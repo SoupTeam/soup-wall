@@ -1,0 +1,19 @@
+{
+  "scope": "SOU-99 merge verification",
+  "approved_head": "84b483646487f5c3d3d581f034080ba61b031af8",
+  "merged_main": "7af550291782cf3c11cffc8d7b30bb071f4bf5e9",
+  "resolution": "license_policy.py and Cargo.lock match main; CDLA exception accepts only reviewed webpki-roots 1.0.10",
+  "workspace_tests": {
+    "passed": 1603,
+    "failed": 0,
+    "ignored": 12
+  },
+  "clippy_workspace_all_targets_D_warnings": "PASS",
+  "fmt": "PASS",
+  "license_policy_tests": 36,
+  "merged_binary_launcher_cli_tests": 16,
+  "dispatch_witness_controls": 6,
+  "updated_mcp_helper_tests": 9,
+  "test_environment": "Target source read-only; isolated build/temp outputs; Apple cc emitted restricted xcrun cache diagnostics during linking. All tests passed; Clippy with -D warnings passed without warnings.",
+  "hosted_original_server_qualification": "Re-executed by CI for the merge head; prior approved evidence remains attributed to its original source commit."
+}

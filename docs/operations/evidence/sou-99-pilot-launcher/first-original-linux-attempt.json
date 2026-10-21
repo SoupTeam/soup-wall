@@ -1,0 +1,162 @@
+{
+  "contract_version": "sw-pilot-launcher/1",
+  "scenario_type": "installed_original_server_full_launch",
+  "status": "failed",
+  "real_host_executed": false,
+  "scripted_owned_provider": true,
+  "paid_api_calls": 0,
+  "preview_and_fixture_evidence": "Separate from this required execution witness",
+  "source": {
+    "commit": "c0c690652f5db4b583db3c3d2b8f86a0001178db",
+    "tree": "6873c936d1a7e4d5d8b960e4548afc73bd2fde12",
+    "dirty": false
+  },
+  "selected_sha256": {
+    "agentfw": "df0252bac5dda203601a29283e499b5f6ac186125ce9234a16672411db0aedf4",
+    "git_launcher": "f1cab944e0ce7540d4f68106bf2185a0936e4ef52e226817e38bd349c3129ea7",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "bwrap": "05ea79a4760092d08756604bd7670ecb62834eff7df8b550da5db58e82587c9a",
+    "git": "efdebf1bbe90a2e7a84f35a843491895fa5405a88f11ea4d0ea1c0e83605ee39",
+    "strace": "38a5c75cb29dd85ddd7780d54f5bf595554d7a1b5c42524b23065f5dc4c4b01d"
+  },
+  "profiles": {
+    "filesystem": {
+      "profile_sha256": "892fd9a2c922bbe5608f4f960609fbc44be7ac36a8525e866ad35bfa13b977de",
+      "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+      "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+      "format": "sw-mcp/filesystem-readonly/1"
+    },
+    "git": {
+      "profile_sha256": "f5f834e79c09533f7a45d4be7fffc589e0a0652aafb6714bf07b978bc479bd6a",
+      "package_tree_sha256": "ef4a419007a14bf0fab05b99e7a95f8e6b4a4aa7478dc8adcd0a3a1d45628ba0",
+      "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
+      "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "format": "sw-mcp/git-readonly/1"
+    }
+  },
+  "policy_sha256": "d31b6663b3bd778889cfd0ea733809a4800c5501f78d1af1245e45af5ea22bcd",
+  "process_cleanup": {
+    "observed": [
+      {
+        "pid": 9311,
+        "start_time_ticks": 42717,
+        "parent_process": true
+      },
+      {
+        "pid": 9315,
+        "start_time_ticks": 42723,
+        "parent_process": false
+      },
+      {
+        "pid": 9316,
+        "start_time_ticks": 42726,
+        "parent_process": false
+      },
+      {
+        "pid": 9326,
+        "start_time_ticks": 42768,
+        "parent_process": false
+      },
+      {
+        "pid": 9327,
+        "start_time_ticks": 42769,
+        "parent_process": false
+      },
+      {
+        "pid": 9328,
+        "start_time_ticks": 42772,
+        "parent_process": false
+      },
+      {
+        "pid": 9330,
+        "start_time_ticks": 42775,
+        "parent_process": false
+      },
+      {
+        "pid": 9329,
+        "start_time_ticks": 42774,
+        "parent_process": false
+      },
+      {
+        "pid": 9331,
+        "start_time_ticks": 42775,
+        "parent_process": false
+      },
+      {
+        "pid": 9332,
+        "start_time_ticks": 42778,
+        "parent_process": false
+      },
+      {
+        "pid": 9334,
+        "start_time_ticks": 42779,
+        "parent_process": false
+      },
+      {
+        "pid": 9333,
+        "start_time_ticks": 42779,
+        "parent_process": false
+      },
+      {
+        "pid": 9342,
+        "start_time_ticks": 42785,
+        "parent_process": false
+      },
+      {
+        "pid": 9345,
+        "start_time_ticks": 42786,
+        "parent_process": false
+      },
+      {
+        "pid": 9344,
+        "start_time_ticks": 42786,
+        "parent_process": false
+      },
+      {
+        "pid": 9343,
+        "start_time_ticks": 42786,
+        "parent_process": false
+      },
+      {
+        "pid": 9347,
+        "start_time_ticks": 42792,
+        "parent_process": false
+      },
+      {
+        "pid": 9346,
+        "start_time_ticks": 42791,
+        "parent_process": false
+      },
+      {
+        "pid": 9357,
+        "start_time_ticks": 43233,
+        "parent_process": false
+      },
+      {
+        "pid": 9358,
+        "start_time_ticks": 43235,
+        "parent_process": false
+      },
+      {
+        "pid": 9359,
+        "start_time_ticks": 43235,
+        "parent_process": false
+      },
+      {
+        "pid": 9360,
+        "start_time_ticks": 43240,
+        "parent_process": false
+      }
+    ],
+    "descendant_count": 21,
+    "all_stopped": true,
+    "remaining": []
+  },
+  "error_type": "ValueError",
+  "error": "five_correlated_host_results_required",
+  "ci_run": 39571373962,
+  "note": "First exact-source Linux full-run failed because Git did not connect; preserved as failure, not acceptance."
+}
