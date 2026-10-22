@@ -6,6 +6,10 @@ It does **not** start Agent, Claude or the enforcing daemon. Only a separate
 successful [installed-pilot qualification](INSTALLED_PILOT_QUALIFICATION.md)
 can establish the selected runtime's observed behavior.
 
+For a verified non-root build of the Git and bubblewrap inputs, follow
+[native prerequisite preparation](PILOT_NATIVE_PREREQUISITES.md) first and
+pass its emitted absolute paths as `--git` and `--bwrap` below.
+
 ## Inputs
 
 Use a clean, reviewed Git checkout on native Ubuntu 24.04 x86_64 as a non-root

@@ -334,6 +334,7 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
       - name: Verify disposable runner administration boundary before building
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
@@ -352,19 +353,12 @@ jobs:
             --output "$RUNNER_TEMP/sou111-assets/git.tar.xz"
           printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 \
             "$RUNNER_TEMP/sou111-assets/git.tar.xz" | sha256sum --check
-          mkdir -m 700 "$RUNNER_TEMP/sou111-assets/git-src"
-          tar -xJf "$RUNNER_TEMP/sou111-assets/git.tar.xz" -C "$RUNNER_TEMP/sou111-assets/git-src" \
-            --strip-components=1 --no-same-owner --no-same-permissions
-          make -C "$RUNNER_TEMP/sou111-assets/git-src" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease \
-            NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
           curl --fail --location --retry 3 \
             https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
           printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
             "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
-          mkdir -m 700 "$RUNNER_TEMP/sou111-assets/bwrap-src" "$RUNNER_TEMP/sou111-assets/libcap"
-          tar -xJf "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" \
-            -C "$RUNNER_TEMP/sou111-assets/bwrap-src" --strip-components=1 --no-same-owner --no-same-permissions
+          mkdir -m 700 "$RUNNER_TEMP/sou111-assets/libcap"
           (cd "$RUNNER_TEMP/sou111-assets" && apt-get download libcap-dev)
           dpkg-deb -x "$RUNNER_TEMP"/sou111-assets/libcap-dev_*.deb "$RUNNER_TEMP/sou111-assets/libcap"
           caplib="$RUNNER_TEMP/sou111-assets/libcap/usr/lib/x86_64-linux-gnu"
@@ -373,15 +367,67 @@ jobs:
           ln -s "$caplib" "$RUNNER_TEMP/sou111-assets/libcap/usr/lib64"
           python3 -m pip install --disable-pip-version-check --target "$RUNNER_TEMP/sou111-assets/build-tools" \
             meson==1.9.1
-          export PYTHONPATH="$RUNNER_TEMP/sou111-assets/build-tools"
           export PATH="$RUNNER_TEMP/sou111-assets/build-tools/bin:$PATH"
-          export PKG_CONFIG_LIBDIR="$caplib/pkgconfig"
-          export PKG_CONFIG_SYSROOT_DIR="$RUNNER_TEMP/sou111-assets/libcap"
-          meson setup "$RUNNER_TEMP/sou111-assets/bwrap-build" "$RUNNER_TEMP/sou111-assets/bwrap-src" \
-            -Dtests=false -Dman=disabled -Dselinux=disabled \
-            -Dbash_completion=disabled -Dzsh_completion=disabled
-          meson compile -C "$RUNNER_TEMP/sou111-assets/bwrap-build"
-          "$RUNNER_TEMP/sou111-assets/bwrap-build/bwrap" --help | grep -- '--ro-bind-fd'
+          native_args=(--output "$RUNNER_TEMP/sou111-native-prerequisites"
+            --expected-commit "$(git rev-parse HEAD)"
+            --git-archive "$RUNNER_TEMP/sou111-assets/git.tar.xz"
+            --bwrap-archive "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
+            --pkg-config-libdir "$caplib/pkgconfig"
+            --pkg-config-sysroot "$RUNNER_TEMP/sou111-assets/libcap"
+            --meson-pythonpath "$RUNNER_TEMP/sou111-assets/build-tools")
+          python3 -B scripts/prepare-native-pilot-prerequisites.py "${native_args[@]}" \
+            > "$RUNNER_TEMP/sou111-assets/native-plan.json"
+          start="$(date +%s)"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare "${native_args[@]}" \
+            > "$RUNNER_TEMP/sou111-assets/native-first.json"
+          finish="$(date +%s)"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare "${native_args[@]}" \
+            > "$RUNNER_TEMP/sou111-assets/native-reused.json"
+          marker="$RUNNER_TEMP/sou111-native-prerequisites/current.json"
+          marker_before="$(sha256sum "$marker" | cut -d ' ' -f1)"
+          printf 'wrong archive\n' > "$RUNNER_TEMP/sou111-assets/bad-git.tar.xz"
+          bad_args=("${native_args[@]}")
+          for index in "${!bad_args[@]}"; do
+            if [[ "${bad_args[$index]}" == "$RUNNER_TEMP/sou111-assets/git.tar.xz" ]]; then
+              bad_args[$index]="$RUNNER_TEMP/sou111-assets/bad-git.tar.xz"
+            fi
+          done
+          if python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --rebuild \
+            "${bad_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-rejected.json"; then
+            echo 'Wrong prerequisite digest unexpectedly succeeded' >&2; exit 1
+          fi
+          test "$marker_before" = "$(sha256sum "$marker" | cut -d ' ' -f1)"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare "${native_args[@]}" \
+            > "$RUNNER_TEMP/sou111-assets/native-recovered.json"
+          printf '{"native_build_seconds":%s}\n' "$((finish - start))" \
+            > "$RUNNER_TEMP/sou111-assets/native-timing.json"
+          python3 -B - <<'PY' >> "$GITHUB_ENV"
+          import json, os
+          from pathlib import Path
+          result = json.loads((Path(os.environ['RUNNER_TEMP']) / 'sou111-assets/native-first.json').read_text())
+          asset = Path(os.environ['RUNNER_TEMP']) / 'sou111-assets'
+          repeated = json.loads((asset / 'native-reused.json').read_text())
+          rejected = json.loads((asset / 'native-rejected.json').read_text())
+          recovered = json.loads((asset / 'native-recovered.json').read_text())
+          assert result['status'] == 'prepared-not-qualified' and repeated['status'] == 'reused'
+          assert rejected['status'] == 'failed' and rejected['reason'] == 'git_archive_digest_mismatch'
+          assert recovered['status'] == 'reused'
+          assert all(result[role] == repeated[role] == recovered[role]
+                     for role in ('git', 'bwrap', 'receipt'))
+          receipt = json.loads(Path(result['receipt']).read_text())
+          summary = {'status': 'prepared-not-qualified', 'reused': True,
+                     'bad_digest_refused': True, 'old_generation_preserved': True,
+                     'source_commit': receipt['source_commit'],
+                     'archive_sha256': {kind: entry['sha256']
+                                        for kind, entry in receipt['archives'].items()},
+                     'binary_sha256': {kind: entry['sha256']
+                                       for kind, entry in receipt['binaries'].items()}}
+          (asset / 'native-summary.json').write_text(json.dumps(summary, sort_keys=True) + '\n')
+          print('SOU115_GIT=' + result['git'])
+          print('SOU115_BWRAP=' + result['bwrap'])
+          PY
+          export SOU115_GIT="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["git"])')"
+          export SOU115_BWRAP="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["bwrap"])')"
           cargo build --locked -p agentfw --bins --message-format=json > "$RUNNER_TEMP/sou111-assets/build.jsonl"
           cargo test --locked -p agentfw --lib --no-run --message-format=json > "$RUNNER_TEMP/sou111-assets/test-build.jsonl"
           python3 - <<'PY'
@@ -412,8 +458,8 @@ jobs:
           path = Path(os.environ['RUNNER_TEMP']) / 'sou111-assets/policy.yaml'
           pilot.owned_bytes(path, pilot.PILOT_POLICY.encode())
           PY
-          sha256sum "$RUNNER_TEMP/sou111-assets/node.tar.xz" "$RUNNER_TEMP/sou111-assets/git-src/git" \
-            "$RUNNER_TEMP/sou111-assets/bwrap-build/bwrap" \
+          sha256sum "$RUNNER_TEMP/sou111-assets/node.tar.xz" "$SOU115_GIT" \
+            "$SOU115_BWRAP" \
             target/debug/agentfw target/debug/agentfw-git-sandbox > "$RUNNER_TEMP/sou111-assets/selected-hashes.txt"
       - name: Provision job-scoped permission for the exact sandbox executable
         shell: bash
@@ -421,7 +467,7 @@ jobs:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           set -euo pipefail
-          source="$RUNNER_TEMP/sou111-assets/bwrap-build/bwrap"
+          source="$SOU115_BWRAP"
           python3 -B scripts/ci_bwrap_userns.py install --source "$source" \
             --sha256 "$(sha256sum "$source" | cut -d ' ' -f1)" \
             --report "$RUNNER_TEMP/sou111-assets/apparmor-provisioning.json"
@@ -458,7 +504,7 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox"
             --sandbox-tests "$(cat "$asset/sandbox-test-path")"
             --node-archive "$asset/node.tar.xz" --bwrap "$SOU111_BWRAP"
-            --git "$asset/git-src/git"
+            --git "$SOU115_GIT"
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude"
             --python "$(command -v python3)"
             --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py"
@@ -514,6 +560,9 @@ jobs:
           name: sou111-native-preparation-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/sou111-assets/selected-hashes.txt
+            ${{ runner.temp }}/sou111-assets/native-summary.json
+            ${{ runner.temp }}/sou111-assets/native-timing.json
+            ${{ runner.temp }}/sou111-assets/native-rejected.json
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
             ${{ runner.temp }}/sou111-assets/apparmor-provisioning.json
             ${{ runner.temp }}/sou111-apparmor-cleanup.json
