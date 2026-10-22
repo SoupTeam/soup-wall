@@ -64,7 +64,8 @@ agentfw pilot-approval --home "$HOME/.agentfw" --run RUN_ID \
 
 List shows server/tool, pending ID, expiry and binding, without arguments.
 Approve requires successful explicit inspection of the same arguments/binding.
-Control characters in the explicit inspection output are escaped. Do not tee
+Control and non-ASCII characters in the explicit inspection output are shown
+as JSON escapes, keeping invisible Unicode characters visible. Do not tee
 inspection output into general logs or export it with qualification evidence.
 Never paste bearer tokens or child grants into either terminal.
 

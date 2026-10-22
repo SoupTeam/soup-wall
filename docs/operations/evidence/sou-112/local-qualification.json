@@ -1,9 +1,9 @@
 {
   "task": "SOU-112",
-  "qualification": "local-macos-only; Linux qualification pending",
+  "qualification": "local-macos-only; separate Linux report retained",
   "base": "e2fa19ce3162aea6a39c821882e369f64dc40e02",
   "workspace_tests": {
-    "passed": 1625,
+    "passed": 1626,
     "failed": 0,
     "ignored": 12
   },
@@ -14,16 +14,16 @@
   "linux_runtime_proven": false,
   "isolation": "read-only isolated source; scratch-only writes; external network denied; owned loopback permitted",
   "logs_sha256": {
-    "ready-local-tests.log": "479cb0d4bfd80536162c55cb810ab85ca18f50d63fa413c6cc9f11e2ccda19e0",
-    "ready-local-clippy.log": "05e8f501c73134e1e18c0c1a82c6a98236f0622e5e02189166fb9fe6897c4a9f"
+    "ready-local-tests.log": "fbdf8c869c8b2d15a04dec288f2fbd850fb7885aa602517b6c26ca4480544757",
+    "ready-local-clippy.log": "d146dd1e01c415b48b9dcc78bc6f012e296706ab55601e1f076eade818903300"
   },
-  "script_controls_source_commit": "fe7c841 plus leading-hyphen CLI regression",
+  "script_controls_source_commit": "8e80084",
   "documentation": {
-    "files": 229,
-    "local_links": 871,
+    "files": 230,
+    "local_links": 874,
     "errors": 0
   },
-  "rust_snapshot_base": "fe7c841",
+  "rust_snapshot_base": "8e80084",
   "rust_source_sha256": {
     "crates/agentfw/src/lib.rs": "3bd629cc7ce8d38248f50fe4ab326467e79301aef00f96c910d45410024f21d1",
     "crates/agentfw/src/main.rs": "f6739b7f0aad8070c01432f2316448212a171a42a6031f34362785838d34c9c9",
@@ -31,7 +31,8 @@
     "crates/agentfw/src/native.rs": "ebc26f17269df90bf17f6f32ca58c1d6f2fc2c30e647b4296dc4f0420ed24dde",
     "crates/agentfw/src/native/approval.rs": "d0cf3c71dbdf9292f97a8dff0e5081f91d765d50223c9d943619c793b149d5d6",
     "crates/agentfw/src/native/approval/tests/selected_tests.rs": "cca2c10761ebab83c3491c998e28f25fef69708e0fe1dfe6ad181b431eb3625d",
-    "crates/agentfw/src/pilot_approval.rs": "b0881e155cf10b4bf62af92d2cb79e97d15acd59f7f365b3db3cda7d5529d610",
+    "crates/agentfw/src/pilot_approval.rs": "3a49ac6c31f562c88651423aef870b32e97756a78a74dd46f6b8cc0d023093cd",
     "crates/agentfw/src/pilot_launcher.rs": "f5a348565d27f85bf7d603de994b87dbe8c4971999856373f1f22ad0694dd0b9"
-  }
+  },
+  "retained_linux_report": "linux-qualification.json"
 }

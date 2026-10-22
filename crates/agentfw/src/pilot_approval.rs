@@ -720,13 +720,12 @@ fn checked_record(home: &Path, observed: &Value) -> Result<Value> {
 fn escaped(value: &Value) -> Result<String> {
     let mut out = String::new();
     for c in serde_json::to_string_pretty(value)?.chars() {
-        if ('\u{7f}'..='\u{9f}').contains(&c)
-            || matches!(c, '\u{61c}' | '\u{feff}')
-            || ('\u{200b}'..='\u{200f}').contains(&c)
-            || ('\u{2028}'..='\u{202e}').contains(&c)
-            || ('\u{2060}'..='\u{206f}').contains(&c)
-        {
-            out.push_str(&format!("\\u{:04x}", c as u32));
+        if !c.is_ascii() || c == '\u{7f}' {
+            // ASCII JSON also makes Unicode formatting/invisible characters
+            // unambiguous. Encode astral characters as valid surrogate pairs.
+            for unit in c.encode_utf16(&mut [0; 2]) {
+                out.push_str(&format!("\\u{unit:04x}"));
+            }
         } else {
             out.push(c);
         }
@@ -1019,6 +1018,16 @@ mod tests {
             assert!(!text.contains(c));
         }
         assert!(text.contains("\\u001b") && text.contains("\\u009b") && text.contains("\\u202e"));
+    }
+
+    #[test]
+    fn inspection_escapes_invisible_unicode_and_preserves_exact_arguments() {
+        let value = json!({"args":{"path":"/workspace/данные\u{ad}\u{180e}😀.txt"}});
+        let display = escaped(&value).unwrap();
+        assert!(display.is_ascii());
+        assert!(display.contains("\\u00ad") && display.contains("\\u180e"));
+        assert!(display.contains("\\ud83d\\ude00"));
+        assert_eq!(serde_json::from_str::<Value>(&display).unwrap(), value);
     }
 
     #[test]
