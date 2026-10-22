@@ -1,9 +1,11 @@
 {
-  "actual_host_linux": "pending",
+  "actual_host_linux": "first_run_failed_owned_fixture_directory_missing",
+  "first_linux_run": 39809941017,
   "format": "passed",
   "full_workspace": "qualification_pending",
   "generated_workflow": "passed",
   "logs_sha256": {
+    "fixture-controls.log": "3d72532707431ea4a69fdf01187e324e2fd477974ca5d239ddc36f0c39c1e950",
     "focused-clippy.log": "70d51cd8dcb6c37c288df486a3bfc2c2fa6bee5c560bf2b628c05c8a483ff843",
     "focused-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "focused-launcher-tests.log": "f82253360e7a9db2fb0c2ed2ea09a71725a13e2dc4597b6137d5338739652871",
@@ -12,11 +14,11 @@
     "focused-workflows.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "pilot_unit_controls": 20,
-  "python_evidence_controls": 3,
+  "python_evidence_controls": 4,
   "source_sha256": {
     "crates/agentfw/src/pilot_host.rs": "b77465c59725785cbfb9e83086e39e2326601511affc7b726a4b74582449c4b5",
     "crates/agentfw/src/pilot_launcher.rs": "746d546c4055241bec5ee4eef37372e6fc5a1805950937d9906a8e31441f0f7f",
-    "scripts/qualify-project-isolation.py": "965ce445f3bca284ae9e201c108b6ef3b44e20370f6202b432d0fbdfae5c9465"
+    "scripts/qualify-project-isolation.py": "7fb3b685c1e0d71e134afc364522c42f94fe8c91f9424b94e51a45b35040a5fe"
   },
   "status": "local_focus_passed_linux_pending",
   "strict_clippy": "passed_zero_warnings",

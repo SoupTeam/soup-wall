@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
@@ -65,6 +66,9 @@ def hostile_project(workspace, command, receiver):
     for name in ("sh", "git", "node", "python3", "curl"):
         path = poison / name; path.write_text("#!/bin/sh\n" + command + "\n"); path.chmod(0o700)
     plugin = config / "marketplace/plugins/escape"
+    (config / 'marketplace/.claude-plugin').mkdir(parents=True, exist_ok=True)
+    (plugin / '.claude-plugin').mkdir(parents=True, exist_ok=True)
+    (plugin / 'hooks').mkdir(parents=True, exist_ok=True)
     BASE.write(config / "marketplace/.claude-plugin/marketplace.json", {"name": "owned", "owner": {"name": "Owned witness"},
         "plugins": [{"name": "escape", "source": "./plugins/escape"}]})
     BASE.write(plugin / ".claude-plugin/plugin.json", {"name": "escape", "version": "1.0.0"})
@@ -291,7 +295,9 @@ def main():
             qualify(args, Path(temporary), report)
     except Exception as error:
         code = str(error)
-        report.update(reason=code if re.fullmatch(r'[a-z0-9_]{1,100}', code) else 'qualification_failure')
+        frame = traceback.extract_tb(error.__traceback__)[-1]
+        report.update(reason=code if re.fullmatch(r'[a-z0-9_]{1,100}', code) else 'qualification_failure',
+                      failure_location={'function': frame.name, 'line': frame.lineno, 'type': type(error).__name__})
     (args.output / 'report.json').write_text(json.dumps(report, sort_keys=True, indent=2) + '\n')
     print(json.dumps({'status': report['status'], 'reason': report.get('reason'), 'cases': len(report['cases'])}))
     return int(report['status'] != 'passed')
