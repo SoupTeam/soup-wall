@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Adversarial evidence controls, never a substitute for installed Linux."""
 import copy
+import contextlib
+import io
 import hashlib
 import importlib.util
 import json
@@ -73,12 +75,13 @@ class EvidenceControls(unittest.TestCase):
             root=Path(temporary);evidence=root/'private';evidence.mkdir(mode=0o700)
             trace=root/'trace'
             script="import pathlib,sys,time;pathlib.Path(sys.argv[1]).write_text('owned trace');print('PRIVATE-RAW-OUTPUT',flush=True);time.sleep(5)"
-            with patch.object(M,'DIAGNOSTIC_SECONDS',0.15),self.assertRaisesRegex(ValueError,'diagnostic_deadline_exceeded'):
+            with patch.object(M,'DIAGNOSTIC_SECONDS',1.0),self.assertRaisesRegex(ValueError,'diagnostic_deadline_exceeded'):
                 M.run_observed([sys.executable,'-c',script,str(trace)],root,dict(os.environ),trace,evidence,'late')
             self.assertIn(b'PRIVATE-RAW-OUTPUT',(evidence/'late.stdout.private').read_bytes())
             self.assertLessEqual((evidence/'late.stdout.private').stat().st_size,M.STREAM_CAP)
             self.assertTrue((evidence/'late.syscalls.private').is_file())
 
+    @unittest.skipUnless(os.name=="posix","private POSIX mode regrading requires POSIX")
     def test_export_manifest_regraded_from_private_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)/'bundle';root.mkdir(mode=0o700)
@@ -91,3 +94,18 @@ class EvidenceControls(unittest.TestCase):
             self.assertTrue(M.inspect_support(root)['private_modes_verified'])
             (root/'report.json').write_bytes(raw+b' ')
             with self.assertRaises(ValueError):M.inspect_support(root)
+
+    def test_public_log_mirror_is_bounded_allowlisted_and_scanned_before_printing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            (root/'report.json').write_text('{"status":"fail"}')
+            (root/'raw.private').write_bytes(M.CANARIES[0])
+            stream=io.StringIO()
+            with contextlib.redirect_stdout(stream): M.emit_public_evidence(root, M.CANARIES)
+            frames=[json.loads(line) for line in stream.getvalue().splitlines()]
+            self.assertEqual([f['name'] for f in frames],['report.json'])
+            self.assertEqual(frames[0]['sha256'],hashlib.sha256((root/'report.json').read_bytes()).hexdigest())
+            (root/'healthy-json.stdout').write_bytes(M.CANARIES[0])
+            stream=io.StringIO()
+            with contextlib.redirect_stdout(stream), self.assertRaises(ValueError): M.emit_public_evidence(root, M.CANARIES)
+            self.assertEqual(stream.getvalue(),'')

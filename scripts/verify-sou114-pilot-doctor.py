@@ -334,25 +334,25 @@ def qualify(args, private, output, evidence, report, secrets):
         changed.write_bytes(original)
         # Synthetic negative evidence tests the reader; it is never a positive
         # original-daemon substitute or represented as authenticated history.
-        evidence = private / "incident.jsonl"
+        incident_file = private / "incident.jsonl"
         def event_file(row):
-            evidence.write_text(json.dumps(row)+"\n"); evidence.chmod(0o600)
-        synthetic_ref = ["--incident-file", str(evidence), *reference[2:]]
+            incident_file.write_text(json.dumps(row)+"\n"); incident_file.chmod(0o600)
+        synthetic_ref = ["--incident-file", str(incident_file), *reference[2:]]
         event_file(dict(incident, seq=incident["seq"]+999))
         doctor("missing-incident", synthetic_ref, reason="incident_missing_or_rotated")
         event_file(dict(incident, at_ms=1))
         doctor("stale-incident", synthetic_ref, reason="incident_stale_or_future_record")
         event_file(dict(incident, registry_sha256="0"*64))
         doctor("mismatched-incident", synthetic_ref, reason="incident_mismatched_or_ambiguous")
-        evidence.write_bytes(b"not-json " + CANARIES[2] + b"\n")
+        incident_file.write_bytes(b"not-json " + CANARIES[2] + b"\n")
         doctor("malformed-input", synthetic_ref, reason="incident_malformed_record")
-        with evidence.open("wb") as stream: stream.truncate(8*1024*1024+1)
+        with incident_file.open("wb") as stream: stream.truncate(8*1024*1024+1)
         doctor("oversized-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
-        evidence.unlink(); evidence.symlink_to(home / "audit.jsonl")
+        incident_file.unlink(); incident_file.symlink_to(home / "audit.jsonl")
         doctor("symlink-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
-        evidence.unlink(); os.mkfifo(evidence, 0o600)
+        incident_file.unlink(); os.mkfifo(incident_file, 0o600)
         doctor("fifo-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
-        evidence.unlink(); event_file(incident); evidence.chmod(0o644)
+        incident_file.unlink(); event_file(incident); incident_file.chmod(0o644)
         doctor("public-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
         doctor("existing-output", ["--support-bundle", str(output / "healthy-support")], code=4)
         (output / "link").symlink_to(output / "healthy-support", target_is_directory=True)
@@ -381,6 +381,31 @@ def qualify(args, private, output, evidence, report, secrets):
     grade(report, output)
 
 
+def emit_public_evidence(output, secrets):
+    """Mirror only already-sanitized finite public evidence into readable CI logs.
+
+    Raw private incident/authority/syscall/server files are never eligible.
+    This also makes a failed check diagnosable when artifact download is absent.
+    """
+    names = ["report.json"]
+    names += [case + "." + suffix for case in CASES for suffix in ("stdout", "stderr", "process.json")]
+    names += [name + "/" + file for name in SUPPORT_NAMES for file in ("report.json", "manifest.json")]
+    frames = []
+    total = 0
+    for name in names:
+        path = output / name
+        if not path.exists():
+            continue
+        require(not path.is_symlink() and path.is_file() and path.stat().st_size <= STREAM_CAP, "public_evidence_type_or_cap")
+        raw = path.read_bytes()
+        total += len(raw)
+        require(total <= 2 * 1024 * 1024, "public_evidence_total_cap")
+        scan(raw, secrets)
+        frames.append({"format": "sw-pilot-doctor-public-file/1", "name": name,
+                       "sha256": hashlib.sha256(raw).hexdigest(), "text": raw.decode("utf-8")})
+    for frame in frames:
+        print(json.dumps(frame, sort_keys=True))
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", required=True)
@@ -406,7 +431,8 @@ def main(argv=None):
         report["status"]="pass"
     except Exception as error:
         report["status"]="fail";report["error_code"]="required_diagnostic_acceptance_failed"
-        if isinstance(error, ValueError) and str(error) in {
+        finite_case_errors = {"diagnostic_" + kind + "_" + case for kind in ("exit", "reason") for case in CASES}
+        if isinstance(error, ValueError) and str(error) in finite_case_errors | {
             "linux_x86_64_required", "exact_clean_candidate_required", "owned_lifecycle_failed", "original_pair_not_verified",
             "exact_recorded_refusal_missing", "collector_cleanup_not_completed_normally", "actual_refusal_missing", "useful_original_read_missing",
             "published_privacy_canary", "diagnostic_spawned_program", "diagnostic_spawned_process", "diagnostic_deadline_exceeded",
@@ -423,6 +449,7 @@ def main(argv=None):
                   "skipped": 0, "error_code": "published_report_privacy_failure"}
     write(args.output / "report.json", report)
     print(json.dumps({key: report[key] for key in ("format","status","skipped")}, sort_keys=True))
+    emit_public_evidence(args.output, secrets)
     return 0 if report["status"]=="pass" else 1
 
 if __name__=="__main__":

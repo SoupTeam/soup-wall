@@ -381,9 +381,11 @@ pub(crate) async fn diagnose(
                 }
             }
         }
-        report.checks.push(check("pilot_registry", "private_config_and_original_schemas", if expected_registry.is_some(){Outcome::Ready}else{Outcome::Failed},
+        let mut registry_check = check("pilot_registry", "private_config_and_original_schemas", if expected_registry.is_some(){Outcome::Ready}else{Outcome::Failed},
             if expected_registry.is_some(){"two_server_registry_verified"}else{"two_server_registry_mismatch"},
-            "The selected native registry is compared with both accepted original tool/schema sets.", "Use the reviewed combined original filesystem/Git registry; retain exact tool and schema pins."));
+            "The selected native registry is compared with both accepted original tool/schema sets.", "Use the reviewed combined original filesystem/Git registry; retain exact tool and schema pins.");
+        registry_check.sha256 = expected_registry.clone();
+        report.checks.push(registry_check);
         let policy = (|| -> anyhow::Result<_> {
             let policy = if let Some(path) = &cfg.policy {
                 let bytes = crate::doctor::read_private(path, 1024 * 1024)?;
