@@ -99,7 +99,27 @@ namespace. On the tested GitHub Ubuntu 24.04 runner, the native qualification's
 positive sandbox control failed before the server started: both direct and
 descriptor-pinned bubblewrap reported `loopback: Failed RTM_NEWADDR: Operation
 not permitted` with the runner's AppArmor unprivileged-user-namespace
-restriction enabled. Keep that failure and use a native host whose existing
-security policy permits the required isolated sandbox before retrying the
-qualifier. Do not disable AppArmor, remove network isolation, or treat prepared
-assets as an active pilot because of this runner limitation.
+restriction enabled. The original failure remains retained. For this disposable
+GitHub-hosted job, CI now provisions a root-owned copy of the exact hashed
+bubblewrap and an AppArmor `userns` profile attached only to that job's copy.
+This is runner administration, separate from the unprivileged product preparation
+command. It follows Ubuntu's application-specific profile mechanism:
+[Ubuntu 24.04 user namespace restrictions](https://documentation.ubuntu.com/release-notes/24.04/#unprivileged-user-namespace-restrictions).
+
+The host restriction stays enabled. The helper requires native Ubuntu 24.04,
+an explicit GitHub-hosted job identity and a non-root qualifier. Before the
+original-server qualification, both direct and descriptor-pinned execution must
+prove separate user/network/mount/PID namespaces, read-only bindings, refusal of
+nested user namespaces, zero effective capabilities and no connection to an
+independent host listener. The unapproved original path must remain refused.
+The owned profile and binary are removed in an `always()` cleanup step; foreign
+files or operator edits cause refusal rather than deletion. No shared VPS, local
+machine, global sysctl, AppArmor service or runtime enforcement policy is changed.
+
+For a focused CI environment check, dispatch `mcp-real-filesystem.yml` on the
+candidate branch with `native_preparation_only: true`. This omits the duplicate
+Ubuntu 22.04 lane only for that explicit manual run; normal Ready CI still
+requires every selected job. A passing provisioning probe is not pilot
+qualification: the full enforcing-daemon/original-server qualifier must also pass.
+Do not disable AppArmor, remove network isolation, or treat prepared assets as an
+active pilot when either control fails.

@@ -1211,7 +1211,7 @@ jobs:
 
   mcp-real-filesystem--required-linux-sandbox-and-real-host:
     name: "mcp-real-filesystem / required-linux-sandbox-and-real-host"
-    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'required-linux-sandbox-and-real-host')
+    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && github.event.inputs.native_preparation_only == 'true')
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -1510,6 +1510,7 @@ jobs:
     timeout-minutes: 65
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
+      SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1520,7 +1521,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.94.1
       - uses: Swatinem/rust-cache@v2
       - name: Focused preparation boundaries
-        run: python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
       - name: Build accepted selected runtimes without global installation
         shell: bash
         run: |
@@ -1598,6 +1601,14 @@ jobs:
           sha256sum "$RUNNER_TEMP/sou111-assets/node.tar.xz" "$RUNNER_TEMP/sou111-assets/git-src/git" \
             "$RUNNER_TEMP/sou111-assets/bwrap-build/bwrap" \
             target/debug/agentfw target/debug/agentfw-git-sandbox > "$RUNNER_TEMP/sou111-assets/selected-hashes.txt"
+      - name: Provision job-scoped permission for the exact sandbox executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="$RUNNER_TEMP/sou111-assets/bwrap-build/bwrap"
+          python3 -B scripts/ci_bwrap_userns.py install --source "$source" \
+            --sha256 "$(sha256sum "$source" | cut -d ' ' -f1)" \
+            --report "$RUNNER_TEMP/sou111-assets/apparmor-provisioning.json"
       - name: Record bounded namespace startup diagnosis
         shell: bash
         run: |
@@ -1607,11 +1618,11 @@ jobs:
             printf 'runner_apparmor_profile='; cat /proc/self/attr/current
             printf 'restrict_unprivileged_userns='; cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo unavailable
             set +e
-            timeout 10 "$asset/bwrap-build/bwrap" --unshare-all --unshare-user \
+            timeout 10 "$SOU111_BWRAP" --unshare-all --unshare-user \
               --disable-userns --assert-userns-disabled --ro-bind / / --proc /proc \
               --dev /dev -- /usr/bin/true
             printf 'direct_bwrap_exit=%s\n' "$?"
-            exec 3< "$asset/bwrap-build/bwrap"
+            exec 3< "$SOU111_BWRAP"
             timeout 10 /proc/self/fd/3 --unshare-all --unshare-user \
               --disable-userns --assert-userns-disabled --ro-bind / / --proc /proc \
               --dev /dev -- /usr/bin/true
@@ -1630,7 +1641,7 @@ jobs:
             --agentfw "$PWD/target/debug/agentfw"
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox"
             --sandbox-tests "$(cat "$asset/sandbox-test-path")"
-            --node-archive "$asset/node.tar.xz" --bwrap "$asset/bwrap-build/bwrap"
+            --node-archive "$asset/node.tar.xz" --bwrap "$SOU111_BWRAP"
             --git "$asset/git-src/git"
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude"
             --python "$(command -v python3)"
@@ -1671,6 +1682,13 @@ jobs:
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou111-qualification"
+      - name: Remove only this job's sandbox permission and executable
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/ci_bwrap_userns.py cleanup \
+            --report "$RUNNER_TEMP/sou111-apparmor-cleanup.json"
       - name: Retain bounded result and first failure
         if: always()
         uses: actions/upload-artifact@v7
@@ -1679,6 +1697,8 @@ jobs:
           path: |
             ${{ runner.temp }}/sou111-assets/selected-hashes.txt
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
+            ${{ runner.temp }}/sou111-assets/apparmor-provisioning.json
+            ${{ runner.temp }}/sou111-apparmor-cleanup.json
             ${{ runner.temp }}/sou111-assets/plan.json
             ${{ runner.temp }}/sou111-assets/first.json
             ${{ runner.temp }}/sou111-assets/reused.json
