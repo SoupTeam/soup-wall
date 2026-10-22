@@ -1478,12 +1478,40 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
             })
         })
         .collect();
+    let pilot_collectors: Vec<Value> = sessions
+        .entries
+        .iter()
+        .filter(|(_, s)| {
+            s.host_session.is_some()
+                && s.authority_digest.is_some()
+                && s.liveness_lease.is_some()
+        })
+        .map(|(id, s)| {
+            json!({"session_id": id, "session_epoch": s.epoch,
+                "active": !s.is_dead(now, now_ms, &sessions) && validate_lineage(&sessions, s, now_ms, now).is_ok(),
+            "host_session": s.host_session, "server_id": s.server_id, "agent_id": s.agent_id,
+            "authority_sha256": s.authority_digest})
+        })
+        .collect();
+    let pilot_pending = match native
+        .approval
+        .as_ref()
+        .map(|a| a.operator_bindings())
+        .transpose()
+    {
+        Ok(value) => value.unwrap_or_default(),
+        Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
+    };
     (
         StatusCode::OK,
         Json(json!({
             "instance_id": native.instance_id(),
             "registry_sha256": native.registry_sha256,
             "bindings": bindings,
+            "pilot_collectors": pilot_collectors,
+            "pilot_pending": pilot_pending,
+            "approval_enabled": native.approval.is_some(),
+            "liveness_enabled": st.config.native.as_ref().and_then(|n| n.liveness.as_ref()).is_some(),
             "provenance": {
                 "accounting_revision": "sw-provenance-storage/1",
                 "limits": firewall.provenance_limits(),
