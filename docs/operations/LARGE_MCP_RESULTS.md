@@ -48,7 +48,7 @@ Memory: the collector buffers at most one frame of 1 MiB from the server. An
 oversized frame is never buffered: a constant-memory JSON scanner validates and
 discards it. With 8 active calls the worst case is about 8 x (frame + parsed
 value + daemon request body), roughly 40 MiB. Measured growth with 8 concurrent
-120 KiB reads plus one 2 MiB response: about 8 MiB.
+120 KiB reads plus one 2 MiB response: 6 to 9 MiB.
 
 ## What the host sees
 
@@ -143,3 +143,5 @@ Malformed, unterminated, endless and slow oversized frames cannot be produced by
 the original server. They are covered by deterministic relay tests
 (`real_server::frames` and `real_server::fault_tests`), which also cover
 concurrent correlation, late cancelled frames and daemon size refusals.
+
+Evidence: [Linux run, 2026-10-23](evidence/LARGE_RESULTS_2026-10-23.md).
