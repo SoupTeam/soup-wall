@@ -279,19 +279,49 @@ def extract(archive, destination, kind):
             target.symlink_to(linkname)
 
 
+def group_has_running_member(pgid):
+    """Inspect the owned Linux process group, excluding already-dead zombies."""
+    with os.scandir("/proc") as entries:
+        for entry in entries:
+            if not entry.name.isdecimal():
+                continue
+            try:
+                fields = (Path(entry.path) / "stat").read_text().rsplit(") ", 1)[1].split()
+            except (FileNotFoundError, ProcessLookupError, PermissionError, IndexError):
+                continue
+            if len(fields) >= 3 and fields[0] not in ("Z", "X") and int(fields[2]) == pgid:
+                return True
+    return False
+
+
+def leader_finished(process):
+    # WNOWAIT leaves the group leader unreaped. Its PID therefore cannot be
+    # reused while stop_group is still allowed to signal that process group.
+    return process.returncode is not None or os.waitid(
+        os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+
+
 def stop_group(process):
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    if process.returncode is not None:
         return
+    pgid = process.pid  # start_new_session=True made the child its own leader.
     try:
-        process.wait(timeout=2)
-    except subprocess.TimeoutExpired:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    deadline = time.monotonic() + 2
+    while group_has_running_member(pgid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if group_has_running_member(pgid):
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-        process.wait(timeout=2)
+        deadline = time.monotonic() + 2
+        while group_has_running_member(pgid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+    require(not group_has_running_member(pgid), "owned_build_group_not_stopped", "cleanup")
+    process.wait(timeout=2)
 
 
 def build(command, *, cwd, env, log, seconds, stage):
@@ -316,7 +346,7 @@ def build(command, *, cwd, env, log, seconds, stage):
                 selector = selectors.DefaultSelector()
                 selector.register(process.stdout, selectors.EVENT_READ)
                 deadline, count, over_limit = time.monotonic() + seconds, 0, False
-                while selector.get_map() or process.poll() is None:
+                while selector.get_map() or not leader_finished(process):
                     if cancelled:
                         raise Failure(f"{stage}_cancelled", stage)
                     if time.monotonic() > deadline:
@@ -333,9 +363,8 @@ def build(command, *, cwd, env, log, seconds, stage):
                         if count > MAX_LOG:
                             over_limit = True
                             raise Failure(f"{stage}_log_limit; inspect private log", stage)
-                    if process.poll() is not None and selector.get_map():
-                        stop_group(process)
-                code = process.wait(timeout=2)
+                stop_group(process)
+                code = process.returncode
                 if cancelled:
                     raise Failure(f"{stage}_cancelled", stage)
                 require(not over_limit, f"{stage}_log_limit", stage)
@@ -345,10 +374,15 @@ def build(command, *, cwd, env, log, seconds, stage):
                 if selector is not None:
                     selector.close()
                 if process is not None:
-                    stop_group(process)
-                    process.stdout.close()
-                output.flush()
-                os.fsync(output.fileno())
+                    try:
+                        stop_group(process)
+                    finally:
+                        process.stdout.close()
+                        output.flush()
+                        os.fsync(output.fileno())
+                else:
+                    output.flush()
+                    os.fsync(output.fileno())
     finally:
         for signum, handler in previous.items():
             signal.signal(signum, handler)

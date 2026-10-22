@@ -41,10 +41,15 @@ class PreparationBoundary(unittest.TestCase):
             worker = root / "worker.py"
             worker.write_text('''import json, os, pathlib, subprocess, sys, time
 child = subprocess.Popen([sys.executable, "-c",
-    "import pathlib,sys,time; time.sleep(1.5); pathlib.Path(sys.argv[1]).write_text('escaped')",
+    "import pathlib,signal,sys,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); pathlib.Path(sys.argv[1]).write_text('ready'); time.sleep(30)",
     sys.argv[2]])
+for _ in range(200):
+    if pathlib.Path(sys.argv[2]).exists():
+        break
+    time.sleep(0.01)
+if not pathlib.Path(sys.argv[2]).exists():
+    raise RuntimeError("descendant was not ready")
 pathlib.Path(sys.argv[1]).write_text(json.dumps({"worker": os.getpid(), "child": child.pid}))
-time.sleep(30)
 ''')
             helper = root / "helper.py"
             helper.write_text('''import importlib.util, pathlib, sys
@@ -54,7 +59,7 @@ spec.loader.exec_module(preparation)
 root = pathlib.Path(sys.argv[2])
 try:
     preparation.build([sys.executable, str(root / "worker.py"),
-                       str(root / "pids.json"), str(root / "escaped")],
+                       str(root / "pids.json"), str(root / "ready")],
                       cwd=root, env={"PATH": "/usr/bin:/bin"},
                       log=root / "build.log", seconds=30, stage="build")
 except preparation.Failure as error:
@@ -74,13 +79,45 @@ except preparation.Failure as error:
                 stdout, stderr = process.communicate(timeout=5)
                 self.assertEqual(process.returncode, 0, stderr)
                 self.assertIn("build_cancelled", stdout)
-                time.sleep(1.7)
-                self.assertFalse((root / "escaped").exists(),
-                                 "a cancelled build must not leave its descendant running")
+                self.assertFalse(PREP.group_has_running_member(json.loads(pids.read_text())["worker"]),
+                                 "a cancelled build must stop a SIGTERM-resistant descendant")
             finally:
                 if process.poll() is None:
                     process.kill()
                     process.communicate(timeout=5)
+                if pids.exists():
+                    try:
+                        os.killpg(json.loads(pids.read_text())["worker"], signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
+    @unittest.skipUnless(os.name == "posix", "process groups require Linux")
+    def test_timeout_stops_resistant_descendant_after_leader_exits(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worker = root / "worker.py"
+            worker.write_text('''import json, os, pathlib, subprocess, sys, time
+child = subprocess.Popen([sys.executable, "-c",
+    "import pathlib,signal,sys,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); pathlib.Path(sys.argv[1]).write_text('ready'); time.sleep(30)",
+    sys.argv[2]])
+for _ in range(200):
+    if pathlib.Path(sys.argv[2]).exists():
+        break
+    time.sleep(0.01)
+if not pathlib.Path(sys.argv[2]).exists():
+    raise RuntimeError("descendant was not ready")
+pathlib.Path(sys.argv[1]).write_text(json.dumps({"worker": os.getpid(), "child": child.pid}))
+''')
+            pids = root / "pids.json"
+            try:
+                with self.assertRaisesRegex(PREP.Failure, "owned_fixture_timeout"):
+                    PREP.build([os.sys.executable, str(worker), str(pids), str(root / "ready")], cwd=root,
+                               env={"PATH": "/usr/bin:/bin"}, log=root / "build.log",
+                               seconds=1, stage="owned_fixture")
+                self.assertTrue(pids.exists())
+                self.assertFalse(PREP.group_has_running_member(json.loads(pids.read_text())["worker"]),
+                                 "timeout must stop the descendant even after the leader exits")
+            finally:
                 if pids.exists():
                     try:
                         os.killpg(json.loads(pids.read_text())["worker"], signal.SIGKILL)
