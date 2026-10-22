@@ -371,7 +371,13 @@ class EvidenceFormat(unittest.TestCase):
     """Driver evidence must be the exact format the gate validates (compatibility, not qualification)."""
 
     def build(self, mutate=None):
-        head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        def git(*args, binary=False):
+            out = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, check=True).stdout
+            return out if binary else out.decode().strip()
+        head, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
+        # The committed bytes a Linux checkout of HEAD runs (a Windows autocrlf working copy may differ).
+        committed = {rel: hashlib.sha256(git("cat-file", "blob", f"HEAD:{rel}", binary=True)).hexdigest()
+                     for rel in (*GATE.RUNTIME_DRIVERS.values(), GATE.RUNTIME_REPLAY_MODULE)}
         classifier = REPLAY.classifier_identity(CANDIDATE, MANIFEST["candidate"]["sha256"])
         allowed = REPLAY.original_error_expected()
         files = {}
@@ -387,10 +393,12 @@ class EvidenceFormat(unittest.TestCase):
                                 "dispatch_witness": {"observed": benign, "inotify_opens": 1 if benign else 0},
                                 "useful_result": kind == "original_result",
                                 "effect_witness": {"workspace_unchanged": True, "egress_bodies": 0}})
-            ev = REPLAY.evidence(profile, status="pass", source={"commit": head, "tree": None, "dirty": False},
+            ev = REPLAY.evidence(profile, status="pass", source={"commit": head, "tree": tree, "dirty": False},
                                  classifier=classifier, replay_result={"matrix_sha256": digest, "cases": records, "sessions": 1},
                                  failures=[], calibration={"dispatch_witness_calibrated": True, "effect_witness_calibrated": True},
-                                 identities={"agent_binary_sha256": "a" * 64, "driver_sha256": "b" * 64},
+                                 identities={"agent_binary_sha256": "a" * 64,
+                                             "driver_sha256": committed[GATE.RUNTIME_DRIVERS[profile]],
+                                             "replay_module_sha256": committed[GATE.RUNTIME_REPLAY_MODULE]},
                                  runtime={"bwrap": "c" * 64},
                                  witnesses={"daemon_stopped": True, "workspace_unchanged": True, "egress_bodies": 0})
             ev["platform"] = "Linux-format-compatibility-test"  # this is a format test, not a Linux run

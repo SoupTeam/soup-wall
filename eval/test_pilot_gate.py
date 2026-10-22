@@ -65,9 +65,10 @@ def codes(result):
 class Throwaway:
     """A git repository from committed bytes, optionally with a broken candidate, plus recorded reports."""
 
-    def __init__(self, base: Path, candidate: bytes | None = None, calls=3, spawns=1, matrix_edit=None, report_edit=None):
+    def __init__(self, base: Path, candidate: bytes | None = None, calls=3, spawns=1, matrix_edit=None, report_edit=None,
+                 extra=()):
         self.repo = base / "repo"
-        for rel in TREE:
+        for rel in (*TREE, *extra):
             target = self.repo / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(committed(rel))
@@ -302,7 +303,20 @@ class BrokenCandidates(unittest.TestCase):
         self.assertTrue({"input_modified", "fixture_modified", "report_expectation_mismatch"} <= found, found)
 
 
-def runtime_evidence(profile: str, commit: str, mutate=None) -> dict:
+RUNTIME_DRIVERS = {"filesystem": "scripts/verify-sou62-real-mcp.py", "git": "scripts/verify-sou68-real-mcp.py"}
+
+
+def rev(spec: str, repo=ROOT) -> str:
+    return subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", spec], capture_output=True, text=True,
+                          check=True).stdout.strip()
+
+
+def blob_sha(commit: str, rel: str, repo=ROOT) -> str:
+    return sha(subprocess.run(["git", "-C", str(repo), "cat-file", "blob", f"{commit}:{rel}"], capture_output=True,
+                              check=True).stdout)
+
+
+def runtime_evidence(profile: str, commit: str, mutate=None, repo=ROOT) -> dict:
     """SYNTHETIC TEST INPUT for the validator only; it is not evidence and is never committed."""
     pins = {**REAL["inputs"]}
     prof_dir = "filesystem-readonly-v1" if profile == "filesystem" else "git-readonly-v1"
@@ -324,12 +338,15 @@ def runtime_evidence(profile: str, commit: str, mutate=None) -> dict:
                           "useful_result": (allowed and not original_error) if allowed else None,
                           "effect_witness": {"kind": "synthetic", "workspace_unchanged": True, "egress_bodies": 0}})
     ev = {"format": "sou97-runtime-evidence/1", "profile": profile, "status": "pass", "platform": "Linux-synthetic",
-          "source": {"commit": commit, "dirty": False}, "matrix_sha256": pins[MATRIX],
+          "source": {"commit": commit, "tree": rev(f"{commit}^{{tree}}", repo), "dirty": False}, "matrix_sha256": pins[MATRIX],
           "identities": {"classifier_sha256": REAL["candidate"]["sha256"], "classifier_revision": REAL["candidate"]["revision"],
                          "policy_sha256": pins[f"profiles/mcp/{prof_dir}/policy.yaml"],
                          "tools_list_sha256": pins[f"profiles/mcp/{prof_dir}/upstream-tools-list.json"],
                          "upstream_identity_sha256": pins[f"profiles/mcp/{prof_dir}/upstream-identity.json"],
-                         "agent_binary_sha256": "a" * 64, "driver_sha256": "b" * 64, "runtime": {"bwrap": "c" * 64}},
+                         "agent_binary_sha256": "a" * 64,
+                         "driver_sha256": blob_sha(commit, RUNTIME_DRIVERS[profile], repo),
+                         "replay_module_sha256": blob_sha(commit, "scripts/sou97_runtime_replay.py", repo),
+                         "runtime": {"bwrap": "c" * 64}},
           "witnesses": {"dispatch_witness_calibrated": True, "effect_witness_calibrated": True, "daemon_stopped": True,
                         "workspace_unchanged": True, "egress_bodies": 0},
           "cases": cases}
@@ -382,6 +399,122 @@ class RuntimeValidator(unittest.TestCase):
                 done, result, _ = self.gate(**kwargs)
                 self.assertEqual(done.returncode, 1)
                 self.assertIn(code, codes(result))
+
+
+class RuntimeSourceBinding(unittest.TestCase):
+    """D1: runtime evidence must share one verified source identity, and it must be the evaluated commit.
+
+    Runs in a throwaway repository built from committed public bytes (Throwaway), so that commits can be
+    added after the "evidence" without touching this checkout or any other repository.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="sou97-binding-")
+        cls.tw = Throwaway(Path(cls.tmp), extra=(*RUNTIME_DRIVERS.values(), "scripts/sou97_runtime_replay.py"))
+        cls.head = cls.tw.recorded
+        repo = cls.tw.repo
+        cls.runtime_change = cls.commit_file("crates/agentfw/src/sou97_binding_control.rs", b"// changed after evidence\n")
+        git("reset", "-q", "--hard", cls.head, cwd=repo)
+        cls.docs_change = cls.commit_file("docs/sou97-binding-control.md", b"documentation only\n")
+        git("reset", "-q", "--hard", cls.head, cwd=repo)
+        cls.driver_change = cls.commit_file(RUNTIME_DRIVERS["git"], committed(RUNTIME_DRIVERS["git"]) + b"# changed\n")
+        git("reset", "-q", "--hard", cls.head, cwd=repo)
+        # Same tree as the evaluated commit but no shared history: not this source, whatever its bytes.
+        cls.unrelated = git("commit-tree", cls.head + "^{tree}", "-m", "unrelated", cwd=repo).decode().strip()
+
+    @classmethod
+    def tearDownClass(cls):
+        remove_tree(cls.tmp)
+
+    @classmethod
+    def commit_file(cls, rel: str, data: bytes) -> str:
+        target = cls.tw.repo / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        git("add", "-A", cwd=cls.tw.repo)
+        git("commit", "-q", "-m", "after evidence: " + rel, cwd=cls.tw.repo)
+        return git("rev-parse", "HEAD", cwd=cls.tw.repo).decode().strip()
+
+    def gate(self, fs=None, git_=None, ref=None, fs_mutate=None, git_mutate=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = []
+            for profile, commit, mutate in (("filesystem", fs or self.head, fs_mutate), ("git", git_ or self.head, git_mutate)):
+                path = Path(tmp, f"{profile}.json")
+                path.write_text(json.dumps(runtime_evidence(profile, commit, mutate, repo=self.tw.repo)), encoding="utf-8")
+                args += ["--runtime-evidence", path]
+            return run_gate("--mode", "runtime", "--manifest-file", self.tw.path, "--repo", self.tw.repo,
+                            "--ref", ref or self.head, *args)
+
+    def assertRejected(self, result, *expected):
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertTrue(set(expected) <= codes(result), codes(result))
+
+    def test_control_exact_head_evidence_qualifies(self):
+        for evaluated in (self.head, self.runtime_change):
+            with self.subTest(evaluated=evaluated):
+                done, result, _ = self.gate(fs=evaluated, git_=evaluated, ref=evaluated)
+                self.assertEqual((done.returncode, result["verdict"]), (0, "RUNTIME_QUALIFIED"), result["failures"])
+
+    def test_profiles_from_different_commits_are_rejected(self):
+        done, result, _ = self.gate(git_=self.tw.source)
+        self.assertEqual(done.returncode, 1)
+        self.assertRejected(result, "runtime_source_mismatch", "runtime_source_not_evaluated")
+        mismatch = next(f["detail"] for f in result["failures"] if f["code"] == "runtime_source_mismatch")
+        self.assertEqual(mismatch, {"filesystem": self.head, "git": self.tw.source})
+
+    def test_stale_or_unrelated_commit_is_rejected(self):
+        # Stale: the previous gate accepted an ancestor holding the same pinned inputs.
+        done, result, _ = self.gate(fs=self.tw.source, git_=self.tw.source)
+        self.assertEqual(done.returncode, 1)
+        self.assertRejected(result, "runtime_source_not_evaluated", "runtime_driver_identity")
+        self.assertNotIn("runtime_source_mismatch", codes(result))
+        _, result, _ = self.gate(fs=self.unrelated, git_=self.unrelated)
+        self.assertRejected(result, "runtime_source_not_evaluated", "runtime_source_lineage")
+        _, result, _ = self.gate(fs_mutate=lambda ev: ev["source"].update(commit="0123456789abcdef0123456789abcdef01234567"))
+        self.assertRejected(result, "runtime_source_unknown", "runtime_source_mismatch", "runtime_driver_identity")
+
+    def test_source_changed_after_evidence_is_rejected(self):
+        # Exact head: a runtime change, a driver change and even a documentation-only successor all need new runs.
+        for evaluated in (self.runtime_change, self.driver_change, self.docs_change):
+            with self.subTest(evaluated=evaluated):
+                done, result, _ = self.gate(ref=evaluated)
+                self.assertEqual(done.returncode, 1)
+                self.assertRejected(result, "runtime_source_not_evaluated", "runtime_driver_identity")
+
+    def test_driver_identities_must_be_the_committed_bytes(self):
+        mutations = {
+            "placeholder driver digest": lambda ev: ev["identities"].update(driver_sha256="b" * 64),
+            "other profile's driver": lambda ev: ev["identities"].update(
+                driver_sha256=blob_sha(self.head, RUNTIME_DRIVERS["git"], self.tw.repo)),
+            "placeholder replay module": lambda ev: ev["identities"].update(replay_module_sha256="c" * 64),
+            "missing replay module": lambda ev: ev["identities"].pop("replay_module_sha256"),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label):
+                done, result, _ = self.gate(fs_mutate=mutate)
+                self.assertEqual(done.returncode, 1)
+                self.assertEqual(codes(result), {"runtime_driver_identity"})
+        # A driver changed after the run: evidence of the old bytes against the new commit.
+        _, result, _ = self.gate(ref=self.driver_change, fs=self.driver_change, git_=self.driver_change,
+                                 git_mutate=lambda ev: ev["identities"].update(
+                                     driver_sha256=blob_sha(self.head, RUNTIME_DRIVERS["git"], self.tw.repo)))
+        self.assertEqual(codes(result), {"runtime_driver_identity"})
+
+    def test_missing_or_invalid_provenance_is_rejected(self):
+        other_tree = rev(self.tw.source + "^{tree}", self.tw.repo)
+        mutations = {
+            "runtime_source": [lambda ev: ev.pop("source"), lambda ev: ev.update(source="HEAD"),
+                               lambda ev: ev["source"].pop("tree"), lambda ev: ev["source"].update(dirty=True),
+                               lambda ev: ev["source"].pop("dirty"), lambda ev: ev["source"].update(commit="77a3b61")],
+            "runtime_source_tree": [lambda ev: ev["source"].update(tree=other_tree)],
+        }
+        for code, variants in mutations.items():
+            for index, mutate in enumerate(variants):
+                with self.subTest(code=code, variant=index):
+                    done, result, _ = self.gate(git_mutate=mutate)
+                    self.assertEqual(done.returncode, 1)
+                    self.assertRejected(result, code)
 
 
 if __name__ == "__main__":

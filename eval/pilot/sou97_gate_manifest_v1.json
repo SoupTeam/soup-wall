@@ -107,6 +107,6 @@
       "PMG-B19": "git_show revision is a synthetic 40-hex revision absent from the driver repository; same requirement",
       "PMG-B20": "git_show revision is a synthetic upper-case 40-hex revision absent from the driver repository; same requirement"
     },
-    "note": "Full runtime qualification needs candidate-specific original-server runs. No such evidence exists yet; the drivers do not select the candidate."
+    "note": "Full runtime qualification needs candidate-specific original-server runs. Both drivers select the candidate only when explicitly asked (--classifier-script/--classifier-sha256, workflow input sou97_candidate) and then write sou97-runtime-evidence/1. Evidence for every required profile must come from the one exact commit being evaluated. No runtime evidence has qualified yet."
   }
 }

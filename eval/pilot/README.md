@@ -71,13 +71,22 @@ profile with these fields:
 
 - `format`, `profile` (`filesystem` or `git`), `status: "pass"`, and `platform` starting with
   `Linux`.
-- `source: {commit, dirty: false}`. The commit must descend from `evidence.source_commit` and hold
-  the pinned candidate, policy, tool list and upstream identity.
+- `source: {commit, tree, dirty: false}`. The source is bound exactly:
+  - `commit` must be a commit in the evaluated repository, and `tree` must be its tree.
+  - `commit` must **be** the evaluated commit (`--ref`, or the clean `HEAD` of `--root`). Any later
+    commit, including a documentation-only one, needs new runs: no ancestry exception is defined.
+  - Every profile's evidence must name the same commit (`runtime_source_mismatch` otherwise).
+  - The commit must descend from `evidence.source_commit` and hold the pinned candidate, policy, tool
+    list and upstream identity.
 - `matrix_sha256`, plus `identities`:
   - `classifier_sha256` and `classifier_revision`;
   - `policy_sha256`, `tools_list_sha256` and `upstream_identity_sha256`;
-  - `agent_binary_sha256` and `driver_sha256`;
-  - `runtime`, a map of runtime component hashes.
+  - `driver_sha256` and `replay_module_sha256`, which must equal the committed bytes of the profile's
+    driver (`scripts/verify-sou62-real-mcp.py` or `scripts/verify-sou68-real-mcp.py`) and of
+    `scripts/sou97_runtime_replay.py` at that commit;
+  - `agent_binary_sha256` and `runtime`, a map of runtime component hashes. These are build and
+    install products: the gate records them but cannot prove them from source, so they must be
+    checked against the retained artifacts of the same runs.
 - `witnesses`: `dispatch_witness_calibrated`, `effect_witness_calibrated`, `daemon_stopped` and
   `workspace_unchanged` all `true`, and `egress_bodies: 0`.
 - `cases`: one entry per runtime-reachable matrix case of the profile.
@@ -85,7 +94,9 @@ profile with these fields:
     observed dispatch witness, `useful_result: true`, an unchanged workspace and no egress.
   - **Every expected profile refusal** needs a refusal verdict with a `refusal_code`,
     `dispatched: false`, a dispatch witness that observed nothing, an unchanged workspace and no
-    egress.
+    egress. The gate does not yet require a particular refusal code or channel: the frozen matrix
+    records only `expected_native: profile_refusal` and its `admission_basis`, not the native
+    message, and no retained runtime evidence has been reviewed to ground one.
   - **Every case** carries `arguments_sha256.sent`, the canonical hash of the exact matrix arguments.
   - **The cases listed in `runtime.original_error_expected`** (synthetic Git revisions no repository contains)
     instead need `result_kind: "original_error"` and `useful_result: false`. They must still be admitted,
@@ -112,8 +123,9 @@ runs have completed and their artifacts have been checked.
 3. Wait for both runs to finish. Download the artifacts `sou62-real-filesystem-mcp-evidence`
    and `sou68-real-git-mcp-evidence`. Each contains `sou97-*-candidate/sou97-runtime-evidence.json`
    with the run's driver report, collector logs and response sidecar.
-4. Confirm that both evidence files record the pushed commit (`source.commit`) and `dirty: false`.
-   Then run, on that commit:
+4. Confirm that both evidence files record the same pushed commit (`source.commit`, with its
+   `source.tree`) and `dirty: false`. Both workflows must run on that one commit. Then run, on that
+   commit:
    `python3 eval/tools/check_pilot_gate.py --mode runtime --runtime-evidence fs/sou97-runtime-evidence.json --runtime-evidence git/sou97-runtime-evidence.json`.
 5. Only a `RUNTIME_QUALIFIED` verdict from step 4 on genuine artifacts supports a runtime
    claim. Retain the artifacts and the gate output together.

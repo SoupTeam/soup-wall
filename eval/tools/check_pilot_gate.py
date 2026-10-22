@@ -7,7 +7,8 @@ Modes
            acceptance: no native policy verdict or execution effect has been observed.
   runtime  Everything in offline, plus candidate-specific Linux original-server evidence for every
            required profile (format sou97-runtime-evidence/1). Missing runtime evidence is a FAIL,
-           never a skip. Its best verdict is RUNTIME_QUALIFIED.
+           never a skip. All evidence must come from the one commit being evaluated, with the
+           committed driver and replay module bytes. Its best verdict is RUNTIME_QUALIFIED.
 
 The gate is a comparator. It never runs a classifier, never simulates native policy and never infers
 execution effects from predictions: runtime outcomes are read only from runtime evidence.
@@ -36,11 +37,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-GATE_VERSION = 1
+GATE_VERSION = 2
 MANIFEST_FORMAT = "sou97-pilot-gate-manifest/1"
 REPORT_KIND, REPORT_VERSION = "sou97-pilot-report", 2
 RUNTIME_FORMAT = "sou97-runtime-evidence/1"
 PROFILES = ("filesystem", "git")
+# Committed sources whose raw-byte sha256 each driver records in its evidence (sha256 of the file it ran).
+RUNTIME_DRIVERS = {"filesystem": "scripts/verify-sou62-real-mcp.py", "git": "scripts/verify-sou68-real-mcp.py"}
+RUNTIME_REPLAY_MODULE = "scripts/sou97_runtime_replay.py"
 RISKY = ("write", "delete", "send_data", "change_permissions")
 LATENCY_MODES = ("in_process_call", "warm_process_round_trip", "cold_process_per_call")
 SAFETY_NOT_PROVEN_READ = "must_not_be_classified_read_with_unknown_false"
@@ -390,20 +394,23 @@ class Gate:
     # ------------------------------------------------------------------ runtime evidence
     def check_runtime(self, paths: list[str]) -> None:
         want = self.m["runtime"]
-        seen = {}
+        seen, commits = {}, {}
         for path in paths:
             try:
                 ev = json.loads(Path(path).read_bytes().decode("utf-8"))
             except (OSError, UnicodeError, ValueError):
                 self.fail("runtime_unreadable", path)
                 continue
-            profile = ev.get("profile")
-            if ev.get("format") != RUNTIME_FORMAT or profile not in want["required_profiles"]:
-                self.fail("runtime_format", {"file": Path(path).name, "format": ev.get("format"), "profile": profile})
+            profile = ev.get("profile") if isinstance(ev, dict) else None
+            if profile not in want["required_profiles"] or ev.get("format") != RUNTIME_FORMAT:
+                self.fail("runtime_format", {"file": Path(path).name,
+                                             "format": ev.get("format") if isinstance(ev, dict) else None, "profile": profile})
                 continue
             if profile in seen:
                 self.fail("runtime_duplicate_profile", profile)
                 continue
+            source = ev.get("source")
+            commits[profile] = source.get("commit") if isinstance(source, dict) else None
             try:
                 seen[profile] = self.check_runtime_profile(Path(path).name, profile, ev)
             except (AttributeError, KeyError, TypeError, ValueError, IndexError) as error:
@@ -412,6 +419,9 @@ class Gate:
         for profile in want["required_profiles"]:
             if profile not in seen:
                 self.fail("runtime_evidence_missing", profile)
+        # One runtime source identity: every profile's evidence must come from the same commit.
+        if len(set(commits.values())) > 1:
+            self.fail("runtime_source_mismatch", dict(sorted(commits.items())))
         self.observed["runtime"] = seen
 
     def check_runtime_profile(self, name: str, profile: str, ev: dict) -> dict:
@@ -422,11 +432,28 @@ class Gate:
             self.fail("runtime_not_passed", {**where, "status": ev.get("status")})
         if not str(ev.get("platform", "")).startswith(self.m["runtime"]["required_platform_prefix"]):
             self.fail("runtime_platform", {**where, "platform": ev.get("platform")})
-        src = ev.get("source", {})
-        commit = src.get("commit")
-        if not (isinstance(commit, str) and HEX40.fullmatch(commit)) or src.get("dirty") is not False:
-            self.fail("runtime_source", {**where, "source": src})
-        elif self.src.commit is not None:
+        src = ev.get("source")
+        src = src if isinstance(src, dict) else {}
+        commit, tree = src.get("commit"), src.get("tree")
+        verified = None  # the evidence commit, once it is proven to be the evaluated commit's own source
+        if (not (isinstance(commit, str) and HEX40.fullmatch(commit)) or not (isinstance(tree, str) and HEX40.fullmatch(tree))
+                or src.get("dirty") is not False):
+            self.fail("runtime_source", {**where, "source": src or ev.get("source")})
+        elif self.src.commit is None:
+            self.fail("runtime_source_unverified", where)
+        elif self.src.git("rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}") != commit:
+            self.fail("runtime_source_unknown", {**where, "commit": commit})
+        else:
+            if self.src.git("rev-parse", "--verify", "--quiet", f"{commit}^{{tree}}") != tree:
+                self.fail("runtime_source_tree", {**where, "commit": commit, "tree": tree})
+            # Exact-head binding: evidence is accepted only for the commit being evaluated. A later commit,
+            # whatever it changes, needs new runs; no ancestry or documentation-only exception is defined.
+            if commit != self.src.commit:
+                self.fail("runtime_source_not_evaluated", {**where, "commit": commit, "evaluated": self.src.commit})
+            elif self.src.ref is None and self.src.git("status", "--porcelain", "--untracked-files=no") != "":
+                self.fail("runtime_source_not_evaluated", {**where, "commit": commit, "detail": "evaluated directory has tracked changes"})
+            else:
+                verified = commit
             if not self.src.is_ancestor(self.m["evidence"]["source_commit"], commit):
                 self.fail("runtime_source_lineage", {**where, "commit": commit})
             for rel in (self.m["candidate"]["path"], f"profiles/mcp/{prof_dir}/policy.yaml",
@@ -434,9 +461,14 @@ class Gate:
                 got = self.src.blob(commit, rel)
                 if got is None or sha256(got) != pins[rel]:
                     self.fail("runtime_source_input", {**where, "path": rel, "commit": commit})
-        else:
-            self.fail("runtime_source_unverified", where)
         ids = ev.get("identities", {})
+        # The driver and replay module that produced the evidence must be the committed bytes of that commit.
+        # The agent binary and runtime components are build/install products: recorded, not provable from source.
+        for key, rel in (("driver_sha256", RUNTIME_DRIVERS[profile]), ("replay_module_sha256", RUNTIME_REPLAY_MODULE)):
+            got = self.src.blob(verified, rel) if verified else None
+            if got is None or ids.get(key) != sha256(got):
+                self.fail("runtime_driver_identity", {**where, "field": key, "path": rel, "actual": ids.get(key),
+                                                      "expected": None if got is None else sha256(got)})
         expected = {"classifier_sha256": self.m["candidate"]["sha256"],
                     "policy_sha256": pins[f"profiles/mcp/{prof_dir}/policy.yaml"],
                     "tools_list_sha256": pins[f"profiles/mcp/{prof_dir}/upstream-tools-list.json"],
@@ -446,9 +478,8 @@ class Gate:
                 self.fail("runtime_identity", {**where, "field": key, "expected": value, "actual": ids.get(key)})
         if ids.get("classifier_revision") != self.m["candidate"]["revision"]:
             self.fail("runtime_identity", {**where, "field": "classifier_revision"})
-        for key in ("agent_binary_sha256", "driver_sha256"):
-            if not (isinstance(ids.get(key), str) and HEX64.fullmatch(ids[key])):
-                self.fail("runtime_identity", {**where, "field": key})
+        if not (isinstance(ids.get("agent_binary_sha256"), str) and HEX64.fullmatch(ids["agent_binary_sha256"])):
+            self.fail("runtime_identity", {**where, "field": "agent_binary_sha256"})
         runtime_ids = ids.get("runtime", {})
         if not runtime_ids or not all(isinstance(v, str) and HEX64.fullmatch(v) for v in runtime_ids.values()):
             self.fail("runtime_identity", {**where, "field": "runtime"})
