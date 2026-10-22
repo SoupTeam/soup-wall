@@ -196,7 +196,7 @@ def selected_paths(args, generation):
     return paths
 
 
-def verify_generation(generation, expected_commit):
+def verify_generation(generation, expected_commit, *, probe_native=True):
     generation = private_dir(generation)
     selection_path = bounded_file(generation / "selection.json", MAX_JSON)
     selection = PILOT.strict_json(selection_path.read_bytes())
@@ -209,8 +209,9 @@ def verify_generation(generation, expected_commit):
     }
     require(selection.get("prepared_profiles") == profiles, "selected_profile_identity_mismatch")
     require(FS.sha(paths["node"]) == FS.NODE_SHA256, "node_binary_digest_mismatch")
-    for role in PILOT.EXECUTABLE_ROLES:
-        check_native(paths[role])
+    if probe_native:
+        for role in PILOT.EXECUTABLE_ROLES:
+            check_native(paths[role])
     return selection_path, profiles
 
 

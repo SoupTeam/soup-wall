@@ -78,6 +78,10 @@ pub struct PilotLaunchArgs {
     #[arg(long)]
     pub workspace: PathBuf,
 
+    /// Separate Git root pinned by the installed Git profile; defaults to --workspace.
+    #[arg(long)]
+    pub git_workspace: Option<PathBuf>,
+
     /// Explicit installed daemon home directory containing native-token and config;
     /// defaults to ~/.agentfw or AGENTFW_HOME.
     #[arg(long)]
@@ -150,6 +154,7 @@ pub struct ValidatedConfig {
     pub claude_path: PathBuf,
     pub workspace_path: PathBuf,
     pub home_path: PathBuf,
+    pub git_workspace_path: PathBuf,
     pub fs_profile_path: PathBuf,
     pub git_profile_path: PathBuf,
     pub classifier_path: Option<PathBuf>,
@@ -278,6 +283,17 @@ impl PilotLaunchArgs {
             },
         };
 
+        let git_workspace_path = self
+            .git_workspace
+            .as_ref()
+            .unwrap_or(&workspace_path)
+            .canonicalize()
+            .context("canonicalize Git workspace")?;
+        ensure!(
+            git_workspace_path.is_dir(),
+            "selected Git workspace is not a directory"
+        );
+
         // 5. Optional classifier and policy
         let classifier_path = match &self.classifier {
             Some(p) => {
@@ -349,8 +365,12 @@ impl PilotLaunchArgs {
             &workspace_path,
             is_mock,
         )?;
-        let (git_runtime_cmd, resolved_git_profile) =
-            resolve_server_runtime(GIT_SERVER_ID, &git_profile_path, &workspace_path, is_mock)?;
+        let (git_runtime_cmd, resolved_git_profile) = resolve_server_runtime(
+            GIT_SERVER_ID,
+            &git_profile_path,
+            &git_workspace_path,
+            is_mock,
+        )?;
 
         let prompt = self
             .prompt
@@ -361,6 +381,7 @@ impl PilotLaunchArgs {
         Ok(ValidatedConfig {
             claude_path,
             workspace_path,
+            git_workspace_path,
             home_path,
             fs_profile_path: resolved_fs_profile,
             git_profile_path: resolved_git_profile,
@@ -1037,7 +1058,15 @@ pub fn write_per_process_mcp_config(
         let mut env_obj = serde_json::Map::new();
         env_obj.insert(
             "AGENTFW_WORKSPACE".to_string(),
-            serde_json::Value::String(config.workspace_path.display().to_string()),
+            serde_json::Value::String(
+                if server_id == GIT_SERVER_ID {
+                    &config.git_workspace_path
+                } else {
+                    &config.workspace_path
+                }
+                .display()
+                .to_string(),
+            ),
         );
         if !config.allow_command_fixtures && config.mock_daemon_token.is_none() {
             ensure!(
@@ -1500,6 +1529,7 @@ mod tests {
     fn test_missing_claude_executable_fails() {
         let temp = tempfile::tempdir().unwrap();
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude: temp.path().join("nonexistent_claude"),
             workspace: temp.path().to_path_buf(),
             home: None,
@@ -1565,7 +1595,10 @@ mod tests {
         let test_token = crate::token::generate();
         let test_instance_id = crate::token::generate();
 
+        let git_workspace = temp.path().join("separate-git");
+        fs::create_dir(&git_workspace).unwrap();
         let args = PilotLaunchArgs {
+            git_workspace: Some(git_workspace.clone()),
             claude,
             workspace: workspace.clone(),
             home: Some(temp.path().to_path_buf()),
@@ -1631,6 +1664,10 @@ mod tests {
         let mcp_data: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&mcp_config).unwrap()).unwrap();
         let fs_env = &mcp_data["mcpServers"]["filesystem"]["env"];
+        assert_eq!(
+            mcp_data["mcpServers"]["git"]["env"]["AGENTFW_WORKSPACE"],
+            git_workspace.canonicalize().unwrap().display().to_string()
+        );
         assert_eq!(fs_env["AGENTFW_HOST_SESSION"], "test-session-123");
         assert_eq!(fs_env["AGENTFW_NATIVE_LIVENESS"], "true");
         assert_eq!(
@@ -1655,6 +1692,7 @@ mod tests {
         fs::write(&git_profile, r#"{"tools":[{"name":"shared_tool"}]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1694,6 +1732,7 @@ mod tests {
         fs::write(&git_profile, r#"{"command":"/bin/echo","args":["world"]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1736,6 +1775,7 @@ mod tests {
         fs::create_dir_all(&git_dir).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1778,6 +1818,7 @@ mod tests {
         fs::write(&git_profile, r#"{"command":"/bin/echo","args":["world"]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
