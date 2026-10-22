@@ -89,5 +89,12 @@ identities, failed/late logs and independent process cleanup are retained.
 Focused native tests separately cover changed identities/arguments, replay,
 authority loss and pruning; those are distinct evidence scopes.
 
+After a successful explicit CLI approval, the acceptance client observes the
+original response with its common 35-second read budget and records the budget
+and elapsed time. A missing response remains a named failure, without retrying
+the call or approval. This observation budget changes neither the production
+relay deadline, pending wait nor broker TTL; exact original bytes and once-only
+kernel execution are still required. Negative-case deadlines remain unchanged.
+
 The existing Ready filesystem job runs this bounded command for both families.
 No new per-push matrix is added. Draft fast checks cannot replace this command.
