@@ -314,7 +314,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   native-ubuntu-2404:
-    name: Native Ubuntu 24.04 preparation
+    name: native-ubuntu-2404
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404')
     runs-on: ubuntu-24.04

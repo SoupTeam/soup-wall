@@ -33,6 +33,7 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 CHECK_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
     "agent-doctor.yml": {"agent-doctor-linux": ("doctor-linux",)},
     "agent-fleet.yml": {"fleet": ("Fleet API and real dual-store browser witness",)},
+    "agent-windows-onboarding.yml": {"standard-user-onboarding": ("standard-user-onboarding",)},
     "benchmark.yml": {"agent-scorecard": ("Agent security scorecard",)},
     "ci.yml": {
         "documentation": ("Documentation links",),

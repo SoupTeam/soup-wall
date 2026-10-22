@@ -92,7 +92,7 @@ def main() -> int:
         if not TARGET.is_file() or TARGET.read_text(encoding="utf-8") != content:
             parser.error("Component workflow drift: run python3 scripts/ci_components.py")
     else:
-        TARGET.write_text(content, encoding="utf-8")
+        TARGET.write_text(content, encoding="utf-8", newline="\n")
     return 0
 
 
