@@ -115,6 +115,10 @@ pub struct PilotLaunchArgs {
     #[arg(long, default_value_t = DEFAULT_TIMEOUT_SECONDS)]
     pub timeout_seconds: u64,
 
+    /// Opt in to bounded operator Ask continuation for original Linux read-only profiles.
+    #[arg(long, default_value_t = 0)]
+    pub ask_wait_seconds: u64,
+
     /// Output versioned machine-readable JSON summary instead of operator logs.
     #[arg(long)]
     pub json: bool,
@@ -153,6 +157,7 @@ pub struct ValidatedConfig {
     pub host_session: String,
     pub agent_bin_path: PathBuf,
     pub timeout: Duration,
+    pub ask_wait_seconds: u64,
     pub dry_run: bool,
     pub mock_daemon_token: Option<String>,
     pub mock_instance_id: Option<String>,
@@ -364,6 +369,7 @@ impl PilotLaunchArgs {
             host_session,
             agent_bin_path,
             timeout: Duration::from_secs(self.timeout_seconds),
+            ask_wait_seconds: self.ask_wait_seconds,
             dry_run: self.dry_run,
             mock_daemon_token: self.mock_daemon_token.clone(),
             mock_instance_id: self.mock_instance_id.clone(),
@@ -999,8 +1005,14 @@ pub fn write_per_process_mcp_config(
             encoded_grant.clone(),
             "--home".to_string(),
             config.home_path.display().to_string(),
-            "--".to_string(),
         ];
+        if config.ask_wait_seconds > 0 {
+            collector_args.extend([
+                "--native-approval-wait-seconds".into(),
+                config.ask_wait_seconds.to_string(),
+            ]);
+        }
+        collector_args.push("--".into());
         collector_args.extend(runtime_cmd.clone());
 
         let mut s_obj = serde_json::Map::new();
@@ -1182,6 +1194,9 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .as_millis() as u64;
 
     let config = args.validate()?;
+    if config.ask_wait_seconds > 0 {
+        crate::pilot_approval::preflight(&config)?;
+    }
     let guard = PrivateDirGuard::new(&config.workspace_path)?;
 
     // Discover live daemon instance or mock for testing
@@ -1207,6 +1222,15 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .context("verify daemon active policy against selected policy")?;
 
     let grants = mint_grants(&config, now_ms, &instance_id)?;
+    let pilot_run = if config.ask_wait_seconds > 0 && !config.dry_run {
+        Some(crate::pilot_approval::RunGuard::create(
+            &config,
+            &instance_id,
+            &grants,
+        )?)
+    } else {
+        None
+    };
     let (mcp_config_path, server_plans) =
         write_per_process_mcp_config(&guard.path, &config, &grants)?;
 
@@ -1319,6 +1343,13 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .env("CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS", "1")
         .env("CLAUDE_CODE_MAX_RETRIES", "0");
 
+    if let Some(run) = &pilot_run {
+        eprintln!("Pilot Ask configured; run: {}", run.id());
+        eprintln!(
+            "Second terminal (same daemon home): agentfw pilot-approval --run {} list",
+            run.id()
+        );
+    }
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
     let child_pid = child.id();
 
@@ -1412,7 +1443,10 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                 }
             }
         }
-    })?;
+    });
+    let cleanup = pilot_run.as_ref().map(|run| run.finish()).transpose();
+    let exit_status = exit_status?;
+    cleanup?;
 
     let exit_code = exit_status.code().unwrap_or(1);
     if !args.json {
@@ -1477,6 +1511,7 @@ mod tests {
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 10,
+            ask_wait_seconds: 0,
             json: false,
             prompt: None,
             model: "claude-sonnet-4-20250514".into(),
@@ -1542,6 +1577,7 @@ mod tests {
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 60,
+            ask_wait_seconds: 0,
             json: true,
             prompt: None,
             model: "claude-sonnet-4-20250514".into(),
@@ -1630,6 +1666,7 @@ mod tests {
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 60,
+            ask_wait_seconds: 0,
             json: false,
             prompt: None,
             model: "claude-sonnet-4-20250514".into(),
@@ -1668,6 +1705,7 @@ mod tests {
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 60,
+            ask_wait_seconds: 0,
             json: false,
             prompt: None,
             model: "claude-sonnet-4-20250514".into(),
@@ -1709,6 +1747,7 @@ mod tests {
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 60,
+            ask_wait_seconds: 0,
             json: false,
             prompt: None,
             model: "claude-sonnet-4-20250514".into(),
@@ -1750,6 +1789,7 @@ mod tests {
             agent_bin: None,
             dry_run: true,
             timeout_seconds: 60,
+            ask_wait_seconds: 0,
             json: false,
             prompt: None,
             model: "claude-sonnet-4-20250514".into(),

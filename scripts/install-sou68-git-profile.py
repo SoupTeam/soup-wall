@@ -79,7 +79,8 @@ def registry(manifest):
         for tool in manifest["result"]["tools"]]}
 
 
-def install(destination, workspace, git, git_sha256, bwrap, git_launcher, *, static_git=False):
+def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
+            *, static_git=False, python_archive=None, wheelhouse=None, allow_download=True, log=None):
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("Git profile requires Linux x86-64; no isolation fallback")
     workspace, git, bwrap, git_launcher = [Path(p).resolve(strict=True) for p in (workspace, git, bwrap, git_launcher)]
@@ -103,14 +104,24 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher, *, sta
     package = destination / "package"
     package.mkdir(mode=0o700)
     archive = destination / "python.tar.gz"
-    request = urllib.request.Request(identity["python"]["url"], headers={"User-Agent": "Soup-Wall-SOU68"})
-    with urllib.request.urlopen(request, timeout=60) as response, archive.open("xb") as output:
-        total = 0
-        while chunk := response.read(1024 * 1024):
-            total += len(chunk)
-            if total > 128 * 1024 * 1024:
-                raise ValueError("Python download exceeds bound")
-            output.write(chunk)
+    if python_archive is not None:
+        supplied = Path(python_archive).resolve(strict=True)
+        if supplied.stat().st_size > 128 * 1024 * 1024:
+            raise ValueError("Python archive exceeds bound")
+        if sha(supplied) != identity["python"]["sha256"]:
+            raise ValueError("Python distribution digest mismatch")
+        shutil.copyfile(supplied, archive)
+    elif allow_download:
+        request = urllib.request.Request(identity["python"]["url"], headers={"User-Agent": "Soup-Wall-SOU68"})
+        with urllib.request.urlopen(request, timeout=60) as response, archive.open("xb") as output:
+            total = 0
+            while chunk := response.read(1024 * 1024):
+                total += len(chunk)
+                if total > 128 * 1024 * 1024:
+                    raise ValueError("Python download exceeds bound")
+                output.write(chunk)
+    else:
+        raise ValueError("pinned Python archive is required without explicit downloads")
     if sha(archive) != identity["python"]["sha256"]:
         raise ValueError("Python distribution digest mismatch")
     extract_python(archive, package)
@@ -118,9 +129,13 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher, *, sta
     env = {"PATH": os.environ.get("PATH", ""), "HOME": str(destination), "LANG": "C.UTF-8"}
     if subprocess.check_output([str(python), "-I", "--version"], env=env, text=True, timeout=10).strip() != "Python " + identity["python"]["version"]:
         raise ValueError("Python version mismatch")
+    if not allow_download and wheelhouse is None:
+        raise ValueError("local wheelhouse is required without explicit downloads")
+    offline_args = ["--no-index", "--find-links", str(Path(wheelhouse).resolve(strict=True))] if not allow_download else []
     subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", "--require-hashes",
                     "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
-                    "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300)
+                    *offline_args, "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
+                   stdout=log, stderr=subprocess.STDOUT if log is not None else None)
     # Python extension modules may depend on libraries not used by its launcher.
     # The separate opt-in clone installer validates an interpreter-free ELF Git.
     # Default v1 dependency discovery and all v1 CLI behavior remain unchanged.

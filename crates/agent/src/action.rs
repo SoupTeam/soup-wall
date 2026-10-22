@@ -19,6 +19,36 @@ pub enum ActionClass {
     Destructive,
 }
 
+/// Trusted host interpretation of argument fields, never a deserializable tool
+/// annotation. Hosts may select literal fields only after validating the exact
+/// installed executor/profile/schema and the complete argument envelope. These
+/// roles affect command-pattern upgrades only, not detectors, taint or resources.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum NativeArgumentRoles {
+    #[default]
+    CommandBearing,
+    ValidatedLiteralFields(&'static [&'static str]),
+}
+
+impl NativeArgumentRoles {
+    pub(crate) fn classify(self, args: &serde_json::Value, baseline: ActionClass) -> ActionClass {
+        let Self::ValidatedLiteralFields(fields) = self else {
+            return classify_with_baseline(args, baseline);
+        };
+        let Some(object) = args.as_object() else {
+            return classify_with_baseline(args, baseline);
+        };
+        // Unreviewed fields remain command-bearing, including nested/argv
+        // values. Do not remove anything from the original event itself.
+        let commands: serde_json::Map<String, serde_json::Value> = object
+            .iter()
+            .filter(|(key, _)| !fields.contains(&key.as_str()))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        classify_with_baseline(&serde_json::Value::Object(commands), baseline)
+    }
+}
+
 /// Tools that cannot change anything.
 const READ_ONLY_TOOLS: &[&str] = &["Read", "Grep", "Glob", "NotebookRead", "TodoRead"];
 /// Tools that reach the network but only RETRIEVE. Classified `ReadOnly`: fetching
@@ -209,6 +239,57 @@ mod tests {
 
     fn bash(cmd: &str) -> serde_json::Value {
         serde_json::json!({ "command": cmd })
+    }
+
+    #[test]
+    fn literal_roles_only_remove_reviewed_fields_from_command_upgrades() {
+        let roles = NativeArgumentRoles::ValidatedLiteralFields(&["path", "pattern"]);
+        let literal = serde_json::json!({"path":"/workspace/bin/rm.sh","pattern":"rm -rf"});
+        assert_eq!(
+            roles.classify(&literal, ActionClass::ReadOnly),
+            ActionClass::ReadOnly
+        );
+        assert_eq!(
+            NativeArgumentRoles::CommandBearing.classify(&literal, ActionClass::ReadOnly),
+            ActionClass::Destructive
+        );
+        for (value, class) in [
+            (
+                serde_json::json!({"path":"/workspace/rm.sh","argv":["rm","-rf","/workspace"]}),
+                ActionClass::Destructive,
+            ),
+            (
+                serde_json::json!({"pattern":"data","command":"chmod 777 /workspace"}),
+                ActionClass::PrivilegeChanging,
+            ),
+            (
+                serde_json::json!({"path":"data","argv":["git","push","origin","main"]}),
+                ActionClass::Network,
+            ),
+            (
+                serde_json::json!({"path":"data","argv":["sed","-i s/a/b/"]}),
+                ActionClass::SideEffecting,
+            ),
+            (
+                serde_json::json!(["rm", "-rf", "/workspace"]),
+                ActionClass::Destructive,
+            ),
+        ] {
+            assert_eq!(
+                roles.classify(&value, ActionClass::ReadOnly),
+                class,
+                "{value}"
+            );
+        }
+        // An argument role never reduces an installed effect baseline.
+        for class in [
+            ActionClass::SideEffecting,
+            ActionClass::Network,
+            ActionClass::PrivilegeChanging,
+            ActionClass::Destructive,
+        ] {
+            assert_eq!(roles.classify(&literal, class), class);
+        }
     }
 
     #[test]

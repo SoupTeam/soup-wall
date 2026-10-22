@@ -107,6 +107,11 @@ impl ProfileConfig {
             serde_json::to_value(&current)? == serde_json::to_value(self)?,
             "selected profile changed during approval"
         );
+        self.verify_assets()
+    }
+
+    /// Verify pinned bytes without modifying process environment or launching a server.
+    pub(crate) fn verify_assets(&self) -> anyhow::Result<()> {
         ensure!(
             package_tree_sha256(&self.package_root)? == self.package_tree_sha256,
             "selected package changed during approval"

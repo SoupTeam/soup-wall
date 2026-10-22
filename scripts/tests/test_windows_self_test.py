@@ -92,6 +92,30 @@ class ReportChecks(unittest.TestCase):
 
 @unittest.skipUnless(os.name == "nt" and shutil.which("pwsh"), "native Windows PowerShell required")
 class LauncherCleanupChecks(unittest.TestCase):
+    def test_owned_stage_retains_failed_evidence_only_when_requested(self):
+        for keep in (False, True):
+            with self.subTest(keep=keep):
+                root = None
+                identity = None
+                try:
+                    with self.assertRaisesRegex(RuntimeError, "controlled fixture failure"):
+                        with DRIVER.owned_stage(keep_on_error=keep) as directory:
+                            root = directory
+                            identity = root.stat()
+                            (root / "marker.txt").write_text("owned fixture", encoding="ascii")
+                            raise RuntimeError("controlled fixture failure")
+                    self.assertEqual(root.exists(), keep)
+                    if keep:
+                        self.assertEqual((root / "marker.txt").read_text(encoding="ascii"), "owned fixture")
+                finally:
+                    if root is not None and root.exists():
+                        resolved = root.resolve()
+                        observed = resolved.stat()
+                        self.assertEqual((observed.st_dev, observed.st_ino), (identity.st_dev, identity.st_ino))
+                        self.assertEqual(resolved.parent, Path(tempfile.gettempdir()).resolve())
+                        self.assertTrue(resolved.name.startswith("sw71-"))
+                        shutil.rmtree(resolved)
+
     def test_standard_user_removes_private_temp_on_success_and_failure(self):
         if ctypes.windll.shell32.IsUserAnAdmin():
             self.skipTest("requires the non-elevated account used by native acceptance")
