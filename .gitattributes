@@ -58,3 +58,6 @@ rule_baseline/git_readonly_v1/rule_baseline.py text eol=lf
 
 # The reviewed CDLA notice is checked by its exact raw-byte digest on Windows too.
 policy/third-party-notices/webpki-roots-1.0.10/LICENSE text eol=lf
+
+# Frozen SOU-106 workload bytes are identical on Windows and Linux.
+scripts/benchmarks/installed-pilot-workload-v1.json text eol=lf

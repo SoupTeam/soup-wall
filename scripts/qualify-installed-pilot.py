@@ -575,7 +575,7 @@ class Pilot:
                 "original_write_observed": True, "receiver_positive_observed": True,
                 "original_evidence": original_evidence, **self.preserve()}
 
-    def host(self, label, batches, before_batch=None, host=None, proofs=None):
+    def host(self, label, batches, before_batch=None, host=None, proofs=None, *, direct=False):
         """Run the actual selected host. A batch is one provider parallel proposal.
 
         The local provider observes the original returned tool results. It does
@@ -590,16 +590,26 @@ class Pilot:
         wrapper = directory / "collector.py"
         wrapper.write_text("import os,sys\nos.dup2(os.open(sys.argv[1],os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),2)\n"
                            "os.chdir(sys.argv[2])\nos.execve(sys.argv[3],sys.argv[3:],dict(os.environ))\n")
-        proofs = proofs or {kind: self.mint(host, kind, label + "-" + kind) for kind in TOOLS}
+        proofs = {} if direct else (proofs or {kind: self.mint(host, kind, label + "-" + kind) for kind in TOOLS})
         config = directory / "mcp.json"
         private_json(config, {"mcpServers": {kind: {"command": str(self.paths["python"]),
-            "args": ["-I", str(wrapper), str(directory / (kind + ".log")), str(self.workspace_for(kind)), *self.command(kind)],
-            "env": self.collector_env(kind, host, proofs[kind])} for kind in TOOLS}})
+            "args": ["-I", str(wrapper), str(directory / (kind + ".log")), str(self.workspace_for(kind)), *self.command(kind, direct)],
+            "env": self.env if direct else self.collector_env(kind, host, proofs[kind])} for kind in TOOLS}})
         expected, index = [], 0
         for batch in batches:
             proposals = []
             for kind, tool, arguments in batch:
                 arguments = {"repo_path": "/workspace", **arguments} if kind == "git" else arguments
+                if direct:
+                    def relocate(value):
+                        if isinstance(value, str) and (value == "/workspace" or value.startswith("/workspace/")):
+                            return str(self.workspace_for(kind)) + value[len("/workspace"):]
+                        if isinstance(value, list):
+                            return [relocate(item) for item in value]
+                        if isinstance(value, dict):
+                            return {key: relocate(item) for key, item in value.items()}
+                        return value
+                    arguments = relocate(arguments)
                 proposals.append({"type": "tool_use", "id": f"toolu_pilot_{index}",
                                   "name": f"mcp__{kind}__{tool}", "input": arguments})
                 index += 1
@@ -608,6 +618,7 @@ class Pilot:
         model.requests = BoundedRequests()
         offered, callbacks, provider_errors = set(), set(), []
         latencies, proposed_at = {}, {}
+        first_proposal_at = []
         lock = threading.Lock()
         def next_step(body):
             with lock:
@@ -633,6 +644,8 @@ class Pilot:
                         if before_batch and batch_index not in callbacks:
                             before_batch(batch_index, model.results)
                             callbacks.add(batch_index)
+                        if not first_proposal_at:
+                            first_proposal_at.append(time.monotonic())
                         for identifier in identifiers:
                             proposed_at.setdefault(identifier, time.monotonic())
                         offered.update(identifiers)
@@ -683,6 +696,8 @@ class Pilot:
             uses = [block for row in messages if row.get("type") == "assistant"
                     for block in row.get("message", {}).get("content", []) if block.get("type") == "tool_use"]
             evidence = {"host_session": host, "exit_code": process.returncode, "timed_out": timed_out,
+                "arm": "control" if direct else "protected",
+                "host_start_ms": round((first_proposal_at[0] - started) * 1000, 3) if first_proposal_at else None,
                 "elapsed_ms": round((time.monotonic() - started) * 1000, 3), "tool_proposals": len(uses),
                 "parallel_proposal_batches": sum(len(batch) > 1 for batch in batches),
                 "proposal_sha256": digest(uses), "returned_results_sha256": digest(model.results),
@@ -1008,7 +1023,7 @@ class Pilot:
             retained.append({"file": target.name, "sha256": sha(target), "complete": complete})
         for index, client in enumerate(self.clients):
             retained.append(self.retain_json(f"client-{index:02d}-wire.json", client.transcript()))
-        require(len(retained) <= 64 and all(row["complete"] for row in retained), "owned_evidence_incomplete")
+        require(len(retained) <= getattr(self, "retained_limit", 64) and all(row["complete"] for row in retained), "owned_evidence_incomplete")
         return retained
 
 
@@ -1135,17 +1150,26 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
+    parser.add_argument("--matched-development", action="store_true", help="Run the frozen SOU-106 workload on both actual-host paths")
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--fault", choices=("bad-candidate", "missing-sandbox", "changed-asset"), help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if not args.run and args.matched_development:
+        from pilot_measurement import load_workload
+        workload = load_workload(ROOT)
+        print(json.dumps({"status": "plan", "executed": False, "workload_sha256": digest(workload), "workload": workload}))
+        return 0
     if not args.run:
         print(json.dumps({"status": "plan", "executed": False, "cases": CASES, "limits": LIMITS,
                           "live_provider": False, "runtime_downloads": "existing-pinned-profile-installers-only"}))
         return 0
     if not all((args.selection, args.expected_commit, args.output)):
         parser.error("--run requires --selection, --expected-commit and --output")
+    if args.matched_development:
+        from pilot_measurement import run_matched
+        return run_matched(sys.modules[__name__], args)
     return run(args)
 
 

@@ -10,7 +10,6 @@
   ],
   "assets": {
     "filesystem": {
-      "manifest_sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954",
       "schemas": {
         "read_file": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
         "read_text_file": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
@@ -26,10 +25,10 @@
         "search_files": "5b5a1eaeb940a6cfdd01f018784754be5204da54959a26b19ee5d00231636cc1",
         "get_file_info": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
         "list_allowed_directories": "7a014b717a77aac971ea0ab5c0ff47bb13e6cae7ef9442d9dedb15ce36381b15"
-      }
+      },
+      "manifest_canonical_sha256": "aa701b7cb58fdd4eed9f0cf0c2e1550b79740b0054b3ca85253ce276e7513b06"
     },
     "git": {
-      "manifest_sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
       "schemas": {
         "git_status": "e3eb0910a0b7d725877173b42aa54849c5a978932a2192e3f814a9d92794db25",
         "git_diff_unstaged": "f6d9cece66ac042e727f712545825c152c5d6dc39c944dc99c3319b3464bd5db",
@@ -43,7 +42,8 @@
         "git_checkout": "516dc2e905ce6d79254be1035b338c26992f1c8e66a4e5d88d7b6a7485833969",
         "git_show": "5ba0f464a65a0e4d67c6944e157bdf9fc35447b568ac17f11db31e7adc4716f4",
         "git_branch": "57d04063c4a36858343773eb6928ffd7a2e52a4d95545a310845d8facdc0211c"
-      }
+      },
+      "manifest_canonical_sha256": "f062bbaa4dffb595d45d374c31c276d02a8ac8349e53b21e74f5fb7b36f667b2"
     }
   },
   "engineering_budgets": {
