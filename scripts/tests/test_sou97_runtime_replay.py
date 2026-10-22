@@ -2,12 +2,15 @@
 import hashlib
 import importlib.util
 import json
+import platform
 import re
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -367,6 +370,45 @@ class ReplayBookkeeping(unittest.TestCase):
         self.assertTrue(all(s.closed for s in sessions))
 
 
+def synthetic_replay(profile: str) -> dict:
+    """SYNTHETIC per-case outcomes in the driver record shape (format tests only; never a Linux run)."""
+    allowed = REPLAY.original_error_expected()
+    digest, cases = REPLAY.matrix_cases(profile)
+    records = []
+    for case in cases:
+        benign = case["expectation"] == "benign"
+        kind = ("original_error" if case["id"] in allowed else "original_result") if benign else "native_error"
+        records.append({"case_id": case["id"], "arguments_sha256": {"sent": REPLAY.canonical_sha(case["arguments"])},
+                        "result_kind": kind, "native_verdict": "allow" if benign else "refused",
+                        "refusal_code": None if benign else "jsonrpc:-32602:x", "dispatched": benign,
+                        "dispatch_witness": {"observed": benign, "inotify_opens": 1 if benign else 0},
+                        "useful_result": kind == "original_result",
+                        "effect_witness": {"workspace_unchanged": True, "egress_bodies": 0}})
+    return {"matrix_sha256": digest, "cases": records, "sessions": 1}
+
+
+def throwaway(test_class, prefix: str):
+    """The eval gate tests' Throwaway repository, plus the runtime drivers and replay module at their paths."""
+    test_class.tests = load("sou97_gate_tests_for_replay", "eval/test_pilot_gate.py")
+    test_class.tmp = tempfile.mkdtemp(prefix=prefix)
+    test_class.addClassCleanup(test_class.tests.remove_tree, test_class.tmp)  # also runs if setup fails below
+    test_class.tw = test_class.tests.Throwaway(Path(test_class.tmp),
+                                               extra=(*GATE.RUNTIME_DRIVERS.values(), GATE.RUNTIME_REPLAY_MODULE))
+
+
+def run_gate_runtime(tw, ref: str, files: dict) -> dict:
+    with tempfile.TemporaryDirectory() as tmp:
+        args = []
+        for profile, ev in files.items():
+            path = Path(tmp, profile + ".json")
+            path.write_text(json.dumps(ev), encoding="utf-8")
+            args += ["--runtime-evidence", str(path)]
+        subprocess.run([sys.executable, "-B", str(ROOT / "eval/tools/check_pilot_gate.py"), "--mode", "runtime",
+                        "--manifest-file", str(tw.path), "--repo", str(tw.repo), "--ref", ref, *args,
+                        "--out", str(Path(tmp, "g.json"))], capture_output=True, text=True, timeout=300)
+        return json.loads(Path(tmp, "g.json").read_bytes())
+
+
 class EvidenceFormat(unittest.TestCase):
     """Driver evidence must be the exact format the gate validates (compatibility, not qualification).
 
@@ -376,13 +418,7 @@ class EvidenceFormat(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tests = load("sou97_gate_tests_for_replay", "eval/test_pilot_gate.py")
-        cls.tmp = tempfile.mkdtemp(prefix="sou97-evidence-format-")
-        cls.tw = cls.tests.Throwaway(Path(cls.tmp), extra=(*GATE.RUNTIME_DRIVERS.values(), GATE.RUNTIME_REPLAY_MODULE))
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.tests.remove_tree(cls.tmp)
+        throwaway(cls, "sou97-evidence-format-")
 
     def build(self, mutate=None):
         def git(*args, binary=False):
@@ -394,22 +430,10 @@ class EvidenceFormat(unittest.TestCase):
         committed = {rel: hashlib.sha256(git("cat-file", "blob", f"{head}:{rel}", binary=True)).hexdigest()
                      for rel in (*GATE.RUNTIME_DRIVERS.values(), GATE.RUNTIME_REPLAY_MODULE)}
         classifier = REPLAY.classifier_identity(CANDIDATE, MANIFEST["candidate"]["sha256"])
-        allowed = REPLAY.original_error_expected()
         files = {}
         for profile in ("filesystem", "git"):
-            digest, cases = REPLAY.matrix_cases(profile)
-            records = []
-            for case in cases:
-                benign = case["expectation"] == "benign"
-                kind = ("original_error" if case["id"] in allowed else "original_result") if benign else "native_error"
-                records.append({"case_id": case["id"], "arguments_sha256": {"sent": REPLAY.canonical_sha(case["arguments"])},
-                                "result_kind": kind, "native_verdict": "allow" if benign else "refused",
-                                "refusal_code": None if benign else "jsonrpc:-32602:x", "dispatched": benign,
-                                "dispatch_witness": {"observed": benign, "inotify_opens": 1 if benign else 0},
-                                "useful_result": kind == "original_result",
-                                "effect_witness": {"workspace_unchanged": True, "egress_bodies": 0}})
             ev = REPLAY.evidence(profile, status="pass", source={"commit": head, "tree": tree, "dirty": False},
-                                 classifier=classifier, replay_result={"matrix_sha256": digest, "cases": records, "sessions": 1},
+                                 classifier=classifier, replay_result=synthetic_replay(profile),
                                  failures=[], calibration={"dispatch_witness_calibrated": True, "effect_witness_calibrated": True},
                                  identities={"agent_binary_sha256": "a" * 64,
                                              "driver_sha256": committed[GATE.RUNTIME_DRIVERS[profile]],
@@ -420,16 +444,7 @@ class EvidenceFormat(unittest.TestCase):
             if mutate:
                 mutate(profile, ev)
             files[profile] = ev
-        with tempfile.TemporaryDirectory() as tmp:
-            args = []
-            for profile, ev in files.items():
-                path = Path(tmp, profile + ".json")
-                path.write_text(json.dumps(ev), encoding="utf-8")
-                args += ["--runtime-evidence", str(path)]
-            subprocess.run([sys.executable, "-B", str(ROOT / "eval/tools/check_pilot_gate.py"), "--mode", "runtime",
-                            "--manifest-file", str(self.tw.path), "--repo", str(self.tw.repo), "--ref", head, *args,
-                            "--out", str(Path(tmp, "g.json"))], capture_output=True, text=True, timeout=300)
-            return json.loads(Path(tmp, "g.json").read_bytes())
+        return run_gate_runtime(self.tw, head, files)
 
     def test_driver_evidence_shape_matches_the_gate(self):
         self.assertEqual(self.build()["failures"], [])
@@ -454,6 +469,88 @@ class EvidenceFormat(unittest.TestCase):
                 self.assertIn(code, {f["code"] for f in result["failures"]})
         unlisted = self.build(lambda p, ev: p == "git" and case(ev, "PMG-B01").update(result_kind="original_error", useful_result=False))
         self.assertIn("runtime_benign_failed", {f["code"] for f in unlisted["failures"]})
+
+
+class DriverEvidenceProducers(unittest.TestCase):
+    """The real SOU-62/SOU-68 source() and write_sou97_evidence() must emit what gate_version 2 binds.
+
+    The unmodified producer functions run against a byte-exact checkout of the committed files (the
+    Throwaway repository), as a Linux checkout of that commit would. Only the per-case outcomes and the
+    build/install digests are synthetic stand-ins: no server runs and no Linux runtime result is claimed.
+    """
+
+    STUB = "d" * 64  # build/install products the gate records but cannot prove from source
+
+    @classmethod
+    def setUpClass(cls):
+        throwaway(cls, "sou97-evidence-producers-")
+        cls.drivers = {"filesystem": load("sou97_producer_sou62", "scripts/verify-sou62-real-mcp.py"),
+                       "git": load("sou97_producer_sou68", "scripts/verify-sou68-real-mcp.py")}
+
+    def blob_sha(self, rel: str) -> str:
+        return hashlib.sha256(subprocess.run(["git", "-C", str(self.tw.repo), "cat-file", "blob", f"{self.tw.recorded}:{rel}"],
+                                             capture_output=True, check=True).stdout).hexdigest()
+
+    def produce(self, profile: str) -> dict:
+        module = self.drivers[profile]
+        source_module = module if profile == "filesystem" else module.BASE  # SOU-68 records BASE.source()
+        out = Path(tempfile.mkdtemp(prefix="sou97-producer-out-"))
+        self.addCleanup(self.tests.remove_tree, out)
+        with mock.patch.object(module, "ROOT", self.tw.repo), mock.patch.object(source_module, "ROOT", self.tw.repo):
+            report = {"status": "pass", "source_before": source_module.source(), "binary_sha256": self.STUB,
+                      # run() records sha(Path(__file__)): the driver file of a checkout of that commit
+                      "driver_sha256": module.sha(self.tw.repo / GATE.RUNTIME_DRIVERS[profile]), "error": None}
+            stack = SimpleNamespace(root=out, receiver=SimpleNamespace(bodies=[]), daemon_stopped=True,
+                                    classifier=module.REPLAY.classifier_identity(CANDIDATE, MANIFEST["candidate"]["sha256"]),
+                                    sou97={"result": synthetic_replay(profile), "failures": [], "calibration": {
+                                        "dispatch_witness_calibrated": True, "effect_witness_calibrated": True}})
+            args = None
+            if profile == "filesystem":
+                report.update(installed_profile={"policy_sha256": self.STUB, "profile": {
+                                  "runtimeSha256": self.STUB, "bwrapSha256": self.STUB, "packageTreeSha256": self.STUB}},
+                              sandbox_test_binary_sha256=self.STUB, claude_sha256=self.STUB,
+                              daemon_stopped=True, workspace_unchanged=True)
+            else:
+                stand_ins = {}
+                for name in ("bwrap", "git_launcher", "sandbox_test_binary"):
+                    stand_ins[name] = out / f"stand-in-{name}"
+                    stand_ins[name].write_bytes(b"synthetic stand-in, never executed\n")
+                args = SimpleNamespace(git_sha256=self.STUB, **stand_ins)
+                report.update(installation={"profile": {"packageTreeSha256": self.STUB}}, repository_unchanged=True)
+            module.write_sou97_evidence(stack, report, args)
+        return json.loads((out / "sou97-runtime-evidence.json").read_bytes())
+
+    def test_real_producers_emit_the_bound_source_and_identities(self):
+        tree = subprocess.run(["git", "-C", str(self.tw.repo), "rev-parse", f"{self.tw.recorded}^{{tree}}"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+        files = {}
+        for profile in ("filesystem", "git"):
+            with self.subTest(profile=profile):
+                ev = self.produce(profile)
+                self.assertEqual(ev["source"], {"commit": self.tw.recorded, "tree": tree, "dirty": False})
+                ids = ev["identities"]
+                self.assertEqual(ids["driver_sha256"], self.blob_sha(GATE.RUNTIME_DRIVERS[profile]))
+                self.assertEqual(ids["replay_module_sha256"], self.blob_sha(GATE.RUNTIME_REPLAY_MODULE))
+                self.assertEqual(ids["agent_binary_sha256"], self.STUB)
+                self.assertTrue(ids["runtime"] and all(v == self.STUB or len(v) == 64 for v in ids["runtime"].values()))
+                self.assertEqual(ev["platform"], platform.platform())  # the producer records the host it ran on
+                ev["platform"] = "Linux-producer-compatibility-test"   # this host is not the Linux run
+                files[profile] = ev
+        result = run_gate_runtime(self.tw, self.tw.recorded, files)
+        self.assertEqual(result["failures"], [])
+
+    def test_a_dirty_checkout_is_recorded_and_refused(self):
+        stray = self.tw.repo / "sou97-producer-stray.txt"
+        stray.write_text("untracked\n", encoding="utf-8")
+        self.addCleanup(stray.unlink, missing_ok=True)
+        ev = self.produce("filesystem")
+        self.assertIs(ev["source"]["dirty"], True)
+        ev["platform"] = "Linux-producer-compatibility-test"
+        stray.unlink()  # the Git evidence comes from the clean checkout: only the filesystem source is dirty
+        git_ev = self.produce("git")
+        git_ev["platform"] = "Linux-producer-compatibility-test"
+        result = run_gate_runtime(self.tw, self.tw.recorded, {"filesystem": ev, "git": git_ev})
+        self.assertIn("runtime_source", {f["code"] for f in result["failures"]})
 
 
 class DriverGrade(unittest.TestCase):

@@ -411,6 +411,7 @@ class RuntimeSourceBinding(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="sou97-binding-")
+        cls.addClassCleanup(remove_tree, cls.tmp)  # also runs if the setup below fails
         cls.tw = Throwaway(Path(cls.tmp), extra=(*RUNTIME_DRIVERS.values(), "scripts/sou97_runtime_replay.py"))
         cls.head = cls.tw.recorded
         repo = cls.tw.repo
@@ -422,10 +423,6 @@ class RuntimeSourceBinding(unittest.TestCase):
         git("reset", "-q", "--hard", cls.head, cwd=repo)
         # Same tree as the evaluated commit but no shared history: not this source, whatever its bytes.
         cls.unrelated = git("commit-tree", cls.head + "^{tree}", "-m", "unrelated", cwd=repo).decode().strip()
-
-    @classmethod
-    def tearDownClass(cls):
-        remove_tree(cls.tmp)
 
     @classmethod
     def commit_file(cls, rel: str, data: bytes) -> str:
