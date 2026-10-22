@@ -61,3 +61,4 @@ policy/third-party-notices/webpki-roots-1.0.10/LICENSE text eol=lf
 
 # Frozen SOU-106 workload bytes are identical on Windows and Linux.
 scripts/benchmarks/installed-pilot-workload-v1.json text eol=lf
+scripts/benchmarks/installed-pilot-workload-v2.json text eol=lf

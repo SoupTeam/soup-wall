@@ -670,7 +670,7 @@ class Pilot:
         timed_out = False
         started = time.monotonic()
         try:
-            process = subprocess.Popen(command, cwd=project, env=env, stdin=subprocess.DEVNULL,
+            process = subprocess.Popen(command, cwd=self.workspace if getattr(self, "matched_workload", False) else project, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             witness = BASE.ProcessWitness(process.pid)
             stdout, stderr = BoundedStream(process.stdout), BoundedStream(process.stderr)

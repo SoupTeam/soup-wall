@@ -10,7 +10,7 @@ import tempfile
 import time
 from pilot_qualification import Failure, canonical, digest, matched_gate, new_report, require, sha
 
-WORKLOAD = Path(__file__).parent / 'benchmarks/installed-pilot-workload-v1.json'
+WORKLOAD = Path(__file__).parent / 'benchmarks/installed-pilot-workload-v2.json'
 
 
 def load_workload(root):
@@ -61,6 +61,7 @@ def run_matched(api, args):
         package = json.loads((api.ROOT / 'profiles/mcp/filesystem-readonly-v1/claude-host/package.json').read_bytes())
         require(version == package['dependencies']['@anthropic-ai/claude-code'] + ' (Claude Code)', 'selected_host_version_changed')
         report['claude_version'] = version
+        pilot.matched_workload = True
         pilot.retained_limit = 192  # Fixed 40-host bound; no unbounded log inventory.
         report['source_and_selection_verification_ms'] = round((time.monotonic() - started) * 1000, 3)
         asset_started = time.monotonic()

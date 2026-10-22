@@ -204,7 +204,7 @@ The opt-in extension uses the same selected binaries, profile installers, daemon
 original filesystem/Git servers and Claude Code host as the procedure above.
 It does not enable Ask approval or replace the selected policies/classifiers.
 The versioned public workload is
-[`installed-pilot-workload-v1.json`](../../scripts/benchmarks/installed-pilot-workload-v1.json).
+[`installed-pilot-workload-v2.json`](../../scripts/benchmarks/installed-pilot-workload-v2.json).
 Its 12 supported benign multi-step variants include listing/search, batched and
 optional reads, Git status/log/diff/show, parallel calls and continuation. Eight
 mutator variants are explicitly **profile-unsupported**, not policy Deny examples.
@@ -256,3 +256,8 @@ it is separate from runtime evidence. Missing setup or runtime evidence fails.
 Raw owned evidence remains private; share only inspected sanitized summaries.
 These scripted controls do not measure live-model effectiveness, prove model
 consumption, close Phase 4, or certify pilot readiness.
+
+The first v1 attempt is retained in [SOU-106 evidence](evidence/sou106/README.md).
+Version 2 corrects a `tail=1` request that selected the original server's trailing
+empty line: `tail=2` requests the intended useful line without changing the
+expected content. Search-followed-by-read interruptions remain failures.
