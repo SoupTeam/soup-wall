@@ -290,11 +290,11 @@ def qualify(args, private, report):
     try:
         for kind in ("filesystem", "git"):
             for case in ("restart", "approve", "reject", "expire", "cancel", "approved_cancel", "default"):
-                start_daemon(kind, 2 if case == "expire" else 30)
+                start_daemon(kind, 5 if case == "expire" else 30)
                 pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind, enabled=case != "default")
                 active.append(pilot)
                 row = {"profile": kind, "case": case, "configured": case != "default", "pending":False,
-                    "approved":False, "passed": False, "policy_sha256":LAUNCH.sha(setup.policy),
+                    "approved":False, "passed": False, "broker_ttl_seconds":5 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
                     "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
                 cases.append(row)
                 sibling = other = None
@@ -390,7 +390,16 @@ def qualify(args, private, report):
                 if case == "approve":
                     marker = "7 red widgets" if kind == "filesystem" else "committed baseline"
                     require(marker in json.dumps(primary),"original_approved_result_not_useful")
+                if case == "expire":
+                    require("native_approval_expired" in json.dumps(primary), "expiry_refusal_not_attributed")
                 followup = pilot.model.results.get("followup")
+                followup_text = json.dumps(followup)
+                row["followup"] = {"present": followup is not None,
+                    "is_error": None if followup is None else followup["is_error"],
+                    "refusal_codes": [code for code in ("native_approval_expired", "native_approval_timeout",
+                        "native_approval_rejected", "native_provenance_incomplete", "native_child_authority_expired")
+                        if code in followup_text],
+                    "sha256":BASE.hashlib.sha256(followup_text.encode()).hexdigest()}
                 # Default Git Ask is explicitly refused without a wait; its
                 # correlated continuation is another refusal, never a fake Allow.
                 if case != "default" or kind == "filesystem":
