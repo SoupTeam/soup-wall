@@ -52,6 +52,13 @@ pub struct Inputs {
     pub policy: Option<PathBuf>,
     #[arg(long, requires = "policy")]
     pub policy_sha256: Option<String>,
+    /// Linux: accepted read-only original-server profile (`profile.json` written by
+    /// the filesystem or Git profile installer). Its registry and policy are passed
+    /// with --registry/--policy; the selected entry must be its original server.
+    #[arg(long, requires = "server_profile_sha256")]
+    pub server_profile: Option<PathBuf>,
+    #[arg(long, requires = "server_profile")]
+    pub server_profile_sha256: Option<String>,
     /// Reviewed workspace the selected server works in.
     #[arg(long)]
     pub workspace: PathBuf,

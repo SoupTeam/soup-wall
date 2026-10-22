@@ -4,6 +4,17 @@ Changes to the public Soup Wall source distribution are recorded here. Release a
 
 ## Unreleased
 
+- Added accepted original-server profiles to `agentfw onboard` and
+  `mcp-connection` (Linux): `--server-profile` selects the installed
+  filesystem-readonly-v1 or git-readonly-v1 profile. Preview verifies the profile,
+  runtime/dependency/sandbox pins, registry compatibility, the original entry and
+  Linux sandbox prerequisites, and binds them to the plan digest. Connect persists
+  only five validated launch settings, and verification requires an original useful
+  read, a refused change with an independent workspace witness and a useful
+  continuation through the connected entry. Recovery and undo cover the owned
+  classifier copy and the connection's manifest record. A generic connect of a
+  profile registry is refused.
+
 - Added `agentfw onboard` (Linux, SOU-69): a read-only `preview` with the exact
   plan, conflicts, prerequisites and a plan digest; an explicit `apply` of that
   digest that journals each step through the accepted install, lifecycle,

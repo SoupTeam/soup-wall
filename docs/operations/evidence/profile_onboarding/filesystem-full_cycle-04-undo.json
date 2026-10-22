@@ -1,0 +1,64 @@
+{
+  "agentfw_version": "0.3.0",
+  "exit_code": 0,
+  "explanation": "This onboarding's changes were reversed; the non-empty audit log was kept.",
+  "next_steps": [
+    "review and remove the retained audit log yourself, or run undo again with --purge-agent-home"
+  ],
+  "operation": "undo",
+  "profile": {
+    "arch": "x86_64",
+    "id": "linux-local-user-mcp-v1",
+    "os": "linux",
+    "supported": true
+  },
+  "result": "undone",
+  "retained": {
+    "audit_log": true,
+    "connection_recovery_files": "kept beside the host config by mcp-connection by design; remove only after review"
+  },
+  "rollback": [
+    {
+      "detail": "only the selected entry was restored; unrelated edits preserved",
+      "outcome": "reversed",
+      "step": "connect_server"
+    },
+    {
+      "detail": "owned Agent stopped and managed binary removed",
+      "outcome": "reversed",
+      "step": "lifecycle"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "config"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "registry"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "policy"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "classifier"
+    },
+    {
+      "detail": "removed exact owned bytes",
+      "outcome": "reversed",
+      "step": "token"
+    },
+    {
+      "detail": "non-empty audit log retained; remove with undo --purge-agent-home after review",
+      "outcome": "retained",
+      "step": "agent_home"
+    }
+  ],
+  "schema_version": "sw-onboarding/1",
+  "started_at_unix_ms": 1792565030216
+}
