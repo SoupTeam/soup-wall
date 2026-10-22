@@ -615,26 +615,27 @@ pub struct PrivateDirGuard {
 
 impl PrivateDirGuard {
     pub fn new(workspace: &Path) -> Result<Self> {
-        let temp_base = std::env::var_os("TMPDIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
-        Self::in_parent(workspace, &temp_base)
+        Self::for_workspaces(&[workspace])
     }
 
-    fn in_parent(workspace: &Path, temp_base: &Path) -> Result<Self> {
-        let temp_base = temp_base
+    fn for_workspaces(workspaces: &[&Path]) -> Result<Self> {
+        let parent = std::env::var_os("TMPDIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        Self::in_parent(workspaces, &parent)
+    }
+
+    fn in_parent(workspaces: &[&Path], parent: &Path) -> Result<Self> {
+        let parent = parent
             .canonicalize()
             .context("canonicalize private state parent")?;
-        let rand_suffix = random_hex_128();
-        let private_path = temp_base.join(format!("soup-wall-pilot-{}", rand_suffix));
-
-        // Ensure private dir is not inside workspace
-        let canonical_workspace = workspace.canonicalize()?;
-        ensure!(
-            !private_path.starts_with(&canonical_workspace),
-            "private per-run configuration directory must be outside the workspace"
-        );
-
+        let private_path = parent.join(format!("soup-wall-pilot-{}", random_hex_128()));
+        for workspace in workspaces {
+            ensure!(
+                !private_path.starts_with(workspace.canonicalize()?),
+                "private per-run configuration directory must be outside the workspace"
+            );
+        }
         let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
         {
@@ -642,7 +643,6 @@ impl PrivateDirGuard {
             builder.mode(0o700);
         }
         builder.create(&private_path)?;
-
         Ok(Self {
             path: private_path,
             disarmed: false,
@@ -1542,6 +1542,26 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn private_state_parent_cannot_alias_either_selected_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let filesystem = root.path().join("filesystem");
+        let git = root.path().join("git");
+        fs::create_dir(&filesystem).unwrap();
+        fs::create_dir(&git).unwrap();
+        for (i, workspace) in [&filesystem, &git].iter().enumerate() {
+            let alias = root.path().join(format!("alias-{i}"));
+            std::os::unix::fs::symlink(workspace, &alias).unwrap();
+            assert!(PrivateDirGuard::in_parent(&[&filesystem, &git], &alias).is_err());
+            assert!(fs::read_dir(workspace).unwrap().next().is_none());
+        }
+        let guard = PrivateDirGuard::in_parent(&[&filesystem, &git], root.path()).unwrap();
+        let path = guard.path.clone();
+        drop(guard);
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn completed_host_remains_waitable_until_owned_group_cleanup() {
         let mut child = Command::new("/bin/sh")
             .args(["-c", "exit 17"])
@@ -1555,22 +1575,6 @@ mod tests {
         // A second observation must still see the same waitable child.
         assert!(owned_host_exited(&mut child).unwrap());
         assert_eq!(child.wait().unwrap().code(), Some(17));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn private_state_parent_cannot_alias_the_untrusted_workspace() {
-        let root = tempfile::tempdir().unwrap();
-        let workspace = root.path().join("workspace");
-        fs::create_dir(&workspace).unwrap();
-        let alias = root.path().join("outside-alias");
-        std::os::unix::fs::symlink(&workspace, &alias).unwrap();
-        assert!(PrivateDirGuard::in_parent(&workspace, &alias).is_err());
-        assert!(fs::read_dir(&workspace).unwrap().next().is_none());
-        let guard = PrivateDirGuard::in_parent(&workspace, root.path()).unwrap();
-        let path = guard.path.clone();
-        drop(guard);
-        assert!(!path.exists());
     }
 
     #[test]

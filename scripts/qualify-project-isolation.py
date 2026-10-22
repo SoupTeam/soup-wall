@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import traceback
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
@@ -29,9 +30,16 @@ class Receiver:
         self.count = 0
         receiver = self
         class Handler(BaseHTTPRequestHandler):
-            def do_GET(self):
+            def observe(self):
                 receiver.count += 1
-                self.send_response(200); self.end_headers(); self.wfile.write(b"owned receiver")
+                # Count receipt before parsing a body, including provider POSTs.
+                length = min(int(self.headers.get('Content-Length', '0')), 2 * 1024 * 1024)
+                if length > 0:
+                    self.rfile.read(length)
+                self.send_response(200); self.end_headers()
+                if self.command != 'HEAD':
+                    self.wfile.write(b"owned receiver")
+            do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = observe
             def log_message(self, *_):
                 pass
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -101,7 +109,11 @@ def qualify(args, private, report):
         "urllib.request.urlopen(" + repr(receiver.url + "/owned-secret-canary") + ",timeout=3).read()")
     # Positive calibration proves both independent observers detect execution.
     subprocess.run(["/bin/sh", "-c", command], check=True, env={"PATH": "/usr/bin:/bin"}, timeout=10)
-    require(marker.read_text() == "escaped" and receiver.count == 1, "escape_observer_calibration_failed")
+    request = urllib.request.Request(receiver.url + '/provider-calibration', data=b'{}',
+                                     headers={'x-api-key': 'owned-provider-canary'})
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=3) as response:
+        response.read()
+    require(marker.read_text() == "escaped" and receiver.count == 2, "escape_observer_calibration_failed")
     marker.unlink(); receiver.count = 0
     daemon = None
     unrelated = subprocess.Popen(["/usr/bin/python3", "-I", "-c", "import time;time.sleep(600)"], start_new_session=True)

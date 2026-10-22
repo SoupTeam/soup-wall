@@ -5,6 +5,7 @@ from pathlib import Path
 import unittest
 import tempfile
 import json
+import urllib.request
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +27,18 @@ class IsolationEvidence(unittest.TestCase):
             self.assertTrue((root / '.claude/commands/escape.md').is_file())
             self.assertTrue((root / '.claude/skills/escape/SKILL.md').is_file())
             self.assertTrue((root / 'poison-bin/git').is_file())
+
+    def test_secret_receiver_observes_provider_posts_as_well_as_command_gets(self):
+        receiver = ACCEPTANCE.Receiver()
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            for data in (None, b'{"owned":"canary"}'):
+                request = urllib.request.Request(receiver.url, data=data, headers={'x-api-key': 'owned-canary'})
+                with opener.open(request, timeout=3) as response:
+                    response.read()
+            self.assertEqual(receiver.count, 2)
+        finally:
+            receiver.close()
 
     def results(self):
         return {f'toolu_isolation_{i}': {'is_error': i >= 2, 'content':

@@ -3,7 +3,7 @@
   "all_python": {
     "failed": 0,
     "note": "59 existing environment/platform/optional skips plus 3 existing Linux /proc controls explicitly inapplicable on macOS; Linux CI retains them unchanged.",
-    "run": 1071,
+    "run": 1072,
     "skipped": 62
   },
   "bench_python": {
@@ -14,29 +14,36 @@
   "docs": "236 Markdown files, 892 local links, zero errors",
   "first_linux_run": 39809941017,
   "format": "passed",
-  "full_workspace": "previous_full_passed_1638_0_failed_12_ignored; final_lifecycle_change_rerun_pending",
+  "full_workspace": {
+    "failed": 0,
+    "ignored": 12,
+    "note": "Existing optional tests remain ignored. macOS sandbox produces Xcode cache-write diagnostics. Private-state constructor refactor is covered by focused controls.",
+    "passed": 1639
+  },
   "generated_workflow": "passed",
   "logs_sha256": {
-    "all-python.log": "7312155f45d42fde56cb63885021ca71cc0c2f138473a831521d992414fc9c78",
-    "bench-python.log": "8c7d6fc8aec0ee32b3c8de6c1ff576eae725e343342fd89c7ffb1c0f1aa0211c",
+    "all-python.log": "35f1fb5ca28b1c89876cafd076b0b905a263ae000ea4c624a1038bb7d9f5a35a",
+    "bench-python.log": "a2023afe61c49695b95e1c40972b8df160c699ff5719813a430d2606b6d865a0",
     "docs.log": "bb26d494580c3f4c8a1f732fbddd17c22856743586e8a21ac2bd2240710d356b",
-    "fixture-controls.log": "3d72532707431ea4a69fdf01187e324e2fd477974ca5d239ddc36f0c39c1e950",
-    "focused-clippy.log": "cf6b6441c88fa7377fdf46ca9e0561c2e75bf2b295eee4141d24a2b985271997",
+    "fixture-controls.log": "9294a346209757e5b5575cdfe126068f108aaf6c7928623b5b6c8955deff8f27",
+    "focused-clippy.log": "d53bdd0a1b40e6d042e8bdd80a13e700df5214ea11206ec655f8d8985127b00d",
     "focused-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "focused-launcher-tests.log": "8afc79a98037dce6d0fdccaa8a8ecdcbbe9a16863a25f5046ebb0de69c676bd6",
-    "focused-preparation.log": "4dad543a012263174551b225edf31be63e0a8abf7ceb3f0bb946e7effb38429a",
-    "focused-python.log": "5b68ec17a4416f183c32df38e22e2e18f03e799390c4abe53ba1605f7defd92f",
-    "focused-workflows.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    "focused-launcher-tests.log": "3971764822d2302ba2ef6dd56b81b1f9167da21a73365a72f4ed4c2117f00868",
+    "focused-preparation.log": "1138fc9b5018c088ea39f329555910eea83063cab9f1a6ef6a372fdf049007bc",
+    "focused-python.log": "3d72532707431ea4a69fdf01187e324e2fd477974ca5d239ddc36f0c39c1e950",
+    "focused-workflows.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ready-local-tests.log": "b4cddda23de364c4ca20b57e1503d28001b96398f950324decdd77b6c3ee14d9"
   },
   "pilot_unit_controls": 21,
-  "python_evidence_controls": 4,
+  "python_evidence_controls": 5,
+  "receiver_calibration": "GET command marker and POST provider transport; five evidence controls passed",
   "second_linux_run": 39810842378,
   "source_sha256": {
     "crates/agentfw/src/pilot_host.rs": "b77465c59725785cbfb9e83086e39e2326601511affc7b726a4b74582449c4b5",
-    "crates/agentfw/src/pilot_launcher.rs": "0602a7db4848384bbadf2430346a1540717d0702b613c18c28a270bcf9f2e21a",
-    "scripts/qualify-project-isolation.py": "7fb3b685c1e0d71e134afc364522c42f94fe8c91f9424b94e51a45b35040a5fe"
+    "crates/agentfw/src/pilot_launcher.rs": "1087d70e42a9af11b3e750d8f4215dd1998185c807fe15742312f6f37da12dac",
+    "scripts/qualify-project-isolation.py": "1165a5dc5e2332a439e8bf868d1446660d12866e34399196857e84ab365c09d1"
   },
-  "status": "local_focus_passed_linux_pending",
+  "status": "local_checks_passed_linux_final_qualification_pending",
   "strict_clippy": "passed_zero_warnings",
   "task": "SOU-117"
 }
