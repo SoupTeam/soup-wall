@@ -91,19 +91,26 @@ def collector_dispatches(text, binary, strict=True):
             continue
         if not strict and any(pid == int(prefix[1]) for pid, _ in channels) and (int(prefix[1]),int(prefix[3])) not in channels:
             continue  # Only the discovery-calibrated original-server channel.
-        match = re.match(r"^(\d+)\s+write\((\d+),\s*(\"(?:[^\"\\]|\\.)*\"),\s*(\d+)\)\s*=\s*(\d+)\s*$", line)
+        # Failed syscalls transferred no bytes and cannot prove a dispatch.
+        # Validate the entire row; incomplete channels still fail below.
+        result = r"(-1 [A-Z][A-Z0-9_]*(?: \([^\n)]*\))?|\d+)"
+        match = re.match(r"^(\d+)\s+write\((\d+),\s*(\"(?:[^\"\\]|\\.)*\"),\s*(\d+)\)\s*=\s*" + result + r"\s*$", line)
         if match:
-            pid, fd, count, written = int(match[1]), int(match[2]), int(match[4]), int(match[5])
+            pid, fd, count = int(match[1]), int(match[2]), int(match[4])
+            written = 0 if match[5].startswith("-1 ") else int(match[5])
             raw = ast.literal_eval("b" + match[3])
         else:
-            vector = re.match(r"^(\d+)\s+writev\((\d+),\s*\[(.*)\],\s*\d+\)\s*=\s*(\d+)\s*$", line)
-            require(vector is not None, "unobserved_collector_write")
+            vector = re.match(r"^(\d+)\s+writev\((\d+),\s*\[(.*)\],\s*\d+\)\s*=\s*" + result + r"\s*$", line)
+            # Numeric identity only: raw rows can contain private HTTP bytes.
+            require(vector is not None,
+                    f"unobserved_collector_write:{prefix[2]}:pid={prefix[1]}:fd={prefix[3]}")
             pieces = re.findall(r'iov_base=("(?:[^"\\]|\\.)*"), iov_len=(\d+)', vector[3])
             require(pieces and vector[3].count("iov_base=") == len(pieces), "truncated_write_vector")
             decoded = [(ast.literal_eval("b" + raw), int(size)) for raw, size in pieces]
             require(all(len(raw) == size for raw, size in decoded), "truncated_write_vector")
             raw = b"".join(item[0] for item in decoded)
-            pid, fd, count, written = int(vector[1]), int(vector[2]), len(raw), int(vector[4])
+            pid, fd, count = int(vector[1]), int(vector[2]), len(raw)
+            written = 0 if vector[4].startswith("-1 ") else int(vector[4])
         # strace uses byte escapes; the owned protocol is ASCII JSON.
         require(len(raw) >= written and written <= count, "truncated_collector_write")
         key = pid, fd
