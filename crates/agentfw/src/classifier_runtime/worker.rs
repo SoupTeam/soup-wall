@@ -25,6 +25,9 @@ use crate::mcp::admission::{
     parse_classifier_reply, Classification, Invocation, InvocationClassifier,
 };
 
+#[cfg(all(test, unix))]
+mod ready_tests;
+
 pub const MAX_INPUT: usize = 1024 * 1024;
 const MAX_REPLY_FRAME: usize = 64 * 1024;
 /// Must stay below the collector's outer two-second classification timeout.
@@ -81,6 +84,29 @@ struct Reply {
     id: u64,
     input_sha256: String,
     result_json: String,
+}
+
+/// The ready handshake: protocol, `ready: true` and the verified classifier digest, no
+/// unknown fields. Anything else means the process is not the one that was verified.
+fn check_ready(frame: &[u8], classifier_sha256: &str) -> anyhow::Result<()> {
+    let ready: Ready = serde_json::from_slice(frame).context("invalid ready frame")?;
+    ensure!(
+        ready.v == WORKER_PROTOCOL && ready.ready && ready.classifier_sha256 == classifier_sha256,
+        "worker ready frame does not match the installed package"
+    );
+    Ok(())
+}
+
+/// A reply must carry the protocol, echo the request id and the digest of the exact input.
+fn check_reply(bytes: &[u8], id: u64, digest: &str) -> anyhow::Result<String> {
+    let reply: Reply = serde_json::from_slice(bytes).context("invalid worker reply")?;
+    ensure!(reply.v == WORKER_PROTOCOL, "worker protocol mismatch");
+    ensure!(reply.id == id, "worker reply id does not match the request");
+    ensure!(
+        reply.input_sha256 == digest,
+        "worker reply is bound to different input"
+    );
+    Ok(reply.result_json)
 }
 
 /// What "ready" means for one prepared classifier: this exact verified package and
@@ -169,6 +195,9 @@ pub struct PackagedClassifier {
     prepared: bool,
     /// Number of worker processes started (identity/latency evidence and tests).
     starts: std::sync::atomic::AtomicU64,
+    /// Test-only: replaces the worker bootstrap program so tests can inject exact frames.
+    #[cfg(test)]
+    bootstrap: Option<String>,
     /// Retired workers whose process tree could not be proven empty (always 0 when sound).
     #[cfg(windows)]
     unclean: std::sync::Arc<std::sync::atomic::AtomicU64>,
@@ -186,9 +215,27 @@ impl PackagedClassifier {
             deadline: REQUEST_DEADLINE,
             prepared: false,
             starts: Default::default(),
+            #[cfg(test)]
+            bootstrap: None,
             #[cfg(windows)]
             unclean: Default::default(),
         })
+    }
+
+    /// Test-only seam: run `code` instead of the real bootstrap. Package verification,
+    /// the interpreter pin and every frame check stay exactly as in production.
+    #[cfg(all(test, unix))]
+    fn with_bootstrap(mut self, code: String) -> Self {
+        self.bootstrap = Some(code);
+        self
+    }
+
+    fn bootstrap_code(&self) -> &str {
+        #[cfg(test)]
+        if let Some(code) = &self.bootstrap {
+            return code;
+        }
+        WORKER_BOOTSTRAP
     }
 
     pub fn with_deadline(mut self, deadline: Duration) -> Self {
@@ -279,7 +326,7 @@ impl PackagedClassifier {
             .arg("-I")
             .arg("-u")
             .arg("-c")
-            .arg(WORKER_BOOTSTRAP)
+            .arg(self.bootstrap_code())
             .arg(&verified.dir)
             .arg(&verified.classifier_sha256)
             .arg(&verified.worker_sha256)
@@ -380,13 +427,7 @@ impl PackagedClassifier {
                 );
             }
         };
-        let ready: Ready = serde_json::from_slice(&frame).context("invalid ready frame")?;
-        ensure!(
-            ready.v == WORKER_PROTOCOL
-                && ready.ready
-                && ready.classifier_sha256 == verified.classifier_sha256,
-            "worker ready frame does not match the installed package"
-        );
+        check_ready(&frame, &verified.classifier_sha256)?;
         Ok(worker)
     }
 
@@ -414,14 +455,7 @@ impl PackagedClassifier {
             }
             Err(RecvTimeoutError::Disconnected) => bail!("classifier worker exited"),
         };
-        let reply: Reply = serde_json::from_slice(&bytes).context("invalid worker reply")?;
-        ensure!(reply.v == WORKER_PROTOCOL, "worker protocol mismatch");
-        ensure!(reply.id == id, "worker reply id does not match the request");
-        ensure!(
-            reply.input_sha256 == digest,
-            "worker reply is bound to different input"
-        );
-        Ok(reply.result_json)
+        check_reply(&bytes, id, &digest)
     }
 
     /// Raw classifier output text for one exact input (same bytes the single-shot
