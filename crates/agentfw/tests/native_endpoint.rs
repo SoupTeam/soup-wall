@@ -5705,13 +5705,15 @@ async fn review36_expired_child_authority_must_not_authorize_hooks() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
+    // Give the useful control enough real time to run even on a cold Windows
+    // worker. Expiry itself is tested below without sleeping on that control.
     let grant = ca::mint_scoped(
         &ca::derive_key(NATIVE_TOKEN),
         "review-host",
         "resource-fixture",
         &["read_document".into(), "Bash".into()],
         now,
-        500,
+        30_000,
         scoped_fixture_nonce(&f, "review-host", Some("parent-agent")),
         Some("worker".into()),
         Some("parent-agent".into()),
@@ -5722,22 +5724,59 @@ async fn review36_expired_child_authority_must_not_authorize_hooks() {
     start["server_id"] = json!("resource-fixture");
     start["child_authority"] = json!(ca::encode_token(&grant));
     let (s, r) = f.post(&start).await;
-    assert_allow(s, &r);
+    assert!(
+        s == StatusCode::OK && r["release"] == true,
+        "phase=child_start reason=valid_authority_rejected"
+    );
     let hook = json!({"session_id":"review-host","hook_event_name":"PreToolUse","tool_name":"read_document","tool_input":{},"agent_id":"worker"});
     let r = post_with_proof(&f, &hook, start["child_authority"].as_str().unwrap()).await;
-    assert_eq!(r, json!({}), "control: valid grant remains useful");
-    tokio::time::sleep(std::time::Duration::from_millis(550)).await;
+    let check_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    assert_eq!(r, json!({}),
+        "phase=useful_hook reason=valid_authority_rejected issue_to_check_ms={} expiry_after_check_ms={}",
+        check_ms.saturating_sub(now), grant.expires_at_ms.saturating_sub(check_ms));
+    f.state
+        .native
+        .as_ref()
+        .unwrap()
+        .advance_test_time_ms(30_001);
     let (_, r) = f
         .post(&f.call("short-child", "read_document", &json!({})))
         .await;
     assert_eq!(
         r["error_code"], "native_child_authority_expired",
-        "control: grant really expired"
+        "phase=child_call reason=expired_authority_accepted"
     );
-    let r = post_with_proof(&f, &hook, start["child_authority"].as_str().unwrap()).await;
+    // The hook verifier reads the production wall clock. Present a separately
+    // signed, already expired proof to verify that path without changing its clock.
+    let real_check_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    let expired = ca::mint_scoped(
+        &ca::derive_key(NATIVE_TOKEN),
+        "review-host",
+        "resource-fixture",
+        &["read_document".into()],
+        real_check_ms.saturating_sub(2_000),
+        500,
+        scoped_fixture_nonce(&f, "review-host", Some("parent-agent")),
+        Some("worker".into()),
+        Some("parent-agent".into()),
+        Some(vec![]),
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    let r = post_with_proof(&f, &hook, &ca::encode_token(&expired)).await;
     assert_eq!(
         r["hookSpecificOutput"]["permissionDecision"], "deny",
-        "expired native authority still authorizes hook: {r}"
+        "phase=hook_real_clock reason=expired_authority_accepted issue_to_check_ms={} expiry_before_check_ms={}",
+        real_check_ms.saturating_sub(expired.issued_at_ms), real_check_ms.saturating_sub(expired.expires_at_ms)
+    );
+    assert!(
+        r.to_string().contains("native_hook_authority_invalid"),
+        "phase=hook_real_clock reason=wrong_denial_for_expiry"
     );
 }
 

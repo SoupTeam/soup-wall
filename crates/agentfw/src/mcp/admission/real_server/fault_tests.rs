@@ -19,6 +19,41 @@ use wiremock::{
 type Reader = BufReader<ReadHalf<DuplexStream>>;
 type Writer = WriteHalf<DuplexStream>;
 
+#[tokio::test]
+async fn selected_admission_errors_stay_bounded_without_echoing_private_bodies() {
+    for (body, expected) in [
+        (
+            json!({"error_code":"native_fixture_refused","private":"private fixture payload"})
+                .to_string(),
+            "code=native_fixture_refused",
+        ),
+        (
+            json!({"error_code":"private fixture payload"}).to_string(),
+            "code=unavailable",
+        ),
+        (
+            "private fixture payload".repeat(1024),
+            "MCP admission response exceeds limit",
+        ),
+    ] {
+        let daemon = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(409).set_body_string(body))
+            .mount(&daemon)
+            .await;
+        let config =
+            installed_registry_config(installed_registry_entries(server_profile::FORMAT)).unwrap();
+        let collector = Collector::new(&config).unwrap();
+        let error = collector
+            .post(&daemon.uri(), "fixture-token", &json!({}))
+            .await
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains(expected), "{message}");
+        assert!(!message.contains("private fixture payload"));
+    }
+}
+
 // Only unit-test builds have this task-local producer/completion seam. The
 // real relay, native receipt transport, policy boundary and Linux publisher
 // run unchanged; this is deterministic phase coverage, not upstream evidence.
@@ -149,6 +184,238 @@ async fn original_create_eof_after_inspection_or_staging_discards_output() {
                 .count(),
             0
         );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn original_create_native_ask_cannot_use_selected_readonly_approval() {
+    let mut fixture = Harness::for_format(
+        "create-daemon-ask",
+        server_profile::filesystem_create::FORMAT,
+    )
+    .await;
+    fixture.ready().await;
+    fixture.host(json!({"jsonrpc":"2.0","id":"write-ask","method":"tools/call",
+        "params":{"name":"write_file","arguments":{"path":"/workspace/ask.txt","content":"private"}}})).await;
+    let response = fixture.host_reply().await;
+    assert_eq!(response["id"], "write-ask");
+    assert!(
+        response.to_string().contains("fixture_native_ask"),
+        "{response}"
+    );
+    assert!(!fixture
+        .boundary_home
+        .path()
+        .join("workspace/ask.txt")
+        .exists());
+    assert!(!fixture
+        .daemon
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .any(|request| request.url.path() == "/approval"));
+    fixture.useful(json!("read-after-create-ask")).await;
+}
+
+#[tokio::test]
+async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classification() {
+    struct Evidence {
+        actions: Vec<String>,
+        unknown: bool,
+        fail: bool,
+    }
+    impl super::super::InvocationClassifier for Evidence {
+        fn source(&self) -> &'static str {
+            "controlled-classification-evidence"
+        }
+        fn classify(
+            &self,
+            _: &super::super::Invocation,
+        ) -> anyhow::Result<super::super::Classification> {
+            ensure!(!self.fail, "controlled classifier failure");
+            Ok(super::super::Classification {
+                actions: self.actions.clone(),
+                unknown: self.unknown,
+                confidence: 1.0,
+                uncertainty: 0.0,
+                reason: "controlled boundary regression".into(),
+            })
+        }
+    }
+    for (actions, unknown, fail, approval) in [
+        (vec![], false, false, true),
+        (vec!["read".into()], true, false, true),
+        (vec![], false, true, true),
+        (vec![], false, false, false),
+        (vec!["read".into()], true, false, false),
+        (vec![], false, true, false),
+    ] {
+        let mut config =
+            installed_registry_config(installed_registry_entries(server_profile::FORMAT)).unwrap();
+        config.classifier = Some(Arc::new(Evidence {
+            actions,
+            unknown,
+            fail,
+        }));
+        config.approval = approval.then(|| super::super::ApprovalWait {
+            url: "http://127.0.0.1:1/never-reached".into(),
+            wait: Duration::from_secs(1),
+        });
+        let collector = Collector::new(&config).unwrap();
+        let definition = server_profile::original_manifest()["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "read_text_file")
+            .unwrap()
+            .clone();
+        let snapshot = Arc::new(Snapshot {
+            sha256: "a".repeat(64),
+            server_info: json!({}),
+            tools: BTreeMap::from([(
+                "read_text_file".into(),
+                AdmittedTool {
+                    description: definition["description"].as_str().unwrap().into(),
+                    schema: definition["inputSchema"].clone(),
+                    schema_sha256: sha(canonical(&definition["inputSchema"])
+                        .to_string()
+                        .as_bytes()),
+                    definition_sha256: sha(canonical(&definition).to_string().as_bytes()),
+                    definition,
+                },
+            )]),
+        });
+        let call = Call {
+            profile: server_profile::FORMAT.into(),
+            id: json!(81),
+            tool: "read_text_file".into(),
+            args: json!({"path":"/workspace/notes.txt"}),
+            raw: vec![],
+            request_sha256: "a".repeat(64),
+            phase: Phase::Admitting,
+            cancelled: false,
+            cancel: tokio::sync::watch::channel(false).0,
+            dispatched: false,
+            deadline: Instant::now() + Duration::from_secs(2),
+            progress: None,
+            progress_count: 0,
+            last_progress: 0.0,
+            create_lease: None,
+            #[cfg(target_os = "linux")]
+            pinned_workspace: None,
+        };
+        let profile = server_profile::ProfileConfig {
+            format: call.profile.clone(),
+            workspace: "/workspace".into(),
+            runtime_path: "/never-spawned".into(),
+            runtime_sha256: "a".repeat(64),
+            package_root: "/never-spawned".into(),
+            package_tree_sha256: "b".repeat(64),
+            bwrap_path: "/never-spawned".into(),
+            bwrap_sha256: "c".repeat(64),
+            libraries: vec![],
+            git: None,
+            git_launcher: None,
+        };
+        let Decision::Refused(raw) = admit(&collector, snapshot, &call, &profile).await.unwrap()
+        else {
+            panic!("incomplete classification acquired a dispatch grant");
+        };
+        let text = String::from_utf8(raw).unwrap();
+        assert!(
+            text.contains(if fail {
+                "classifier_error"
+            } else if approval {
+                "classifier_unknown_approval_unsupported"
+            } else {
+                "classifier_ask"
+            }),
+            "{text}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn selected_pending_approval_cancellation_rejection_and_timeout_close_exact_record() {
+    for control in ["cancel", "reject", "timeout", "identity"] {
+        let daemon = MockServer::start().await;
+        Mock::given(method("POST")).and(path("/approval"))
+            .respond_with(move |request: &Request| {
+                let value: Value = serde_json::from_slice(&request.body).unwrap();
+                let action = value["action"].as_str().unwrap();
+                ResponseTemplate::new(200).set_body_json(json!({
+                    "contract_version":crate::native::approval::APPROVAL_CONTRACT,
+                    "action":action,"pending_id":if control == "identity" && action == "status" {"foreign"} else {"owned-pending"},
+                    "state":if action == "status" && control == "reject" {"rejected"} else {"pending"},
+                    "expires_in_ms":5000,"binding_sha256":"b".repeat(64)}))
+            }).mount(&daemon).await;
+        let mut config =
+            installed_registry_config(installed_registry_entries(server_profile::FORMAT)).unwrap();
+        config.approval = Some(super::super::ApprovalWait {
+            url: format!("{}/approval", daemon.uri()),
+            wait: Duration::from_millis(300),
+        });
+        let collector = Collector::new(&config).unwrap();
+        let cancel = tokio::sync::watch::channel(false).0;
+        let call = Call {
+            profile: server_profile::FORMAT.into(),
+            id: json!(81),
+            tool: "read_text_file".into(),
+            args: json!({"path":"/workspace/notes.txt"}),
+            raw: vec![],
+            request_sha256: "a".repeat(64),
+            phase: Phase::Admitting,
+            cancelled: false,
+            cancel: cancel.clone(),
+            dispatched: false,
+            deadline: Instant::now() + Duration::from_secs(2),
+            progress: None,
+            progress_count: 0,
+            last_progress: 0.0,
+            create_lease: None,
+            #[cfg(target_os = "linux")]
+            pinned_workspace: None,
+        };
+        let context = crate::native::approval::SelectedInvocation {
+            host_call_id: call.id.clone(),
+            request_sha256: call.request_sha256.clone(),
+            server_id: config.server_id.clone(),
+            profile: call.profile.clone(),
+            profile_sha256: "a".repeat(64),
+            classifier_sha256: "b".repeat(64),
+            snapshot_sha256: "c".repeat(64),
+            definition_sha256: "d".repeat(64),
+            input_sha256: "e".repeat(64),
+        };
+        let pending = wait_approval(&collector, &call, "daemon", "schema", &context);
+        let cancelling = async {
+            if control == "cancel" {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                cancel.send_replace(true);
+            }
+        };
+        let (result, _) = tokio::join!(pending, cancelling);
+        if control == "identity" {
+            assert!(result.is_err());
+        } else {
+            assert!(result.unwrap().is_err());
+        }
+        let requests = daemon.received_requests().await.unwrap();
+        let bodies: Vec<Value> = requests
+            .iter()
+            .map(|r| serde_json::from_slice(&r.body).unwrap())
+            .collect();
+        assert_eq!(
+            bodies
+                .iter()
+                .filter(|r| r["action"] == "cancel" && r["pending_id"] == "owned-pending")
+                .count(),
+            1
+        );
+        assert_eq!(bodies[0]["selected_invocation"], json!(context));
+        assert_eq!(bodies[0]["args"], call.args);
     }
 }
 
@@ -428,6 +695,13 @@ impl Harness {
             .respond_with(move |request:&Request| {
                 let value:Value=serde_json::from_slice(&request.body).unwrap();
                 if fault=="daemon-loss" && value["event"]=="call" { return ResponseTemplate::new(503); }
+                if fault == "create-daemon-ask" && value["event"] == "call" && value["tool"] == "write_file" {
+                    return ResponseTemplate::new(200).set_body_json(json!({
+                        "contract_version":CONTRACT,"registry_sha256":value["registry_sha256"],
+                        "session_id":value["session_id"],"event":"call","verdict":"ask",
+                        "enforced":true,"release":false,"call_id":null,"binding_sha256":null,
+                        "content_sha256":null,"reason_codes":["fixture_native_ask"]}));
+                }
                 let allowed=value["args"]["path"]!="/workspace/deny";
                 let mut receipt=json!({"contract_version":CONTRACT,"registry_sha256":value["registry_sha256"],
                     "session_id":value["session_id"],"event":value["event"],"verdict":if allowed{"allow"}else{"deny"},
@@ -493,7 +767,10 @@ impl Harness {
                 Arc::new(ReadTestDouble)
             }),
             resource_profiles: BTreeMap::new(),
-            approval: None,
+            approval: (fault == "create-daemon-ask").then(|| super::super::ApprovalWait {
+                url: format!("{}/approval", daemon.uri()),
+                wait: Duration::from_millis(300),
+            }),
             liveness_url: None,
             liveness_lease_seconds: None,
         };
@@ -513,25 +790,28 @@ impl Harness {
         let create_driver = CREATE_DRIVER.try_with(Arc::clone).ok();
         let run = async move {
             let collector = Collector::new(&config)?;
+            // Protocol-only fixture: this profile is never spawned or used to
+            // qualify approval resumption / Linux filesystem confinement.
+            let profile = server_profile::ProfileConfig {
+                format: format.into(),
+                workspace,
+                runtime_path: "/never-spawned/runtime".into(),
+                runtime_sha256: "0".repeat(64),
+                package_root: "/never-spawned/package".into(),
+                package_tree_sha256: "0".repeat(64),
+                bwrap_path: "/never-spawned/bwrap".into(),
+                bwrap_sha256: "0".repeat(64),
+                libraries: vec![],
+                git: None,
+                git_launcher: None,
+            };
             relay(
                 &collector,
                 &mut BufReader::new(relay_client),
                 &mut relay_host,
                 &mut BufReader::new(relay_server),
                 &mut relay_child,
-                &server_profile::ProfileConfig {
-                    format: format.to_owned(),
-                    workspace,
-                    runtime_path: std::path::PathBuf::from("/tmp/node"),
-                    runtime_sha256: String::new(),
-                    package_root: std::path::PathBuf::from("/tmp"),
-                    package_tree_sha256: String::new(),
-                    bwrap_path: std::path::PathBuf::from("/tmp/bwrap"),
-                    bwrap_sha256: String::new(),
-                    libraries: vec![],
-                    git: None,
-                    git_launcher: None,
-                },
+                &profile,
             )
             .await
         };

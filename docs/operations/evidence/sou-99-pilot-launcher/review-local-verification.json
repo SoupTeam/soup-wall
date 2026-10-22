@@ -1,0 +1,27 @@
+{
+  "scope": "Local macOS checks; not original-server Linux execution",
+  "production_rust_changed": false,
+  "rust_source_commit": "2e36713448cf6a56cf7c81c23dd902680dcf0479",
+  "workspace": {
+    "passed": 1600,
+    "failed_after_target_reruns": 0,
+    "ignored": 12,
+    "command": "cargo test --offline --locked --workspace --no-fail-fast; rerun only agentfw self_test and soup-wall-adapter attack_scenarios after sandbox correction"
+  },
+  "initial_environment_failures": [
+    "system /bin/ps permission",
+    "one JSON report path in isolated source"
+  ],
+  "isolation": "Target source read-only; build/temp outputs private; exact ps exception and one attack_results.json artifact allowed",
+  "clippy": "cargo clippy --offline --locked --workspace --all-targets -- -D warnings: PASS",
+  "fmt": "PASS",
+  "python_cli_contracts": 16,
+  "dispatch_observer_negative_controls": 6,
+  "ci_generation_controls": 5,
+  "docs": {
+    "files": 223,
+    "local_links": 855,
+    "errors": 0
+  },
+  "original_server_full_launch": "Pending actual Linux CI report; fixture/preview success is insufficient"
+}

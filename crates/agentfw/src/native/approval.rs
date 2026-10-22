@@ -19,7 +19,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use axum::extract::State as AxState;
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soup_wall_agent::{EventKind, Verdict};
@@ -32,6 +32,75 @@ use crate::handlers::Shared;
 pub const APPROVAL_CONTRACT: &str = "sw-native-approval/1";
 /// Versioned scope prefix: a hook approval can never match this tool name.
 pub const SCOPE: &str = "native-mcp/approval/v1:";
+
+/// Additional frozen invocation identity inside the existing signed approval.
+/// These collector observations are bindings, never new daemon authority.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedInvocation {
+    pub host_call_id: Value,
+    pub request_sha256: String,
+    pub server_id: String,
+    pub profile: String,
+    pub profile_sha256: String,
+    pub classifier_sha256: String,
+    pub snapshot_sha256: String,
+    pub definition_sha256: String,
+    pub input_sha256: String,
+}
+
+impl SelectedInvocation {
+    pub(super) fn validate(&self, tool: &super::Tool, args: &Value) -> Result<(), &'static str> {
+        let valid = || -> anyhow::Result<()> {
+            anyhow::ensure!(
+                super::selected_host_id(&self.host_call_id)
+                    && super::identifier(&self.server_id)
+                    && tool.mcp_result_profile.as_deref() == Some(self.profile.as_str())
+                    && tool.action_class == soup_wall_agent::ActionClass::ReadOnly
+                    && tool.resource_policy.is_none()
+                    && tool.workspace_profile.is_none()
+                    && tool.egress.is_empty(),
+                "unsupported selected approval"
+            );
+            for digest in [
+                &self.request_sha256,
+                &self.profile_sha256,
+                &self.classifier_sha256,
+                &self.snapshot_sha256,
+                &self.definition_sha256,
+                &self.input_sha256,
+            ] {
+                anyhow::ensure!(super::is_digest(digest), "invalid selected identity");
+            }
+            let manifest = crate::mcp::server_profile::original_manifest_for(&self.profile)?;
+            let profiles =
+                crate::mcp::server_profile::classify_manifest_for(&self.profile, &manifest)?;
+            profiles
+                .get(&tool.name)
+                .ok_or_else(|| anyhow::anyhow!("unknown selected tool"))?
+                .validate_arguments(args)?;
+            let definition = manifest["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|item| item["name"] == tool.name)
+                .unwrap();
+            anyhow::ensure!(
+                super::canonical_digest(definition) == self.definition_sha256
+                    && super::canonical_digest(&definition["inputSchema"]) == tool.schema_sha256,
+                "selected definition changed"
+            );
+            Ok(())
+        };
+        valid().map_err(|_| "native_approval_selected_unsupported")
+    }
+
+    pub(super) fn binding(&self, call_binding: &str) -> String {
+        // Existing native key, signed scope, policy epoch and spend ledger.
+        super::canonical_digest(&json!({"call_binding":call_binding,
+            "selected_invocation":self}))
+    }
+}
 const MAX_PENDING: usize = 16;
 const KEEP_TERMINAL: usize = 64;
 
@@ -83,6 +152,7 @@ struct Record {
     binding_sha256: String,
     source: Source,
     policy_epoch: u64,
+    selected: bool,
     expires: Instant,
     state: State,
 }
@@ -97,6 +167,15 @@ pub struct ApprovalState {
 }
 
 impl ApprovalState {
+    fn requires_owner(&self, id: Option<&str>, session: &str) -> bool {
+        self.records
+            .lock()
+            .map(|records| {
+                id.and_then(|id| records.get(id))
+                    .is_some_and(|record| record.session_id == session && record.selected)
+            })
+            .unwrap_or(true)
+    }
     /// Restart semantics: leftovers from an earlier daemon are removed. A pending
     /// approval, or an issued-but-unredeemed one, never survives a restart.
     pub fn new(home: &Path, grant_key: &[u8], ttl_seconds: u64) -> anyhow::Result<Self> {
@@ -135,10 +214,11 @@ impl ApprovalState {
         let _ = std::fs::remove_file(grants_dir(&self.home).join(format!("{id}.json")));
     }
 
-    fn prune(records: &mut BTreeMap<String, Record>, now: Instant) {
-        for record in records.values_mut() {
+    fn prune(&self, records: &mut BTreeMap<String, Record>, now: Instant) {
+        for (id, record) in records.iter_mut() {
             if record.state == State::Pending && record.expires <= now {
                 record.state = State::Closed("expired");
+                self.remove_files(id);
             }
         }
         let terminal: Vec<String> = records
@@ -148,6 +228,7 @@ impl ApprovalState {
             .collect();
         if terminal.len() > KEEP_TERMINAL {
             for id in terminal.iter().take(terminal.len() - KEEP_TERMINAL) {
+                self.remove_files(id);
                 records.remove(id);
             }
         }
@@ -202,7 +283,7 @@ impl ApprovalState {
             .lock()
             .map_err(|_| "native_approval_unavailable")?;
         let now = Instant::now();
-        Self::prune(&mut records, now);
+        self.prune(&mut records, now);
         let record = records.get_mut(id).ok_or("native_approval_unknown")?;
         match &record.state {
             State::Pending => {}
@@ -282,7 +363,7 @@ impl ApprovalState {
     /// Once closed, an approval cannot be retried or rescued under another identity or argument.
     pub fn invalidate(&self, id: &str, session_id: &str, reason: &'static str) {
         if let Ok(mut records) = self.records.lock() {
-            Self::prune(&mut records, Instant::now());
+            self.prune(&mut records, Instant::now());
             if let Some(record) = records.get_mut(id) {
                 if record.session_id == session_id && record.state == State::Pending {
                     record.state = State::Closed(reason);
@@ -300,10 +381,18 @@ impl ApprovalState {
             .map_err(|_| "native_approval_unavailable")?;
         let now = Instant::now();
         self.reconcile_rejections(&mut records);
-        Self::prune(&mut records, now);
-        let record = records.get(id).ok_or("native_approval_unknown")?;
+        self.prune(&mut records, now);
+        let record = records.get_mut(id).ok_or("native_approval_unknown")?;
         if record.session_id != session_id {
             return Err("native_approval_unknown");
+        }
+        if record.state == State::Pending
+            && self.store.policy_epoch().ok() != Some(record.policy_epoch)
+        {
+            record.state = State::Closed("stale_policy");
+        }
+        if record.state != State::Pending {
+            self.remove_files(id);
         }
         let left = record.expires.saturating_duration_since(now).as_millis() as u64;
         let state = match &record.state {
@@ -343,6 +432,7 @@ struct ApprovalRequest {
     pending_id: Option<String>,
     #[serde(default)]
     resource_admission: Option<super::resource::Admission>,
+    selected_invocation: Option<SelectedInvocation>,
 }
 
 fn failure(code: &'static str, status: StatusCode) -> (StatusCode, Json<Value>) {
@@ -400,6 +490,11 @@ pub async fn handler(
     };
     // Hold the native owner stable through status/cancel (native -> records).
     // Opening takes the same native lock itself before creating any record.
+    let require_owner = request.action != "request"
+        && approval.requires_owner(request.pending_id.as_deref(), &request.session_id);
+    if require_owner && identity.is_none() {
+        return failure("native_approval_bound_owner_required", StatusCode::CONFLICT);
+    }
     let owner_guard = if request.action != "request" && identity.is_some() {
         let state = match native.sessions.lock() {
             Ok(state) => state,
@@ -544,6 +639,33 @@ fn open_bound(
         return Err("native_schema_mismatch");
     }
     let is_resource = tool.resource_policy.is_some();
+    let selected = crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref());
+    if selected != request.selected_invocation.is_some() {
+        return Err("native_approval_selected_context_required");
+    }
+    if let Some(context) = &request.selected_invocation {
+        if identity.is_none() {
+            return Err("native_approval_bound_owner_required");
+        }
+        context.validate(tool, args)?;
+        if request.resource_admission.is_some() {
+            return Err("native_resource_policy_missing");
+        }
+        if session.host_session.is_none() || session.agent_id.is_none() {
+            return Err("native_approval_bound_owner_required");
+        }
+        if session.server_id.as_deref() != Some(&context.server_id) {
+            return Err("native_approval_selected_server_mismatch");
+        }
+        if session.host_session.is_some()
+            && (!session.granted_tools.iter().any(|t| t == name)
+                || session.granted_resources.as_ref().is_some_and(|resources| {
+                    !super::child_resources_authorized(resources, None, tool, args, None)
+                }))
+        {
+            return Err("native_child_authority_escalation");
+        }
+    }
     if is_resource && !super::resource_approval::is_supported_linux_resource_tool(tool) {
         return Err("native_approval_resource_tool_unsupported");
     }
@@ -553,7 +675,7 @@ fn open_bound(
         tool: name.into(),
         args: args.clone(),
     });
-    let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+    let mut outcome = super::invocation::inspect(&mut firewall, &ev, tool, &hosts)?;
     if let Some(host) = &session.host_session {
         let ev_host = session.host_event(
             host,
@@ -563,7 +685,7 @@ fn open_bound(
                 args: args.clone(),
             },
         );
-        let host_outcome = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+        let host_outcome = super::invocation::inspect(&mut firewall, &ev_host, tool, &hosts)?;
         outcome = super::merge_provenance_outcomes(outcome, host_outcome);
     }
     let mut verdict = resolved(&outcome);
@@ -588,7 +710,7 @@ fn open_bound(
     } else {
         None
     };
-    let bound = binding(
+    let mut bound = binding(
         &native.registry_sha256,
         &session.epoch,
         name,
@@ -596,6 +718,9 @@ fn open_bound(
         args,
         request.resource_admission.as_ref(),
     );
+    if let Some(context) = &request.selected_invocation {
+        bound = context.binding(&super::selected_host_binding(&bound, &context.host_call_id));
+    }
     let policy_epoch = approval
         .store
         .policy_epoch()
@@ -607,7 +732,7 @@ fn open_bound(
         .lock()
         .map_err(|_| "native_approval_unavailable")?;
     approval.reconcile_rejections(&mut records);
-    ApprovalState::prune(&mut records, Instant::now());
+    approval.prune(&mut records, Instant::now());
     if records
         .values()
         .any(|r| r.session_id == request.session_id && r.state == State::Pending)
@@ -636,6 +761,9 @@ fn open_bound(
     });
     if let Some(details) = resource_details {
         file["resource_details"] = details;
+    }
+    if let Some(context) = &request.selected_invocation {
+        file["selected_invocation"] = json!(context);
     }
     // Audit first and fail closed; the audit line never carries raw arguments.
     audit(
@@ -671,6 +799,7 @@ fn open_bound(
             binding_sha256: bound.clone(),
             source,
             policy_epoch,
+            selected: request.selected_invocation.is_some(),
             expires: Instant::now() + approval.ttl,
             state: State::Pending,
         },
@@ -768,15 +897,25 @@ pub fn operator_approve(
     };
     let key = native_key(&grant::derive_key(hook_token));
     let store = GrantStore::new(&grants_dir(home));
-    if let Err(error) = store.issue(&key, &action, now, expires - now, id.to_string()) {
-        let _ = std::fs::remove_file(pending_dir(home).join(format!("{id}.deciding")));
-        return Err(error.into());
-    }
+    let (issued, _) = match store.issue(&key, &action, now, expires - now, id.to_string()) {
+        Ok(issued) => issued,
+        Err(error) => {
+            let _ = std::fs::remove_file(pending_dir(home).join(format!("{id}.deciding")));
+            return Err(error.into());
+        }
+    };
     let dir = pending_dir(home);
-    let _ = std::fs::rename(
+    if std::fs::rename(
         dir.join(format!("{id}.deciding")),
         dir.join(format!("{id}.approved")),
-    );
+    )
+    .is_err()
+    {
+        // Retirement/cancellation may remove the claim before issue completes.
+        // Never leave an orphan grant on disk. Redemption may also have won
+        // already; discarding its now-absent file cannot undo that action.
+        store.discard(&issued);
+    }
     Ok(())
 }
 
@@ -940,6 +1079,7 @@ mod tests {
                 schema_sha256: Some(schema),
                 pending_id: None,
                 resource_admission: None,
+                selected_invocation: None,
             };
             super::open(
                 &self.st,
@@ -1410,4 +1550,5 @@ mod tests {
             );
         }
     }
+    mod selected_tests;
 }

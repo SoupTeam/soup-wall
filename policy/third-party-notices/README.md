@@ -1,8 +1,8 @@
 # Reviewed crate license notice sources (SOU-27)
 
-The initial inventory contains **byte-for-byte** notices from 20 crate cache archives inspected on 2026-10-12.
-The 2026-10-21 TLS security update replaces the selected `webpki-roots` pin with 1.0.10.
-Its verified crate archive contains the identical CDLA license bytes; the original 1.0.9 notice remains as historical evidence.
+The original texts were copied **byte-for-byte** from 20 crate cache archives inspected on 2026-10-12.
+The `webpki-roots 1.0.10` notice was copied from its checksum-verified crate archive on
+2026-10-21; its bytes match the previously reviewed `1.0.9` notice.
 The Cargo.lock archive checksum and SHA256 of each copied notice are pinned in `policy/license-policy.toml`.
 This repository copy is not a new license grant; review the upstream crate and redistributable artifact before release.
 

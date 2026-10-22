@@ -468,6 +468,33 @@ decision = "unresolved"
         self.assertEqual(mod.judge_spdx("MIT/Apache-2.0", self.policy)[0], "unknown")
         self.assertEqual(mod.judge_spdx("CDLA-Permissive-2.0", self.policy)[0], "disallowed")
 
+    def test_cdla_exception_is_limited_to_reviewed_webpki_roots_version(self):
+        self.registry_pkg.update(name="webpki-roots", version="1.0.10",
+                                 license="CDLA-Permissive-2.0")
+        notice = self.root / "cdla-notice.txt"
+        notice.write_text("synthetic CDLA review evidence\n", encoding="utf8")
+        exception = {"name": "webpki-roots", "version": "1.0.10", "source": self.registry,
+                     "license": "CDLA-Permissive-2.0", "selected_license": "CDLA-Permissive-2.0",
+                     "cargo_lock_checksum": "a" * 64,
+                     "reason": "Exact archived data license reviewed for this package and version",
+                     "notice_path": "cdla-notice.txt",
+                     "notice_sha256": mod.sha256(notice)}
+        self.policy["package_exceptions"] = [exception]
+
+        def decision():
+            self.write_lock()
+            lock = tomllib.loads((self.root / "Cargo.lock").read_text())
+            rows, errors = mod.inventory_rust(self.metadata(), lock, self.policy, self.root)
+            self.assertFalse(errors)
+            return next(row["decision"] for row in rows if row["name"] == self.registry_pkg["name"])
+
+        self.assertEqual(decision(), "exception")
+        self.registry_pkg["version"] = exception["version"] = "1.0.9"
+        self.assertEqual(decision(), "disallowed")
+        self.registry_pkg["version"] = exception["version"] = "1.0.10"
+        self.registry_pkg["name"] = exception["name"] = "other-roots"
+        self.assertEqual(decision(), "disallowed")
+
     def test_path_escape_rejected(self):
         with self.assertRaises(ValueError):
             mod.within(self.root, "../outside")

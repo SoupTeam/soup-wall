@@ -21,6 +21,7 @@ use crate::handlers::Shared;
 pub mod approval;
 pub mod child_authority;
 pub mod continuity;
+mod invocation;
 pub mod liveness;
 pub mod resource;
 pub mod resource_approval;
@@ -588,7 +589,9 @@ impl HookAuthorityGuard<'_> {
                     if let EventKind::ToolCall { tool: name, .. } = &mut canonical.kind {
                         *name = tool.name.clone();
                     }
-                    return firewall.inspect_native_call(&canonical, tool.action_class, &hosts);
+                    if let Ok(outcome) = invocation::inspect(firewall, &canonical, tool, &hosts) {
+                        return outcome;
+                    }
                 }
             }
             let mut refused = Outcome::allow();
@@ -940,6 +943,7 @@ struct Request {
     delivery: Option<String>,
     resource_admission: Option<resource::Admission>,
     approval_id: Option<String>,
+    selected_invocation: Option<approval::SelectedInvocation>,
     pub host_session: Option<String>,
     pub child_authority: Option<String>,
     pub server_id: Option<String>,
@@ -989,6 +993,12 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             }
             if object.contains_key("approval_id") {
                 keys.insert("approval_id");
+            }
+            if object.contains_key("selected_invocation") {
+                keys.insert("selected_invocation");
+                if request.selected_invocation.is_none() || request.approval_id.is_none() {
+                    return Err("native_invalid_fields");
+                }
             }
             if matches!(
                 request.contract_version.as_str(),
@@ -2349,7 +2359,7 @@ fn inspect_bound(
             tool: name.into(),
             args: args.clone(),
         });
-        let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+        let mut outcome = invocation::inspect(&mut firewall, &ev, tool, &hosts)?;
         if let Some(host) = &session.host_session {
             let ev_host = session.host_event(
                 host,
@@ -2359,7 +2369,7 @@ fn inspect_bound(
                     args: args.clone(),
                 },
             );
-            let outcome_host = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+            let outcome_host = invocation::inspect(&mut firewall, &ev_host, tool, &hosts)?;
             outcome = merge_provenance_outcomes(outcome, outcome_host);
         }
         let mut verdict = resolved(&outcome);
@@ -2394,6 +2404,48 @@ fn inspect_bound(
             // Exact single-use operator approval, rechecked against the policy
             // verdict computed just now. A hard Deny can never be rescued.
             let approval = native.approval.as_ref().ok_or("native_approval_disabled")?;
+            let approval_bound = if selected_result {
+                if identity.is_none() {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_approval_bound_owner_required",
+                    );
+                    return Err("native_approval_bound_owner_required");
+                }
+                let Some(context) = request.selected_invocation.as_ref() else {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_approval_selected_context_required",
+                    );
+                    return Err("native_approval_selected_context_required");
+                };
+                let valid = context.validate(tool, args).and_then(|()| {
+                    if request.mcp_host_call_id.as_ref() != Some(&context.host_call_id)
+                        || session.server_id.as_deref() != Some(&context.server_id)
+                    {
+                        Err("native_approval_selected_binding_mismatch")
+                    } else {
+                        Ok(())
+                    }
+                });
+                if let Err(code) = valid {
+                    approval.invalidate(approval_id, &request.session_id, code);
+                    return Err(code);
+                }
+                context.binding(&bound)
+            } else {
+                if request.selected_invocation.is_some() {
+                    approval.invalidate(
+                        approval_id,
+                        &request.session_id,
+                        "native_approval_selected_unsupported",
+                    );
+                    return Err("native_approval_selected_unsupported");
+                }
+                bound.clone()
+            };
             if verdict == Verdict::Deny {
                 // An explicit hard Deny (including egress denial or lineage floor failure)
                 // can never be approved or redeemed. Terminally invalidate the presented approval.
@@ -2425,7 +2477,7 @@ fn inspect_bound(
                             &session.epoch,
                             name,
                             &tool.schema_sha256,
-                            &bound,
+                            &approval_bound,
                             verdict,
                         ) {
                             Ok(()) => {
@@ -2539,13 +2591,14 @@ fn inspect_bound(
             args: args.clone(),
         };
         let mut outcome =
-            firewall.inspect_native_call(&session.event(kind.clone()), tool.action_class, &hosts);
+            invocation::inspect(&mut firewall, &session.event(kind.clone()), tool, &hosts)?;
         if let Some(host) = &session.host_session {
-            let host_outcome = firewall.inspect_native_call(
+            let host_outcome = invocation::inspect(
+                &mut firewall,
                 &session.host_event(host, session.seq, kind),
-                tool.action_class,
+                tool,
                 &hosts,
-            );
+            )?;
             outcome = merge_provenance_outcomes(outcome, host_outcome);
         }
         let verdict = resolved(&outcome);
@@ -2864,6 +2917,7 @@ fn audit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod literal_arguments;
     use crate::{
         audit::AuditSink,
         handlers::{AppState, Sessions as HookSessions},
@@ -3245,8 +3299,13 @@ mod tests {
         let native = st.native.as_ref().unwrap();
         start(st, "mcp-test");
         let tool = &native.registry.tools[0];
+        let args = if tool.mcp_result_profile.is_some() {
+            json!({"path":"/workspace/notes.txt"})
+        } else {
+            json!({})
+        };
         let mut fields =
-            json!({"tool": tool.name, "args": {}, "schema_sha256": tool.schema_sha256});
+            json!({"tool": tool.name, "args": args, "schema_sha256": tool.schema_sha256});
         if tool.mcp_result_profile.is_some() {
             fields["mcp_host_call_id"] = serde_json::from_str::<Value>(content)
                 .ok()
@@ -3262,7 +3321,7 @@ mod tests {
                 "mcp-test",
                 "result",
                 json!({
-                    "tool": tool.name, "args": {}, "call_id": call.call_id,
+                    "tool": tool.name, "args": args, "call_id": call.call_id,
                     "result_kind": kind, "delivery": "mcp_host", "content": content
                 }),
             ),
@@ -3951,7 +4010,7 @@ print(json.dumps(selected, separators=(",",":")))
         start(&st, "typed-host");
         let mut calls = Vec::new();
         for host_id in [json!(1), json!("1")] {
-            calls.push(inspect(&st,native,request(native,"typed-host","call",json!({"tool":tool.name,"args":{},"schema_sha256":tool.schema_sha256,"mcp_host_call_id":host_id}))).unwrap());
+            calls.push(inspect(&st,native,request(native,"typed-host","call",json!({"tool":tool.name,"args":{"path":"/workspace/notes.txt"},"schema_sha256":tool.schema_sha256,"mcp_host_call_id":host_id}))).unwrap());
         }
         assert_ne!(calls[0].binding_sha256, calls[1].binding_sha256);
         let response=json!({"jsonrpc":"2.0","id":"1","result":{"content":[{"type":"text","text":"ordinary"}],"structuredContent":{"content":"ordinary"}}}).to_string();
@@ -3960,7 +4019,7 @@ print(json.dumps(selected, separators=(",",":")))
                 native,
                 "typed-host",
                 "result",
-                json!({"tool":tool.name,"args":{},"call_id":call.call_id,"result_kind":"value","delivery":"mcp_host","content":response}),
+                json!({"tool":tool.name,"args":{"path":"/workspace/notes.txt"},"call_id":call.call_id,"result_kind":"value","delivery":"mcp_host","content":response}),
             )
         };
         assert_eq!(
@@ -4036,7 +4095,7 @@ print(json.dumps(selected, separators=(",",":")))
                     "delivery",
                     "call",
                     json!({
-                        "tool": tool.name, "args": {}, "schema_sha256": tool.schema_sha256,
+                        "tool": tool.name, "args": {"path":"/workspace/notes.txt"}, "schema_sha256": tool.schema_sha256,
                         "mcp_host_call_id": "original"
                     }),
                 ),
@@ -4052,7 +4111,7 @@ print(json.dumps(selected, separators=(",",":")))
                         "delivery",
                         "result",
                         json!({
-                            "tool": tool.name, "args": {}, "call_id": call.call_id,
+                            "tool": tool.name, "args": {"path":"/workspace/notes.txt"}, "call_id": call.call_id,
                             "result_kind": "value", "delivery": delivery, "content": content
                         })
                     )
