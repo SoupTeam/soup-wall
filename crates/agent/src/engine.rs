@@ -10,7 +10,7 @@ use soup_wall_core::{
     SecretDetector, Severity,
 };
 
-use crate::action::{classify, classify_with_baseline, touches_sensitive_path, ActionClass};
+use crate::action::{classify, touches_sensitive_path, ActionClass, NativeArgumentRoles};
 use crate::authority::Authority;
 use crate::egress::{hosts, is_allowed};
 use crate::event::{AgentEvent, EventKind, ToolDecl, Trust};
@@ -367,7 +367,24 @@ impl AgentFirewall {
         baseline: ActionClass,
         egress: &[String],
     ) -> Outcome {
-        self.inspect_inner(ev, Some((baseline, egress)), false)
+        self.inspect_native_call_with_argument_roles(
+            ev,
+            baseline,
+            egress,
+            NativeArgumentRoles::CommandBearing,
+        )
+    }
+
+    /// As above, with field roles derived by a trusted host from a validated
+    /// immutable executor contract. Wire input must never select these roles.
+    pub fn inspect_native_call_with_argument_roles(
+        &mut self,
+        ev: &AgentEvent,
+        baseline: ActionClass,
+        egress: &[String],
+        roles: NativeArgumentRoles,
+    ) -> Outcome {
+        self.inspect_inner(ev, Some((baseline, egress, roles)), false)
     }
 
     /// Inspect before release without tainting a session with withheld content.
@@ -422,7 +439,7 @@ impl AgentFirewall {
     fn inspect_inner(
         &mut self,
         ev: &AgentEvent,
-        native: Option<(ActionClass, &[String])>,
+        native: Option<(ActionClass, &[String], NativeArgumentRoles)>,
         record_results: bool,
     ) -> Outcome {
         // Lifecycle events only mutate state.
@@ -497,10 +514,10 @@ impl AgentFirewall {
                 }
                 signals.action_class = Some(native.map_or_else(
                     || classify(tool, args),
-                    |(baseline, _)| classify_with_baseline(args, baseline),
+                    |(baseline, _, roles)| roles.classify(args, baseline),
                 ));
                 signals.egress_hosts = hosts(args);
-                if let Some((_, declared)) = native {
+                if let Some((_, declared, _)) = native {
                     signals.egress_hosts.extend_from_slice(declared);
                     signals.egress_hosts.sort();
                     signals.egress_hosts.dedup();
@@ -926,7 +943,7 @@ mod tests {
             },
         );
         assert_eq!(
-            classify_with_baseline(
+            crate::action::classify_with_baseline(
                 &serde_json::json!({"query": "rm -rf /data"}),
                 ActionClass::ReadOnly
             ),

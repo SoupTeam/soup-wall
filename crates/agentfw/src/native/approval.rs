@@ -695,7 +695,7 @@ fn open_bound(
         tool: name.into(),
         args: args.clone(),
     });
-    let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+    let mut outcome = super::invocation::inspect(&mut firewall, &ev, tool, &hosts)?;
     if let Some(host) = &session.host_session {
         let ev_host = session.host_event(
             host,
@@ -705,7 +705,7 @@ fn open_bound(
                 args: args.clone(),
             },
         );
-        let host_outcome = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+        let host_outcome = super::invocation::inspect(&mut firewall, &ev_host, tool, &hosts)?;
         outcome = super::merge_provenance_outcomes(outcome, host_outcome);
     }
     let mut verdict = resolved(&outcome);

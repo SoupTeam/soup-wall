@@ -14,7 +14,9 @@ pub mod policy;
 pub mod resolution;
 pub mod taint;
 
-pub use action::{classify, classify_with_baseline, touches_sensitive_path, ActionClass};
+pub use action::{
+    classify, classify_with_baseline, touches_sensitive_path, ActionClass, NativeArgumentRoles,
+};
 pub use authority::{Authority, Escalation};
 pub use egress::{hosts, is_allowed};
 pub use engine::{AgentFirewall, Outcome, DEFAULT_TAINT_CAP};
