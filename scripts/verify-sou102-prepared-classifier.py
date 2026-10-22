@@ -38,10 +38,12 @@ def load(name, path):
 
 BASE = load("sou102_fs", ROOT / "scripts/verify-sou62-real-mcp.py")
 ASK = load("sou102_witness", ROOT / "scripts/verify-sou105-selected-approval.py")
+GIT = load("sou102_git", ROOT / "scripts/verify-sou68-real-mcp.py")
 require, write, sha = BASE.require, BASE.write, BASE.sha
 FORMAT = "sw-classifier/prepared-acceptance/1"
 TEXT = BASE.TEXT
 NOTES = "/workspace/notes.txt"
+GIT_MARKER = "SOU-68 synthetic initial commit"
 PREPARE_MAX_SECONDS = 2.5  # outer 2 s collector deadline plus scheduling slack; never raised
 
 
@@ -102,10 +104,13 @@ class Collector:
         env = dict(ctx.env)
         if prepare:
             env["AGENTFW_CLASSIFIER_PREPARE"] = "1"
-        command = [str(ctx.args.agentfw), "mcp", "--native-admission", "--id", "sou102-filesystem", "--",
-                   ctx.profile["runtimePath"],
-                   str(Path(ctx.profile["packageRoot"]) / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
-                   "/workspace"]
+        if ctx.server == "git":
+            server = [ctx.profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
+        else:
+            server = [ctx.profile["runtimePath"],
+                      str(Path(ctx.profile["packageRoot"]) / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"),
+                      "/workspace"]
+        command = [str(ctx.args.agentfw), "mcp", "--native-admission", "--id", "sou102-" + ctx.server, "--", *server]
         if trace:
             command = [str(ctx.args.strace), "-f", "-qq", "-s", "4096", "-e", "trace=openat,execve",
                        "-o", str(self.trace), "--", *command]
@@ -151,6 +156,9 @@ class Collector:
 
     def reads(self, evidence=None):
         require(self.trace is not None, "syscall witness not enabled")
+        if self.ctx.server == "git":
+            return ASK.trace_effects(self.trace, "git", git_path="/mcp-runtime/git", evidence=evidence,
+                                     git_revision=self.ctx.git_revision)
         return ASK.trace_effects(self.trace, "filesystem", target=NOTES, evidence=evidence)
 
     def wait_ready_event(self, timeout=15):
@@ -163,22 +171,49 @@ class Collector:
         raise ValueError(self.label + ": no readiness event")
 
     def initialize(self):
-        listing = self.client.initialize()
-        manifest = json.loads((BASE.INSTALL.ASSETS / "upstream-tools-list.json").read_text())["result"]
+        if self.ctx.server == "git":
+            # The Git server pins a newer protocol revision than the filesystem client helper.
+            protocol = "2025-11-25"
+            result, _ = self.client.exchange({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": protocol, "capabilities": {}, "clientInfo": {"name": "sou102-acceptance", "version": "1"}}})
+            require(result.get("result", {}).get("protocolVersion") == protocol, "original protocol pin changed")
+            self.client.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+            listing, _ = self.client.exchange({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+            assets = GIT.INSTALL.ASSETS
+        else:
+            listing = self.client.initialize()
+            assets = BASE.INSTALL.ASSETS
+        manifest = json.loads((assets / "upstream-tools-list.json").read_text())["result"]
         require(listing.get("result") == manifest, "original discovery changed")
         return time.monotonic() - self.started
+
+    def frame(self, identifier):
+        if self.ctx.server == "git":
+            return {"jsonrpc": "2.0", "id": identifier, "method": "tools/call", "params": {
+                "name": "git_show", "arguments": {"repo_path": "/workspace", "revision": "HEAD"}}}
+        return BASE.call(identifier, {"path": NOTES})
+
+    def useful(self, response):
+        """The original server's own useful result."""
+        if self.ctx.server == "git":
+            result = response.get("result", {})
+            require("error" not in response and not result.get("isError", False), "useful Git read refused: " + str(response)[:300])
+            text = "".join(block.get("text", "") for block in result.get("content", []) if block.get("type") == "text")
+            require(GIT_MARKER in text, "original Git result missing")
+            return True
+        return BASE.result_text(response) == TEXT
 
     def call(self, identifier, expect):
         before = self.reads() if self.trace else None
         began = time.monotonic()
-        response, raw = self.client.exchange(BASE.call(identifier, {"path": NOTES}))
+        response, raw = self.client.exchange(self.frame(identifier))
         elapsed = time.monotonic() - began
         after = self.reads() if self.trace else None
         dispatch = [e for e in BASE.events(self.stderr) if e.get("host_call_id") == identifier and e.get("state") == "inflight"]
         row = {"id": identifier, "latency_ms": round(elapsed * 1000, 3), "response": response, "dispatch_events": dispatch,
                "reads_before": before, "reads_after": after}
         if expect == "ok":
-            require(BASE.result_text(response) == TEXT, "useful original result missing")
+            require(self.useful(response), "useful original result missing")
             require(dispatch and all(e["execution_dispatched"] is True for e in dispatch), "collector dispatch absent")
             if self.trace:
                 require(after == before + 1, "independent witness: exactly one useful read expected")
@@ -390,19 +425,31 @@ def scenario_latency(ctx, report, rounds):
 def run(args, report):
     require(platform.system() == "Linux" and platform.machine() == "x86_64", "native Linux x86-64 required; no fallback/skip")
     report["source_before"] = BASE.source()
-    report["runtime"] = {name: sha(getattr(args, name)) for name in ("agentfw", "node", "npm", "bwrap", "strace")}
+    names = ("agentfw", "bwrap", "strace") + (("git", "git_launcher") if args.server == "git" else ("node", "npm"))
+    report["server"] = args.server
+    report["runtime"] = {name: sha(getattr(args, name)) for name in names}
     ctx = Context()
-    ctx.args, ctx.output = args, args.output
+    ctx.args, ctx.output, ctx.server = args, args.output, args.server
     ctx.python = args.python
     report["python"] = {"path": str(args.python), "sha256": sha(args.python), "version": platform.python_version()}
     ctx.workspace, ctx.home, installed = args.output / "workspace", args.output / "home", args.output / "installed"
     ctx.private = args.output.parent / ("." + args.output.name + "-private-syscalls")
-    ctx.workspace.mkdir(mode=0o700); ctx.home.mkdir(mode=0o700); ctx.private.mkdir(mode=0o700)
-    (ctx.workspace / "notes.txt").write_text(TEXT, encoding="utf-8")
-    BASE.INSTALL.install(installed, ctx.workspace, args.node, args.bwrap, args.npm)
+    ctx.home.mkdir(mode=0o700); ctx.private.mkdir(mode=0o700)
+    env = BASE.environment(ctx.home)
+    if args.server == "git":
+        env.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_OPTIONAL_LOCKS="0",
+                   GIT_TERMINAL_PROMPT="0", GIT_PYTHON_GIT_EXECUTABLE=str(args.git))
+        GIT.prepare_repo(ctx.workspace, args.git, env)
+        ctx.git_revision = subprocess.check_output([str(args.git), "rev-parse", "HEAD"], cwd=ctx.workspace, env=env,
+                                                   text=True, timeout=5).strip()
+        report["git_revision"] = ctx.git_revision
+        GIT.INSTALL.install(installed, ctx.workspace, args.git, sha(args.git), args.bwrap, args.git_launcher)
+    else:
+        ctx.workspace.mkdir(mode=0o700)
+        (ctx.workspace / "notes.txt").write_text(TEXT, encoding="utf-8")
+        BASE.INSTALL.install(installed, ctx.workspace, args.node, args.bwrap, args.npm)
     ctx.profile = json.loads((installed / "profile.json").read_text())
     report["installation"] = json.loads((installed / "installation.json").read_text())
-    env = BASE.environment(ctx.home)
     subprocess.run([str(args.agentfw), "install"], env=env, stdin=subprocess.DEVNULL, capture_output=True, check=True, timeout=30)
     archive = args.output / "classifier-frozen.pkg"
     subprocess.run([str(args.agentfw), "classifier-package", "build", "--classifier", "frozen", "--source", str(ROOT),
@@ -429,15 +476,22 @@ def run(args, report):
         if daemon is not None:
             BASE.DEMO.stop(daemon)
     report["source_after"] = BASE.source()
-    report["not_demonstrated"] = ["mismatched ready identity (worker-level tests only)", "late reply (worker-level tests only)",
-                                  "original Git MCP server (not run in this report)"]
+    report["not_demonstrated"] = ["mismatched ready identity (worker-level tests only)", "late reply (worker-level tests only)"]
+    if args.server == "git":
+        report["classifier_scope"] = ("the frozen installed classifier reads git_show as read but leaves git_status/git_log/git_diff "
+                                      "unknown, so git_show is the only useful call here")
+    else:
+        report["not_demonstrated"].append("original Git MCP server (see the Git report)")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", required=True)
-    for name in ("agentfw", "node", "npm", "bwrap", "strace", "python", "output"):
+    parser.add_argument("--server", choices=("filesystem", "git"), default="filesystem")
+    for name in ("agentfw", "bwrap", "strace", "python", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    for name in ("node", "npm", "git", "git-launcher"):
+        parser.add_argument("--" + name, type=Path)
     parser.add_argument("--rounds", type=int, default=5)
     args = parser.parse_args()
     args.output = args.output.resolve()
@@ -445,7 +499,9 @@ def main():
     args.output.mkdir(mode=0o700, parents=True)
     report = {"format": FORMAT, "status": "failed", "cases": []}
     try:
-        for name in ("agentfw", "node", "npm", "bwrap", "strace", "python"):
+        needed = ("agentfw", "bwrap", "strace", "python") + (("git", "git_launcher") if args.server == "git" else ("node", "npm"))
+        for name in needed:
+            require(getattr(args, name) is not None, "--" + name.replace("_", "-") + " is required for " + args.server)
             setattr(args, name, getattr(args, name).resolve(strict=True))
         run(args, report)
         report["status"] = "passed"

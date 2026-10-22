@@ -10,19 +10,19 @@
     "interpreter_version": "3.13.16",
     "package_id": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
     "start_sequence": 1,
-    "worker_pid": 2794
+    "worker_pid": 7008
    },
    "worker_pids": [
-    2794
+    7008
    ],
-   "ready_after_start_ms": 1221.4,
+   "ready_after_start_ms": 1300.1,
    "passed": true
   },
   {
    "case": "first-useful-call",
-   "worker_pid": 2794,
+   "worker_pid": 7008,
    "id": 100,
-   "latency_ms": 157.193,
+   "latency_ms": 116.13,
    "response": {
     "result": {
      "content": [
@@ -57,9 +57,9 @@
   },
   {
    "case": "continuation",
-   "worker_pid": 2794,
+   "worker_pid": 7008,
    "id": 101,
-   "latency_ms": 48.811,
+   "latency_ms": 52.375,
    "response": {
     "result": {
      "content": [
@@ -94,11 +94,11 @@
   },
   {
    "case": "session-isolation",
-   "worker_a": 2794,
-   "worker_b": 2835,
+   "worker_a": 7008,
+   "worker_b": 7050,
    "b_reads": 1,
    "id": 100,
-   "latency_ms": 50.314,
+   "latency_ms": 46.12,
    "response": {
     "result": {
      "content": [
@@ -133,10 +133,10 @@
   },
   {
    "case": "killed-worker-replaced-before-dispatch",
-   "old_pid": 2794,
-   "new_pid": 2870,
+   "old_pid": 7008,
+   "new_pid": 7086,
    "id": 103,
-   "latency_ms": 777.976,
+   "latency_ms": 884.999,
    "response": {
     "result": {
      "content": [
@@ -171,9 +171,9 @@
   },
   {
    "case": "hung-worker-refused-within-deadline",
-   "old_pid": 2870,
+   "old_pid": 7086,
    "id": 104,
-   "latency_ms": 1431.853,
+   "latency_ms": 1453.124,
    "response": {
     "error": {
      "code": -32603,
@@ -190,9 +190,9 @@
   },
   {
    "case": "recovery-after-hang",
-   "new_pid": 2873,
+   "new_pid": 7090,
    "id": 105,
-   "latency_ms": 703.298,
+   "latency_ms": 778.583,
    "response": {
     "result": {
      "content": [
@@ -228,7 +228,7 @@
   {
    "case": "altered-assets-lost-worker-refused",
    "id": 106,
-   "latency_ms": 21.503,
+   "latency_ms": 27.762,
    "response": {
     "error": {
      "code": -32603,
@@ -246,9 +246,9 @@
   },
   {
    "case": "recovery-after-restore",
-   "new_pid": 2876,
+   "new_pid": 7093,
    "id": 107,
-   "latency_ms": 787.249,
+   "latency_ms": 883.415,
    "response": {
     "result": {
      "content": [
@@ -283,47 +283,47 @@
   },
   {
    "case": "reaped-when-no-call-is-made",
-   "worker_pid": 2885,
+   "worker_pid": 7102,
    "reads": 0,
    "cleanup": {
     "exit_code": 0,
-    "transcript_pid": 2879,
+    "transcript_pid": 7096,
     "forced_cleanup": false,
     "process_cleanup": {
      "observed": [
       {
-       "pid": 2879,
-       "start_time_ticks": 91730,
+       "pid": 7096,
+       "start_time_ticks": 264736,
        "parent_process": true
       },
       {
-       "pid": 2884,
-       "start_time_ticks": 91730,
+       "pid": 7101,
+       "start_time_ticks": 264737,
        "parent_process": false
       },
       {
-       "pid": 2885,
-       "start_time_ticks": 91845,
+       "pid": 7102,
+       "start_time_ticks": 264855,
        "parent_process": false
       },
       {
-       "pid": 2890,
-       "start_time_ticks": 93372,
+       "pid": 7107,
+       "start_time_ticks": 266476,
        "parent_process": false
       },
       {
-       "pid": 2891,
-       "start_time_ticks": 93374,
+       "pid": 7108,
+       "start_time_ticks": 266479,
        "parent_process": false
       },
       {
-       "pid": 2892,
-       "start_time_ticks": 93375,
+       "pid": 7109,
+       "start_time_ticks": 266480,
        "parent_process": false
       },
       {
-       "pid": 2893,
-       "start_time_ticks": 93379,
+       "pid": 7110,
+       "start_time_ticks": 266488,
        "parent_process": false
       }
      ],
@@ -341,18 +341,18 @@
    "reads": 0,
    "cleanup": {
     "exit_code": 1,
-    "transcript_pid": 2917,
+    "transcript_pid": 7134,
     "forced_cleanup": false,
     "process_cleanup": {
      "observed": [
       {
-       "pid": 2917,
-       "start_time_ticks": 93620,
+       "pid": 7134,
+       "start_time_ticks": 266552,
        "parent_process": true
       },
       {
-       "pid": 2922,
-       "start_time_ticks": 93620,
+       "pid": 7139,
+       "start_time_ticks": 266552,
        "parent_process": false
       }
      ],
@@ -365,16 +365,17 @@
   }
  ],
  "source_before": {
-  "commit": "b1e03e9ce77421a7945baef68786b4a4ad741075",
-  "tree": "3b4b61028a662c32c40e0757d64ed62b27f4fc46",
+  "commit": "d680f89da5870bb8cb59121e06a72f5a34dd67da",
+  "tree": "0817cff125b2d4868e5f62c02c0a1237b0009ddf",
   "dirty": false
  },
+ "server": "filesystem",
  "runtime": {
   "agentfw": "02f5cf638192ed45ccc02c88bfdbd47bc51eed00475043e626a641bb04d5ccf6",
-  "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
-  "npm": "08607ae1731958930bb071e1a4aaeb835f1c1c371d8ccc43ef860b3146a682be",
   "bwrap": "e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71",
-  "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+  "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001",
+  "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+  "npm": "08607ae1731958930bb071e1a4aaeb835f1c1c371d8ccc43ef860b3146a682be"
  },
  "python": {
   "path": "/usr/bin/python3.13",
@@ -545,7 +546,7 @@
    ]
   },
   "upstream_identity_sha256": "bd2b235f11e4e3ccd31467185b33b26751a626ed23e499ca72392b56dc9849ca",
-  "profile_sha256": "52d4cd117417543cd5f7b5c3c1663f9a5c715480f860194e004cb1d177eea377",
+  "profile_sha256": "41719d639ed939ccad99f6b5076f5f63d858284d63fcfa6efa6ab28bfc175c79",
   "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
   "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
   "package_lock_sha256": "98afd2e0fe566a9a9ca626953934c96b23411b8feb619ddeb1cadff341b6d693",
@@ -579,43 +580,43 @@
  "witness_a": 6,
  "collector_a_cleanup": {
   "exit_code": 0,
-  "transcript_pid": 2788,
+  "transcript_pid": 7002,
   "forced_cleanup": false,
   "process_cleanup": {
    "observed": [
     {
-     "pid": 2788,
-     "start_time_ticks": 87212,
+     "pid": 7002,
+     "start_time_ticks": 260253,
      "parent_process": true
     },
     {
-     "pid": 2793,
-     "start_time_ticks": 87213,
+     "pid": 7007,
+     "start_time_ticks": 260253,
      "parent_process": false
     },
     {
-     "pid": 2794,
-     "start_time_ticks": 87325,
+     "pid": 7008,
+     "start_time_ticks": 260373,
      "parent_process": false
     },
     {
-     "pid": 2800,
-     "start_time_ticks": 88999,
+     "pid": 7016,
+     "start_time_ticks": 261999,
      "parent_process": false
     },
     {
-     "pid": 2801,
-     "start_time_ticks": 89001,
+     "pid": 7017,
+     "start_time_ticks": 262001,
      "parent_process": false
     },
     {
-     "pid": 2802,
-     "start_time_ticks": 89003,
+     "pid": 7018,
+     "start_time_ticks": 262002,
      "parent_process": false
     },
     {
-     "pid": 2803,
-     "start_time_ticks": 89012,
+     "pid": 7019,
+     "start_time_ticks": 262009,
      "parent_process": false
     }
    ],
@@ -629,149 +630,149 @@
   "note": "No syscall tracing here: tracing would inflate process start times.",
   "lazy": {
    "first_call_ms": [
-    589.453,
-    590.592,
-    586.179,
-    587.666,
-    588.085,
-    537.87,
-    569.156,
-    589.673,
-    616.623,
-    536.344
+    629.644,
+    613.04,
+    590.085,
+    598.54,
+    717.069,
+    577.971,
+    660.132,
+    610.674,
+    603.072,
+    585.789
    ],
    "warm_call_ms": [
-    10.839,
-    15.38,
-    13.205,
-    14.593,
-    16.105,
-    14.268,
-    18.813,
-    19.04,
-    17.941,
-    12.845,
-    10.72,
-    11.044,
-    9.969,
-    9.665,
-    13.709,
-    16.827,
-    15.223,
-    16.455,
-    13.669,
-    14.836,
-    11.424,
-    11.945,
-    12.706,
-    12.836,
-    14.99,
-    15.262,
-    15.37,
-    10.817,
-    10.837,
-    10.635
+    14.511,
+    16.111,
+    17.907,
+    17.202,
+    19.967,
+    16.628,
+    11.613,
+    12.635,
+    11.952,
+    11.164,
+    10.804,
+    9.478,
+    15.227,
+    14.983,
+    14.292,
+    14.021,
+    12.728,
+    12.742,
+    13.703,
+    12.19,
+    10.196,
+    16.045,
+    16.206,
+    16.439,
+    13.816,
+    11.693,
+    13.56,
+    18.14,
+    15.443,
+    12.068
    ],
    "failures": [],
    "first_call_ms_summary": {
     "n": 10,
-    "p50_ms": 587.88,
-    "max_ms": 616.62,
-    "p95_ms": 616.62
+    "p50_ms": 606.87,
+    "max_ms": 717.07,
+    "p95_ms": 717.07
    },
    "warm_call_ms_summary": {
     "n": 30,
-    "p50_ms": 13.69,
-    "max_ms": 19.04,
-    "p95_ms": 18.81
+    "p50_ms": 13.92,
+    "max_ms": 19.97,
+    "p95_ms": 18.14
    }
   },
   "prepared": {
    "startup_to_ready_ms": [
-    1004.5296620000954,
-    1153.7218850000954,
-    1055.6036550001409,
-    1132.6234089999616,
-    1064.9789149999833,
-    1174.4157410000753,
-    1073.3731939999416,
-    1040.2649850000216,
-    1019.090776999974,
-    1012.8717400000369
+    1021.5189310001733,
+    1210.3182939999897,
+    1182.8368579999733,
+    1037.9221550001603,
+    1163.909988999876,
+    1333.8246500002242,
+    1317.7409250001801,
+    1264.2537359997732,
+    1273.7988959997892,
+    1237.1917039999971
    ],
    "first_call_ms": [
-    23.112,
-    20.106,
-    28.488,
-    18.688,
-    27.249,
-    22.104,
-    31.01,
-    21.157,
-    20.137,
-    21.788
+    23.809,
+    21.473,
+    22.019,
+    20.217,
+    19.636,
+    27.196,
+    26.957,
+    27.345,
+    26.2,
+    25.588
    ],
    "warm_call_ms": [
-    12.779,
-    14.817,
-    14.973,
-    13.76,
-    12.963,
-    14.251,
-    13.576,
-    11.156,
-    13.004,
-    13.288,
-    15.465,
-    16.813,
-    14.659,
-    14.715,
-    13.866,
-    13.437,
-    13.565,
-    15.046,
-    12.089,
-    12.246,
-    11.686,
-    12.654,
-    12.069,
-    14.112,
-    15.355,
-    15.503,
-    14.388,
-    14.128,
-    14.661,
-    13.28
+    14.427,
+    13.101,
+    13.051,
+    16.08,
+    15.912,
+    17.753,
+    16.6,
+    13.292,
+    16.241,
+    14.165,
+    20.401,
+    15.231,
+    14.308,
+    14.273,
+    14.36,
+    16.986,
+    17.522,
+    20.405,
+    19.513,
+    17.521,
+    16.513,
+    18.392,
+    21.223,
+    22.543,
+    17.035,
+    18.563,
+    21.308,
+    15.859,
+    12.492,
+    13.408
    ],
    "failures": [],
    "startup_to_ready_ms_summary": {
     "n": 10,
-    "p50_ms": 1060.29,
-    "max_ms": 1174.42,
-    "p95_ms": 1174.42
+    "p50_ms": 1223.75,
+    "max_ms": 1333.82,
+    "p95_ms": 1333.82
    },
    "first_call_ms_summary": {
     "n": 10,
-    "p50_ms": 21.95,
-    "max_ms": 31.01,
-    "p95_ms": 31.01
+    "p50_ms": 24.7,
+    "max_ms": 27.34,
+    "p95_ms": 27.34
    },
    "warm_call_ms_summary": {
     "n": 30,
-    "p50_ms": 13.81,
-    "max_ms": 16.81,
-    "p95_ms": 15.5
+    "p50_ms": 16.38,
+    "max_ms": 22.54,
+    "p95_ms": 21.31
    }
   }
  },
  "source_after": {
-  "commit": "b1e03e9ce77421a7945baef68786b4a4ad741075",
-  "tree": "3b4b61028a662c32c40e0757d64ed62b27f4fc46",
+  "commit": "d680f89da5870bb8cb59121e06a72f5a34dd67da",
+  "tree": "0817cff125b2d4868e5f62c02c0a1237b0009ddf",
   "dirty": false
  },
  "not_demonstrated": [
   "mismatched ready identity (worker-level tests only)",
   "late reply (worker-level tests only)",
-  "original Git MCP server (not run in this report)"
+  "original Git MCP server (see the Git report)"
  ]
 }

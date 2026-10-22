@@ -1,8 +1,8 @@
 {
   "kind": "filesystem",
-  "trace_sha256": "656c51bd4fdb094583ca2be023ff2d956453c101237a1eb82ef906081ee1b296",
+  "trace_sha256": "b0325a2e8737ef01324d0f9e364fd4c9fc0a050917279b1dca5a8f87b39d6e35",
   "successful_target_syscalls": [
-    "2854  openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18"
+    "7069  openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18"
   ],
   "effects": 1,
   "raw_trace_exported": false,
