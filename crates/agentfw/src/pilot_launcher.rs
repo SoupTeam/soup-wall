@@ -631,27 +631,34 @@ pub struct PrivateDirGuard {
 
 impl PrivateDirGuard {
     pub fn new(workspace: &Path) -> Result<Self> {
-        let temp_base = std::env::var_os("TMPDIR")
+        Self::for_workspaces(&[workspace])
+    }
+
+    fn for_workspaces(workspaces: &[&Path]) -> Result<Self> {
+        let parent = std::env::var_os("TMPDIR")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
-        let rand_suffix = random_hex_128();
-        let private_path = temp_base.join(format!("soup-wall-pilot-{}", rand_suffix));
+        Self::in_parent(workspaces, &parent)
+    }
 
-        // Ensure private dir is not inside workspace
-        let canonical_workspace = workspace.canonicalize()?;
-        ensure!(
-            !private_path.starts_with(&canonical_workspace),
-            "private per-run configuration directory must be outside the workspace"
-        );
-
-        fs::create_dir_all(&private_path)?;
-
+    fn in_parent(workspaces: &[&Path], parent: &Path) -> Result<Self> {
+        let parent = parent
+            .canonicalize()
+            .context("canonicalize private state parent")?;
+        let private_path = parent.join(format!("soup-wall-pilot-{}", random_hex_128()));
+        for workspace in workspaces {
+            ensure!(
+                !private_path.starts_with(workspace.canonicalize()?),
+                "private per-run configuration directory must be outside the workspace"
+            );
+        }
+        let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&private_path, fs::Permissions::from_mode(0o700))?;
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
         }
-
+        builder.create(&private_path)?;
         Ok(Self {
             path: private_path,
             disarmed: false,
@@ -912,6 +919,34 @@ pub fn verify_daemon_policy(config: &ValidatedConfig, _daemon_token: &str) -> Re
     }
 
     Ok(())
+}
+
+// Keep the owned leader unreaped until its process group has been stopped.
+// try_wait() would release its PID before the delayed group KILL, permitting reuse.
+#[cfg(unix)]
+fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    let mut information = unsafe { std::mem::zeroed::<libc::siginfo_t>() };
+    let result = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            child.id(),
+            &mut information,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    if result < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            return Ok(false);
+        }
+        return Err(error);
+    }
+    Ok(information.si_signo != 0)
+}
+
+#[cfg(not(unix))]
+fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    child.try_wait().map(|status| status.is_some())
 }
 
 #[cfg(unix)]
@@ -1226,14 +1261,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     if config.ask_wait_seconds > 0 {
         crate::pilot_approval::preflight(&config)?;
     }
-    let guard = PrivateDirGuard::new(&config.workspace_path)?;
-    ensure!(
-        !guard
-            .path
-            .canonicalize()?
-            .starts_with(&config.git_workspace_path),
-        "private per-run configuration directory must be outside the Git workspace"
-    );
+    let guard =
+        PrivateDirGuard::for_workspaces(&[&config.workspace_path, &config.git_workspace_path])?;
 
     // Discover live daemon instance or mock for testing
     let daemon_token = if let Some(ref mock) = config.mock_daemon_token {
@@ -1417,15 +1446,15 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
         loop {
             // Check if child has exited
-            match child.try_wait() {
-                Ok(Some(status)) => {
+            match owned_host_exited(&mut child) {
+                Ok(true) => {
                     terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return Ok(status);
+                    return child.wait().context("reap owned host after group cleanup");
                 }
-                Ok(None) => {}
-                Err(e) => {
-                    terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return Err(anyhow::anyhow!("error waiting for child: {}", e));
+                Ok(false) => {}
+                Err(error) => {
+                    // Ownership could not be established; never signal a potentially reused PID.
+                    return Err(anyhow::anyhow!("cannot establish owned host exit state: {}", error));
                 }
             }
 
@@ -1536,6 +1565,43 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_state_parent_cannot_alias_either_selected_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let filesystem = root.path().join("filesystem");
+        let git = root.path().join("git");
+        fs::create_dir(&filesystem).unwrap();
+        fs::create_dir(&git).unwrap();
+        for (i, workspace) in [&filesystem, &git].iter().enumerate() {
+            let alias = root.path().join(format!("alias-{i}"));
+            std::os::unix::fs::symlink(workspace, &alias).unwrap();
+            assert!(PrivateDirGuard::in_parent(&[&filesystem, &git], &alias).is_err());
+            assert!(fs::read_dir(workspace).unwrap().next().is_none());
+        }
+        let guard = PrivateDirGuard::in_parent(&[&filesystem, &git], root.path()).unwrap();
+        let path = guard.path.clone();
+        drop(guard);
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn completed_host_remains_waitable_until_owned_group_cleanup() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 17"])
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !owned_host_exited(&mut child).unwrap() {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // A second observation must still see the same waitable child.
+        assert!(owned_host_exited(&mut child).unwrap());
+        assert_eq!(child.wait().unwrap().code(), Some(17));
     }
 
     #[test]

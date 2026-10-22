@@ -172,7 +172,7 @@ def qualify(args, private, report):
                                 return None
                         if process.poll() is not None:
                             raise ValueError("prepared_entry_exited_before_host")
-                    record = until(identify, "prepared_run_not_published")
+                    record = until(identify, "prepared_run_not_published", seconds=90)
                     home = Path(record["home"])
                     decisions = []
                     if case == "ask":
@@ -250,6 +250,9 @@ def qualify(args, private, report):
                         useful_result(model.results, "toolu_prepared_2", "Owned prepared continuation.")
                     require(model.results["toolu_prepared_1"]["is_error"] == (case == "default"), "prepared_continuation_outcome_wrong")
                     require(len(decisions) == (2 if case == "ask" else 0), "prepared_explicit_decisions_missing")
+                    if case == "default":
+                        require(selection['expected_refusal']['rule'] in json.dumps(model.results['toolu_prepared_1']),
+                                'prepared_default_wrong_refusal_rule')
                     if case == "useful-refusal":
                         require("tracked.txt" in json.dumps(model.results["toolu_prepared_1"]), "prepared_git_bytes_missing")
                         require(model.results["toolu_prepared_2"]["is_error"] is True, "prepared_mutator_not_refused")
