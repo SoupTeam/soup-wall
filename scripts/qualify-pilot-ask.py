@@ -180,16 +180,23 @@ class Pilot:
 
     def wire_observation(self):
         # A partial live strace write is inconclusive, never a zero witness.
+        last_error = "incomplete_trace_line"
         def observe():
+            nonlocal last_error
             require(self.trace.stat().st_size <= 32 * 1024 * 1024, "wire_trace_bound")
             text = self.trace.read_text()
             if not text.endswith("\n"):
                 return None
             try:
                 return LAUNCH.collector_dispatches(text, self.setup.binary, strict=False)
-            except ValueError:
+            except ValueError as error:
+                code = str(error)
+                last_error = code if re.fullmatch(r"[a-z_]{1,80}", code) else "invalid_trace_encoding"
                 return None
-        return until(observe, "complete_original_wire_observation_missing", seconds=2)
+        try:
+            return until(observe, "complete_original_wire_observation_missing", seconds=2)
+        except ValueError:
+            raise ValueError("original_wire_observation_" + last_error) from None
 
     def dispatches(self, peer=False):
         observed = self.wire_observation()
@@ -282,7 +289,7 @@ def qualify(args, private, report):
 
     try:
         for kind in ("filesystem", "git"):
-            for case in ("approve", "reject", "expire", "cancel", "approved_cancel", "restart", "default"):
+            for case in ("restart", "approve", "reject", "expire", "cancel", "approved_cancel", "default"):
                 start_daemon(kind, 2 if case == "expire" else 30)
                 pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind, enabled=case != "default")
                 active.append(pilot)
@@ -301,6 +308,7 @@ def qualify(args, private, report):
                     row["stage"] = "wait_primary"
                     waiting = pilot.waiting()
                     row.update(pending=True, binding_sha256=waiting["binding_sha256"])
+                    row["stage"] = "before_decision_wire_check"
                     require(pilot.undispatched(), "dispatch_before_operator_decision")
                     if kind == "filesystem" and case == "approve":
                         until(lambda: pilot.dispatches(peer=True) == 1 and pilot.effects(peer=True) == 1, "Allow_peer_blocked_by_pending_Ask", seconds=5)
@@ -347,7 +355,9 @@ def qualify(args, private, report):
                     else:
                         require(case == "expire", "unknown_case")
                     if case in ("cancel", "approved_cancel", "restart"):
+                        row["stage"] = "finish_cancel_or_restart"
                         row["cleanup"] = pilot.finish(expected=1)
+                        row["stage"] = "after_cancel_or_restart_wire_check"
                         require(pilot.undispatched(), "cancelled_run_dispatched")
                         for extension in ("json","approved","rejected","deciding"):
                             require(not (setup.home / "native-pending" / (waiting["pending_id"]+"."+extension)).exists(), "unused_pending_file_survived")
@@ -428,7 +438,7 @@ def main():
     except Exception as error:
         report.update(status="failed", error_type=type(error).__name__,
             error_location=[{"function": frame.name, "line": frame.lineno}
-                for frame in traceback.extract_tb(error.__traceback__)[-4:]])
+                for frame in traceback.extract_tb(error.__traceback__)[-6:]])
         if isinstance(error,ValueError):
             report["error"] = str(error)
     BASE.write(args.output / "qualification.json",report)
