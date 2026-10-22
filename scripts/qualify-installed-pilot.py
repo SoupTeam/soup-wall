@@ -99,6 +99,7 @@ def source():
 
 
 def validate_selection(selection, expected):
+    require(isinstance(selection, dict), "selection_invalid")
     require(selection.get("format") == "sw-installed-pilot-selection/2", "selection_version")
     before = source()
     require(not before["dirty"] and before["commit"] == expected

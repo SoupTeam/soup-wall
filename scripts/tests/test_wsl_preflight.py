@@ -84,6 +84,9 @@ class WslPreflightControls(unittest.TestCase):
             for content, status, reason in (
                 (None, "unavailable", "selection_unreadable"),
                 ('{"secret": "PRIVATE_VALUE",', "incompatible", "selection_invalid"),
+                ('["PRIVATE_VALUE"]', "incompatible", "selection_invalid"),
+                ('null', "incompatible", "selection_invalid"),
+                ('42', "incompatible", "selection_invalid"),
                 ('{"format": "wrong", "secret": "PRIVATE_VALUE"}', "incompatible", "selection_version"),
             ):
                 if content is not None:
