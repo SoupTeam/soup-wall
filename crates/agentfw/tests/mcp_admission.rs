@@ -4230,7 +4230,15 @@ fn operator_approve(fixture: &Fixture, row: &Value) -> anyhow::Result<()> {
 async fn warm_stateless_windows_classifier(script: &Path) {
     let python = std::env::var_os("AGENTFW_CLASSIFIER_PYTHON").unwrap_or_else(|| "python".into());
     let mut command = Command::new(python);
-    command.args(["-I", "-u"]).arg(script).env_clear();
+    command
+        .args([
+            "-I",
+            "-u",
+            "-c",
+            "import hashlib, runpy, sys; hashlib.sha256(b'fixture-warmup').hexdigest(); runpy.run_path(sys.argv[1], run_name='__main__')",
+        ])
+        .arg(script)
+        .env_clear();
     if let Some(root) = std::env::var_os("SystemRoot") {
         command.env("SystemRoot", root);
     }
