@@ -1510,7 +1510,6 @@ jobs:
     timeout-minutes: 65
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
-      SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1603,6 +1602,8 @@ jobs:
             target/debug/agentfw target/debug/agentfw-git-sandbox > "$RUNNER_TEMP/sou111-assets/selected-hashes.txt"
       - name: Provision job-scoped permission for the exact sandbox executable
         shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           set -euo pipefail
           source="$RUNNER_TEMP/sou111-assets/bwrap-build/bwrap"
@@ -1685,6 +1686,8 @@ jobs:
       - name: Remove only this job's sandbox permission and executable
         if: always()
         shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           set -euo pipefail
           python3 -B scripts/ci_bwrap_userns.py cleanup \
