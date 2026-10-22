@@ -1,5 +1,6 @@
 """One planner must retain every original component's executable acceptance."""
 from pathlib import Path
+import json
 import re
 import sys
 import tempfile
@@ -11,6 +12,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from ci_components import blocks, generated, TARGET
 import ci_components
 from ci_impact import WORKFLOW_JOBS
+from ci_admission import component_names
 
 
 class SharedComponents(unittest.TestCase):
@@ -36,6 +38,15 @@ class SharedComponents(unittest.TestCase):
         source = blocks((ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text())
         self.assertIn("runs-on: ubuntu-22.04", source["required-linux-sandbox-and-real-host"])
         self.assertIn("runs-on: ubuntu-24.04", source["native-ubuntu-2404"])
+
+    def test_ubuntu_preparation_name_matches_trusted_admission(self):
+        workflow = "mcp-real-filesystem.yml"
+        job = "native-ubuntu-2404"
+        central = blocks(TARGET.read_text())["mcp-real-filesystem--" + job]
+        name = re.search(r"(?m)^    name: (.+)$", central)
+        self.assertIsNotNone(name)
+        self.assertEqual(("Components / " + json.loads(name[1]),),
+                         component_names(workflow, [job]))
 
     def test_runtime_steps_and_platform_controls_are_not_replaced_by_summaries(self):
         central = blocks(TARGET.read_text())
