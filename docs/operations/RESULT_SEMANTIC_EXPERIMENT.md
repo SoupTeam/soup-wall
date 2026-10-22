@@ -31,7 +31,7 @@ Each sample carries the complete public result as `untrusted_result` in a JSON
 envelope. No content, role label, filename, tool description, claimed system
 instruction or requested answer inside it is authoritative. Keep all bytes for
 inspection; do not strip instructions, inspect only a prefix, or trust the wrapper.
-The original fixture byte hash and normalized experiment input hash are distinct
+The working-tree fixture byte hash and normalized experiment input hash are distinct
 and recorded. New model adapters must document tokenization and reject input that
 cannot be inspected completely within their context limit.
 
