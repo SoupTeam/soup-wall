@@ -149,10 +149,12 @@ reparse point and revalidated. The result:
 
 `rollback` verifies the target package with the same checks before the pointer moves.
 `recover` and `remove` (both profiles) refuse a classifier directory that is itself a
-symbolic link, a junction or another reparse point, so a redirected profile cannot make
-cleanup delete anything outside it; below the root they use the standard library's
-recursive delete and do not re-verify a damaged profile first. `read_only` has no Windows meaning
-and is not used; protection is the ACL.
+symbolic link, a junction or another reparse point, and a plain directory that is reached
+through a redirected ancestor (the same ancestor validation that runtime selection uses
+runs before anything is deleted), so a redirected profile cannot make cleanup delete
+anything outside it; below the root they use the standard library's recursive delete and do
+not re-verify a damaged profile first. `read_only` has no Windows meaning and is not used;
+protection is the ACL.
 
 ### Atomic selection and recovery
 
@@ -220,14 +222,14 @@ install again from a freshly built archive.
 
 ### Windows evidence
 
-- `crates/agentfw/tests/classifier_runtime_windows.rs` (19 positive tests that must all
+- `crates/agentfw/tests/classifier_runtime_windows.rs` (20 positive tests that must all
   run on a native Windows runner; there is no skipped positive test) covers build
   determinism from a Windows checkout, the lifecycle, ACLs on every owned object, junction,
   foreign ACL, unprotected inheritance and hard-link attacks, edited, missing, replaced and
   extra files, changed interpreter, interrupted install, invalid update, worker/single-shot
   parity on 9 stress inputs and on the 66 public development/regression cases, reuse,
   crash and hang recovery, restart refusal after tampering, independent sessions and
-  Job Object process-tree cleanup.
+  Job Object process-tree cleanup, and refusal of cleanup through a redirected ancestor.
 - `tests/mcp_admission.rs::sou64_*` run on Windows: the real collector classifies with the
   installed package; a missing package is a selection error with no fallback.
 - `scripts/classifier-runtime-windows-acceptance.py` runs the production collector and
@@ -266,14 +268,15 @@ none of them changed a deadline or added a retry:
   spellings by design, so the tests create their profiles under the real long path.
 - The runner account is the built-in local Administrator. `Get-Acl` prints that SID in
   SDDL as `LA`; the ACL test compares the owner in the form SDDL prints it.
-- In one of the hosted runs the very first worker start of a test process did not answer
-  within the 1.4 s start deadline (the test took about 2.1 s instead of about 0.8 s) and
-  failed closed, as designed. The failure was not captured with its error text, so the
-  cold OS file cache of a fresh runner is the likely cause, not a proven one. The tests now
-  start the interpreter once before the first profile is created and report the worker
-  error text if a call fails. Production code, the start and request deadlines and the
-  no-retry rule are unchanged: on a machine where the first launch is that slow, the first
-  call is refused and the next call starts a fresh verified worker.
+- In one hosted run the first worker call of a test process failed. By the log timestamps
+  the test took 2.1 s, while the same test took 0.8 s in the other Windows job of the same
+  run. That is consistent with the 1.4 s start deadline, but it is not proven: the error
+  text was not captured, and the cold starts measured on the same kind of runner (worker
+  first call p95 99.5 ms, max 103.7 ms) were far below the deadline. The tests now start
+  the interpreter once before the first profile is created and report the worker error
+  text if a call fails. Production code, the start and request deadlines and the no-retry
+  rule are unchanged: if a first launch ever exceeds the deadline, that call is refused and
+  the next call starts a fresh verified worker.
 
 ## Limits
 

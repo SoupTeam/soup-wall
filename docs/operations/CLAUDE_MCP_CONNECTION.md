@@ -12,7 +12,7 @@ Use absolute paths to an existing Agent executable, its reviewed `.agentfw`
 directory and a JSON file containing an `mcpServers` object. The Agent must be
 running in enforcing mode with its pinned native registry. The selected server
 must name an absolute executable and an array of string arguments.
-The installed entry may contain at most 256 arguments. The collector adds 11,
+The installed entry may contain at most 256 arguments. The generic collector adds 11,
 so an original entry may contain at most 245. The complete proposed config
 and recovery record must each fit within 1 MiB before any transaction is saved.
 
@@ -43,6 +43,28 @@ Agent profile. The original command and argument values retain their order.
 A nonempty selected `env` is outside this profile: move credentials to an
 operator-reviewed mechanism before connecting. Unrelated server entries and
 settings retain their JSON values. Formatting and object key order may change.
+
+### Selected original-server profiles (Linux)
+
+`--server-profile <profile.json> --classifier-script <file> --classifier-python <python>`
+connects the original [filesystem](MCP_REAL_FILESYSTEM.md) or
+[Git](GIT_MCP_PROFILE.md) server under its accepted read-only profile. The selected
+entry must be the profile's original command and arguments. Preview and connect
+verify the profile, every installed runtime pin and the repository rules with the
+collector's own sandbox code; connect also requires a registry whose result-profile
+tools all belong to that profile and no resource executor. The wrapper then adds
+exactly five settings to `env -i`: `AGENTFW_MCP_SERVER_PROFILE`, `AGENTFW_WORKSPACE`,
+`AGENTFW_CLASSIFIER=rule-baseline`, `AGENTFW_RULE_BASELINE` and
+`AGENTFW_CLASSIFIER_PYTHON` (normalized absolute paths only), so the collector adds
+16 arguments and an original entry may contain at most 240. The ownership record
+binds the profile, classifier and interpreter digests. `inspect` re-verifies them from
+the recorded paths and reports `unknown` after any change; a retried `connect` with
+different settings is refused. `disconnect` is unchanged. A connect without
+`--server-profile` for a registry that belongs to an original-server profile is
+refused, so an entry never appears protected while its server runs outside the profile.
+Probes of profile connections negotiate the pinned protocol version with a 60-second
+bound. [Onboarding](ONBOARDING.md#original-filesystem-and-git-profiles) uses this path.
+Other platforms refuse `--server-profile`.
 
 ## Controlled verification
 
