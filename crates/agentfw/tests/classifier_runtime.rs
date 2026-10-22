@@ -565,8 +565,17 @@ fn process_gone(pid: u32) -> bool {
     unsafe { libc::kill(pid as i32, 0) != 0 }
 }
 
+/// Prepared-worker tests start real interpreters against the unchanged 1.4 s start deadline.
+/// Run together with the rest of this binary they can miss it on a loaded CI runner, so they
+/// take turns. The production deadline is not touched.
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 #[test]
 fn a_prepared_worker_is_ready_before_the_first_call_and_serves_it() {
+    let _serial = serial();
     let (dir, _store) = installed(Which::Frozen);
     let worker = PackagedClassifier::from_home(dir.path())
         .unwrap()
@@ -597,6 +606,7 @@ fn a_prepared_worker_is_ready_before_the_first_call_and_serves_it() {
 
 #[test]
 fn a_lost_worker_invalidates_readiness_and_only_preparation_replaces_it() {
+    let _serial = serial();
     let (dir, _store) = installed(Which::Frozen);
     let worker = PackagedClassifier::from_home(dir.path())
         .unwrap()
@@ -630,6 +640,7 @@ fn a_lost_worker_invalidates_readiness_and_only_preparation_replaces_it() {
 
 #[test]
 fn a_hung_prepared_worker_is_retired_by_the_deadline_and_replaced_by_preparation() {
+    let _serial = serial();
     let (dir, _store) = installed(Which::Frozen);
     let worker = PackagedClassifier::from_home(dir.path())
         .unwrap()
@@ -655,6 +666,7 @@ fn a_hung_prepared_worker_is_retired_by_the_deadline_and_replaced_by_preparation
 
 #[test]
 fn a_changed_selection_invalidates_readiness_and_is_refused_until_restart() {
+    let _serial = serial();
     let (dir, store) = installed(Which::Frozen);
     let worker = PackagedClassifier::from_home(dir.path())
         .unwrap()
@@ -677,6 +689,7 @@ fn a_changed_selection_invalidates_readiness_and_is_refused_until_restart() {
 
 #[test]
 fn altered_assets_are_refused_at_preparation_and_start_no_worker() {
+    let _serial = serial();
     use std::os::unix::fs::PermissionsExt;
     let (dir, store) = installed(Which::Frozen);
     let worker = PackagedClassifier::from_home(dir.path())
@@ -710,6 +723,7 @@ fn altered_assets_are_refused_at_preparation_and_start_no_worker() {
 
 #[test]
 fn a_prepared_worker_is_reaped_when_the_collector_never_makes_a_call() {
+    let _serial = serial();
     let (dir, _store) = installed(Which::Frozen);
     let pid = {
         let worker = PackagedClassifier::from_home(dir.path())
