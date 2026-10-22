@@ -362,9 +362,17 @@ that fails leaves no worker behind. Separate collector sessions have separate wo
   reported separately on purpose. These numbers come from one container and are not a
   guarantee; a preparation that exceeds the start deadline fails, it is not retried and the
   deadline is not raised.
+- Real server: `scripts/verify-sou102-prepared-classifier.py` runs the real collector with
+  the installed package in front of the pinned original filesystem MCP server and witnesses
+  every effect by a kernel syscall trace (first useful call, continuation, killed and hung
+  worker, altered package, recovery, session isolation, exit without a call, startup
+  failure; zero forbidden reads). Results, caveats and measurements:
+  `docs/operations/evidence/sou-102/README.md`. On a lazy first call the worker start
+  (p50 588 ms there) lands inside the call; prepared, the first call took p50 22 ms.
 - Not covered: the prepared tests are Unix-only. The Windows suite
   (`classifier_runtime_windows`) runs unchanged. The opt-in is not demonstrated on Windows
-  and not yet on the original pinned filesystem and Git MCP servers.
+  or on the original Git MCP server, and a mismatched ready identity and a late reply are
+  covered only at worker level.
 
 ## Limits
 
