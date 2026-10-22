@@ -261,3 +261,7 @@ The first v1 attempt is retained in [SOU-106 evidence](evidence/sou106/README.md
 Version 2 corrects a `tail=1` request that selected the original server's trailing
 empty line: `tail=2` requests the intended useful line without changing the
 expected content. Search-followed-by-read interruptions remain failures.
+
+Delivery counters refer to original tool results withheld from the host. This
+filesystem/Git workload has no network-send operations and does not claim a
+calibrated network-delivery prevention result.

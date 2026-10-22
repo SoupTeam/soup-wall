@@ -32,9 +32,10 @@ def run_matched(api, args):
     require(not args.output.exists() and not args.output.is_relative_to(api.ROOT), 'new_external_output_required')
     args.output.mkdir(mode=0o700, parents=True)
     report = {'format': 'sw-installed-pilot-matched/1', 'workload_sha256': digest(workload),
-              'workload_file_sha256': sha(WORKLOAD), 'conditions': workload['conditions'],
+              'workload_file_sha256': sha(WORKLOAD), 'required_pairs': len(workload['cases']),
+              'required_arms': 2 * len(workload['cases']), 'conditions': workload['conditions'],
               'engineering_budgets': workload['engineering_budgets'], 'identity': {}, 'rows': [],
-              'source_unchanged': False, 'cleanup': False, 'failures': [], 'live_model_effectiveness': 'not_measured'}
+              'source_unchanged': False, 'cleanup': False, 'failures': [], 'live_model_effectiveness': 'not_measured', 'network_delivery': 'not_exercised_no_network_operations_in_workload'}
     for case in workload['cases']:
         for arm in ('control', 'protected'):
             report['rows'].append({'case': case['id'], 'arm': arm, 'status': 'incomplete',
@@ -103,6 +104,7 @@ def run_matched(api, args):
             report['failures'].append('cleanup_' + type(error).__name__.lower())
             report['cleanup'] = False
         api.TOOLS = previous_tools
+    report['arm_counts'] = {state: sum(r['status'] == state for r in report['rows']) for state in ('passed', 'failed', 'incomplete')}
     try:
         report['gate'] = matched_gate(workload, report)
     except (Failure, ValueError, KeyError, TypeError) as error:
@@ -215,7 +217,8 @@ def execute_case(api, pilot, case, row):
                 require(row['explicit_refusal'], 'expected_profile_refusal_missing')
                 require(observed.get('effect_observed') is False and observed.get('original_opens') == 0, 'forbidden_execution_or_effect')
                 row['denied_execution_count'] = stop - start
-                row['forbidden_delivery_count'] = len(pilot.receiver.bodies)
+                row['forbidden_result_delivery_count'] = sum(not r['is_error'] for r in refused)
+                row['denied_result_delivery_count'] = stop - start
                 pilot.preserve()
         row.update(status='passed', reason=None)
     except (Exception, KeyboardInterrupt) as error:
@@ -252,7 +255,12 @@ def restore_control_files(saved, backups):
 def useful_result(api, tool, arguments, value):
     """Source-based witnesses from the accepted owned fixtures, not model text."""
     if tool in ('read_text_file', 'read_file'):
-        return value == (api.BASE.TEXT if arguments['path'].endswith('guide.txt') else api.NOTES)
+        expected = api.BASE.TEXT if arguments['path'].endswith('guide.txt') else api.NOTES
+        if 'head' in arguments:
+            expected = '\n'.join(expected.split('\n')[:arguments['head']])
+        elif 'tail' in arguments:
+            expected = '\n'.join(expected.split('\n')[-arguments['tail']:])
+        return value == expected
     if tool == 'read_multiple_files':
         return api.BASE.TEXT in value and api.NOTES in value
     if tool in ('list_directory', 'list_directory_with_sizes'):

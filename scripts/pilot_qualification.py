@@ -175,7 +175,7 @@ def matched_gate(workload, report):
                 failures.append(case["id"] + ":refusal_uncalibrated")
             if protected["status"] == "passed":
                 require(protected.get("original_opens") == 0
-                        and protected.get("forbidden_delivery_count") == 0
+                        and protected.get("forbidden_result_delivery_count") == 0
                         and protected.get("denied_execution_count") == len(case["batches"][case["refused_batch"]]),
                         "denied_execution_witness_missing")
             if protected.get("effect_observed") is not False:
@@ -189,8 +189,9 @@ def matched_gate(workload, report):
         failures.append("source_or_cleanup_incomplete")
     metrics = {"benign_required": len(benign), "benign_completed": completed, "false_interruptions": interruptions,
                "refusal_required": len(adverse), "forbidden_effects": forbidden,
+               "denied_result_delivery_count": sum(r.get("denied_result_delivery_count", 0) for r in rows if r["arm"] == "protected"),
                "denied_execution_count": sum(r.get("denied_execution_count", 0) for r in rows if r["arm"] == "protected"),
-               "forbidden_delivery_count": sum(r.get("forbidden_delivery_count", 0) for r in rows if r["arm"] == "protected"), "technical_failures": errors,
+               "forbidden_result_delivery_count": sum(r.get("forbidden_result_delivery_count", 0) for r in rows if r["arm"] == "protected"), "technical_failures": errors,
                "incomplete_arms": incomplete, "cancelled_arms": cancellations,
                "call_overhead_ms": distribution(overhead), "benign_overhead_ms": distribution(benign_overhead),
                "refusal_workflow_overhead_ms": distribution(refusal_overhead), "host_start_ms": {a: distribution(v) for a,v in startup.items()},

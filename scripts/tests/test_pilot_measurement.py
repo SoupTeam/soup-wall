@@ -4,11 +4,12 @@ import copy
 import sys
 import os
 import tempfile
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from pilot_measurement import load_workload, restore_control_files
+from pilot_measurement import load_workload, restore_control_files, useful_result
 from pilot_qualification import digest, matched_gate, Failure
 
 class MatchedGateTests(unittest.TestCase):
@@ -24,7 +25,7 @@ class MatchedGateTests(unittest.TestCase):
                     'host_start_ms':20.0,'useful_continuation':True,'all_results_useful':True,
                     'normalized_results_sha256':'fixture','effect_observed':arm=='control',
                     'explicit_refusal':arm=='protected','original_opens':0 if arm=='protected' else 1,
-                    'forbidden_delivery_count':0,'denied_execution_count':len(c['batches'][1]) if c['kind']=='refusal' and arm=='protected' else 0})
+                    'forbidden_result_delivery_count':0,'denied_execution_count':len(c['batches'][1]) if c['kind']=='refusal' and arm=='protected' else 0})
     def gate(self): return matched_gate(self.workload,self.report)
     def test_complete_fixture_has_full_denominators(self):
         r=self.gate();self.assertEqual(r['status'],'passed');self.assertEqual(r['metrics']['benign_completed'],12)
@@ -73,6 +74,17 @@ class MatchedGateTests(unittest.TestCase):
     def test_cleanup_or_source_change_fails(self):
         self.report['source_unchanged']=False
         self.assertEqual(self.gate()['status'],'failed')
+
+class UsefulContentTests(unittest.TestCase):
+    def test_original_head_tail_and_full_read_bytes(self):
+        api=SimpleNamespace(BASE=SimpleNamespace(TEXT='guide\n'),NOTES='notes\n')
+        self.assertTrue(useful_result(api,'read_text_file',{'path':'/workspace/guide.txt','head':1},'guide'))
+        self.assertFalse(useful_result(api,'read_text_file',{'path':'/workspace/guide.txt','head':1},'guide\n'))
+        self.assertTrue(useful_result(api,'read_text_file',{'path':'/workspace/notes.txt','tail':2},'notes\n'))
+        self.assertTrue(useful_result(api,'read_text_file',{'path':'/workspace/notes.txt'},'notes\n'))
+    def test_successful_mcp_envelope_with_file_errors_is_not_useful(self):
+        api=SimpleNamespace(BASE=SimpleNamespace(TEXT='guide\n'),NOTES='notes\n')
+        self.assertFalse(useful_result(api,'read_multiple_files',{},'guide.txt: Error - Access denied'))
 
 class OwnedRestorationTests(unittest.TestCase):
     def test_inplace_and_replaced_inode_restore_original(self):
