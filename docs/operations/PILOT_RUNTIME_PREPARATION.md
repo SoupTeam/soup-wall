@@ -11,6 +11,9 @@ can establish the selected runtime's observed behavior.
 For a verified non-root build of the Git and bubblewrap inputs, follow
 [native prerequisite preparation](PILOT_NATIVE_PREREQUISITES.md) first and
 pass its emitted absolute paths as `--git` and `--bwrap` below.
+For the three caller-supplied Agent binaries, follow
+[native Agent source build](PILOT_SOURCE_BUILD.md) and pass its emitted paths
+as `--agentfw`, `--git-launcher`, and `--sandbox-tests`.
 
 ## Inputs
 

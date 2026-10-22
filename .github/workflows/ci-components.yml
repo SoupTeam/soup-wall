@@ -1577,6 +1577,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_run.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_build_native_pilot_inputs.py -v
       - name: Verify disposable runner administration boundary before building
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
@@ -1686,19 +1687,70 @@ jobs:
           PY
           export SOU115_GIT="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["git"])')"
           export SOU115_BWRAP="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["bwrap"])')"
-          cargo build --locked -p agentfw --bins --message-format=json > "$RUNNER_TEMP/sou111-assets/build.jsonl"
-          cargo test --locked -p agentfw --lib --no-run --message-format=json > "$RUNNER_TEMP/sou111-assets/test-build.jsonl"
-          python3 - <<'PY'
-          import json, os
+          source_args=(--output "$RUNNER_TEMP/sou119-agent-build"
+            --expected-commit "$(git rev-parse HEAD)")
+          python3 -B scripts/build-native-pilot-inputs.py "${source_args[@]}" \
+            > "$RUNNER_TEMP/sou111-assets/source-plan.json"
+          python3 -B scripts/build-native-pilot-inputs.py --build "${source_args[@]}" \
+            > "$RUNNER_TEMP/sou111-assets/source-first.json"
+          reuse_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
+          python3 -B scripts/build-native-pilot-inputs.py --build "${source_args[@]}" \
+            > "$RUNNER_TEMP/sou111-assets/source-reused.json"
+          reuse_finish="$(python3 -c 'import time; print(time.monotonic_ns())')"
+          source_marker="$RUNNER_TEMP/sou119-agent-build/current.json"
+          marker_before="$(sha256sum "$source_marker" | cut -d ' ' -f1)"
+          if python3 -B scripts/build-native-pilot-inputs.py --build --rebuild \
+            --output "$RUNNER_TEMP/sou119-agent-build" \
+            --expected-commit 0000000000000000000000000000000000000000 \
+            > "$RUNNER_TEMP/sou111-assets/source-rejected.json"; then
+            echo 'Changed source identity unexpectedly rebuilt the Agent inputs' >&2; exit 1
+          fi
+          test "$marker_before" = "$(sha256sum "$source_marker" | cut -d ' ' -f1)"
+          python3 -B scripts/build-native-pilot-inputs.py --build "${source_args[@]}" \
+            > "$RUNNER_TEMP/sou111-assets/source-recovered.json"
+          python3 - "$reuse_start" "$reuse_finish" <<'PY'
+          import hashlib, json, os, subprocess, sys
           from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP']) / 'sou111-assets'
-          rows = [json.loads(line) for line in (root / 'test-build.jsonl').read_text().splitlines()]
-          found = [row['executable'] for row in rows if row.get('reason') == 'compiler-artifact'
-                   and row.get('target', {}).get('name') == 'agentfw'
-                   and row.get('profile', {}).get('test') and row.get('executable')]
-          assert len(found) == 1, 'one exact Agent library test binary is required'
-          (root / 'sandbox-test-path').write_text(found[0])
+          asset = Path(os.environ['RUNNER_TEMP']) / 'sou111-assets'
+          rows = {name: json.loads((asset / f'source-{name}.json').read_text())
+                  for name in ('plan', 'first', 'reused', 'rejected', 'recovered')}
+          assert rows['plan']['status'] == 'plan' and rows['plan']['executed'] is False
+          assert rows['first']['status'] == 'built-not-qualified'
+          assert rows['reused']['status'] == rows['recovered']['status'] == 'reused'
+          assert rows['rejected']['status'] == 'failed'
+          assert rows['rejected']['reason'] == 'candidate_source_mismatch'
+          roles = ('agentfw', 'git_launcher', 'sandbox_tests', 'receipt')
+          assert all(rows['first'][role] == rows['reused'][role] == rows['recovered'][role]
+                     for role in roles)
+          output = Path(os.environ['RUNNER_TEMP']) / 'sou119-agent-build'
+          binaries = {}
+          for role in roles[:-1]:
+              selected = Path(rows['first'][role])
+              assert selected.is_absolute() and selected.resolve(strict=True).is_relative_to(output)
+              assert selected.is_file() and os.access(selected, os.X_OK)
+              with selected.open('rb') as stream:
+                  binaries[role] = hashlib.file_digest(stream, 'sha256').hexdigest()
+          receipt = Path(rows['first']['receipt'])
+          assert receipt.is_absolute() and receipt.resolve(strict=True).is_relative_to(output)
+          summary = {'status': 'built-not-qualified', 'verified_reuse': True,
+                     'changed_source_refused': True, 'previous_generation_preserved': True,
+                     'source_commit': subprocess.check_output(
+                         ['git', 'rev-parse', 'HEAD'], text=True, timeout=10).strip(),
+                     'binary_sha256': binaries}
+          (asset / 'source-summary.json').write_text(json.dumps(summary, sort_keys=True) + '\n')
+          (asset / 'source-build-timing.json').write_text(json.dumps({
+              'clean_build_seconds': rows['first']['build_seconds'],
+              'verified_reuse_seconds': round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3),
+          }, sort_keys=True) + '\n')
+          with Path(os.environ['GITHUB_ENV']).open('a') as environment:
+              for role, variable in (('agentfw', 'SOU119_AGENTFW'),
+                                     ('git_launcher', 'SOU119_GIT_LAUNCHER'),
+                                     ('sandbox_tests', 'SOU119_SANDBOX_TESTS')):
+                  environment.write(variable + '=' + rows['first'][role] + '\n')
           PY
+          export SOU119_AGENTFW="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/source-first.json").read_text())["agentfw"])')"
+          export SOU119_GIT_LAUNCHER="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/source-first.json").read_text())["git_launcher"])')"
+          export SOU119_SANDBOX_TESTS="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/source-first.json").read_text())["sandbox_tests"])')"
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets/node"
           tar -xJf "$RUNNER_TEMP/sou111-assets/node.tar.xz" -C "$RUNNER_TEMP/sou111-assets/node" \
             --strip-components=1 --no-same-owner --no-same-permissions
@@ -1718,7 +1770,8 @@ jobs:
           PY
           sha256sum "$RUNNER_TEMP/sou111-assets/node.tar.xz" "$SOU115_GIT" \
             "$SOU115_BWRAP" \
-            target/debug/agentfw target/debug/agentfw-git-sandbox > "$RUNNER_TEMP/sou111-assets/selected-hashes.txt"
+            "$SOU119_AGENTFW" "$SOU119_GIT_LAUNCHER" "$SOU119_SANDBOX_TESTS" \
+            > "$RUNNER_TEMP/sou111-assets/selected-hashes.txt"
       - name: Provision job-scoped permission for the exact sandbox executable
         shell: bash
         env:
@@ -1758,9 +1811,9 @@ jobs:
           mkdir -m 700 "$output"
           commit="$(git rev-parse HEAD)"
           args=(--output "$output" --expected-commit "$commit"
-            --agentfw "$PWD/target/debug/agentfw"
-            --git-launcher "$PWD/target/debug/agentfw-git-sandbox"
-            --sandbox-tests "$(cat "$asset/sandbox-test-path")"
+            --agentfw "$SOU119_AGENTFW"
+            --git-launcher "$SOU119_GIT_LAUNCHER"
+            --sandbox-tests "$SOU119_SANDBOX_TESTS"
             --node-archive "$asset/node.tar.xz" --bwrap "$SOU111_BWRAP"
             --git "$SOU115_GIT"
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude"
@@ -1769,7 +1822,15 @@ jobs:
             --git-classifier "$PWD/rule_baseline/git_readonly_v1/rule_baseline.py"
             --policy "$asset/policy.yaml" --allow-download)
           python3 -B scripts/prepare-installed-pilot.py "${args[@]}" > "$asset/plan.json"
+          preparation_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
           python3 -B scripts/prepare-installed-pilot.py --prepare "${args[@]}" > "$asset/first.json"
+          preparation_finish="$(python3 -c 'import time; print(time.monotonic_ns())')"
+          python3 - "$preparation_start" "$preparation_finish" "$asset/runtime-timing.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          elapsed = round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3)
+          Path(sys.argv[3]).write_text(json.dumps({'preparation_seconds': elapsed}) + '\n')
+          PY
           python3 -B scripts/prepare-installed-pilot.py --prepare "${args[@]}" > "$asset/reused.json"
           printf 'bad archive' > "$asset/bad-node.tar.xz"
           bad_args=("${args[@]}")
@@ -1800,8 +1861,18 @@ jobs:
         run: |
           set -euo pipefail
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          qualification_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
           python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou111-qualification"
+          qualification_finish="$(python3 -c 'import time; print(time.monotonic_ns())')"
+          python3 - "$qualification_start" "$qualification_finish" "$RUNNER_TEMP/sou111-assets/runtime-timing.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          path = Path(sys.argv[3])
+          values = json.loads(path.read_text())
+          values['qualification_seconds'] = round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3)
+          path.write_text(json.dumps(values, sort_keys=True) + '\n')
+          PY
       - name: Qualify owned prepared-selection launch and failures with the original host
         shell: bash
         run: |
@@ -1833,6 +1904,14 @@ jobs:
             ${{ runner.temp }}/sou111-assets/native-diagnostic.json
             ${{ runner.temp }}/sou111-assets/native-first.json
             ${{ runner.temp }}/sou111-assets/native-reused.json
+            ${{ runner.temp }}/sou111-assets/source-plan.json
+            ${{ runner.temp }}/sou111-assets/source-first.json
+            ${{ runner.temp }}/sou111-assets/source-reused.json
+            ${{ runner.temp }}/sou111-assets/source-rejected.json
+            ${{ runner.temp }}/sou111-assets/source-recovered.json
+            ${{ runner.temp }}/sou111-assets/source-summary.json
+            ${{ runner.temp }}/sou111-assets/source-build-timing.json
+            ${{ runner.temp }}/sou111-assets/runtime-timing.json
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
             ${{ runner.temp }}/sou111-assets/apparmor-provisioning.json
             ${{ runner.temp }}/sou111-apparmor-cleanup.json
