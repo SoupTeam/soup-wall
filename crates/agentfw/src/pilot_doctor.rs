@@ -92,6 +92,25 @@ fn digest_check(
     c
 }
 
+fn classifier_check(path: Option<&Path>, wanted: Option<&str>) -> Check {
+    if path.is_none() && wanted.is_none() {
+        return check("pilot_classifier", "explicit_classifier_selection", Outcome::Unknown,
+            "pilot_classifier_not_selected", "The launcher-selected classifier is not declared by daemon status; no classifier runtime use is inferred.",
+            "Pass the reviewed --classifier-script and --classifier-sha256; selected source identity still does not prove a worker ran.");
+    }
+    if let (Some(path), Some(wanted)) = (path, wanted) {
+        if let Ok(actual) = crate::doctor::hash_selected_file(path, 16 * 1024 * 1024) {
+            if actual == wanted {
+                return digest_check("pilot_classifier", "selected_classifier_source", "selected_classifier_source_identity", actual,
+                    "Reviewed classifier source matches the declared digest; daemon status does not attest classifier worker use.");
+            }
+        }
+    }
+    check("pilot_classifier", "selected_classifier_source", Outcome::Failed,
+        "pilot_classifier_pin_mismatch_or_unavailable", "The selected classifier source cannot be safely verified against its declared pin.",
+        "Inspect the private selected classifier and its reviewed digest; do not replace a pin merely to accept drift. Doctor never executes or repairs the classifier.")
+}
+
 fn registry_for(format: &str) -> anyhow::Result<Value> {
     let manifest = server_profile::original_manifest_for(format)?;
     let profiles = server_profile::classify_manifest_for(format, &manifest)?;
@@ -334,14 +353,10 @@ pub(crate) async fn diagnose(
             None => report.checks.push(ProfileFailure::Profile.check(id)),
         }
     }
-    if let (Some(path), Some(wanted)) = (&args.classifier_script, &args.classifier_sha256) {
-        if let Ok(actual) = crate::doctor::hash_selected_file(path, 16 * 1024 * 1024) {
-            if actual == *wanted {
-                report.checks.push(digest_check("pilot_classifier", "selected_classifier_source", "selected_classifier_source_identity", actual,
-                    "Reviewed classifier source matches the declared digest; daemon status does not attest classifier worker use."));
-            }
-        }
-    }
+    report.checks.push(classifier_check(
+        args.classifier_script.as_deref(),
+        args.classifier_sha256.as_deref(),
+    ));
     let mut expected_registry = None;
     if let Some(cfg) = config {
         report.checks.push(digest_check("pilot_config", "validated_disk_config", "selected_config_identity",
@@ -458,11 +473,6 @@ pub(crate) async fn diagnose(
             "pilot_config_unavailable", "No validated selected configuration is available for a current-instance comparison.",
             "Inspect the private selected config.yaml and run the normal read-only diagnostic again after operator recovery; do not infer runtime readiness from installed assets."));
     }
-    if args.classifier_script.is_none() {
-        report.checks.push(check("pilot_classifier","explicit_classifier_selection",Outcome::Unknown,"pilot_classifier_not_selected",
-            "The launcher-selected classifier is not declared by daemon status; no classifier runtime use is inferred.",
-            "Pass the reviewed --classifier-script and --classifier-sha256; selected source identity still does not prove a worker ran."));
-    }
     if args.pilot.incident_file.is_some() {
         report.incident = Some(incident::lookup(
             &args.pilot,
@@ -478,6 +488,37 @@ use anyhow::Context;
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    #[test]
+    fn classifier_pin_failures_never_disappear_from_pilot_readiness() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let source = root.join("PRIVATE-CLASSIFIER-CANARY.py");
+        std::fs::write(&source, b"# PRIVATE-SOURCE-CANARY\n").unwrap();
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let wanted = sha(&std::fs::read(&source).unwrap());
+        assert_eq!(
+            classifier_check(Some(&source), Some(&wanted)).outcome,
+            Outcome::Ready
+        );
+        assert_eq!(classifier_check(None, None).outcome, Outcome::Unknown);
+        std::fs::write(&source, b"# PRIVATE-CHANGED-CANARY\n").unwrap();
+        for check in [
+            classifier_check(Some(&source), Some(&wanted)),
+            classifier_check(Some(&source), Some("PRIVATE-PIN-CANARY")),
+            classifier_check(Some(&source), None),
+            classifier_check(None, Some(&wanted)),
+        ] {
+            assert_eq!(check.outcome, Outcome::Failed);
+            assert_eq!(crate::doctor::setup(&[&check]), Outcome::Failed);
+            assert_eq!(
+                check.reason_code,
+                "pilot_classifier_pin_mismatch_or_unavailable"
+            );
+            let encoded = serde_json::to_string(&check).unwrap();
+            assert!(!encoded.contains("CANARY") && !encoded.contains(root.to_str().unwrap()));
+        }
+    }
     #[tokio::test]
     async fn absent_config_or_unsupported_platform_never_supplies_runtime_readiness() {
         let dir = tempfile::tempdir().unwrap();

@@ -277,6 +277,7 @@ active host-call execution remain unknown in every report.
 | `pilot_profile_workspace_mismatch` | Select the profile installed for the exact selected workspace |
 | `pilot_original_identity_mismatch`, `two_server_registry_mismatch` | Compare accepted original schema/registry/policy pins; do not replace a digest merely to accept drift |
 | `pilot_package_changed_or_unsafe` | Inspect the selected package, original entrypoint and lock against its receipt before launch |
+| `pilot_classifier_pin_mismatch_or_unavailable` | Inspect the selected private classifier and reviewed digest; drift fails both overall and pilot setup readiness without executing it |
 | `pilot_runtime_asset_changed_or_unsafe` | Inspect the selected runtime/sandbox/Git executable pins using the existing preparation workflow |
 | `pilot_git_launcher_changed_or_unsafe` | Verify the Git launcher digest and private single-linked installation copy; do not select a Cargo hard-linked build alias |
 | `pilot_system_library_changed_or_unsafe` | Inspect system-library pins and root-owned loader aliases without relaxing ownership/path checks |

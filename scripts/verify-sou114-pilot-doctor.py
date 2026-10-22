@@ -41,7 +41,7 @@ require, sha, write = BASE.require, BASE.sha, BASE.write
 FILES = ("crates/agentfw/src/doctor.rs", "crates/agentfw/src/pilot_doctor.rs",
          "crates/agentfw/src/pilot_doctor/io.rs", "crates/agentfw/src/pilot_doctor/incident.rs",
          "crates/agentfw/src/support_bundle.rs", "scripts/verify-sou114-pilot-doctor.py")
-CASES = ("healthy-json", "healthy-text", "recorded-refusal", "changed-asset", "missing-incident",
+CASES = ("healthy-json", "healthy-text", "recorded-refusal", "changed-asset", "changed-classifier", "missing-incident",
          "stale-incident", "mismatched-incident", "malformed-input", "oversized-input",
          "symlink-input", "fifo-input", "public-input", "existing-output", "symlink-output",
          "workspace-output", "daemon-unavailable")
@@ -270,7 +270,7 @@ def qualify(args, private, output, evidence, report, secrets):
     with running_owned_daemon(lifecycle) as stop_daemon:
         report["real_managed_daemon"] = True
         secrets.extend([private.as_posix().encode(), (home / "token").read_bytes().strip(), (home / "native-token").read_bytes().strip()])
-        baseline = {p: p.read_bytes() for p in (home / "config.yaml", home / "versions/lifecycle.json", policy, registry, operator, fs / "profile.json", gt / "profile.json")}
+        baseline = {p: p.read_bytes() for p in (home / "config.yaml", home / "versions/lifecycle.json", policy, registry, operator, classifier, fs / "profile.json", gt / "profile.json")}
         workspace_before = digest(BASE.snapshot(workspace))
         common = [str(installed_bin), "doctor", "--pilot", "--home", str(home), "--agent", str(installed_bin),
             "--fs-profile", str(fs / "profile.json"), "--git-profile", str(gt / "profile.json"), "--workspace", str(workspace),
@@ -362,6 +362,11 @@ def qualify(args, private, output, evidence, report, secrets):
             original = changed.read_bytes(); changed.write_bytes(original+b"\n// changed asset\n")
             doctor("changed-asset", code=3, reason="pilot_package_changed_or_unsafe")
             changed.write_bytes(original)
+            original_classifier = classifier.read_bytes()
+            classifier.write_bytes(original_classifier + b"\n# " + CANARIES[2] + b"\n")
+            changed_classifier = doctor("changed-classifier", code=3, reason="pilot_classifier_pin_mismatch_or_unavailable")
+            require(changed_classifier["pilot"]["setup"] == "failed", "classifier_drift_reported_ready")
+            classifier.write_bytes(original_classifier)
             # Synthetic negative evidence tests the reader; it is never a positive
             # original-daemon substitute or represented as authenticated history.
             incident_file = private / "incident.jsonl"
