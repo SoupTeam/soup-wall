@@ -22,6 +22,7 @@ pub mod map;
 pub mod mcp;
 pub mod native;
 pub mod onboarding;
+pub mod pilot_approval;
 pub mod pilot_launcher;
 pub mod policy_transition;
 pub use native::child_authority;
@@ -47,6 +48,8 @@ pub mod support_bundle;
 pub mod token;
 #[cfg(windows)]
 pub(crate) mod windows_create;
+#[cfg(windows)]
+pub mod windows_onboarding;
 #[cfg(windows)]
 pub(crate) mod windows_read;
 

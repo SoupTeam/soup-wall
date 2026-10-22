@@ -3,6 +3,140 @@
 use super::*;
 use crate::native::{canonical_digest, child_authority, hash};
 
+#[tokio::test]
+async fn pilot_runtime_metadata_is_authenticated_bounded_and_not_bearer_authority() {
+    let (env, name, args, schema, context) = fixture(crate::mcp::server_profile::FORMAT);
+    open_selected(&env, &name, &args, &schema, &context).unwrap();
+    {
+        let native = env.native();
+        let mut sessions = native.sessions.lock().unwrap();
+        let session = sessions.entries.get_mut("selected-owner").unwrap();
+        session.liveness_lease = Some(crate::native::liveness::Lease::new(
+            "selected-owner".into(),
+            session.epoch.clone(),
+            native.instance_id().into(),
+            Duration::from_secs(4),
+            native.monotonic_now(),
+        ));
+    }
+    let (status, _) = crate::native::instance(AxState(env.st.clone()), HeaderMap::new()).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "authorization",
+        format!("Bearer {}", env.native().token).parse().unwrap(),
+    );
+    let (status, Json(value)) =
+        crate::native::instance(AxState(env.st.clone()), headers.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["pilot_collectors"].as_array().unwrap().len(), 1);
+    assert_eq!(value["pilot_collectors"][0]["active"], true);
+    assert_eq!(
+        value["pilot_collectors"][0]["host_session"],
+        "selected-host"
+    );
+    assert_eq!(
+        value["pilot_pending"][0]["args_sha256"],
+        canonical_digest(&args)
+    );
+    for field in ["args", "owner_token", "child_authority"] {
+        assert!(value["pilot_collectors"][0].get(field).is_none());
+        assert!(value["pilot_pending"][0].get(field).is_none());
+    }
+    {
+        let native = env.native();
+        let mut sessions = native.sessions.lock().unwrap();
+        sessions
+            .entries
+            .get_mut("selected-owner")
+            .unwrap()
+            .liveness_lease
+            .as_mut()
+            .unwrap()
+            .expires_at = native.monotonic_now();
+    }
+    let (_, Json(value)) = crate::native::instance(AxState(env.st.clone()), headers).await;
+    assert_eq!(value["pilot_collectors"][0]["active"], false);
+}
+
+#[test]
+fn run_operator_scope_cannot_claim_another_session_or_epoch() {
+    for format in [
+        crate::mcp::server_profile::FORMAT,
+        crate::mcp::server_profile::git::FORMAT,
+    ] {
+        let (env, name, args, schema, context) = fixture(format);
+        let opened = open_selected(&env, &name, &args, &schema, &context).unwrap();
+        let pending = opened["pending_id"].as_str().unwrap();
+        let binding = opened["binding_sha256"].as_str().unwrap();
+        let observed = env
+            .native()
+            .approval
+            .as_ref()
+            .unwrap()
+            .operator_bindings()
+            .unwrap();
+        assert_eq!(observed.len(), 1);
+        assert_eq!(observed[0]["args_sha256"], canonical_digest(&args));
+        assert!(observed[0].get("args").is_none());
+        assert!(observed[0].get("owner_token").is_none());
+        let epoch = observed[0]["session_epoch"].as_str().unwrap();
+        for (session, epoch) in [
+            ("foreign-session", epoch),
+            ("selected-owner", "foreign-epoch"),
+        ] {
+            assert!(operator_approve_for_session(
+                env.home(),
+                HOOK,
+                pending,
+                binding,
+                session,
+                epoch
+            )
+            .is_err());
+            assert!(
+                operator_reject_for_session(env.home(), pending, binding, session, epoch).is_err()
+            );
+            assert!(env
+                .native()
+                .approval
+                .as_ref()
+                .unwrap()
+                .pending_file(pending)
+                .exists());
+        }
+        operator_approve_for_session(env.home(), HOOK, pending, binding, "selected-owner", epoch)
+            .unwrap();
+        assert_eq!(
+            call_selected(
+                &env,
+                "selected-owner",
+                &name,
+                &args,
+                &schema,
+                &context,
+                pending
+            )
+            .unwrap()
+            .verdict,
+            "allow"
+        );
+        assert!(
+            !call_selected(
+                &env,
+                "selected-owner",
+                &name,
+                &args,
+                &schema,
+                &context,
+                pending
+            )
+            .unwrap()
+            .release
+        );
+    }
+}
+
 fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
     let mut env = env(Some(60));
     let name = if format == crate::mcp::server_profile::FORMAT {

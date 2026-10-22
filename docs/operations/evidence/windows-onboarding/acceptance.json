@@ -1,0 +1,205 @@
+{
+  "schema_version": "sou90-windows-onboarding-acceptance/1",
+  "status": "passed",
+  "cleanup_verified": true,
+  "native_windows": true,
+  "elevated": false,
+  "platform": "Windows-10-10.0.26200-SP0",
+  "source_commit": "e86b9dfc48d2626ca2a34fe37f153bb56d7f2a76",
+  "administrator_group_present": true,
+  "agent_sha256": "f528cdec1f6a29fc883a3429f02b1281e86320ea11f122de71d360c010f993dd",
+  "python_sha256": "5f7b89a612c9b8af1d6456cdfcd1dbe5ca630849e79aebced9bee9a6694952ec",
+  "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+  "registry_sha256": "edb2a0cb6ef8d0dcdee09aa089fe5c79fc068ca72ade64d6987b3c1c01095830",
+  "policy_sha256": "8b2bfb66b14a988a29cf2698c482bc7cd91ba550fea14ccfa63540e815eb3c57",
+  "driver_sha256": "4f352b69457f0f5824a88f482924af7b32fb38d97ee47121a2eb81e5be7b9571",
+  "checks": [
+    {
+      "id": "read_only_preview",
+      "status": "passed",
+      "duration_ms": 12907,
+      "observed": {
+        "read_only": true,
+        "confirmation_bound": true
+      }
+    },
+    {
+      "id": "wrong_confirmation",
+      "status": "passed",
+      "duration_ms": 20718,
+      "observed": {
+        "no_agent_home_created": true,
+        "edited_host_preserved": true
+      }
+    },
+    {
+      "id": "five_asset_hash_refusals",
+      "status": "passed",
+      "duration_ms": 9141,
+      "observed": {
+        "five_wrong_hashes_refused": true
+      }
+    },
+    {
+      "id": "foreign_port_preserved",
+      "status": "passed",
+      "duration_ms": 47,
+      "observed": {
+        "foreign_port_preserved": true,
+        "connections": 0
+      }
+    },
+    {
+      "id": "interrupted_prepared",
+      "status": "passed",
+      "duration_ms": 110672,
+      "observed": {
+        "interrupted_at": "prepared",
+        "recovered": true,
+        "useful_read": true,
+        "expected_host_state_at_checkpoint": true,
+        "original_entry_restored": true
+      }
+    },
+    {
+      "id": "interrupted_configured",
+      "status": "passed",
+      "duration_ms": 96047,
+      "observed": {
+        "interrupted_at": "configured",
+        "recovered": true,
+        "useful_read": true,
+        "expected_host_state_at_checkpoint": true,
+        "original_entry_restored": true
+      }
+    },
+    {
+      "id": "interrupted_installed",
+      "status": "passed",
+      "duration_ms": 73718,
+      "observed": {
+        "interrupted_at": "installed",
+        "recovered": true,
+        "useful_read": true,
+        "expected_host_state_at_checkpoint": true,
+        "original_entry_restored": true
+      }
+    },
+    {
+      "id": "interrupted_daemon_started",
+      "status": "passed",
+      "duration_ms": 78391,
+      "observed": {
+        "interrupted_at": "daemon_started",
+        "recovered": true,
+        "useful_read": true,
+        "expected_host_state_at_checkpoint": true,
+        "original_entry_restored": true
+      }
+    },
+    {
+      "id": "interrupted_publishing",
+      "status": "passed",
+      "duration_ms": 84859,
+      "observed": {
+        "interrupted_at": "publishing",
+        "recovered": true,
+        "useful_read": true,
+        "expected_host_state_at_checkpoint": true,
+        "original_entry_restored": true
+      }
+    },
+    {
+      "id": "interrupted_connected",
+      "status": "passed",
+      "duration_ms": 77625,
+      "observed": {
+        "interrupted_at": "connected",
+        "recovered": true,
+        "useful_read": true,
+        "expected_host_state_at_checkpoint": true,
+        "original_entry_restored": true
+      }
+    },
+    {
+      "id": "transactional_apply",
+      "status": "passed",
+      "duration_ms": 43813,
+      "observed": {
+        "configured": true,
+        "daemon_verified": true,
+        "host_reload_pending": true
+      }
+    },
+    {
+      "id": "installed_self_test",
+      "status": "passed",
+      "duration_ms": 29203,
+      "observed": {
+        "self_test_scenarios": 5,
+        "protected_send_executions": 0
+      }
+    },
+    {
+      "id": "configured_connection_useful_read",
+      "status": "passed",
+      "duration_ms": 7609,
+      "observed": {
+        "useful_read_executed": true,
+        "no_send_execution": true
+      }
+    },
+    {
+      "id": "operator_conflict_preserved",
+      "status": "passed",
+      "duration_ms": 35063,
+      "observed": {
+        "operator_edit_preserved": true,
+        "classifier_edit_refused": true
+      }
+    },
+    {
+      "id": "daemon_loss_and_recovery",
+      "status": "passed",
+      "duration_ms": 31922,
+      "observed": {
+        "failed_verification_refused": true,
+        "recovery_verified": true,
+        "daemon_loss_child_executions": 0,
+        "daemon_loss_receiver_connections": 0,
+        "foreign_recovery_listener_connections": 0
+      }
+    },
+    {
+      "id": "useful_read_after_recovery",
+      "status": "passed",
+      "duration_ms": 7719,
+      "observed": {
+        "useful_read_executed": true,
+        "no_send_execution": true
+      }
+    },
+    {
+      "id": "unrelated_settings_and_receiver",
+      "status": "passed",
+      "duration_ms": 0,
+      "observed": {
+        "unrelated_config_preserved": true,
+        "unrelated_process_preserved": true,
+        "operator_file_preserved": true,
+        "receiver_connections": 0
+      }
+    },
+    {
+      "id": "owned_idempotent_removal",
+      "status": "passed",
+      "duration_ms": 7609,
+      "observed": {
+        "original_entry_restored": true,
+        "idempotent": true
+      }
+    }
+  ],
+  "passed": 18,
+  "failed": 0
+}

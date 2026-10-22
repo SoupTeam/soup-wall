@@ -240,6 +240,12 @@ enum Cmd {
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
     SelfTest(agentfw::self_test::Args),
+    #[cfg(windows)]
+    /// Preview a native Windows Agent setup against explicitly selected local assets.
+    OnboardWindows {
+        #[command(subcommand)]
+        command: agentfw::windows_onboarding::Command,
+    },
     /// First-use onboarding: read-only preview, explicit apply of the reviewed plan, and undo (Linux).
     ///
     /// Exit 0 verified/plan ready/undone, 6 configured but unverified, 3 failed, 4 incomplete or refused, 5 unsupported.
@@ -269,6 +275,8 @@ enum Cmd {
     },
     /// Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
     PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
+    /// Inspect and decide one exact pending call owned by a live pilot run.
+    PilotApproval(agentfw::pilot_approval::OperatorArgs),
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
     Sandbox {
         /// Writable directory exposed as `/workspace`.
@@ -460,6 +468,11 @@ fn main() -> anyhow::Result<()> {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
         Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
+        #[cfg(windows)]
+        Cmd::OnboardWindows { command } => {
+            prepare_lifecycle_process()?;
+            agentfw::windows_onboarding::run(command)
+        }
         Cmd::Onboard(command) => std::process::exit(agentfw::onboarding::run(command)),
         Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
@@ -735,6 +748,7 @@ fn main() -> anyhow::Result<()> {
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
         Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
+        Cmd::PilotApproval(args) => agentfw::pilot_approval::operator(args),
         Cmd::McpProfile { home, command } => {
             let home = match home {
                 Some(h) => h,

@@ -150,6 +150,8 @@ struct Record {
     tool: String,
     schema_sha256: String,
     binding_sha256: String,
+    args_sha256: String,
+    expires_at_ms: u64,
     source: Source,
     policy_epoch: u64,
     selected: bool,
@@ -167,6 +169,24 @@ pub struct ApprovalState {
 }
 
 impl ApprovalState {
+    /// Authenticated operator correlation only; never export arguments or grants.
+    pub(super) fn operator_bindings(&self) -> Result<Vec<Value>, &'static str> {
+        let records = self
+            .records
+            .lock()
+            .map_err(|_| "native_approval_unavailable")?;
+        let now = Instant::now();
+        Ok(records
+            .iter()
+            .filter(|(_, r)| r.selected && r.state == State::Pending && r.expires > now)
+            .map(|(id, r)| {
+                json!({"pending_id": id, "session_id": r.session_id,
+                "session_epoch": r.epoch, "tool": r.tool, "binding_sha256": r.binding_sha256,
+                "args_sha256": r.args_sha256, "expires_at_ms": r.expires_at_ms})
+            })
+            .collect())
+    }
+
     fn requires_owner(&self, id: Option<&str>, session: &str) -> bool {
         self.records
             .lock()
@@ -675,7 +695,7 @@ fn open_bound(
         tool: name.into(),
         args: args.clone(),
     });
-    let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+    let mut outcome = super::invocation::inspect(&mut firewall, &ev, tool, &hosts)?;
     if let Some(host) = &session.host_session {
         let ev_host = session.host_event(
             host,
@@ -685,7 +705,7 @@ fn open_bound(
                 args: args.clone(),
             },
         );
-        let host_outcome = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+        let host_outcome = super::invocation::inspect(&mut firewall, &ev_host, tool, &hosts)?;
         outcome = super::merge_provenance_outcomes(outcome, host_outcome);
     }
     let mut verdict = resolved(&outcome);
@@ -797,6 +817,8 @@ fn open_bound(
             tool: name.into(),
             schema_sha256: tool.schema_sha256.clone(),
             binding_sha256: bound.clone(),
+            args_sha256: super::args_hash(args),
+            expires_at_ms: created_ms + ttl_ms,
             source,
             policy_epoch,
             selected: request.selected_invocation.is_some(),
@@ -881,7 +903,35 @@ pub fn operator_approve(
     id: &str,
     binding: &str,
 ) -> anyhow::Result<()> {
+    approve_scoped(home, hook_token, id, binding, None)
+}
+
+/// The run-scoped CLI supplies identities observed from the authenticated daemon.
+pub(crate) fn operator_approve_for_session(
+    home: &Path,
+    hook_token: &str,
+    id: &str,
+    binding: &str,
+    session: &str,
+    epoch: &str,
+) -> anyhow::Result<()> {
+    approve_scoped(home, hook_token, id, binding, Some((session, epoch)))
+}
+
+fn approve_scoped(
+    home: &Path,
+    hook_token: &str,
+    id: &str,
+    binding: &str,
+    scope: Option<(&str, &str)>,
+) -> anyhow::Result<()> {
     let record = read_pending(home, id)?;
+    if let Some((session, epoch)) = scope {
+        anyhow::ensure!(
+            record["session_id"] == session && record["session_epoch"] == epoch,
+            "pending call no longer belongs to this collector"
+        );
+    }
     let now = now_ms();
     let expires = record["expires_at_ms"].as_u64().unwrap_or(0);
     anyhow::ensure!(expires > now, "pending approval has expired");
@@ -926,6 +976,28 @@ pub fn operator_reject(home: &Path, id: &str) -> anyhow::Result<()> {
     std::fs::rename(
         dir.join(format!("{id}.deciding")),
         dir.join(format!("{id}.rejected")),
+    )?;
+    Ok(())
+}
+
+pub(crate) fn operator_reject_for_session(
+    home: &Path,
+    id: &str,
+    binding: &str,
+    session: &str,
+    epoch: &str,
+) -> anyhow::Result<()> {
+    let record = read_pending(home, id)?;
+    anyhow::ensure!(
+        record["binding_sha256"] == binding
+            && record["session_id"] == session
+            && record["session_epoch"] == epoch,
+        "pending call no longer belongs to this collector"
+    );
+    claim(home, id)?;
+    std::fs::rename(
+        pending_dir(home).join(format!("{id}.deciding")),
+        pending_dir(home).join(format!("{id}.rejected")),
     )?;
     Ok(())
 }
