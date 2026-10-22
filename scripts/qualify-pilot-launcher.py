@@ -196,7 +196,7 @@ def prepare_original_launch(args, private, report):
     head_before, index_before = git("rev-parse", "HEAD"), sha(workspace / ".git/index")
     status_before = git("status", "--porcelain=v1")
     return SimpleNamespace(selected=selected, binary=binary, workspace=workspace, env=env,
-        profiles=profiles, registry=registry, policy=policy, home=home, port=port,
+        profiles=profiles, registry=registry, policy=policy, home=home, port=port, notes=notes,
         before=before, head_before=head_before, index_before=index_before, status_before=status_before, git=git)
 
 
@@ -205,6 +205,7 @@ def qualify(args, private, report):
     selected, binary, workspace, env = setup.selected, setup.binary, setup.workspace, setup.env
     profiles, registry, policy, home, port = setup.profiles, setup.registry, setup.policy, setup.home, setup.port
     before, head_before, index_before, status_before, git = setup.before, setup.head_before, setup.index_before, setup.status_before, setup.git
+    notes = setup.notes
     daemon = process = model = witness = None
     try:
         with (private / "daemon.log").open("wb") as log:

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """False-positive controls for the independent launcher dispatch observer."""
 import importlib.util
+import builtins
+import symtable
 import json
 from pathlib import Path
 import unittest
@@ -12,6 +14,19 @@ SPEC.loader.exec_module(WITNESS)
 
 
 class DispatchControls(unittest.TestCase):
+    def test_shared_preparation_does_not_leave_missing_global_names(self):
+        for filename in ("qualify-pilot-launcher.py", "qualify-pilot-ask.py"):
+            path = ROOT / "scripts" / filename
+            table = symtable.symtable(path.read_text(), str(path), "exec")
+            known = set(table.get_identifiers()) | set(dir(builtins))
+            def missing(scope):
+                result = {s.get_name() for s in scope.get_symbols()
+                    if s.is_global() and s.is_referenced() and s.get_name() not in known}
+                for child in scope.get_children():
+                    result.update(missing(child))
+                return result
+            self.assertEqual(missing(table), set(), filename)
+
     def trace(self):
         rows = ['101 execve("/owned/agentfw", ["/owned/agentfw", "mcp"], 0x0) = 0',
                 '102 execve("/owned/agentfw", ["/owned/agentfw", "mcp"], 0x0) = 0']

@@ -109,7 +109,8 @@ removal; the CLI never broad-deletes another run to make capacity.
 
 `scripts/qualify-pilot-ask.py` uses the actual launcher/Claude executable, pinned
 original servers and an owned loopback provider with no paid traffic. It checks
-zero target kernel effects before approval, exactly one after approval,
+zero original-server wire dispatches and target kernel effects before approval,
+exactly one of each after approval,
 correlated refusal on reject/expiry, useful continuation, an Allow peer,
 cross-run isolation, metadata tampering, replay, cancellation, restart and
 cleanup. Arguments and raw syscall traces remain private; exported evidence
