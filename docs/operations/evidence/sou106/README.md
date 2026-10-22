@@ -32,3 +32,27 @@ POSIX paths/permissions and external temporary directories; its Windows failures
 are not suppressed. The focused new gate/restoration suite passed 14/14 with
 an owned writable temporary directory and hard-link permissions. Documentation
 links passed (232 documents / 881 links before this evidence addition).
+
+## Attempt 2 (full workload, retained failure)
+
+Source: `41e3f10d6c1dd27c530f17e3086363c0fb8c68f3`.
+[Focused Linux run](https://github.com/SoupTeam/soup-wall/actions/runs/39760959479).
+[Original report](attempt-2.json). All 40 arms ran; source and assets stayed
+unchanged and cleanup passed. All eight refusal variants passed, calibrating
+nine mutating calls before observing zero protected effects/opens.
+
+The gate remained failed: 9/12 benign pairs passed. Both head-and-diff arms
+failed an oracle comparison that incorrectly retained the final newline; the
+original server's head slicing omits it. The corrected source-based oracle has
+focused head/tail tests. Search-read-status and search-exclusion still failed
+in protected mode at the existing `combined-ask-mcp-derived-read` rule.
+These original outcomes are retained; no runtime policy/classifier is changed.
+
+The original report called all four failed arms `technical_failures`. The next
+report distinguishes `failed_arms` from runtime/transport technical failures and
+reports false interruptions separately. This bookkeeping correction does not
+change the gate or case outcomes. All per-arm reasons remain available.
+
+Observed successful benign-pair call overhead (27 samples): median 53.467 ms,
+p95 125.687 ms. These exclude the failed pairs and are not overall utility or
+an accepted latency threshold. The final corrected source requires its own run.
