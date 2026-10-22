@@ -42,6 +42,59 @@ PREP = load("pilot_run_preparation", "prepare-installed-pilot.py")
 GROUPS = load("pilot_run_groups", "prepare-native-pilot-prerequisites.py")
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
+PUBLIC_FAILURE_CODES = frozenset({
+    'native_linux_x86_64_required',
+    'non_root_operator_required',
+    'native_ubuntu_required_wsl_is_separate',
+    'ubuntu_24_04_required',
+    'selection_version',
+    'selection_roles_mismatch',
+    'forbidden_action_expectation_required',
+    'absolute_selected_path_required',
+    'selected_artifact_unavailable',
+    'selected_executable_unavailable',
+    'selected_artifact_changed',
+    'private_directory_required',
+    'private_owned_0700_directory_required',
+    'duplicate_json_input_key',
+    'nonfinite_json_input',
+    'input_size_limit',
+    'input_digest_mismatch',
+    'regular_input_required',
+    'absolute_selection_and_full_commit_required',
+    'accepted_two_server_classifier_required',
+    'authenticated_readiness_failed',
+    'candidate_source_mismatch',
+    'canonical_selection_required',
+    'canonical_state_root_required',
+    'daemon_process_identity_mismatch',
+    'daemon_registry_or_features_mismatch',
+    'loopback_port_out_of_range',
+    'native_instance_invalid',
+    'native_readiness_invalid',
+    'occupied_port_refused',
+    'owned_daemon_lost',
+    'owned_daemon_not_ready',
+    'owned_process_cleanup_failed',
+    'parent_death_signal_unavailable',
+    'pilot_cancelled',
+    'pilot_cancelled_before_host',
+    'pilot_deadline_out_of_range',
+    'pilot_timeout',
+    'preparation_marker_mismatch',
+    'prepared_assets_inside_checkout',
+    'prepared_generation_required',
+    'prepared_selection_required',
+    'private_output_limit',
+    'registry_collision',
+    'restricted_launcher_failed',
+    'selected_executable_changed',
+    'selection_changed_before_host',
+    'selection_changed_before_launch',
+    'state_inside_checkout',
+    'state_inside_workspace',
+    'unsafe_state_parent',
+})
 
 
 class Failure(Exception):
@@ -169,12 +222,7 @@ def run(args, report):
         except OSError:
             raise Failure("occupied_port_refused") from None
         port = reservation.getsockname()[1]
-    private = Path(tempfile.mkdtemp(prefix="soup-wall-run-", dir=state_root))
-    private.chmod(0o700)
-    report.update(run_directory=str(private), port=port, executed=False)
-    home = private / ".agentfw"
-    home.mkdir(mode=0o700)
-    env = environment(paths, private)
+    private = None
     daemon = launcher = None
     streams = []
     cancelled = False
@@ -185,6 +233,13 @@ def run(args, report):
     try:
         for sig in previous:
             signal.signal(sig, cancel)
+        require(not cancelled, "pilot_cancelled")
+        private = Path(tempfile.mkdtemp(prefix="soup-wall-run-", dir=state_root))
+        private.chmod(0o700)
+        report.update(run_directory=str(private), port=port, executed=False)
+        home = private / ".agentfw"
+        home.mkdir(mode=0o700)
+        env = environment(paths, private)
         tools = []
         for kind in ("filesystem", "git"):
             tools.extend(PREP.PILOT.strict_json((Path(profiles[kind]["profile"]["path"]).parent /
@@ -277,12 +332,18 @@ def run(args, report):
                 finally:
                     process.stdout.close()
         for stream in streams:
-            stream.close()
+            try:
+                stream.close()
+            except OSError:
+                errors.append("private_log")
         for sig, handler in previous.items():
             signal.signal(sig, handler)
         # No unbounded output or secret-bearing state survives normal exit/failure.
-        if not errors:
-            shutil.rmtree(private)
+        if not errors and private is not None:
+            try:
+                shutil.rmtree(private)
+            except OSError:
+                errors.append("private_state")
         report["cleanup"] = "failed" if errors else "owned_state_removed"
         require(not errors, "owned_process_cleanup_failed")
 
@@ -307,7 +368,7 @@ def main():
     except Exception as error:
         # Never echo subprocess output, raw paths, arguments, credentials or arbitrary exception strings.
         code = str(error)
-        report.update(status="failed", reason=code if re.fullmatch(r"[a-z0-9_]{1,100}", code)
+        report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
                       else "pilot_input_or_runtime_failure")
     print(json.dumps(report, sort_keys=True, ensure_ascii=True))
     return 1 if report["status"] == "failed" else 0

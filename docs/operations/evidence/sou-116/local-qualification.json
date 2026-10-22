@@ -1,34 +1,51 @@
 {
+  "all_python": {
+    "failed": 0,
+    "note": "59 pre-existing environment/platform/optional skips plus 3 unchanged Linux /proc controls explicitly inapplicable on macOS; Linux CI retains them.",
+    "run": 1079,
+    "skipped": 62
+  },
+  "bench_python": {
+    "failed": 0,
+    "run": 66,
+    "skipped": 19
+  },
+  "docs": "Checked 236 Markdown files and 895 local links; 0 errors.",
   "first_linux_run": 39806646480,
+  "fourth_linux_run": 39813740053,
   "launcher_tests": 9,
-  "linux_acceptance": "third_run_exceeded_startup_observation_deadline; bounded_90_second_publication_control_added",
+  "linux_acceptance": "ten_actual_host_cases_passed_at_78e5658; final_candidate_requalified_by_ready_CI",
   "logs_sha256": {
+    "all-python.log": "e916d3fedbe3246f39e686da606fe501d60df277648a7128af9279daba4dbe4f",
+    "bench-python.log": "58c163c3bfa3ca945f19838a4aab7f56e397c3b4a5dde1ae1f102bad694ddc9a",
+    "docs.log": "ea4d231572b278aabfa591725622ef64d539108d47fb696ab3b63c91c3a77768",
+    "final-python-controls.log": "4a313b5f5cb2bcf1bbe1d6799a1bfd5c91f425193131fde95d7c840406a87f87",
     "focused-clippy.log": "58e9989add0af261e7ddf28a3766eb35e3e2bad0c3bcb4355ed6d5bf32367a2c",
     "focused-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "focused-launcher-tests.log": "f621b2230aa4275e1572e35c140194613748d28237bd47d330c6c50c32280826",
     "focused-preparation.log": "f01bc14062bd949d258f9cf075827ff0e843a6ddbd80cf91160333edb0ed8314",
     "focused-python.log": "a23104c7466a41c819c7a10a2109399fcbc5e456cb7ce12012b61ac5593b2307",
     "focused-workflows.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "ready-local-tests.log": "5db30fc0ebd2c80e6f6d3c99fd8dcbd78baa45914ec1519b4811d0542cd1207d"
+    "ready-local-tests.log": "d6ab35b4181caa7b1227a8de6f13e567b7964ed053f67990b97ac03ffb6a5305"
   },
   "no_live_model_effectiveness_claim": true,
   "preparation_controls": 7,
-  "prepared_run_python_controls": 10,
+  "prepared_run_python_controls": 12,
   "second_linux_run": 39809079159,
   "source_sha256": {
     "crates/agentfw/src/pilot_launcher.rs": "d88b1ef51f5f434ae95463ef39d538e587a56f0aa7102aad093366e0c42124d8",
-    "scripts/pilot-run.py": "ba233fc1ac00c5fafc68253617923ccaa47bc97443c847e618d4770abb81b6e5",
+    "scripts/pilot-run.py": "75c57c1e2c990cc3f62151b96841ef6ac4fd54aa75ab090fd5aba83bf9e74f65",
     "scripts/prepare-installed-pilot.py": "ade16b25f804660e234be471adaebdf0ebdcb87acdffcff2afe3df13c8c6d5a5",
     "scripts/qualify-prepared-pilot-run.py": "d14b25e8c301f14f4c47ec8ed02182954b64f440236e478682d2d08d14f98728"
   },
-  "status": "local_checks_passed_linux_pending",
+  "status": "local_and_actual_linux_checks_passed_ready_qualification_pending",
   "strict_clippy": "passed_zero_warnings",
   "task": "SOU-116",
   "third_linux_run": 39810595040,
   "workspace_tests": {
     "failed": 0,
     "ignored": 12,
-    "note": "Existing optional/helper/latency/model-dependent tests remain ignored; strict local sandbox emitted Xcode cache-write diagnostics.",
-    "passed": 1634
+    "note": "Existing optional/helper/latency/model-dependent tests remain ignored; macOS sandbox emits Xcode cache-write diagnostics.",
+    "passed": 1636
   }
 }

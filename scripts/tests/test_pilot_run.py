@@ -57,6 +57,20 @@ class PreparedRunBoundary(unittest.TestCase):
                 execute.assert_not_called()
             self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
 
+    def test_unsupported_platform_reports_a_finite_actionable_reason_without_spawn(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            args, selection, paths, profiles = self.fixture(Path(temporary))
+            with patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN.PREP, "supported_platform", side_effect=ValueError("native_linux_x86_64_required")), \
+                 patch.object(RUN.subprocess, "Popen") as spawn, \
+                 patch.object(sys, "argv", ["pilot-run", "--run", "--selection", str(args.selection),
+                                            "--expected-commit", args.expected_commit]), \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 1)
+                self.assertEqual(json.loads(output.getvalue())["reason"], "native_linux_x86_64_required")
+                self.assertFalse(json.loads(output.getvalue())["executed"])
+                spawn.assert_not_called()
+
     def test_marker_and_generation_must_be_completed_selected_and_unchanged(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -168,6 +182,23 @@ class PreparedRunBoundary(unittest.TestCase):
         acceptance.useful_result({"followup": {"is_error": False, "content": [
             {"type": "text", "text": "Owned prepared continuation."}]}}, "followup", "Owned prepared continuation.")
 
+    def test_failure_during_private_setup_removes_partial_state_without_spawn(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args, selection, paths, profiles = self.fixture(root)
+            previous = RUN.signal.getsignal(RUN.signal.SIGTERM)
+            report = {}
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "environment", side_effect=RuntimeError("owned setup failure")), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaisesRegex(RuntimeError, "owned setup failure"):
+                    RUN.run(args, report)
+                spawn.assert_not_called()
+            self.assertEqual(report["cleanup"], "owned_state_removed")
+            self.assertFalse(list(root.glob("soup-wall-run-*")))
+            self.assertEqual(RUN.signal.getsignal(RUN.signal.SIGTERM), previous)
+
     def test_provider_is_explicit_but_project_environment_is_not_inherited(self):
         with patch.dict(os.environ, {"PATH": "/untrusted", "PYTHONPATH": "/untrusted",
              "LD_PRELOAD": "/untrusted", "CLAUDE_CONFIG_DIR": "/untrusted", "AGENTFW_TOKEN": "secret",
@@ -181,12 +212,14 @@ class PreparedRunBoundary(unittest.TestCase):
         self.assertEqual(env["AGENTFW_HOME"], str(Path(env["HOME"]) / ".agentfw"))
 
     def test_unexpected_error_never_exports_secret_or_raw_subprocess_output(self):
-        with patch.object(RUN, "selected", side_effect=RuntimeError("Bearer owned-secret\nprivate args")), \
-             patch.object(sys, "argv", ["pilot-run", "--selection", "/unused/selection.json", "--expected-commit", "b" * 40]), \
-             patch("sys.stdout", new_callable=io.StringIO) as output:
-            self.assertEqual(RUN.main(), 1)
-            self.assertNotIn("owned-secret", output.getvalue())
-            self.assertEqual(json.loads(output.getvalue())["reason"], "pilot_input_or_runtime_failure")
+        for secret in ("Bearer owned-secret\nprivate args", "0123456789abcdef" * 4):
+            with self.subTest(secret_shape="hex" if secret.isalnum() else "message"), \
+                 patch.object(RUN, "selected", side_effect=RuntimeError(secret)), \
+                 patch.object(sys, "argv", ["pilot-run", "--selection", "/unused/selection.json", "--expected-commit", "b" * 40]), \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 1)
+                self.assertNotIn(secret, output.getvalue())
+                self.assertEqual(json.loads(output.getvalue())["reason"], "pilot_input_or_runtime_failure")
 
 
 if __name__ == "__main__":
