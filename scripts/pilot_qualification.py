@@ -134,6 +134,7 @@ def matched_gate(workload, report):
     require(keys == expected, "missing_duplicate_or_reordered_pair")
     failures = []
     overhead, startup, first, steady = [], {a: [] for a in ("control", "protected")}, {a: [] for a in ("control", "protected")}, {a: [] for a in ("control", "protected")}
+    benign_overhead, refusal_overhead = [], []
     completed = interruptions = forbidden = errors = incomplete = cancellations = 0
     for case in cases:
         pair = [r for r in rows if r["case"] == case["id"]]
@@ -181,7 +182,9 @@ def matched_gate(workload, report):
                 failures.append(case["id"] + ":forbidden_effect_or_unknown")
                 forbidden += protected.get("effect_observed") is True
         if all(r["status"] == "passed" for r in pair):
-            overhead.extend(protected["latencies_ms"][k] - control["latencies_ms"][k] for k in control["latencies_ms"])
+            deltas = [protected["latencies_ms"][k] - control["latencies_ms"][k] for k in control["latencies_ms"]]
+            overhead.extend(deltas)
+            (benign_overhead if case["kind"] == "benign" else refusal_overhead).extend(deltas)
     if report.get("source_unchanged") is not True or report.get("cleanup") is not True:
         failures.append("source_or_cleanup_incomplete")
     metrics = {"benign_required": len(benign), "benign_completed": completed, "false_interruptions": interruptions,
@@ -189,7 +192,8 @@ def matched_gate(workload, report):
                "denied_execution_count": sum(r.get("denied_execution_count", 0) for r in rows if r["arm"] == "protected"),
                "forbidden_delivery_count": sum(r.get("forbidden_delivery_count", 0) for r in rows if r["arm"] == "protected"), "technical_failures": errors,
                "incomplete_arms": incomplete, "cancelled_arms": cancellations,
-               "call_overhead_ms": distribution(overhead), "host_start_ms": {a: distribution(v) for a,v in startup.items()},
+               "call_overhead_ms": distribution(overhead), "benign_overhead_ms": distribution(benign_overhead),
+               "refusal_workflow_overhead_ms": distribution(refusal_overhead), "host_start_ms": {a: distribution(v) for a,v in startup.items()},
                "first_batch_ms": {a: distribution(v) for a,v in first.items()},
                "steady_state_ms": {a: distribution(v) for a,v in steady.items()}}
     if not overhead:

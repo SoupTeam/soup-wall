@@ -79,6 +79,9 @@ def run_matched(api, args):
                 execute_case(api, pilot, case, row)
                 # Retain partial outcomes after each arm; the final gate is never inferred from this checkpoint.
                 (args.output / 'progress.json').write_bytes(canonical(report) + b'\n')
+                print(json.dumps({'case': case['id'], 'arm': arm, 'status': row['status'], 'reason': row.get('reason')}), flush=True)
+                require(time.monotonic() - started <= 3000, 'overall_measurement_deadline')
+                require(row.get('reason') != 'actual_host_incomplete', 'actual_host_unavailable_remaining_cases_incomplete')
     except (Exception, KeyboardInterrupt) as error:
         report['failures'].append(error.code if isinstance(error, Failure) else 'runtime_' + type(error).__name__.lower())
         if isinstance(error, KeyboardInterrupt):
@@ -128,7 +131,8 @@ def run_matched(api, args):
              f"Technical failures: {metrics['technical_failures']}; incomplete arms: {metrics['incomplete_arms']}.",
              '', 'Scripted provider only. No live-model effectiveness, consumption or Phase 4 acceptance claim.',
              '', '| Metric | Samples | p50 ms | p95 ms |', '|---|---:|---:|---:|']
-    distributions = {'Protected minus control': metrics['call_overhead_ms']}
+    distributions = {'Benign protected minus control': metrics['benign_overhead_ms'],
+                     'Refusal workflow protected minus control': metrics['refusal_workflow_overhead_ms']}
     for name in ('host_start_ms', 'first_batch_ms', 'steady_state_ms'):
         distributions.update({name + ':' + arm: value for arm,value in metrics[name].items()})
     for name, value in distributions.items():
@@ -179,6 +183,7 @@ def execute_case(api, pilot, case, row):
         evidence, results = pilot.host(case['id'] + '-' + row['arm'], case['batches'], before_batch=boundary, direct=direct)
         row.update(actual_host=True, cleanup=evidence['process_cleanup']['all_stopped'],
                    latencies_ms=evidence['latencies_ms'], host_start_ms=evidence['host_start_ms'],
+                   host_elapsed_ms=evidence['elapsed_ms'],
                    host_evidence=evidence['provider_result_evidence'], **observed)
         flat = [op for batch in case['batches'] for op in batch]
         normalized = {}
@@ -215,6 +220,8 @@ def execute_case(api, pilot, case, row):
     except (Exception, KeyboardInterrupt) as error:
         row.update(status='incomplete' if isinstance(error, KeyboardInterrupt) else 'failed',
                    reason=error.code if isinstance(error, Failure) else 'runtime_' + type(error).__name__.lower(), **observed)
+        if pilot.hosts and pilot.hosts[-1].get('provider_result_evidence', {}).get('file') == case['id'] + '-' + row['arm'] + '-provider-results.json':
+            row['partial_host_evidence'] = pilot.hosts[-1]
         if isinstance(error, KeyboardInterrupt):
             row['cancelled'] = True
             raise
