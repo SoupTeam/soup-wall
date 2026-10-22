@@ -14,7 +14,7 @@ mod unix;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-mod windows_safety;
+pub(crate) mod windows_safety;
 
 use std::path::PathBuf;
 

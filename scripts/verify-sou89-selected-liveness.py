@@ -1505,7 +1505,9 @@ def run_selected_acceptance(args) -> int:
                     require(st == 200 and start_bound_risk.get('release') is True,
                             'bound_native_session_start_failed_on_affected_host')
 
-                    # 4b. Sensitive path call on affected host is held by restored sticky taint/incomplete floor
+                    # 4b. This native-only contrast uses the selected sandbox namespace, not a host path.
+                    # No original-server sensitive file execution is claimed here.
+                    # The affected host is held by restored sticky taint/incomplete floor
                     st, call_risk_floor = http_post(
                         f'http://127.0.0.1:{r_port}/native/v1',
                         r_token,
@@ -1515,7 +1517,7 @@ def run_selected_acceptance(args) -> int:
                             'session_id': 'sess-bound-restart-risk',
                             'event': 'call',
                             'tool': 'read_text_file',
-                            'args': {'path': str(r_home / '.env')},
+                            'args': {'path': '/workspace/.env'},
                             'schema_sha256': next(t['schema_sha256'] for t in fs_reg_tools if t['name'] == 'read_text_file'),
                             'mcp_host_call_id': 'call-floor-1',
                         },
@@ -1605,7 +1607,7 @@ def run_selected_acceptance(args) -> int:
                             'session_id': 'sess-bound-independent',
                             'event': 'call',
                             'tool': 'read_text_file',
-                            'args': {'path': str(r_home / '.env')},
+                            'args': {'path': '/workspace/.env'},
                             'schema_sha256': next(t['schema_sha256'] for t in fs_reg_tools if t['name'] == 'read_text_file'),
                             'mcp_host_call_id': 'call-ind-1',
                         },

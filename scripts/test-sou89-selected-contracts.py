@@ -1873,12 +1873,14 @@ def test_restart_risk_affected_host_policy_witness_and_independent_context():
         })
         assert st == 200 and start_risk.get('release') is True
 
-        # 6. Sensitive path call on affected host is held by restored sticky taint/incomplete floor
+        # 6. Use the same validated selected namespace as the production native-only contrast.
+        # Outside-workspace refusal is covered separately by SOU-110.
+        # Sensitive path call on affected host is held by restored sticky taint/incomplete floor
         st, call_risk_floor = m.http_post(f'http://127.0.0.1:{port}/native/v1', tok, {
             'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': sha,
             'session_id': 'sess-bound-restart-risk', 'event': 'call',
             'tool': 'read_text_file',
-            'args': {'path': str(r_home / '.env')},
+            'args': {'path': '/workspace/.env'},
             'schema_sha256': next(t['schema_sha256'] for t in reg_data['tools'] if t['name'] == 'read_text_file'),
             'mcp_host_call_id': 'call-floor-1',
         })
@@ -1926,7 +1928,7 @@ def test_restart_risk_affected_host_policy_witness_and_independent_context():
             'contract_version': m.NATIVE_CONTRACT, 'registry_sha256': sha,
             'session_id': 'sess-bound-independent', 'event': 'call',
             'tool': 'read_text_file',
-            'args': {'path': str(r_home / '.env')},
+            'args': {'path': '/workspace/.env'},
             'schema_sha256': next(t['schema_sha256'] for t in reg_data['tools'] if t['name'] == 'read_text_file'),
             'mcp_host_call_id': 'call-ind-1',
         })
