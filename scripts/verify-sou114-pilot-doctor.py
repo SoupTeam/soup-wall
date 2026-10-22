@@ -210,10 +210,20 @@ def qualify(args, private, output, evidence, report, secrets):
     (workspace / "notes.txt").write_text("SOU114 useful original-server notes.\n")
     (workspace / "credentials.txt").write_bytes(CANARIES[0])
     git("add", "."); git("commit", "-m", "Owned baseline")
+    # Cargo's top-level debug binary is normally hard-linked to its deps entry.
+    # The installed diagnostic deliberately refuses hard-linked selected assets.
+    # Preparation alone stages an exact private single-linked installation copy;
+    # no diagnostic path changes assets or relaxes the no-follow/single-link rule.
+    launcher = private / "agentfw-git-sandbox"
+    shutil.copyfile(selected["git_launcher"], launcher); launcher.chmod(0o700)
+    require(sha(launcher) == report["selected_sha256"]["git_launcher"] and launcher.stat().st_nlink == 1,
+            "owned_launcher_copy_mismatch")
+    report["installed_launcher"] = {"sha256": sha(launcher), "single_link": True,
+        "source_link_count": selected["git_launcher"].stat().st_nlink}
     fs, gt = private / "filesystem", private / "git"
     with (private / "installer.private").open("wb") as log:
         BASE.INSTALL.install(fs, workspace, selected["node"], selected["bwrap"], selected["npm"], log=log)
-        GIT.INSTALL.install(gt, workspace, selected["git"], sha(selected["git"]), selected["bwrap"], selected["git_launcher"], log=log)
+        GIT.INSTALL.install(gt, workspace, selected["git"], sha(selected["git"]), selected["bwrap"], launcher, log=log)
     report["profiles"] = {kind: {"profile_sha256": sha(path / "profile.json"), "receipt_sha256": sha(path / "installation.json"),
         "package_tree_sha256": json.loads((path / "profile.json").read_text())["packageTreeSha256"]} for kind, path in (("filesystem", fs), ("git", gt))}
     registry = private / "registry.json"
