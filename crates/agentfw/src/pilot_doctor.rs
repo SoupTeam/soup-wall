@@ -120,6 +120,8 @@ enum ProfileFailure {
     Identity,
     Package,
     Runtime,
+    GitLauncher,
+    Library,
     Changed,
 }
 impl ProfileFailure {
@@ -130,7 +132,9 @@ impl ProfileFailure {
             Self::Receipt => ("pilot_receipt_missing_or_invalid", "The existing installation receipt or adjacent registry/policy is absent, unsafe or invalid.", "Inspect installation.json, registry.json and policy.yaml in the selected private installation; use the reviewed installer workflow if incomplete."),
             Self::Identity => ("pilot_original_identity_mismatch", "Installed receipt, original schema/registry or profile policy differs from the accepted identities.", "Compare the selected installation with the reviewed original profile; do not replace a digest merely to accept drift."),
             Self::Package => ("pilot_package_changed_or_unsafe", "The selected package tree, original entrypoint or lock differs from its pin or cannot be safely hashed within bounds.", "Inspect the selected server package and installer receipt privately; do not launch it until the reviewed package pins agree."),
-            Self::Runtime => ("pilot_runtime_asset_changed_or_unsafe", "A selected runtime, sandbox, Git executable or system library differs from its installed pin or is unsafe.", "Compare the selected runtime and library pins with installation.json; use the existing reviewed runtime preparation workflow before launch."),
+            Self::Runtime => ("pilot_runtime_asset_changed_or_unsafe", "A selected runtime, sandbox or Git executable differs from its installed pin or is unsafe.", "Compare the selected executable pins with installation.json; use the existing reviewed runtime preparation workflow before launch."),
+            Self::GitLauncher => ("pilot_git_launcher_changed_or_unsafe", "The selected Git sandbox launcher differs from its installed pin or is not a safe single-linked regular asset.", "Inspect the private Git launcher selection and its reviewed digest. Stage a private regular installation copy through the existing preparation workflow; doctor does not copy or launch it."),
+            Self::Library => ("pilot_system_library_changed_or_unsafe", "A selected system library differs from its installed pin or cannot be safely inspected through the accepted root-owned loader aliases.", "Compare the installed system-library pins privately; use the reviewed runtime preparation workflow without weakening path or ownership checks."),
             Self::Changed => ("pilot_profile_changed_during_inspection", "Selected profile or receipt changed while bounded inspection was running.", "Finish any operator installation change, then retry a read-only diagnostic of the stable selected profile."),
         };
         check(
@@ -223,18 +227,21 @@ fn profile(
             (&config.bwrap_path, &config.bwrap_sha256),
         ]
         .into_iter()
-        .chain(
-            config
-                .git
-                .iter()
-                .chain(config.git_launcher.iter())
-                .map(|l| (&l.path, &l.sha256)),
-        ) {
+        .chain(config.git.iter().map(|l| (&l.path, &l.sha256)))
+        {
             ensure!(
                 io::asset(path, budget)? == *expected,
                 "runtime asset mismatch"
             );
         }
+        phase = ProfileFailure::GitLauncher;
+        if let Some(launcher) = &config.git_launcher {
+            ensure!(
+                io::asset(&launcher.path, budget)? == launcher.sha256,
+                "Git launcher pin mismatch"
+            );
+        }
+        phase = ProfileFailure::Library;
         for library in &config.libraries {
             ensure!(
                 io::system_library(&library.path, budget)? == library.sha256,
@@ -446,6 +453,10 @@ pub(crate) async fn diagnose(
                 "No matching authenticated current-instance observation is available; an open port or a local record is insufficient.",
                 "Run agentfw protection-status --query-only in the selected installation; inspect lifecycle status privately before operator recovery.")),
         }
+    } else {
+        report.checks.push(check("pilot_runtime", "validated_disk_config", Outcome::Unknown,
+            "pilot_config_unavailable", "No validated selected configuration is available for a current-instance comparison.",
+            "Inspect the private selected config.yaml and run the normal read-only diagnostic again after operator recovery; do not infer runtime readiness from installed assets."));
     }
     if args.classifier_script.is_none() {
         report.checks.push(check("pilot_classifier","explicit_classifier_selection",Outcome::Unknown,"pilot_classifier_not_selected",
@@ -467,6 +478,43 @@ use anyhow::Context;
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn absent_config_or_unsupported_platform_never_supplies_runtime_readiness() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let args = DoctorArgs {
+            pilot: PilotArgs {
+                enabled: true,
+                workspace: Some(root.clone()),
+                ..Default::default()
+            },
+            home: Some(root.join("PRIVATE-HOME-CANARY")),
+            agent: None,
+            host_config: None,
+            server: None,
+            classifier_script: None,
+            classifier_sha256: None,
+            json: true,
+            support_bundle: None,
+        };
+        let report = diagnose(&args, args.home.as_deref().unwrap(), None).await;
+        assert_ne!(report.setup, Outcome::Ready);
+        if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            let runtime = report
+                .checks
+                .iter()
+                .find(|c| c.id == "pilot_runtime")
+                .unwrap();
+            assert_eq!(runtime.outcome, Outcome::Unknown);
+            assert_eq!(runtime.reason_code, "pilot_config_unavailable");
+            assert!(runtime.sha256.is_none());
+        } else {
+            assert_eq!(report.setup, Outcome::Unsupported);
+            assert_eq!(report.checks[0].reason_code, "pilot_runtime_unsupported");
+        }
+        let encoded = serde_json::to_string(&report).unwrap();
+        assert!(!encoded.contains("CANARY") && !encoded.contains(root.to_str().unwrap()));
+    }
     #[test]
     fn profile_failure_identifies_the_failed_operator_check_without_paths_or_errors() {
         use std::os::unix::fs::PermissionsExt;
@@ -490,6 +538,8 @@ mod tests {
             ProfileFailure::Identity,
             ProfileFailure::Package,
             ProfileFailure::Runtime,
+            ProfileFailure::GitLauncher,
+            ProfileFailure::Library,
             ProfileFailure::Changed,
         ];
         let codes: std::collections::BTreeSet<_> = values

@@ -186,6 +186,10 @@ checked separately; daemon status does not attest which classifier worker ran.
 A selected profile/config/audit file must be owner-private, regular,
 single-linked, bounded and link-free in every path component. System runtime
 assets may be root-owned and readable, but cannot be group/other-writable.
+Selected executable assets must also be single-linked. Cargo debug outputs can
+be hard-linked to a build entry: the operator preparation workflow must stage a
+private regular installation copy with the same reviewed digest before pinning
+that path. Doctor refuses the build alias and never makes the copy itself.
 Only the accepted installer's system-library list has an additional exception:
 root-owned `/lib`, `/lib64`, `/usr/lib`, `/usr/lib64` loader aliases are resolved
 through pinned Linux `O_PATH` descriptors, with at most 40 links, 1,024 steps,
@@ -273,10 +277,13 @@ active host-call execution remain unknown in every report.
 | `pilot_profile_workspace_mismatch` | Select the profile installed for the exact selected workspace |
 | `pilot_original_identity_mismatch`, `two_server_registry_mismatch` | Compare accepted original schema/registry/policy pins; do not replace a digest merely to accept drift |
 | `pilot_package_changed_or_unsafe` | Inspect the selected package, original entrypoint and lock against its receipt before launch |
-| `pilot_runtime_asset_changed_or_unsafe` | Inspect the selected runtime/sandbox/Git/library pins using the existing preparation workflow |
+| `pilot_runtime_asset_changed_or_unsafe` | Inspect the selected runtime/sandbox/Git executable pins using the existing preparation workflow |
+| `pilot_git_launcher_changed_or_unsafe` | Verify the Git launcher digest and private single-linked installation copy; do not select a Cargo hard-linked build alias |
+| `pilot_system_library_changed_or_unsafe` | Inspect system-library pins and root-owned loader aliases without relaxing ownership/path checks |
 | `pilot_profile_changed_during_inspection` | Finish the operator installation change, then diagnose the stable selection |
 | `installed_pilot_not_active` | Inspect lifecycle/enforcement configuration and use the existing operator activation workflow |
 | `pilot_daemon_unavailable_or_unverifiable`, `pilot_runtime_identity_mismatch` | Query protection status and inspect lifecycle ownership; do not adopt an occupied port |
+| `pilot_config_unavailable` | Inspect the private selected config before comparing current runtime identity; installed assets alone cannot establish readiness |
 | `recorded_classifier_uncertainty` | Review original schema and reviewed classifier; use only the supported intended Ask workflow |
 | `recorded_native_policy_refusal` | Review exact request and current action/resource policy privately; do not weaken the policy |
 | `recorded_result_withheld` | Review result policy and independent effect witnesses; do not force release or claim rollback |
