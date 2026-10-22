@@ -114,3 +114,13 @@ binary hashes. Record the measured value from the exact reviewed run before
 claiming a setup-time result. Archive acquisition and SOU-111 runtime/profile
 preparation are separate intervals; the clean build time is not a full pilot
 setup time.
+
+On source `c8b9bd520b8345794254ac80e3b4f9d0e2f23753`, the [native Ubuntu
+24.04 qualification run](https://github.com/SoupTeam/soup-wall/actions/runs/39759708725)
+recorded **41 seconds** in `native-timing.json` for the clean Git and
+bubblewrap build. The same run verified reuse, refused a wrong archive digest
+without changing the selected generation, and completed the existing
+installed-pilot qualification with 12 passed cases, no failed or incomplete
+cases, and no remaining blockers. This timing excludes archive acquisition,
+other prerequisite installation, Rust builds, SOU-111 preparation and the
+two-server run. It is one hosted-run observation, not a setup-time guarantee.
