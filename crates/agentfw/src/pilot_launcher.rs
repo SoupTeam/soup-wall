@@ -78,6 +78,10 @@ pub struct PilotLaunchArgs {
     #[arg(long)]
     pub workspace: PathBuf,
 
+    /// Separate Git root pinned by the installed Git profile; defaults to --workspace.
+    #[arg(long)]
+    pub git_workspace: Option<PathBuf>,
+
     /// Explicit installed daemon home directory containing native-token and config;
     /// defaults to ~/.agentfw or AGENTFW_HOME.
     #[arg(long)]
@@ -150,6 +154,7 @@ pub struct ValidatedConfig {
     pub claude_path: PathBuf,
     pub workspace_path: PathBuf,
     pub home_path: PathBuf,
+    pub git_workspace_path: PathBuf,
     pub fs_profile_path: PathBuf,
     pub git_profile_path: PathBuf,
     pub classifier_path: Option<PathBuf>,
@@ -278,6 +283,17 @@ impl PilotLaunchArgs {
             },
         };
 
+        let git_workspace_path = self
+            .git_workspace
+            .as_ref()
+            .unwrap_or(&workspace_path)
+            .canonicalize()
+            .context("canonicalize Git workspace")?;
+        ensure!(
+            git_workspace_path.is_dir(),
+            "selected Git workspace is not a directory"
+        );
+
         // 5. Optional classifier and policy
         let classifier_path = match &self.classifier {
             Some(p) => {
@@ -349,8 +365,12 @@ impl PilotLaunchArgs {
             &workspace_path,
             is_mock,
         )?;
-        let (git_runtime_cmd, resolved_git_profile) =
-            resolve_server_runtime(GIT_SERVER_ID, &git_profile_path, &workspace_path, is_mock)?;
+        let (git_runtime_cmd, resolved_git_profile) = resolve_server_runtime(
+            GIT_SERVER_ID,
+            &git_profile_path,
+            &git_workspace_path,
+            is_mock,
+        )?;
 
         let prompt = self
             .prompt
@@ -361,6 +381,7 @@ impl PilotLaunchArgs {
         Ok(ValidatedConfig {
             claude_path,
             workspace_path,
+            git_workspace_path,
             home_path,
             fs_profile_path: resolved_fs_profile,
             git_profile_path: resolved_git_profile,
@@ -610,27 +631,36 @@ pub struct PrivateDirGuard {
 
 impl PrivateDirGuard {
     pub fn new(workspace: &Path) -> Result<Self> {
-        let temp_base = std::env::var_os("TMPDIR")
+        Self::for_workspaces(&[workspace])
+    }
+
+    fn for_workspaces(workspaces: &[&Path]) -> Result<Self> {
+        let parent = std::env::var_os("TMPDIR")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
-        let rand_suffix = random_hex_128();
-        let private_path = temp_base.join(format!("soup-wall-pilot-{}", rand_suffix));
+        Self::in_parent(workspaces, &parent)
+    }
 
-        // Ensure private dir is not inside workspace
-        let canonical_workspace = workspace.canonicalize()?;
-        ensure!(
-            !private_path.starts_with(&canonical_workspace),
-            "private per-run configuration directory must be outside the workspace"
-        );
-
-        fs::create_dir_all(&private_path)?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&private_path, fs::Permissions::from_mode(0o700))?;
+    fn in_parent(workspaces: &[&Path], parent: &Path) -> Result<Self> {
+        let parent = parent
+            .canonicalize()
+            .context("canonicalize private state parent")?;
+        let private_path = parent.join(format!("soup-wall-pilot-{}", random_hex_128()));
+        for workspace in workspaces {
+            ensure!(
+                !private_path.starts_with(workspace.canonicalize()?),
+                "private per-run configuration directory must be outside the workspace"
+            );
         }
-
+        let builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        let builder = {
+            use std::os::unix::fs::DirBuilderExt;
+            let mut builder = builder;
+            builder.mode(0o700);
+            builder
+        };
+        builder.create(&private_path)?;
         Ok(Self {
             path: private_path,
             disarmed: false,
@@ -893,6 +923,34 @@ pub fn verify_daemon_policy(config: &ValidatedConfig, _daemon_token: &str) -> Re
     Ok(())
 }
 
+// Keep the owned leader unreaped until its process group has been stopped.
+// try_wait() would release its PID before the delayed group KILL, permitting reuse.
+#[cfg(unix)]
+fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    let mut information = unsafe { std::mem::zeroed::<libc::siginfo_t>() };
+    let result = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            child.id(),
+            &mut information,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    if result < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            return Ok(false);
+        }
+        return Err(error);
+    }
+    Ok(information.si_signo != 0)
+}
+
+#[cfg(not(unix))]
+fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    child.try_wait().map(|status| status.is_some())
+}
+
 #[cfg(unix)]
 #[allow(dead_code)]
 async fn terminate_process_group(pgid: u32, grace: Duration) {
@@ -1037,7 +1095,15 @@ pub fn write_per_process_mcp_config(
         let mut env_obj = serde_json::Map::new();
         env_obj.insert(
             "AGENTFW_WORKSPACE".to_string(),
-            serde_json::Value::String(config.workspace_path.display().to_string()),
+            serde_json::Value::String(
+                if server_id == GIT_SERVER_ID {
+                    &config.git_workspace_path
+                } else {
+                    &config.workspace_path
+                }
+                .display()
+                .to_string(),
+            ),
         );
         if !config.allow_command_fixtures && config.mock_daemon_token.is_none() {
             ensure!(
@@ -1197,7 +1263,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     if config.ask_wait_seconds > 0 {
         crate::pilot_approval::preflight(&config)?;
     }
-    let guard = PrivateDirGuard::new(&config.workspace_path)?;
+    let guard =
+        PrivateDirGuard::for_workspaces(&[&config.workspace_path, &config.git_workspace_path])?;
 
     // Discover live daemon instance or mock for testing
     let daemon_token = if let Some(ref mock) = config.mock_daemon_token {
@@ -1350,14 +1417,23 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             run.id()
         );
     }
-    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
-    let child_pid = child.id();
-
-    // Supervise process with deadline, signal interception, and daemon heartbeat
+    // Install interception before creating the separate host process group.
+    // A TERM during runtime/signal initialization must never strand a live host.
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("create supervisor runtime")?;
+
+    #[cfg(unix)]
+    let (mut sigterm, mut sigint) = {
+        let _entered = rt.enter();
+        (
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?,
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,
+        )
+    };
+    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
+    let child_pid = child.id();
 
     let timeout = config.timeout;
     let home_path = config.home_path.clone();
@@ -1370,21 +1446,17 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
         interval.tick().await;
 
-        #[cfg(unix)]
-        let mut sigterm =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
-
         loop {
             // Check if child has exited
-            match child.try_wait() {
-                Ok(Some(status)) => {
+            match owned_host_exited(&mut child) {
+                Ok(true) => {
                     terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return Ok(status);
+                    return child.wait().context("reap owned host after group cleanup");
                 }
-                Ok(None) => {}
-                Err(e) => {
-                    terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return Err(anyhow::anyhow!("error waiting for child: {}", e));
+                Ok(false) => {}
+                Err(error) => {
+                    // Ownership could not be established; never signal a potentially reused PID.
+                    return Err(anyhow::anyhow!("cannot establish owned host exit state: {}", error));
                 }
             }
 
@@ -1398,7 +1470,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     let _ = child.wait();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
-                _ = tokio::signal::ctrl_c() => {
+                _ = async {
+                    #[cfg(unix)]
+                    sigint.recv().await;
+                    #[cfg(not(unix))]
+                    let _ = tokio::signal::ctrl_c().await;
+                } => {
                     terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
@@ -1409,11 +1486,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                 }
                 _ = async {
                     #[cfg(unix)]
-                    if let Some(ref mut st) = sigterm {
-                        st.recv().await;
-                    } else {
-                        futures_util::future::pending::<()>().await;
-                    }
+                    sigterm.recv().await;
                     #[cfg(not(unix))]
                     futures_util::future::pending::<()>().await;
                 } => {
@@ -1496,10 +1569,48 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn private_state_parent_cannot_alias_either_selected_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let filesystem = root.path().join("filesystem");
+        let git = root.path().join("git");
+        fs::create_dir(&filesystem).unwrap();
+        fs::create_dir(&git).unwrap();
+        for (i, workspace) in [&filesystem, &git].iter().enumerate() {
+            let alias = root.path().join(format!("alias-{i}"));
+            std::os::unix::fs::symlink(workspace, &alias).unwrap();
+            assert!(PrivateDirGuard::in_parent(&[&filesystem, &git], &alias).is_err());
+            assert!(fs::read_dir(workspace).unwrap().next().is_none());
+        }
+        let guard = PrivateDirGuard::in_parent(&[&filesystem, &git], root.path()).unwrap();
+        let path = guard.path.clone();
+        drop(guard);
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn completed_host_remains_waitable_until_owned_group_cleanup() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 17"])
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !owned_host_exited(&mut child).unwrap() {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // A second observation must still see the same waitable child.
+        assert!(owned_host_exited(&mut child).unwrap());
+        assert_eq!(child.wait().unwrap().code(), Some(17));
+    }
+
     #[test]
     fn test_missing_claude_executable_fails() {
         let temp = tempfile::tempdir().unwrap();
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude: temp.path().join("nonexistent_claude"),
             workspace: temp.path().to_path_buf(),
             home: None,
@@ -1565,7 +1676,10 @@ mod tests {
         let test_token = crate::token::generate();
         let test_instance_id = crate::token::generate();
 
+        let git_workspace = temp.path().join("separate-git");
+        fs::create_dir(&git_workspace).unwrap();
         let args = PilotLaunchArgs {
+            git_workspace: Some(git_workspace.clone()),
             claude,
             workspace: workspace.clone(),
             home: Some(temp.path().to_path_buf()),
@@ -1631,6 +1745,10 @@ mod tests {
         let mcp_data: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&mcp_config).unwrap()).unwrap();
         let fs_env = &mcp_data["mcpServers"]["filesystem"]["env"];
+        assert_eq!(
+            mcp_data["mcpServers"]["git"]["env"]["AGENTFW_WORKSPACE"],
+            git_workspace.canonicalize().unwrap().display().to_string()
+        );
         assert_eq!(fs_env["AGENTFW_HOST_SESSION"], "test-session-123");
         assert_eq!(fs_env["AGENTFW_NATIVE_LIVENESS"], "true");
         assert_eq!(
@@ -1655,6 +1773,7 @@ mod tests {
         fs::write(&git_profile, r#"{"tools":[{"name":"shared_tool"}]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1694,6 +1813,7 @@ mod tests {
         fs::write(&git_profile, r#"{"command":"/bin/echo","args":["world"]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1736,6 +1856,7 @@ mod tests {
         fs::create_dir_all(&git_dir).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1778,6 +1899,7 @@ mod tests {
         fs::write(&git_profile, r#"{"command":"/bin/echo","args":["world"]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,

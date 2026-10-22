@@ -1,0 +1,52 @@
+{
+  "all_python": {
+    "failed": 0,
+    "note": "59 pre-existing environment/platform/optional skips plus 3 unchanged Linux /proc controls explicitly inapplicable on macOS; Linux CI retains them.",
+    "run": 1079,
+    "skipped": 62
+  },
+  "bench_python": {
+    "failed": 0,
+    "run": 66,
+    "skipped": 19
+  },
+  "docs": "Checked 236 Markdown files and 895 local links; 0 errors.",
+  "first_linux_run": 39806646480,
+  "fourth_linux_run": 39813740053,
+  "launcher_tests": 9,
+  "linux_acceptance": "ten_actual_host_cases_passed_at_78e5658; final_candidate_requalified_by_ready_CI",
+  "logs_sha256": {
+    "all-python.log": "e916d3fedbe3246f39e686da606fe501d60df277648a7128af9279daba4dbe4f",
+    "bench-python.log": "58c163c3bfa3ca945f19838a4aab7f56e397c3b4a5dde1ae1f102bad694ddc9a",
+    "docs.log": "ea4d231572b278aabfa591725622ef64d539108d47fb696ab3b63c91c3a77768",
+    "final-python-controls.log": "4a313b5f5cb2bcf1bbe1d6799a1bfd5c91f425193131fde95d7c840406a87f87",
+    "focused-clippy.log": "aaa6fe9fbb372797f8951eccb323a78aed61f116c3067aa76e2d2ddac16d6b9e",
+    "focused-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "focused-launcher-tests.log": "ebb17ad7d8129cba939e3d60f24318e292a1937a9dde7c763d3382f3bbfd5a4f",
+    "focused-preparation.log": "f01bc14062bd949d258f9cf075827ff0e843a6ddbd80cf91160333edb0ed8314",
+    "focused-python.log": "ad2a83bd0a5d81a63bc90ab6e0b497ef3369b02708a22170f21456e74149bf40",
+    "focused-workflows.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ready-local-tests.log": "d6ab35b4181caa7b1227a8de6f13e567b7964ed053f67990b97ac03ffb6a5305"
+  },
+  "no_live_model_effectiveness_claim": true,
+  "preparation_controls": 7,
+  "prepared_run_python_controls": 12,
+  "second_linux_run": 39809079159,
+  "source_sha256": {
+    "crates/agentfw/src/pilot_launcher.rs": "94c7c2b1aa90304dda397e1d62042290384df8d2d91acf2aab0922f16c3cd76b",
+    "scripts/pilot-run.py": "75c57c1e2c990cc3f62151b96841ef6ac4fd54aa75ab090fd5aba83bf9e74f65",
+    "scripts/prepare-installed-pilot.py": "ade16b25f804660e234be471adaebdf0ebdcb87acdffcff2afe3df13c8c6d5a5",
+    "scripts/qualify-prepared-pilot-run.py": "d14b25e8c301f14f4c47ec8ed02182954b64f440236e478682d2d08d14f98728"
+  },
+  "status": "local_and_actual_linux_checks_passed_ready_qualification_pending",
+  "strict_clippy": "passed_zero_warnings",
+  "task": "SOU-116",
+  "third_linux_run": 39810595040,
+  "windows_compiler_probe": "unused_mut fixed by cfg-specific builder mutation; Windows requalification pending",
+  "workspace_tests": {
+    "failed": 0,
+    "ignored": 12,
+    "note": "Existing optional/helper/latency/model-dependent tests remain ignored; macOS sandbox emits Xcode cache-write diagnostics.",
+    "passed": 1636
+  }
+}

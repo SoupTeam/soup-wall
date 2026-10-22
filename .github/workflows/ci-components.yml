@@ -1586,6 +1586,7 @@ jobs:
       - name: Focused preparation boundaries
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_run.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
       - name: Verify disposable runner administration boundary before building
@@ -1813,6 +1814,15 @@ jobs:
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou111-qualification"
+      - name: Qualify owned prepared-selection launch and failures with the original host
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v strace
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          python3 -B scripts/qualify-prepared-pilot-run.py --selection "$selection" \
+            --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
+            --output "$RUNNER_TEMP/sou116-qualification"
       - name: Remove only this job's sandbox permission and executable
         if: always()
         shell: bash
@@ -1843,6 +1853,7 @@ jobs:
             ${{ runner.temp }}/sou111-assets/reused.json
             ${{ runner.temp }}/sou111-assets/first-failure.json
             ${{ runner.temp }}/sou111-assets/recovered.json
+            ${{ runner.temp }}/sou116-qualification/report.json
             ${{ runner.temp }}/sou111-qualification/report.json
             ${{ runner.temp }}/sou111-qualification/filesystem-sandbox.log
             ${{ runner.temp }}/sou111-qualification/git-sandbox.log

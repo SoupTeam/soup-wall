@@ -2,7 +2,9 @@
 
 `scripts/prepare-installed-pilot.py` prepares the accepted original filesystem
 and Git server profiles and writes a `sw-installed-pilot-selection/2` manifest.
-It does **not** start Agent, Claude or the enforcing daemon. Only a separate
+It does **not** start Agent, Claude or the enforcing daemon. To launch a completed
+prepared selection with an owned enforcing daemon, use the explicit
+[prepared pilot-run entry point](PREPARED_PILOT_RUN.md). Only a separate
 successful [installed-pilot qualification](INSTALLED_PILOT_QUALIFICATION.md)
 can establish the selected runtime's observed behavior.
 
