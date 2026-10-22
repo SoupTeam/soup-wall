@@ -40,7 +40,7 @@ def identity(env):
             and re.fullmatch(r'[A-Za-z0-9_-]{1,150}', job), 'invalid_job_identity')
     suffix = f'{run}-{attempt}-{hashlib.sha256(job.encode()).hexdigest()[:16]}'
     name = 'soup-wall-ci-bwrap-' + suffix
-    return name, Path('/opt') / name, Path('/etc/apparmor.d') / name
+    return name, Path('/usr/lib') / name, Path('/etc/apparmor.d') / name
 
 
 def guard():
@@ -75,7 +75,17 @@ def regular(path, owner=None):
 def root_parent(path):
     info = path.lstat()
     require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022,
-            'unsafe_root_directory')
+            f'unsafe_root_directory:{path}:uid={info.st_uid}:mode={stat.S_IMODE(info.st_mode):04o}')
+
+
+def check_environment():
+    _, directory, policy = guard()
+    observed = {str(path): {'uid': path.lstat().st_uid,
+                           'mode': f'{stat.S_IMODE(path.lstat().st_mode):04o}'}
+                for path in (Path('/opt'), directory.parent, policy.parent)}
+    print(json.dumps({'disposable_runner_parents': observed}))
+    root_parent(directory.parent)
+    root_parent(policy.parent)
 
 
 def sudo(*args, data=None, check=True):
@@ -247,6 +257,7 @@ def cleanup(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
+    sub.add_parser('check')
     prepare = sub.add_parser('install')
     prepare.add_argument('--source', type=Path, required=True)
     prepare.add_argument('--sha256', required=True)
@@ -255,7 +266,10 @@ def main():
     remove.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()
     try:
-        (install if args.command == 'install' else cleanup)(args)
+        if args.command == 'check':
+            check_environment()
+        else:
+            (install if args.command == 'install' else cleanup)(args)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)
         return 1

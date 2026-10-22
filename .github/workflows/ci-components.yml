@@ -1523,6 +1523,10 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
+      - name: Verify disposable runner administration boundary before building
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 -B scripts/ci_bwrap_userns.py check
       - name: Build accepted selected runtimes without global installation
         shell: bash
         run: |

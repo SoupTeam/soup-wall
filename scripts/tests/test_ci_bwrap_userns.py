@@ -31,7 +31,7 @@ class ProvisioningBoundary(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(RuntimeError):
                 ci.identity(good | change)
         name, directory, profile = ci.identity(good)
-        self.assertEqual(directory.parent, Path('/opt'))
+        self.assertEqual(directory.parent, Path('/usr/lib'))
         self.assertEqual(profile.parent, Path('/etc/apparmor.d'))
         self.assertEqual(profile.name, name)
         self.assertNotEqual(ci.identity(good | {'GITHUB_RUN_ATTEMPT': '3'})[0], name)
