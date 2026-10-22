@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+import traceback
 
 import importlib.util
 
@@ -288,7 +289,14 @@ def qualify(args, private, report):
                     "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
                 cases.append(row)
                 sibling = other = None
+                if kind == "filesystem" and case == "approve":
+                    # Start both actual hosts before either pending lease is
+                    # consumed by the other host's startup. Deadlines stay fixed.
+                    row["stage"] = "start_independent_run"
+                    sibling = Pilot(setup, private / "independent-run", classifier, kind)
+                    active.append(sibling)
                 if case != "default":
+                    row["stage"] = "wait_primary"
                     waiting = pilot.waiting()
                     row.update(pending=True, binding_sha256=waiting["binding_sha256"])
                     require(pilot.undispatched(), "dispatch_before_operator_decision")
@@ -297,21 +305,25 @@ def qualify(args, private, report):
                         row["allow_peer_while_pending"] = True
                     if case in ("approve", "reject"):
                         # Exact binding alone is insufficient without inspection.
+                        row["stage"] = "inspection_required_control"
                         pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
+                        row["stage"] = "inspect_primary"
                         pilot.inspect(waiting)
                         if kind == "filesystem" and case == "approve":
-                            sibling = Pilot(setup, private / "independent-run", classifier, kind)
-                            active.append(sibling); other = sibling.waiting()
+                            row["stage"] = "wait_independent_pending"
+                            other = sibling.waiting()
                             pilot.operator("approve", other["pending_id"], "--binding", other["binding_sha256"], success=False)
                             sibling.operator("reject", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
                             require(sibling.undispatched(), "cross_run_decision_dispatched")
                         pilot.operator("approve", waiting["pending_id"], "--binding", "0" * 64, success=False)
+                        row["stage"] = "metadata_tamper_control"
                         saved = pilot.metadata.read_bytes()
                         altered = json.loads(saved); altered["host_session"] = "untrusted-label"
                         pilot.metadata.write_text(json.dumps(altered))
                         pilot.operator("list", success=False)
                         pilot.metadata.write_bytes(saved)
                         require(pilot.undispatched(), "target_dispatched_before_exact_decision")
+                        row["stage"] = "exact_decision"
                         pilot.operator(case, waiting["pending_id"], "--binding", waiting["binding_sha256"])
                         row["decision_submitted"] = case
                         pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
@@ -412,7 +424,9 @@ def main():
         with tempfile.TemporaryDirectory(prefix="sou112-private-") as directory:
             qualify(args,Path(directory),report)
     except Exception as error:
-        report.update(status="failed", error_type=type(error).__name__)
+        report.update(status="failed", error_type=type(error).__name__,
+            error_location=[{"function": frame.name, "line": frame.lineno}
+                for frame in traceback.extract_tb(error.__traceback__)[-4:]])
         if isinstance(error,ValueError):
             report["error"] = str(error)
     BASE.write(args.output / "qualification.json",report)
