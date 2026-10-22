@@ -30,6 +30,12 @@ class SharedComponents(unittest.TestCase):
         self.assertEqual(len(actual), 43)
         self.assertIn("gateway-sdk--official-sdk", actual)
         self.assertIn("mcp-https-post--linux-https-post", actual)
+        self.assertIn("mcp-real-filesystem--native-ubuntu-2404", actual)
+
+    def test_existing_filesystem_lane_keeps_its_qualified_runner(self):
+        source = blocks((ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text())
+        self.assertIn("runs-on: ubuntu-22.04", source["required-linux-sandbox-and-real-host"])
+        self.assertIn("runs-on: ubuntu-24.04", source["native-ubuntu-2404"])
 
     def test_runtime_steps_and_platform_controls_are_not_replaced_by_summaries(self):
         central = blocks(TARGET.read_text())
