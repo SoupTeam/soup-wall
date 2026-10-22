@@ -41,7 +41,7 @@ require, sha, write = BASE.require, BASE.sha, BASE.write
 FILES = ("crates/agentfw/src/doctor.rs", "crates/agentfw/src/pilot_doctor.rs",
          "crates/agentfw/src/pilot_doctor/io.rs", "crates/agentfw/src/pilot_doctor/incident.rs",
          "crates/agentfw/src/support_bundle.rs", "scripts/verify-sou114-pilot-doctor.py")
-CASES = ("healthy-json", "healthy-text", "recorded-refusal", "changed-asset", "changed-classifier", "missing-incident",
+CASES = ("healthy-json", "healthy-text", "recorded-refusal", "changed-asset", "changed-classifier", "unverifiable-agent", "missing-incident",
          "stale-incident", "mismatched-incident", "malformed-input", "oversized-input",
          "symlink-input", "fifo-input", "public-input", "existing-output", "symlink-output",
          "workspace-output", "daemon-unavailable")
@@ -285,7 +285,7 @@ def qualify(args, private, output, evidence, report, secrets):
             for file in staged.iterdir(): scan(file.read_bytes(), secrets)
             os.rename(staged, output / name)
             report["support_exports"].append(verified)
-        def doctor(label, extra=(), code=0, reason=None, text=False):
+        def doctor(label, extra=(), code=0, reason=None, text=False, selected_agent=None):
             require(label in CASES, "unknown_diagnostic_case")
             print(json.dumps({"format":"sw-pilot-doctor-progress/1", "case":label, "status":"starting"}), flush=True)
             before = {p: p.read_bytes() for p in baseline}
@@ -293,8 +293,11 @@ def qualify(args, private, output, evidence, report, secrets):
             started = time.monotonic()
             report["current_case"] = label
             trace = private / (label + ".syscalls.private")
+            selected_command = common.copy()
+            if selected_agent is not None:
+                selected_command[selected_command.index("--agent") + 1] = str(selected_agent)
             result = run_observed([str(selected["strace"]), "-f", "-qq", "-s", "8192", "-e", "trace=process", "-o", str(trace), "--",
-                *common, *([] if text else ["--json"]), *extra], private, env, trace, evidence, label)
+                *selected_command, *([] if text else ["--json"]), *extra], private, env, trace, evidence, label)
             observed = trace.read_text()
             witness = process_witness(observed, installed_bin)
             scan(result.stdout + result.stderr, secrets)
@@ -367,6 +370,12 @@ def qualify(args, private, output, evidence, report, secrets):
             changed_classifier = doctor("changed-classifier", code=3, reason="pilot_classifier_pin_mismatch_or_unavailable")
             require(changed_classifier["pilot"]["setup"] == "failed", "classifier_drift_reported_ready")
             classifier.write_bytes(original_classifier)
+            agent_alias = private / "selected-agent-alias"
+            agent_alias.symlink_to(installed_bin)
+            unverifiable = doctor("unverifiable-agent", selected_agent=agent_alias, code=3, reason="pilot_binary_unverifiable")
+            require(unverifiable["pilot"]["setup"] == "failed" and any(
+                c["id"] == "pilot_runtime" and c["outcome"] == "unknown" and c["reason_code"] == "pilot_runtime_identity_unverifiable"
+                for c in unverifiable["pilot"]["checks"]), "partial_identity_reported_as_current_match")
             # Synthetic negative evidence tests the reader; it is never a positive
             # original-daemon substitute or represented as authenticated history.
             incident_file = private / "incident.jsonl"

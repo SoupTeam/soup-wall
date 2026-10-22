@@ -440,6 +440,14 @@ pub(crate) async fn diagnose(
             .agent
             .as_deref()
             .and_then(|p| crate::doctor::hash_selected_file(p, 512 * 1024 * 1024).ok());
+        report.checks.push(if let Some(digest) = &binary {
+            digest_check("pilot_binary", "private_selected_agent_binary", "selected_binary_identity", digest.clone(),
+                "The explicitly selected Agent binary was descriptor-hashed; authenticated current status must match this identity.")
+        } else {
+            check("pilot_binary", "private_selected_agent_binary", Outcome::Failed, "pilot_binary_unverifiable",
+                "The selected Agent binary cannot be safely verified within the file bounds.",
+                "Select the absolute private managed Agent executable; inspect its reviewed pin without following a link or adopting a PATH alias.")
+        });
         let expected = Expectations {
             config_sha256: Some(protection_status::config_digest(cfg)),
             policy_sha256: policy,
@@ -447,7 +455,13 @@ pub(crate) async fn diagnose(
             registry_sha256: expected_registry.clone(),
             ..Default::default()
         };
-        let observed = if let Some(token) = token.filter(|t| !t.trim().is_empty()) {
+        let identities_complete = expected.config_sha256.is_some()
+            && expected.policy_sha256.is_some()
+            && expected.binary_sha256.is_some()
+            && expected.registry_sha256.is_some();
+        let observed = if !identities_complete {
+            Err("pilot_selected_pins_incomplete")
+        } else if let Some(token) = token.filter(|t| !t.trim().is_empty()) {
             protection_status::query(cfg, token.trim(), &expected, Duration::from_secs(2)).await
         } else {
             Err("status_token_unavailable")
@@ -463,10 +477,16 @@ pub(crate) async fn diagnose(
                     "Use the existing operator lifecycle workflow if activation is needed; doctor never starts or restarts the daemon.");
                 c.sha256=Some(sha(snapshot.runtime.instance.as_bytes())); report.checks.push(c);
             }
-            Err(code) => report.checks.push(check("pilot_runtime","authenticated_status_nonce_and_bearer",Outcome::Unknown,
-                if code=="status_identity_mismatch" {"pilot_runtime_identity_mismatch"} else {"pilot_daemon_unavailable_or_unverifiable"},
-                "No matching authenticated current-instance observation is available; an open port or a local record is insufficient.",
-                "Run agentfw protection-status --query-only in the selected installation; inspect lifecycle status privately before operator recovery.")),
+            Err(code) => report.checks.push(if code == "pilot_selected_pins_incomplete" {
+                check("pilot_runtime", "selected_identity_comparison_prerequisites", Outcome::Unknown,
+                    "pilot_runtime_identity_unverifiable", "Selected binary, policy or registry identities are incomplete; no current-instance match is claimed.",
+                    "Review the failed private identity checks before retrying the diagnostic; do not adopt a listener or replace a reviewed pin to accept drift.")
+            } else {
+                check("pilot_runtime","authenticated_status_nonce_and_bearer",Outcome::Unknown,
+                    if code=="status_identity_mismatch" {"pilot_runtime_identity_mismatch"} else {"pilot_daemon_unavailable_or_unverifiable"},
+                    "No matching authenticated current-instance observation is available; an open port or a local record is insufficient.",
+                    "Run agentfw protection-status --query-only in the selected installation; inspect lifecycle status privately before operator recovery.")
+            }),
         }
     } else {
         report.checks.push(check("pilot_runtime", "validated_disk_config", Outcome::Unknown,

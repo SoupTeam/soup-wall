@@ -285,6 +285,7 @@ active host-call execution remain unknown in every report.
 | `installed_pilot_not_active` | Inspect lifecycle/enforcement configuration and use the existing operator activation workflow |
 | `pilot_daemon_unavailable_or_unverifiable`, `pilot_runtime_identity_mismatch` | Query protection status and inspect lifecycle ownership; do not adopt an occupied port |
 | `pilot_config_unavailable` | Inspect the private selected config before comparing current runtime identity; installed assets alone cannot establish readiness |
+| `pilot_binary_unverifiable`, `pilot_runtime_identity_unverifiable` | Verify all selected binary/policy/registry identities first; partial status comparisons cannot establish a selected current-instance match |
 | `recorded_classifier_uncertainty` | Review original schema and reviewed classifier; use only the supported intended Ask workflow |
 | `recorded_native_policy_refusal` | Review exact request and current action/resource policy privately; do not weaken the policy |
 | `recorded_result_withheld` | Review result policy and independent effect witnesses; do not force release or claim rollback |
