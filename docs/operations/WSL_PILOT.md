@@ -92,6 +92,11 @@ the actual installed run; this increment does not certify those behaviors.
 
 ## Current evidence boundary
 
+The [October 22 current-main refresh](evidence/wsl/OCT22_REFRESH.md) records a
+new 12/12 run after native literal-argument handling, pilot preparation and
+Windows onboarding were integrated, with exact source/runtime identities and
+the preceding download-digest failure preserved separately.
+
 The [retained actual WSL2 qualification](evidence/wsl/QUALIFICATION.md) records
 the first missing-library failure and a complete 12/12 useful/refusal/recovery
 run, including the independent port control and unchanged settings. Its source

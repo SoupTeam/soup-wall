@@ -2,6 +2,16 @@
   "format": "sw-wsl-evidence/1",
   "scope": "actual-wsl2-x86_64-scripted-provider",
   "archives": {
+    "installed-wsl2-6e19343.zip": {
+      "bytes": 128105,
+      "sha256": "a9c2ed0b3286556d44a4866325da3b70ccdf67298dc3605324f6c37758cca80d",
+      "files": 68
+    },
+    "python-download-failure-0b34160.zip": {
+      "bytes": 3771,
+      "sha256": "f7d75eed7e687b241ee011cd2e118e912ed9801e2fab8b66b3eca60be5ba3e09",
+      "files": 2
+    },
     "missing-elf-prerequisites.zip": {
       "bytes": 3836,
       "sha256": "5d38cf476124138bd9103ed2219aabcdd10e3ca965bd57d17ae6030205db7d9f",
