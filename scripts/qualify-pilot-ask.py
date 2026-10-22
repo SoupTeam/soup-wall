@@ -1,0 +1,481 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""SOU-112: actual installed two-terminal launcher workflow; no paid provider.
+
+Operator decisions are explicit same-user CLI actions in an owned harness, not
+proof of physical human presence. Raw arguments, grants and syscall traces stay
+in private temporary storage. Kernel effects and host-correlated results are
+independent of approval files and CLI success messages.
+"""
+from __future__ import annotations
+import argparse
+import json
+import os
+import re
+from pathlib import Path
+import signal
+import subprocess
+import tempfile
+import time
+import uuid
+import traceback
+
+import importlib.util
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load(name, filename):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+LAUNCH = load("sou112_original_launcher", "qualify-pilot-launcher.py")
+SELECTED = load("sou112_selected_witness", "verify-sou105-selected-approval.py")
+BASE, require = LAUNCH.BASE, LAUNCH.require
+
+
+def diagnostic(text):
+    # Export a finite code, never arbitrary host/argument/token output.
+    for marker, code in [
+        ("collector authority failed", "authority_verification"),
+        ("same agentfw executable", "collector_image"),
+        ("accepted two-server", "classifier_identity"),
+        ("failed pinned", "asset_identity"),
+        ("selected executable or library changed", "asset_identity"),
+        ("policy mismatch", "policy_identity"),
+        ("approval/liveness/registry", "daemon_prerequisites"),
+        ("native.approval and native.liveness", "daemon_prerequisites"),
+        ("owned, private", "private_permissions"),
+        ("not owned by a pilot launcher", "launcher_role"),
+        ("not sealed", "manifest_seals"),
+        ("sealed selection", "manifest_identity"),
+        ("executable differs", "launcher_executable"),
+        ("wrong or restarted daemon", "daemon_instance"),
+        ("daemon refused", "daemon_auth"),
+        ("not owned by this live pilot", "run_scope"),
+        ("binding differs", "exact_binding"),
+        ("before approval", "inspection_required"),
+        ("cleanup", "cleanup"),
+        ("unexpected argument", "cli_argument_parsing"),
+        ("open bounded operator input", "operator_input_missing"),
+        ("pilot launcher is no longer live", "launcher_exited"),
+        ("No such file or directory", "owned_file_missing"),
+        ("timed out", "deadline"),
+    ]:
+        if marker in text:
+            return code
+    return "unclassified"
+
+
+def until(check, label, seconds=20):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        result = check()
+        if result:
+            return result
+        time.sleep(.05)
+    raise ValueError(label)
+
+
+def stop(process):
+    if process and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill(); process.wait(timeout=5)
+
+
+class Pilot:
+    def __init__(self, setup, root, classifier, kind, enabled=True):
+        self.setup, self.root, self.kind = setup, root, kind
+        root.mkdir(mode=0o700)
+        self.session, self.run_id = str(uuid.uuid4()), None
+        self.trace = root / "syscalls.private"
+        self.model = BASE.DEMO.ScriptedModel([])
+        self.offered, self.result_times = set(), {}
+        target = ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}) if kind == "filesystem" else (
+            "git", "git_show", {"repo_path": "/workspace", "revision": setup.head_before})
+        self.primary = target
+        self.peer = ("filesystem", "read_text_file", {"path": "/workspace/notes.txt"})
+
+        def next_step(body):
+            require(len(self.model.requests) <= 32, "owned_provider_request_bound")
+            names = {tool.get("name") for tool in body.get("tools", [])}
+            if not {"mcp__filesystem__read_text_file", "mcp__git__git_show"}.issubset(names):
+                return [{"type": "text", "text": "Owned auxiliary request."}]
+            for message in body.get("messages", []):
+                blocks = message.get("content", [])
+                for block in blocks if isinstance(blocks, list) else []:
+                    if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in self.offered:
+                        logical = block["tool_use_id"].removeprefix("toolu_pilot_ask_")
+                        self.result_times.setdefault(logical, time.time_ns() // 1_000_000)
+                        self.model.results[logical] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
+            if "primary" not in self.model.results:
+                proposals = [("primary", self.primary)]
+                if kind == "filesystem":
+                    proposals.append(("allow-peer", self.peer))
+            elif "followup" not in self.model.results:
+                proposals = [("followup", self.peer)]
+            else:
+                return [{"type": "text", "text": "Owned operator continuation completed."}]
+            result = []
+            for identifier, (server, tool, arguments) in proposals:
+                wire_id = "toolu_pilot_ask_" + identifier
+                require(wire_id not in self.offered,"host_request_would_have_been_reissued")
+                self.offered.add(wire_id)
+                result.append({"type": "tool_use", "id": wire_id, "name": f"mcp__{server}__{tool}", "input": arguments})
+            return result
+
+        self.model.next = next_step
+        env = dict(setup.env, ANTHROPIC_BASE_URL=self.model.url, ANTHROPIC_API_KEY="owned-loopback-only",
+            HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
+        command = [str(setup.selected["strace"]), "-f", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
+            "-o", str(self.trace), str(setup.binary), "pilot-launch", "--claude", str(setup.selected["claude"]),
+            "--workspace", str(setup.workspace), "--fs-profile", str(setup.profiles["filesystem"]),
+            "--git-profile", str(setup.profiles["git"]), "--home", str(setup.home), "--policy", str(setup.policy),
+            "--classifier", str(classifier), "--host-session", self.session, "--timeout-seconds", "90", "--json"]
+        if enabled:
+            command += ["--ask-wait-seconds", "25"]
+        self.out = (root / "host.stdout.private").open("wb")
+        self.err = (root / "host.stderr.private").open("wb")
+        self.process = subprocess.Popen(command, cwd=root, env=env, stdout=self.out, stderr=self.err, start_new_session=True)
+        self.witness = BASE.ProcessWitness(self.process.pid)
+        if enabled:
+            def identify():
+                directory = setup.home / "pilot-runs"
+                for path in directory.glob("*/run.json"):
+                    try:
+                        record = json.loads(path.read_text())
+                    except (OSError,ValueError):
+                        continue  # Bounded publication retry, never authority.
+                    if record["host_session"] == self.session:
+                        self.run_id, self.metadata, self.launcher_pid = record["run_id"], path, record["launcher_pid"]
+                        self.launcher_start = record["launcher_start"]
+                        require(all(re.fullmatch(r"[0-9a-f]{64}",v) for v in record["authorities"].values()), "run_metadata_contains_non_digest_authority")
+                        require((setup.home / "native-token").read_text().strip() not in path.read_text(), "run_metadata_leaked_native_token")
+                        return True
+                if self.process.poll() is not None:
+                    self.err.flush()
+                    raise ValueError("launcher_before_publication_" + diagnostic((root / "host.stderr.private").read_text()[-16000:]))
+            try:
+                until(identify, "run_metadata_missing", seconds=90)
+            except Exception:
+                self.close()
+                raise
+
+    def operator(self, *words, success=True, without_home=False):
+        command = [str(self.setup.binary), "pilot-approval", "--home", str(self.setup.home), "--run", self.run_id, *words]
+        env = dict(self.setup.env)
+        if without_home:
+            env.pop("HOME", None)
+        result = subprocess.run(command, cwd=self.root, env=env, capture_output=True, text=True, timeout=10)
+        require((result.returncode == 0) == success, "operator_outcome_" + words[0] + "_" + diagnostic(result.stderr))
+        return json.loads(result.stdout) if result.returncode == 0 else None
+
+    def waiting(self):
+        def check():
+            rows = self.operator("list")
+            return rows[0] if len(rows) == 1 else None
+        return until(check, "selected_pending_missing")
+
+    def effects(self, peer=False):
+        return SELECTED.trace_effects(self.trace, "filesystem" if peer else self.kind,
+            target="/workspace/notes.txt" if peer else "/workspace/credentials.txt", git_revision=self.setup.head_before)
+
+    def wire_observation(self):
+        # A partial live strace write is inconclusive, never a zero witness.
+        last_error = "incomplete_trace_line"
+        def observe():
+            nonlocal last_error
+            require(self.trace.stat().st_size <= 32 * 1024 * 1024, "wire_trace_bound")
+            text = self.trace.read_text()
+            if not text.endswith("\n"):
+                return None
+            try:
+                return LAUNCH.collector_dispatches(text, self.setup.binary, strict=False)
+            except ValueError as error:
+                code = str(error)
+                last_error = code if re.fullmatch(r"[a-z_]{1,80}", code) else "invalid_trace_encoding"
+                return None
+        try:
+            return until(observe, "complete_original_wire_observation_missing", seconds=2)
+        except ValueError:
+            raise ValueError("original_wire_observation_" + last_error) from None
+
+    def dispatches(self, peer=False):
+        observed = self.wire_observation()
+        _, tool, arguments = self.peer if peer else self.primary
+        fingerprint = BASE.hashlib.sha256(json.dumps(arguments, sort_keys=True,
+            separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        return sum(call["tool"] == tool and call["args_sha256"] == fingerprint
+            for call in observed["calls"])
+
+    def undispatched(self):
+        return self.dispatches() == 0 and self.effects() == 0
+
+    def inspect(self, pending):
+        shown = self.operator("inspect", pending["pending_id"])
+        expected = self.primary[2] if pending["server"] == self.primary[0] and pending["tool"] == self.primary[1] else self.peer[2]
+        require(shown["args"] == expected and shown["binding_sha256"] == pending["binding_sha256"], "inspection_not_exact_original_call")
+
+    def pause_collector(self):
+        observed = self.wire_observation()
+        matches = [pid for pid, server in observed["collector_servers"].items() if server == self.kind]
+        require(len(matches) == 1, "one_kernel_observed_selected_collector_required")
+        pid = matches[0]
+        identity = BASE.ProcessWitness.identity(pid)
+        require(identity is not None, "selected_collector_not_live")
+        os.kill(pid,signal.SIGSTOP)
+        until(lambda: Path(f"/proc/{pid}/stat").read_text().rsplit(")",1)[1].split()[0] in ("T","t"), "collector_not_stopped",seconds=2)
+        require(BASE.ProcessWitness.identity(pid) == identity, "collector_identity_changed")
+
+    def decide(self, pending, decision):
+        self.inspect(pending)
+        self.operator(decision, pending["pending_id"], "--binding", pending["binding_sha256"])
+        return {"expires_at_ms":pending["expires_at_ms"],
+            "decision_submitted_at_ms":time.time_ns() // 1_000_000}
+
+    def finish(self, expected=0):
+        self.process.wait(timeout=100)
+        self.out.close(); self.err.close()
+        require((self.process.returncode == 0) == (expected == 0), "unexpected_launcher_exit_" + diagnostic((self.root / "host.stderr.private").read_text()[-16000:]))
+        if expected == 0:
+            report = json.loads((self.root / "host.stdout.private").read_text())
+            require(report["status"] == "completed" and not Path(report["private_config_dir"]).exists(), "private_host_config_survived")
+        if self.run_id:
+            require(not self.metadata.parent.exists(), "owned_run_metadata_survived")
+        cleanup = self.witness.finish()
+        require(cleanup["all_stopped"], "owned_descendant_survived")
+        return cleanup
+
+    def close(self):
+        if self.process.poll() is None and self.run_id:
+            if BASE.ProcessWitness.identity(self.launcher_pid) == self.launcher_start:
+                try:
+                    os.kill(self.launcher_pid,signal.SIGTERM)
+                    self.process.wait(timeout=10)
+                except (ProcessLookupError,subprocess.TimeoutExpired):
+                    pass
+        stop(self.process)
+        self.model.close()
+        self.out.close(); self.err.close()
+        cleanup = self.witness.finish()
+        for item in cleanup["remaining"]:
+            if BASE.ProcessWitness.identity(item["pid"]) == item["start_time_ticks"]:
+                try:
+                    os.kill(item["pid"], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+
+def qualify(args, private, report):
+    setup = LAUNCH.prepare_original_launch(args, private, report)
+    classifier = private / "classifier.py"
+    classifier.write_bytes((ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py").read_bytes())
+    report.pop("policy_sha256",None)
+    report["classifier_sha256"] = LAUNCH.sha(classifier)
+    (setup.workspace / "credentials.txt").write_text("Owned synthetic inventory: 7 red widgets\n")
+    (setup.workspace / "notes.txt").write_text("Owned useful continuation: 7 red widgets\n")
+    before = BASE.snapshot(setup.workspace)
+    status_before = setup.git("status","--porcelain=v1")
+    cases, active, daemon = [], [], None
+
+    def start_daemon(kind, ttl):
+        nonlocal daemon
+        stop(daemon)
+        sensitive = ", touches_sensitive_path: true" if kind == "filesystem" else ""
+        setup.policy.write_text("agent_policies:\n  - name: owned-read-ask\n    when: { action_class: read_only" + sensitive + " }\n    action: ask\ndefault: allow\n")
+        BASE.write(setup.home / "config.yaml", {"port": setup.port, "enforce": True, "policy": str(setup.policy),
+            "native": {"registry_path": str(setup.registry), "registry_sha256": LAUNCH.sha(setup.registry),
+                "approval": {"ttl_seconds": ttl}, "liveness": {"default_lease_seconds": 4,
+                    "max_lease_seconds": 60, "maintenance_interval_ms": 100}}})
+        with (private / "daemon.private").open("ab") as log:
+            daemon = subprocess.Popen([str(setup.binary), "serve"], cwd=private, env=setup.env, stdout=log, stderr=log)
+        require(BASE.DEMO.wait_healthy(setup.port, daemon), "daemon_not_ready")
+
+    try:
+        for kind in ("git", "filesystem"):
+            for case in ("expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"):
+                start_daemon(kind, 20 if case == "expire" else 30)
+                pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind, enabled=case != "default")
+                active.append(pilot)
+                row = {"profile": kind, "case": case, "configured": case != "default", "pending":False,
+                    "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
+                    "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
+                cases.append(row)
+                sibling = other = None
+                if kind == "filesystem" and case == "approve":
+                    # Start both actual hosts before either pending lease is
+                    # consumed by the other host's startup. Deadlines stay fixed.
+                    row["stage"] = "start_independent_run"
+                    sibling = Pilot(setup, private / "independent-run", classifier, kind)
+                    active.append(sibling)
+                if case != "default":
+                    row["stage"] = "wait_primary"
+                    waiting = pilot.waiting()
+                    row.update(pending=True, binding_sha256=waiting["binding_sha256"])
+                    row["stage"] = "before_decision_wire_check"
+                    require(pilot.undispatched(), "dispatch_before_operator_decision")
+                    if kind == "filesystem" and case == "approve":
+                        until(lambda: pilot.dispatches(peer=True) == 1 and pilot.effects(peer=True) == 1, "Allow_peer_blocked_by_pending_Ask", seconds=5)
+                        row["allow_peer_while_pending"] = True
+                    if case == "approve":
+                        rows = pilot.operator("list", without_home=True)
+                        require(any(r["pending_id"] == waiting["pending_id"] for r in rows),
+                            "explicit_home_depends_on_environment")
+                        row["explicit_home_without_environment"] = True
+                    if case in ("approve", "reject"):
+                        # Exact binding alone is insufficient without inspection.
+                        row["stage"] = "inspection_required_control"
+                        pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
+                        row["stage"] = "inspect_primary"
+                        pilot.inspect(waiting)
+                        if kind == "filesystem" and case == "approve":
+                            row["stage"] = "wait_independent_pending"
+                            other = sibling.waiting()
+                            pilot.operator("approve", other["pending_id"], "--binding", other["binding_sha256"], success=False)
+                            sibling.operator("reject", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
+                            require(sibling.undispatched(), "cross_run_decision_dispatched")
+                        pilot.operator("approve", waiting["pending_id"], "--binding", "0" * 64, success=False)
+                        row["stage"] = "metadata_tamper_control"
+                        saved = pilot.metadata.read_bytes()
+                        altered = json.loads(saved); altered["host_session"] = "untrusted-label"
+                        pilot.metadata.write_text(json.dumps(altered))
+                        pilot.operator("list", success=False)
+                        pilot.metadata.write_bytes(saved)
+                        require(pilot.undispatched(), "target_dispatched_before_exact_decision")
+                        row["stage"] = "exact_decision"
+                        pilot.operator(case, waiting["pending_id"], "--binding", waiting["binding_sha256"])
+                        row["decision_submitted"] = case
+                        pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
+                    elif case in ("cancel","approved_cancel"):
+                        if case == "approved_cancel":
+                            pilot.inspect(waiting)
+                            pilot.pause_collector()
+                            pilot.operator("approve",waiting["pending_id"],"--binding",waiting["binding_sha256"])
+                            require((setup.home / "native-grants" / (waiting["pending_id"]+".json")).is_file(), "unused_grant_not_issued")
+                            require(pilot.undispatched(), "stopped_collector_dispatched")
+                            row.update(approval_issued=True,decision_submitted="approve")
+                        else:
+                            pilot.inspect(waiting)
+                        os.kill(pilot.launcher_pid, signal.SIGTERM)
+                    elif case == "restart":
+                        pilot.inspect(waiting)
+                        start_daemon(kind, 30)
+                        pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
+                    else:
+                        require(case == "expire", "unknown_case")
+                    if case in ("cancel", "approved_cancel", "restart"):
+                        row["stage"] = "finish_cancel_or_restart"
+                        row["cleanup"] = pilot.finish(expected=1)
+                        row["stage"] = "after_cancel_or_restart_wire_check"
+                        require(pilot.undispatched(), "cancelled_run_dispatched")
+                        for extension in ("json","approved","rejected","deciding"):
+                            require(not (setup.home / "native-pending" / (waiting["pending_id"]+"."+extension)).exists(), "unused_pending_file_survived")
+                        require(not (setup.home / "native-grants" / (waiting["pending_id"]+".json")).exists(), "unused_grant_survived")
+                        pilot.operator("approve",waiting["pending_id"],"--binding",waiting["binding_sha256"],success=False)
+                        row.update(passed=True, dispatched=0, kernel_effects=0, released=False)
+                        pilot.close(); active.remove(pilot)
+                        continue
+                # Git's deliberately broad synthetic Ask policy also asks about
+                # the useful follow-up. That separate request needs its own decision.
+                if kind == "git":
+                    def followup_ready():
+                        if "primary" not in pilot.model.results:
+                            return None
+                        rows = pilot.operator("list") if pilot.run_id else []
+                        return next((r for r in rows if r["tool"] == "read_text_file"), None)
+                    if pilot.run_id:
+                        followup = until(followup_ready, "useful_followup_pending_missing")
+                        row["followup_decision"] = pilot.decide(followup, "approve")
+                row["cleanup"] = pilot.finish()
+                if sibling:
+                    require(sibling.operator("list")[0]["pending_id"] == other["pending_id"], "cleanup_cancelled_other_run")
+                    require(sibling.undispatched(), "other_run_dispatched_without_approval")
+                    sibling.decide(other,"reject"); sibling.finish()
+                    require(sibling.undispatched(), "rejected_other_run_dispatched")
+                    sibling.close(); active.remove(sibling)
+                    row["cross_run_isolation_and_cleanup"] = True
+                primary = pilot.model.results.get("primary")
+                require(primary is not None and primary["is_error"] == (case != "approve"), "correlated_primary_result_missing")
+                if case == "approve":
+                    marker = "7 red widgets" if kind == "filesystem" else "committed baseline"
+                    require(marker in json.dumps(primary),"original_approved_result_not_useful")
+                primary_text = json.dumps(primary)
+                row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
+                if case == "expire":
+                    # The relay min(wait, remaining TTL) may report timeout on
+                    # the same boundary the daemon reports expired. Require
+                    # both a native deadline refusal and the ORIGINAL expiry.
+                    elapsed = pilot.result_times["primary"] - waiting["expires_at_ms"]
+                    row["refusal_after_original_expiry_ms"] = elapsed
+                    require(row["primary_refusal_codes"] and elapsed >= 0, "expiry_refusal_not_attributed")
+                followup = pilot.model.results.get("followup")
+                followup_text = json.dumps(followup)
+                row["followup"] = {"present": followup is not None,
+                    "is_error": None if followup is None else followup["is_error"],
+                    "refusal_codes": sorted(set(re.findall(r"native_[a-z_]{1,64}", followup_text)))[:16],
+                    "result_received_at_ms":pilot.result_times.get("followup"),
+                    "diagnostic_flags": [flag for flag in ("concurrent mcp input", "not classified", "timed out", "closed", "withheld") if flag in followup_text.lower()],
+                    "sha256":BASE.hashlib.sha256(followup_text.encode()).hexdigest()}
+                # Default Git Ask is explicitly refused without a wait; its
+                # correlated continuation is another refusal, never a fake Allow.
+                if case != "default" or kind == "filesystem":
+                    require(followup and not followup["is_error"] and "7 red widgets" in json.dumps(followup), "useful_continuation_failed")
+                effects, dispatches = pilot.effects(), pilot.dispatches()
+                require(effects == dispatches == (1 if case == "approve" else 0), "original_request_not_exactly_once_or_refused")
+                audit = [json.loads(line) for line in (setup.home / "audit.jsonl").read_text().splitlines() if line]
+                redemptions = [] if case == "default" else [item for item in audit if
+                    item.get("host_session") == pilot.session and item.get("event") == "native_call"
+                    and ("native_approval_redeemed:" + waiting["pending_id"]) in item.get("reason_codes",[])
+                    ]
+                require(len(redemptions) == (1 if case == "approve" else 0), "approval_redemption_observation_mismatch")
+                row.update(passed=True, dispatched=dispatches, kernel_effects=effects, released=not primary["is_error"],
+                    approved=bool(redemptions), approved_observation="native signed grant redemption audit",
+                    host_result_sha256=BASE.hashlib.sha256(json.dumps(primary,sort_keys=True).encode()).hexdigest(),
+                    trace_sha256=LAUNCH.sha(pilot.trace), raw_arguments_exported=False)
+                pilot.close(); active.remove(pilot)
+        require(before == BASE.snapshot(setup.workspace) and status_before == setup.git("status","--porcelain=v1")
+            and setup.index_before == LAUNCH.sha(setup.workspace / ".git/index")
+            and setup.head_before == setup.git("rev-parse", "HEAD"), "workspace_or_git_state_changed")
+        report.update(status="pass", cases=cases, workspace_unchanged=True, real_host_executed=True,
+            source_after=BASE.source())
+        require(report["source"] == report["source_after"], "source_changed")
+        require(report["classifier_sha256"] == LAUNCH.sha(classifier), "classifier_changed")
+        require(all(LAUNCH.sha(path) == report["selected_sha256"][name] for name,path in setup.selected.items()), "selected_asset_changed")
+        require(all(LAUNCH.sha(path / "profile.json") == report["profiles"][kind]["profile_sha256"] for kind,path in setup.profiles.items()), "profile_changed")
+        require(not list((setup.home / "pilot-runs").iterdir()), "run_metadata_remains")
+    finally:
+        report["cases"] = cases
+        for pilot in active:
+            pilot.close()
+        stop(daemon)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace", "output"):
+        parser.add_argument("--" + name, type=Path, required=True)
+    args = parser.parse_args(); args.output.mkdir(parents=True,exist_ok=True)
+    report = {"contract_version":"sw-pilot-ask-acceptance/1", "status":"incomplete", "real_host_executed":False,
+        "scripted_owned_provider":True, "paid_api_calls":0, "physical_human_presence_proven":False}
+    try:
+        with tempfile.TemporaryDirectory(prefix="sou112-private-") as directory:
+            qualify(args,Path(directory),report)
+    except Exception as error:
+        report.update(status="failed", error_type=type(error).__name__,
+            error_location=[{"function": frame.name, "line": frame.lineno}
+                for frame in traceback.extract_tb(error.__traceback__)[-6:]])
+        if isinstance(error,ValueError):
+            report["error"] = str(error)
+    BASE.write(args.output / "qualification.json",report)
+    print(json.dumps({key:report.get(key) for key in ("status","error","error_type")}))
+    return 0 if report["status"] == "pass" else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

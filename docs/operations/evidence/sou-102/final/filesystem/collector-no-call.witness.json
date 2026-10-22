@@ -1,0 +1,9 @@
+{
+  "kind": "filesystem",
+  "trace_sha256": "8a8fe25fd756d35660b3f7b487fe911ecebf5147a4a4439e0c4771550d790a99",
+  "successful_target_syscalls": [],
+  "effects": 0,
+  "raw_trace_exported": false,
+  "git_revision": null,
+  "pinned_git_commands": []
+}
