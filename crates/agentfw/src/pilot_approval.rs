@@ -742,7 +742,11 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
         args.run.len() == 32 && args.run.bytes().all(|b| b.is_ascii_hexdigit()),
         "invalid pilot run id"
     );
-    let home = args.home.unwrap_or(Config::home_path()?).canonicalize()?;
+    let home = match args.home {
+        Some(home) => home,
+        None => Config::home_path()?,
+    }
+    .canonicalize()?;
     let root = home.join("pilot-runs");
     private_dir(&root)?;
     let dir = root.join(&args.run);

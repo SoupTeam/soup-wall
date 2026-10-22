@@ -30,7 +30,9 @@ After the Linux run, terminal rendering was simplified to ASCII JSON escapes,
 including invisible Unicode and valid astral surrogate pairs. A round-trip
 witness and the full local suite passed for this presentation change. Accepted main was then integrated through
 `a8b732203a9d0690792375109ad4056167f6b84d` (SOU-110), and the full local
-suite passed again. Final PR qualification must still use the current PR candidate: the development dispatch
+suite passed again. Explicit `--home` selection was also made independent of
+the ambient `HOME`; the Linux harness verifies a live run with `HOME` cleared.
+Final PR qualification must still use the current PR candidate: the development dispatch
 above does not substitute for Ready CI, five CodeQL analyses or trusted admission.
 
 See the [two-terminal quickstart](../../PILOT_ASK_WORKFLOW.md).

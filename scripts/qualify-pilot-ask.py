@@ -167,9 +167,12 @@ class Pilot:
                 self.close()
                 raise
 
-    def operator(self, *words, success=True):
+    def operator(self, *words, success=True, without_home=False):
         command = [str(self.setup.binary), "pilot-approval", "--home", str(self.setup.home), "--run", self.run_id, *words]
-        result = subprocess.run(command, cwd=self.root, env=self.setup.env, capture_output=True, text=True, timeout=10)
+        env = dict(self.setup.env)
+        if without_home:
+            env.pop("HOME", None)
+        result = subprocess.run(command, cwd=self.root, env=env, capture_output=True, text=True, timeout=10)
         require((result.returncode == 0) == success, "operator_outcome_" + words[0] + "_" + diagnostic(result.stderr))
         return json.loads(result.stdout) if result.returncode == 0 else None
 
@@ -320,6 +323,11 @@ def qualify(args, private, report):
                     if kind == "filesystem" and case == "approve":
                         until(lambda: pilot.dispatches(peer=True) == 1 and pilot.effects(peer=True) == 1, "Allow_peer_blocked_by_pending_Ask", seconds=5)
                         row["allow_peer_while_pending"] = True
+                    if case == "approve":
+                        rows = pilot.operator("list", without_home=True)
+                        require(any(r["pending_id"] == waiting["pending_id"] for r in rows),
+                            "explicit_home_depends_on_environment")
+                        row["explicit_home_without_environment"] = True
                     if case in ("approve", "reject"):
                         # Exact binding alone is insufficient without inspection.
                         row["stage"] = "inspection_required_control"
