@@ -58,6 +58,33 @@ class DispatchControls(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "forbidden_original_server_dispatch"):
             self.observe(self.trace() + [row])
 
+    def test_failed_exec_cannot_calibrate_original_collector(self):
+        rows = self.trace()
+        rows[0] = rows[0].replace("= 0", "= -1 ENOENT (No such file or directory)")
+        with self.assertRaisesRegex(ValueError, "two_actual_collector_execs_required"):
+            self.observe(rows)
+
+    def test_argument_fingerprint_distinguishes_allow_peer_from_pending_ask(self):
+        rows = self.trace()[:4]
+        fingerprints = []
+        for path in ("/workspace/notes.txt", "/workspace/credentials.txt"):
+            frame = json.dumps({"method": "tools/call", "params": {
+                "name": "read_text_file", "arguments": {"path": path}}}) + "\n"
+            rows.append(f'101 write(9, {json.dumps(frame)}, {len(frame)}) = {len(frame)}')
+            observed = WITNESS.collector_dispatches("\n".join(rows), Path("/owned/agentfw"), strict=False)
+            fingerprints.append(observed["calls"][-1]["args_sha256"])
+        self.assertNotEqual(*fingerprints)
+        self.assertEqual(len(observed["calls"]), 2)
+
+    def test_live_observer_does_not_ignore_incomplete_original_channel(self):
+        for suffix in ('101 write(9, "pending", 7 <unfinished ...>',
+                       '101 write(9, "partial", 7) = 7'):
+            with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                WITNESS.collector_dispatches("\n".join(self.trace() + [suffix]), Path("/owned/agentfw"), strict=False)
+        observed = WITNESS.collector_dispatches("\n".join(self.trace() + [
+            '101 write(12, "http", 4 <unfinished ...>']), Path("/owned/agentfw"), strict=False)
+        self.assertEqual(len(observed["calls"]), 4)
+
     def test_resumed_syscall_preserves_original_complete_dispatch(self):
         rows = self.trace()
         original = rows[-1]

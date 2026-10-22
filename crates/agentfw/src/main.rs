@@ -269,6 +269,8 @@ enum Cmd {
     },
     /// Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
     PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
+    /// Inspect and decide one exact pending call owned by a live pilot run.
+    PilotApproval(agentfw::pilot_approval::OperatorArgs),
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
     Sandbox {
         /// Writable directory exposed as `/workspace`.
@@ -735,6 +737,7 @@ fn main() -> anyhow::Result<()> {
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
         Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
+        Cmd::PilotApproval(args) => agentfw::pilot_approval::operator(args),
         Cmd::McpProfile { home, command } => {
             let home = match home {
                 Some(h) => h,

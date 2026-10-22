@@ -22,6 +22,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,14 +45,14 @@ default: allow
 """
 
 
-def dispatch_witness(text, binary):
+def collector_dispatches(text, binary, strict=True):
     """Decode complete successful writes by actual `agentfw mcp` processes.
 
     Discovery and useful original-server dispatch calibrate this observation.
     Unknown/truncated writes cannot be silently counted as a negative witness.
     """
     lines, pending = [], {}
-    for line in text.splitlines():
+    for line in (row.lstrip() for row in text.splitlines()):
         unfinished = re.match(r"^(\d+)\s+(.*?)\s*<unfinished \.\.\.>$", line)
         resumed = re.match(r"^(\d+)\s+<\.\.\. \w+ resumed>(.*)$", line)
         if unfinished:
@@ -65,15 +66,16 @@ def dispatch_witness(text, binary):
     collectors = set()
     for line in lines:
         match = re.match(r"^(\d+)\s+execve\((\"(?:[^\"\\]|\\.)*\"),\s*\[(.*?)\],", line)
-        if match and ast.literal_eval(match[2]) == str(binary) and '"mcp"' in match[3]:
+        if match and ast.literal_eval(match[2]) == str(binary) and '"mcp"' in match[3] and re.search(r'\)\s*=\s*0\s*$',line):
             collectors.add(int(match[1]))
     require(len(collectors) >= 2, "two_actual_collector_execs_required")
-    require(not any(int(pid) in collectors for pid in pending), "unfinished_collector_syscall")
-    calls, buffers, discoveries = [], {}, set()
+    calls, buffers, discoveries, channels = [], {}, set(), set()
     for line in lines:
-        prefix = re.match(r"^(\d+)\s+(write|writev)\(", line)
+        prefix = re.match(r"^(\d+)\s+(write|writev)\((\d+),", line)
         if not prefix or int(prefix[1]) not in collectors:
             continue
+        if not strict and any(pid == int(prefix[1]) for pid, _ in channels) and (int(prefix[1]),int(prefix[3])) not in channels:
+            continue  # Only the discovery-calibrated original-server channel.
         match = re.match(r"^(\d+)\s+write\((\d+),\s*(\"(?:[^\"\\]|\\.)*\"),\s*(\d+)\)\s*=\s*(\d+)\s*$", line)
         if match:
             pid, fd, count, written = int(match[1]), int(match[2]), int(match[4]), int(match[5])
@@ -102,21 +104,37 @@ def dispatch_witness(text, binary):
                 continue
             if value.get("method") == "tools/list":
                 discoveries.add(pid)
+                channels.add(key)
             if value.get("method") == "tools/call":
                 calls.append({"pid": pid, "fd": fd, "id": value.get("id"),
-                              "tool": value.get("params", {}).get("name")})
+                              "tool": value.get("params", {}).get("name"),
+                              "args_sha256":BASE.hashlib.sha256(json.dumps(value.get("params",{}).get("arguments"),sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()})
     require(discoveries == collectors, "original_discovery_not_observed")
+    require(all(sum(pid == owner for owner,_ in channels) == 1 for pid in collectors), "original_wire_channel_changed")
+    for pid, syscall in pending.items():
+        if int(pid) not in collectors:
+            continue
+        fd = re.match(r"(?:write|writev)\((\d+),",syscall)
+        require(not strict and (fd is None or (int(pid),int(fd[1])) not in channels), "unfinished_collector_syscall")
+    require(all(not buffers.get(channel) for channel in channels), "incomplete_original_wire_frame")
+    require(all((call["pid"],call["fd"]) in channels for call in calls), "unobserved_original_call_channel")
+    return {"collector_pids":sorted(collectors),"discoveries":len(discoveries),"calls":calls,
+            "observer":"independent strace collector write syscalls"}
+
+
+def dispatch_witness(text, binary):
+    observed = collector_dispatches(text,binary)
+    calls = observed["calls"]
     require(sum(c["tool"] == "read_text_file" for c in calls) == 3,
             "three_original_filesystem_dispatches_required")
     require(sum(c["tool"] == "git_status" for c in calls) == 1,
             "original_git_useful_dispatch_required")
     require(len(calls) == 4 and not any(c["tool"] == "git_reset" for c in calls),
             "forbidden_original_server_dispatch")
-    return {"collector_pids": sorted(collectors), "discoveries": len(discoveries), "calls": calls,
-            "forbidden_dispatches": 0, "observer": "independent strace collector write syscalls"}
+    return dict(observed,forbidden_dispatches=0)
 
 
-def qualify(args, private, report):
+def prepare_original_launch(args, private, report):
     require(platform.system() == "Linux" and platform.machine() == "x86_64", "linux_x86_64_required")
     selected = {name: getattr(args, name).resolve(strict=True) for name in
                 ("agentfw", "git_launcher", "claude", "node", "npm", "bwrap", "git", "strace")}
@@ -177,6 +195,16 @@ def qualify(args, private, report):
     before = BASE.snapshot(workspace)
     head_before, index_before = git("rev-parse", "HEAD"), sha(workspace / ".git/index")
     status_before = git("status", "--porcelain=v1")
+    return SimpleNamespace(selected=selected, binary=binary, workspace=workspace, env=env,
+        profiles=profiles, registry=registry, policy=policy, home=home, port=port,
+        before=before, head_before=head_before, index_before=index_before, status_before=status_before, git=git)
+
+
+def qualify(args, private, report):
+    setup = prepare_original_launch(args, private, report)
+    selected, binary, workspace, env = setup.selected, setup.binary, setup.workspace, setup.env
+    profiles, registry, policy, home, port = setup.profiles, setup.registry, setup.policy, setup.home, setup.port
+    before, head_before, index_before, status_before, git = setup.before, setup.head_before, setup.index_before, setup.status_before, setup.git
     daemon = process = model = witness = None
     try:
         with (private / "daemon.log").open("wb") as log:

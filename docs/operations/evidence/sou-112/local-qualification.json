@@ -1,0 +1,20 @@
+{
+  "task": "SOU-112",
+  "qualification": "local-macos-only; Linux qualification pending",
+  "base": "731d8c4c3cd921117cdb1934587d5aa97c80d6a7",
+  "workspace_tests": {
+    "passed": 1621,
+    "failed": 0,
+    "ignored": 12
+  },
+  "clippy": "workspace all-targets -D warnings PASS",
+  "fmt": "PASS",
+  "launcher_cli_controls": 18,
+  "dispatch_witness_controls": 9,
+  "linux_runtime_proven": false,
+  "isolation": "read-only isolated source; scratch-only writes; external network denied; owned loopback permitted",
+  "logs_sha256": {
+    "ready-local-tests.log": "ae87cbac2ac99a48b7b71aba108dbc9a06deff7dea3512aa27b34b4b06cd75ba",
+    "ready-local-clippy.log": "8c13773355e6763716ca1f23d418b362213dffd481f442cccd662753d5fdce86"
+  }
+}

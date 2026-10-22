@@ -54,6 +54,31 @@ class PilotLaunchCliTests(unittest.TestCase):
         self.assertIn("--dry-run", proc.stdout)
         self.assertIn("--session-id", proc.stdout)
         self.assertIn("--json", proc.stdout)
+        self.assertIn("--ask-wait-seconds", proc.stdout)
+
+    def test_run_operator_requires_a_run_and_exact_binding(self):
+        for words in (["pilot-approval", "list"],
+                      ["pilot-approval", "--run", "a" * 32, "approve", "pending"],
+                      ["pilot-approval", "--run", "a" * 32, "reject", "pending"]):
+            proc = subprocess.run([str(AGENTFW_BIN), *words], cwd=ROOT, capture_output=True, text=True)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("required", proc.stderr)
+
+    def test_ask_opt_in_never_executes_a_fixture_host(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir); workspace = tmp / "workspace"; workspace.mkdir()
+            marker = tmp / "executed"
+            host = tmp / "claude"
+            make_executable(host, '#!/bin/sh\nprintf executed > "' + str(marker) + '"\n')
+            fs = tmp / "fs.json"; git = tmp / "git.json"
+            fs.write_text(json.dumps({"command":"echo","tools":["read_text_file"]}))
+            git.write_text(json.dumps({"command":"echo","tools":["git_status"]}))
+            proc = self.run_pilot(["--claude",str(host),"--workspace",str(workspace),
+                "--fs-profile",str(fs),"--git-profile",str(git),"--mock-daemon-token","owned-test",
+                "--allow-command-fixtures","--ask-wait-seconds","25"])
+            self.assertNotEqual(proc.returncode,0)
+            self.assertIn("original installed profiles on qualified Linux",proc.stderr)
+            self.assertFalse(marker.exists())
 
     def test_missing_claude_executable_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:
