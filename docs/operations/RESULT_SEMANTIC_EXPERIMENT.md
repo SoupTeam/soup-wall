@@ -93,7 +93,10 @@ a larger independently authored development set; warm p95 <=150 ms, p99 <=300 ms
 with a hard 500 ms worker deadline. These are proposed targets, not achieved results
 or permission to relax existing protection. Small-sample zero errors cannot establish
 a production risk bound. Model choice, offline checkpoint/license/resources and
-independent evaluation must be agreed before real experiments.
+independent evaluation must be recorded before real experiments. Review 5615670403
+requested the next pinned local adapter step; see
+[the local experiment](RESULT_LOCAL_MODEL_EXPERIMENT.md). Independent development
+paraphrases remain pending; no production integration was approved.
 
 ## Reproduction and interpretation
 
