@@ -1,0 +1,848 @@
+{
+ "format": "sw-classifier/prepared-acceptance/1",
+ "status": "passed",
+ "cases": [
+  {
+   "case": "ready-before-first-call",
+   "readiness": {
+    "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "interpreter_sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+    "interpreter_version": "3.13.16",
+    "package_id": "318201921779ff6e0b2c2089fcaa45c0c8d472678e25d0cbe0309e3443f97b7e",
+    "start_sequence": 1,
+    "worker_pid": 8041
+   },
+   "worker_pids": [
+    8041
+   ],
+   "ready_after_start_ms": 1448.9,
+   "passed": true
+  },
+  {
+   "case": "first-useful-call",
+   "worker_pid": 8041,
+   "id": 100,
+   "latency_ms": 257.814,
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 100,
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "commit 4b6481ecd1c888822c6d708a9392c8d5239d68ac\nAuthor: SOU68 Synthetic <sou68@example.invalid>\nDate:   2026-10-22 08:10:48 +0000\n\n    SOU-68 synthetic initial commit\n\n--- /dev/null\n+++ notes.txt\n@@ -0,0 +1 @@\n+synthetic original text\n"
+      }
+     ],
+     "isError": false
+    }
+   },
+   "dispatch_events": [
+    {
+     "active": 1,
+     "arguments_sha256": "7a05372cd0dec2c789859140298019a625dec113a9d3bb1cf5b81c6ad15d732f",
+     "event": "mcp_real_call",
+     "execution_dispatched": true,
+     "host_call_id": 100,
+     "id_type": "integer",
+     "profile": "sw-mcp/git-readonly/1",
+     "queued": 0,
+     "state": "inflight"
+    }
+   ],
+   "reads_before": 0,
+   "reads_after": 1,
+   "passed": true
+  },
+  {
+   "case": "continuation",
+   "worker_pid": 8041,
+   "id": 101,
+   "latency_ms": 161.342,
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 101,
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "commit 4b6481ecd1c888822c6d708a9392c8d5239d68ac\nAuthor: SOU68 Synthetic <sou68@example.invalid>\nDate:   2026-10-22 08:10:48 +0000\n\n    SOU-68 synthetic initial commit\n\n--- /dev/null\n+++ notes.txt\n@@ -0,0 +1 @@\n+synthetic original text\n"
+      }
+     ],
+     "isError": false
+    }
+   },
+   "dispatch_events": [
+    {
+     "active": 1,
+     "arguments_sha256": "7a05372cd0dec2c789859140298019a625dec113a9d3bb1cf5b81c6ad15d732f",
+     "event": "mcp_real_call",
+     "execution_dispatched": true,
+     "host_call_id": 101,
+     "id_type": "integer",
+     "profile": "sw-mcp/git-readonly/1",
+     "queued": 0,
+     "state": "inflight"
+    }
+   ],
+   "reads_before": 1,
+   "reads_after": 2,
+   "passed": true
+  },
+  {
+   "case": "session-isolation",
+   "worker_a": 8041,
+   "worker_b": 8076,
+   "b_reads": 1,
+   "id": 100,
+   "latency_ms": 194.465,
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 100,
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "commit 4b6481ecd1c888822c6d708a9392c8d5239d68ac\nAuthor: SOU68 Synthetic <sou68@example.invalid>\nDate:   2026-10-22 08:10:48 +0000\n\n    SOU-68 synthetic initial commit\n\n--- /dev/null\n+++ notes.txt\n@@ -0,0 +1 @@\n+synthetic original text\n"
+      }
+     ],
+     "isError": false
+    }
+   },
+   "dispatch_events": [
+    {
+     "active": 1,
+     "arguments_sha256": "7a05372cd0dec2c789859140298019a625dec113a9d3bb1cf5b81c6ad15d732f",
+     "event": "mcp_real_call",
+     "execution_dispatched": true,
+     "host_call_id": 100,
+     "id_type": "integer",
+     "profile": "sw-mcp/git-readonly/1",
+     "queued": 0,
+     "state": "inflight"
+    }
+   ],
+   "reads_before": 0,
+   "reads_after": 1,
+   "passed": true
+  },
+  {
+   "case": "killed-worker-replaced-before-dispatch",
+   "old_pid": 8041,
+   "new_pid": 8106,
+   "id": 103,
+   "latency_ms": 922.692,
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 103,
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "commit 4b6481ecd1c888822c6d708a9392c8d5239d68ac\nAuthor: SOU68 Synthetic <sou68@example.invalid>\nDate:   2026-10-22 08:10:48 +0000\n\n    SOU-68 synthetic initial commit\n\n--- /dev/null\n+++ notes.txt\n@@ -0,0 +1 @@\n+synthetic original text\n"
+      }
+     ],
+     "isError": false
+    }
+   },
+   "dispatch_events": [
+    {
+     "active": 1,
+     "arguments_sha256": "7a05372cd0dec2c789859140298019a625dec113a9d3bb1cf5b81c6ad15d732f",
+     "event": "mcp_real_call",
+     "execution_dispatched": true,
+     "host_call_id": 103,
+     "id_type": "integer",
+     "profile": "sw-mcp/git-readonly/1",
+     "queued": 0,
+     "state": "inflight"
+    }
+   ],
+   "reads_before": 3,
+   "reads_after": 4,
+   "passed": true
+  },
+  {
+   "case": "hung-worker-refused-within-deadline",
+   "old_pid": 8106,
+   "id": 104,
+   "latency_ms": 1431.307,
+   "response": {
+    "error": {
+     "code": -32603,
+     "message": "Soup Wall could not classify the MCP invocation (classifier_error); policy not reached"
+    },
+    "id": 104,
+    "jsonrpc": "2.0"
+   },
+   "dispatch_events": [],
+   "reads_before": 4,
+   "reads_after": 4,
+   "error": "Soup Wall could not classify the MCP invocation (classifier_error); policy not reached",
+   "passed": true
+  },
+  {
+   "case": "recovery-after-hang",
+   "new_pid": 8114,
+   "id": 105,
+   "latency_ms": 964.409,
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 105,
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "commit 4b6481ecd1c888822c6d708a9392c8d5239d68ac\nAuthor: SOU68 Synthetic <sou68@example.invalid>\nDate:   2026-10-22 08:10:48 +0000\n\n    SOU-68 synthetic initial commit\n\n--- /dev/null\n+++ notes.txt\n@@ -0,0 +1 @@\n+synthetic original text\n"
+      }
+     ],
+     "isError": false
+    }
+   },
+   "dispatch_events": [
+    {
+     "active": 1,
+     "arguments_sha256": "7a05372cd0dec2c789859140298019a625dec113a9d3bb1cf5b81c6ad15d732f",
+     "event": "mcp_real_call",
+     "execution_dispatched": true,
+     "host_call_id": 105,
+     "id_type": "integer",
+     "profile": "sw-mcp/git-readonly/1",
+     "queued": 0,
+     "state": "inflight"
+    }
+   ],
+   "reads_before": 4,
+   "reads_after": 5,
+   "passed": true
+  },
+  {
+   "case": "altered-assets-lost-worker-refused",
+   "id": 106,
+   "latency_ms": 20.076,
+   "response": {
+    "error": {
+     "code": -32603,
+     "message": "Soup Wall could not classify the MCP invocation (classifier_not_ready); policy not reached"
+    },
+    "id": 106,
+    "jsonrpc": "2.0"
+   },
+   "dispatch_events": [],
+   "reads_before": 5,
+   "reads_after": 5,
+   "error": "Soup Wall could not classify the MCP invocation (classifier_not_ready); policy not reached",
+   "worker_pids": [],
+   "passed": true
+  },
+  {
+   "case": "recovery-after-restore",
+   "new_pid": 8122,
+   "id": 107,
+   "latency_ms": 820.925,
+   "response": {
+    "jsonrpc": "2.0",
+    "id": 107,
+    "result": {
+     "content": [
+      {
+       "type": "text",
+       "text": "commit 4b6481ecd1c888822c6d708a9392c8d5239d68ac\nAuthor: SOU68 Synthetic <sou68@example.invalid>\nDate:   2026-10-22 08:10:48 +0000\n\n    SOU-68 synthetic initial commit\n\n--- /dev/null\n+++ notes.txt\n@@ -0,0 +1 @@\n+synthetic original text\n"
+      }
+     ],
+     "isError": false
+    }
+   },
+   "dispatch_events": [
+    {
+     "active": 1,
+     "arguments_sha256": "7a05372cd0dec2c789859140298019a625dec113a9d3bb1cf5b81c6ad15d732f",
+     "event": "mcp_real_call",
+     "execution_dispatched": true,
+     "host_call_id": 107,
+     "id_type": "integer",
+     "profile": "sw-mcp/git-readonly/1",
+     "queued": 0,
+     "state": "inflight"
+    }
+   ],
+   "reads_before": 5,
+   "reads_after": 6,
+   "passed": true
+  },
+  {
+   "case": "reaped-when-no-call-is-made",
+   "worker_pid": 8137,
+   "reads": 0,
+   "cleanup": {
+    "exit_code": 0,
+    "transcript_pid": 8130,
+    "forced_cleanup": false,
+    "process_cleanup": {
+     "observed": [
+      {
+       "pid": 8130,
+       "start_time_ticks": 305115,
+       "parent_process": true
+      },
+      {
+       "pid": 8135,
+       "start_time_ticks": 305115,
+       "parent_process": false
+      },
+      {
+       "pid": 8137,
+       "start_time_ticks": 305230,
+       "parent_process": false
+      },
+      {
+       "pid": 8144,
+       "start_time_ticks": 307874,
+       "parent_process": false
+      },
+      {
+       "pid": 8145,
+       "start_time_ticks": 307877,
+       "parent_process": false
+      },
+      {
+       "pid": 8146,
+       "start_time_ticks": 307879,
+       "parent_process": false
+      },
+      {
+       "pid": 8147,
+       "start_time_ticks": 307903,
+       "parent_process": false
+      },
+      {
+       "pid": 8148,
+       "start_time_ticks": 308226,
+       "parent_process": false
+      },
+      {
+       "pid": 8149,
+       "start_time_ticks": 308229,
+       "parent_process": false
+      }
+     ],
+     "descendant_count": 8,
+     "all_stopped": true,
+     "remaining": []
+    }
+   },
+   "passed": true
+  },
+  {
+   "case": "startup-failure-before-any-call",
+   "exit_code": 1,
+   "client_error": "collector-startup-failure closed before correlated response",
+   "reads": 0,
+   "cleanup": {
+    "exit_code": 1,
+    "transcript_pid": 8152,
+    "forced_cleanup": false,
+    "process_cleanup": {
+     "observed": [
+      {
+       "pid": 8152,
+       "start_time_ticks": 308423,
+       "parent_process": true
+      },
+      {
+       "pid": 8157,
+       "start_time_ticks": 308423,
+       "parent_process": false
+      }
+     ],
+     "descendant_count": 1,
+     "all_stopped": true,
+     "remaining": []
+    }
+   },
+   "passed": true
+  }
+ ],
+ "source_before": {
+  "commit": "d680f89da5870bb8cb59121e06a72f5a34dd67da",
+  "tree": "0817cff125b2d4868e5f62c02c0a1237b0009ddf",
+  "dirty": false
+ },
+ "server": "git",
+ "runtime": {
+  "agentfw": "02f5cf638192ed45ccc02c88bfdbd47bc51eed00475043e626a641bb04d5ccf6",
+  "bwrap": "b268aa8274086980bf3e1399dc1692a4da8f904fe75ed08edf8f56b3d8f40677",
+  "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001",
+  "git": "0a599d616feffe27ea35f245f0636ea368f41ee9925a96a1e61f644c84ba6d27",
+  "git_launcher": "b42af1f2f64554639dcdb6e08993814f0294d9893ccf3579fd8b2e51b878ae16"
+ },
+ "python": {
+  "path": "/usr/bin/python3.13",
+  "sha256": "a35753ccb97941cce1467786cce892e608141f09d717188a3235d4f51a754446",
+  "version": "3.13.16"
+ },
+ "git_revision": "4b6481ecd1c888822c6d708a9392c8d5239d68ac",
+ "installation": {
+  "format": "sou68-profile-installation/1",
+  "profile": {
+   "format": "sw-mcp/git-readonly/1",
+   "workspace": "<run>/workspace",
+   "runtimePath": "<run>/installed/package/python/bin/python3.11",
+   "runtimeSha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
+   "packageRoot": "<run>/installed/package",
+   "packageTreeSha256": "0e4dd267798e4ace213585469efaea02b46b320cc733dd46ff75d6bee672de2f",
+   "bwrapPath": "<bwrap-build>/bwrap",
+   "bwrapSha256": "b268aa8274086980bf3e1399dc1692a4da8f904fe75ed08edf8f56b3d8f40677",
+   "git": {
+    "path": "<git-build>/git",
+    "sha256": "0a599d616feffe27ea35f245f0636ea368f41ee9925a96a1e61f644c84ba6d27"
+   },
+   "gitLauncher": {
+    "path": "<build>/agentfw-git-sandbox",
+    "sha256": "b42af1f2f64554639dcdb6e08993814f0294d9893ccf3579fd8b2e51b878ae16"
+   },
+   "libraries": [
+    {
+     "path": "/lib/x86_64-linux-gnu/libX11.so.6",
+     "sha256": "c5b5d782bd9cab3420a62df88f5c991507edf3331a89f98464ddbc538c37b879"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libXau.so.6",
+     "sha256": "8040da3f8516c1acfe39f04ff022480cdb273705ba5e7a4ca70bbdb1527cd67a"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libXdmcp.so.6",
+     "sha256": "667d97d6da16016400ab10de9f83ef4ab209ceb6adf68ff9650225ec13e723b0"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libXext.so.6",
+     "sha256": "2907e6a996465de5b32a0dd10534d4416b87f1dee5670aaa7b19301a1fc93f44"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libXft.so.2",
+     "sha256": "368eee2879589cb6716f03ba23dee35b97faa0a4102c715776c7224bef8e3164"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libXrender.so.1",
+     "sha256": "250977e0e004b6c0556144c3e683487063b4582dc83d205196ec3aa65d54e2c6"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libXss.so.1",
+     "sha256": "1e165bf4777952eb9bb34c93f12e4fbd5de082a7f88a3c39fcd05e87dd8ddb07"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libbrotlicommon.so.1",
+     "sha256": "a91ead095d2c80520c55a89057bbe10b031a075340442e63f44b310f93883a1b"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libbrotlidec.so.1",
+     "sha256": "64d8a5019d4c294b89fde1193343ea324bbd8603652554e5545f0a01595fa2c5"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libbsd.so.0",
+     "sha256": "e86cd4f0019f42c2ba5e60602e0edc8694d2948377d98c3654d0f6bddb5254bb"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libbz2.so.1.0",
+     "sha256": "cc08c9f50a8009ffd6391e0116a100369b11ca9238fa52392c019e6645b122a1"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libc.so.6",
+     "sha256": "3a15d66867d83762c7f2f1e37359cb8f6c5743edb369c65285cb0b1c4f7498bf"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libcrypt.so.1",
+     "sha256": "1502636e3be8232c9cf801dfb533694aea985d449904f3e1295db26d7b348946"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libdl.so.2",
+     "sha256": "c2994527172cc23b7fb0f7d611b71e00a37da27af12c2e5e9e0dc1a742886c96"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libexpat.so.1",
+     "sha256": "286682ecbc5e59a638963b1a4e6351e65eb32fcf4bdcb9cb7569b6a61fe06a8d"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libfontconfig.so.1",
+     "sha256": "a94b4059b27766f563894c8f7e61762b6f6b2e25c59ef36b730164d4b75c6c98"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libfreetype.so.6",
+     "sha256": "c14c53c5baff12afafb610c6312fb879e9bb77e80dd42e27504d52d6d8bcd059"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libgcc_s.so.1",
+     "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libm.so.6",
+     "sha256": "fce00b6f25f459cf4ae0b7fae4257909a1a8a86f9149e7c029a5d617baf1ccd0"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libmd.so.0",
+     "sha256": "423e18586b6ea740f4465afd64f7a9a4cb7264ed979c8e7256f9085af5345fef"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libpng16.so.16",
+     "sha256": "eac265b3506df0d9110dd9143e1d0503e2daabafe1d98b23fac8ca17b71d1f6b"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libpthread.so.0",
+     "sha256": "90491a21ce44efcf3bd4b65ec82501c091d7ebe7f8d9b341dd01d721001d9ecd"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/librt.so.1",
+     "sha256": "6d072187d88e092e81561a44c03a4a41397319022c6d43519757cc051c576d82"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libtcl8.6.so",
+     "sha256": "2d072235d4a518cb02fd8c6a2dd052119545a9a4406cb69e8cdeef156571dec2"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libtk8.6.so",
+     "sha256": "1f2c8a80fc92fb02ead07853e397d247f3b9316b58f78782e4e5d9ac8e9fe728"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libutil.so.1",
+     "sha256": "5181d2b5de571bf054395684bfe77db685badf0163ac50b5e47d2148b52f11c3"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libxcb.so.1",
+     "sha256": "7958a0136b121bdc4c708968569ad152a9ed208ab026e2537b1005dde64ca440"
+    },
+    {
+     "path": "/lib/x86_64-linux-gnu/libz.so.1",
+     "sha256": "86200da370f20476a2507e9097a789b5ef97269b4ca8d5e164ad82dab9d99892"
+    },
+    {
+     "path": "/lib64/ld-linux-x86-64.so.2",
+     "sha256": "c20a2dc8917c755f02b94049356320fe1f62ac7d9f8994731f807d9df39302da"
+    }
+   ]
+  },
+  "upstream_identity": {
+   "package": "mcp-server-git",
+   "version": "2026.10.10",
+   "sdk": "1.29.0",
+   "protocol": "2025-11-25",
+   "source": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
+   "python": {
+    "version": "3.11.14",
+    "release": "20251014",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.11.14%2B20251014-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "91ab434738647ab45d630aaa02e3808bb516239beeb52f7799c12a12d1557a38"
+   },
+   "git_version": "2.51.2",
+   "git_source_url": "https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz",
+   "git_source_sha256": "233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3",
+   "files": {
+    "upstream-initialize.json": "d3cf3433f2e2fe8bef9389e8aa93f9bb3f7f00082f7b14a7c915d06aabae042d",
+    "upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+    "requirements.lock": "a2cfeda583ce58ab092610ee5b8902ef2f6ab1c97dabebf7eb67bcc512f5f1e5"
+   }
+  },
+  "git_version": "git version 2.51.2",
+  "profile_sha256": "fe03c60e9893ceae58c41a0c5de9133e703953295314818cbdd9ff96ab034f51",
+  "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+  "policy_sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+  "bwrap_version": "bubblewrap 0.13.1"
+ },
+ "classifier_archive_sha256": "df923672792fa666bb58005091b2dd860b41192bad65ad99f0270d417690fdbf",
+ "witness_a": 6,
+ "collector_a_cleanup": {
+  "exit_code": 0,
+  "transcript_pid": 8035,
+  "forced_cleanup": false,
+  "process_cleanup": {
+   "observed": [
+    {
+     "pid": 8035,
+     "start_time_ticks": 298419,
+     "parent_process": true
+    },
+    {
+     "pid": 8040,
+     "start_time_ticks": 298420,
+     "parent_process": false
+    },
+    {
+     "pid": 8041,
+     "start_time_ticks": 298547,
+     "parent_process": false
+    },
+    {
+     "pid": 8050,
+     "start_time_ticks": 301068,
+     "parent_process": false
+    },
+    {
+     "pid": 8051,
+     "start_time_ticks": 301074,
+     "parent_process": false
+    },
+    {
+     "pid": 8052,
+     "start_time_ticks": 301075,
+     "parent_process": false
+    },
+    {
+     "pid": 8053,
+     "start_time_ticks": 301094,
+     "parent_process": false
+    },
+    {
+     "pid": 8054,
+     "start_time_ticks": 301443,
+     "parent_process": false
+    },
+    {
+     "pid": 8055,
+     "start_time_ticks": 301445,
+     "parent_process": false
+    },
+    {
+     "pid": 8060,
+     "start_time_ticks": 301489,
+     "parent_process": false
+    },
+    {
+     "pid": 8061,
+     "start_time_ticks": 301492,
+     "parent_process": false
+    },
+    {
+     "pid": 8062,
+     "start_time_ticks": 301494,
+     "parent_process": false
+    },
+    {
+     "pid": 8065,
+     "start_time_ticks": 301511,
+     "parent_process": false
+    },
+    {
+     "pid": 8066,
+     "start_time_ticks": 301513,
+     "parent_process": false
+    },
+    {
+     "pid": 8067,
+     "start_time_ticks": 301515,
+     "parent_process": false
+    },
+    {
+     "pid": 8100,
+     "start_time_ticks": 304521,
+     "parent_process": false
+    },
+    {
+     "pid": 8101,
+     "start_time_ticks": 304525,
+     "parent_process": false
+    },
+    {
+     "pid": 8102,
+     "start_time_ticks": 304529,
+     "parent_process": false
+    },
+    {
+     "pid": 8109,
+     "start_time_ticks": 304620,
+     "parent_process": false
+    },
+    {
+     "pid": 8110,
+     "start_time_ticks": 304623,
+     "parent_process": false
+    },
+    {
+     "pid": 8111,
+     "start_time_ticks": 304627,
+     "parent_process": false
+    },
+    {
+     "pid": 8117,
+     "start_time_ticks": 304869,
+     "parent_process": false
+    },
+    {
+     "pid": 8118,
+     "start_time_ticks": 304872,
+     "parent_process": false
+    },
+    {
+     "pid": 8119,
+     "start_time_ticks": 304875,
+     "parent_process": false
+    },
+    {
+     "pid": 8125,
+     "start_time_ticks": 304968,
+     "parent_process": false
+    },
+    {
+     "pid": 8126,
+     "start_time_ticks": 304972,
+     "parent_process": false
+    },
+    {
+     "pid": 8127,
+     "start_time_ticks": 304974,
+     "parent_process": false
+    }
+   ],
+   "descendant_count": 26,
+   "all_stopped": true,
+   "remaining": []
+  }
+ },
+ "latency": {
+  "rounds": 10,
+  "note": "No syscall tracing here: tracing would inflate process start times.",
+  "lazy": {
+   "first_call_ms": [
+    589.906,
+    579.781,
+    683.243,
+    716.085,
+    624.843,
+    698.597,
+    631.053,
+    770.54,
+    647.006,
+    657.854
+   ],
+   "warm_call_ms": [
+    26.839,
+    32.296,
+    36.143,
+    32.372,
+    37.443,
+    39.815,
+    26.167,
+    29.486,
+    37.323,
+    38.502,
+    33.117,
+    37.48,
+    27.498,
+    27.255,
+    25.9,
+    35.823,
+    29.161,
+    35.279,
+    37.812,
+    29.566,
+    41.679,
+    36.345,
+    32.17,
+    37.846,
+    35.004,
+    38.172,
+    43.568,
+    31.189,
+    31.167,
+    33.234
+   ],
+   "failures": [],
+   "first_call_ms_summary": {
+    "n": 10,
+    "p50_ms": 652.43,
+    "max_ms": 770.54,
+    "p95_ms": 770.54
+   },
+   "warm_call_ms_summary": {
+    "n": 30,
+    "p50_ms": 34.12,
+    "max_ms": 43.57,
+    "p95_ms": 41.68
+   }
+  },
+  "prepared": {
+   "startup_to_ready_ms": [
+    1349.248217999957,
+    1090.886898000008,
+    1276.608326999849,
+    1186.050712999986,
+    1218.6577449997458,
+    1275.9121250001044,
+    1137.4195210000835,
+    1140.87771100003,
+    1208.1866360003914,
+    1192.3459640001965
+   ],
+   "first_call_ms": [
+    31.339,
+    52.499,
+    37.886,
+    41.681,
+    39.83,
+    31.768,
+    32.651,
+    35.605,
+    51.253,
+    30.806
+   ],
+   "warm_call_ms": [
+    28.11,
+    26.778,
+    30.841,
+    59.617,
+    50.022,
+    45.181,
+    28.536,
+    29.716,
+    38.336,
+    42.377,
+    32.134,
+    37.903,
+    48.591,
+    41.399,
+    38.54,
+    29.169,
+    30.397,
+    30.741,
+    25.555,
+    31.819,
+    40.237,
+    35.38,
+    35.002,
+    31.799,
+    47.892,
+    31.108,
+    42.027,
+    34.654,
+    31.212,
+    37.904
+   ],
+   "failures": [],
+   "startup_to_ready_ms_summary": {
+    "n": 10,
+    "p50_ms": 1200.27,
+    "max_ms": 1349.25,
+    "p95_ms": 1349.25
+   },
+   "first_call_ms_summary": {
+    "n": 10,
+    "p50_ms": 36.75,
+    "max_ms": 52.5,
+    "p95_ms": 52.5
+   },
+   "warm_call_ms_summary": {
+    "n": 30,
+    "p50_ms": 34.83,
+    "max_ms": 59.62,
+    "p95_ms": 50.02
+   }
+  }
+ },
+ "source_after": {
+  "commit": "d680f89da5870bb8cb59121e06a72f5a34dd67da",
+  "tree": "0817cff125b2d4868e5f62c02c0a1237b0009ddf",
+  "dirty": false
+ },
+ "not_demonstrated": [
+  "mismatched ready identity (worker-level tests only)",
+  "late reply (worker-level tests only)"
+ ],
+ "classifier_scope": "the frozen installed classifier reads git_show as read but leaves git_status/git_log/git_diff unknown, so git_show is the only useful call here"
+}
