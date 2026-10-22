@@ -124,8 +124,15 @@ def collector_dispatches(text, binary, strict=True):
                 calls.append({"pid": pid, "fd": fd, "id": value.get("id"),
                               "tool": value.get("params", {}).get("name"),
                               "args_sha256":BASE.hashlib.sha256(json.dumps(value.get("params",{}).get("arguments"),sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()).hexdigest()})
-    require(discoveries == collectors, "original_discovery_not_observed")
-    require(all(sum(pid == owner for owner,_ in channels) == 1 for pid in collectors), "original_wire_channel_changed")
+    # On daemon loss the genuine host may attempt a fresh collector which is
+    # refused before original-server discovery. It cannot calibrate a channel
+    # or conceal a call: every tools/call below still requires its own observed
+    # discovery channel. Initial selected servers must both be calibrated.
+    require(discoveries == collectors if strict else len(discoveries) >= 2,
+            "original_discovery_not_observed")
+    identified = {collector_servers[pid] for pid in discoveries if collector_servers[pid] is not None}
+    require(not identified or identified == {"filesystem", "git"}, "both_selected_original_servers_required")
+    require(all(sum(pid == owner for owner,_ in channels) == 1 for pid in discoveries), "original_wire_channel_changed")
     for pid, syscall in pending.items():
         if int(pid) not in collectors:
             continue

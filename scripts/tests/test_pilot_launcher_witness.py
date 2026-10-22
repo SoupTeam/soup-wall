@@ -110,6 +110,18 @@ class DispatchControls(unittest.TestCase):
         self.assertEqual(observed["collector_servers"], {101: "filesystem", 102: "git"})
         self.assertEqual(len(observed["calls"]), 4)
 
+    def test_rejected_restart_collector_cannot_calibrate_or_hide_dispatch(self):
+        rows = self.trace() + ['103 execve("/owned/agentfw", ["/owned/agentfw", "mcp", "--id", "filesystem"], 0x0) = 0']
+        observed = WITNESS.collector_dispatches("\n".join(rows), Path("/owned/agentfw"), strict=False)
+        self.assertEqual(observed["discoveries"], 2)
+        self.assertEqual(len(observed["calls"]), 4)
+        with self.assertRaisesRegex(ValueError, "original_discovery_not_observed"):
+            self.observe(rows)
+        frame = json.dumps({"method": "tools/call", "params": {"name": "read_text_file", "arguments": {"path": "/workspace/credentials.txt"}}}) + "\n"
+        rows.append(f'103 write(9, {json.dumps(frame)}, {len(frame)}) = {len(frame)}')
+        with self.assertRaisesRegex(ValueError, "unobserved_original_call_channel"):
+            WITNESS.collector_dispatches("\n".join(rows), Path("/owned/agentfw"), strict=False)
+
     def test_resumed_syscall_preserves_original_complete_dispatch(self):
         rows = self.trace()
         original = rows[-1]
