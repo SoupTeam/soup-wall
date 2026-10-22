@@ -64,6 +64,17 @@ class PilotLaunchCliTests(unittest.TestCase):
             self.assertNotEqual(proc.returncode, 0)
             self.assertIn("required", proc.stderr)
 
+    def test_base64url_pending_id_is_not_an_option(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for action in ("inspect", "approve", "reject"):
+                words = ["pilot-approval", "--home", tmpdir, "--run", "a" * 32, action, "--owned-pending-id"]
+                if action != "inspect":
+                    words += ["--binding", "b" * 64]
+                proc = subprocess.run([str(AGENTFW_BIN), *words], cwd=ROOT, capture_output=True, text=True)
+                self.assertNotEqual(proc.returncode, 0)  # No live run in this owned empty home.
+                self.assertNotIn("unexpected argument", proc.stderr)
+                self.assertNotIn("Usage:", proc.stderr)
+
     def test_ask_opt_in_never_executes_a_fixture_host(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir); workspace = tmp / "workspace"; workspace.mkdir()

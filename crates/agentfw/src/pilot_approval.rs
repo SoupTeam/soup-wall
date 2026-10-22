@@ -38,14 +38,19 @@ pub enum OperatorAction {
     /// Digests and expiry only. Never displays raw arguments.
     List,
     /// Explicitly inspect the exact arguments before deciding.
-    Inspect { id: String },
+    Inspect {
+        #[arg(allow_hyphen_values = true)]
+        id: String,
+    },
     /// Approve one previously inspected binding, never an entire run.
     Approve {
+        #[arg(allow_hyphen_values = true)]
         id: String,
         #[arg(long)]
         binding: String,
     },
     Reject {
+        #[arg(allow_hyphen_values = true)]
         id: String,
         #[arg(long)]
         binding: String,
@@ -902,6 +907,38 @@ mod tests {
                 "authority_sha256":"c".repeat(64),"session_id":"native-one","session_epoch":"epoch-one"}],
             "pilot_pending":[{"pending_id":"pending-one","tool":"read_text_file","binding_sha256":"d".repeat(64),
                 "session_id":"native-one","session_epoch":"epoch-one"}]})
+    }
+
+    #[test]
+    fn base64url_pending_ids_with_leading_hyphens_are_positional_values() {
+        use clap::Parser;
+        #[derive(Parser)]
+        struct TestCli {
+            #[command(flatten)]
+            args: OperatorArgs,
+        }
+        for action in ["inspect", "approve", "reject"] {
+            for id in ["-owned", "--owned", "_owned"] {
+                let mut words = vec![
+                    "operator".to_string(),
+                    "--run".into(),
+                    "a".repeat(32),
+                    action.into(),
+                    id.into(),
+                ];
+                if action != "inspect" {
+                    words.extend(["--binding".into(), "b".repeat(64)]);
+                }
+                let parsed = TestCli::try_parse_from(words).expect("valid broker id must parse");
+                let parsed_id = match parsed.args.action {
+                    OperatorAction::Inspect { id }
+                    | OperatorAction::Approve { id, .. }
+                    | OperatorAction::Reject { id, .. } => id,
+                    OperatorAction::List => unreachable!(),
+                };
+                assert_eq!(parsed_id, id);
+            }
+        }
     }
 
     #[test]

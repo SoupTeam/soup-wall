@@ -59,6 +59,10 @@ def diagnostic(text):
         ("binding differs", "exact_binding"),
         ("before approval", "inspection_required"),
         ("cleanup", "cleanup"),
+        ("unexpected argument", "cli_argument_parsing"),
+        ("open bounded operator input", "operator_input_missing"),
+        ("pilot launcher is no longer live", "launcher_exited"),
+        ("No such file or directory", "owned_file_missing"),
         ("timed out", "deadline"),
     ]:
         if marker in text:
