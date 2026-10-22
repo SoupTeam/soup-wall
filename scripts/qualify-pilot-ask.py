@@ -92,7 +92,7 @@ class Pilot:
         self.session, self.run_id = str(uuid.uuid4()), None
         self.trace = root / "syscalls.private"
         self.model = BASE.DEMO.ScriptedModel([])
-        self.offered = set()
+        self.offered, self.result_times = set(), {}
         target = ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}) if kind == "filesystem" else (
             "git", "git_show", {"repo_path": "/workspace", "revision": setup.head_before})
         self.primary = target
@@ -108,6 +108,7 @@ class Pilot:
                 for block in blocks if isinstance(blocks, list) else []:
                     if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in self.offered:
                         logical = block["tool_use_id"].removeprefix("toolu_pilot_ask_")
+                        self.result_times.setdefault(logical, time.time_ns() // 1_000_000)
                         self.model.results[logical] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
             if "primary" not in self.model.results:
                 proposals = [("primary", self.primary)]
@@ -288,8 +289,8 @@ def qualify(args, private, report):
         require(BASE.DEMO.wait_healthy(setup.port, daemon), "daemon_not_ready")
 
     try:
-        for kind in ("filesystem", "git"):
-            for case in ("restart", "approve", "reject", "expire", "cancel", "approved_cancel", "default"):
+        for kind in ("git", "filesystem"):
+            for case in ("expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"):
                 start_daemon(kind, 5 if case == "expire" else 30)
                 pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind, enabled=case != "default")
                 active.append(pilot)
@@ -390,8 +391,15 @@ def qualify(args, private, report):
                 if case == "approve":
                     marker = "7 red widgets" if kind == "filesystem" else "committed baseline"
                     require(marker in json.dumps(primary),"original_approved_result_not_useful")
+                primary_text = json.dumps(primary)
+                row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
                 if case == "expire":
-                    require("native_approval_expired" in json.dumps(primary), "expiry_refusal_not_attributed")
+                    # The relay min(wait, remaining TTL) may report timeout on
+                    # the same boundary the daemon reports expired. Require
+                    # both a native deadline refusal and the ORIGINAL expiry.
+                    elapsed = pilot.result_times["primary"] - waiting["expires_at_ms"]
+                    row["refusal_after_original_expiry_ms"] = elapsed
+                    require(row["primary_refusal_codes"] and elapsed >= 0, "expiry_refusal_not_attributed")
                 followup = pilot.model.results.get("followup")
                 followup_text = json.dumps(followup)
                 row["followup"] = {"present": followup is not None,
@@ -399,6 +407,7 @@ def qualify(args, private, report):
                     "refusal_codes": [code for code in ("native_approval_expired", "native_approval_timeout",
                         "native_approval_rejected", "native_provenance_incomplete", "native_child_authority_expired")
                         if code in followup_text],
+                    "diagnostic_flags": [flag for flag in ("concurrent mcp input", "not classified", "timed out", "closed", "withheld") if flag in followup_text.lower()],
                     "sha256":BASE.hashlib.sha256(followup_text.encode()).hexdigest()}
                 # Default Git Ask is explicitly refused without a wait; its
                 # correlated continuation is another refusal, never a fake Allow.
