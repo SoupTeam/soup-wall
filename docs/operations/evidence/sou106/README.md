@@ -56,3 +56,37 @@ change the gate or case outcomes. All per-arm reasons remain available.
 Observed successful benign-pair call overhead (27 samples): median 53.467 ms,
 p95 125.687 ms. These exclude the failed pairs and are not overall utility or
 an accepted latency threshold. The final corrected source requires its own run.
+
+## Latest exact-source measurement
+
+Source: `ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc`. [Focused run](https://github.com/SoupTeam/soup-wall/actions/runs/39762231154).
+[Full report](measured-report.json), [English scorecard](scorecard.md),
+[minimal runtime blockers](runtime-blockers.json).
+
+Gate: **failed**. Benign pairs: 10/12; false interruptions: 2; technical failures: 0; incomplete arms: 0.
+Refusal variants: 8; denied executions: 9; forbidden effects: 0.
+Source unchanged: True; cleanup: True.
+
+Both search-followed-by-read cases retain their expected useful outcomes.
+The current selected policy returns Ask at `combined-ask-mcp-derived-read`;
+the default refusal flow does not execute/release the requested read. This is
+a reproducible runtime/policy compatibility blocker for this workload. The
+measurement increment does not change policy or implement the separately owned
+Ask flow. Review the intended approval/policy behavior before claiming pilot
+acceptance. Do not reclassify these failures to make the gate pass.
+
+The measured implementation is the source above; subsequent evidence-only
+commits preserve its measured identity rather than claiming a new measurement.
+No live model, paid access, Phase 4 effectiveness or release claim.
+
+Focused Linux checks on the measured source passed: new gate/restoration 16/16,
+existing installed-pilot 26/26, preparation 6/6 and namespace checks 6/6.
+Both required real sandbox positive tests passed. The **workflow still failed**
+because the actual-host utility gate correctly rejected the two interruptions.
+
+Successful benign pair call overhead: n=29, median 50.294 ms, p95 64.634 ms.
+Host startup was materially more expensive: median 1207.341 ms for controls
+(n=20) and 6821.055 ms for successful protected arms (n=18). These startup
+populations differ; this is not a paired startup delta or a cold-cache claim.
+The full report preserves failed-arm timings too. Useful-call overhead alone
+must not be presented as total pilot startup cost.
