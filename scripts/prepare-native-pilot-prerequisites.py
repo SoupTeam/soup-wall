@@ -380,7 +380,10 @@ def tree_digest(generation, *, completed=False):
             info = path.lstat()
             require(info.st_uid == os.getuid() and not info.st_mode & (stat.S_ISUID | stat.S_ISGID),
                     "generation_entry_ownership_changed", "reuse")
-            if completed:
+            # POSIX symlink mode is normally 0777 and chmod would affect its
+            # target. The frozen parent directory protects the link entry;
+            # each regular target is checked separately below.
+            if completed and not path.is_symlink():
                 require(not info.st_mode & 0o222, "completed_generation_writable", "reuse")
             if path.is_symlink():
                 target = path.resolve(strict=True)

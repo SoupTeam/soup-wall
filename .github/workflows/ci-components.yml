@@ -1581,8 +1581,13 @@ jobs:
             exit 1
           fi
           finish="$(date +%s)"
-          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare "${native_args[@]}" \
-            > "$RUNNER_TEMP/sou111-assets/native-reused.json"
+          if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+            "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-reused.json"; then
+            cp "$RUNNER_TEMP/sou111-assets/native-reused.json" \
+              "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+            cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+            exit 1
+          fi
           marker="$RUNNER_TEMP/sou111-native-prerequisites/current.json"
           marker_before="$(sha256sum "$marker" | cut -d ' ' -f1)"
           printf 'wrong archive\n' > "$RUNNER_TEMP/sou111-assets/bad-git.tar.xz"
@@ -1764,6 +1769,8 @@ jobs:
             ${{ runner.temp }}/sou111-assets/native-timing.json
             ${{ runner.temp }}/sou111-assets/native-rejected.json
             ${{ runner.temp }}/sou111-assets/native-diagnostic.json
+            ${{ runner.temp }}/sou111-assets/native-first.json
+            ${{ runner.temp }}/sou111-assets/native-reused.json
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
             ${{ runner.temp }}/sou111-assets/apparmor-provisioning.json
             ${{ runner.temp }}/sou111-apparmor-cleanup.json

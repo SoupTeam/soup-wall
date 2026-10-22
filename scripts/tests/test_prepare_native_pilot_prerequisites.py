@@ -31,6 +31,22 @@ def args(root, *, prepare=True, rebuild=False):
 
 
 class PreparationBoundary(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "POSIX symlink modes require Linux")
+    def test_frozen_generation_accepts_internal_symlink_and_rejects_changed_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            generation = Path(temporary) / "generation"
+            generation.mkdir(mode=0o700)
+            target = generation / "target"
+            target.write_text("original")
+            (generation / "link").symlink_to("target")
+            before = PREP.tree_digest(generation)
+            PREP.freeze(generation)
+            self.assertEqual(PREP.tree_digest(generation, completed=True), before)
+            target.chmod(0o600)
+            target.write_text("changed")
+            target.chmod(0o400)
+            self.assertNotEqual(PREP.tree_digest(generation, completed=True), before)
+
     def test_plan_is_read_only_and_reports_exact_missing_build_dependencies(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
