@@ -278,6 +278,94 @@ none of them changed a deadline or added a retry:
   rule are unchanged: if a first launch ever exceeds the deadline, that call is refused and
   the next call starts a fresh verified worker.
 
+## Prepared pilot path (SOU-102)
+
+Without this opt-in nothing changes: the packaged worker starts lazily on the first
+classification, and that first call has to fit worker start (up to 1.4 s) plus the request
+(up to 1.4 s) into the collector's 2 s outer deadline. The pilot path moves the start out
+of the first protected call without changing any deadline.
+
+### Enabling it (Linux; opt-in)
+
+```
+agentfw classifier-package install <archive> --python /usr/bin/python3
+AGENTFW_CLASSIFIER=rule-package AGENTFW_CLASSIFIER_PREPARE=1 agentfw mcp ...
+```
+
+Only `AGENTFW_CLASSIFIER_PREPARE=1` enables it; unset or any other value keeps the lazy
+behavior. It applies to `AGENTFW_CLASSIFIER=rule-package` only.
+
+### What "ready" means
+
+At startup the collector starts the exact verified worker (the same verification, the same
+`ready` handshake against `WORKER_PROTOCOL` and the classifier digest, the same 1.4 s start
+deadline) and only then accepts protected calls. It logs one line on stderr:
+
+```
+{"event":"mcp_classifier_ready","readiness":{"package_id":..., "classifier_sha256":...,
+ "interpreter_sha256":..., "interpreter_version":..., "worker_pid":..., "start_sequence":1}}
+```
+
+Readiness describes one owned worker instance. It is true only while that process is
+running **and** the installed selection still has the same package id, interpreter digest
+and interpreter version. It is not a health check of the classifier's answers and not a
+claim about the host.
+
+The first protected call is classified by that same process; nothing is started for it.
+No tool is called and nothing is classified during preparation.
+
+### When readiness is lost
+
+A worker that exited, was killed, hung past the 1.4 s request deadline, or answered
+incorrectly is retired and reaped as before, and readiness is gone with it. A changed
+selection (another package installed, interpreter record changed) also invalidates it.
+
+Before every protected call the collector asks for preparation again. If the worker is
+still ready this does nothing. If it was lost, a fresh verified worker is started first
+and the call is classified by it. Preparation and classification share the single 2 s
+outer deadline, so a replacement never extends it. A call that cannot be prepared is
+refused with `classifier_not_ready` before dispatch (`policy not reached`, nothing
+reaches the original server) and one `mcp_classifier_not_ready` line is logged. In prepared
+mode a worker is never started inside a request path; only preparation starts one.
+
+A collector prepared for one package does not follow a different installed package: after
+`install` or rollback it refuses calls until it is restarted.
+
+### Cleanup
+
+A prepared worker is owned by the collector. It is killed and reaped when its readiness is
+retired or replaced and when the collector exits, even if it never served a call; a startup
+that fails leaves no worker behind. Separate collector sessions have separate workers.
+
+### Troubleshooting
+
+| Symptom | Meaning |
+| --- | --- |
+| Collector exits at startup with `the classifier is not ready` | The worker could not be prepared; the cause follows (worker start/ready diagnostics, or `installed package no longer verifies`). Fix the package (`classifier-package verify`, `install`, `recover`) and restart. Nothing was dispatched. |
+| `classifier_not_ready` on a call | Preparation failed for that call (altered files, a changed selection, or a start that did not finish within the deadline). The call was not dispatched; the next call tries preparation again. Restart the collector after changing the installed package. |
+| `classifier_error` / `classifier_timeout` on a call | The prepared worker did not answer within its 1.4 s request deadline (or 2 s in total). It was retired; the next call prepares a replacement. |
+
+### Evidence and limits
+
+- `crates/agentfw/tests/classifier_runtime.rs` (Unix): readiness before the first call
+  and reuse, lost and hung workers, changed selection, altered assets, reaping with no call.
+- `crates/agentfw/tests/mcp_admission.rs::sou102_*` (Linux): the real collector and daemon
+  with the installed package: readiness precedes the first call and the same process
+  serves it; a killed worker is replaced before the next dispatch; a hung worker refuses
+  that call and the next one recovers; an altered package ends startup; a changed package
+  or altered files with a lost worker refuse with `classifier_not_ready`. Each refusal
+  asserts zero executions in the server's own ledger.
+- Latency from the ignored `prepared_latency_evidence` test (Linux container, **debug**
+  build, 15 cold preparations, 300 warm requests): cold preparation p50 551 ms, p95 621 ms,
+  max 639 ms; first call after preparation p50 1.4 ms, max 1.8 ms; warm request p50 0.5 ms,
+  p95 0.9 ms, max 2.8 ms; no preparation failures. Cold preparation and calls are
+  reported separately on purpose. These numbers come from one container and are not a
+  guarantee; a preparation that exceeds the start deadline fails, it is not retried and the
+  deadline is not raised.
+- Not covered: the prepared tests are Unix-only. The Windows suite
+  (`classifier_runtime_windows`) runs unchanged. The opt-in is not demonstrated on Windows
+  and not yet on the original pinned filesystem and Git MCP servers.
+
 ## Limits
 
 The package does not defend against a compromised same-user OS (same limit as SOU-48), and

@@ -224,6 +224,30 @@ for raw in sys.stdin:
   print('{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}', flush=True)
 "#;
 
+/// Edit one installed classifier file so the package no longer verifies.
+#[cfg(unix)]
+fn alter_installed_classifier(store: &agentfw::classifier_runtime::package::Store) {
+    use std::os::unix::fs::PermissionsExt;
+    let id = store.verify().unwrap()["package"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let file = store
+        .root()
+        .join("packages")
+        .join(id)
+        .join("rule_baseline.py");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let mut edited = std::fs::read(&file).unwrap();
+    edited.extend_from_slice(b"# altered\n");
+    std::fs::write(&file, edited).unwrap();
+}
+
+#[cfg(not(unix))]
+fn alter_installed_classifier(_store: &agentfw::classifier_runtime::package::Store) {
+    unimplemented!("the altered-package fixture is exercised on Unix");
+}
+
 /// The CPython the installed-classifier fixtures run: `/usr/bin/python3` on Unix; on
 /// Windows `AGENTFW_TEST_PYTHON`, else the real `sys.executable` of `python` on PATH.
 #[cfg(not(windows))]
@@ -604,6 +628,7 @@ fn spawn_gateway_named(
         .env("AGENTFW_WORKSPACE", directory);
     command
         .env_remove("AGENTFW_CLASSIFIER")
+        .env_remove("AGENTFW_CLASSIFIER_PREPARE")
         .env_remove("AGENTFW_RULE_BASELINE")
         .env_remove("AGENTFW_TEST_CLASSIFIER")
         .env_remove("AGENTFW_TEST_CLASSIFIER_READ")
@@ -630,7 +655,7 @@ fn spawn_gateway_named(
                     .join("rule_baseline/rule_baseline.py"),
             );
         }
-        Some("rule-package") => {
+        Some(selection @ ("rule-package" | "rule-package-prepared" | "rule-package-broken")) => {
             // Install the pinned frozen package into this fixture's private profile.
             let profile = directory.join(".agentfw");
             if !profile.exists() {
@@ -651,10 +676,16 @@ fn spawn_gateway_named(
                 root,
             )
             .unwrap();
-            agentfw::classifier_runtime::package::Store::new(&profile)
-                .install(&archive, &classifier_test_python())
-                .unwrap();
+            let store = agentfw::classifier_runtime::package::Store::new(&profile);
+            store.install(&archive, &classifier_test_python()).unwrap();
+            if selection == "rule-package-broken" {
+                alter_installed_classifier(&store);
+            }
             command.env("AGENTFW_CLASSIFIER", "rule-package");
+            if selection != "rule-package" {
+                // The explicit pilot opt-in under test.
+                command.env("AGENTFW_CLASSIFIER_PREPARE", "1");
+            }
         }
         Some(value) if value.starts_with("script:") => {
             command
@@ -844,7 +875,7 @@ impl Fixture {
         #[cfg(unix)]
         let root = root.canonicalize().unwrap();
         #[cfg(windows)]
-        let root = if classifier == Some("rule-package") {
+        let root = if classifier.is_some_and(|name| name.starts_with("rule-package")) {
             windows_long_path(&root)
         } else {
             root
@@ -6258,4 +6289,268 @@ async fn sou89_active_old_collector_cannot_inherit_a_rebound_peers_admission() {
     assert!(peer.exchange(r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#).await.unwrap().contains("Inventory"));
     assert_eq!(executed(&peer.ledger).len(), 1);
     peer.child.kill().await.unwrap();
+}
+
+// ---------------------------------------------------------------- SOU-102 prepared classifier
+
+#[cfg(target_os = "linux")]
+const SOU102_READ: &str = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{}}}"#;
+
+/// Structured gateway stderr lines in order, so events can be ordered against each other.
+#[cfg(target_os = "linux")]
+fn gateway_events(fixture: &Fixture) -> Vec<Value> {
+    std::fs::read_to_string(&fixture.stderr)
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|line| line.get("event").is_some())
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn events_named(fixture: &Fixture, name: &str) -> Vec<Value> {
+    gateway_events(fixture)
+        .into_iter()
+        .filter(|line| line["event"] == name)
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn worker_pid_of(fixture: &Fixture) -> u32 {
+    let ready = events_named(fixture, "mcp_classifier_ready");
+    assert_eq!(ready.len(), 1, "exactly one readiness event is expected");
+    ready[0]["readiness"]["worker_pid"].as_u64().unwrap() as u32
+}
+
+#[cfg(target_os = "linux")]
+fn process_exists(pid: u32) -> bool {
+    // A killed child stays a zombie until its parent reaps it; a zombie is not running.
+    std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .map(|stat| {
+            stat.rsplit(')')
+                .next()
+                .unwrap_or("")
+                .trim_start()
+                .starts_with(|c| c != 'Z')
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+async fn wait_until_gone(pid: u32) -> bool {
+    for _ in 0..40 {
+        if !process_exists(pid) {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    false
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sou102_prepared_collector_is_ready_before_the_first_call_and_reuses_the_worker() {
+    let mut fixture = Fixture::with_classifier("normal", true, Some("rule-package-prepared")).await;
+    fixture.ready().await;
+    let pid = worker_pid_of(&fixture);
+    let ready = &events_named(&fixture, "mcp_classifier_ready")[0]["readiness"];
+    assert_eq!(ready["start_sequence"], 1);
+    assert_eq!(ready["worker_pid"], pid);
+    assert!(
+        process_exists(pid),
+        "the worker is running before any protected call"
+    );
+    assert!(
+        events_named(&fixture, "mcp_classification").is_empty(),
+        "nothing is classified before the first call"
+    );
+
+    let reply = fixture.exchange(SOU102_READ).await.unwrap();
+    assert!(reply.contains("7 red widgets"), "{reply}");
+    assert_eq!(executed(&fixture.ledger).len(), 1);
+    assert!(process_exists(pid), "the first call used the ready worker");
+
+    let events = gateway_events(&fixture);
+    let ready_at = events
+        .iter()
+        .position(|e| e["event"] == "mcp_classifier_ready")
+        .unwrap();
+    let classified_at = events
+        .iter()
+        .position(|e| e["event"] == "mcp_classification")
+        .unwrap();
+    assert!(
+        ready_at < classified_at,
+        "readiness precedes the first call"
+    );
+    assert_eq!(
+        events_named(&fixture, "mcp_classifier_ready").len(),
+        1,
+        "no second preparation happened for the first call"
+    );
+    assert!(events_named(&fixture, "mcp_classifier_not_ready").is_empty());
+    assert_eq!(
+        events_named(&fixture, "mcp_classification")[0]["source"],
+        "rule-baseline/packaged-worker"
+    );
+
+    // A second call keeps using the same worker.
+    let again = fixture
+        .exchange(&SOU102_READ.replace("\"id\":3", "\"id\":4"))
+        .await
+        .unwrap();
+    assert!(again.contains("7 red widgets"), "{again}");
+    assert!(process_exists(pid));
+    assert_eq!(executed(&fixture.ledger).len(), 2);
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sou102_a_killed_worker_is_replaced_before_the_next_dispatch() {
+    let mut fixture = Fixture::with_classifier("normal", true, Some("rule-package-prepared")).await;
+    fixture.ready().await;
+    let pid = worker_pid_of(&fixture);
+    assert!(fixture
+        .exchange(SOU102_READ)
+        .await
+        .unwrap()
+        .contains("7 red widgets"));
+
+    // SAFETY: kills the classifier worker started by this test's gateway.
+    unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+    assert!(wait_until_gone(pid).await);
+
+    let reply = fixture
+        .exchange(&SOU102_READ.replace("\"id\":3", "\"id\":4"))
+        .await
+        .unwrap();
+    assert!(
+        reply.contains("7 red widgets"),
+        "the lost worker is replaced before this call is dispatched: {reply}"
+    );
+    assert_eq!(executed(&fixture.ledger).len(), 2);
+    assert_eq!(events_named(&fixture, "mcp_classification").len(), 2);
+    assert!(events_named(&fixture, "mcp_classifier_not_ready").is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sou102_a_hung_worker_refuses_that_call_and_the_next_call_recovers() {
+    let mut fixture = Fixture::with_classifier("normal", true, Some("rule-package-prepared")).await;
+    fixture.ready().await;
+    let pid = worker_pid_of(&fixture);
+
+    // SAFETY: stops the classifier worker started by this test's gateway.
+    unsafe { libc::kill(pid as i32, libc::SIGSTOP) };
+    let started = std::time::Instant::now();
+    let refused: Value =
+        serde_json::from_str(&fixture.exchange(SOU102_READ).await.unwrap()).unwrap();
+    let message = refused["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("classifier_error") && message.contains("policy not reached"),
+        "{message}"
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(2500),
+        "the outer 2 s deadline is unchanged"
+    );
+    assert!(
+        executed(&fixture.ledger).is_empty(),
+        "an unclassified call is never dispatched"
+    );
+    assert!(wait_until_gone(pid).await, "the hung worker is retired");
+
+    let reply = fixture
+        .exchange(&SOU102_READ.replace("\"id\":3", "\"id\":4"))
+        .await
+        .unwrap();
+    assert!(reply.contains("7 red widgets"), "{reply}");
+    assert_eq!(executed(&fixture.ledger).len(), 1);
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sou102_prepared_startup_with_an_altered_package_ends_before_any_call() {
+    // The installed package no longer verifies, so no worker may be started from it.
+    let mut fixture = Fixture::with_classifier("normal", true, Some("rule-package-broken")).await;
+    fixture.assert_gateway_failed().await;
+    assert!(fixture
+        .exchange(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#)
+        .await
+        .is_none());
+    let stderr = std::fs::read_to_string(&fixture.stderr).unwrap();
+    assert!(
+        stderr.contains("no longer verifies"),
+        "the failure says what to fix: {stderr}"
+    );
+    assert!(events_named(&fixture, "mcp_classifier_ready").is_empty());
+    assert!(executed(&fixture.ledger).is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sou102_a_changed_installed_package_refuses_calls_until_the_collector_restarts() {
+    use agentfw::classifier_runtime::package::{build, Store, Which};
+    let mut fixture = Fixture::with_classifier("normal", true, Some("rule-package-prepared")).await;
+    fixture.ready().await;
+    let pid = worker_pid_of(&fixture);
+    assert!(fixture
+        .exchange(SOU102_READ)
+        .await
+        .unwrap()
+        .contains("7 red widgets"));
+
+    // Another package becomes the selected one while this collector is running.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .unwrap();
+    let archive = build(Which::Rev2, root).unwrap();
+    Store::new(&fixture._dir.path().join(".agentfw"))
+        .install(&archive, &classifier_test_python())
+        .unwrap();
+
+    let refused: Value = serde_json::from_str(
+        &fixture
+            .exchange(&SOU102_READ.replace("\"id\":3", "\"id\":4"))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let message = refused["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("classifier_not_ready") && message.contains("policy not reached"),
+        "{message}"
+    );
+    assert_eq!(executed(&fixture.ledger).len(), 1, "no further dispatch");
+    assert_eq!(events_named(&fixture, "mcp_classifier_not_ready").len(), 1);
+    assert!(
+        wait_until_gone(pid).await,
+        "the worker of the replaced package is retired"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn sou102_altered_assets_and_a_lost_worker_refuse_the_call_and_start_nothing() {
+    use agentfw::classifier_runtime::package::Store;
+    let mut fixture = Fixture::with_classifier("normal", true, Some("rule-package-prepared")).await;
+    fixture.ready().await;
+    let pid = worker_pid_of(&fixture);
+
+    alter_installed_classifier(&Store::new(&fixture._dir.path().join(".agentfw")));
+    // SAFETY: kills the classifier worker started by this test's gateway.
+    unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+    assert!(wait_until_gone(pid).await);
+
+    let refused: Value =
+        serde_json::from_str(&fixture.exchange(SOU102_READ).await.unwrap()).unwrap();
+    let message = refused["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("classifier_not_ready") && message.contains("policy not reached"),
+        "{message}"
+    );
+    assert!(executed(&fixture.ledger).is_empty());
+    assert!(events_named(&fixture, "mcp_classification").is_empty());
+    assert_eq!(events_named(&fixture, "mcp_classifier_not_ready").len(), 1);
 }

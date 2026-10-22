@@ -1033,9 +1033,12 @@ impl<'a> Collector<'a> {
         let Some(classifier) = self.config.classifier.clone() else {
             return Ok(Ok(ClassifiedAssessment::allow()));
         };
-        // Pilot path: a lost or outdated worker is replaced before this call is classified,
-        // within the same outer deadline. Not prepared means refused, never dispatched.
-        if classifier.requires_preparation() {
+        // Pilot path: a lost or outdated worker is replaced before this call is classified.
+        // Preparation and classification share the one outer deadline, so a replacement
+        // never extends it. Not prepared means refused, never dispatched.
+        let began = std::time::Instant::now();
+        let prepared_path = classifier.requires_preparation();
+        if prepared_path {
             let preparing = classifier.clone();
             let outcome = tokio::time::timeout(
                 CLASSIFIER_TIMEOUT,
@@ -1087,7 +1090,12 @@ impl<'a> Collector<'a> {
         let task = tokio::task::spawn_blocking(move || classifier.classify(&input));
         // ponytail: a timed-out classifier thread is abandoned, not killed; an
         // out-of-process classifier would be needed to reclaim it.
-        let (result, mapped) = match tokio::time::timeout(CLASSIFIER_TIMEOUT, task).await {
+        let remaining = if prepared_path {
+            CLASSIFIER_TIMEOUT.saturating_sub(began.elapsed())
+        } else {
+            CLASSIFIER_TIMEOUT
+        };
+        let (result, mapped) = match tokio::time::timeout(remaining, task).await {
             Err(_) => (None, Err("classifier_timeout")),
             Ok(Err(_)) => (None, Err("classifier_crash")),
             Ok(Ok(Err(_))) => (None, Err("classifier_error")),
