@@ -9,6 +9,7 @@ in the private temporary root and are never part of the output archive.
 """
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager
 import hashlib
 import importlib.util
 import json
@@ -190,6 +191,23 @@ def grade(report, output=None):
                     and re.fullmatch(r"[0-9a-f]{64}", witness["trace_sha256"]), "process_witness_invalid")
 
 
+
+@contextmanager
+def running_owned_daemon(lifecycle):
+    """Cover setup failures too; explicit stop and final cleanup share one owner."""
+    running = True
+    def stop():
+        nonlocal running
+        if running:
+            lifecycle("stop")
+            running = False
+    try:
+        lifecycle("start")
+        yield stop
+    finally:
+        stop()
+
+
 def qualify(args, private, output, evidence, report, secrets):
     require(platform.system() == "Linux" and platform.machine() == "x86_64", "linux_x86_64_required")
     report["source_before"] = BASE.source()
@@ -248,144 +266,143 @@ def qualify(args, private, output, evidence, report, secrets):
     operator = private / "operator-settings.json"; write(operator, {"unrelated": CANARIES[1].decode()})
     lifecycle("install", "sou114", str(binary), "--sha256", sha(binary))
     installed_bin = home / "versions/agentfw-sou114"
-    lifecycle("start")
-    report["real_managed_daemon"] = True
-    secrets.extend([private.as_posix().encode(), (home / "token").read_bytes().strip(), (home / "native-token").read_bytes().strip()])
-    baseline = {p: p.read_bytes() for p in (home / "config.yaml", home / "versions/lifecycle.json", policy, registry, operator, fs / "profile.json", gt / "profile.json")}
-    workspace_before = digest(BASE.snapshot(workspace))
-    common = [str(installed_bin), "doctor", "--pilot", "--home", str(home), "--agent", str(installed_bin),
-        "--fs-profile", str(fs / "profile.json"), "--git-profile", str(gt / "profile.json"), "--workspace", str(workspace),
-        "--classifier-script", str(classifier), "--classifier-sha256", sha(classifier)]
-    report["cases"] = []
-    report["support_exports"] = []
-    support_stage = evidence / "support-staging"
-    support_stage.mkdir(mode=0o700)
-    def publish_support(name):
-        staged = support_stage / name
-        verified = inspect_support(staged)
-        for file in staged.iterdir(): scan(file.read_bytes(), secrets)
-        os.rename(staged, output / name)
-        report["support_exports"].append(verified)
-    def doctor(label, extra=(), code=0, reason=None, text=False):
-        before = {p: p.read_bytes() for p in baseline}
-        before_workspace = digest(BASE.snapshot(workspace))
-        started = time.monotonic()
-        report["current_case"] = label
-        trace = private / (label + ".syscalls.private")
-        result = run_observed([str(selected["strace"]), "-f", "-qq", "-s", "8192", "-e", "trace=process", "-o", str(trace), "--",
-            *common, *([] if text else ["--json"]), *extra], private, env, trace, evidence, label)
-        observed = trace.read_text()
-        witness = process_witness(observed, installed_bin)
-        scan(result.stdout + result.stderr, secrets)
-        (output / (label + ".stdout")).write_bytes(result.stdout)
-        (output / (label + ".stderr")).write_bytes(result.stderr)
-        (output / (label + ".stdout")).chmod(0o600)
-        (output / (label + ".stderr")).chmod(0o600)
-        require(result.returncode == code, "diagnostic_exit_" + label)
-        if text:
-            require(b"Next:" in result.stdout and b"active-host protection UNKNOWN" in result.stdout, "operator_text_missing")
-            value = None
-        else:
-            value = json.loads(result.stdout)
-            require(value["active_host_call_protection"] == "unknown" and value["pilot"]["active_host_call_protection"] == "unknown", "execution_overclaim")
-            if reason:
-                found = [c["reason_code"] for c in value["pilot"]["checks"]]
-                if value["pilot"].get("incident"): found.append(value["pilot"]["incident"]["reason_code"])
-                require(reason in found, "diagnostic_reason_" + label)
-        require(before == {p: p.read_bytes() for p in before}, "diagnostic_changed_operator_input")
-        require(before_workspace == digest(BASE.snapshot(workspace)), "diagnostic_changed_workspace")
-        write(output / (label + ".process.json"), witness)
-        report["cases"].append({"case": label, "exit_code": code, "elapsed_ms": round((time.monotonic()-started)*1000),
-            "executed_programs": 1, "process_observer": "strace process syscalls", "process_sha256": sha(output / (label + ".process.json")),
-            "stdout_sha256": sha(output / (label + ".stdout")), "stderr_sha256": sha(output / (label + ".stderr")), "passed": True})
-        return value
     clients = []
-    daemon_running = True
-    try:
-        healthy = doctor("healthy-json", ["--support-bundle", str(support_stage / "healthy-support")], reason="current_instance_ready_not_execution")
-        require(all(any(c["id"]==kind+"_profile" and c["reason_code"]=="original_profile_pins_verified" for c in healthy["pilot"]["checks"]) for kind in ("filesystem", "git")), "original_pair_not_verified")
-        publish_support("healthy-support")
-        report["original_profiles_verified"] = True
-        doctor("healthy-text", text=True)
-        # Actual selected original server and enforcing daemon generate the
-        # incident. This setup call is outside doctor and separately recorded.
-        with (private / "collector.private").open("wb") as log:
-            profile = json.loads((fs / "profile.json").read_text())
-            collector_env = dict(env, AGENTFW_MCP_SERVER_PROFILE=str(fs / "profile.json"), AGENTFW_WORKSPACE=str(workspace),
-                AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=str(classifier), AGENTFW_CLASSIFIER_PYTHON=sys.executable)
-            client = BASE.Client([str(installed_bin), "mcp", "--native-admission", "--id", "filesystem", "--",
-                profile["runtimePath"], str(Path(profile["packageRoot"]) / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"), "/workspace"], collector_env, workspace, log, "owned real incident")
-            clients.append(client)
-            client.initialize()
-            useful, _ = client.exchange(BASE.call(10, {"path": "/workspace/notes.txt"}))
-            require("SOU114 useful" in BASE.result_text(useful), "useful_original_read_missing")
-            refused, _ = client.exchange(BASE.call(11, {"path": "/workspace/credentials.txt"}))
-            require(BASE.refused(refused), "actual_refusal_missing")
-            client.close()
-        rows = [json.loads(line) for line in (home / "audit.jsonl").read_bytes().splitlines()]
-        selected_rows = [r for r in rows if r.get("event")=="native_call" and r.get("tool")=="read_text_file" and r.get("verdict")=="deny" and r.get("released") is False and r.get("rule")=="owned-refusal"]
-        require(len(selected_rows)==1, "exact_recorded_refusal_missing")
-        incident = selected_rows[0]
-        write(private / "selected-native-record.private.json", incident)
-        report["real_refusal"] = {"record_sha256": digest(incident), "verdict": "deny", "released": False,
-            "useful_prior_read": True, "collector_cleanup": client.process_witness.final["all_stopped"],
-            "forced_cleanup": client.forced_cleanup, "collector_exit_code": client.process.returncode,
-            "process_witness_sha256": digest(client.process_witness.final)}
-        require(not client.forced_cleanup and client.process.returncode == 0, "collector_cleanup_not_completed_normally")
-        reference = ["--incident-file", str(home / "audit.jsonl"), "--incident-source", "native-audit",
-            "--incident-session", incident["session"], "--incident-seq", str(incident["seq"])]
-        value = doctor("recorded-refusal", reference + ["--support-bundle", str(support_stage / "incident-support")], reason="recorded_native_policy_refusal")
-        require(value["pilot"]["incident"]["current_instance_binding"] == "not_recorded_by_this_source", "audit_upgraded_to_current_instance")
-        require(value["pilot"]["incident"]["selected_record_sha256"] == [digest(incident)], "selected_refusal_digest_mismatch")
-        publish_support("incident-support")
-        changed = Path(profile["packageRoot"]) / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
-        original = changed.read_bytes(); changed.write_bytes(original+b"\n// changed asset\n")
-        doctor("changed-asset", code=3, reason="pilot_package_changed_or_unsafe")
-        changed.write_bytes(original)
-        # Synthetic negative evidence tests the reader; it is never a positive
-        # original-daemon substitute or represented as authenticated history.
-        incident_file = private / "incident.jsonl"
-        def event_file(row):
-            incident_file.write_text(json.dumps(row)+"\n"); incident_file.chmod(0o600)
-        synthetic_ref = ["--incident-file", str(incident_file), *reference[2:]]
-        event_file(dict(incident, seq=incident["seq"]+999))
-        doctor("missing-incident", synthetic_ref, reason="incident_missing_or_rotated")
-        event_file(dict(incident, at_ms=1))
-        doctor("stale-incident", synthetic_ref, reason="incident_stale_or_future_record")
-        event_file(dict(incident, registry_sha256="0"*64))
-        doctor("mismatched-incident", synthetic_ref, reason="incident_mismatched_or_ambiguous")
-        incident_file.write_bytes(b"not-json " + CANARIES[2] + b"\n")
-        doctor("malformed-input", synthetic_ref, reason="incident_malformed_record")
-        with incident_file.open("wb") as stream: stream.truncate(8*1024*1024+1)
-        doctor("oversized-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
-        incident_file.unlink(); incident_file.symlink_to(home / "audit.jsonl")
-        doctor("symlink-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
-        incident_file.unlink(); os.mkfifo(incident_file, 0o600)
-        doctor("fifo-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
-        incident_file.unlink(); event_file(incident); incident_file.chmod(0o644)
-        doctor("public-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
-        doctor("existing-output", ["--support-bundle", str(output / "healthy-support")], code=4)
-        (output / "link").symlink_to(output / "healthy-support", target_is_directory=True)
-        doctor("symlink-output", ["--support-bundle", str(output / "link")], code=4)
-        (output / "link").unlink()
-        doctor("workspace-output", ["--support-bundle", str(workspace / "must-not-exist")], code=4)
-        require(baseline == {p: p.read_bytes() for p in baseline}, "operator_inputs_changed")
-        report["operator_config_unchanged"] = True
-        report["workspace_unchanged"] = digest(BASE.snapshot(workspace)) == workspace_before
-        lifecycle("stop")
-        daemon_running = False
-        doctor("daemon-unavailable", code=3, reason="pilot_daemon_unavailable_or_unverifiable")
-        report["daemon_stopped"] = True
-        for file in output.rglob("*"):
-            require(not file.is_symlink(), "published_link")
-            if file.is_file(): scan(file.read_bytes(), secrets)
-        report["privacy_scan_passed"] = True
-        report.pop("current_case", None)
-    finally:
-        for client in clients:
-            if client.process.poll() is None: client.close()
-        if daemon_running:
-            lifecycle("stop")
+    with running_owned_daemon(lifecycle) as stop_daemon:
+        report["real_managed_daemon"] = True
+        secrets.extend([private.as_posix().encode(), (home / "token").read_bytes().strip(), (home / "native-token").read_bytes().strip()])
+        baseline = {p: p.read_bytes() for p in (home / "config.yaml", home / "versions/lifecycle.json", policy, registry, operator, fs / "profile.json", gt / "profile.json")}
+        workspace_before = digest(BASE.snapshot(workspace))
+        common = [str(installed_bin), "doctor", "--pilot", "--home", str(home), "--agent", str(installed_bin),
+            "--fs-profile", str(fs / "profile.json"), "--git-profile", str(gt / "profile.json"), "--workspace", str(workspace),
+            "--classifier-script", str(classifier), "--classifier-sha256", sha(classifier)]
+        report["cases"] = []
+        report["support_exports"] = []
+        support_stage = evidence / "support-staging"
+        support_stage.mkdir(mode=0o700)
+        def publish_support(name):
+            staged = support_stage / name
+            verified = inspect_support(staged)
+            for file in staged.iterdir(): scan(file.read_bytes(), secrets)
+            os.rename(staged, output / name)
+            report["support_exports"].append(verified)
+        def doctor(label, extra=(), code=0, reason=None, text=False):
+            require(label in CASES, "unknown_diagnostic_case")
+            print(json.dumps({"format":"sw-pilot-doctor-progress/1", "case":label, "status":"starting"}), flush=True)
+            before = {p: p.read_bytes() for p in baseline}
+            before_workspace = digest(BASE.snapshot(workspace))
+            started = time.monotonic()
+            report["current_case"] = label
+            trace = private / (label + ".syscalls.private")
+            result = run_observed([str(selected["strace"]), "-f", "-qq", "-s", "8192", "-e", "trace=process", "-o", str(trace), "--",
+                *common, *([] if text else ["--json"]), *extra], private, env, trace, evidence, label)
+            observed = trace.read_text()
+            witness = process_witness(observed, installed_bin)
+            scan(result.stdout + result.stderr, secrets)
+            (output / (label + ".stdout")).write_bytes(result.stdout)
+            (output / (label + ".stderr")).write_bytes(result.stderr)
+            (output / (label + ".stdout")).chmod(0o600)
+            (output / (label + ".stderr")).chmod(0o600)
+            require(result.returncode == code, "diagnostic_exit_" + label)
+            if text:
+                require(b"Next:" in result.stdout and b"active-host protection UNKNOWN" in result.stdout, "operator_text_missing")
+                value = None
+            else:
+                value = json.loads(result.stdout)
+                require(value["active_host_call_protection"] == "unknown" and value["pilot"]["active_host_call_protection"] == "unknown", "execution_overclaim")
+                if reason:
+                    found = [c["reason_code"] for c in value["pilot"]["checks"]]
+                    if value["pilot"].get("incident"): found.append(value["pilot"]["incident"]["reason_code"])
+                    require(reason in found, "diagnostic_reason_" + label)
+            require(before == {p: p.read_bytes() for p in before}, "diagnostic_changed_operator_input")
+            require(before_workspace == digest(BASE.snapshot(workspace)), "diagnostic_changed_workspace")
+            write(output / (label + ".process.json"), witness)
+            report["cases"].append({"case": label, "exit_code": code, "elapsed_ms": round((time.monotonic()-started)*1000),
+                "executed_programs": 1, "process_observer": "strace process syscalls", "process_sha256": sha(output / (label + ".process.json")),
+                "stdout_sha256": sha(output / (label + ".stdout")), "stderr_sha256": sha(output / (label + ".stderr")), "passed": True})
+            print(json.dumps({"format":"sw-pilot-doctor-progress/1", "case":label, "status":"pass"}), flush=True)
+            return value
+        try:
+            healthy = doctor("healthy-json", ["--support-bundle", str(support_stage / "healthy-support")], reason="current_instance_ready_not_execution")
+            require(all(any(c["id"]==kind+"_profile" and c["reason_code"]=="original_profile_pins_verified" for c in healthy["pilot"]["checks"]) for kind in ("filesystem", "git")), "original_pair_not_verified")
+            publish_support("healthy-support")
+            report["original_profiles_verified"] = True
+            doctor("healthy-text", text=True)
+            # Actual selected original server and enforcing daemon generate the
+            # incident. This setup call is outside doctor and separately recorded.
+            with (private / "collector.private").open("wb") as log:
+                profile = json.loads((fs / "profile.json").read_text())
+                collector_env = dict(env, AGENTFW_MCP_SERVER_PROFILE=str(fs / "profile.json"), AGENTFW_WORKSPACE=str(workspace),
+                    AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=str(classifier), AGENTFW_CLASSIFIER_PYTHON=sys.executable)
+                client = BASE.Client([str(installed_bin), "mcp", "--native-admission", "--id", "filesystem", "--",
+                    profile["runtimePath"], str(Path(profile["packageRoot"]) / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"), "/workspace"], collector_env, workspace, log, "owned real incident")
+                clients.append(client)
+                client.initialize()
+                useful, _ = client.exchange(BASE.call(10, {"path": "/workspace/notes.txt"}))
+                require("SOU114 useful" in BASE.result_text(useful), "useful_original_read_missing")
+                refused, _ = client.exchange(BASE.call(11, {"path": "/workspace/credentials.txt"}))
+                require(BASE.refused(refused), "actual_refusal_missing")
+                client.close()
+            rows = [json.loads(line) for line in (home / "audit.jsonl").read_bytes().splitlines()]
+            selected_rows = [r for r in rows if r.get("event")=="native_call" and r.get("tool")=="read_text_file" and r.get("verdict")=="deny" and r.get("released") is False and r.get("rule")=="owned-refusal"]
+            require(len(selected_rows)==1, "exact_recorded_refusal_missing")
+            incident = selected_rows[0]
+            write(private / "selected-native-record.private.json", incident)
+            report["real_refusal"] = {"record_sha256": digest(incident), "verdict": "deny", "released": False,
+                "useful_prior_read": True, "collector_cleanup": client.process_witness.final["all_stopped"],
+                "forced_cleanup": client.forced_cleanup, "collector_exit_code": client.process.returncode,
+                "process_witness_sha256": digest(client.process_witness.final)}
+            require(not client.forced_cleanup and client.process.returncode == 0, "collector_cleanup_not_completed_normally")
+            reference = ["--incident-file", str(home / "audit.jsonl"), "--incident-source", "native-audit",
+                "--incident-session", incident["session"], "--incident-seq", str(incident["seq"])]
+            value = doctor("recorded-refusal", reference + ["--support-bundle", str(support_stage / "incident-support")], reason="recorded_native_policy_refusal")
+            require(value["pilot"]["incident"]["current_instance_binding"] == "not_recorded_by_this_source", "audit_upgraded_to_current_instance")
+            require(value["pilot"]["incident"]["selected_record_sha256"] == [digest(incident)], "selected_refusal_digest_mismatch")
+            publish_support("incident-support")
+            changed = Path(profile["packageRoot"]) / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"
+            original = changed.read_bytes(); changed.write_bytes(original+b"\n// changed asset\n")
+            doctor("changed-asset", code=3, reason="pilot_package_changed_or_unsafe")
+            changed.write_bytes(original)
+            # Synthetic negative evidence tests the reader; it is never a positive
+            # original-daemon substitute or represented as authenticated history.
+            incident_file = private / "incident.jsonl"
+            def event_file(row):
+                incident_file.write_text(json.dumps(row)+"\n"); incident_file.chmod(0o600)
+            synthetic_ref = ["--incident-file", str(incident_file), *reference[2:]]
+            event_file(dict(incident, seq=incident["seq"]+999))
+            doctor("missing-incident", synthetic_ref, reason="incident_missing_or_rotated")
+            event_file(dict(incident, at_ms=1))
+            doctor("stale-incident", synthetic_ref, reason="incident_stale_or_future_record")
+            event_file(dict(incident, registry_sha256="0"*64))
+            doctor("mismatched-incident", synthetic_ref, reason="incident_mismatched_or_ambiguous")
+            incident_file.write_bytes(b"not-json " + CANARIES[2] + b"\n")
+            doctor("malformed-input", synthetic_ref, reason="incident_malformed_record")
+            with incident_file.open("wb") as stream: stream.truncate(8*1024*1024+1)
+            doctor("oversized-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
+            incident_file.unlink(); incident_file.symlink_to(home / "audit.jsonl")
+            doctor("symlink-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
+            incident_file.unlink(); os.mkfifo(incident_file, 0o600)
+            doctor("fifo-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
+            incident_file.unlink(); event_file(incident); incident_file.chmod(0o644)
+            doctor("public-input", synthetic_ref, reason="incident_unavailable_or_unsafe")
+            doctor("existing-output", ["--support-bundle", str(output / "healthy-support")], code=4)
+            (output / "link").symlink_to(output / "healthy-support", target_is_directory=True)
+            doctor("symlink-output", ["--support-bundle", str(output / "link")], code=4)
+            (output / "link").unlink()
+            doctor("workspace-output", ["--support-bundle", str(workspace / "must-not-exist")], code=4)
+            require(baseline == {p: p.read_bytes() for p in baseline}, "operator_inputs_changed")
+            report["operator_config_unchanged"] = True
+            report["workspace_unchanged"] = digest(BASE.snapshot(workspace)) == workspace_before
+            stop_daemon()
+            doctor("daemon-unavailable", code=3, reason="pilot_daemon_unavailable_or_unverifiable")
+            report["daemon_stopped"] = True
+            for file in output.rglob("*"):
+                require(not file.is_symlink(), "published_link")
+                if file.is_file(): scan(file.read_bytes(), secrets)
+            report["privacy_scan_passed"] = True
+            report.pop("current_case", None)
+        finally:
+            for client in clients:
+                if client.process.poll() is None: client.close()
     report["source_after"] = BASE.source()
     report["source_files_after"] = {name: sha(ROOT / name) for name in FILES}
     grade(report, output)

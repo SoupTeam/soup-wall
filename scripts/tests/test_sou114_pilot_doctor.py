@@ -31,6 +31,20 @@ class EvidenceControls(unittest.TestCase):
 
     def test_valid_denominator(self): M.grade(self.fixture())
 
+    def test_owned_daemon_stops_after_early_setup_failure_without_double_stop(self):
+        for fail_start in (False,True):
+            calls=[]
+            def lifecycle(action):
+                calls.append(action)
+                if fail_start and action=='start': raise ValueError('owned-start-failure')
+            with self.subTest(fail_start=fail_start), self.assertRaises(ValueError):
+                with M.running_owned_daemon(lifecycle): raise ValueError('early-setup-failure')
+            self.assertEqual(calls,['start','stop'])
+        calls=[]
+        with M.running_owned_daemon(calls.append) as stop:
+            stop();stop()
+        self.assertEqual(calls,['start','stop'])
+
     def test_rejects_missing_case_or_failed_program_observation(self):
         for mutation in (lambda r:r["cases"].pop(),lambda r:r["cases"][0].update(passed=False),lambda r:r["cases"][0].update(executed_programs=2)):
             value=self.fixture();mutation(value)
