@@ -1,0 +1,11 @@
+{
+  "kind": "filesystem",
+  "trace_sha256": "b0325a2e8737ef01324d0f9e364fd4c9fc0a050917279b1dca5a8f87b39d6e35",
+  "successful_target_syscalls": [
+    "7069  openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18"
+  ],
+  "effects": 1,
+  "raw_trace_exported": false,
+  "git_revision": null,
+  "pinned_git_commands": []
+}

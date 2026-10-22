@@ -1,0 +1,16 @@
+{
+  "kind": "filesystem",
+  "trace_sha256": "394d867ae78df586230216b7ca744f6b9740fa7c4441b2525f4c27d22af1464c",
+  "successful_target_syscalls": [
+    "611   openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18",
+    "616   openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18",
+    "621   openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18",
+    "610   openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18",
+    "615   openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18",
+    "620   openat(AT_FDCWD, \"/workspace/notes.txt\", O_RDONLY|O_CLOEXEC) = 18"
+  ],
+  "effects": 6,
+  "raw_trace_exported": false,
+  "git_revision": null,
+  "pinned_git_commands": []
+}

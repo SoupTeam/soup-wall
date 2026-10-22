@@ -1,0 +1,18 @@
+{
+  "kind": "git",
+  "trace_sha256": "08680485618bc49d7d8d70a5f5943219dff5dc1db91ba085744f8ea398675ce6",
+  "successful_target_syscalls": [],
+  "effects": 0,
+  "raw_trace_exported": false,
+  "git_revision": "d78d0ac3f251c445b17e41d1ac2145eb2eefffae",
+  "pinned_git_commands": [
+    [
+      "/mcp-runtime/git",
+      "version"
+    ],
+    [
+      "/mcp-runtime/git",
+      "version"
+    ]
+  ]
+}
