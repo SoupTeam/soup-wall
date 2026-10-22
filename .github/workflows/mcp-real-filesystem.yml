@@ -308,3 +308,191 @@ jobs:
             ${{ runner.temp }}/profile-onboarding-filesystem/*.json
           if-no-files-found: error
           retention-days: 30
+  native-ubuntu-2404:
+    name: Native Ubuntu 24.04 preparation
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      RUSTUP_TOOLCHAIN: '1.94.1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Focused preparation boundaries
+        run: python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
+      - name: Build accepted selected runtimes without global installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${RUNNER_TEMP:?}"
+          mkdir -m 700 "$RUNNER_TEMP/sou111-assets"
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz \
+            --output "$RUNNER_TEMP/sou111-assets/node.tar.xz"
+          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 \
+            "$RUNNER_TEMP/sou111-assets/node.tar.xz" | sha256sum --check
+          curl --fail --location --retry 3 https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz \
+            --output "$RUNNER_TEMP/sou111-assets/git.tar.xz"
+          printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 \
+            "$RUNNER_TEMP/sou111-assets/git.tar.xz" | sha256sum --check
+          mkdir -m 700 "$RUNNER_TEMP/sou111-assets/git-src"
+          tar -xJf "$RUNNER_TEMP/sou111-assets/git.tar.xz" -C "$RUNNER_TEMP/sou111-assets/git-src" \
+            --strip-components=1 --no-same-owner --no-same-permissions
+          make -C "$RUNNER_TEMP/sou111-assets/git-src" -j2 NO_CURL=YesPlease NO_EXPAT=YesPlease \
+            NO_TCLTK=YesPlease NO_GETTEXT=YesPlease NO_OPENSSL=YesPlease git
+          curl --fail --location --retry 3 \
+            https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz \
+            --output "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
+            "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
+          mkdir -m 700 "$RUNNER_TEMP/sou111-assets/bwrap-src" "$RUNNER_TEMP/sou111-assets/libcap"
+          tar -xJf "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" \
+            -C "$RUNNER_TEMP/sou111-assets/bwrap-src" --strip-components=1 --no-same-owner --no-same-permissions
+          (cd "$RUNNER_TEMP/sou111-assets" && apt-get download libcap-dev)
+          dpkg-deb -x "$RUNNER_TEMP"/sou111-assets/libcap-dev_*.deb "$RUNNER_TEMP/sou111-assets/libcap"
+          caplib="$RUNNER_TEMP/sou111-assets/libcap/usr/lib/x86_64-linux-gnu"
+          cp /lib/x86_64-linux-gnu/libcap.so.2 "$caplib/"
+          ln -sf libcap.so.2 "$caplib/libcap.so"
+          ln -s "$caplib" "$RUNNER_TEMP/sou111-assets/libcap/usr/lib64"
+          python3 -m pip install --disable-pip-version-check --target "$RUNNER_TEMP/sou111-assets/build-tools" \
+            meson==1.9.1
+          export PYTHONPATH="$RUNNER_TEMP/sou111-assets/build-tools"
+          export PATH="$RUNNER_TEMP/sou111-assets/build-tools/bin:$PATH"
+          export PKG_CONFIG_LIBDIR="$caplib/pkgconfig"
+          export PKG_CONFIG_SYSROOT_DIR="$RUNNER_TEMP/sou111-assets/libcap"
+          meson setup "$RUNNER_TEMP/sou111-assets/bwrap-build" "$RUNNER_TEMP/sou111-assets/bwrap-src" \
+            -Dtests=false -Dman=disabled -Dselinux=disabled \
+            -Dbash_completion=disabled -Dzsh_completion=disabled
+          meson compile -C "$RUNNER_TEMP/sou111-assets/bwrap-build"
+          "$RUNNER_TEMP/sou111-assets/bwrap-build/bwrap" --help | grep -- '--ro-bind-fd'
+          cargo build --locked -p agentfw --bins --message-format=json > "$RUNNER_TEMP/sou111-assets/build.jsonl"
+          cargo test --locked -p agentfw --lib --no-run --message-format=json > "$RUNNER_TEMP/sou111-assets/test-build.jsonl"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'sou111-assets'
+          rows = [json.loads(line) for line in (root / 'test-build.jsonl').read_text().splitlines()]
+          found = [row['executable'] for row in rows if row.get('reason') == 'compiler-artifact'
+                   and row.get('target', {}).get('name') == 'agentfw'
+                   and row.get('profile', {}).get('test') and row.get('executable')]
+          assert len(found) == 1, 'one exact Agent library test binary is required'
+          (root / 'sandbox-test-path').write_text(found[0])
+          PY
+          mkdir -m 700 "$RUNNER_TEMP/sou111-assets/node"
+          tar -xJf "$RUNNER_TEMP/sou111-assets/node.tar.xz" -C "$RUNNER_TEMP/sou111-assets/node" \
+            --strip-components=1 --no-same-owner --no-same-permissions
+          mkdir -m 700 "$RUNNER_TEMP/sou111-assets/claude"
+          cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$RUNNER_TEMP/sou111-assets/claude/"
+          export PATH="$RUNNER_TEMP/sou111-assets/node/bin:$PATH"
+          "$RUNNER_TEMP/sou111-assets/node/bin/npm" ci --ignore-scripts --no-audit --no-fund \
+            --prefix "$RUNNER_TEMP/sou111-assets/claude"
+          python3 -B - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('pilot', 'scripts/qualify-installed-pilot.py')
+          pilot = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(pilot)
+          path = Path(os.environ['RUNNER_TEMP']) / 'sou111-assets/policy.yaml'
+          pilot.owned_bytes(path, pilot.PILOT_POLICY.encode())
+          PY
+          sha256sum "$RUNNER_TEMP/sou111-assets/node.tar.xz" "$RUNNER_TEMP/sou111-assets/git-src/git" \
+            "$RUNNER_TEMP/sou111-assets/bwrap-build/bwrap" \
+            target/debug/agentfw target/debug/agentfw-git-sandbox > "$RUNNER_TEMP/sou111-assets/selected-hashes.txt"
+      - name: Record bounded namespace startup diagnosis
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          {
+            printf 'runner_apparmor_profile='; cat /proc/self/attr/current
+            printf 'restrict_unprivileged_userns='; cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo unavailable
+            set +e
+            timeout 10 "$asset/bwrap-build/bwrap" --unshare-all --unshare-user \
+              --disable-userns --assert-userns-disabled --ro-bind / / --proc /proc \
+              --dev /dev -- /usr/bin/true
+            printf 'direct_bwrap_exit=%s\n' "$?"
+            exec 3< "$asset/bwrap-build/bwrap"
+            timeout 10 /proc/self/fd/3 --unshare-all --unshare-user \
+              --disable-userns --assert-userns-disabled --ro-bind / / --proc /proc \
+              --dev /dev -- /usr/bin/true
+            printf 'pinned_fd_bwrap_exit=%s\n' "$?"
+          } > "$asset/namespace-probe.txt" 2>&1
+          cat "$asset/namespace-probe.txt"
+      - name: Prepare, repeat, and recover from a rejected digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          output="$RUNNER_TEMP/sou111-preparation"
+          mkdir -m 700 "$output"
+          commit="$(git rev-parse HEAD)"
+          args=(--output "$output" --expected-commit "$commit"
+            --agentfw "$PWD/target/debug/agentfw"
+            --git-launcher "$PWD/target/debug/agentfw-git-sandbox"
+            --sandbox-tests "$(cat "$asset/sandbox-test-path")"
+            --node-archive "$asset/node.tar.xz" --bwrap "$asset/bwrap-build/bwrap"
+            --git "$asset/git-src/git"
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude"
+            --python "$(command -v python3)"
+            --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py"
+            --git-classifier "$PWD/rule_baseline/git_readonly_v1/rule_baseline.py"
+            --policy "$asset/policy.yaml" --allow-download)
+          python3 -B scripts/prepare-installed-pilot.py "${args[@]}" > "$asset/plan.json"
+          python3 -B scripts/prepare-installed-pilot.py --prepare "${args[@]}" > "$asset/first.json"
+          python3 -B scripts/prepare-installed-pilot.py --prepare "${args[@]}" > "$asset/reused.json"
+          printf 'bad archive' > "$asset/bad-node.tar.xz"
+          bad_args=("${args[@]}")
+          for index in "${!bad_args[@]}"; do
+            if [[ "${bad_args[$index]}" == "$asset/node.tar.xz" ]]; then
+              bad_args[$index]="$asset/bad-node.tar.xz"
+            fi
+          done
+          if python3 -B scripts/prepare-installed-pilot.py --prepare --rebuild \
+            "${bad_args[@]}" > "$asset/first-failure.json"; then
+            echo 'Wrong digest unexpectedly succeeded' >&2; exit 1
+          fi
+          python3 -B scripts/prepare-installed-pilot.py --prepare "${args[@]}" > "$asset/recovered.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'sou111-assets'
+          rows = {name: json.loads((root / (name + '.json')).read_text())
+                  for name in ('plan', 'first', 'reused', 'first-failure', 'recovered')}
+          assert rows['plan']['status'] == 'plan' and rows['plan']['executed'] is False
+          assert rows['first']['status'] == 'prepared-not-active'
+          assert rows['reused']['status'] == rows['recovered']['status'] == 'reused'
+          assert rows['first-failure']['status'] == 'failed'
+          assert rows['first']['selection'] == rows['reused']['selection'] == rows['recovered']['selection']
+          PY
+      - name: Qualify exact prepared selection through enforcing daemon and original servers
+        shell: bash
+        run: |
+          set -euo pipefail
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou111-qualification"
+      - name: Retain bounded result and first failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou111-native-preparation-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/sou111-assets/selected-hashes.txt
+            ${{ runner.temp }}/sou111-assets/namespace-probe.txt
+            ${{ runner.temp }}/sou111-assets/plan.json
+            ${{ runner.temp }}/sou111-assets/first.json
+            ${{ runner.temp }}/sou111-assets/reused.json
+            ${{ runner.temp }}/sou111-assets/first-failure.json
+            ${{ runner.temp }}/sou111-assets/recovered.json
+            ${{ runner.temp }}/sou111-qualification/report.json
+            ${{ runner.temp }}/sou111-qualification/filesystem-sandbox.log
+            ${{ runner.temp }}/sou111-qualification/git-sandbox.log
+            ${{ runner.temp }}/sou111-qualification/sandbox-positive-failure.txt
+          if-no-files-found: warn
+          retention-days: 7
