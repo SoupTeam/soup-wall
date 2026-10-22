@@ -1,20 +1,37 @@
 {
   "task": "SOU-112",
   "qualification": "local-macos-only; Linux qualification pending",
-  "base": "731d8c4c3cd921117cdb1934587d5aa97c80d6a7",
+  "base": "e2fa19ce3162aea6a39c821882e369f64dc40e02",
   "workspace_tests": {
-    "passed": 1621,
+    "passed": 1624,
     "failed": 0,
     "ignored": 12
   },
   "clippy": "workspace all-targets -D warnings PASS",
   "fmt": "PASS",
   "launcher_cli_controls": 18,
-  "dispatch_witness_controls": 9,
+  "dispatch_witness_controls": 11,
   "linux_runtime_proven": false,
   "isolation": "read-only isolated source; scratch-only writes; external network denied; owned loopback permitted",
   "logs_sha256": {
-    "ready-local-tests.log": "ae87cbac2ac99a48b7b71aba108dbc9a06deff7dea3512aa27b34b4b06cd75ba",
-    "ready-local-clippy.log": "8c13773355e6763716ca1f23d418b362213dffd481f442cccd662753d5fdce86"
+    "ready-local-tests.log": "b8233a340c0d1a462e21002e38082544a7ac21f045d195bde9fab637d7e681ab",
+    "ready-local-clippy.log": "12f09414d04561ec28b6068d3d563b5e5140afcd16b2aee681d2ac4e4b98df40"
+  },
+  "script_controls_source_commit": "dbb59ee",
+  "documentation": {
+    "files": 229,
+    "local_links": 871,
+    "errors": 0
+  },
+  "rust_snapshot_base": "2184e82",
+  "rust_source_sha256": {
+    "crates/agentfw/src/lib.rs": "3bd629cc7ce8d38248f50fe4ab326467e79301aef00f96c910d45410024f21d1",
+    "crates/agentfw/src/main.rs": "f6739b7f0aad8070c01432f2316448212a171a42a6031f34362785838d34c9c9",
+    "crates/agentfw/src/mcp/server_profile.rs": "9cdb3e60fd25fd4b1b05aa4dd183f6028a0c63a7b8c7eeb6fe4e88ce12054431",
+    "crates/agentfw/src/native.rs": "ebc26f17269df90bf17f6f32ca58c1d6f2fc2c30e647b4296dc4f0420ed24dde",
+    "crates/agentfw/src/native/approval.rs": "d0cf3c71dbdf9292f97a8dff0e5081f91d765d50223c9d943619c793b149d5d6",
+    "crates/agentfw/src/native/approval/tests/selected_tests.rs": "cca2c10761ebab83c3491c998e28f25fef69708e0fe1dfe6ad181b431eb3625d",
+    "crates/agentfw/src/pilot_approval.rs": "f6af53d87f803849193675cd7e1656320cec075ad5c07a5d13df1d631a13a20c",
+    "crates/agentfw/src/pilot_launcher.rs": "f5a348565d27f85bf7d603de994b87dbe8c4971999856373f1f22ad0694dd0b9"
   }
 }
