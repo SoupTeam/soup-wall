@@ -1,5 +1,8 @@
 # Claude Code Pilot Launcher
 
+For explicit run-scoped operator Ask decisions from a second terminal, see
+[the opt-in Ask workflow](PILOT_ASK_WORKFLOW.md). Default launcher behavior is unchanged.
+
 The `agentfw pilot-launch` command delivers a trusted, per-run launcher for Claude Code paired with two pinned Model Context Protocol (MCP) servers (`filesystem` and `git`). It replaces error-prone manual authority minting, ad-hoc environment variables, and manual configuration editing with a single validated entry point.
 
 ## Overview
