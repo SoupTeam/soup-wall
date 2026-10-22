@@ -368,12 +368,14 @@ that fails leaves no worker behind. Separate collector sessions have separate wo
   call, continuation, killed and hung worker, altered package, recovery, session isolation,
   exit without a call, startup failure; zero forbidden effects on both). Results, caveats
   and measurements: `docs/operations/evidence/sou-102/README.md`. On a lazy first call the
-  worker start (p50 about 600 ms there) lands inside the call; prepared, the first call took
-  p50 25 ms (filesystem) and 37 ms (Git). With the frozen classifier `git_show` is the only
+  worker start (p50 about 580 to 620 ms there) lands inside the call; prepared, the first call took
+  p50 26 ms (filesystem) and 35 ms (Git) in the final runs. With the frozen classifier `git_show` is the only
   useful Git call: it leaves `git_status`, `git_log` and the diff tools unknown.
 - Not covered: the prepared tests are Unix-only. The Windows suite
   (`classifier_runtime_windows`) runs unchanged. The opt-in is not demonstrated on Windows,
-  and a mismatched ready identity and a late reply are covered only at worker level.
+  and a mismatched ready identity is covered only at worker level, by the named tests
+  `classifier_runtime::worker::ready_tests` (wrong digest, wrong protocol version, `ready: false`,
+  unknown field, malformed frame, and bad replies); a late reply is shown by the hung-worker case.
 
 ## Limits
 
