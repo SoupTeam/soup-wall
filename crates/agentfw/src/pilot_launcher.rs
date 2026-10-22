@@ -905,6 +905,34 @@ pub fn verify_daemon_policy(config: &ValidatedConfig, _daemon_token: &str) -> Re
     Ok(())
 }
 
+// Keep the owned leader unreaped until its process group has been stopped.
+// try_wait() would release its PID before the delayed group KILL, permitting reuse.
+#[cfg(unix)]
+fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    let mut information = unsafe { std::mem::zeroed::<libc::siginfo_t>() };
+    let result = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            child.id(),
+            &mut information,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    if result < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            return Ok(false);
+        }
+        return Err(error);
+    }
+    Ok(information.si_signo != 0)
+}
+
+#[cfg(not(unix))]
+fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    child.try_wait().map(|status| status.is_some())
+}
+
 #[cfg(unix)]
 #[allow(dead_code)]
 async fn terminate_process_group(pgid: u32, grace: Duration) {
@@ -1391,15 +1419,15 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
         loop {
             // Check if child has exited
-            match child.try_wait() {
-                Ok(Some(status)) => {
+            match owned_host_exited(&mut child) {
+                Ok(true) => {
                     terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return Ok(status);
+                    return child.wait().context("reap owned host after group cleanup");
                 }
-                Ok(None) => {}
-                Err(e) => {
-                    terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return Err(anyhow::anyhow!("error waiting for child: {}", e));
+                Ok(false) => {}
+                Err(error) => {
+                    // Ownership could not be established; never signal a potentially reused PID.
+                    return Err(anyhow::anyhow!("cannot establish owned host exit state: {}", error));
                 }
             }
 
@@ -1510,6 +1538,23 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn completed_host_remains_waitable_until_owned_group_cleanup() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 17"])
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !owned_host_exited(&mut child).unwrap() {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // A second observation must still see the same waitable child.
+        assert!(owned_host_exited(&mut child).unwrap());
+        assert_eq!(child.wait().unwrap().code(), Some(17));
     }
 
     #[cfg(unix)]
