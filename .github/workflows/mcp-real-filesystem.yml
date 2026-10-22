@@ -375,8 +375,14 @@ jobs:
             --pkg-config-libdir "$caplib/pkgconfig"
             --pkg-config-sysroot "$RUNNER_TEMP/sou111-assets/libcap"
             --meson-pythonpath "$RUNNER_TEMP/sou111-assets/build-tools")
-          python3 -B scripts/prepare-native-pilot-prerequisites.py "${native_args[@]}" \
-            > "$RUNNER_TEMP/sou111-assets/native-plan.json"
+          if ! python3 -B scripts/prepare-native-pilot-prerequisites.py \
+            "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-plan.json"; then
+            cp "$RUNNER_TEMP/sou111-assets/native-plan.json" \
+              "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+            cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/sou111-assets/native-plan.json"
           start="$(date +%s)"
           if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
             "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-first.json"; then
