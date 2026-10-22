@@ -1,0 +1,43 @@
+{
+  "task": "SOU-112",
+  "qualification": "local-macos-only; separate Linux report retained",
+  "base": "a8b732203a9d0690792375109ad4056167f6b84d",
+  "workspace_tests": {
+    "passed": 1632,
+    "failed": 0,
+    "ignored": 12
+  },
+  "clippy": "workspace all-targets -D warnings PASS",
+  "fmt": "PASS",
+  "launcher_cli_controls": 19,
+  "dispatch_witness_controls": 12,
+  "linux_runtime_proven": false,
+  "isolation": "read-only isolated source; scratch-only writes; external network denied; owned loopback permitted",
+  "logs_sha256": {
+    "ready-local-tests.log": "ff249e8239f6768b29d2106c330c6432144438b538bb7eb430c4015c2c4a131f",
+    "ready-local-clippy.log": "132c48b9d0bacd8d8e77e519222e95b2279a4c4a90457901aa73230e81ab3586"
+  },
+  "script_controls_source_commit": "8e80084",
+  "documentation": {
+    "files": 231,
+    "local_links": 874,
+    "errors": 0
+  },
+  "rust_snapshot_base": "19533c41cb287bae1e5d040a1f3b3fb1f9854702",
+  "rust_source_sha256": {
+    "crates/agentfw/src/lib.rs": "3bd629cc7ce8d38248f50fe4ab326467e79301aef00f96c910d45410024f21d1",
+    "crates/agentfw/src/main.rs": "f6739b7f0aad8070c01432f2316448212a171a42a6031f34362785838d34c9c9",
+    "crates/agentfw/src/mcp/server_profile.rs": "9cdb3e60fd25fd4b1b05aa4dd183f6028a0c63a7b8c7eeb6fe4e88ce12054431",
+    "crates/agentfw/src/native.rs": "22b74269fe433e3ac025fe4bd8dcaac0c9858bd57b486245b2175039aecda48d",
+    "crates/agentfw/src/native/approval.rs": "3b1164979d0d5f2b5eeb12851332f31fd0ad12cff2467874ab1300e727a12ace",
+    "crates/agentfw/src/native/approval/tests/selected_tests.rs": "cca2c10761ebab83c3491c998e28f25fef69708e0fe1dfe6ad181b431eb3625d",
+    "crates/agentfw/src/pilot_approval.rs": "4baa23f19de15be2f4e704bbedb5b064f4cd1b4934ffdea01e4550396bde4f85",
+    "crates/agentfw/src/pilot_launcher.rs": "f5a348565d27f85bf7d603de994b87dbe8c4971999856373f1f22ad0694dd0b9"
+  },
+  "retained_linux_report": "linux-qualification.json",
+  "ci_admission_controls": 50,
+  "local_toolchain": {
+    "cargo": "cargo 1.99.0 (5f94df478 2026-08-27) (Homebrew)",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28) (Homebrew)"
+  }
+}

@@ -30,6 +30,9 @@ const MAX_REPLY_FRAME: usize = 64 * 1024;
 /// Must stay below the collector's outer two-second classification timeout.
 pub const REQUEST_DEADLINE: Duration = Duration::from_millis(1400);
 const START_DEADLINE: Duration = Duration::from_millis(1400);
+/// Only used after a start failure, and never past `START_DEADLINE`: how long to wait for
+/// the exit status of a worker whose output has closed.
+const START_EXIT_GRACE: Duration = Duration::from_millis(200);
 
 // Verifies the exact bytes of the installed files (one read each), executes the
 // classifier unchanged under a non-main module name, then hands control to the framing
@@ -140,6 +143,27 @@ fn read_frame<R: BufRead>(reader: &mut R) -> Result<Option<Vec<u8>>, String> {
         if done {
             return Ok(Some(line));
         }
+    }
+}
+
+/// Describes the worker process for a start-failure message. Polls the exit status for at
+/// most `grace` (zero means a single check) and never blocks beyond it.
+fn process_state(child: &mut Child, grace: Duration) -> String {
+    let until = Instant::now() + grace;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return describe_exit(status.code()),
+            Ok(None) if Instant::now() >= until => return "process still running".into(),
+            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+            Err(error) => return format!("process state unavailable: {error}"),
+        }
+    }
+}
+
+fn describe_exit(code: Option<i32>) -> String {
+    match code {
+        Some(code) => format!("process exited with code {code} (0x{:08X})", code as u32),
+        None => "process ended by a signal".into(),
     }
 }
 
@@ -275,23 +299,28 @@ impl PackagedClassifier {
             #[cfg(windows)]
             unclean: self.unclean.clone(),
         };
+        let waiting = Instant::now();
         let frame = match worker.from_worker.recv_timeout(START_DEADLINE) {
             Ok(frame) => frame.map_err(|e| anyhow::anyhow!("worker start failed: {e}"))?,
             Err(RecvTimeoutError::Timeout) => {
                 // The worker is still owned by its job and Drop retires it. Distinguish a
                 // slow bootstrap from an early exit without changing the admission bound.
-                let status = worker.child.try_wait().ok().flatten();
+                let state = process_state(&mut worker.child, Duration::ZERO);
                 bail!(
-                    "classifier worker did not become ready within {:?} (child status: {:?})",
-                    START_DEADLINE,
-                    status
+                    "classifier worker did not become ready within {:?} ({state})",
+                    START_DEADLINE
                 );
             }
             Err(RecvTimeoutError::Disconnected) => {
-                let status = worker.child.try_wait().ok().flatten();
+                // The output closes when the process exits, but its status may not be
+                // collectable yet: wait briefly, never past the start deadline.
+                let grace = START_DEADLINE
+                    .saturating_sub(waiting.elapsed())
+                    .min(START_EXIT_GRACE);
+                let state = process_state(&mut worker.child, grace);
                 bail!(
-                    "classifier worker exited before ready (child status: {:?})",
-                    status
+                    "classifier worker exited before ready after {} ms ({state})",
+                    waiting.elapsed().as_millis()
                 );
             }
         };
@@ -376,5 +405,42 @@ impl InvocationClassifier for PackagedClassifier {
         let input = serde_json::to_string(&invocation.semantic_input())?;
         ensure!(input.len() <= MAX_INPUT, "classifier input exceeds limit");
         parse_classifier_reply(self.classify_raw(&input)?.as_bytes())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exit_codes_are_reported_in_decimal_and_hex() {
+        assert_eq!(
+            describe_exit(Some(78)),
+            "process exited with code 78 (0x0000004E)"
+        );
+        assert_eq!(
+            describe_exit(Some(-1073741515)),
+            "process exited with code -1073741515 (0xC0000135)"
+        );
+        assert_eq!(describe_exit(None), "process ended by a signal");
+    }
+
+    #[test]
+    fn an_exited_process_is_reported_with_its_code() {
+        #[cfg(unix)]
+        let mut command = {
+            let mut c = Command::new("sh");
+            c.args(["-c", "exit 7"]);
+            c
+        };
+        #[cfg(windows)]
+        let mut command = {
+            let mut c = Command::new("cmd");
+            c.args(["/C", "exit 7"]);
+            c
+        };
+        let mut child = command.spawn().expect("a trivial process must start");
+        let state = process_state(&mut child, Duration::from_secs(5));
+        assert!(state.starts_with("process exited with code 7"), "{state}");
     }
 }
