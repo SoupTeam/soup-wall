@@ -94,7 +94,7 @@ def private_json(path, value):
         stream.write(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
 
 
-def install(destination, workspace, node, bwrap, npm):
+def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline=False, log=None):
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("this profile requires Linux x86-64")
     workspace, node, bwrap = [Path(path).resolve(strict=True) for path in (workspace, node, bwrap)]
@@ -133,10 +133,13 @@ def install(destination, workspace, node, bwrap, npm):
         shutil.copyfile(ASSETS / name, package / name)
     environment = {key: value for key, value in os.environ.items() if key in {"PATH", "LANG"}}
     environment["PATH"] = str(node.parent) + os.pathsep + environment.get("PATH", "")
-    environment.update(HOME=str(destination), npm_config_cache=str(destination / "npm-cache"),
+    cache = Path(npm_cache).resolve(strict=True) if npm_cache is not None else destination / "npm-cache"
+    environment.update(HOME=str(destination), npm_config_cache=str(cache),
                        npm_config_update_notifier="false", npm_config_fund="false", npm_config_audit="false")
-    subprocess.run([str(npm), "ci", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=package,
-                   env=environment, check=True, timeout=300)
+    subprocess.run([str(npm), "ci", "--ignore-scripts", "--no-audit", "--no-fund",
+                    *(["--offline"] if offline else [])], cwd=package,
+                   env=environment, check=True, timeout=300,
+                   stdout=log, stderr=subprocess.STDOUT if log is not None else None)
     if sha(package / "node_modules/@modelcontextprotocol/server-filesystem/dist/index.js") != identity["package"]["originalEntrypointSha256"]:
         raise ValueError("installed original server entrypoint identity mismatch")
     manifest = json.loads((ASSETS / "upstream-tools-list.json").read_text(encoding="utf-8"))
