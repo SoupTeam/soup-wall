@@ -266,6 +266,16 @@ not attest a paid/live model, an already running host reload, Windows/macOS upgr
 or whole-Phase readiness. Exact-source results and remaining verification status are
 recorded in [SOU-78 evidence](operations/evidence/sou-78-evidence.md).
 
+The trusted per-run Claude Code pilot launcher
+([`agentfw pilot-launch`](operations/CLAUDE_PILOT_LAUNCHER.md), SOU-99)
+provides a validated, bounded execution environment for Claude Code with pinned
+filesystem and Git MCP servers. It derives scoped HMAC child authority grants from
+the authenticated daemon, enforces strict host boundaries (`--restricted`,
+`--strict-mcp-config`, `--tools ""`, `--allowedTools`), isolates per-run configuration
+in a private directory outside the workspace (`0700`), and guarantees complete
+cleanup on exit or failure. Exact-source qualification and sequence evidence are
+recorded in [SOU-99 evidence](operations/evidence/sou-99-evidence.md).
+
 ### Phase 6 — Complete team rollout and operational validation
 
 **Depends on:** Phases 1–5 and selected deployment/identity environments.

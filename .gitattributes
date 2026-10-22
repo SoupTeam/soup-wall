@@ -57,3 +57,6 @@ rule_baseline/pilot_readonly_v1/rule_baseline.py text eol=lf
 # SOU-98 explicit preset and selected Git snapshot use committed byte identities.
 profiles/pilot/linux-readonly-v1/** text eol=lf
 rule_baseline/git_readonly_v1/rule_baseline.py text eol=lf
+
+# The reviewed CDLA notice is checked by its exact raw-byte digest on Windows too.
+policy/third-party-notices/webpki-roots-1.0.10/LICENSE text eol=lf

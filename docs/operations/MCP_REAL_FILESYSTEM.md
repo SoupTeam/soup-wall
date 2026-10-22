@@ -94,7 +94,11 @@ AGENTFW_CLASSIFIER_PYTHON=/absolute/python3 \
   /workspace
 ```
 
-Use this command and environment in the selected Claude Code `mcpServers`
+For a persistent Claude Code entry, prefer
+[`agentfw onboard --server-profile`](ONBOARDING.md#original-filesystem-and-git-profiles):
+it previews and pins these identities, persists only these launch settings,
+verifies a useful read and a witnessed refusal through the entry, and can be undone.
+Otherwise use this command and environment in the selected Claude Code `mcpServers`
 entry. The server command, fixed entry point and `/workspace` argument must
 match the installed profile exactly. No package is downloaded during collector
 startup. Native receipts retain existing session, schema, original arguments,

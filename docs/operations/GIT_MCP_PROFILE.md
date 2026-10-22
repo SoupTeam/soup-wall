@@ -124,6 +124,12 @@ private profile/registry/policy files and an installation report. It never edits
 an existing Agent home or client configuration. Failed partial installations
 remain for diagnosis and must not be treated as usable profiles.
 
+To connect the installed profile to a Claude Code entry persistently, use
+[`agentfw onboard --server-profile`](ONBOARDING.md#original-filesystem-and-git-profiles)
+with the Git classifier snapshot above. It verifies a `git_status` read, a refused
+`git_create_branch` with an unchanged repository witness and a continuation through
+the connected entry, and undo restores the original entry.
+
 ## Exact-source acceptance
 
 Build the current Agent, its private Git launcher (`cargo build --locked -p

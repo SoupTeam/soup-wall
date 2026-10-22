@@ -32,7 +32,7 @@ jobs:
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-git')
     runs-on: ubuntu-22.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
@@ -114,6 +114,16 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou98-git" \
             2>&1 | tee "$RUNNER_TEMP/sou98-git.log"
+      - name: Required persistent onboarding of the installed Git profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/onboarding-profile-acceptance.py --profiles git \
+            --agentfw "$PWD/target/debug/agentfw" --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --out "$RUNNER_TEMP/profile-onboarding-git" --work-parent "$RUNNER_TEMP" \
+            2>&1 | tee "$RUNNER_TEMP/sou68-profile-onboarding.log"
       - name: SOU-97 opt-in candidate classifier through the original Git server
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
         shell: bash
@@ -210,6 +220,7 @@ jobs:
             ${{ runner.temp }}/sou68-*.log
             ${{ runner.temp }}/sou68-acceptance/*.json
             ${{ runner.temp }}/sou68-acceptance/*.log
+            ${{ runner.temp }}/profile-onboarding-git/*.json
             ${{ runner.temp }}/sou97-*.log
             ${{ runner.temp }}/sou97-git-candidate/*.json
             ${{ runner.temp }}/sou97-git-candidate/*.jsonl

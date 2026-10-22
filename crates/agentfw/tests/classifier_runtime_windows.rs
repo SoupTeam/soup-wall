@@ -57,12 +57,13 @@ fn long_temp_root() -> PathBuf {
 
 /// A hosted runner starts the first interpreter of a job with a cold OS file cache, which
 /// can take longer than the 1.4 s worker start deadline. The deadline is production
-/// behaviour and stays as it is; the tests start the interpreter once, with the imports
-/// the worker needs, so that the cold-cache cost is not charged to whichever test runs first.
+/// behaviour and stays as it is; the tests start the interpreter once with every stdlib
+/// module imported by the reviewed bootstrap, classifier and framing code. In particular,
+/// the classifier imports `re` and `typing` before it emits the ready frame.
 fn warm_interpreter() {
     static WARM: std::sync::Once = std::sync::Once::new();
     WARM.call_once(|| {
-        run(Command::new(python()).args(["-I", "-c", "import hashlib, json, sys"]));
+        run(Command::new(python()).args(["-I", "-c", "import hashlib, json, re, sys, typing"]));
     });
 }
 
