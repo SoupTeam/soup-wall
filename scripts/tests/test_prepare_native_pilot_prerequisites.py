@@ -5,9 +5,12 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
 import stat
+import subprocess
 import tarfile
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -31,6 +34,59 @@ def args(root, *, prepare=True, rebuild=False):
 
 
 class PreparationBoundary(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "process signals require Linux")
+    def test_cancelled_build_stops_owned_descendant(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            worker = root / "worker.py"
+            worker.write_text('''import json, os, pathlib, subprocess, sys, time
+child = subprocess.Popen([sys.executable, "-c",
+    "import pathlib,sys,time; time.sleep(1.5); pathlib.Path(sys.argv[1]).write_text('escaped')",
+    sys.argv[2]])
+pathlib.Path(sys.argv[1]).write_text(json.dumps({"worker": os.getpid(), "child": child.pid}))
+time.sleep(30)
+''')
+            helper = root / "helper.py"
+            helper.write_text('''import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("preparation", sys.argv[1])
+preparation = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(preparation)
+root = pathlib.Path(sys.argv[2])
+try:
+    preparation.build([sys.executable, str(root / "worker.py"),
+                       str(root / "pids.json"), str(root / "escaped")],
+                      cwd=root, env={"PATH": "/usr/bin:/bin"},
+                      log=root / "build.log", seconds=30, stage="build")
+except preparation.Failure as error:
+    print(error.reason)
+''')
+            process = subprocess.Popen([os.sys.executable, str(helper),
+                                        str(ROOT / "scripts/prepare-native-pilot-prerequisites.py"),
+                                        str(root)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       text=True)
+            pids = root / "pids.json"
+            try:
+                deadline = time.monotonic() + 5
+                while not pids.exists() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                self.assertTrue(pids.exists(), "the owned descendant must have started")
+                process.send_signal(signal.SIGTERM)
+                stdout, stderr = process.communicate(timeout=5)
+                self.assertEqual(process.returncode, 0, stderr)
+                self.assertIn("build_cancelled", stdout)
+                time.sleep(1.7)
+                self.assertFalse((root / "escaped").exists(),
+                                 "a cancelled build must not leave its descendant running")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate(timeout=5)
+                if pids.exists():
+                    try:
+                        os.killpg(json.loads(pids.read_text())["worker"], signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
     @unittest.skipUnless(os.name == "posix", "POSIX symlink modes require Linux")
     def test_frozen_generation_accepts_internal_symlink_and_rejects_changed_target(self):
         with tempfile.TemporaryDirectory() as temporary:

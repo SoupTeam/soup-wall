@@ -296,41 +296,62 @@ def stop_group(process):
 
 def build(command, *, cwd, env, log, seconds, stage):
     """Drain bounded output and stop the entire owned process group on every exit."""
-    with log.open("xb") as output:
-        os.fchmod(output.fileno(), 0o600)
-        process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, start_new_session=True)
-        selector = selectors.DefaultSelector()
-        selector.register(process.stdout, selectors.EVENT_READ)
-        deadline, count, over_limit = time.monotonic() + seconds, 0, False
-        try:
-            while selector.get_map() or process.poll() is None:
-                if time.monotonic() > deadline:
-                    raise Failure(f"{stage}_timeout; inspect private log", stage)
-                if not selector.get_map():
-                    time.sleep(0.2)
-                for key, _ in selector.select(timeout=0.2) if selector.get_map() else ():
-                    block = os.read(key.fd, 65536)
-                    if not block:
-                        selector.unregister(key.fileobj)
-                        continue
-                    count += len(block)
-                    output.write(block[:max(0, MAX_LOG - output.tell())])
-                    if count > MAX_LOG:
-                        over_limit = True
-                        raise Failure(f"{stage}_log_limit; inspect private log", stage)
-                if process.poll() is not None and selector.get_map():
+    cancelled = False
+
+    def mark_cancelled(_signum, _frame):
+        nonlocal cancelled
+        cancelled = True
+
+    previous = {signum: signal.getsignal(signum) for signum in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        for signum in previous:
+            signal.signal(signum, mark_cancelled)
+        with log.open("xb") as output:
+            os.fchmod(output.fileno(), 0o600)
+            process = None
+            selector = None
+            try:
+                process = subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE,
+                                           stderr=subprocess.STDOUT, start_new_session=True)
+                selector = selectors.DefaultSelector()
+                selector.register(process.stdout, selectors.EVENT_READ)
+                deadline, count, over_limit = time.monotonic() + seconds, 0, False
+                while selector.get_map() or process.poll() is None:
+                    if cancelled:
+                        raise Failure(f"{stage}_cancelled", stage)
+                    if time.monotonic() > deadline:
+                        raise Failure(f"{stage}_timeout; inspect private log", stage)
+                    if not selector.get_map():
+                        time.sleep(0.2)
+                    for key, _ in selector.select(timeout=0.2) if selector.get_map() else ():
+                        block = os.read(key.fd, 65536)
+                        if not block:
+                            selector.unregister(key.fileobj)
+                            continue
+                        count += len(block)
+                        output.write(block[:max(0, MAX_LOG - output.tell())])
+                        if count > MAX_LOG:
+                            over_limit = True
+                            raise Failure(f"{stage}_log_limit; inspect private log", stage)
+                    if process.poll() is not None and selector.get_map():
+                        stop_group(process)
+                code = process.wait(timeout=2)
+                if cancelled:
+                    raise Failure(f"{stage}_cancelled", stage)
+                require(not over_limit, f"{stage}_log_limit", stage)
+                if code:
+                    raise Failure(f"{stage}_exit_{code}; inspect private log", stage, code)
+            finally:
+                if selector is not None:
+                    selector.close()
+                if process is not None:
                     stop_group(process)
-            code = process.wait(timeout=2)
-            require(not over_limit, f"{stage}_log_limit", stage)
-            if code:
-                raise Failure(f"{stage}_exit_{code}; inspect private log", stage, code)
-        finally:
-            selector.close()
-            stop_group(process)
-            process.stdout.close()
-            output.flush()
-            os.fsync(output.fileno())
+                    process.stdout.close()
+                output.flush()
+                os.fsync(output.fileno())
+    finally:
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
 
 
 def captured(command, *, seconds=10, stage="verify"):
