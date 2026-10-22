@@ -320,7 +320,7 @@ jobs:
   native-ubuntu-2404:
     name: native-ubuntu-2404
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && inputs.matched_development_only)
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && github.event.inputs.matched_development_only == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 65
     env:
@@ -503,7 +503,7 @@ jobs:
           set -euo pipefail
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           mode=()
-          if [[ "${{ inputs.matched_development_only }}" == "true" ]]; then mode=(--matched-development); fi
+          if [[ "${{ github.event.inputs.matched_development_only }}" == "true" ]]; then mode=(--matched-development); fi
           python3 -B scripts/qualify-installed-pilot.py --run "${mode[@]}" --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou111-qualification"
       - name: Remove only this job's sandbox permission and executable
