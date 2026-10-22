@@ -1,7 +1,7 @@
 # Claude Code Pilot Launcher
 
 For explicit run-scoped operator Ask decisions from a second terminal, see
-[the opt-in Ask workflow](PILOT_ASK_WORKFLOW.md). Default launcher behavior is unchanged.
+[the opt-in Ask workflow](PILOT_ASK_WORKFLOW.md). Default Ask behavior remains non-interactive.
 
 The `agentfw pilot-launch` command delivers a trusted, per-run launcher for Claude Code paired with two pinned Model Context Protocol (MCP) servers (`filesystem` and `git`). It replaces error-prone manual authority minting, ad-hoc environment variables, and manual configuration editing with a single validated entry point.
 
@@ -32,7 +32,7 @@ agentfw pilot-launch \
 
 | Flag | Description | Default |
 | :--- | :--- | :--- |
-| `--claude <PATH>` | Absolute path to the verified Claude Code executable. Must exist and be executable. | Required |
+| `--claude <PATH>` | Absolute path to the pinned Claude Code 2.1.251 Linux x86_64 executable. Its SHA-256 must match the supported host. | Required |
 | `--workspace <PATH>` | Target directory exposed to the pilot conversation. Must be a directory. | Required |
 | `--fs-profile <PATH>` | Pinned filesystem profile JSON or directory containing upstream tool metadata. | Required |
 | `--git-profile <PATH>` | Pinned Git profile JSON or directory containing upstream tool metadata. | Required |
@@ -50,8 +50,9 @@ agentfw pilot-launch \
 ### 1. Private Per-Run Isolation
 The launcher creates a fresh temporary directory with mode `0700` strictly outside the workspace:
 - Generated `mcp.json` is written with mode `0600`.
-- Environment variable `CLAUDE_CONFIG_DIR` points to this private directory, ensuring operator global configurations (`~/.claude.json`) are neither read nor modified.
-- Upon process exit, SIGINT, SIGTERM, or abnormal failure, an RAII cleanup guard automatically removes the private directory and all contained state.
+- The host receives private HOME, TMPDIR and CLAUDE_CONFIG_DIR values. Its environment is cleared before fixed isolation settings and explicit operator provider transport inputs are supplied; operator global configurations (`~/.claude.json`) remain outside discovery.
+- The canonical temporary parent is checked before creating state, including symlink aliases into the selected workspace.
+- On normal return, returned errors and intercepted SIGINT/SIGTERM, cleanup removes the private directory and contained state. Untrappable process or machine loss cannot certify cleanup and is not reported as a completed run.
 
 ### 2. Scoped Child Authority Minting
 Child authority grants are minted using the authenticated daemon's native token (`child_authority::derive_key`):
@@ -60,7 +61,8 @@ Child authority grants are minted using the authenticated daemon's native token 
 
 ### 3. Strict Host Boundary Enforcement
 Claude Code is invoked with strict arguments to prevent prompt-based tool bypass:
-- `--restricted`: Restricts built-in host capabilities.
+- `--restricted`: Restricts built-in host capabilities and executable customization sources for the exact pinned host.
+- `--setting-sources ""` and a private `--settings` file: exclude project/user settings, disable hooks and enable no plugins. Machine-managed settings/MCP configuration and unsupported host versions/platforms receive an explicit unsupported refusal.
 - `--strict-mcp-config`: Rejects servers not defined in the specified configuration.
 - `--mcp-config <PATH>`: Pins server definitions to the private per-run configuration.
 - `--tools ""`: Disables built-in default tools (e.g. unmediated `Bash`).
@@ -100,6 +102,7 @@ The real-filesystem CI lane supplies those assets and retains a separate `sou99-
 
 ## Related Documents
 
+- [Untrusted project configuration boundary](PILOT_PROJECT_ISOLATION.md)
 - [MCP Stdio Admission](MCP_STDIO_ADMISSION.md)
 - [MCP Real Filesystem Profile](MCP_REAL_FILESYSTEM.md)
 - [Claude MCP Connection](CLAUDE_MCP_CONNECTION.md)
