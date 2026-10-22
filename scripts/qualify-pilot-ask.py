@@ -162,7 +162,7 @@ class Pilot:
                     self.err.flush()
                     raise ValueError("launcher_before_publication_" + diagnostic((root / "host.stderr.private").read_text()[-16000:]))
             try:
-                until(identify, "run_metadata_missing")
+                until(identify, "run_metadata_missing", seconds=90)
             except Exception:
                 self.close()
                 raise
