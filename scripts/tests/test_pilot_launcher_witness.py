@@ -100,6 +100,16 @@ class DispatchControls(unittest.TestCase):
             '101 write(12, "http", 4 <unfinished ...>']), Path("/owned/agentfw"), strict=False)
         self.assertEqual(len(observed["calls"]), 4)
 
+    def test_resumed_exec_preserves_actual_collector_and_server_identity(self):
+        rows = self.trace()
+        rows[0] = rows[0].replace('"mcp"', '"mcp", "--id", "filesystem"')
+        rows[1] = rows[1].replace('"mcp"', '"mcp", "--id", "git"')
+        start, result = rows[0].split(" = ")
+        rows[0:1] = [start[:-1] + " <unfinished ...>", "101 <... execve resumed>) = " + result]
+        observed = WITNESS.collector_dispatches("\n".join(rows), Path("/owned/agentfw"), strict=False)
+        self.assertEqual(observed["collector_servers"], {101: "filesystem", 102: "git"})
+        self.assertEqual(len(observed["calls"]), 4)
+
     def test_resumed_syscall_preserves_original_complete_dispatch(self):
         rows = self.trace()
         original = rows[-1]

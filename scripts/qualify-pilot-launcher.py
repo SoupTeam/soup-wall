@@ -45,12 +45,8 @@ default: allow
 """
 
 
-def collector_dispatches(text, binary, strict=True):
-    """Decode complete successful writes by actual `agentfw mcp` processes.
-
-    Discovery and useful original-server dispatch calibrate this observation.
-    Unknown/truncated writes cannot be silently counted as a negative witness.
-    """
+def normalized_syscalls(text):
+    """Join interleaved strace syscalls without losing process ownership."""
     lines, pending = [], {}
     for line in (row.lstrip() for row in text.splitlines()):
         unfinished = re.match(r"^(\d+)\s+(.*?)\s*<unfinished \.\.\.>$", line)
@@ -63,11 +59,30 @@ def collector_dispatches(text, binary, strict=True):
             lines.append(resumed[1] + " " + pending.pop(resumed[1]) + resumed[2])
         else:
             lines.append(line)
-    collectors = set()
+    return lines, pending
+
+
+def collector_processes(lines, binary):
+    collectors = {}
     for line in lines:
-        match = re.match(r"^(\d+)\s+execve\((\"(?:[^\"\\]|\\.)*\"),\s*\[(.*?)\],", line)
-        if match and ast.literal_eval(match[2]) == str(binary) and '"mcp"' in match[3] and re.search(r'\)\s*=\s*0\s*$',line):
-            collectors.add(int(match[1]))
+        match = re.match(r'^(\d+)\s+execve\(("(?:[^"\\]|\\.)*"),\s*\[(.*?)\],', line)
+        if not match or ast.literal_eval(match[2]) != str(binary) or not re.search(r'\)\s*=\s*0\s*$', line):
+            continue
+        argv = ast.literal_eval("[" + match[3] + "]")
+        if len(argv) < 2 or argv[1] != "mcp":
+            continue
+        server = None
+        if argv.count("--id") == 1 and argv.index("--id") + 1 < len(argv):
+            server = argv[argv.index("--id") + 1]
+        collectors[int(match[1])] = server
+    return collectors
+
+
+def collector_dispatches(text, binary, strict=True):
+    """Observe complete writes on discovery-calibrated original-server pipes."""
+    lines, pending = normalized_syscalls(text)
+    collector_servers = collector_processes(lines, binary)
+    collectors = set(collector_servers)
     require(len(collectors) >= 2, "two_actual_collector_execs_required")
     calls, buffers, discoveries, channels = [], {}, set(), set()
     for line in lines:
@@ -118,7 +133,8 @@ def collector_dispatches(text, binary, strict=True):
         require(not strict and (fd is None or (int(pid),int(fd[1])) not in channels), "unfinished_collector_syscall")
     require(all(not buffers.get(channel) for channel in channels), "incomplete_original_wire_frame")
     require(all((call["pid"],call["fd"]) in channels for call in calls), "unobserved_original_call_channel")
-    return {"collector_pids":sorted(collectors),"discoveries":len(discoveries),"calls":calls,
+    return {"collector_pids":sorted(collectors),"collector_servers":collector_servers,
+            "discoveries":len(discoveries),"calls":calls,
             "observer":"independent strace collector write syscalls"}
 
 

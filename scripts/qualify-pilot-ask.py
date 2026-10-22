@@ -178,7 +178,7 @@ class Pilot:
         return SELECTED.trace_effects(self.trace, "filesystem" if peer else self.kind,
             target="/workspace/notes.txt" if peer else "/workspace/credentials.txt", git_revision=self.setup.head_before)
 
-    def dispatches(self, peer=False):
+    def wire_observation(self):
         # A partial live strace write is inconclusive, never a zero witness.
         def observe():
             require(self.trace.stat().st_size <= 32 * 1024 * 1024, "wire_trace_bound")
@@ -189,7 +189,10 @@ class Pilot:
                 return LAUNCH.collector_dispatches(text, self.setup.binary, strict=False)
             except ValueError:
                 return None
-        observed = until(observe, "complete_original_wire_observation_missing", seconds=2)
+        return until(observe, "complete_original_wire_observation_missing", seconds=2)
+
+    def dispatches(self, peer=False):
+        observed = self.wire_observation()
         _, tool, arguments = self.peer if peer else self.primary
         fingerprint = BASE.hashlib.sha256(json.dumps(arguments, sort_keys=True,
             separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
@@ -205,11 +208,10 @@ class Pilot:
         require(shown["args"] == expected and shown["binding_sha256"] == pending["binding_sha256"], "inspection_not_exact_original_call")
 
     def pause_collector(self):
-        pattern = re.compile(r'^\s*(\d+)\s+execve\(' + re.escape(json.dumps(str(self.setup.binary)))
-            + r',\s*\[.*?"mcp".*?"--id",\s*' + re.escape(json.dumps(self.kind)) + r'.*\)\s*=\s*0\s*$', re.M)
-        matches = pattern.findall(self.trace.read_text())
+        observed = self.wire_observation()
+        matches = [pid for pid, server in observed["collector_servers"].items() if server == self.kind]
         require(len(matches) == 1, "one_kernel_observed_selected_collector_required")
-        pid = int(matches[0])
+        pid = matches[0]
         identity = BASE.ProcessWitness.identity(pid)
         require(identity is not None, "selected_collector_not_live")
         os.kill(pid,signal.SIGSTOP)
