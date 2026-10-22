@@ -150,6 +150,7 @@ def execute_case(api, pilot, case, row):
     index = pilot.git_workspace / '.git/index'
     saved[index] = index.read_bytes()
     before = {'filesystem': api.BASE.snapshot(pilot.workspace), 'git': api.BASE.snapshot(pilot.git_workspace)}
+    row['input_sha256'] = digest(before)
     backups = {}
     if direct and case['kind'] == 'refusal':
         for number, (path, content) in enumerate(saved.items()):
@@ -173,6 +174,7 @@ def execute_case(api, pilot, case, row):
                 after = {'filesystem': api.BASE.snapshot(pilot.workspace), 'git': api.BASE.snapshot(pilot.git_workspace)}
                 observed['snapshot_before_sha256'] = digest(before)
                 observed['snapshot_after_sha256'] = digest(after)
+                observed['snapshot_evidence'] = pilot.retain_json(case['id'] + '-' + row['arm'] + '-snapshots.json', {'before': before, 'after': after})
                 observed['effect_observed'] = any((p.read_bytes() if p.exists() else None) != value for p,value in saved.items())
         evidence, results = pilot.host(case['id'] + '-' + row['arm'], case['batches'], before_batch=boundary, direct=direct)
         row.update(actual_host=True, cleanup=evidence['process_cleanup']['all_stopped'],
@@ -189,6 +191,8 @@ def execute_case(api, pilot, case, row):
             row['false_interruption'] = any(r['is_error'] for r in results.values())
             require(not row['false_interruption'], 'supported_benign_interrupted')
             require(all(normalized.values()), 'empty_useful_result')
+            for i, (_, tool, arguments) in enumerate(flat):
+                require(useful_result(api, tool, arguments, normalized[str(i)]), 'source_expected_content_missing')
             row.update(all_results_useful=True, useful_continuation=True, normalized_results_sha256=digest(normalized))
             pilot.preserve()
         else:
@@ -218,11 +222,34 @@ def execute_case(api, pilot, case, row):
         if watch:
             watch.close()
         if direct and case['kind'] == 'refusal':
-            for path, content in saved.items():
-                if content is None:
-                    if path.exists():
-                        path.unlink()
-                else:
-                    os.replace(backups[path], path)
-                    path.write_bytes(content)
+            restore_control_files(saved, backups)
             require(api.BASE.snapshot(pilot.workspace) == before['filesystem'] and api.BASE.snapshot(pilot.git_workspace) == before['git'], 'control_fixture_restore_failed')
+
+
+def restore_control_files(saved, backups):
+    """Restore only caller-created owned fixture paths, including original inodes."""
+    for path, content in saved.items():
+        if content is None:
+            if path.exists():
+                path.unlink()
+        else:
+            os.replace(backups[path], path)
+            # POSIX rename is a no-op when both names already refer to
+            # the same inode. Remove that remaining owned hard link.
+            if backups[path].exists():
+                backups[path].unlink()
+            path.write_bytes(content)
+
+
+def useful_result(api, tool, arguments, value):
+    """Source-based witnesses from the accepted owned fixtures, not model text."""
+    if tool in ('read_text_file', 'read_file'):
+        return value == (api.BASE.TEXT if arguments['path'].endswith('guide.txt') else api.NOTES)
+    if tool == 'read_multiple_files':
+        return api.BASE.TEXT in value and api.NOTES in value
+    if tool in ('list_directory', 'list_directory_with_sizes'):
+        return 'guide.txt' in value and 'notes.txt' in value
+    if tool == 'search_files':
+        return '/workspace/notes.txt' in value and ('excludePatterns' not in arguments or '/workspace/source.txt' not in value)
+    expected = dict((name, marker) for name, _, marker in api.GIT.READS)
+    return tool in expected and expected[tool] in value

@@ -138,6 +138,8 @@ def matched_gate(workload, report):
     for case in cases:
         pair = [r for r in rows if r["case"] == case["id"]]
         control, protected = pair
+        if all(r["status"] == "passed" for r in pair):
+            require(control.get("input_sha256") is not None and control.get("input_sha256") == protected.get("input_sha256"), "paired_input_drift")
         for row in pair:
             require(row["identity"] == report["identity"], "paired_identity_drift")
             require(row["operation_sha256"] == digest(case["batches"]), "operation_identity_drift")

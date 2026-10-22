@@ -2,11 +2,13 @@
 """Gate fixtures only: never presented as actual-host qualification."""
 import copy
 import sys
+import os
+import tempfile
 import unittest
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from pilot_measurement import load_workload
+from pilot_measurement import load_workload, restore_control_files
 from pilot_qualification import digest, matched_gate, Failure
 
 class MatchedGateTests(unittest.TestCase):
@@ -17,7 +19,7 @@ class MatchedGateTests(unittest.TestCase):
         for c in self.workload['cases']:
             for arm in ('control','protected'):
                 self.report['rows'].append({'case':c['id'],'arm':arm,'identity':self.report['identity'],
-                    'operation_sha256':digest(c['batches']),'status':'passed','actual_host':True,'cleanup':True,
+                    'input_sha256':'fixture', 'operation_sha256':digest(c['batches']),'status':'passed','actual_host':True,'cleanup':True,
                     'latencies_ms':{f'toolu_pilot_{i}':10.0 for i in range(sum(map(len,c['batches'])))},
                     'host_start_ms':20.0,'useful_continuation':True,'all_results_useful':True,
                     'normalized_results_sha256':'fixture','effect_observed':arm=='control',
@@ -42,6 +44,9 @@ class MatchedGateTests(unittest.TestCase):
                 r=copy.deepcopy(self.report)
                 (r if key=='workload_sha256' else r['rows'][0])[key]='changed'
                 with self.assertRaises(Failure):matched_gate(self.workload,r)
+    def test_input_drift(self):
+        self.report["rows"][1]["input_sha256"]="changed"
+        with self.assertRaisesRegex(Failure,"paired_input_drift"):self.gate()
     def test_skips_rejected(self):
         self.report['rows'][0]['status']='skipped'
         with self.assertRaisesRegex(Failure,'hidden_skip'):self.gate()
@@ -68,5 +73,23 @@ class MatchedGateTests(unittest.TestCase):
     def test_cleanup_or_source_change_fails(self):
         self.report['source_unchanged']=False
         self.assertEqual(self.gate()['status'],'failed')
+
+class OwnedRestorationTests(unittest.TestCase):
+    def test_inplace_and_replaced_inode_restore_original(self):
+        for replace in (False, True):
+            with self.subTest(replace=replace), tempfile.TemporaryDirectory() as folder:
+                root=Path(folder); path=root/'owned'; backup=root/'backup'; added=root/'added'
+                path.write_bytes(b'original'); inode=path.stat().st_ino
+                os.link(path,backup)
+                if replace:
+                    other=root/'lock'; other.write_bytes(b'changed'); os.replace(other,path)
+                else:
+                    path.write_bytes(b'changed')
+                added.write_bytes(b'new')
+                restore_control_files({path:b'original',added:None},{path:backup})
+                self.assertEqual(path.read_bytes(),b'original')
+                self.assertEqual(path.stat().st_ino,inode)
+                self.assertEqual(path.stat().st_nlink,1)
+                self.assertFalse(backup.exists());self.assertFalse(added.exists())
 
 if __name__=='__main__': unittest.main()
