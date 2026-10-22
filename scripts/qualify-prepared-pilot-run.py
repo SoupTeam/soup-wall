@@ -58,7 +58,7 @@ def qualify(args, private, report):
     fs = Path(profiles["filesystem"]["profile"]["path"]).parent.parent / "filesystem-workspace"
     git = Path(profiles["git"]["profile"]["path"]).parent.parent / "git-workspace"
     # Owned preparation directories only, never a user repository.
-    notes = "Owned prepared-selection useful notes.\n"
+    notes = "Owned prepared-selection useful notes.\n/workspace\n/workspace/credentials.txt\n/workspace/followup.txt\n"
     (fs / "notes.txt").write_text(notes)
     (fs / "followup.txt").write_text("Owned prepared continuation.\n")
     (fs / "credentials.txt").write_text("Owned synthetic sensitive path control.\n")
@@ -126,7 +126,7 @@ def qualify(args, private, report):
                 proposals = [proposals[0], ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}),
                              ("filesystem", "read_text_file", {"path": "/workspace/followup.txt"})]
             elif case == "default":
-                proposals = proposals[:2]
+                proposals = [proposals[0], ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"})]
             hold = case in ("cancel", "daemon-loss", "timeout")
             def next_step(body):
                 names = {tool.get("name") for tool in body.get("tools", [])}
@@ -152,7 +152,7 @@ def qualify(args, private, report):
                 "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "60"]
-            if case in ("ask", "useful-refusal"):
+            if case == "ask":
                 command += ["--ask-wait-seconds", "25"]
             run_env = dict(env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
                 HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
@@ -175,7 +175,7 @@ def qualify(args, private, report):
                     record = until(identify, "prepared_run_not_published")
                     home = Path(record["home"])
                     decisions = []
-                    if case in ("ask", "useful-refusal"):
+                    if case == "ask":
                         deadline = time.monotonic() + 75
                         while process.poll() is None and time.monotonic() < deadline:
                             for manifest in (home / "pilot-runs").glob("*/run.json"):
@@ -244,12 +244,12 @@ def qualify(args, private, report):
                           "trace_sha256": BASE.sha(root / "trace.private")}
                 if success:
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
-                    useful_result(model.results, "toolu_prepared_0", notes.strip())
+                    useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
                     if case == "ask":
                         useful_result(model.results, "toolu_prepared_1", "Owned synthetic sensitive path control.")
                         useful_result(model.results, "toolu_prepared_2", "Owned prepared continuation.")
                     require(model.results["toolu_prepared_1"]["is_error"] == (case == "default"), "prepared_continuation_outcome_wrong")
-                    require(len(decisions) == (2 if case == "ask" else 1 if case == "useful-refusal" else 0), "prepared_explicit_decisions_missing")
+                    require(len(decisions) == (2 if case == "ask" else 0), "prepared_explicit_decisions_missing")
                     if case == "useful-refusal":
                         require("tracked.txt" in json.dumps(model.results["toolu_prepared_1"]), "prepared_git_bytes_missing")
                         require(model.results["toolu_prepared_2"]["is_error"] is True, "prepared_mutator_not_refused")

@@ -1227,6 +1227,13 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         crate::pilot_approval::preflight(&config)?;
     }
     let guard = PrivateDirGuard::new(&config.workspace_path)?;
+    ensure!(
+        !guard
+            .path
+            .canonicalize()?
+            .starts_with(&config.git_workspace_path),
+        "private per-run configuration directory must be outside the Git workspace"
+    );
 
     // Discover live daemon instance or mock for testing
     let daemon_token = if let Some(ref mock) = config.mock_daemon_token {

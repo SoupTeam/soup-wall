@@ -1,24 +1,25 @@
 {
   "first_linux_run": 39806646480,
   "launcher_tests": 7,
-  "linux_acceptance": "first_run_failed_useful_launch_diagnosis_in_progress",
+  "linux_acceptance": "second_run_failed_witness_did_not_seed_mcp_derived_argument",
   "logs_sha256": {
-    "focused-clippy.log": "83f532a899581d333d3ca8742a9259011180ec63e91d0933b3de6542ee457faf",
+    "focused-clippy.log": "78292c8de5608913b489a51879f1cbc5dd39209f1b2e7bcd73782001b32844c5",
     "focused-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "focused-launcher-tests.log": "03e53dd8f157c705c8518d288bc97d7f42da234ca734d22be6a12ab25a9f8aed",
-    "focused-preparation.log": "8d409c46fb3fcc3f35698131585090294ab9eb44a666e0e84c5423ef60e8eaa9",
-    "focused-python.log": "0b06e3e63c740ebe122b6664a9457728cc2b2907ae48d614c61427dafa067c01",
+    "focused-launcher-tests.log": "b4dc95f991cb764a0111300c5b2415063fe7e631b9b696bbcbb89c2672183a0d",
+    "focused-preparation.log": "de456fc4503a4efdb47d044ae9eaffbbd96a2a2b33f8bc941accaf26603f2ac7",
+    "focused-python.log": "85412d49027a6f40cb3db1bd3c2aea5ad4f04784b08bac7f84fc8852f23ac90b",
     "focused-workflows.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "ready-local-tests.log": "b7833cbfdabe9d157dee20ff9e3ba41911b28ea47e5443a3308ab8778746314b"
+    "ready-local-tests.log": "5db30fc0ebd2c80e6f6d3c99fd8dcbd78baa45914ec1519b4811d0542cd1207d"
   },
   "no_live_model_effectiveness_claim": true,
   "preparation_controls": 7,
   "prepared_run_python_controls": 10,
+  "second_linux_run": 39809079159,
   "source_sha256": {
-    "crates/agentfw/src/pilot_launcher.rs": "e5c52e9d83600592e8166231404ff58bb097312e8b9858d622d20dd541faaa22",
+    "crates/agentfw/src/pilot_launcher.rs": "d857dc344eb3951e6bde741be270f2e9ab1e8cfb3db6c2d1c903bd34e32d3347",
     "scripts/pilot-run.py": "ba233fc1ac00c5fafc68253617923ccaa47bc97443c847e618d4770abb81b6e5",
     "scripts/prepare-installed-pilot.py": "ade16b25f804660e234be471adaebdf0ebdcb87acdffcff2afe3df13c8c6d5a5",
-    "scripts/qualify-prepared-pilot-run.py": "6c4b47552088f01eccb0f9f81a195671d54ac52fd12fab24f853a974b007edaf"
+    "scripts/qualify-prepared-pilot-run.py": "bd46f2539d56fa61d30b815068112ef3484fd14faeaf8e53a74bce0f2d26a524"
   },
   "status": "local_checks_passed_linux_pending",
   "strict_clippy": "passed_zero_warnings",
@@ -26,7 +27,7 @@
   "workspace_tests": {
     "failed": 0,
     "ignored": 12,
-    "note": "Existing optional external-environment/helper/opt-in tests remain ignored; strict macOS sandbox emitted Xcode cache-write diagnostics during this suite. Workspace rerun for signal-registration change is in progress; prior full-suite count is retained here.",
+    "note": "Existing optional/helper/latency/model-dependent tests remain ignored; strict local sandbox emitted Xcode cache-write diagnostics.",
     "passed": 1634
   }
 }
