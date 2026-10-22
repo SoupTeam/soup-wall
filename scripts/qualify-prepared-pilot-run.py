@@ -43,6 +43,12 @@ def until(check, label, seconds=30):
     raise ValueError(label)
 
 
+def useful_result(results, identifier, marker):
+    value = results.get(identifier, {})
+    require(value.get("is_error") is False and marker in json.dumps(value.get("content")),
+            "prepared_useful_result_missing")
+
+
 def qualify(args, private, report):
     before = RUN.PREP.PILOT.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
@@ -150,7 +156,8 @@ def qualify(args, private, report):
                 command += ["--ask-wait-seconds", "25"]
             run_env = dict(env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
                 HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
-            process = witness = None
+            process = witness = record = None
+            decisions = []
             try:
                 with (root / "stdout.private").open("wb") as out, (root / "stderr.private").open("wb") as err:
                     process = subprocess.Popen(command, cwd=private, env=run_env, stdout=out, stderr=err,
@@ -237,7 +244,10 @@ def qualify(args, private, report):
                           "trace_sha256": BASE.sha(root / "trace.private")}
                 if success:
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
-                    require(model.results["toolu_prepared_0"]["is_error"] is False, "prepared_useful_read_failed")
+                    useful_result(model.results, "toolu_prepared_0", notes.strip())
+                    if case == "ask":
+                        useful_result(model.results, "toolu_prepared_1", "Owned synthetic sensitive path control.")
+                        useful_result(model.results, "toolu_prepared_2", "Owned prepared continuation.")
                     require(model.results["toolu_prepared_1"]["is_error"] == (case == "default"), "prepared_continuation_outcome_wrong")
                     require(len(decisions) == (2 if case == "ask" else 1 if case == "useful-refusal" else 0), "prepared_explicit_decisions_missing")
                     if case == "useful-refusal":
@@ -264,10 +274,30 @@ def qualify(args, private, report):
                 else:
                     result["failure_reason"] = outcome["reason"]
                 report["cases"].append(result)
+            except Exception:
+                observation = {"provider_request_count": len(model.requests),
+                    "correlated_results": {key: value["is_error"] for key, value in model.results.items()},
+                    "operator_decision_count": len(decisions)}
+                try:
+                    outcome = json.loads((root / "stdout.private").read_text().splitlines()[-1])
+                    observation.update(entry_status=outcome.get("status"), entry_reason=outcome.get("reason"))
+                except (OSError, ValueError, IndexError):
+                    observation["entry_report"] = "not_published"
+                report["failure_observation"] = observation
+                raise
             finally:
-                if process is not None and process.poll() is None:
-                    process.terminate()
-                    process.wait(timeout=15)
+                # strace is only an observer: terminating it does not cancel the
+                # orchestrator. Signal the independently identified owned entry.
+                if record is not None and process is not None and process.poll() is None:
+                    supervisor = Path("/proc") / str(record["supervisor_pid"])
+                    try:
+                        if (supervisor.stat().st_uid == os.getuid() and
+                            str(ROOT / "scripts/pilot-run.py").encode() in
+                            (supervisor / "cmdline").read_bytes().split(b"\0")):
+                            os.kill(record["supervisor_pid"], signal.SIGTERM)
+                            process.wait(timeout=15)
+                    except (OSError, subprocess.TimeoutExpired):
+                        pass
                 if witness is not None:
                     cleanup = witness.finish()
                     for row in cleanup["remaining"]:
@@ -276,6 +306,9 @@ def qualify(args, private, report):
                                 os.kill(row["pid"], signal.SIGKILL)
                             except ProcessLookupError:
                                 pass
+                if process is not None and process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=10)
                 model.close()
         require(workspace_before == {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}, "prepared_workspace_changed")
         require(selected_before == {role: BASE.sha(path) for role, path in paths.items()}, "prepared_selected_assets_changed")

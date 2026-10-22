@@ -232,6 +232,7 @@ def run(args, report):
             log = (private / "host.private.log").open("xb")
             os.fchmod(log.fileno(), 0o600)
             streams.append(log)
+            require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
             launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=parent_death)
             selector.register(launcher.stdout, selectors.EVENT_READ, (log, True))

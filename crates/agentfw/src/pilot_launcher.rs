@@ -1379,14 +1379,23 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             run.id()
         );
     }
-    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
-    let child_pid = child.id();
-
-    // Supervise process with deadline, signal interception, and daemon heartbeat
+    // Install interception before creating the separate host process group.
+    // A TERM during runtime/signal initialization must never strand a live host.
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("create supervisor runtime")?;
+
+    #[cfg(unix)]
+    let (mut sigterm, mut sigint) = {
+        let _entered = rt.enter();
+        (
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?,
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,
+        )
+    };
+    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
+    let child_pid = child.id();
 
     let timeout = config.timeout;
     let home_path = config.home_path.clone();
@@ -1398,10 +1407,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         let deadline = tokio::time::Instant::now() + timeout;
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
         interval.tick().await;
-
-        #[cfg(unix)]
-        let mut sigterm =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
 
         loop {
             // Check if child has exited
@@ -1427,7 +1432,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     let _ = child.wait();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
-                _ = tokio::signal::ctrl_c() => {
+                _ = async {
+                    #[cfg(unix)]
+                    sigint.recv().await;
+                    #[cfg(not(unix))]
+                    let _ = tokio::signal::ctrl_c().await;
+                } => {
                     terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
@@ -1438,11 +1448,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                 }
                 _ = async {
                     #[cfg(unix)]
-                    if let Some(ref mut st) = sigterm {
-                        st.recv().await;
-                    } else {
-                        futures_util::future::pending::<()>().await;
-                    }
+                    sigterm.recv().await;
                     #[cfg(not(unix))]
                     futures_util::future::pending::<()>().await;
                 } => {

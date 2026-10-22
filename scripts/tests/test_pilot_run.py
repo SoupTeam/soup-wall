@@ -10,7 +10,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("sou116_run", ROOT / "scripts/pilot-run.py")
@@ -127,6 +127,46 @@ class PreparedRunBoundary(unittest.TestCase):
                     with self.assertRaisesRegex(RUN.Failure, "state_inside_"):
                         RUN.run(args, {})
                     spawn.assert_not_called()
+
+    def test_cancellation_during_last_validation_never_starts_host(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args, selection, paths, profiles = self.fixture(root)
+            paths.update(agentfw=Path("/trusted/agentfw"), claude=Path("/trusted/claude"),
+                         node=Path("/trusted/node"), python=Path("/trusted/python"), policy=Path("/trusted/policy"))
+            (root / "registry.json").write_text('{"tools": []}')
+            read_fd, write_fd = os.pipe()
+            os.close(write_fd)
+            daemon = MagicMock(pid=12345, stdout=os.fdopen(read_fd, "rb"))
+            count = 0
+            def validate(_args):
+                nonlocal count
+                count += 1
+                if count == 3:
+                    os.kill(os.getpid(), RUN.signal.SIGTERM)
+                return selection, paths, profiles
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", side_effect=validate), \
+                 patch.object(RUN, "readiness", return_value={}), \
+                 patch.object(RUN.GROUPS, "leader_finished", return_value=False), \
+                 patch.object(RUN.GROUPS, "stop_group"), \
+                 patch.object(RUN.subprocess, "Popen", return_value=daemon) as spawn:
+                with self.assertRaisesRegex(RUN.Failure, "pilot_cancelled_before_host"):
+                    RUN.run(args, {})
+            self.assertEqual(count, 3)
+            self.assertEqual(spawn.call_count, 1)  # Only the owned daemon, never a host.
+            self.assertFalse(list(root.glob("soup-wall-run-*")))
+
+    def test_correlated_dispatch_without_useful_result_cannot_pass_qualification(self):
+        spec = importlib.util.spec_from_file_location("sou116_acceptance", ROOT / "scripts/qualify-prepared-pilot-run.py")
+        acceptance = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(acceptance)
+        for value in ({}, {"is_error": True, "content": "Owned prepared continuation."},
+                      {"is_error": False, "content": []}, {"is_error": False, "content": "withheld"}):
+            with self.assertRaisesRegex(ValueError, "prepared_useful_result_missing"):
+                acceptance.useful_result({"followup": value}, "followup", "Owned prepared continuation.")
+        acceptance.useful_result({"followup": {"is_error": False, "content": [
+            {"type": "text", "text": "Owned prepared continuation."}]}}, "followup", "Owned prepared continuation.")
 
     def test_provider_is_explicit_but_project_environment_is_not_inherited(self):
         with patch.dict(os.environ, {"PATH": "/untrusted", "PYTHONPATH": "/untrusted",
