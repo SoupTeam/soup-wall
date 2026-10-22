@@ -1,23 +1,35 @@
 """One planner must retain every original component's executable acceptance."""
 from pathlib import Path
+import json
 import re
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from ci_components import blocks, generated, TARGET
+import ci_components
 from ci_impact import WORKFLOW_JOBS
+from ci_admission import component_names
 
 
 class SharedComponents(unittest.TestCase):
+    def test_generator_writes_stable_lf_output_on_every_platform(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "components.yml"
+            with patch.object(ci_components, "TARGET", target), patch.object(sys, "argv", ["ci_components.py"]):
+                self.assertEqual(ci_components.main(), 0)
+            self.assertEqual(target.read_bytes(), generated().encode("utf-8"))
+
     def test_committed_workflow_matches_all_registered_source_jobs(self):
         self.assertEqual(TARGET.read_text(), generated())
         actual = blocks(TARGET.read_text())
         expected = {f"{wf.removesuffix('.yml')}--{job}" for wf, jobs in WORKFLOW_JOBS.items()
                     if wf != "ci.yml" for job in jobs}
         self.assertEqual(set(actual), expected)
-        self.assertEqual(len(actual), 43)
+        self.assertEqual(len(actual), 44)
         self.assertIn("gateway-sdk--official-sdk", actual)
         self.assertIn("mcp-https-post--linux-https-post", actual)
         self.assertIn("mcp-real-filesystem--native-ubuntu-2404", actual)
@@ -26,6 +38,15 @@ class SharedComponents(unittest.TestCase):
         source = blocks((ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text())
         self.assertIn("runs-on: ubuntu-22.04", source["required-linux-sandbox-and-real-host"])
         self.assertIn("runs-on: ubuntu-24.04", source["native-ubuntu-2404"])
+
+    def test_ubuntu_preparation_name_matches_trusted_admission(self):
+        workflow = "mcp-real-filesystem.yml"
+        job = "native-ubuntu-2404"
+        central = blocks(TARGET.read_text())["mcp-real-filesystem--" + job]
+        name = re.search(r"(?m)^    name: (.+)$", central)
+        self.assertIsNotNone(name)
+        self.assertEqual(("Components / " + json.loads(name[1]),),
+                         component_names(workflow, [job]))
 
     def test_runtime_steps_and_platform_controls_are_not_replaced_by_summaries(self):
         central = blocks(TARGET.read_text())
