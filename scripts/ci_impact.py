@@ -29,6 +29,7 @@ CI_JOBS = (
 WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
     "agent-doctor.yml": ("agent-doctor-linux",),
     "agent-fleet.yml": ("fleet",),
+    "agent-windows-onboarding.yml": ("standard-user-onboarding",),
     "agent-windows-self-test.yml": ("standard-user-self-test",),
     "classifier-runtime-windows.yml": ("native-windows-classifier-runtime",),
     "benchmark.yml": ("agent-scorecard",),
@@ -67,7 +68,8 @@ WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
 }
 
 AGENT_WORKFLOWS = frozenset({
-    "agent-doctor.yml", "agent-windows-self-test.yml", "classifier-runtime-windows.yml", "console-recovery.yml",
+    "agent-doctor.yml", "agent-windows-onboarding.yml", "agent-windows-self-test.yml",
+    "classifier-runtime-windows.yml", "console-recovery.yml",
     "managed-credential-rotation.yml", "managed-group-rollout.yml",
     "managed-policy-demo.yml", "managed-policy-postgres.yml",
     "managed-policy-tls.yml", "mcp-create-file.yml", "mcp-https-get.yml", "mcp-https-post.yml",

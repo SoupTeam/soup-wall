@@ -209,7 +209,7 @@ pub fn run(command: Command) -> anyhow::Result<()> {
 }
 
 #[cfg(windows)]
-mod windows;
+pub(crate) mod windows;
 
 #[cfg(test)]
 mod cli_tests {

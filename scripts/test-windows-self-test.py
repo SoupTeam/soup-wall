@@ -45,7 +45,7 @@ def read(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 @contextmanager
-def owned_stage():
+def owned_stage(*, keep_on_error=False):
     identity = subprocess.run([str(Path(os.environ["SystemRoot"]) / "System32/whoami.exe"),
                                "/user", "/fo", "csv", "/nh"], capture_output=True, check=True, timeout=10)
     sids = re.findall(rb"S-1-5-21-(?:[0-9]+-){3}[0-9]+", identity.stdout)
@@ -71,13 +71,18 @@ def owned_stage():
     finally:
         K.LocalFree(descriptor)
     identity = directory.stat()
+    failed = False
     try:
         yield directory
+    except BaseException:
+        failed = True
+        raise
     finally:
-        observed = directory.lstat()
-        require((observed.st_dev, observed.st_ino) == (identity.st_dev, identity.st_ino)
-                and not observed.st_file_attributes & 0x400, "fixture identity changed before cleanup")
-        shutil.rmtree(directory)
+        if not (keep_on_error and failed):
+            observed = directory.lstat()
+            require((observed.st_dev, observed.st_ino) == (identity.st_dev, identity.st_ino)
+                    and not observed.st_file_attributes & 0x400, "fixture identity changed before cleanup")
+            shutil.rmtree(directory)
 
 
 class Acceptance:

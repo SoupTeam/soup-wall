@@ -38,14 +38,14 @@ unsafe extern "system" fn on_control(code: u32) -> i32 {
     }
 }
 
-pub(super) fn install_control_handler() -> io::Result<()> {
+pub(crate) fn install_control_handler() -> io::Result<()> {
     if unsafe { SetConsoleCtrlHandler(Some(on_control), 1) } == 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(())
 }
 
-pub(super) fn standard_user() -> io::Result<()> {
+pub(crate) fn standard_user() -> io::Result<()> {
     let mut raw = null_mut();
     if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) } == 0 {
         return Err(io::Error::last_os_error());
@@ -263,11 +263,11 @@ fn verify_security(file: &File, directory: bool, private: bool) -> io::Result<()
     Ok(())
 }
 
-pub(super) fn check_private(path: &Path, directory: bool) -> io::Result<File> {
+pub(crate) fn check_private(path: &Path, directory: bool) -> io::Result<File> {
     open(path, directory, false)
 }
 
-pub(super) fn new_file(path: &Path) -> io::Result<File> {
+pub(crate) fn new_file(path: &Path) -> io::Result<File> {
     let text = path
         .to_str()
         .ok_or_else(|| invalid("Unicode file path required"))?;
@@ -279,7 +279,7 @@ pub(super) fn new_file(path: &Path) -> io::Result<File> {
     open(path, false, true)
 }
 
-pub(super) fn new_directory(path: &Path) -> io::Result<()> {
+pub(crate) fn new_directory(path: &Path) -> io::Result<()> {
     let sid = current_user_sid()?;
     let sddl: Vec<u16> = format!("O:{sid}D:P(A;OICI;GA;;;{sid})(A;OICI;GA;;;SY)")
         .encode_utf16()
@@ -333,7 +333,7 @@ pub(super) fn check_parent(path: &Path) -> io::Result<()> {
     verify_security(&file, true, false)
 }
 
-pub(super) struct Owned {
+pub(crate) struct Owned {
     pub child: Child,
     job: Arc<OwnedHandle>,
     monitor_done: Arc<AtomicBool>,
@@ -344,7 +344,7 @@ pub(super) struct Owned {
     log_bytes: Arc<std::sync::atomic::AtomicUsize>,
 }
 
-pub(super) struct StopRecord {
+pub(crate) struct StopRecord {
     pub reaped: bool,
     pub group_empty: bool,
     pub exit: Option<i32>,
