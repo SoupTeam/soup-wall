@@ -21,6 +21,7 @@ use crate::handlers::Shared;
 pub mod approval;
 pub mod child_authority;
 pub mod continuity;
+mod invocation;
 pub mod liveness;
 pub mod resource;
 pub mod resource_approval;
@@ -588,7 +589,9 @@ impl HookAuthorityGuard<'_> {
                     if let EventKind::ToolCall { tool: name, .. } = &mut canonical.kind {
                         *name = tool.name.clone();
                     }
-                    return firewall.inspect_native_call(&canonical, tool.action_class, &hosts);
+                    if let Ok(outcome) = invocation::inspect(firewall, &canonical, tool, &hosts) {
+                        return outcome;
+                    }
                 }
             }
             let mut refused = Outcome::allow();
@@ -2342,7 +2345,7 @@ fn inspect_bound(
             tool: name.into(),
             args: args.clone(),
         });
-        let mut outcome = firewall.inspect_native_call(&ev, tool.action_class, &hosts);
+        let mut outcome = invocation::inspect(&mut firewall, &ev, tool, &hosts)?;
         if let Some(host) = &session.host_session {
             let ev_host = session.host_event(
                 host,
@@ -2352,7 +2355,7 @@ fn inspect_bound(
                     args: args.clone(),
                 },
             );
-            let outcome_host = firewall.inspect_native_call(&ev_host, tool.action_class, &hosts);
+            let outcome_host = invocation::inspect(&mut firewall, &ev_host, tool, &hosts)?;
             outcome = merge_provenance_outcomes(outcome, outcome_host);
         }
         let mut verdict = resolved(&outcome);
@@ -2574,13 +2577,14 @@ fn inspect_bound(
             args: args.clone(),
         };
         let mut outcome =
-            firewall.inspect_native_call(&session.event(kind.clone()), tool.action_class, &hosts);
+            invocation::inspect(&mut firewall, &session.event(kind.clone()), tool, &hosts)?;
         if let Some(host) = &session.host_session {
-            let host_outcome = firewall.inspect_native_call(
+            let host_outcome = invocation::inspect(
+                &mut firewall,
                 &session.host_event(host, session.seq, kind),
-                tool.action_class,
+                tool,
                 &hosts,
-            );
+            )?;
             outcome = merge_provenance_outcomes(outcome, host_outcome);
         }
         let verdict = resolved(&outcome);
@@ -2891,6 +2895,7 @@ fn audit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod literal_arguments;
     use crate::{
         audit::AuditSink,
         handlers::{AppState, Sessions as HookSessions},
@@ -3272,8 +3277,13 @@ mod tests {
         let native = st.native.as_ref().unwrap();
         start(st, "mcp-test");
         let tool = &native.registry.tools[0];
+        let args = if tool.mcp_result_profile.is_some() {
+            json!({"path":"/workspace/notes.txt"})
+        } else {
+            json!({})
+        };
         let mut fields =
-            json!({"tool": tool.name, "args": {}, "schema_sha256": tool.schema_sha256});
+            json!({"tool": tool.name, "args": args, "schema_sha256": tool.schema_sha256});
         if tool.mcp_result_profile.is_some() {
             fields["mcp_host_call_id"] = serde_json::from_str::<Value>(content)
                 .ok()
@@ -3289,7 +3299,7 @@ mod tests {
                 "mcp-test",
                 "result",
                 json!({
-                    "tool": tool.name, "args": {}, "call_id": call.call_id,
+                    "tool": tool.name, "args": args, "call_id": call.call_id,
                     "result_kind": kind, "delivery": "mcp_host", "content": content
                 }),
             ),
@@ -3842,7 +3852,7 @@ mod tests {
         start(&st, "typed-host");
         let mut calls = Vec::new();
         for host_id in [json!(1), json!("1")] {
-            calls.push(inspect(&st,native,request(native,"typed-host","call",json!({"tool":tool.name,"args":{},"schema_sha256":tool.schema_sha256,"mcp_host_call_id":host_id}))).unwrap());
+            calls.push(inspect(&st,native,request(native,"typed-host","call",json!({"tool":tool.name,"args":{"path":"/workspace/notes.txt"},"schema_sha256":tool.schema_sha256,"mcp_host_call_id":host_id}))).unwrap());
         }
         assert_ne!(calls[0].binding_sha256, calls[1].binding_sha256);
         let response=json!({"jsonrpc":"2.0","id":"1","result":{"content":[{"type":"text","text":"ordinary"}],"structuredContent":{"content":"ordinary"}}}).to_string();
@@ -3851,7 +3861,7 @@ mod tests {
                 native,
                 "typed-host",
                 "result",
-                json!({"tool":tool.name,"args":{},"call_id":call.call_id,"result_kind":"value","delivery":"mcp_host","content":response}),
+                json!({"tool":tool.name,"args":{"path":"/workspace/notes.txt"},"call_id":call.call_id,"result_kind":"value","delivery":"mcp_host","content":response}),
             )
         };
         assert_eq!(
@@ -3927,7 +3937,7 @@ mod tests {
                     "delivery",
                     "call",
                     json!({
-                        "tool": tool.name, "args": {}, "schema_sha256": tool.schema_sha256,
+                        "tool": tool.name, "args": {"path":"/workspace/notes.txt"}, "schema_sha256": tool.schema_sha256,
                         "mcp_host_call_id": "original"
                     }),
                 ),
@@ -3943,7 +3953,7 @@ mod tests {
                         "delivery",
                         "result",
                         json!({
-                            "tool": tool.name, "args": {}, "call_id": call.call_id,
+                            "tool": tool.name, "args": {"path":"/workspace/notes.txt"}, "call_id": call.call_id,
                             "result_kind": "value", "delivery": delivery, "content": content
                         })
                     )
