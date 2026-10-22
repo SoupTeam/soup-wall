@@ -229,6 +229,8 @@ class Pilot:
     def decide(self, pending, decision):
         self.inspect(pending)
         self.operator(decision, pending["pending_id"], "--binding", pending["binding_sha256"])
+        return {"expires_at_ms":pending["expires_at_ms"],
+            "decision_submitted_at_ms":time.time_ns() // 1_000_000}
 
     def finish(self, expected=0):
         self.process.wait(timeout=100)
@@ -291,11 +293,11 @@ def qualify(args, private, report):
     try:
         for kind in ("git", "filesystem"):
             for case in ("expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"):
-                start_daemon(kind, 5 if case == "expire" else 30)
+                start_daemon(kind, 20 if case == "expire" else 30)
                 pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind, enabled=case != "default")
                 active.append(pilot)
                 row = {"profile": kind, "case": case, "configured": case != "default", "pending":False,
-                    "approved":False, "passed": False, "broker_ttl_seconds":5 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
+                    "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
                     "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
                 cases.append(row)
                 sibling = other = None
@@ -377,7 +379,7 @@ def qualify(args, private, report):
                         return next((r for r in rows if r["tool"] == "read_text_file"), None)
                     if pilot.run_id:
                         followup = until(followup_ready, "useful_followup_pending_missing")
-                        pilot.decide(followup, "approve")
+                        row["followup_decision"] = pilot.decide(followup, "approve")
                 row["cleanup"] = pilot.finish()
                 if sibling:
                     require(sibling.operator("list")[0]["pending_id"] == other["pending_id"], "cleanup_cancelled_other_run")
@@ -404,9 +406,8 @@ def qualify(args, private, report):
                 followup_text = json.dumps(followup)
                 row["followup"] = {"present": followup is not None,
                     "is_error": None if followup is None else followup["is_error"],
-                    "refusal_codes": [code for code in ("native_approval_expired", "native_approval_timeout",
-                        "native_approval_rejected", "native_provenance_incomplete", "native_child_authority_expired")
-                        if code in followup_text],
+                    "refusal_codes": sorted(set(re.findall(r"native_[a-z_]{1,64}", followup_text)))[:16],
+                    "result_received_at_ms":pilot.result_times.get("followup"),
                     "diagnostic_flags": [flag for flag in ("concurrent mcp input", "not classified", "timed out", "closed", "withheld") if flag in followup_text.lower()],
                     "sha256":BASE.hashlib.sha256(followup_text.encode()).hexdigest()}
                 # Default Git Ask is explicitly refused without a wait; its
