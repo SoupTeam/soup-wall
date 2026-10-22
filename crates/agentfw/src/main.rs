@@ -240,6 +240,12 @@ enum Cmd {
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
     SelfTest(agentfw::self_test::Args),
+    #[cfg(windows)]
+    /// Preview a native Windows Agent setup against explicitly selected local assets.
+    OnboardWindows {
+        #[command(subcommand)]
+        command: agentfw::windows_onboarding::Command,
+    },
     /// First-use onboarding: read-only preview, explicit apply of the reviewed plan, and undo (Linux).
     ///
     /// Exit 0 verified/plan ready/undone, 6 configured but unverified, 3 failed, 4 incomplete or refused, 5 unsupported.
@@ -460,6 +466,11 @@ fn main() -> anyhow::Result<()> {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
         Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
+        #[cfg(windows)]
+        Cmd::OnboardWindows { command } => {
+            prepare_lifecycle_process()?;
+            agentfw::windows_onboarding::run(command)
+        }
         Cmd::Onboard(command) => std::process::exit(agentfw::onboarding::run(command)),
         Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
