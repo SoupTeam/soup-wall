@@ -118,3 +118,13 @@ cleanup. Arguments and raw syscall traces remain private; exported evidence
 contains identities, digests, bounded counts and correlated outcome states.
 The existing Linux original-filesystem CI job runs this command; no new matrix
 or exemption replaces current-source CI, CodeQL or candidate admission.
+
+The paired-host qualification holds both owned scripted providers behind a
+readiness barrier before either can propose a tool call. Both actual hosts must
+be ready, both run-scoped pending lists empty, and both calibrated original-server
+observations clear before release. This keeps the independent host's traced
+startup outside the first host's approval lease. The 25-second continuation wait,
+broker TTL, inspection, wrong-binding, metadata-tamper, cross-run and exact-once
+assertions remain unchanged. Scheduling controls are in
+`scripts/tests/test_pilot_ask_scheduling.py`; current-source CI re-executes the
+actual-host procedure.

@@ -1,0 +1,356 @@
+{
+  "cases": [
+    {
+      "approved": false,
+      "approved_observation": "native signed grant redemption audit",
+      "binding_sha256": "51d77099db0f3ce4698ad893a8f08b23c54738785409095622133ccc7b7d6d31",
+      "broker_ttl_seconds": 20,
+      "case": "expire",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 27,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "d7c7c24525a8b2f320213258e1ba7930062ad390d7c88c187b426501fde94476",
+      "configured": true,
+      "dispatched": 0,
+      "followup": {
+        "diagnostic_flags": [],
+        "is_error": false,
+        "present": true,
+        "refusal_codes": [],
+        "result_received_at_ms": 1792689286085,
+        "sha256": "60c2ca11c81f7a227ec8cf509e429388a76c8a61990488b3e546717a93734b87"
+      },
+      "followup_decision": {
+        "decision_submitted_at_ms": 1792689278336,
+        "expires_at_ms": 1792689298311
+      },
+      "host_result_sha256": "0a6c8abb84cf78f87839a0b41a9b4c203258059955fc4b42a61e4a4fc87e7813",
+      "kernel_effects": 0,
+      "passed": true,
+      "pending": true,
+      "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+      "primary_refusal_codes": [
+        "native_approval_timeout"
+      ],
+      "profile": "git",
+      "raw_arguments_exported": false,
+      "refusal_after_original_expiry_ms": 27,
+      "released": false,
+      "stage": "before_decision_wire_check",
+      "trace_sha256": "b1b6d87f1ca9fc8e4dc4860bbf91b456a2dd0ff89747657b7cef533b223a414e"
+    },
+    {
+      "approved": false,
+      "binding_sha256": "e2c5aa03da01e1506069738dc137fef91e0acf629c564f0c0af488ab16920e90",
+      "broker_ttl_seconds": 30,
+      "case": "restart",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 27,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "1773f610cb41bfbdcfafa1342c79d65d1afb4881345ddac05ad337b67be651c8",
+      "configured": true,
+      "dispatched": 0,
+      "kernel_effects": 0,
+      "passed": true,
+      "pending": true,
+      "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+      "profile": "git",
+      "released": false,
+      "stage": "after_cancel_or_restart_wire_check"
+    },
+    {
+      "approved": true,
+      "approved_observation": "native signed grant redemption audit",
+      "binding_sha256": "529c6459e33eb9e22251af1c22144fefde19e71e4b7fcf36b5191112fb263d9b",
+      "broker_ttl_seconds": 30,
+      "case": "approve",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 30,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "1773f610cb41bfbdcfafa1342c79d65d1afb4881345ddac05ad337b67be651c8",
+      "configured": true,
+      "decision_submitted": "approve",
+      "dispatched": 1,
+      "explicit_home_without_environment": true,
+      "followup": {
+        "diagnostic_flags": [],
+        "is_error": false,
+        "present": true,
+        "refusal_codes": [],
+        "result_received_at_ms": 1792689379624,
+        "sha256": "60c2ca11c81f7a227ec8cf509e429388a76c8a61990488b3e546717a93734b87"
+      },
+      "followup_decision": {
+        "decision_submitted_at_ms": 1792689371839,
+        "expires_at_ms": 1792689401782
+      },
+      "host_result_sha256": "a69d0f70e7b751b8175ded3145f7c4c2b238a73e9255a215df3e0b9047679123",
+      "kernel_effects": 1,
+      "passed": true,
+      "pending": true,
+      "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+      "primary_refusal_codes": [],
+      "profile": "git",
+      "raw_arguments_exported": false,
+      "released": true,
+      "stage": "exact_decision",
+      "trace_sha256": "72b02c12713586e79729e31d5ea82d2a3890a1836375445865f7e71098c66c67"
+    },
+    {
+      "approved": false,
+      "approved_observation": "native signed grant redemption audit",
+      "binding_sha256": "b41f4df61373de24f4cee7cc0465bd8ce9b01ff16305731edf30446969e0d1cf",
+      "broker_ttl_seconds": 30,
+      "case": "reject",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 27,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "1773f610cb41bfbdcfafa1342c79d65d1afb4881345ddac05ad337b67be651c8",
+      "configured": true,
+      "decision_submitted": "reject",
+      "dispatched": 0,
+      "followup": {
+        "diagnostic_flags": [],
+        "is_error": false,
+        "present": true,
+        "refusal_codes": [],
+        "result_received_at_ms": 1792689426474,
+        "sha256": "60c2ca11c81f7a227ec8cf509e429388a76c8a61990488b3e546717a93734b87"
+      },
+      "followup_decision": {
+        "decision_submitted_at_ms": 1792689418694,
+        "expires_at_ms": 1792689448638
+      },
+      "host_result_sha256": "76a4a5dc141a430e9eca1cb4978355a78992ef9bf1a0e22ddd11d5afc4d817be",
+      "kernel_effects": 0,
+      "passed": true,
+      "pending": true,
+      "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+      "primary_refusal_codes": [],
+      "profile": "git",
+      "raw_arguments_exported": false,
+      "released": false,
+      "stage": "exact_decision",
+      "trace_sha256": "e2abd030fabafd13dabb590fa05ea9a17395f5f178c4e6948227eb224fe328d2"
+    },
+    {
+      "approved": false,
+      "binding_sha256": "968206003016c73473d0e4edbd14c709414f54b8d1126b5fdac6e66da710a0cb",
+      "broker_ttl_seconds": 30,
+      "case": "cancel",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 27,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "1773f610cb41bfbdcfafa1342c79d65d1afb4881345ddac05ad337b67be651c8",
+      "configured": true,
+      "dispatched": 0,
+      "kernel_effects": 0,
+      "passed": true,
+      "pending": true,
+      "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+      "profile": "git",
+      "released": false,
+      "stage": "after_cancel_or_restart_wire_check"
+    },
+    {
+      "approval_issued": true,
+      "approved": false,
+      "binding_sha256": "65ebfcc6a1a69f830962c8c3c8d38be00e715e9259174b683a7f01ea8333dc61",
+      "broker_ttl_seconds": 30,
+      "case": "approved_cancel",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 27,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "1773f610cb41bfbdcfafa1342c79d65d1afb4881345ddac05ad337b67be651c8",
+      "configured": true,
+      "decision_submitted": "approve",
+      "dispatched": 0,
+      "kernel_effects": 0,
+      "passed": true,
+      "pending": true,
+      "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+      "profile": "git",
+      "released": false,
+      "stage": "after_cancel_or_restart_wire_check"
+    },
+    {
+      "approved": false,
+      "approved_observation": "native signed grant redemption audit",
+      "broker_ttl_seconds": 30,
+      "case": "default",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 26,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "1773f610cb41bfbdcfafa1342c79d65d1afb4881345ddac05ad337b67be651c8",
+      "configured": false,
+      "dispatched": 0,
+      "followup": {
+        "diagnostic_flags": [
+          "withheld"
+        ],
+        "is_error": true,
+        "present": true,
+        "refusal_codes": [],
+        "result_received_at_ms": 1792689529784,
+        "sha256": "9988e4571da62378ce80eccbd8e89b5ddfd4ee73a1b74ada41010ce5a531bbf6"
+      },
+      "host_result_sha256": "deba024fd24169d745cdc573f7c34099ef89308d537505713ca66779126b5f14",
+      "kernel_effects": 0,
+      "passed": true,
+      "pending": false,
+      "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+      "primary_refusal_codes": [],
+      "profile": "git",
+      "raw_arguments_exported": false,
+      "released": false,
+      "trace_sha256": "fde6a3952f6a6cad1c10089f1ffb5ef9c392e36aa8e2c81a2a4d6ef4e6eb8f66"
+    },
+    {
+      "approved": false,
+      "approved_observation": "native signed grant redemption audit",
+      "binding_sha256": "fa7cb0a963aa9aeeb87812b91e0fb65bb0ec89b07d25e1a62508e6c46e052515",
+      "broker_ttl_seconds": 20,
+      "case": "expire",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 25,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "d7c7c24525a8b2f320213258e1ba7930062ad390d7c88c187b426501fde94476",
+      "configured": true,
+      "dispatched": 0,
+      "followup": {
+        "diagnostic_flags": [],
+        "is_error": false,
+        "present": true,
+        "refusal_codes": [],
+        "result_received_at_ms": 1792689587592,
+        "sha256": "60c2ca11c81f7a227ec8cf509e429388a76c8a61990488b3e546717a93734b87"
+      },
+      "host_result_sha256": "0a6c8abb84cf78f87839a0b41a9b4c203258059955fc4b42a61e4a4fc87e7813",
+      "kernel_effects": 0,
+      "passed": true,
+      "pending": true,
+      "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+      "primary_refusal_codes": [
+        "native_approval_timeout"
+      ],
+      "profile": "filesystem",
+      "raw_arguments_exported": false,
+      "refusal_after_original_expiry_ms": 26,
+      "released": false,
+      "stage": "before_decision_wire_check",
+      "trace_sha256": "1d16abea2034fa4332dbae774e99d13d69faf71e4887c12fd57cb1de92e1742c"
+    },
+    {
+      "approved": false,
+      "binding_sha256": "6b59184a5c02cb219776a6f60f8a34a8caf7b97db0616317b5f284e61cc33b62",
+      "broker_ttl_seconds": 30,
+      "case": "restart",
+      "cleanup": {
+        "all_stopped": true,
+        "descendant_count": 28,
+        "remaining_count": 0
+      },
+      "configuration_sha256": "1773f610cb41bfbdcfafa1342c79d65d1afb4881345ddac05ad337b67be651c8",
+      "configured": true,
+      "dispatched": 0,
+      "kernel_effects": 0,
+      "passed": true,
+      "pending": true,
+      "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+      "profile": "filesystem",
+      "released": false,
+      "stage": "after_cancel_or_restart_wire_check"
+    },
+    {
+      "allow_peer_while_pending": true,
+      "approved": false,
+      "binding_sha256": "5ac3a0e10b3c173ff99502ba1f572836ccb1f9e52a31f0b5b6cd497e499d5998",
+      "broker_ttl_seconds": 30,
+      "case": "approve",
+      "configuration_sha256": "1773f610cb41bfbdcfafa1342c79d65d1afb4881345ddac05ad337b67be651c8",
+      "configured": true,
+      "explicit_home_without_environment": true,
+      "passed": false,
+      "pending": true,
+      "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+      "profile": "filesystem",
+      "stage": "exact_decision"
+    }
+  ],
+  "ci_run": 39819798077,
+  "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+  "contract_version": "sw-pilot-ask-acceptance/1",
+  "diagnosis": "The first host could issue its pending Ask while the independent host was still performing traced startup. The qualification barrier now holds both providers until both hosts are ready; approval wait and broker TTL are unchanged.",
+  "error": "operator_outcome_approve_run_scope",
+  "error_location": [
+    {
+      "function": "main",
+      "line": 468
+    },
+    {
+      "function": "qualify",
+      "line": 352
+    },
+    {
+      "function": "operator",
+      "line": 176
+    },
+    {
+      "function": "require",
+      "line": 66
+    }
+  ],
+  "error_type": "ValueError",
+  "paid_api_calls": 0,
+  "physical_human_presence_proven": false,
+  "profiles": {
+    "filesystem": {
+      "format": "sw-mcp/filesystem-readonly/1",
+      "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+      "profile_sha256": "b9e228651bf0f4480130e98aa05fd575b5cf47b063cb38d2779263145afc9ee4",
+      "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+      "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31"
+    },
+    "git": {
+      "format": "sw-mcp/git-readonly/1",
+      "package_tree_sha256": "3d89865440add389aeb01d6885b8225a510bd3eaea6d19de1b4a9e0d454681c0",
+      "profile_sha256": "03c31900148f644e929828f4380d3a4746287a8cddd70cc89c3672b080072f6a",
+      "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c"
+    }
+  },
+  "real_host_executed": false,
+  "scripted_owned_provider": true,
+  "selected_sha256": {
+    "agentfw": "b77fe077885d0a6bff9177dcb225bd71530898d645cccab55bc82f8aced0d6c7",
+    "bwrap": "05ea79a4760092d08756604bd7670ecb62834eff7df8b550da5db58e82587c9a",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "git": "efdebf1bbe90a2e7a84f35a843491895fa5405a88f11ea4d0ea1c0e83605ee39",
+    "git_launcher": "f1cab944e0ce7540d4f68106bf2185a0936e4ef52e226817e38bd349c3129ea7",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "strace": "38a5c75cb29dd85ddd7780d54f5bf595554d7a1b5c42524b23065f5dc4c4b01d"
+  },
+  "source": {
+    "commit": "4d5a23d5f611b033005cfbb6c4c18ea04db399fc",
+    "dirty": false,
+    "tree": "d3bf55570cf6c2fb17718be955ee8dbaa44dc901"
+  },
+  "status": "failed"
+}
