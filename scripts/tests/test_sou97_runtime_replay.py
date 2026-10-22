@@ -368,15 +368,30 @@ class ReplayBookkeeping(unittest.TestCase):
 
 
 class EvidenceFormat(unittest.TestCase):
-    """Driver evidence must be the exact format the gate validates (compatibility, not qualification)."""
+    """Driver evidence must be the exact format the gate validates (compatibility, not qualification).
+
+    The gate runs against a throwaway repository with its own recorded-evidence history (the eval gate
+    tests' Throwaway), so this format check does not depend on how much history the checkout has.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tests = load("sou97_gate_tests_for_replay", "eval/test_pilot_gate.py")
+        cls.tmp = tempfile.mkdtemp(prefix="sou97-evidence-format-")
+        cls.tw = cls.tests.Throwaway(Path(cls.tmp), extra=(*GATE.RUNTIME_DRIVERS.values(), GATE.RUNTIME_REPLAY_MODULE))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tests.remove_tree(cls.tmp)
 
     def build(self, mutate=None):
         def git(*args, binary=False):
-            out = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, check=True).stdout
+            out = subprocess.run(["git", "-C", str(self.tw.repo), *args], capture_output=True, check=True).stdout
             return out if binary else out.decode().strip()
-        head, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
-        # The committed bytes a Linux checkout of HEAD runs (a Windows autocrlf working copy may differ).
-        committed = {rel: hashlib.sha256(git("cat-file", "blob", f"HEAD:{rel}", binary=True)).hexdigest()
+        head = self.tw.recorded
+        tree = git("rev-parse", f"{head}^{{tree}}")
+        # The committed bytes a Linux checkout of that commit runs (a Windows autocrlf working copy may differ).
+        committed = {rel: hashlib.sha256(git("cat-file", "blob", f"{head}:{rel}", binary=True)).hexdigest()
                      for rel in (*GATE.RUNTIME_DRIVERS.values(), GATE.RUNTIME_REPLAY_MODULE)}
         classifier = REPLAY.classifier_identity(CANDIDATE, MANIFEST["candidate"]["sha256"])
         allowed = REPLAY.original_error_expected()
@@ -412,7 +427,7 @@ class EvidenceFormat(unittest.TestCase):
                 path.write_text(json.dumps(ev), encoding="utf-8")
                 args += ["--runtime-evidence", str(path)]
             subprocess.run([sys.executable, "-B", str(ROOT / "eval/tools/check_pilot_gate.py"), "--mode", "runtime",
-                            "--manifest-file", str(ROOT / "eval/pilot/sou97_gate_manifest_v1.json"), *args,
+                            "--manifest-file", str(self.tw.path), "--repo", str(self.tw.repo), "--ref", head, *args,
                             "--out", str(Path(tmp, "g.json"))], capture_output=True, text=True, timeout=300)
             return json.loads(Path(tmp, "g.json").read_bytes())
 
