@@ -23,6 +23,7 @@ pub mod mcp;
 pub mod native;
 pub mod onboarding;
 pub mod pilot_approval;
+mod pilot_host;
 pub mod pilot_launcher;
 pub mod policy_transition;
 pub use native::child_authority;

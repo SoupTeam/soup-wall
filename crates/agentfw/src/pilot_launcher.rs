@@ -358,6 +358,11 @@ impl PilotLaunchArgs {
             .unwrap_or_else(|| "Run the owned pilot sequence.".to_string());
         let model = self.model.clone();
 
+        crate::pilot_host::validate(
+            &claude_path,
+            self.allow_command_fixtures || self.mock_daemon_token.is_some(),
+        )?;
+
         Ok(ValidatedConfig {
             claude_path,
             workspace_path,
@@ -613,6 +618,13 @@ impl PrivateDirGuard {
         let temp_base = std::env::var_os("TMPDIR")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
+        Self::in_parent(workspace, &temp_base)
+    }
+
+    fn in_parent(workspace: &Path, temp_base: &Path) -> Result<Self> {
+        let temp_base = temp_base
+            .canonicalize()
+            .context("canonicalize private state parent")?;
         let rand_suffix = random_hex_128();
         let private_path = temp_base.join(format!("soup-wall-pilot-{}", rand_suffix));
 
@@ -623,13 +635,13 @@ impl PrivateDirGuard {
             "private per-run configuration directory must be outside the workspace"
         );
 
-        fs::create_dir_all(&private_path)?;
-
+        let mut builder = fs::DirBuilder::new();
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&private_path, fs::Permissions::from_mode(0o700))?;
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
         }
+        builder.create(&private_path)?;
 
         Ok(Self {
             path: private_path,
@@ -1125,15 +1137,12 @@ pub fn write_per_process_mcp_config(
             );
         }
 
-        if let Ok(py) = std::env::var("AGENTFW_CLASSIFIER_PYTHON") {
+        // The interpreter is part of the validated installed Git profile.
+        // An ambient project environment must not replace executable classifier authority.
+        if let Some(python) = config.git_runtime_cmd.first() {
             env_obj.insert(
                 "AGENTFW_CLASSIFIER_PYTHON".to_string(),
-                serde_json::Value::String(py),
-            );
-        } else if server_id == GIT_SERVER_ID && !runtime_cmd.is_empty() {
-            env_obj.insert(
-                "AGENTFW_CLASSIFIER_PYTHON".to_string(),
-                serde_json::Value::String(runtime_cmd[0].clone()),
+                serde_json::Value::String(python.clone()),
             );
         }
 
@@ -1327,7 +1336,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         }
     }
 
-    // Environment isolation
+    // Discard ambient executable settings before adding the fixed host flags.
+    crate::pilot_host::isolate(&mut cmd, &guard.path)?;
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL", "1")
@@ -1350,14 +1360,23 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             run.id()
         );
     }
-    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
-    let child_pid = child.id();
-
-    // Supervise process with deadline, signal interception, and daemon heartbeat
+    // Install interception before creating the separate host process group.
+    // A TERM during runtime/signal initialization must never strand a live host.
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("create supervisor runtime")?;
+
+    #[cfg(unix)]
+    let (mut sigterm, mut sigint) = {
+        let _entered = rt.enter();
+        (
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?,
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,
+        )
+    };
+    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
+    let child_pid = child.id();
 
     let timeout = config.timeout;
     let home_path = config.home_path.clone();
@@ -1369,10 +1388,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         let deadline = tokio::time::Instant::now() + timeout;
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
         interval.tick().await;
-
-        #[cfg(unix)]
-        let mut sigterm =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
 
         loop {
             // Check if child has exited
@@ -1398,7 +1413,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     let _ = child.wait();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
-                _ = tokio::signal::ctrl_c() => {
+                _ = async {
+                    #[cfg(unix)]
+                    sigint.recv().await;
+                    #[cfg(not(unix))]
+                    let _ = tokio::signal::ctrl_c().await;
+                } => {
                     terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
@@ -1409,11 +1429,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                 }
                 _ = async {
                     #[cfg(unix)]
-                    if let Some(ref mut st) = sigterm {
-                        st.recv().await;
-                    } else {
-                        futures_util::future::pending::<()>().await;
-                    }
+                    sigterm.recv().await;
                     #[cfg(not(unix))]
                     futures_util::future::pending::<()>().await;
                 } => {
@@ -1494,6 +1510,22 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_state_parent_cannot_alias_the_untrusted_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        let alias = root.path().join("outside-alias");
+        std::os::unix::fs::symlink(&workspace, &alias).unwrap();
+        assert!(PrivateDirGuard::in_parent(&workspace, &alias).is_err());
+        assert!(fs::read_dir(&workspace).unwrap().next().is_none());
+        let guard = PrivateDirGuard::in_parent(&workspace, root.path()).unwrap();
+        let path = guard.path.clone();
+        drop(guard);
+        assert!(!path.exists());
     }
 
     #[test]
@@ -1631,6 +1663,11 @@ mod tests {
         let mcp_data: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&mcp_config).unwrap()).unwrap();
         let fs_env = &mcp_data["mcpServers"]["filesystem"]["env"];
+        assert_eq!(fs_env["AGENTFW_CLASSIFIER_PYTHON"], "/usr/bin/python3");
+        assert_eq!(
+            mcp_data["mcpServers"]["git"]["env"]["AGENTFW_CLASSIFIER_PYTHON"],
+            "/usr/bin/python3"
+        );
         assert_eq!(fs_env["AGENTFW_HOST_SESSION"], "test-session-123");
         assert_eq!(fs_env["AGENTFW_NATIVE_LIVENESS"], "true");
         assert_eq!(

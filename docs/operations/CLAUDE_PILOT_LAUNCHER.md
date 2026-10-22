@@ -104,3 +104,6 @@ The real-filesystem CI lane supplies those assets and retains a separate `sou99-
 - [MCP Real Filesystem Profile](MCP_REAL_FILESYSTEM.md)
 - [Claude MCP Connection](CLAUDE_MCP_CONNECTION.md)
 - [Agent Lifecycle](AGENT_LIFECYCLE.md)
+
+For the pinned Linux host configuration boundary and hostile-project witnesses,
+see [Project configuration isolation](PILOT_PROJECT_ISOLATION.md).
