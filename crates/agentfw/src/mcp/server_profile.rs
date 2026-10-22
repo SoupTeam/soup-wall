@@ -38,6 +38,18 @@ pub const SERVER_ENTRYPOINT: &str =
 pub const MAX_PAGES: usize = 4;
 pub const MAX_TOOLS: usize = 64;
 pub const MAX_FRAME_BYTES: usize = 262_144;
+/// Reviewed result budgets, separate from argument/request validation.
+/// One decoded result text (each content block and each structured string).
+pub const RESULT_TEXT_BYTES: usize = super::input::RESULT_STRING_BYTES;
+/// One complete server response line on the wire, newline included. Covers
+/// the duplicated text and structuredContent channels of one maximal text
+/// with ordinary JSON escaping. Larger frames are never buffered whole.
+pub const RESULT_FRAME_BYTES: usize = 1_048_576;
+/// Bytes of one oversized frame that may be validated and discarded while
+/// resynchronizing to its end. Beyond this the session fails closed.
+pub const RESULT_DRAIN_BYTES: usize = 16 * 1024 * 1024;
+/// Wall-clock bound for draining one oversized frame.
+pub const RESULT_DRAIN_TIME: std::time::Duration = std::time::Duration::from_secs(10);
 pub const MAX_DISCOVERY_BYTES: usize = 262_144;
 pub const MAX_PROFILE_BYTES: usize = 65_536;
 const MAX_TREE_FILES: usize = 32_768;
@@ -401,12 +413,18 @@ impl ToolProfile {
         for block in blocks {
             exact_keys(block, &["type", "text"])?;
             ensure!(
-                block["type"] == "text"
-                    && block["text"]
-                        .as_str()
-                        .is_some_and(|s| s.len() <= MAX_FRAME_BYTES),
+                block["type"] == "text" && block["text"].is_string(),
                 "unsupported MCP content"
             );
+            if block["text"]
+                .as_str()
+                .is_some_and(|s| s.len() > RESULT_TEXT_BYTES)
+            {
+                return Err(super::input::ResultBudgetExceeded {
+                    limit: RESULT_TEXT_BYTES,
+                }
+                .into());
+            }
         }
         if let Some(structured) = result.get("structuredContent") {
             self.output
@@ -493,7 +511,8 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
             _ => Some("selected_profile_tool_unsupported"),
         };
         let input = InputSchema::read_selected(&tool["inputSchema"]).ok();
-        let output = InputSchema::read_selected(&tool["outputSchema"]).ok();
+        let output =
+            InputSchema::read_selected_role(&tool["outputSchema"], super::input::Role::Result).ok();
         let unsupported_reason = unsupported_reason.or_else(|| {
             if input.is_none() || output.is_none() {
                 Some("selected_profile_schema_unsupported")
@@ -738,6 +757,54 @@ mod tests {
                 .is_err());
         }
         assert_eq!(read.validate_result(&json!({"result":{"content":[{"type":"text","text":"ordinary error"}],"isError":true}})).unwrap(), "error");
+    }
+
+    #[test]
+    fn result_budget_is_separate_from_argument_budget_on_both_channels() {
+        use super::super::input::ResultBudgetExceeded;
+        let tools = classify_manifest(&original_manifest()).unwrap();
+        let read = &tools["read_text_file"];
+        let frame = |text: &str, structured: &str| {
+            json!({"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":text}],
+                "structuredContent":{"content":structured}}})
+        };
+        let budget_error = |value: &Value| {
+            read.validate_result(value)
+                .unwrap_err()
+                .downcast_ref::<ResultBudgetExceeded>()
+                .copied()
+        };
+        // The old argument default was the result limit; it no longer is.
+        for size in [16_383, 16_384, 16_385, 20 * 1024, 60 * 1024, 120 * 1024] {
+            let text = "a".repeat(size);
+            assert_eq!(read.validate_result(&frame(&text, &text)).unwrap(), "value");
+        }
+        let below = "b".repeat(RESULT_TEXT_BYTES - 1);
+        let at = "b".repeat(RESULT_TEXT_BYTES);
+        let above = "b".repeat(RESULT_TEXT_BYTES + 1);
+        assert_eq!(
+            read.validate_result(&frame(&below, &below)).unwrap(),
+            "value"
+        );
+        assert_eq!(read.validate_result(&frame(&at, &at)).unwrap(), "value");
+        let limit = Some(ResultBudgetExceeded {
+            limit: RESULT_TEXT_BYTES,
+        });
+        assert_eq!(budget_error(&frame(&above, "small")), limit);
+        assert_eq!(budget_error(&frame("small", &above)), limit);
+        // Bytes, not characters: 65_536 four-byte scalars fill the budget exactly.
+        let wide = "\u{1F963}".repeat(RESULT_TEXT_BYTES / 4);
+        assert_eq!(read.validate_result(&frame(&wide, &wide)).unwrap(), "value");
+        let wider = format!("{wide}x");
+        assert_eq!(budget_error(&frame(&wider, &wider)), limit);
+        // Type and shape validation are unchanged by the result role.
+        let typed = json!({"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"x"}],
+            "structuredContent":{"content":7}}});
+        assert!(budget_error(&typed).is_none() && read.validate_result(&typed).is_err());
+        // Arguments keep the reviewed 16 KiB default string budget.
+        let input = read.input.as_ref().unwrap();
+        assert!(input.validate(&json!({"path":"p".repeat(16_384)})).is_ok());
+        assert!(input.validate(&json!({"path":"p".repeat(16_385)})).is_err());
     }
 
     #[test]

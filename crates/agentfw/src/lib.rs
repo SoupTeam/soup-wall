@@ -88,7 +88,9 @@ pub fn app_with_diagnostics(
         )
         .route(
             "/native/v1",
-            post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
+            post(native::handler).layer(axum::extract::DefaultBodyLimit::max(
+                native::MAX_MCP_RESULT_BODY,
+            )),
         )
         .route(
             "/native/liveness/v1",

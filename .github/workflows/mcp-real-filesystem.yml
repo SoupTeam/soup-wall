@@ -102,6 +102,18 @@ jobs:
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --strace /usr/bin/strace \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou110-literals" \
             2>&1 | tee "$RUNNER_TEMP/sou110-literals.log"
+      - name: Required large original results, bounded refusal and useful continuation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s scripts/tests -p test_large_results.py -v
+          python3 -B scripts/verify-large-results.py --run \
+            --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --strace /usr/bin/strace \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/large-results" \
+            2>&1 | tee "$RUNNER_TEMP/large-results.log"
       - name: SOU-99 full launcher with installed original profiles
         shell: bash
         run: |
@@ -301,6 +313,10 @@ jobs:
             ${{ runner.temp }}/sou110-literals/report.json
             ${{ runner.temp }}/sou110-literals/*.log
             ${{ runner.temp }}/sou110-literals/*.witness.json
+            ${{ runner.temp }}/large-results.log
+            ${{ runner.temp }}/large-results/report.json
+            ${{ runner.temp }}/large-results/*/collector.log
+            ${{ runner.temp }}/large-results/*/daemon.log
             ${{ runner.temp }}/sou105-approval.log
             ${{ runner.temp }}/sou105-approval/report.json
             ${{ runner.temp }}/sou105-approval/**/*.log
