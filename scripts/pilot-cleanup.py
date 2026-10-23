@@ -63,6 +63,8 @@ def private(path, modes=(0o700,)):
 
 def target_path(prefix, generation):
     require(sys.platform == "linux" and os.geteuid() != 0, "ordinary_linux_user_required")
+    require(Path("/proc/self/uid_map").read_text().split() == ["0", "0", "4294967295"],
+            "host_user_namespace_required")
     require(prefix.is_absolute() and prefix.resolve(strict=True) == prefix,
             "canonical_absolute_prefix_required")
     require(not prefix.is_relative_to(ROOT) and not (prefix / ".git").exists(), "source_checkout_refused")

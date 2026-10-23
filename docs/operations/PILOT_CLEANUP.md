@@ -5,6 +5,8 @@ private preparation prefix. It supports the accepted SOU-111 runtime selections
 and SOU-115 native prerequisite receipts. Use an ordinary Linux account with
 read access to the process records needed to prove the generation is unused.
 This command starts no processes and executes no selected binaries.
+Run in the host user namespace; a nested user namespace can hide active host
+processes and is refused before inspecting the prefix.
 
 ## Plan first
 
@@ -82,3 +84,15 @@ directory for manual inspection; a partial generation must never be relaunched.
 Do not run preparation, profile switching or new pilot launches concurrently
 with removal. Process inspection is a point-in-time check, not a lock shared
 with every other process running as the operator.
+
+## Native qualification
+
+`scripts/qualify-pilot-cleanup.py` defaults to a plan. An explicit `--run` uses
+the accepted native prerequisite builder to create two genuine generations in
+a new private output directory. It checks reuse, current retention, refusal
+while an owned process uses the older generation, dry-run preservation,
+confirmed removal, reuse of the retained generation and an unrelated sentinel.
+The registered Ubuntu 24.04 job runs it after pilot qualification, using its
+already verified Git/bubblewrap archives and compiler inputs. Only the bounded
+`report.json` and `dry-run.json` are uploaded; build logs and source trees remain
+private. An unavailable prerequisite or uncertain process record fails the run.

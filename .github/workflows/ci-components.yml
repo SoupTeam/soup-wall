@@ -1927,6 +1927,18 @@ jobs:
           python3 -B scripts/qualify-prepared-pilot-run.py --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --output "$RUNNER_TEMP/sou116-qualification"
+      - name: Qualify receipt-aware cleanup with native preparation generations
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/sou111-assets/build-tools/bin:$PATH"
+          python3 -B scripts/qualify-pilot-cleanup.py --run \
+            --output "$RUNNER_TEMP/sou121-cleanup" --expected-commit "$(git rev-parse HEAD)" \
+            --git-archive "$RUNNER_TEMP/sou111-assets/git.tar.xz" \
+            --bwrap-archive "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" \
+            --pkg-config-libdir "$RUNNER_TEMP/sou111-assets/libcap/usr/lib/x86_64-linux-gnu/pkgconfig" \
+            --pkg-config-sysroot "$RUNNER_TEMP/sou111-assets/libcap" \
+            --meson-pythonpath "$RUNNER_TEMP/sou111-assets/build-tools"
       - name: Remove only this job's sandbox permission and executable
         if: always()
         shell: bash
@@ -1967,6 +1979,8 @@ jobs:
             ${{ runner.temp }}/sou111-assets/recovered.json
             ${{ runner.temp }}/sou111-qualification/**
             ${{ runner.temp }}/sou116-qualification/report.json
+            ${{ runner.temp }}/sou121-cleanup/report.json
+            ${{ runner.temp }}/sou121-cleanup/dry-run.json
             ${{ runner.temp }}/sou111-qualification/filesystem-sandbox.log
             ${{ runner.temp }}/sou111-qualification/git-sandbox.log
             ${{ runner.temp }}/sou111-qualification/sandbox-positive-failure.txt

@@ -279,10 +279,25 @@ with tempfile.TemporaryDirectory() as temporary:
             target = self.fixture(root, cleanup)
             plan = cleanup.inspect(root, target.name)
             if plan["classification"] == "active-or-uncertain":
-                self.skipTest("run in an inspectable isolated PID namespace for positive acceptance")
+                self.skipTest("positive acceptance requires an inspectable native host account")
             result = cleanup.apply(root, target.name, plan["confirmation"])
             self.assertEqual(result["status"], "removed")
             self.assertFalse(target.exists())
+
+    def test_nested_user_namespace_refuses_before_inspection(self):
+        cleanup = self.load()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = self.fixture(root, cleanup)
+            original = Path.read_text
+            def nested_mapping(path, *args, **kwargs):
+                if str(path) == "/proc/self/uid_map":
+                    return "1000 1000 1\n"
+                return original(path, *args, **kwargs)
+            with patch("pathlib.Path.read_text", autospec=True, side_effect=nested_mapping):
+                with self.assertRaisesRegex(ValueError, "host_user_namespace_required"):
+                    cleanup.inspect(root, target.name)
+            self.assertTrue(target.exists())
 
 
 if __name__ == "__main__":
