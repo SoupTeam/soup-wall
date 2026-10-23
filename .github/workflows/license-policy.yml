@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
       - name: Unit-test policy evaluator and fail-closed paths
         run: python3 -m unittest discover -s scripts/tests -p 'test_license_policy.py' -v
       - name: Check full locked workspace and write provenance report
