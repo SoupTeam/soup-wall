@@ -14,13 +14,16 @@ effectiveness or WSL2 qualification.
 | Replacement completed but directory sync failed or was interrupted | Report publication/durability uncertainty; do not restore an old pointer or delete either generation. | Revalidate `current.json` using the normal preparation command. A failed verification requires reviewed preparation with `--rebuild`. |
 | Private run configuration or authority cannot be persisted | Refuse before protected host startup. | Restore access to the owned state parent and start a new run. |
 | Daemon cannot read an existing configuration | Refuse startup; do not substitute defaults for permission, I/O or decoding errors. | Restore the operator's intended configuration and access, then start a new run. |
-| Native admission/result audit append or durability check fails | Withhold admission/result. A failed legacy sink stays unavailable for that process. | Stop the owned run, preserve the audit, inspect its tail and start a new private run with fresh authority. |
+| Native Linux admission/result audit append or durability check fails | Withhold admission/result. A failed legacy sink stays unavailable for that process. | Stop the owned run, preserve the audit, inspect its tail and start a new private run with fresh authority. |
 | Run rendezvous/log write fails after host startup | Return failure and stop owned processes; host effects may already have happened. | Inspect the affected workspace and report before starting a fresh run. |
 | Cleanup cannot close logs or remove private state | Report cleanup failure and retain remaining state; do not claim successful removal. | Confirm the recorded owned process identities have stopped, restore access to that exact owned directory and retry narrowly scoped cleanup. |
 
 The append-only legacy audit is not a transactional database: restarting alone
-does not repair a torn historical JSONL tail. Preserve the old file as incident
-evidence. The prepared launcher uses a fresh private home for each invocation.
+does not repair a torn historical JSONL tail. Linux refuses a nonempty legacy
+file without a final newline; this bounded check does not validate historical
+JSON records. Preserve the old file as incident evidence. The prepared launcher
+uses a fresh private home for each invocation. Linux native writes sync before
+release; Windows legacy durability behavior is unchanged.
 If using configured retained audit storage, use its existing documented recovery
 command; this change does not add rotation or silently truncate evidence.
 
