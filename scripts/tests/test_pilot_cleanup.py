@@ -240,10 +240,7 @@ class PilotCleanupTests(unittest.TestCase):
 
     def test_descriptor_descent_refuses_bound_mount(self):
         self.load()
-        program = '''import importlib.util, os, pathlib, subprocess, sys, tempfile
-spec = importlib.util.spec_from_file_location("cleanup", sys.argv[1])
-cleanup = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(cleanup)
+        program = '''import importlib.util, os, pathlib, subprocess, sys, tempfile, traceback
 with tempfile.TemporaryDirectory() as temporary:
     root = pathlib.Path(temporary)
     target, outside = root / "target", root / "outside"
@@ -251,25 +248,55 @@ with tempfile.TemporaryDirectory() as temporary:
     outside.mkdir(mode=0o700)
     (outside / "keep.txt").write_text("keep")
     subprocess.run(["mount", "--bind", str(outside), str(target)], check=True, capture_output=True)
-    descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        try:
-            child = cleanup.open_child(descriptor, "target")
-        except ValueError as error:
-            assert str(error) == "directory_mount_or_link_refused"
-        else:
-            os.close(child)
-            raise AssertionError("descriptor crossed a bind mount")
-        assert (outside / "keep.txt").read_text() == "keep"
+        if "SUDO_UID" in os.environ:
+            uid, gid = int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"])
+            for path in (root, outside, outside / "keep.txt"):
+                os.chown(path, uid, gid)
+        child = os.fork()
+        if child == 0:
+            try:
+                if "SUDO_UID" in os.environ:
+                    os.setgroups([])
+                    os.setgid(gid)
+                    os.setuid(uid)
+                    assert os.geteuid() != 0
+                spec = importlib.util.spec_from_file_location("cleanup", sys.argv[1])
+                cleanup = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(cleanup)
+                descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    try:
+                        nested = cleanup.open_child(descriptor, "target")
+                    except ValueError as error:
+                        assert str(error) == "directory_mount_or_link_refused"
+                    else:
+                        os.close(nested)
+                        raise AssertionError("descriptor crossed a bind mount")
+                    assert (outside / "keep.txt").read_text() == "keep"
+                finally:
+                    os.close(descriptor)
+                os._exit(0)
+            except BaseException:
+                traceback.print_exc()
+                os._exit(1)
+        assert os.waitpid(child, 0)[1] == 0, "ordinary-user mount boundary failed"
     finally:
-        os.close(descriptor)
         subprocess.run(["umount", str(target)], check=True, capture_output=True)
 '''
-        result = subprocess.run(["unshare", "--user", "--map-root-user", "--mount", "--fork",
-                                 sys.executable, "-B", "-c", program, str(SCRIPT)],
+        if os.environ.get("PILOT_CLEANUP_PRIVILEGED_FIXTURE") == "1":
+            command = ["sudo", "-n", "unshare", "--mount", "--propagation", "private", "--fork"]
+            interpreter = "/usr/bin/python3"
+        else:
+            command = ["unshare", "--user", "--map-root-user", "--mount", "--fork"]
+            interpreter = sys.executable
+            probe = subprocess.run([*command, "/bin/true"], capture_output=True, text=True, timeout=10)
+            if probe.returncode and "Operation not permitted" in probe.stderr:
+                self.skipTest("host does not permit an isolated test mount namespace")
+            self.assertEqual(probe.returncode, 0, probe.stderr)
+        result = subprocess.run([*command,
+                                 interpreter, "-B", "-c", program, str(SCRIPT)],
                                 capture_output=True, text=True, timeout=20)
-        if "unshare failed: Operation not permitted" in result.stderr:
-            self.skipTest("host does not permit an isolated test mount namespace")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_real_unused_generation_without_process_mock(self):

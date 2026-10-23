@@ -386,6 +386,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.94.1
       - uses: Swatinem/rust-cache@v2
       - name: Focused preparation boundaries
+        env:
+          PILOT_CLEANUP_PRIVILEGED_FIXTURE: '1'
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_measurement.py -v
@@ -705,14 +707,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PATH="$RUNNER_TEMP/sou111-assets/build-tools/bin:$PATH"
-          python3 -B scripts/qualify-pilot-cleanup.py --run \
-            --output "$RUNNER_TEMP/sou121-cleanup" --expected-commit "$(git rev-parse HEAD)" \
-            --git-archive "$RUNNER_TEMP/sou111-assets/git.tar.xz" \
-            --bwrap-archive "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" \
-            --pkg-config-libdir "$RUNNER_TEMP/sou111-assets/libcap/usr/lib/x86_64-linux-gnu/pkgconfig" \
-            --pkg-config-sysroot "$RUNNER_TEMP/sou111-assets/libcap" \
-            --meson-pythonpath "$RUNNER_TEMP/sou111-assets/build-tools"
+          account="sw121${GITHUB_RUN_ID}"
+          fixture="$(mktemp -d /tmp/sw121-ci.XXXXXXXX)"
+          [[ "$fixture" == /tmp/sw121-ci.* && -d "$fixture" && ! -L "$fixture" ]]
+          sudo useradd --no-create-home --shell /usr/sbin/nologin "$account"
+          trap 'sudo userdel "$account"' EXIT
+          cp "$RUNNER_TEMP/sou111-assets/git.tar.xz" "$fixture/git.tar.xz"
+          cp "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" "$fixture/bwrap.tar.xz"
+          cp -a "$RUNNER_TEMP/sou111-assets/build-tools" "$fixture/build-tools"
+          cp -a "$RUNNER_TEMP/sou111-assets/libcap" "$fixture/libcap"
+          ln -sfn "$fixture/libcap/usr/lib/x86_64-linux-gnu" "$fixture/libcap/usr/lib64"
+          sudo chown -R "$account:$account" "$fixture"
+          mkdir -m 700 "$RUNNER_TEMP/sou121-cleanup"
+          status=0
+          sudo -u "$account" env \
+            HOME="$fixture" PATH="$fixture/build-tools/bin:/usr/bin:/bin" \
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$GITHUB_WORKSPACE" \
+            /usr/bin/python3 -B scripts/qualify-pilot-cleanup.py --run \
+              --output "$fixture/result" --expected-commit "$(git rev-parse HEAD)" \
+              --git-archive "$fixture/git.tar.xz" --bwrap-archive "$fixture/bwrap.tar.xz" \
+              --pkg-config-libdir "$fixture/libcap/usr/lib/x86_64-linux-gnu/pkgconfig" \
+              --pkg-config-sysroot "$fixture/libcap" --meson-pythonpath "$fixture/build-tools" || status=$?
+          for report in report.json dry-run.json; do
+            if sudo test -f "$fixture/result/$report"; then
+              sudo install -m 600 -o "$(id -u)" -g "$(id -g)" \
+                "$fixture/result/$report" "$RUNNER_TEMP/sou121-cleanup/$report"
+            fi
+          done
+          exit "$status"
       - name: Remove only this job's sandbox permission and executable
         if: always()
         shell: bash
