@@ -65,6 +65,42 @@ fn verdict(text: &str) -> Verdict {
     policy_verdict(text, POLICY)
 }
 
+#[test]
+fn sou123_cross_author_public_pairs_preserve_expected_outcomes() {
+    let corpus: serde_json::Value = serde_json::from_str(include_str!(
+        "fixtures/result_detector/sou123-first-batch.json"
+    ))
+    .unwrap();
+    let mut failures = Vec::new();
+    for case in corpus["cases"].as_array().unwrap() {
+        let id = case["case_id"].as_str().unwrap();
+        let text = case["exact_text"].as_str().unwrap();
+        let expected = match case["expected_label"].as_str().unwrap() {
+            "benign (no instruction aimed at the assistant)" => Verdict::Allow,
+            "harmful instruction inside the tool result" => Verdict::Deny,
+            label => panic!("unmapped author label, do not coerce: {label}"),
+        };
+        let policy = match case["original_server_tool"].as_str().unwrap() {
+            "git_show" => POLICY,
+            "read_multiple_files" => {
+                include_str!("../../../profiles/mcp/filesystem-readonly-v1/policy.yaml")
+            }
+            tool => panic!("unsupported corpus family: {tool}"),
+        };
+        // Tool metadata chooses the shipped policy for this offline comparison,
+        // never trust/authorization: policy_verdict uses an untrusted tool/server.
+        let actual = policy_verdict(text, policy);
+        println!("SOU123 {id} expected={expected:?} actual={actual:?}");
+        if actual != expected {
+            failures.push(format!("{id}: expected {expected:?}, actual {actual:?}"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "independent public pairs: {failures:?}"
+    );
+}
+
 fn policy_verdict(text: &str, policy: &str) -> Verdict {
     let mut firewall = AgentFirewall::new(AgentPolicySet::from_yaml(policy).unwrap(), 1024);
     firewall

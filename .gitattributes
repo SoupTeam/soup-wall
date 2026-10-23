@@ -3,6 +3,7 @@ models/**/*.bin filter=lfs diff=lfs merge=lfs -text
 
 # Original SOU-113 capture: preserve all hash-bound bytes without conversion.
 crates/agent/tests/fixtures/result_detector/sou113-original/** -text
+crates/agent/tests/fixtures/result_detector/sou123-first-batch.json -text
 
 # Preserve the pinned upstream package bytes on every platform.
 vendor/kryptering/** text eol=lf
