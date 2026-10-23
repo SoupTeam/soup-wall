@@ -1,5 +1,17 @@
 # SOU-124 development evidence
 
+## Cleanup review follow-up
+
+`review.json` records implementation `deb5aa7` and exact source hashes after
+ensuring that failed latency accounting cannot bypass owned-process cleanup.
+All active hosts and the daemon receive a cleanup attempt even when an earlier
+owner's cleanup fails. The Python 3.11 supported suite passes: 1101 run, 1039
+passed, 62 skipped, no failures. Eleven focused Ask controls pass, including
+eight accounting/host/daemon failure combinations. Reintroducing the accounting
+ordering defect makes the regression fail. Rust is unchanged from the original
+checkpoint below. This does not implement input reuse or supply Linux samples;
+the performance blocker and Draft status remain.
+
 Implementation checkpoint: `77ec1a5ed5c2214cf641fb8d7ba86eab22c43a86`, based on
 accepted main `cdd9d36c65a592455e4f421268758adb6db744b8`.
 `development.json` records its tree and the exact changed-file SHA-256 values.

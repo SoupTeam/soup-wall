@@ -1,0 +1,60 @@
+{
+  "format": "sw-sou124-review/1",
+  "status": "local_review_pass_performance_blocker",
+  "implementation_commit": "deb5aa775838d500e01ba6b81ac4d4cfad75c995",
+  "implementation_git_tree": "73cc9ec2b851e6ae0711e3d95f01f02db489cbb5",
+  "source_files_sha256": {
+    "crates/agentfw/src/mcp/admission/real_server.rs": "61d6b1da99e8fc632325966a5abb2ee22e3957f8595aff2c0519ebfe18e85060",
+    "crates/agentfw/src/mcp/server_profile.rs": "c16f67ff140d05d1d9dd2e59d199fb4964d2da6f92df85a490611c8ade7c1b24",
+    "docs/operations/PILOT_ASK_LATENCY.md": "3f095030f2f81d82e1d9b17ad391fa7b1ff1107ae49dcbd96d8d7b67084c8d04",
+    "scripts/pilot_ask_latency.py": "d24067dfbc5f28138245afd65975461acde974c99543e677ad20ea1ee85a23eb",
+    "scripts/qualify-pilot-ask.py": "119d2d5abcf1b162b98032b758f2d156b57a6a30b6017062ed972c5025ac1d5d",
+    "scripts/tests/test_pilot_ask_latency.py": "aebc79063a4068522d73319ee637a5c9c40a1c673b6daa648bd514d87b0de74d"
+  },
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "change": "Latency accounting cannot skip cleanup; attempt every active owned host and daemon after any accounting or owner-cleanup failure.",
+  "python_suite": {
+    "command": "TMPDIR=/private/tmp /tmp/soup-wall-python/bin/python /tmp/run-soup-wall-supported-python.py",
+    "python": "3.11",
+    "run": 1101,
+    "passed": 1039,
+    "skipped": 62,
+    "failed": 0,
+    "log_sha256": "262033c82a8f1cc95b90b095252af6f53a4de83fd88a2d64b523fcaa1ee7899f",
+    "unsupported_controls_unchanged": [
+      "test_cancelled_build_stops_owned_descendant",
+      "test_timeout_stops_resistant_descendant_after_leader_exits",
+      "test_failed_and_timed_out_build_leave_bounded_private_logs"
+    ],
+    "test_source_modified_to_skip": false
+  },
+  "focused_tests": {
+    "run": 11,
+    "failed": 0,
+    "cleanup_fault_combinations": 8,
+    "log_sha256": "c012b483bd11fb1897b1f4da5adf0c096bd2639b5ef25977ec16ba5394ed362d"
+  },
+  "regression_mutation": {
+    "mutation": "accounting before guaranteed cleanup",
+    "result": "regression_test_failed_as_required",
+    "log_sha256": "f268a8f5ad1bce21ec5f1f3b06cc021c6dccea26a523f9ebfc05a19fd9decd0e"
+  },
+  "checks": {
+    "diff_whitespace": "pass"
+  },
+  "rust": {
+    "rerun": false,
+    "reason": "All Rust files are byte-identical to the implementation checkpoint in development.json; this follow-up changes Python and its guide."
+  },
+  "performance": {
+    "immutable_reuse_implemented": false,
+    "native_linux_before_after_samples": 0,
+    "target_met": false,
+    "status": "performance_blocker"
+  },
+  "native_linux_qualified": false,
+  "raw_logs_exported": false
+}
