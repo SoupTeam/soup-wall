@@ -24,12 +24,16 @@ struct Identity {
     modified: std::time::SystemTime,
     #[cfg(unix)]
     unix: [u64; 9],
+    #[cfg(windows)]
+    windows: [u64; 5],
 }
 
 impl Identity {
     fn read(path: &Path, metadata: &fs::Metadata) -> anyhow::Result<Self> {
         #[cfg(unix)]
         use std::os::unix::fs::MetadataExt;
+        #[cfg(windows)]
+        use std::os::windows::fs::MetadataExt;
         Ok(Self {
             canonical: path.canonicalize()?,
             kind: metadata.file_type(),
@@ -46,6 +50,14 @@ impl Identity {
                 metadata.ctime() as u64,
                 metadata.ctime_nsec() as u64,
                 metadata.mtime_nsec() as u64,
+            ],
+            #[cfg(windows)]
+            windows: [
+                metadata.file_attributes() as u64,
+                metadata.creation_time(),
+                metadata.volume_serial_number().unwrap_or(0) as u64,
+                metadata.number_of_links().unwrap_or(0) as u64,
+                metadata.file_index().unwrap_or(0),
             ],
         })
     }
