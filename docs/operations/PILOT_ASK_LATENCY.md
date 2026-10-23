@@ -41,7 +41,8 @@ samples supplement those cases; they do not replace adversarial qualification.
 
 The report retains each case and its original failure. If a run stops early,
 `latency` records the missing planned cases as incomplete. A failure or incomplete
-denominator prevents `target_met`. p50/p95 use nearest rank over successful
+denominator prevents `target_met`. A missed target returns nonzero with status
+`performance_blocker`, even if the independent security controls passed. p50/p95 use nearest rank over successful
 observations and are accompanied by successful, failed and incomplete counts.
 The outer metric measures the conservative monotonic duration from immediately
 before the operator approval command to the correlated original result.

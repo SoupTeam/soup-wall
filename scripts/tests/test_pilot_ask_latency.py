@@ -3,6 +3,11 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import io
+import json
+import sys
+import tempfile
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("ask_latency", Path(__file__).resolve().parents[1] / "pilot_ask_latency.py")
 LATENCY = importlib.util.module_from_spec(SPEC)
@@ -54,3 +59,25 @@ class AskLatencyAccounting(unittest.TestCase):
         for size in (0, 19, True, 101):
             with self.assertRaises(ValueError):
                 LATENCY.summarize([], size)
+
+
+class AskPerformanceCli(unittest.TestCase):
+    def test_cli_never_reports_success_for_a_missed_performance_target(self):
+        spec = importlib.util.spec_from_file_location("ask_latency_cli", Path(__file__).resolve().parents[1] / "qualify-pilot-ask.py")
+        ask = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ask)
+        for samples, target_met in [(0, False), (20, False), (20, True)]:
+            with self.subTest(samples=samples, target_met=target_met), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                argv = ["qualify-pilot-ask"]
+                for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace"):
+                    argv += ["--" + name, str(root / "not-executed")]
+                argv += ["--output", str(root / "out"), "--approval-samples", str(samples)]
+                def qualified(_args, _private, report):
+                    report.update(status="pass", latency={"status": "target_met" if target_met else "performance_blocker"})
+                with patch.object(ask, "qualify", side_effect=qualified), patch.object(sys, "argv", argv), patch("sys.stdout", new_callable=io.StringIO):
+                    code = ask.main()
+                report = json.loads((root / "out" / "qualification.json").read_text())
+                blocked = samples != 0 and not target_met
+                self.assertEqual(code, 1 if blocked else 0)
+                self.assertEqual(report["status"], "performance_blocker" if blocked else "pass")

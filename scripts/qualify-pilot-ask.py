@@ -538,6 +538,8 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix="sou112-private-") as directory:
             qualify(args,Path(directory),report)
+        if args.approval_samples and report.get("latency", {}).get("status") != "target_met":
+            report["status"] = "performance_blocker"
     except Exception as error:
         report.update(status="failed", error_type=type(error).__name__,
             error_location=[{"function": frame.name, "line": frame.lineno}
