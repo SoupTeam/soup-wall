@@ -148,3 +148,9 @@ is explicitly outside performance acceptance and cannot replace the required
 bounded stage timings, never raw tool arguments, credentials or host output.
 The failed native attempt and its full baseline measurements are retained;
 current candidate performance remains unqualified until a complete run passes.
+
+Only the explicitly requested manual paired benchmark has a 140-minute outer
+runner budget: two existing 3600-second measurement-side budgets plus bounded
+setup/preflight. The complete baseline alone took approximately 49 minutes in
+the retained attempt. Ordinary PR/native jobs retain 65 minutes. Host, approval,
+call and per-case deadlines are unchanged; a slow sample still misses 3000 ms.

@@ -377,7 +377,9 @@ jobs:
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && github.event.inputs.matched_development_only == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.native_preparation_only == 'true')
     runs-on: ubuntu-24.04
-    timeout-minutes: 65
+    # The optional paired measurement owns two <=3600s side budgets plus setup.
+    # Ordinary PR/default native qualification retains its existing 65 minutes.
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != '' && 140 || 65 }}
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
