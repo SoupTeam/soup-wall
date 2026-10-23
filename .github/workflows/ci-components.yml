@@ -1946,7 +1946,7 @@ jobs:
           cargo test --locked -p agentfw --lib audit::tests
           cargo test --locked -p agentfw --lib audit_write_failure_withholds_result
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
-          python3 -B scripts/qualify-pilot-storage.py --selection "$selection" \
+          python3 -B scripts/qualify-pilot-storage.py --run --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --output "$RUNNER_TEMP/pilot-storage-qualification"
       - name: Remove only this job's sandbox permission and executable

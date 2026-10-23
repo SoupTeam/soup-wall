@@ -20,6 +20,38 @@ SPEC.loader.exec_module(RUN)
 
 
 class PreparedRunBoundary(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Linux owned file-descriptor fault control")
+    def test_authority_sync_storage_failure_refuses_before_daemon_and_cleans_only_owned_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args, selection, paths, profiles = self.fixture(root)
+            paths.update(agentfw=Path("/trusted/agentfw"), claude=Path("/trusted/claude"),
+                         node=Path("/trusted/node"), python=Path("/trusted/python"), policy=Path("/trusted/policy"))
+            (root / "registry.json").write_text('{"tools": []}')
+            sentinel = root / "foreign.txt"
+            sentinel.write_bytes(b"preserve")
+            sync = RUN.os.fsync
+            faults = []
+            def fail_authority(fd):
+                if Path(os.readlink(f"/proc/self/fd/{fd}")).name == "native-token":
+                    faults.append("authority_sync")
+                    raise OSError(errno.ENOSPC, "owned storage fault")
+                return sync(fd)
+            report = {}
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN.os, "fsync", side_effect=fail_authority), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaises(OSError):
+                    RUN.run(args, report)
+                spawn.assert_not_called()
+            self.assertEqual(faults, ["authority_sync"])
+            self.assertEqual(report["storage_failure"], "storage_full")
+            self.assertFalse(report["host_started"])
+            self.assertEqual(report["cleanup"], "owned_state_removed")
+            self.assertFalse(list(root.glob("soup-wall-run-*")))
+            self.assertEqual(sentinel.read_bytes(), b"preserve")
+
     def test_storage_diagnostics_are_finite_and_never_echo_paths(self):
         for number, reason in ((errno.ENOSPC, "storage_full"), (errno.EROFS, "storage_read_only"),
                                (errno.EACCES, "storage_permission_denied"), (errno.EIO, "storage_io_failed")):

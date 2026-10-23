@@ -61,7 +61,7 @@ command; this change does not add rotation or silently truncate evidence.
 Run from a clean exact source with the accepted selection and native build tools:
 
 ```sh
-python3 -B scripts/qualify-pilot-storage.py \
+python3 -B scripts/qualify-pilot-storage.py --run \
   --selection /absolute/preparation/generations/GENERATION/selection.json \
   --expected-commit "$(git rev-parse HEAD)" --strace /usr/bin/strace \
   --output /absolute/private/new-storage-qualification
