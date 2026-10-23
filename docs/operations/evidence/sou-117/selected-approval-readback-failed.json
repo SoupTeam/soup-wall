@@ -1,0 +1,26 @@
+{
+  "actual_response_latency": "not_observed; client stopped waiting at its 10-second bound",
+  "exact_backend_cause": "not_established; no success inferred",
+  "filesystem_cases_passed": 13,
+  "followup": "Use the existing common 35-second client observation budget after explicit approval, record elapsed time, preserve production and negative-case deadlines; fresh actual Linux qualification required.",
+  "git_case": {
+    "binding_sha256": "2f71211f6e9d9511e9af60b8fafe3a3053ec89dc203fa243256ec458878e9e04",
+    "broker_ttl_ms": 30000,
+    "case": "approve",
+    "passed": false,
+    "preapproval_effects": 0
+  },
+  "operator_approval_exit": 0,
+  "probe": "existing_selected_single_use_approval",
+  "received_git_approved_response": false,
+  "report_sha256": "a050a4fdc464ff3582c4211e9543a767dcba804ca79be562e5c73d3c6777eb75",
+  "run": 39833271633,
+  "source": {
+    "commit": "451f255b77fcfac4b7f3f9f3bfc0ff595b37e980",
+    "dirty": false,
+    "tree": "0ee689bdd21673b72233c2e43888cb87a10b14ff"
+  },
+  "status": "failed",
+  "task": "SOU-117",
+  "upstream_error": ""
+}

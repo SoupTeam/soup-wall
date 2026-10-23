@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import queue
 import re
 import signal
 import shutil
@@ -115,6 +116,20 @@ def pending(args, env, timeout=5, empty=False):
 def refused_response(client, timeout=8):
     response, _ = client.receive(timeout=timeout)
     return type(response.get("id")) is int and response["id"] == 50 and BASE.refused(response)
+
+
+def approved_response(client, evidence):
+    # Match the common independent client's 35-second observation budget.
+    # Approval has already been explicitly decided: this does not extend the
+    # collector's 25-second pending wait, broker TTL or any negative-case bound.
+    evidence["approved_response_budget_ms"] = 35000
+    started = time.monotonic()
+    try:
+        return client.receive(timeout=35)
+    except queue.Empty:
+        raise ValueError("approved original response not observed within 35 seconds") from None
+    finally:
+        evidence["approved_response_elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
 
 
 def inspected_output(text, pending_id, binding):
@@ -314,7 +329,7 @@ def qualify(rig, report):
             row["broker_ttl_ms"] = inspected["expires_at_ms"] - inspected["created_at_ms"]
             if case == "approve":
                 command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"])
-                response, raw = client.receive(timeout=10)
+                response, raw = approved_response(client, row)
                 require(raw == original_raw and not BASE.refused(response), "original admitted bytes changed / useful approval refused")
                 require(rig.effects(trace) == 1, "approved invocation did not dispatch exactly once")
                 command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
