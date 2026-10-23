@@ -32,8 +32,6 @@ impl Identity {
     fn read(path: &Path, metadata: &fs::Metadata) -> anyhow::Result<Self> {
         #[cfg(unix)]
         use std::os::unix::fs::MetadataExt;
-        #[cfg(windows)]
-        use std::os::windows::fs::MetadataExt;
         Ok(Self {
             canonical: path.canonicalize()?,
             kind: metadata.file_type(),
@@ -52,15 +50,42 @@ impl Identity {
                 metadata.mtime_nsec() as u64,
             ],
             #[cfg(windows)]
-            windows: [
-                metadata.file_attributes() as u64,
-                metadata.creation_time(),
-                metadata.volume_serial_number().unwrap_or(0) as u64,
-                metadata.number_of_links().unwrap_or(0) as u64,
-                metadata.file_index().unwrap_or(0),
-            ],
+            windows: windows_identity(path, metadata)?,
         })
     }
+}
+
+#[cfg(windows)]
+fn windows_identity(path: &Path, metadata: &fs::Metadata) -> anyhow::Result<[u64; 5]> {
+    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES,
+    };
+    // Stable Win32 handle queries are used instead of unstable MetadataExt
+    // identity methods. Directory handles require BACKUP_SEMANTICS.
+    let file = fs::OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    ensure!(
+        file.metadata()?.file_type() == metadata.file_type()
+            && file.metadata()?.len() == metadata.len()
+            && file.metadata()?.modified()? == metadata.modified()?,
+        "selected asset changed during identity query"
+    );
+    Ok([
+        info.dwFileAttributes as u64,
+        ((info.ftCreationTime.dwHighDateTime as u64) << 32)
+            | info.ftCreationTime.dwLowDateTime as u64,
+        info.dwVolumeSerialNumber as u64,
+        info.nNumberOfLinks as u64,
+        ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+    ])
 }
 
 #[derive(Clone)]

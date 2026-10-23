@@ -40,3 +40,57 @@ def summarize(cases, planned_per_profile):
     report["status"] = ("target_met" if all(report[p]["target_met"] for p in ("filesystem", "git"))
                         else "performance_blocker")
     return report
+
+
+def reuse_observation(lines, collector_pid):
+    """Read only the selected collector's kernel-observed diagnostic writes.
+
+    Counts come from the post-verification event, never inferred from timing or
+    metadata. Raw diagnostic text and arguments are not retained in the report.
+    """
+    import ast
+    import json
+    import re
+    buffer = b""
+    observations = []
+    for line in lines:
+        if not re.match(rf"^{collector_pid}\s+(?:write|writev)\(2,", line):
+            continue
+        scalar = re.fullmatch(r'\d+\s+write\(2,\s*("(?:[^"\\]|\\.)*"),\s*(\d+)\)\s*=\s*(\d+|-1 [^\n]+)', line)
+        vector = re.fullmatch(r'\d+\s+writev\(2,\s*\[(.*)\],\s*\d+\)\s*=\s*(\d+|-1 [^\n]+)', line)
+        if scalar:
+            raw = ast.literal_eval("b" + scalar[1])
+            count = int(scalar[2])
+            result = scalar[3]
+        elif vector:
+            pieces = re.findall(r'iov_base=("(?:[^"\\]|\\.)*"), iov_len=(\d+)', vector[1])
+            if not pieces or len(pieces) != vector[1].count("iov_base="):
+                raise ValueError("reuse_diagnostic_write_unobserved")
+            decoded = [(ast.literal_eval("b" + raw), int(size)) for raw, size in pieces]
+            if any(len(raw) != size for raw, size in decoded):
+                raise ValueError("reuse_diagnostic_write_truncated")
+            raw = b"".join(raw for raw, _ in decoded)
+            count, result = len(raw), vector[2]
+        else:
+            raise ValueError("reuse_diagnostic_write_unobserved")
+        written = 0 if result.startswith("-1 ") else int(result)
+        if len(raw) < written or written > count:
+            raise ValueError("reuse_diagnostic_write_truncated")
+        buffer += raw[:written]
+        if len(buffer) > 262144:
+            raise ValueError("reuse_diagnostic_limit")
+        while b"\n" in buffer:
+            payload, buffer = buffer.split(b"\n", 1)
+            try:
+                row = json.loads(payload)
+            except (ValueError, UnicodeError):
+                continue
+            if not isinstance(row, dict) or row.get("event") != "mcp_verified_inputs_resume":
+                continue
+            keys = ("immutable_files", "leased_files", "rehashed_files")
+            if any(type(row.get(key)) is not int or row[key] < 0 for key in keys):
+                raise ValueError("reuse_counts_invalid")
+            observations.append({key: row[key] for key in keys})
+    if len(observations) != 1:
+        raise ValueError("one_selected_reuse_observation_required")
+    return dict(observations[0], observer="collector mcp_verified_inputs_resume")

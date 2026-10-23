@@ -265,4 +265,8 @@ mod linux {
             valid
         }
     }
+    #[cfg(test)]
+    mod native_tests {
+        include!("read_lease/native_tests.rs");
+    }
 }

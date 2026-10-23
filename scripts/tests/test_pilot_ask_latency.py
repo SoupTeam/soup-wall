@@ -15,6 +15,34 @@ LATENCY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(LATENCY)
 
 
+class ReuseObservation(unittest.TestCase):
+    def event(self, pid=7, **updates):
+        row = dict(event="mcp_verified_inputs_resume", immutable_files=0,
+                   leased_files=2, rehashed_files=3)
+        row.update(updates)
+        raw = (json.dumps(row) + "\n").encode()
+        return f'{pid} write(2, {json.dumps(raw.decode())}, {len(raw)}) = {len(raw)}'
+
+    def test_exact_collector_and_split_writes(self):
+        line = self.event()
+        result = LATENCY.reuse_observation([self.event(8), line], 7)
+        self.assertEqual(result["leased_files"], 2)
+        self.assertEqual(result["observer"], "collector mcp_verified_inputs_resume")
+        payload = json.dumps(dict(event="mcp_verified_inputs_resume", immutable_files=1,
+                                  leased_files=0, rehashed_files=1)) + "\n"
+        halves = [payload[:20], payload[20:]]
+        rows = [f'7 write(2, {json.dumps(part)}, {len(part)}) = {len(part)}' for part in halves]
+        self.assertEqual(LATENCY.reuse_observation(rows, 7)["immutable_files"], 1)
+
+    def test_missing_duplicate_invalid_or_failed_observation_refuses(self):
+        for rows in ([], [self.event(8)], [self.event(), self.event()],
+                     [self.event(leased_files=True)], [self.event(immutable_files=-1)],
+                     [self.event().rsplit(" = ", 1)[0] + " = -1 EIO (Input/output error)"],
+                     ['7 write(2, "truncated"..., 100) = 100']):
+            with self.subTest(rows=rows), self.assertRaises(ValueError):
+                LATENCY.reuse_observation(rows, 7)
+
+
 class AskLatencyAccounting(unittest.TestCase):
     def rows(self):
         return [dict(profile=p, case="approve", sample_index=i, passed=True, approved=True,

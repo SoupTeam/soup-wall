@@ -487,6 +487,13 @@ def qualify(args, private, report):
                     # Conservative operator-attempt-to-correlated-result duration,
                     # including operator verification and decision submission.
                     row["decision_to_result_ms"] = (pilot.result_monotonic["primary"] - decision_monotonic) / 1_000_000
+                    # The exact primary collector is selected by successful
+                    # execve and server ID; a peer's proof cannot satisfy this.
+                    lines, pending = LAUNCH.normalized_syscalls(pilot.trace.read_text())
+                    collectors = LAUNCH.collector_processes(lines, setup.binary)
+                    selected = [pid for pid, server in collectors.items() if server == kind]
+                    require(len(selected) == 1, "one_primary_collector_required")
+                    row["verified_inputs_resume"] = LATENCY.reuse_observation(lines, selected[0])
                 primary_text = json.dumps(primary)
                 row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
                 if case == "expire":

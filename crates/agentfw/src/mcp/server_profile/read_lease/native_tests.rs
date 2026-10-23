@@ -485,9 +485,14 @@ fn only_explicit_local_filesystem_types_are_eligible() {
 }
 
 #[test]
-fn root_owned_files_are_never_given_read_lease_proofs() {
+fn unprivileged_caller_cannot_lease_foreign_owned_files() {
     let file = File::open("/bin/sh").unwrap();
     assert_eq!(file.metadata().unwrap().uid(), 0);
+    if unsafe { libc::geteuid() } == 0 {
+        // Root is the owner here, so this fixture cannot prove foreign-owner
+        // refusal. The mandatory native qualification separately forbids root.
+        return;
+    }
     if let Some(owner) = Owner::new(&file) {
         assert!(owner.acquire(&file).unwrap().is_none());
     }
