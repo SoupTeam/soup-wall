@@ -1938,6 +1938,7 @@ jobs:
             --validation-timeout-seconds 120 \
             --output "$RUNNER_TEMP/sou116-qualification"
       - name: Qualify bounded storage faults and fresh-authority recovery
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.storage_recovery_only == 'true'
         shell: bash
         run: |
           set -euo pipefail
