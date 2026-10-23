@@ -1494,7 +1494,11 @@ mod cli_tests {
     #[test]
     fn serve_config_preserves_valid_operator_settings() {
         let home = tempfile::tempdir().unwrap();
-        std::fs::write(home.path().join("config.yaml"), "enforce: true\nport: 18787\n").unwrap();
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "enforce: true\nport: 18787\n",
+        )
+        .unwrap();
         let config = load_serve_config(home.path()).unwrap();
         assert!(config.enforce);
         assert_eq!(config.port, 18787);

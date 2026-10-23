@@ -291,7 +291,8 @@ impl AuditSink {
 
     #[cfg(test)]
     pub(crate) fn fail_writes_for_test(&self, path: &Path) {
-        *self.inner.lock().unwrap() = AuditStorage::Legacy(LegacySink::new(File::open(path).unwrap()));
+        *self.inner.lock().unwrap() =
+            AuditStorage::Legacy(LegacySink::new(File::open(path).unwrap()));
     }
 
     #[cfg(all(test, any(target_os = "linux", windows)))]
