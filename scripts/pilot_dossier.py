@@ -20,7 +20,7 @@ import zipfile
 import zlib
 
 from roadmap_support import (Invalid, require, exact, source, digest, identifier,
-                             relative, safe_file, load_json, pairs_unique,
+                             relative, word, safe_file, load_json, pairs_unique,
                              bounded_tree, validate_index, write_private)
 from pilot_qualification import matched_gate, Failure, canonical
 
@@ -275,7 +275,11 @@ def validate_manifest(m):
     exact(m['candidate'], {'commit', 'tree'}, 'candidate')
     source(m['candidate']['commit'], 'candidate_commit'); source(m['candidate']['tree'], 'candidate_tree')
     source(m['accepted_main'], 'accepted_main', optional=True)
-    exact(m['environment'], {'platform', 'architecture', 'host', 'provider', 'transport'}, 'environment')
+    exact(m['environment'], {'platform', 'architecture', 'host', 'provider', 'transport',
+                              'distribution', 'kernel_release'}, 'environment')
+    for key in ('distribution', 'kernel_release'):
+        if m['environment'][key] is not None:
+            word(m['environment'][key], key, limit=160)
     require(m['environment']['platform'] in ('linux', 'wsl2'), 'selected_platform_unsupported')
     require(m['environment']['architecture'] == 'x86_64' and m['environment']['transport'] == 'stdio'
             and m['environment']['provider'] == 'owned-scripted-loopback'
@@ -341,6 +345,8 @@ def build(m, root, repo):
                 elif ids[key] != m['identities'][key]: record['blockers'].append('identity_mismatch:' + key)
             # Existing schemas often omit an environment record. Never infer it
             # from a filename, the reporter's OS, or a Linux-only code path.
+            if any(v is None for v in m['environment'].values()):
+                record['blockers'].append('expected_environment_unbound')
             if report.get('environment') != m['environment']:
                 record['blockers'].append('environment_absent_or_mismatched')
         except (Invalid, Failure, KeyError, TypeError, ValueError, OSError,

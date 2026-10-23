@@ -11,7 +11,9 @@
     "architecture": "x86_64",
     "host": "Claude Code 2.1.251",
     "provider": "owned-scripted-loopback",
-    "transport": "stdio"
+    "transport": "stdio",
+    "distribution": "Ubuntu 24.04",
+    "kernel_release": null
   },
   "identities": {
     "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",

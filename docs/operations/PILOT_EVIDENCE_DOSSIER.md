@@ -90,7 +90,9 @@ result is valid measurement evidence and does not imply a reporter defect.
 `evidence`. The scope is
 `internal-readonly-original-filesystem-git-scripted-provider`. The environment
 selects platform `linux` or `wsl2`, architecture `x86_64`, host
-`Claude Code 2.1.251`, `stdio`, and `owned-scripted-loopback` provider. Selection
+`Claude Code 2.1.251`, `stdio`, `owned-scripted-loopback` provider, distribution
+and kernel release. An unknown distribution/kernel (`null`) blocks READY; the
+current selection deliberately leaves the unrecorded kernel unknown. Selection
 alone does not prove the runtime environment: a candidate report must contain
 an equal `environment` object, observed by its producer, to qualify. Do not
 backfill an old report with invented environment fields. Missing bindings need

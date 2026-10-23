@@ -28,6 +28,7 @@ class DossierTests(unittest.TestCase):
         self.m['support_index'] = self.put('index.json', self.index)
         self.m['workload'] = self.put('workload.json', self.work)
         self.m['identities'] = {k: 'a' * 64 for k in d.IDENTITIES}
+        self.m['environment']['kernel_release'] = 'synthetic-test-kernel'
         self.m['evidence'] = []
         self.tree = patch.object(d, 'git_tree', return_value=self.m['candidate']['tree'])
         self.tree_mock = self.tree.start(); self.addCleanup(self.tree.stop)
@@ -274,6 +275,11 @@ class DossierTests(unittest.TestCase):
             '--repo',str(ROOT),'--candidate',self.m['candidate']['commit'],'--output',str(output)]),1)
         report=json.loads((output/'dossier.json').read_text(encoding='utf-8'))
         self.assertEqual(next(x for x in report['ledger'] if x['item']=='useful-workflows')['status'],'fail')
+
+    def test_unknown_kernel_cannot_make_environment_ready(self):
+        self.full_fixture();self.m['environment']['kernel_release']=None
+        self.assertEqual(self.result()['status'],'NOT_READY')
+        self.assertIn('expected_environment_unbound',self.result()['evidence'][0]['blockers'])
 
 
 class GitIdentityTests(unittest.TestCase):

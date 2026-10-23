@@ -13,7 +13,9 @@
     "architecture": "x86_64",
     "host": "Claude Code 2.1.251",
     "provider": "owned-scripted-loopback",
-    "transport": "stdio"
+    "transport": "stdio",
+    "distribution": "Ubuntu 24.04",
+    "kernel_release": null
   },
   "selected_identities": {
     "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
@@ -133,6 +135,7 @@
       ],
       "blockers": [
         "historical_source",
+        "expected_environment_unbound",
         "environment_absent_or_mismatched"
       ],
       "role": "candidate",
@@ -235,6 +238,7 @@
         "identity_mismatch:agentfw",
         "identity_mismatch:git",
         "identity_mismatch:bwrap",
+        "expected_environment_unbound",
         "environment_absent_or_mismatched"
       ],
       "role": "candidate",
@@ -321,6 +325,7 @@
         "identity_mismatch:agentfw",
         "identity_mismatch:git",
         "identity_mismatch:bwrap",
+        "expected_environment_unbound",
         "environment_absent_or_mismatched"
       ],
       "role": "candidate",
@@ -363,12 +368,14 @@
             "identity_mismatch:agentfw",
             "identity_mismatch:git",
             "identity_mismatch:bwrap",
+            "expected_environment_unbound",
             "environment_absent_or_mismatched"
           ]
         }
       ],
       "reasons": [
         "environment_absent_or_mismatched",
+        "expected_environment_unbound",
         "historical_source",
         "identity_mismatch:agentfw",
         "identity_mismatch:bwrap",
@@ -407,12 +414,14 @@
           "eligible": false,
           "blockers": [
             "historical_source",
+            "expected_environment_unbound",
             "environment_absent_or_mismatched"
           ]
         }
       ],
       "reasons": [
         "environment_absent_or_mismatched",
+        "expected_environment_unbound",
         "historical_source"
       ],
       "counts": null
@@ -442,12 +451,14 @@
           "eligible": false,
           "blockers": [
             "historical_source",
+            "expected_environment_unbound",
             "environment_absent_or_mismatched"
           ]
         }
       ],
       "reasons": [
         "environment_absent_or_mismatched",
+        "expected_environment_unbound",
         "historical_source"
       ],
       "counts": null
@@ -483,12 +494,14 @@
             "identity_mismatch:agentfw",
             "identity_mismatch:git",
             "identity_mismatch:bwrap",
+            "expected_environment_unbound",
             "environment_absent_or_mismatched"
           ]
         }
       ],
       "reasons": [
         "environment_absent_or_mismatched",
+        "expected_environment_unbound",
         "historical_source",
         "identity_mismatch:agentfw",
         "identity_mismatch:bwrap",
@@ -533,12 +546,14 @@
             "identity_mismatch:agentfw",
             "identity_mismatch:git",
             "identity_mismatch:bwrap",
+            "expected_environment_unbound",
             "environment_absent_or_mismatched"
           ]
         }
       ],
       "reasons": [
         "environment_absent_or_mismatched",
+        "expected_environment_unbound",
         "historical_source",
         "identity_mismatch:agentfw",
         "identity_mismatch:bwrap",
@@ -583,12 +598,14 @@
             "identity_mismatch:agentfw",
             "identity_mismatch:git",
             "identity_mismatch:bwrap",
+            "expected_environment_unbound",
             "environment_absent_or_mismatched"
           ]
         }
       ],
       "reasons": [
         "environment_absent_or_mismatched",
+        "expected_environment_unbound",
         "historical_source",
         "identity_mismatch:agentfw",
         "identity_mismatch:bwrap",
@@ -636,8 +653,8 @@
       "reason": "scripted-provider evidence only"
     }
   ],
-  "selection_sha256": "aff1f36de03419b7c3fbe70f13489cc4e2b7d46f76437b2d8ba1442176027a3a",
-  "reporter_sha256": "3853c51ea64af0564d74ebd06d9fda64533a11cb0f30d0c392d6dbba27597e68",
+  "selection_sha256": "1e9bc34bde3ed35752d0d84713b09ff3e9175594e4463210659f2f17ed66e743",
+  "reporter_sha256": "5d26acd1d5d563bc303db8b2fd3ff22548a9145921c36be727e61213a0c44105",
   "reporter_dependencies": {
     "pilot_qualification.py": "7b83fee9305c3f9002af0b8985dc651f6d9ffc5f81ea1a1bc8f86a2551ee8523",
     "roadmap_support.py": "81fa82f39e78b7315622a0714870041c877d77ced2a337109f2c080ec7bf8749",

@@ -29,7 +29,7 @@ explicit SOU-106 selection, not a claim of new candidate binary identities.
 Windows, Python 3.13.12; TEMP/TMP pointed at an owned writable temporary directory.
 
 - `python -B -m unittest discover -s scripts/tests -p test_pilot_dossier.py -v`:
-  **32/32 pass**, zero skips. Includes actual local Git commit/tree resolution,
+  **33/33 pass**, zero skips. Includes actual local Git commit/tree resolution,
   synthetic complete/incomplete records, hash corruption, missing files, stale
   and mixed source, incorrect policy/profile/registry/classifier identities,
   unknown schema, missing denominators, contradictory witnesses, malformed ZIP
