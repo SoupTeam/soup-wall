@@ -126,6 +126,27 @@ class StabilityControls(unittest.TestCase):
             with self.assertRaises((ValueError, KeyError)):
                 S.process_row(4242, Path(directory))
 
+    def test_exit_transition_uses_explicit_stat_counters_without_optional_status_memory(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "4242"
+            (root / "task/4242").mkdir(parents=True)
+            (root / "task/4242/children").write_text("")
+            (root / "fd").mkdir()
+            for index in range(3):
+                (root / "fd" / str(index)).touch()
+            fields = ["R", *(["0"] * 21)]
+            fields[17], fields[19], fields[21] = "5", "123", "7"
+            (root / "stat").write_text("4242 (owned) " + " ".join(fields))
+            # No status/VmRSS is present, as during a kernel mm teardown.
+            with patch.object(S.os, "sysconf", return_value=4096, create=True):
+                row = S.process_row(4242, Path(directory))
+                self.assertEqual((row["threads"], row["start_ticks"], row["rss_bytes"], row["fds"]), (5, 123, 7 * 4096, 3))
+                fields[21] = "invalid"
+                (root / "stat").write_text("4242 (owned) " + " ".join(fields))
+                with self.assertRaises(ValueError):
+                    S.process_row(4242, Path(directory))
+
     def test_long_job_is_manual_only_and_absent_from_pr_components(self):
         workflow = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
         jobs = blocks(workflow)

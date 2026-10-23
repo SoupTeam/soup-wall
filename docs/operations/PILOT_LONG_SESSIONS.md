@@ -73,6 +73,10 @@ Independent procfs samples record owned process identities, FDs, threads and RSS
 every second. A controlled child with 32 extra FDs and four extra threads
 calibrates the observer before qualification. Empty, stale, inaccessible and
 unsupported observations cannot become safe measurements.
+Thread/start/RSS counters use documented [`stat` fields 20/22/24](https://www.man7.org/linux/man-pages/man5/proc_pid_stat.5.html),
+with RSS pages converted using the observed system page size. This avoids
+indexing optional `status` memory fields during process exit. Kernel RSS counters
+are estimates and include shared pages in each process's RSS.
 
 Frozen sampled ceilings are 96 processes, 2,048 FDs, 256 threads and 1.5 GiB
 aggregate RSS. Quiet checkpoints before the declared daemon replacement must

@@ -52,7 +52,7 @@ def plan(mode="soak"):
         "pressure_scope": "accepted SOU-72 owned generic control; original pilot keeps shipped defaults"}
 
 
-def identity(pid, proc=Path("/proc")):
+def stat_fields(pid, proc=Path("/proc")):
     try:
         raw = (proc / str(pid) / "stat").read_text()
     except (FileNotFoundError, ProcessLookupError):
@@ -61,19 +61,21 @@ def identity(pid, proc=Path("/proc")):
         return None
     fields = raw[raw.rfind(")") + 2:].split()
     require(len(fields) >= 22, "proc_stat_incomplete")
-    return int(fields[19])
+    return fields
+
+
+def identity(pid, proc=Path("/proc")):
+    fields = stat_fields(pid, proc)
+    return int(fields[19]) if fields is not None else None
 
 
 def process_row(pid, proc=Path("/proc")):
-    start = identity(pid, proc)
-    if start is None:
+    fields = stat_fields(pid, proc)
+    if fields is None:
         return None
+    start = int(fields[19])
     try:
         base = proc / str(pid)
-        status = {}
-        for line in (base / "status").read_text().splitlines():
-            key, _, value = line.partition(":")
-            status[key] = value.strip()
         tasks = list((base / "task").iterdir())
         children = set()
         for task in tasks:
@@ -82,12 +84,18 @@ def process_row(pid, proc=Path("/proc")):
             except (FileNotFoundError, ProcessLookupError):
                 continue  # A thread exit, not an unsupported interface.
         fds = len(list((base / "fd").iterdir()))
-        state = status["State"].split()[0]
-        # A zombie has no resident memory; missing VmRSS on a live process is
-        # unsupported observation, not zero RSS.
-        rss = 0 if state in ("Z", "X") else int(status["VmRSS"].split()[0]) * 1024
+        # Kernel status omits task_mem fields when get_task_mm returns NULL;
+        # that can race the printed process state. stat fields20/22/24 remain
+        # numeric: threads/start ticks/RSS pages. Never default a missing field.
+        # https://www.man7.org/linux/man-pages/man5/proc_pid_stat.5.html
+        state, threads, pages = fields[0], int(fields[17]), int(fields[21])
+        require(state in set("RSDZTtXxIKWP") and threads >= 0 and pages >= 0, "proc_stat_invalid_counters")
+        require(hasattr(os, "sysconf"), "linux_page_size_unavailable")
+        page_bytes = os.sysconf("SC_PAGE_SIZE")
+        require(type(page_bytes) is int and page_bytes > 0, "linux_page_size_unavailable")
+        rss = pages * page_bytes
         row = {"pid": pid, "start_ticks": start, "fds": fds,
-               "threads": int(status["Threads"]), "rss_bytes": rss,
+               "threads": threads, "rss_bytes": rss,
                "children": sorted(children), "state": state}
     except (FileNotFoundError, ProcessLookupError):
         require(identity(pid, proc) != start, "live_process_observation_missing")
