@@ -13,6 +13,20 @@ SCRIPT = Path(__file__).resolve().parents[1] / "pilot-cleanup.py"
 
 @unittest.skipUnless(sys.platform == "linux", "Linux descriptor and process controls")
 class PilotCleanupTests(unittest.TestCase):
+    def test_cleanup_working_directory_is_active(self):
+        cleanup = self.load()
+        original = Path.cwd()
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            iterate = Path.iterdir
+            try:
+                os.chdir(target)
+                with patch.object(Path, "iterdir", lambda path: iter(()) if path == Path("/proc")
+                                  else iterate(path)):
+                    self.assertTrue(cleanup.active_use(target))
+            finally:
+                os.chdir(original)
+
     def load(self):
         self.assertTrue(SCRIPT.is_file(), "receipt-aware cleanup is missing")
         spec = importlib.util.spec_from_file_location("pilot_cleanup", SCRIPT)

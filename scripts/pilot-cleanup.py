@@ -161,6 +161,8 @@ def in_target(value, target):
 
 
 def active_use(target):
+    if in_target(str(Path.cwd()), target):
+        return True
     def unreadable(error):
         raise error
     objects = set()
