@@ -1277,11 +1277,16 @@ async fn probe_health(config: &Config, timeout_seconds: u64) -> agentfw::preflig
     }
 }
 
+fn load_serve_config(home: &std::path::Path) -> anyhow::Result<Config> {
+    match std::fs::read_to_string(home.join("config.yaml")) {
+        Ok(s) => Config::from_yaml(&s),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
+        Err(error) => Err(error.into()),
+    }
+}
+
 async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
+    let cfg = load_serve_config(&home)?;
 
     let mut firewall = match &cfg.policy {
         Some(p) => AgentFirewall::with_taint_limits(
@@ -1462,6 +1467,54 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+
+    #[test]
+    fn serve_config_defaults_only_when_missing() {
+        let home = tempfile::tempdir().unwrap();
+        let config = load_serve_config(home.path()).unwrap();
+        assert_eq!(
+            serde_json::to_value(config).unwrap(),
+            serde_json::to_value(Config::default()).unwrap()
+        );
+        assert!(!home.path().join("config.yaml").exists());
+    }
+
+    #[test]
+    fn serve_config_preserves_valid_operator_settings() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("config.yaml"), "enforce: true\nport: 18787\n").unwrap();
+        let config = load_serve_config(home.path()).unwrap();
+        assert!(config.enforce);
+        assert_eq!(config.port, 18787);
+    }
+
+    #[test]
+    fn serve_config_rejects_malformed_yaml() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("config.yaml"), "enforce: [").unwrap();
+        assert!(load_serve_config(home.path()).is_err());
+    }
+
+    #[test]
+    fn serve_config_rejects_directory_instead_of_defaults() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir(home.path().join("config.yaml")).unwrap();
+        let error = load_serve_config(home.path()).unwrap_err();
+        let error = error.downcast_ref::<std::io::Error>().unwrap();
+        assert_ne!(error.kind(), std::io::ErrorKind::NotFound);
+        assert!(home.path().join("config.yaml").is_dir());
+    }
+
+    #[test]
+    fn serve_config_rejects_invalid_utf8_instead_of_defaults() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("config.yaml"), [0xff, 0xfe]).unwrap();
+        let error = load_serve_config(home.path()).unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<std::io::Error>().unwrap().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+    }
 
     #[test]
     fn managed_instance_preserves_leading_hyphens() {
