@@ -101,6 +101,7 @@ def main():
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
+    parser.add_argument("--validation-timeout-seconds", type=int, default=120)
     args = parser.parse_args()
     report = {"format": "sw-pilot-demo/1", "status": "plan", "executed": False,
               "provider": "owned-scripted-loopback", "live_model_effectiveness": "not_tested",

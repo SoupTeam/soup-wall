@@ -129,6 +129,9 @@ retained and make cleanup incomplete. The prepared generation, external input
 builds, global Claude settings and unrelated files remain. Reports contain
 source/input identities, case results and elapsed runtime; private raw traces
 are temporary. Keep setup timings separately from the demo runtime.
+The demo allows 120 seconds for each traced input-validation control. This
+bounded observation budget covers source/package hashing; host execution, Ask,
+cancellation and daemon-loss deadlines retain their accepted values.
 
 ## Troubleshooting and limits
 

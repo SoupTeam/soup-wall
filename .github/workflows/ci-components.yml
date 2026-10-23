@@ -1617,6 +1617,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_measurement.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_run.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_validation.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_demo.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
@@ -1935,6 +1936,7 @@ jobs:
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-prepared-pilot-run.py --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
+            --validation-timeout-seconds 120 \
             --output "$RUNNER_TEMP/sou116-qualification"
       - name: Remove only this job's sandbox permission and executable
         if: always()
