@@ -122,14 +122,17 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(len(names), 4)
         jobs = [self.job("impact / Candidate " + self.SHA)] + [self.job(name) for name in names]
         self.assertEqual(assess_job_names(jobs, names, self.SHA).state, "success")
-        for bad in (jobs[1:], jobs[:-1], jobs + [jobs[-1]],
+        for incomplete in (jobs[1:], jobs[:-1]):
+            self.assertEqual(assess_job_names(incomplete, names, self.SHA).state, "pending")
+        for bad in (jobs + [jobs[-1]],
                     [dict(jobs[0], conclusion="skipped")] + jobs[1:],
                     [self.job("impact / Candidate " + "c" * 40)] + jobs[1:]):
             self.assertEqual(assess_job_names(bad, names, self.SHA).state, "failure")
         for bad_state in ("failure", "cancelled", "timed_out", "neutral", "skipped", None):
             altered = [dict(jobs[0])] + [dict(item) for item in jobs[1:]]
             altered[1]["conclusion"] = bad_state
-            self.assertEqual(assess_job_names(altered, names, self.SHA).state, "failure")
+            expected = "pending" if bad_state is None else "failure"
+            self.assertEqual(assess_job_names(altered, names, self.SHA).state, expected)
 
     def test_codeql_missing_neutral_stale_or_wrong_source_fails_closed(self):
         expected = plan(["README.md"])["codeql"]
@@ -139,7 +142,7 @@ class AdmissionTests(unittest.TestCase):
         jobs = [self.job(name) for name in expected]
         self.assertEqual(assess_codeql(run, jobs, expected, self.HEAD).state, "success")
         self.assertEqual(assess_codeql(None, None, expected, self.HEAD).state, "pending")
-        self.assertEqual(assess_codeql(run, jobs[:-1], expected, self.HEAD).state, "failure")
+        self.assertEqual(assess_codeql(run, jobs[:-1], expected, self.HEAD).state, "pending")
         for conclusion in ("neutral", "skipped", "failure", "cancelled", "timed_out"):
             altered = [dict(item) for item in jobs]
             altered[0]["conclusion"] = conclusion
@@ -169,6 +172,9 @@ class AdmissionTests(unittest.TestCase):
                         outer.job("Documentation links")],
                     2: [outer.job(name) for name in plan(["README.md"])["codeql"]],
                 }
+                for run_id, entries in self.jobs.items():
+                    for index, entry in enumerate(entries):
+                        entry.update(id=run_id * 100 + index, run_id=run_id, run_attempt=1)
                 self.ruleset = prepare_ruleset(RulesetTests().fixture())
                 self.ruleset.update({"id": 24846282, "source_type": "Repository",
                                      "source": "SoupTeam/soup-wall"})
@@ -180,6 +186,13 @@ class AdmissionTests(unittest.TestCase):
                     return {"parents": [{"sha": sha} for sha in self.parents]}
                 if suffix == "/rulesets/24846282":
                     return self.ruleset
+                if suffix.startswith("/actions/runs/"):
+                    return next(run for run in self.runs + self.codeql
+                                if run["id"] == int(suffix.rsplit("/", 1)[1]))
+                if suffix.startswith("/actions/jobs/"):
+                    job_id = int(suffix.rsplit("/", 1)[1])
+                    return next(entry for entries in self.jobs.values() for entry in entries
+                                if entry["id"] == job_id)
                 raise AssertionError(suffix)
 
             def pages(self, suffix, key):
@@ -201,7 +214,7 @@ class AdmissionTests(unittest.TestCase):
             self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "success")
             original_jobs = list(api.jobs[1])
             api.jobs[1] = original_jobs[:1]
-            self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "failure")
+            self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "pending")
             api.jobs[1] = original_jobs
             api.jobs[1][1]["conclusion"] = "failure"
             self.assertEqual(inspect(api, 1, self.SHA, self.HEAD)[1].state, "failure")
