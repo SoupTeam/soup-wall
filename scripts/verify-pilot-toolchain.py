@@ -29,6 +29,7 @@ PINS = ROOT / "profiles/toolchain/linux-pilot-toolchain.json"
 FORMAT = "sw-pilot-toolchain-attestation/1"
 PINS_FORMAT = "sw-pilot-toolchain-pins/1"
 MAX_BYTES = 8 * 1024 * 1024
+EXECUTABLE_MAX_BYTES = 512 * 1024 * 1024  # real compiler/interpreter binaries are tens of MiB
 COMMAND_TIMEOUT = 20
 OUTPUT_LIMIT = 16384
 EXACT = re.compile(r"^\d+\.\d+\.\d+$")
@@ -40,10 +41,10 @@ class Refusal(Exception):
     pass
 
 
-def sha256_file(path: Path) -> str:
+def sha256_file(path: Path, limit: int = MAX_BYTES) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
-        remaining = MAX_BYTES + 1
+        remaining = limit + 1
         while remaining > 0:
             chunk = handle.read(min(65536, remaining))
             if not chunk:
@@ -247,7 +248,7 @@ def check_compiler(report, root, pins, lane="main"):
             path = Path(sysroot_out.strip().splitlines()[0]) / "bin" / name
             try:
                 real = path.resolve(strict=True)
-                executables[name] = {"path": str(real), "sha256": sha256_file(real)}
+                executables[name] = {"path": str(real), "sha256": sha256_file(real, EXECUTABLE_MAX_BYTES)}
             except (OSError, Refusal) as error:
                 problems.append("%s executable could not be hashed: %s" % (name, str(error)[:80]))
     resolved["executables"] = executables
@@ -298,7 +299,7 @@ def check_interpreter(report, python, role, pins):
         report.check("interpreter", False, resolved=str(real), detail="interpreter did not report its version: " + out.strip()[:120])
         return
     implementation, version = lines[0], lines[1]
-    resolved = {"executable": str(real), "sha256": sha256_file(real), "implementation": implementation, "version": version}
+    resolved = {"executable": str(real), "sha256": sha256_file(real, EXECUTABLE_MAX_BYTES), "implementation": implementation, "version": version}
     report.resolved["interpreter"] = resolved
     wanted = pins["python"][role]
     problems = []

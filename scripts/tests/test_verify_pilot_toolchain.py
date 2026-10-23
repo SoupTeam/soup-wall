@@ -137,6 +137,20 @@ class Attestation(Fixture):
             self.assertEqual(code, 2, kwargs)
             self.assertIn(text, self.failed(report)["compiler"])
 
+    def test_real_sized_executables_are_hashed_but_oversized_input_files_are_not(self):
+        big = self.bin / "sysroot/bin/cargo"
+        big.write_bytes(b"#!/bin/sh\n" + b"0" * (9 * 1024 * 1024))
+        big.chmod(0o755)
+        code, report = self.attest()
+        self.assertEqual(code, 0, self.failed(report))
+        self.assertEqual(len(report["resolved"]["compiler"]["executables"]["cargo"]["sha256"]), 64)
+        lock = self.root / "Cargo.lock"
+        lock.write_bytes(lock.read_bytes() + b"#" * (9 * 1024 * 1024))
+        self.commit_change()
+        code, report = self.attest()
+        self.assertEqual(code, 2)
+        self.assertIn("input_too_large", json.dumps(report["checks"]))
+
     def test_missing_cargo_executable_in_the_sysroot_is_refused(self):
         (self.bin / "sysroot/bin/cargo").unlink()
         code, report = self.attest()
