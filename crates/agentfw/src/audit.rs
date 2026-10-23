@@ -236,6 +236,8 @@ impl AuditSink {
         // Reopening by path here would introduce a path-replacement race.
         #[cfg(not(windows))]
         crate::token::restrict(path)?;
+        #[cfg(target_os = "linux")]
+        check_legacy_tail(&file)?;
         Ok(Self {
             inner: Mutex::new(AuditStorage::Legacy(LegacySink::new(file))),
         })
@@ -317,6 +319,23 @@ impl AuditSink {
     }
 }
 
+/// Check only the final record boundary through the opened append handle. This
+/// does not validate earlier JSONL history or repair interrupted records.
+#[cfg(target_os = "linux")]
+fn check_legacy_tail(file: &File) -> anyhow::Result<()> {
+    use std::os::unix::fs::FileExt;
+
+    let len = file.metadata()?.len();
+    if len > 0 {
+        let mut tail = [0u8; 1];
+        anyhow::ensure!(
+            file.read_at(&mut tail, len - 1)? == 1 && tail[0] == b'\n',
+            "legacy audit log has an incomplete tail; stop the daemon, preserve the log as evidence, and repair or replace it before restarting"
+        );
+    }
+    Ok(())
+}
+
 /// Open for append, creating the file with owner-only permissions from the outset
 /// on unix. Creating loose and chmod'ing after (`OpenOptions::create(true)` then a
 /// separate `set_permissions`) leaves a window — however brief — where the file
@@ -328,6 +347,7 @@ fn open_private_append(path: &Path) -> anyhow::Result<File> {
     let f = OpenOptions::new()
         .create(true)
         .append(true)
+        .read(cfg!(target_os = "linux"))
         .mode(0o600)
         .open(path)?;
     Ok(f)
@@ -474,12 +494,20 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), partial);
         drop(sink);
 
-        // Legacy open never validates or repairs existing history. Reopening
-        // alone must preserve the evidence and continue to report unverified.
-        let reopened = AuditSink::open(&path).unwrap();
-        assert_eq!(reopened.health()["state"], "unverified");
+        // Linux refuses an interrupted final record without altering evidence.
+        // Other legacy platforms retain their existing unverified reopen.
+        #[cfg(target_os = "linux")]
+        {
+            let error = AuditSink::open(&path).err().unwrap();
+            assert!(error.to_string().contains("incomplete tail"));
+            assert!(error.to_string().contains("preserve the log as evidence"));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let reopened = AuditSink::open(&path).unwrap();
+            assert_eq!(reopened.health()["state"], "unverified");
+        }
         assert_eq!(std::fs::read(&path).unwrap(), partial);
-        drop(reopened);
 
         // Model an explicit operator repair: preserve the interrupted log,
         // then open a fresh legacy log. No automatic truncation loses evidence.
@@ -522,6 +550,21 @@ mod tests {
             .is_err());
         assert!(sink.write(&line()).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_tail_check_does_not_claim_historical_json_validation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        std::fs::write(&path, b"historical non-json bytes\n").unwrap();
+        let sink = AuditSink::open(&path).unwrap();
+        assert_eq!(sink.health()["state"], "unverified");
+        sink.write_native(&serde_json::json!({"event":"new_record"}))
+            .unwrap();
+        assert!(std::fs::read(&path)
+            .unwrap()
+            .starts_with(b"historical non-json bytes\n"));
     }
 
     #[cfg(target_os = "linux")]

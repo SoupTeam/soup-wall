@@ -12,6 +12,7 @@ use agentfw::sandbox::{
     NetworkPolicy, SandboxSpec,
 };
 use agentfw::Config;
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 
@@ -1278,10 +1279,21 @@ async fn probe_health(config: &Config, timeout_seconds: u64) -> agentfw::preflig
 }
 
 fn load_serve_config(home: &std::path::Path) -> anyhow::Result<Config> {
-    match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s),
+    let path = home.join("config.yaml");
+    match std::fs::read_to_string(&path) {
+        Ok(s) => Config::from_yaml(&s).with_context(|| {
+            format!(
+                "cannot parse daemon configuration {}; restore valid config.yaml before restarting",
+                path.display()
+            )
+        }),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
-        Err(error) => Err(error.into()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "cannot read daemon configuration {}; restore config.yaml access before restarting",
+                path.display()
+            )
+        }),
     }
 }
 
@@ -1492,7 +1504,8 @@ mod cli_tests {
     fn serve_config_rejects_malformed_yaml() {
         let home = tempfile::tempdir().unwrap();
         std::fs::write(home.path().join("config.yaml"), "enforce: [").unwrap();
-        assert!(load_serve_config(home.path()).is_err());
+        let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore valid config.yaml"));
     }
 
     #[test]
@@ -1500,6 +1513,7 @@ mod cli_tests {
         let home = tempfile::tempdir().unwrap();
         std::fs::create_dir(home.path().join("config.yaml")).unwrap();
         let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore config.yaml access"));
         let error = error.downcast_ref::<std::io::Error>().unwrap();
         assert_ne!(error.kind(), std::io::ErrorKind::NotFound);
         assert!(home.path().join("config.yaml").is_dir());
@@ -1510,6 +1524,7 @@ mod cli_tests {
         let home = tempfile::tempdir().unwrap();
         std::fs::write(home.path().join("config.yaml"), [0xff, 0xfe]).unwrap();
         let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore config.yaml access"));
         assert_eq!(
             error.downcast_ref::<std::io::Error>().unwrap().kind(),
             std::io::ErrorKind::InvalidData
