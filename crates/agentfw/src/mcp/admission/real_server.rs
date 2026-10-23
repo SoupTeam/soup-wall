@@ -323,6 +323,12 @@ async fn admit(
                 classifier.revision(),
             ),
         };
+        // Bind same-FD verified input observations before publishing a pending
+        // request. Only kernel-enforced immutable bytes may be reused later.
+        // This state belongs to this exact Ask, never a global authority cache.
+        let frozen = profile.clone();
+        let verified_assets =
+            tokio::task::spawn_blocking(move || frozen.capture_verified_assets()).await??;
         let approval_id =
             match wait_approval(collector, call, source, &installed.schema_sha256, &context).await?
             {
@@ -332,7 +338,9 @@ async fn admit(
         let mut timing = ContinuationTiming::new();
         let resumed = async {
             let frozen = profile.clone();
-            let verified = tokio::task::spawn_blocking(move || frozen.revalidate_assets()).await;
+            let verified =
+                tokio::task::spawn_blocking(move || frozen.revalidate_assets(&verified_assets))
+                    .await;
             timing.record(call, "profile_and_assets", matches!(&verified, Ok(Ok(()))));
             verified??;
             boundary = collector.policy_boundary().await?;

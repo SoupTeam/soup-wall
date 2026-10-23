@@ -15,6 +15,17 @@ use sha2::{Digest, Sha256};
 use super::input::InputSchema;
 
 pub mod git;
+mod read_lease;
+mod verified_inputs;
+
+/// Private to one pending Ask in this collector. Neither serializable nor a
+/// policy/approval result; a daemon restart is still refused on redemption.
+#[derive(Clone)]
+pub(crate) struct VerifiedAssets {
+    profile: Value,
+    profile_path: PathBuf,
+    inputs: verified_inputs::Inputs,
+}
 
 pub fn selected(format: Option<&str>) -> bool {
     matches!(format, Some(FORMAT | git::FORMAT))
@@ -106,11 +117,44 @@ pub struct ProfileConfig {
 impl ProfileConfig {
     /// Recheck immutable installed assets after an operator wait. This only
     /// observes files; it creates no sandbox, budget, process or authority.
-    pub(crate) fn revalidate_assets(&self) -> anyhow::Result<()> {
+    pub(crate) fn capture_verified_assets(&self) -> anyhow::Result<VerifiedAssets> {
+        let profile_path = std::env::var_os(ENVIRONMENT)
+            .map(PathBuf::from)
+            .context("selected profile disappeared")?;
+        let profile = serde_json::to_value(self)?;
+        let mut inputs = verified_inputs::Inputs::default();
+        let mut verification = verified_inputs::Verification::Capture(&mut inputs);
+        verification.entry(&profile_path)?;
+        ensure!(
+            Self::load_from_env()?
+                .map(serde_json::to_value)
+                .transpose()?
+                == Some(profile.clone()),
+            "selected profile changed before approval"
+        );
+        self.verify_assets_with(&mut verification)?;
+        verification.entry(&profile_path)?;
+        inputs.validate_leases()?;
+        Ok(VerifiedAssets {
+            profile,
+            profile_path,
+            inputs,
+        })
+    }
+
+    pub(crate) fn revalidate_assets(&self, verified: &VerifiedAssets) -> anyhow::Result<()> {
         let started = std::time::Instant::now();
+        let mut verification = verified_inputs::Verification::Resume(&verified.inputs);
+        ensure!(
+            std::env::var_os(ENVIRONMENT).map(PathBuf::from).as_ref()
+                == Some(&verified.profile_path),
+            "selected profile path changed during approval"
+        );
+        verification.entry(&verified.profile_path)?;
         let current = Self::load_from_env()?.context("selected profile disappeared")?;
         ensure!(
-            serde_json::to_value(&current)? == serde_json::to_value(self)?,
+            serde_json::to_value(&current)? == verified.profile
+                && serde_json::to_value(self)? == verified.profile,
             "selected profile changed during approval"
         );
         eprintln!(
@@ -118,21 +162,27 @@ impl ProfileConfig {
             serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
             "stage":"selected_profile", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
         );
-        self.verify_assets()
+        self.verify_assets_with(&mut verification)?;
+        verification.entry(&verified.profile_path)?;
+        verified.inputs.validate_leases()?;
+        let (immutable_files, leased_files, rehashed_files) = verified.inputs.counts();
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_verified_inputs_resume",
+            "profile":self.format,"immutable_files":immutable_files,"leased_files":leased_files,"rehashed_files":rehashed_files})
+        );
+        Ok(())
     }
 
     /// Verify pinned bytes without modifying process environment or launching a server.
     pub(crate) fn verify_assets(&self) -> anyhow::Result<()> {
-        let started = std::time::Instant::now();
-        ensure!(
-            package_tree_sha256(&self.package_root)? == self.package_tree_sha256,
-            "selected package changed during approval"
-        );
-        eprintln!(
-            "{}",
-            serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
-            "stage":"package_tree", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
-        );
+        self.verify_assets_with(&mut verified_inputs::Verification::Full)
+    }
+
+    fn verify_assets_with(
+        &self,
+        verification: &mut verified_inputs::Verification<'_>,
+    ) -> anyhow::Result<()> {
         let started = std::time::Instant::now();
         let mut total = 0u64;
         for (path, digest) in [
@@ -147,16 +197,13 @@ impl ProfileConfig {
                 .chain(self.git_launcher.iter())
                 .map(|pin| (&pin.path, &pin.sha256)),
         ) {
-            let mut hash = Sha256::new();
-            let file = open_regular(path)?;
-            let size = file.metadata()?.len();
+            let size = fs::metadata(path)?.len();
             total = total
                 .checked_add(size)
                 .context("selected asset size overflow")?;
             ensure!(total <= MAX_TREE_BYTES, "selected asset byte limit");
-            let read = std::io::copy(&mut file.take(size + 1), &mut hash)?;
             ensure!(
-                read == size && format!("{:x}", hash.finalize()) == *digest,
+                verification.digest(path, size)? == *digest,
                 "selected executable or library changed during approval"
             );
         }
@@ -164,6 +211,16 @@ impl ProfileConfig {
             "{}",
             serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
             "stage":"runtime_and_libraries", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
+        );
+        let started = std::time::Instant::now();
+        ensure!(
+            package_tree_sha256_with(&self.package_root, verification)? == self.package_tree_sha256,
+            "selected package changed during approval"
+        );
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
+            "stage":"package_tree", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
         );
         Ok(())
     }
@@ -560,13 +617,22 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
 /// paths in byte order; files use F\0path\0hex-sha256\n, directories D\0path\n,
 /// symlinks L\0path\0target\n. Nothing is excluded. Links must stay inside root.
 pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
+    package_tree_sha256_with(root, &mut verified_inputs::Verification::Full)
+}
+
+fn package_tree_sha256_with(
+    root: &Path,
+    verification: &mut verified_inputs::Verification<'_>,
+) -> anyhow::Result<String> {
     fn walk(
         root: &Path,
         relative: &Path,
         entries: &mut BTreeMap<String, Vec<u8>>,
         bytes: &mut u64,
         depth: usize,
+        verification: &mut verified_inputs::Verification<'_>,
     ) -> anyhow::Result<()> {
+        verification.entry(&root.join(relative))?;
         ensure!(
             depth <= 32 && entries.len() <= MAX_TREE_FILES,
             "MCP package tree count or depth limit"
@@ -580,6 +646,7 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
                 "invalid MCP package path"
             );
             let metadata = fs::symlink_metadata(entry.path())?;
+            verification.entry(&entry.path())?;
             let record = if metadata.is_symlink() {
                 let target = fs::read_link(entry.path())?;
                 ensure!(!target.is_absolute(), "MCP package link must be relative");
@@ -612,7 +679,7 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
                 );
                 format!("L\0{name}\0{target}\n").into_bytes()
             } else if metadata.is_dir() {
-                walk(root, &child, entries, bytes, depth + 1)?;
+                walk(root, &child, entries, bytes, depth + 1, verification)?;
                 format!("D\0{name}\n").into_bytes()
             } else {
                 ensure!(metadata.is_file(), "unsupported MCP package file type");
@@ -620,34 +687,17 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
                     .checked_add(metadata.len())
                     .context("MCP package size overflow")?;
                 ensure!(*bytes <= MAX_TREE_BYTES, "MCP package byte limit");
-                let mut file = open_regular(entry.path())?;
-                let mut hash = Sha256::new();
-                let mut buffer = [0u8; 65_536];
-                let mut read_bytes = 0u64;
-                loop {
-                    let n = file.read(&mut buffer)?;
-                    if n == 0 {
-                        break;
-                    }
-                    read_bytes += n as u64;
-                    ensure!(
-                        read_bytes <= metadata.len(),
-                        "MCP package changed during hashing"
-                    );
-                    hash.update(&buffer[..n]);
-                }
-                ensure!(
-                    read_bytes == metadata.len(),
-                    "MCP package changed during hashing"
-                );
-                format!("F\0{name}\0{:x}\n", hash.finalize()).into_bytes()
+                let digest = verification.digest(&entry.path(), metadata.len())?;
+                format!("F\0{name}\0{digest}\n").into_bytes()
             };
+            verification.entry(&entry.path())?;
             ensure!(
                 entries.insert(name.to_owned(), record).is_none()
                     && entries.len() <= MAX_TREE_FILES,
                 "MCP package tree entry limit"
             );
         }
+        verification.entry(&root.join(relative))?;
         Ok(())
     }
     ensure!(
@@ -655,7 +705,7 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
         "MCP package root must be a directory"
     );
     let mut entries = BTreeMap::new();
-    walk(root, Path::new(""), &mut entries, &mut 0, 0)?;
+    walk(root, Path::new(""), &mut entries, &mut 0, 0, verification)?;
     let mut hash = Sha256::new();
     for record in entries.values() {
         hash.update(record);
