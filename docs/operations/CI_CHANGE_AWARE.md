@@ -84,6 +84,12 @@ must be the PR's current base and head. Every selected core/component must have 
 an `impact / Candidate <merge SHA>` job and every required OS/backend member in
 the latest attempt. Components share the `ci.yml` run; legacy separate runs are
 still verified when present.
+GitHub may regenerate a test-merge commit after the event snapshot with only
+commit metadata changed. An earlier planner SHA qualifies only when the
+repository API independently confirms its full SHA, the same ordered current
+base/head parents and the exact same tree as the current merge. Missing commit
+identity, another tree or changed parents remain blocking. Admission is still
+published on the current merge SHA and rechecks the current PR and run attempts.
 Failed, cancelled, timed-out, neutral, duplicate or unexpectedly skipped
 required jobs block admission. A missing or incomplete job in an inconsistent
 API snapshot remains pending while its exact run attempt is re-evaluated; it

@@ -31,6 +31,9 @@ class API:
         self.pr = {"state": "open", "draft": False, "base": {"sha": BASE},
                    "head": {"sha": HEAD}, "merge_commit_sha": MERGE, "changed_files": 1}
         self.parents = [BASE, HEAD]
+        self.merge_tree = "e" * 40
+        self.alternative_merges = {}
+        self.commit_reads = []
         self.pr_reads = 0
         self.next_pr_after_first = None
         self.runs = [{"id": 1, "path": ".github/workflows/ci.yml", "head_sha": HEAD,
@@ -58,8 +61,13 @@ class API:
             if self.pr_reads > 1 and self.next_pr_after_first is not None:
                 return self.next_pr_after_first
             return self.pr
-        if suffix == "/git/commits/" + MERGE:
-            return {"parents": [{"sha": sha} for sha in self.parents]}
+        if suffix.startswith("/git/commits/"):
+            sha = suffix.rsplit("/", 1)[1]
+            self.commit_reads.append(sha)
+            if sha == MERGE:
+                return {"sha": sha, "parents": [{"sha": parent} for parent in self.parents],
+                        "tree": {"sha": self.merge_tree}}
+            return self.alternative_merges.get(sha, {})
         if suffix.startswith("/actions/runs/"):
             return next(run for run in self.runs + self.codeql
                         if run["id"] == int(suffix.rsplit("/", 1)[1]))
@@ -110,6 +118,51 @@ class CentralAdmission(unittest.TestCase):
         api = API()
         self.assertEqual(self.assess(api).state, "success")
         self.assertEqual(api.job_reads.count(1), 1)
+
+    def regenerated_merge(self, api):
+        previous = "d" * 40
+        api.jobs[1][0]["name"] = "impact / Candidate " + previous
+        api.alternative_merges[previous] = {
+            "sha": previous, "parents": [{"sha": BASE}, {"sha": HEAD}],
+            "tree": {"sha": api.merge_tree}}
+        return previous
+
+    def test_regenerated_merge_requires_server_verified_identical_source(self):
+        api = API()
+        previous = self.regenerated_merge(api)
+        with patch.object(gate, "plan", return_value=SELECTION), patch.dict(os.environ, {"SOU91_SELECTIVE_CI": ""}):
+            current, verdict = gate.inspect(api, 1, BASE, HEAD)
+        self.assertEqual(verdict.state, "success", verdict.reason)
+        self.assertEqual(current, MERGE, "admission must target the current merge, not the old commit")
+        self.assertEqual(api.commit_reads, [MERGE, previous], "shared run must verify commit metadata only once")
+
+    def test_regenerated_merge_refuses_changed_or_unverifiable_source(self):
+        for change in ("base", "head", "order", "tree", "missing-tree", "identity", "missing", "malformed", "current-tree"):
+            with self.subTest(change=change):
+                api = API()
+                previous = self.regenerated_merge(api)
+                commit = api.alternative_merges[previous]
+                if change == "base": commit["parents"][0]["sha"] = "f" * 40
+                elif change == "head": commit["parents"][1]["sha"] = "f" * 40
+                elif change == "order": commit["parents"].reverse()
+                elif change == "tree": commit["tree"]["sha"] = "f" * 40
+                elif change == "missing-tree": del commit["tree"]
+                elif change == "identity": commit["sha"] = "f" * 40
+                elif change == "missing": api.alternative_merges.clear()
+                elif change == "malformed": api.alternative_merges[previous] = None
+                elif change == "current-tree": api.merge_tree = None
+                self.assertEqual(self.assess(api).state, "failure")
+
+    def test_regenerated_merge_does_not_hide_missing_failed_or_duplicate_jobs(self):
+        for change in ("missing", "failed", "duplicate-planner", "stale-attempt"):
+            with self.subTest(change=change):
+                api = API()
+                self.regenerated_merge(api)
+                if change == "missing": api.jobs[1].pop()
+                elif change == "failed": api.jobs[1][-1]["conclusion"] = "failure"
+                elif change == "duplicate-planner": api.jobs[1].append(job("impact / Candidate " + MERGE))
+                elif change == "stale-attempt": api.jobs[1][-1]["run_attempt"] = 2
+                self.assertEqual(self.assess(api).state, "pending" if change == "missing" else "failure")
 
     def test_missing_member_waits_for_api_snapshot_to_complete(self):
         api = API()

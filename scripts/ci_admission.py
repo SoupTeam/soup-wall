@@ -339,6 +339,39 @@ def run_label(run: dict[str, Any]) -> str:
     return "run " + str(int(run["id"])) + " attempt " + str(int(run["run_attempt"]))
 
 
+def planner_source(api: GitHub, jobs: list[dict[str, Any]], merge_sha: str,
+                   base_sha: str, head_sha: str, commits: dict[str, dict[str, Any]]) -> str:
+    """Verify regenerated merge metadata against repository commit objects only."""
+    planners = [job for job in jobs if "Candidate " in str(job.get("name", ""))]
+    if len(planners) != 1:
+        return merge_sha  # The existing assessor handles missing/duplicate planners.
+    match = re.search(r"Candidate ([0-9a-f]{40})$", str(planners[0].get("name", "")))
+    if match is None or match[1] == merge_sha:
+        return merge_sha
+    previous_sha = match[1]
+    current = commits[merge_sha]
+    tree = current.get("tree")
+    if current.get("sha") != merge_sha or not isinstance(tree, dict) \
+            or not isinstance(tree.get("sha"), str) or not SHA.fullmatch(tree["sha"]):
+        return merge_sha
+    if previous_sha not in commits:
+        commits[previous_sha] = api.get("/git/commits/" + previous_sha)
+    previous = commits[previous_sha]
+    if not isinstance(previous, dict):
+        return merge_sha
+    parents = previous.get("parents")
+    previous_tree = previous.get("tree")
+    if previous.get("sha") != previous_sha or not isinstance(parents, list) \
+            or not all(isinstance(parent, dict) for parent in parents) \
+            or [parent.get("sha") for parent in parents] != [base_sha, head_sha] \
+            or not isinstance(previous_tree, dict) or previous_tree.get("sha") != tree["sha"]:
+        return merge_sha
+    # GitHub can regenerate a test merge one second after the event snapshot.
+    # Both ordered parents AND the complete tree must match; a same-head green
+    # run alone is never sufficient. Final admission still targets merge_sha.
+    return previous_sha
+
+
 def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple[str, Verdict]:
     pr = api.get(f"/pulls/{number}")
     base_sha, head_sha = pr["base"]["sha"], pr["head"]["sha"]
@@ -353,6 +386,7 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
     parents = [item["sha"] for item in commit.get("parents", [])]
     if parents != [base_sha, head_sha]:
         return merge_sha, Verdict("failure", "merge candidate parent identity mismatch")
+    commits = {merge_sha: commit}
     files = api.pages(f"/pulls/{number}/files", "")
     paths: list[str] = []
     for item in files:
@@ -408,12 +442,13 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
         if key not in job_cache:
             job_cache[key] = get_jobs(api, run)
         jobs = job_cache[key]
+        source_sha = planner_source(api, jobs, merge_sha, base_sha, head_sha, commits)
         planner = tuple(job["name"] for job in jobs if
-                        str(job.get("name", "")).endswith("Candidate " + merge_sha))
+                        str(job.get("name", "")).endswith("Candidate " + source_sha))
         verdict = confirm_jobs(api, jobs, (*planner, *expected), run, head_sha, direct_cache)
         if verdict.state != "success":
             return merge_sha, Verdict(verdict.state, workflow + " " + run_label(run) + ": " + verdict.reason)
-        verdict = assess_job_names(jobs, expected, merge_sha, run, head_sha)
+        verdict = assess_job_names(jobs, expected, source_sha, run, head_sha)
         if verdict.state != "success":
             return merge_sha, Verdict(verdict.state, workflow + " " + run_label(run) + ": " + verdict.reason)
     codeql_jobs = get_jobs(api, codeql)
