@@ -116,8 +116,10 @@ def snapshot(root, expected_start, known=None, proc=Path("/proc")):
     require(rows and any(row["pid"] == root for row in rows), "empty_observer_sample")
     totals = {name: sum(row[name] for row in rows) for name in ("fds", "threads", "rss_bytes")}
     totals["processes"] = len(rows)
-    require(all(totals[key] <= BOUNDS[key] for key in totals), "owned_resource_bound_exceeded")
-    return {"monotonic": time.monotonic(), "totals": totals, "processes": rows}
+    result = {"monotonic": time.monotonic(), "totals": totals, "processes": rows}
+    if any(totals[key] > BOUNDS[key] for key in totals):
+        result.update(error="ValueError", code="owned_resource_bound_exceeded")
+    return result
 
 
 def native_sample(instance):
@@ -183,12 +185,16 @@ def observe(root, expected_start):
         while time.monotonic() - started <= 4500:
             if select.select([sys.stdin], [], [], 0)[0]:
                 break  # STOP or EOF from the owned driver.
-            print(json.dumps(snapshot(root, expected_start, known), separators=(",", ":")), flush=True)
+            row = snapshot(root, expected_start, known)
+            print(json.dumps(row, separators=(",", ":")), flush=True)
+            if "error" in row:
+                return 1
             time.sleep(1)
         else:
             raise ValueError("observer_deadline")
     except Exception as error:
-        print(json.dumps({"error": type(error).__name__}), flush=True)
+        print(json.dumps({"error": type(error).__name__,
+                          "code": str(error) if isinstance(error, ValueError) else type(error).__name__}), flush=True)
         return 1
     return 0
 

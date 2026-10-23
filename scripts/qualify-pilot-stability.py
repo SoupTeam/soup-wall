@@ -64,7 +64,13 @@ class Observer:
                     require(self.total <= S.BOUNDS["observer_bytes"] and len(raw) <= 65536, "observer_stream_bound")
                     self.stream.write(raw)
                     row = json.loads(raw)
-                    require("error" not in row, "independent_observer_failed")
+                    if "totals" in row:
+                        for key in self.peaks:
+                            self.peaks[key] = max(self.peaks[key], row["totals"][key])
+                    if "error" in row:
+                        self.errors.append({"type": row["error"], "code": row.get("code")})
+                        self.process.stdin.close()
+                        break
                     self.samples += 1
                     if self.previous is not None:
                         self.max_gap = max(self.max_gap, row["monotonic"] - self.previous)
