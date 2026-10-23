@@ -135,7 +135,7 @@ class Pilot:
         self.session, self.run_id = str(uuid.uuid4()), None
         self.trace = root / "syscalls.private"
         self.model = BASE.DEMO.ScriptedModel([])
-        self.offered, self.result_times = set(), {}
+        self.offered, self.result_times, self.result_monotonic = set(), {}, {}
         self.proposals = ProposalGate(deferred)
         target = ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}) if kind == "filesystem" else (
             "git", "git_show", {"repo_path": "/workspace", "revision": setup.head_before})
@@ -155,6 +155,7 @@ class Pilot:
                     if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in self.offered:
                         logical = block["tool_use_id"].removeprefix("toolu_pilot_ask_")
                         self.result_times.setdefault(logical, time.time_ns() // 1_000_000)
+                        self.result_monotonic.setdefault(logical, time.monotonic_ns())
                         self.model.results[logical] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
             if "primary" not in self.model.results:
                 proposals = [("primary", self.primary)]
@@ -341,14 +342,17 @@ def qualify(args, private, report):
         require(BASE.DEMO.wait_healthy(setup.port, daemon), "daemon_not_ready")
 
     try:
+        samples = getattr(args, "approval_samples", 0)
         for kind in ("git", "filesystem"):
-            for case in ("expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"):
+            selected_cases = (["approve"] * samples if samples else
+                ["expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"])
+            for sample_index, case in enumerate(selected_cases):
                 start_daemon(kind, 20 if case == "expire" else 30)
                 paired = kind == "filesystem" and case == "approve"
-                pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind,
+                pilot = Pilot(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
                               enabled=case != "default", deferred=paired)
                 active.append(pilot)
-                row = {"profile": kind, "case": case, "configured": case != "default", "pending":False,
+                row = {"profile": kind, "case": case, "sample_index": sample_index, "configured": case != "default", "pending":False,
                     "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
                     "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
                 cases.append(row)
@@ -357,7 +361,7 @@ def qualify(args, private, report):
                     # Start both actual hosts before either pending lease is
                     # consumed by the other host's startup. Deadlines stay fixed.
                     row["stage"] = "start_independent_run"
-                    sibling = Pilot(setup, private / "independent-run", classifier, kind, deferred=True)
+                    sibling = Pilot(setup, private / ("independent-run-" + str(sample_index)), classifier, kind, deferred=True)
                     active.append(sibling)
                     row["proposals_released_at_ms"] = release_ready_pilots([pilot, sibling])
                     row["both_hosts_ready_before_proposals"] = True
@@ -399,6 +403,7 @@ def qualify(args, private, report):
                         require(pilot.undispatched(), "target_dispatched_before_exact_decision")
                         row["stage"] = "exact_decision"
                         row["decision_attempt_at_ms"] = time.time_ns() // 1_000_000
+                        decision_monotonic = time.monotonic_ns()
                         pilot.operator(case, waiting["pending_id"], "--binding", waiting["binding_sha256"])
                         row["decision_submitted"] = case
                         pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
@@ -455,6 +460,9 @@ def qualify(args, private, report):
                 if case == "approve":
                     marker = "7 red widgets" if kind == "filesystem" else "committed baseline"
                     require(marker in json.dumps(primary),"original_approved_result_not_useful")
+                    # Conservative operator-attempt-to-correlated-result duration,
+                    # including operator verification and decision submission.
+                    row["decision_to_result_ms"] = (pilot.result_monotonic["primary"] - decision_monotonic) / 1_000_000
                 primary_text = json.dumps(primary)
                 row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
                 if case == "expire":
@@ -501,15 +509,29 @@ def qualify(args, private, report):
         require(not list((setup.home / "pilot-runs").iterdir()), "run_metadata_remains")
     finally:
         report["cases"] = cases
+        if getattr(args, "approval_samples", 0):
+            report["latency"] = LATENCY.summarize(cases, args.approval_samples)
         for pilot in active:
             pilot.close()
         stop(daemon)
+
+
+LATENCY = load("pilot_ask_latency", "pilot_ask_latency.py")
+
+
+def approval_samples(value):
+    number = int(value)
+    if number != 0 and not 20 <= number <= 100:
+        raise argparse.ArgumentTypeError("approval samples must be 0 or 20..100 per profile")
+    return number
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--approval-samples", type=approval_samples, default=0,
+                        help="Separate performance run: 20..100 fresh approvals per profile; no call resubmission")
     args = parser.parse_args(); args.output.mkdir(parents=True,exist_ok=True)
     report = {"contract_version":"sw-pilot-ask-acceptance/1", "status":"incomplete", "real_host_executed":False,
         "scripted_owned_provider":True, "paid_api_calls":0, "physical_human_presence_proven":False}

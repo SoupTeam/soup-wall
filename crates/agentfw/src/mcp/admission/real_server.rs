@@ -37,6 +37,38 @@ struct Grant {
     call_id: Value,
     binding: Value,
     boundary: Option<crate::policy_transition::Boundary>,
+    continuation: Option<ContinuationTiming>,
+}
+
+/// Observations only: never used for authority, deadlines, retries or admission.
+struct ContinuationTiming {
+    observed: Instant,
+    previous: Instant,
+}
+
+impl ContinuationTiming {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            observed: now,
+            previous: now,
+        }
+    }
+
+    fn record(&mut self, call: &Call, stage: &'static str, success: bool) {
+        let now = Instant::now();
+        eprintln!(
+            "{}",
+            json!({
+                "event": "mcp_real_approval_timing", "profile": call.profile,
+                "host_call_id": call.id, "stage": stage, "success": success,
+                "stage_ms": now.duration_since(self.previous).as_secs_f64() * 1000.0,
+                "post_observed_ms": now.duration_since(self.observed).as_secs_f64() * 1000.0,
+                "clock": "collector_monotonic", "authority": false
+            })
+        );
+        self.previous = now;
+    }
 }
 
 struct Release {
@@ -240,6 +272,7 @@ async fn admit(
     } else {
         None
     };
+    let mut continuation = None;
     if let Some(source) = source {
         // No transition gate is held across a human wait. Acquire a fresh
         // boundary, rerun classification and redeem under the current policy.
@@ -296,10 +329,14 @@ async fn admit(
                 Ok(id) => id,
                 Err(code) => return Ok(refusal(&code)),
             };
+        let mut timing = ContinuationTiming::new();
         let resumed = async {
             let frozen = profile.clone();
-            tokio::task::spawn_blocking(move || frozen.revalidate_assets()).await??;
+            let verified = tokio::task::spawn_blocking(move || frozen.revalidate_assets()).await;
+            timing.record(call, "profile_and_assets", matches!(&verified, Ok(Ok(()))));
+            verified??;
             boundary = collector.policy_boundary().await?;
+            timing.record(call, "policy_boundary", true);
             let reassessed = collector
                 .classify(
                     &snapshot,
@@ -313,7 +350,9 @@ async fn admit(
                         https_get: false,
                     },
                 )
-                .await?;
+                .await;
+            timing.record(call, "classifier", matches!(&reassessed, Ok(Ok(_))));
+            let reassessed = reassessed?;
             ensure!(
                 reassessed.is_ok_and(
                     |value| value.known_read_only && value.verdict != ProductionVerdict::Deny
@@ -334,11 +373,17 @@ async fn admit(
         fields["approval_id"] = json!(approval_id);
         fields["selected_invocation"] = json!(context);
         let admitted = collector.event("call", fields).await;
+        timing.record(
+            call,
+            "daemon_redemption",
+            admitted.as_ref().is_ok_and(|r| r["release"] == true),
+        );
         // Idempotent cancellation removes approved but unused state. A lost or
         // malformed native receipt is session-fatal, as on the ordinary path:
         // retire the session rather than orphaning an unseen reserved call.
         collector.cancel_approval(&approval_id).await?;
         receipt = Some(admitted?);
+        continuation = Some(timing);
     }
     let receipt = receipt.context("selected admission receipt absent")?;
     if receipt["release"] != true {
@@ -352,6 +397,7 @@ async fn admit(
         call_id: receipt["call_id"].clone(),
         binding: receipt["binding_sha256"].clone(),
         boundary,
+        continuation,
     }))
 }
 
@@ -437,7 +483,7 @@ async fn wait_approval(
 async fn inspect(
     collector: &Collector<'_>,
     call: &Call,
-    grant: Grant,
+    mut grant: Grant,
     raw: Vec<u8>,
     kind: &str,
 ) -> anyhow::Result<Option<Release>> {
@@ -468,6 +514,9 @@ async fn inspect(
             (replacement, receipt)
         }
     };
+    if let Some(timing) = &mut grant.continuation {
+        timing.record(call, "result_inspection", receipt["release"] == true);
+    }
     let raw = if receipt["release"] == true {
         raw
     } else {
@@ -1007,6 +1056,9 @@ where
                                 } else {
                                     write(child, &call.raw).await?;
                                     call.dispatched = true;
+                                    if let Some(timing) = &mut grant.continuation {
+                                        timing.record(call, "original_dispatch", true);
+                                    }
                                     drop(grant.boundary.take());
                                     call.phase = Phase::Running(grant);
                                     wire.insert(key.clone(), (call.deadline, false));
@@ -1282,13 +1334,16 @@ where
                     continue;
                 };
                 let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
-                let Phase::Running(grant) = phase else {
+                let Phase::Running(mut grant) = phase else {
                     ensure!(
                         call.cancelled,
                         "MCP response arrived in an invalid call phase"
                     );
                     continue;
                 };
+                if let Some(timing) = &mut grant.continuation {
+                    timing.record(call, "original_response", value.get("result").is_some());
+                }
                 let input = detached(call);
                 let worker_key = key.clone();
                 let validated = profiles[&call.tool]

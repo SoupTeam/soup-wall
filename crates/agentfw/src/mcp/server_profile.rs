@@ -107,20 +107,33 @@ impl ProfileConfig {
     /// Recheck immutable installed assets after an operator wait. This only
     /// observes files; it creates no sandbox, budget, process or authority.
     pub(crate) fn revalidate_assets(&self) -> anyhow::Result<()> {
+        let started = std::time::Instant::now();
         let current = Self::load_from_env()?.context("selected profile disappeared")?;
         ensure!(
             serde_json::to_value(&current)? == serde_json::to_value(self)?,
             "selected profile changed during approval"
+        );
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
+            "stage":"selected_profile", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
         );
         self.verify_assets()
     }
 
     /// Verify pinned bytes without modifying process environment or launching a server.
     pub(crate) fn verify_assets(&self) -> anyhow::Result<()> {
+        let started = std::time::Instant::now();
         ensure!(
             package_tree_sha256(&self.package_root)? == self.package_tree_sha256,
             "selected package changed during approval"
         );
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
+            "stage":"package_tree", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
+        );
+        let started = std::time::Instant::now();
         let mut total = 0u64;
         for (path, digest) in [
             (&self.runtime_path, &self.runtime_sha256),
@@ -147,6 +160,11 @@ impl ProfileConfig {
                 "selected executable or library changed during approval"
             );
         }
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
+            "stage":"runtime_and_libraries", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
+        );
         Ok(())
     }
 
