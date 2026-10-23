@@ -51,6 +51,11 @@ only after host cleanup and revocation are confirmed. No rollback of already
 dispatched effects is claimed. Repeating the command with that receipt returns
 `already_stopped` without contacting a potentially replaced service or signalling
 a process. Stop transitions cannot move backwards under concurrent callers.
+Concurrent operator/launcher receipt writes wait up to two seconds for the short
+metadata lock instead of abandoning final confirmation on ordinary contention.
+An occupied or failed lock still reports an error. Terminal output and daemon
+requests never hold that lock: a blocked `inspect` pipe cannot prevent stop,
+and an inspection interrupted by stop cannot persist a fresh inspection receipt.
 
 The prepared-run supervisor still stops its owned launcher and daemon. It retains
 the private run directory when stop intent exists so an interrupted operation or

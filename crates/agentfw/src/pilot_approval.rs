@@ -278,6 +278,10 @@ fn create_dir(path: &Path) -> Result<()> {
 }
 
 fn lock_dir(path: &Path) -> Result<fs::File> {
+    lock_dir_for(path, Duration::ZERO)
+}
+
+fn lock_dir_for(path: &Path, wait: Duration) -> Result<fs::File> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -289,11 +293,24 @@ fn lock_dir(path: &Path) -> Result<fs::File> {
     #[cfg(unix)]
     {
         use std::os::fd::AsRawFd;
-        ensure!(
-            unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
-            "another pilot metadata operation is active; retry"
-        );
+        let deadline = std::time::Instant::now() + wait;
+        loop {
+            if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+                break;
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() != std::io::ErrorKind::WouldBlock {
+                return Err(error).context("lock pilot metadata");
+            }
+            ensure!(
+                std::time::Instant::now() < deadline,
+                "another pilot metadata operation is active; retry"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
+    #[cfg(not(unix))]
+    let _ = wait;
     Ok(file)
 }
 
@@ -815,7 +832,10 @@ fn read_stop(dir: &Path, run: &Run, bytes: &[u8]) -> Result<StopMarker> {
 }
 
 fn write_stop(dir: &Path, run: &Run, bytes: &[u8], status: &str) -> Result<()> {
-    let _reservation = lock_dir(dir)?;
+    // A simultaneous operator/launcher update must not strand a fully cleaned
+    // run in `revoked`. Only short metadata writes hold this lock; never I/O to
+    // a terminal or the daemon. Keep a bound for a stuck or foreign holder.
+    let _reservation = lock_dir_for(dir, Duration::from_secs(2))?;
     if has_stop(dir)? {
         let current = read_stop(dir, run, bytes)?;
         let rank = |value: &str| match value {
@@ -841,6 +861,37 @@ fn write_stop(dir: &Path, run: &Run, bytes: &[u8], status: &str) -> Result<()> {
     write_new(&temporary, &marker)?;
     fs::rename(&temporary, dir.join("stop.json"))?;
     fs::File::open(dir)?.sync_all()?;
+    Ok(())
+}
+
+fn record_inspection(
+    dir: &Path,
+    receipt: &Path,
+    value: &Value,
+    display: &str,
+    terminal: &mut impl Write,
+) -> Result<()> {
+    // A blocked pipe/terminal must not prevent the independent stop command.
+    // Still persist proof of inspection only after the output was flushed.
+    writeln!(terminal, "{display}")?;
+    terminal.flush()?;
+    let _reservation = lock_dir(dir)?;
+    ensure!(!has_stop(dir)?, "pilot run is stopping or stopped");
+    prune_inspections(dir)?;
+    ensure!(
+        fs::read_dir(dir)?.take(18).count() < 18,
+        "inspection receipt capacity reached"
+    );
+    match write_new(receipt, value) {
+        Ok(()) => (),
+        Err(e) if !receipt.exists() => return Err(e),
+        Err(_) => {
+            ensure!(
+                serde_json::from_slice::<Value>(&read_file(receipt, true)?)? == *value,
+                "inspection receipt changed"
+            );
+        }
+    }
     Ok(())
 }
 
@@ -1091,12 +1142,6 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
     let receipt = dir.join(format!("inspected-{identifier}.json"));
     match args.action {
         OperatorAction::Inspect { .. } => {
-            let _reservation = lock_dir(&dir)?;
-            prune_inspections(&dir)?;
-            ensure!(
-                fs::read_dir(&dir)?.take(18).count() < 18,
-                "inspection receipt capacity reached"
-            );
             let value = json!({"binding_sha256": binding, "args_sha256": record["args_sha256"],
                 "expires_at_ms":record["expires_at_ms"]});
             let display = escaped(
@@ -1104,18 +1149,7 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                 "args":record["args"],"binding_sha256":binding,"expires_at_ms":record["expires_at_ms"],"state":"pending"}),
             )?;
             let mut terminal = std::io::stdout().lock();
-            writeln!(terminal, "{display}")?;
-            terminal.flush()?;
-            match write_new(&receipt, &value) {
-                Ok(()) => (),
-                Err(e) if !receipt.exists() => return Err(e),
-                Err(_) => {
-                    ensure!(
-                        serde_json::from_slice::<Value>(&read_file(&receipt, true)?)? == value,
-                        "inspection receipt changed"
-                    );
-                }
-            }
+            record_inspection(&dir, &receipt, &value, &display, &mut terminal)?;
         }
         OperatorAction::Approve {
             binding: requested, ..
@@ -1237,6 +1271,110 @@ mod tests {
         fs::rename(dir.join("stop.json"), dir.join("linked.json")).unwrap();
         symlink(dir.join("linked.json"), dir.join("stop.json")).unwrap();
         assert!(read_stop(&dir, &run, &bytes).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn stop_completion_waits_for_an_inflight_metadata_update() {
+        use std::sync::mpsc;
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        create_dir(&home).unwrap();
+        write_new(&home.join("native-token"), &"owned-test-key").unwrap();
+        let dir = root.path().join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        let bytes = serde_json::to_vec(&run).unwrap();
+        write_stop(&dir, &run, &bytes, "revoked").unwrap();
+        let reservation = lock_dir(&dir).unwrap();
+        // A permanently held lock still fails within a declared budget.
+        assert!(lock_dir_for(&dir, Duration::from_millis(20)).is_err());
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker_dir = dir.clone();
+        let worker_run = run.clone();
+        let worker_bytes = bytes.clone();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            done_tx
+                .send(write_stop(
+                    &worker_dir,
+                    &worker_run,
+                    &worker_bytes,
+                    "stopped",
+                ))
+                .unwrap();
+        });
+        started_rx.recv().unwrap();
+        assert!(matches!(
+            done_rx.recv_timeout(Duration::from_millis(100)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        drop(reservation);
+        done_rx
+            .recv_timeout(Duration::from_secs(3))
+            .unwrap()
+            .unwrap();
+        worker.join().unwrap();
+        assert_eq!(read_stop(&dir, &run, &bytes).unwrap().status, "stopped");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn inspection_output_cannot_lock_out_stop_or_record_after_stop() {
+        struct Terminal<'a> {
+            dir: &'a Path,
+            receipt: &'a Path,
+            run: &'a Run,
+            bytes: &'a [u8],
+            stop_on_flush: bool,
+        }
+        impl Write for Terminal<'_> {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                // Includes an arbitrarily blocked stdout: metadata stays available.
+                assert!(lock_dir(self.dir).is_ok());
+                assert!(!self.receipt.exists());
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                assert!(lock_dir(self.dir).is_ok());
+                assert!(!self.receipt.exists());
+                if self.stop_on_flush {
+                    write_stop(self.dir, self.run, self.bytes, "requested").unwrap();
+                }
+                Ok(())
+            }
+        }
+        for stop_on_flush in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let home = root.path().join("home");
+            create_dir(&home).unwrap();
+            write_new(&home.join("native-token"), &"owned-test-key").unwrap();
+            let dir = root.path().join("run");
+            create_dir(&dir).unwrap();
+            let mut run = run();
+            run.home = home;
+            let bytes = serde_json::to_vec(&run).unwrap();
+            let receipt = dir.join("inspected-call.json");
+            let mut terminal = Terminal {
+                dir: &dir,
+                receipt: &receipt,
+                run: &run,
+                bytes: &bytes,
+                stop_on_flush,
+            };
+            let value = json!({"binding_sha256":"owned", "expires_at_ms":u64::MAX});
+            let result = record_inspection(&dir, &receipt, &value, "exact call", &mut terminal);
+            assert_eq!(result.is_err(), stop_on_flush);
+            assert_eq!(receipt.is_file(), !stop_on_flush);
+            if !stop_on_flush {
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&fs::read(&receipt).unwrap()).unwrap(),
+                    value
+                );
+            }
+        }
     }
 
     #[test]
