@@ -5,6 +5,18 @@ independently on accepted main `cdd9d36c65a592455e4f421268758adb6db744b8`.
 `development.json` records its tree and exact changed-file SHA-256 values.
 Evidence-only follow-ups are not relabelled as tested implementation changes.
 
+## Concurrency review follow-up
+
+`review.json` records implementation `fa6619b` and the exact source hashes after
+fixing stop receipt contention and the inspection terminal-lock boundary.
+The complete Rust workspace passes with 1667 passed, 0 failed and 13 ignored;
+strict clippy, formatting and whitespace checks pass. Both regression tests
+were also checked with the individual defect reintroduced: each failed as
+required. The initial sandboxed run could not bind local fixture ports (26
+failures); the same source passed with owned loopback fixture access. That
+failed log's digest is retained. Python source is unchanged from the initial
+checkpoint below. These remain macOS observations, not Linux qualification.
+
 ## Verified locally
 
 - Canonical temporary root and an isolated branch Cargo target:
