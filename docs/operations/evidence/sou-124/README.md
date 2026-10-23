@@ -1,5 +1,14 @@
 # SOU-124 development evidence
 
+## Verified input reuse follow-up
+
+`input_reuse_review.json` records implementation `e571245` and exact source hashes
+after adding per-Ask verified input observations, conditional fs-verity immutable
+reuse, and unit/relay controls.
+The complete Rust workspace passes with 1661 passed, 0 failed and 13 ignored;
+strict clippy, formatting and whitespace checks pass. These remain macOS observations,
+not Linux performance qualification.
+
 ## Cleanup review follow-up
 
 `review.json` records implementation `deb5aa7` and exact source hashes after
