@@ -1252,7 +1252,7 @@ jobs:
 
   mcp-real-filesystem--required-linux-sandbox-and-real-host:
     name: "mcp-real-filesystem / required-linux-sandbox-and-real-host"
-    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && github.event.inputs.native_preparation_only == 'true')
+    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true'))
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -1585,7 +1585,7 @@ jobs:
 
   mcp-real-filesystem--native-ubuntu-2404:
     name: "mcp-real-filesystem / native-ubuntu-2404"
-    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'native-ubuntu-2404')
+    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && github.event.inputs.matched_development_only == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 65
     env:
@@ -1602,6 +1602,8 @@ jobs:
       - name: Focused preparation boundaries
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_measurement.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_run.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
@@ -1828,7 +1830,9 @@ jobs:
         run: |
           set -euo pipefail
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
-          python3 -B scripts/qualify-installed-pilot.py --run --selection "$selection" \
+          mode=()
+          if [[ "${{ github.event.inputs.matched_development_only }}" == "true" ]]; then mode=(--matched-development); fi
+          python3 -B scripts/qualify-installed-pilot.py --run "${mode[@]}" --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou111-qualification"
       - name: Qualify owned prepared-selection launch and failures with the original host
         shell: bash
@@ -1869,8 +1873,8 @@ jobs:
             ${{ runner.temp }}/sou111-assets/reused.json
             ${{ runner.temp }}/sou111-assets/first-failure.json
             ${{ runner.temp }}/sou111-assets/recovered.json
+            ${{ runner.temp }}/sou111-qualification/**
             ${{ runner.temp }}/sou116-qualification/report.json
-            ${{ runner.temp }}/sou111-qualification/report.json
             ${{ runner.temp }}/sou111-qualification/filesystem-sandbox.log
             ${{ runner.temp }}/sou111-qualification/git-sandbox.log
             ${{ runner.temp }}/sou111-qualification/sandbox-positive-failure.txt

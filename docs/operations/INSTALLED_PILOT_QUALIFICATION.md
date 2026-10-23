@@ -197,3 +197,71 @@ Keep these owner boundaries explicit when converging on the final candidate:
 These are convergence requirements, not fabricated discoveries or reasons to
 wait before running accepted main. No sealed evaluation data, training, paid
 provider call, release, prerelease or registry publication is authorized here.
+
+## Matched installed-host development measurement (SOU-106)
+
+The opt-in extension uses the same selected binaries, profile installers, daemon,
+original filesystem/Git servers and Claude Code host as the procedure above.
+It does not enable Ask approval or replace the selected policies/classifiers.
+The versioned public workload is
+[`installed-pilot-workload-v2.json`](../../scripts/benchmarks/installed-pilot-workload-v2.json).
+Its 12 supported benign multi-step variants include listing/search, batched and
+optional reads, Git status/log/diff/show, parallel calls and continuation. Eight
+mutator variants are explicitly **profile-unsupported**, not policy Deny examples.
+Nested edit arguments are exercised as refused mutations, not claimed supported.
+
+From an ordinary checkout of the exact candidate, after the existing preparation
+procedure has produced a private selection file, run:
+
+```sh
+python3 -B scripts/qualify-installed-pilot.py --run --matched-development \
+  --selection /absolute/private/selection.json \
+  --expected-commit FULL_CANDIDATE_COMMIT \
+  --output /absolute/private/new-matched-result
+```
+
+The command requires Linux x86-64 and the original selected host. It creates its
+runtime workspaces outside the checkout. It never reads a contributor's private
+worktree, calls a paid provider or uses real task data. The default command
+without `--matched-development` remains compatible. The workflow dispatch input
+`matched_development_only` selects one focused native Ubuntu job; do not launch
+the whole native matrix for each sample.
+
+The workload is saved before candidate execution, then each variant runs control
+and protected with identical normalized operations, owned fixture bytes and
+selected assets. Control is the original server through the actual host, without
+admission. Protected uses the existing admission path. Absolute control paths
+are translated from the same `/workspace` arguments and normalized in result
+comparison; there is no tool implementation replacement. Effects are witnessed
+from file/index bytes and kernel OPEN observations during the adverse batch.
+Owned originals are restored before the protected arm; a control that does not
+produce its expected effect cannot establish prevention. Refusal must be explicit,
+produce no independent forbidden effect/open, and permit useful continuation.
+
+`report.json` retains every arm, including failures and unexecuted rows;
+`progress.json` is an incomplete checkpoint only. `scorecard.md` summarizes
+counts and nearest-rank p95 using the existing matched-report distribution.
+Source/selection verification, asset/daemon preparation, host startup, first
+batch and subsequent call observations are distinguished. Already-built binary
+build time is **not measured**. Fresh host processes do not imply cold OS caches;
+control-first ordering can bias overhead. Parallel result observation includes
+host/provider processing and is not isolated server execution time. The 1000 ms
+p95 overhead investigation budget is engineering guidance, not an approved
+security/efficacy threshold. Existing per-host deadlines are retained.
+
+The gate rejects absent/duplicate pairs, identities/operations/schema drift,
+skips, missing calibration, invalid timings, forbidden effects and supported
+benign failures. A deliberately broken pair-list fixture checks the gate itself;
+it is separate from runtime evidence. Missing setup or runtime evidence fails.
+Raw owned evidence remains private; share only inspected sanitized summaries.
+These scripted controls do not measure live-model effectiveness, prove model
+consumption, close Phase 4, or certify pilot readiness.
+
+The first v1 attempt is retained in [SOU-106 evidence](evidence/sou106/README.md).
+Version 2 corrects a `tail=1` request that selected the original server's trailing
+empty line: `tail=2` requests the intended useful line without changing the
+expected content. Search-followed-by-read interruptions remain failures.
+
+Delivery counters refer to original tool results withheld from the host. This
+filesystem/Git workload has no network-send operations and does not claim a
+calibrated network-delivery prevention result.
