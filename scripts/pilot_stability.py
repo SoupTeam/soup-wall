@@ -55,7 +55,9 @@ def plan(mode="soak"):
 def identity(pid, proc=Path("/proc")):
     try:
         raw = (proc / str(pid) / "stat").read_text()
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
+        # procfs can return ESRCH after opening an entry whose process exits
+        # during the read. This is an explicit kernel exit, not missing access.
         return None
     fields = raw[raw.rfind(")") + 2:].split()
     require(len(fields) >= 22, "proc_stat_incomplete")
@@ -77,7 +79,7 @@ def process_row(pid, proc=Path("/proc")):
         for task in tasks:
             try:
                 children.update(int(p) for p in (task / "children").read_text().split())
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 continue  # A thread exit, not an unsupported interface.
         fds = len(list((base / "fd").iterdir()))
         state = status["State"].split()[0]

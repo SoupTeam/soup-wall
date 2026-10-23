@@ -96,6 +96,16 @@ class StabilityControls(unittest.TestCase):
             with self.assertRaises(ValueError):
                 S.snapshot(4242, 1, proc=Path(directory))
 
+    def test_kernel_exit_is_distinct_from_unobservable_live_process(self):
+        from unittest.mock import patch
+        with patch.object(Path, "read_text", side_effect=ProcessLookupError):
+            self.assertIsNone(S.identity(4242))
+            with self.assertRaises(ValueError):
+                S.snapshot(4242, 1)
+        with patch.object(Path, "read_text", side_effect=PermissionError):
+            with self.assertRaises(PermissionError):
+                S.identity(4242)
+
     def test_unreadable_proc_metadata_never_becomes_empty_safe_list(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "4242"
