@@ -60,6 +60,9 @@ Each host result is checked against discovery-calibrated collector write syscall
 for the exact tool and arguments. The trace also observes network syscalls;
 non-loopback destinations fail the run. The loopback receiver is positively
 calibrated and must receive no forbidden delivery.
+Before and after the hour, actual-host derived-read Ask and unsupported Git reset
+must have zero original-server dispatch, while useful follow-ups and the same
+read in an independent conversation must still work.
 
 The shipped scheduler, authority TTLs, liveness leases, policy and provenance
 limits are unchanged. Fresh short-lived conversations replace collectors; the

@@ -161,13 +161,15 @@ class Pilot(P.Pilot):
         # Every dispatched tool must be one of the explicitly supported reads.
         require(all(call["tool"] in ("read_text_file", "git_show", "git_status", "git_diff")
                     for call in witness["calls"]), "forbidden_original_dispatch")
-        # Outage/refusal exercises intentionally withhold proposals. For the
-        # sustained benign workload require every exact tool/argument pair.
-        if label.endswith("final-follow-up") or "round-" in label:
-            expected = Counter((tool, S.digest({"repo_path": "/workspace", **arguments} if kind == "git" else arguments))
-                               for batch in batches for kind, tool, arguments in batch)
-            require(Counter((row["tool"], row["args_sha256"]) for row in witness["calls"]) == expected,
-                    "independent_dispatch_arguments_changed")
+        # The declared errors here are pre-dispatch Ask/profile/outage cases.
+        # Assert exact successful dispatches and zero dispatch of those errors;
+        # an error frame by itself would not establish non-execution.
+        proposals = [row for batch in batches for row in batch]
+        expected = Counter((tool, S.digest({"repo_path": "/workspace", **arguments} if kind == "git" else arguments))
+                           for index, (kind, tool, arguments) in enumerate(proposals)
+                           if not results[f"toolu_pilot_{index}"]["is_error"])
+        require(Counter((row["tool"], row["args_sha256"]) for row in witness["calls"]) == expected,
+                "independent_dispatch_arguments_changed")
         import re
         endpoints = re.findall(r'(?:inet_addr\("|inet_pton\(AF_INET6, ")([^"\n]+)', raw)
         require(endpoints, "network_observer_not_calibrated")
@@ -267,6 +269,7 @@ def run(args):
               "workload": workload, "workload_sha256": S.digest(workload),
               "iterations": [], "faults": {}, "native_samples": []}
     P.private_json(output / "frozen-plan.json", workload)
+    P.private_json(output / "report.json", report)
     pilot = observer = private = None
     started = None
     try:
@@ -287,6 +290,8 @@ def run(args):
         report["observer_calibration"] = calibrate_observer(observer, paths["python"])
         report["sandbox"] = {"passed": True, "evidence": pilot.sandbox()}
         report["calibration"] = {"passed": True, "evidence": pilot.calibrate()}
+        report["protection_before"] = {"passed": True, "refusal": pilot.refusal(), "independent": pilot.independent()}
+        P.private_json(output / "report.json", report)
         # Calibration itself includes actual original reads, controlled write,
         # FIFO readers, repository opens, injection withholding and receiver hit.
         native = S.native_sample(pilot.http("/native/v1/instance"))
@@ -295,15 +300,21 @@ def run(args):
         native_stopped, expected_outage = threading.Event(), threading.Event()
         native_errors = []
         def sample_native():
+            unavailable_since = None
             while not native_stopped.is_set():
                 try:
                     sample = S.native_sample(pilot.http("/native/v1/instance"))
                     report["native_samples"].append({"seconds": round(time.monotonic() - started, 3), **sample})
+                    unavailable_since = None
                     require(len(report["native_samples"]) <= 800, "native_sample_bound")
                 except Exception as error:
                     # Only an explicitly declared daemon outage permits an
                     # unavailable observation. It is retained, not made zero.
                     if expected_outage.is_set() and not isinstance(error, ValueError):
+                        unavailable_since = unavailable_since or time.monotonic()
+                        if time.monotonic() - unavailable_since > S.BOUNDS["recovery_seconds"]:
+                            native_errors.append("declared_outage_exceeded_bound")
+                            break
                         report["native_samples"].append({"seconds": round(time.monotonic() - started, 3), "unavailable": True})
                     else:
                         native_errors.append(type(error).__name__)
@@ -322,6 +333,8 @@ def run(args):
             iteration = {"index": index, "status": "incomplete", "completed_workflows": 0,
                          "false_interruptions": 0, "started_seconds": round(time.monotonic() - started, 3)}
             report["iterations"].append(iteration)
+            P.private_json(output / f"iteration-{index:02d}.json", iteration)
+            P.private_json(output / "report.json", report)
             iteration_started = time.monotonic()
             try:
                 with ThreadPoolExecutor(max_workers=2) as pool:
@@ -375,6 +388,7 @@ def run(args):
             tick()
             time.sleep(0.5)
         report["final_follow_up"] = {"passed": True, "evidence": workflows(pilot, "final-follow-up", 1)}
+        report["protection_after"] = {"passed": True, "refusal": pilot.refusal(), "independent": pilot.independent()}
         report["elapsed_seconds"] = round(time.monotonic() - started, 3)
         report["source_after"] = P.source()
         report["selected_unchanged"] = all(P.sha(path) == report["selected_sha256"][role] for role, path in paths.items())

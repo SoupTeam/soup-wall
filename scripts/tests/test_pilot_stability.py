@@ -23,10 +23,13 @@ def complete():
         "iterations": [{"index": i, "status": "pass", "completed_workflows": 20,
                         "false_interruptions": 0, "elapsed_seconds": 20, "started_seconds": i * 300,
                         "idle": idle.copy()} for i in range(12)],
-        **{key: {"passed": True} for key in ("sandbox", "calibration", "final_follow_up", "cleanup", "observer_calibration")},
+        **{key: {"passed": True} for key in ("sandbox", "calibration", "protection_before", "protection_after", "final_follow_up", "cleanup", "observer_calibration")},
         "faults": {key: {"passed": True} for key in S.FAULTS.values()},
         "observer": {"samples": 3600, "max_gap_seconds": 1.1, "errors": [], "stopped": True, "peaks": idle.copy()},
-        "native_samples": [{"seconds": i * 5} for i in range(720)]}
+        "native_samples": [{"seconds": i * 5, "limits": S.DEFAULT_PROVENANCE.copy(),
+                            "accounting_revision": "sw-provenance-storage/1", "collectors": 0, "active_collectors": 0,
+                            "usage": {"sessions": 1, "retained_bytes": 1024, "max_session_retained_bytes": 1024}}
+                           for i in range(720)]}
 
 
 class StabilityControls(unittest.TestCase):
@@ -68,6 +71,12 @@ class StabilityControls(unittest.TestCase):
     def test_idle_leaks_are_not_hidden_by_absolute_resource_ceiling(self):
         self.rejects(lambda r: r["iterations"][7]["idle"].update(fds=500))
         self.rejects(lambda r: r["iterations"][7]["idle"].update(processes=6))
+
+    def test_native_unknown_gaps_and_overflow_fail_independent_regrading(self):
+        self.rejects(lambda r: r["native_samples"][10]["usage"].update(sessions=513))
+        self.rejects(lambda r: r["native_samples"][10]["limits"].update(total_bytes=999999999))
+        self.rejects(lambda r: r["native_samples"][10].update(seconds=1000))
+        self.rejects(lambda r: r.update(native_samples=[{"unavailable": True, "seconds": i * 5} for i in range(720)]))
 
     def test_native_limits_and_counters_must_be_explicit(self):
         instance = {"instance_id": "owned", "pilot_collectors": [], "provenance": {

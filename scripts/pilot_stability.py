@@ -131,6 +131,7 @@ def native_sample(instance):
     collectors = instance["pilot_collectors"]
     require(len(collectors) <= 64, "native_session_bound_exceeded")
     return {"instance_sha256": digest(instance["instance_id"]), "usage": usage,
+            "limits": provenance["limits"], "accounting_revision": provenance["accounting_revision"],
             "collectors": len(collectors), "active_collectors": sum(r["active"] for r in collectors)}
 
 
@@ -146,7 +147,7 @@ def grade(report):
                 and r["false_interruptions"] == 0 and r["elapsed_seconds"] <= 180 for r in rounds), "workflow_incomplete")
     require(sum(r["completed_workflows"] for r in rounds) == 240, "workload_denominator_changed")
     require(all(abs(r["started_seconds"] - i * 300) <= 15 for i, r in enumerate(rounds)), "sustained_schedule_not_observed")
-    for key in ("sandbox", "calibration", "final_follow_up", "cleanup", "observer_calibration"):
+    for key in ("sandbox", "calibration", "protection_before", "protection_after", "final_follow_up", "cleanup", "observer_calibration"):
         require(report[key]["passed"] is True, "required_witness_missing:" + key)
     require(set(report["faults"]) == set(FAULTS.values()), "fault_iteration_missing")
     require(all(row["passed"] is True for row in report["faults"].values()), "fault_recovery_failed")
@@ -155,6 +156,19 @@ def grade(report):
             and not observer["errors"] and observer["stopped"] is True, "observer_incomplete")
     require(all(0 < observer["peaks"][name] <= BOUNDS[name] for name in ("processes", "fds", "threads", "rss_bytes")), "resource_peak_invalid")
     require(len(report["native_samples"]) >= 650, "native_sampling_incomplete")
+    available = [row for row in report["native_samples"] if not row.get("unavailable")]
+    require(len(available) >= 650 and len(report["native_samples"]) - len(available) <= 4,
+            "native_observation_unavailable")
+    times = [row["seconds"] for row in report["native_samples"]]
+    require(times == sorted(times) and times[0] <= 5 and times[-1] >= 3590
+            and max(b - a for a, b in zip(times, times[1:])) <= 15, "native_sampling_gap")
+    for row in available:
+        require(row["limits"] == DEFAULT_PROVENANCE and row["accounting_revision"] == "sw-provenance-storage/1",
+                "native_observed_limits_changed")
+        require(0 <= row["active_collectors"] <= row["collectors"] <= 64, "native_collector_bound")
+        usage = row["usage"]
+        require(0 <= usage["sessions"] <= 512 and 0 <= usage["retained_bytes"] <= 67108864
+                and 0 <= usage["max_session_retained_bytes"] <= 8388608, "native_observed_capacity_exceeded")
     idle = [row["idle"] for row in rounds[2:8]]  # Compare before intentional daemon replacement.
     require(all(row["processes"] == idle[0]["processes"] for row in idle), "idle_process_growth")
     for field, limit in (("fds", BOUNDS["idle_fd_growth"]), ("threads", BOUNDS["idle_thread_growth"]),
