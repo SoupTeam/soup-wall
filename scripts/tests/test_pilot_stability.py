@@ -48,6 +48,16 @@ class StabilityControls(unittest.TestCase):
             with self.subTest(mutation=mutation):
                 self.rejects(mutation)
 
+    def test_reclaimed_ask_is_an_expected_error_not_a_useful_read(self):
+        rule = "combined-ask-mcp-derived-read"
+        response = {"id": 11, "jsonrpc": "2.0", "result": {"content": [
+            {"text": f"Soup Wall withheld MCP invocation ({rule})", "type": "text"}], "isError": True}}
+        self.assertTrue(S.expected_refusal(response, rule))
+        self.assertFalse(S.expected_refusal(response, "wrong-rule"))
+        response["result"]["isError"] = False
+        self.assertFalse(S.expected_refusal(response, rule))
+        self.assertFalse(S.expected_refusal({"error": {"message": rule}}, rule))
+
     def test_frozen_bounds_cannot_be_raised_after_execution(self):
         self.rejects(lambda r: r["workload"]["resource_bounds"].update(fds=99999))
         self.rejects(lambda r: r.update(workload_sha256="0" * 64))

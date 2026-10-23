@@ -139,6 +139,15 @@ def native_sample(instance):
             "collectors": len(collectors), "active_collectors": sum(r["active"] for r in collectors)}
 
 
+def expected_refusal(response, rule):
+    """Inspect an intentional refusal without invoking useful-result decoders."""
+    result = response.get("result", {})
+    content = result.get("content", []) if isinstance(result, dict) else []
+    return (isinstance(result, dict) and result.get("isError") is True and isinstance(content, list)
+            and any(isinstance(block, dict) and block.get("type") == "text"
+                    and isinstance(block.get("text"), str) and rule in block["text"] for block in content))
+
+
 def grade(report):
     workload = report["workload"]
     require(workload == plan("soak") and report["workload_sha256"] == digest(workload), "frozen_soak_plan_required")

@@ -255,7 +255,7 @@ class Pilot(P.Pilot):
         def verify(client):
             require(client.host_session == sticky["host_session"], "reclaimed_host_context_changed")
             response, _ = client.exchange(P.frame(11, "filesystem", "read_text_file", {"path": "/workspace/forbidden.fifo"}))
-            require(P.BASE.refused(response) and self.expected_refusal["rule"] in P.BASE.result_text(response),
+            require(S.expected_refusal(response, self.expected_refusal["rule"]),
                     "collector_reclamation_lost_sticky_ask")
             rows = [r for r in self.audit() if r.get("event") == "native_call"
                     and r.get("host_session") == client.host_session and r.get("rule") == self.expected_refusal["rule"]]
