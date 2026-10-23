@@ -306,9 +306,9 @@ def run(args, report):
             report["stage"] = "host_start"
             launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=parent_death)
+            report["host_started"] = True
             selector.register(launcher.stdout, selectors.EVENT_READ, (log, True))
             report["launcher_pid"] = launcher.pid
-            report["host_started"] = True
             report["stage"] = "run_publication"
             # Non-secret rendezvous for the existing second-terminal operator CLI.
             json_file(private / "run.json", {"format": "sw-prepared-pilot-run/1", "home": str(home),
