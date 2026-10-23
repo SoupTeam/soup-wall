@@ -45,21 +45,31 @@ default: allow
 """
 
 
-def normalized_syscalls(text):
+def normalized_syscalls(text, *, thread_birth_order=False):
     """Join interleaved strace syscalls without losing process ownership."""
-    lines, pending = [], {}
+    lines, pending, births = [], {}, {}
     for line in (row.lstrip() for row in text.splitlines()):
         unfinished = re.match(r"^(\d+)\s+(.*?)\s*<unfinished \.\.\.>$", line)
         resumed = re.match(r"^(\d+)\s+<\.\.\. \w+ resumed>(.*)$", line)
         if unfinished:
             require(unfinished[1] not in pending, "overlapping_observer_syscall")
             pending[unfinished[1]] = unfinished[2]
+            if thread_birth_order and re.match(r'clone(?:3)?\(', unfinished[2]):
+                # A thread may write before its parent's clone returns. Reserve
+                # the actual entry position; the successful kernel return below
+                # supplies its TID, and failed/non-thread clones convey no scope.
+                births[unfinished[1]] = len(lines)
+                lines.append(None)
         elif resumed:
             require(resumed[1] in pending, "missing_observer_syscall_prefix")
-            lines.append(resumed[1] + " " + pending.pop(resumed[1]) + resumed[2])
+            complete = resumed[1] + " " + pending.pop(resumed[1]) + resumed[2]
+            if resumed[1] in births:
+                lines[births.pop(resumed[1])] = complete
+            else:
+                lines.append(complete)
         else:
             lines.append(line)
-    return lines, pending
+    return [line for line in lines if line is not None], pending
 
 
 def collector_processes(lines, binary):

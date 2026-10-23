@@ -707,6 +707,25 @@ jobs:
           assert rows['first-failure']['status'] == 'failed'
           assert rows['first']['selection'] == rows['reused']['selection'] == rows['recovered']['selection']
           PY
+      - name: Verify real installed Ask capture and resume before comparison
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          first = json.loads((temp / 'sou111-assets/first.json').read_text())
+          generation = Path(first['selection']).resolve(strict=True).parent
+          assert generation.is_relative_to(temp / 'sou111-preparation/generations')
+          for role in ('filesystem', 'git'):
+              profile = generation / (role + '-profile') / 'profile.json'
+              env = dict(os.environ, AGENTFW_MCP_SERVER_PROFILE=str(profile))
+              subprocess.run([os.environ['SOU119_SANDBOX_TESTS'], '--exact',
+                  'mcp::server_profile::tests::native_installed_profile_ask_capture_resume',
+                  '--ignored', '--nocapture', '--test-threads=1'], env=env, check=True, timeout=60)
+          PY
       - name: Prepare hash-locked offline inputs before Ask measurement
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
         shell: bash

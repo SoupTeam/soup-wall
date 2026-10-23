@@ -135,7 +135,7 @@ CI-admission change is part of this implementation.
 
 ### Native follow-up
 
-Linux canonical identity uses an `O_PATH | O_NOFOLLOW` descriptor and its kernel
+Linux canonical identity uses an `O_PATH` descriptor and its kernel
 `/proc/self/fd` path after checking the complete retained metadata against that
 descriptor. This avoids repeated userspace ancestor traversal. Symlinks retain
 resolved-target canonical checks; unavailable proc paths use normal canonical

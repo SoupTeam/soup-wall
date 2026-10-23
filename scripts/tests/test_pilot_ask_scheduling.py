@@ -58,6 +58,24 @@ class ProposalScheduling(unittest.TestCase):
                 ASK.release_ready_pilots(pilots, seconds=.1)
             self.assertFalse(any(p.proposals.released.is_set() for p in pilots))
 
+    def test_diagnostic_thread_birth_precedes_parent_clone_return(self):
+        event = '{"event":"mcp_verified_inputs_resume","immutable_files":0,"leased_files":1,"rehashed_files":2}\n'
+        for result in ('8', '-1 EAGAIN (Resource unavailable)'):
+            text = '\n'.join([
+                '7 clone(child_stack=NULL, flags=CLONE_VM|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD <unfinished ...>',
+                f'8 write(2, {json.dumps(event)}, {len(event)}) = {len(event)}',
+                '7 <... clone resumed>) = ' + result,
+            ])
+            original, pending = ASK.LAUNCH.normalized_syscalls(text)
+            self.assertEqual(pending, {})
+            self.assertTrue(original[0].startswith('8 write'))
+            ordered, pending = ASK.LAUNCH.normalized_syscalls(text, thread_birth_order=True)
+            self.assertEqual(pending, {})
+            if result == '8':
+                self.assertEqual(ASK.LATENCY.reuse_observation(ordered, 7)['leased_files'], 1)
+            else:
+                with self.assertRaises(ValueError): ASK.LATENCY.reuse_observation(ordered, 7)
+
     def test_failure_observation_never_exports_raw_results_or_stderr(self):
         secret = 'private-token-and-arguments-never-exported'
         with tempfile.TemporaryDirectory() as directory:

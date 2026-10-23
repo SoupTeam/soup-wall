@@ -65,14 +65,15 @@ fn canonical_identity(path: &Path, observed: &fs::Metadata) -> anyhow::Result<Pa
         // Preserve resolved-target identity for links, including chains/escapes.
         return Ok(path.canonicalize()?);
     }
-    // O_PATH resolves the same path in the kernel without opening its bytes.
+    // O_PATH follows the final target just like canonicalize, without opening
+    // its bytes. Symlink entry identity is checked separately by entry().
     // /proc/self/fd reports that exact retained dentry's canonical path, avoiding
     // a separate userspace lstat traversal for every ancestor of every file.
     // Compare all retained metadata before accepting its path; a raced lookup
     // is an error, not a metadata/cache shortcut. Unsupported proc uses realpath.
     let file = fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .custom_flags(libc::O_PATH | libc::O_CLOEXEC)
         .open(path)?;
     let current = file.metadata()?;
     ensure!(
@@ -379,6 +380,24 @@ mod tests {
                 path.canonicalize().unwrap()
             );
         }
+        let file_link = root.path().join("runtime-link");
+        symlink(&file, &file_link).unwrap();
+        let followed = fs::metadata(&file_link).unwrap();
+        assert_eq!(
+            canonical_identity(&file_link, &followed).unwrap(),
+            file.canonicalize().unwrap()
+        );
+        let mut inputs = Inputs::default();
+        let digest = Verification::Capture(&mut inputs)
+            .digest(&file_link, 8)
+            .unwrap();
+        assert_eq!(
+            Verification::Resume(&inputs).digest(&file_link, 8).unwrap(),
+            digest
+        );
+        fs::remove_file(&file_link).unwrap();
+        symlink(&file, &file_link).unwrap();
+        assert!(Verification::Resume(&inputs).digest(&file_link, 8).is_err());
         let observed = fs::metadata(&file).unwrap();
         fs::rename(&file, directory.join("old")).unwrap();
         fs::write(&file, b"original").unwrap();
@@ -389,6 +408,30 @@ mod tests {
             canonical_identity(&alias, &link_metadata).unwrap(),
             directory.canonicalize().unwrap()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn runtime_symlink_target_is_usable_but_retargeting_never_reuses_approval() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("target");
+        let other = root.path().join("other");
+        let runtime = root.path().join("runtime");
+        fs::write(&target, b"same bytes").unwrap();
+        fs::write(&other, b"same bytes").unwrap();
+        symlink(&target, &runtime).unwrap();
+        let mut inputs = Inputs::default();
+        let digest = Verification::Capture(&mut inputs)
+            .digest(&runtime, 10)
+            .unwrap();
+        assert_eq!(
+            Verification::Resume(&inputs).digest(&runtime, 10).unwrap(),
+            digest
+        );
+        fs::remove_file(&runtime).unwrap();
+        symlink(&other, &runtime).unwrap();
+        assert!(Verification::Resume(&inputs).digest(&runtime, 10).is_err());
     }
 
     #[test]

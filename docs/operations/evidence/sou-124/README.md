@@ -19,6 +19,14 @@ performance denominator; original deadlines and effect assertions are unchanged.
 Only finite diagnostic codes, stage timings and trace hashes are retained on
 failure. A fresh native run is required; the PR remains Draft.
 
+`native-attempt3-preflight.json` retains the failed two-profile preflight on
+`3f22f94`. The Linux O_PATH control then lacked a followed final-file symlink
+case. The correction preserves normal runtime symlinks while still rejecting
+replacement/retargeting, and authenticates stderr diagnostics from blocking
+worker threads using successful kernel clone lineage. Actual installed-profile
+capture/resume now runs before any long measurement. A fresh complete native
+result remains required; local correction checks do not claim its success.
+
 The sections below are historical checkpoints, not current readiness claims.
 
 ## Verified input reuse follow-up

@@ -42,6 +42,24 @@ class ReuseObservation(unittest.TestCase):
             with self.subTest(rows=rows), self.assertRaises(ValueError):
                 LATENCY.reuse_observation(rows, 7)
 
+    def test_worker_diagnostic_requires_kernel_observed_thread_lineage(self):
+        event = self.event(8)
+        for clone in [
+            '7 clone(child_stack=NULL, flags=CLONE_VM|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD, child_tidptr=0) = 8',
+            '7 clone3({flags=CLONE_VM|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD, exit_signal=0}, 88) = 8',
+        ]:
+            self.assertEqual(LATENCY.reuse_observation([clone, event], 7)['leased_files'], 2)
+        for prefix in [
+            ['7 clone(child_stack=NULL, flags=CLONE_VM|CLONE_VFORK|SIGCHLD) = 8'],
+            ['9 clone(child_stack=NULL, flags=CLONE_VM|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD) = 8'],
+            ['7 clone(child_stack=NULL, flags=CLONE_VM|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD) = -1 EAGAIN (Resource unavailable)'],
+            ['7 clone(child_stack=NULL, flags=CLONE_VM|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD) = 8', '8 exit(0) = ?'],
+            ['7 clone(child_stack=NULL, flags=CLONE_VM|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD) = 8', '7 exit_group(0) = ?'],
+        ]:
+            with self.subTest(prefix=prefix), self.assertRaises(ValueError):
+                LATENCY.reuse_observation(prefix + [event], 7)
+
+
 
 class AskLatencyAccounting(unittest.TestCase):
     def rows(self):

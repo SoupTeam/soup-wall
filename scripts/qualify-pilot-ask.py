@@ -182,7 +182,7 @@ class Pilot:
         self.model.next = next_step
         env = dict(setup.env, ANTHROPIC_BASE_URL=self.model.url, ANTHROPIC_API_KEY="owned-loopback-only",
             HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
-        command = [str(setup.selected["strace"]), "-f", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
+        command = [str(setup.selected["strace"]), "-f", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev,clone,clone3,exit,exit_group",
             "-o", str(self.trace), str(setup.binary), "pilot-launch", "--claude", str(setup.selected["claude"]),
             "--workspace", str(setup.workspace), "--fs-profile", str(setup.profiles["filesystem"]),
             "--git-profile", str(setup.profiles["git"]), "--home", str(setup.home), "--policy", str(setup.policy),
@@ -317,17 +317,26 @@ class Pilot:
         result["stderr_diagnostic"] = diagnostic((self.root / "host.stderr.private").read_bytes()[-16000:].decode('utf-8', errors='replace'))
         if self.trace.exists() and self.trace.stat().st_size <= 32 * 1024 * 1024:
             try:
-                lines, _ = LAUNCH.normalized_syscalls(self.trace.read_text())
+                lines, _ = LAUNCH.normalized_syscalls(self.trace.read_text(), thread_birth_order=True)
                 collectors = LAUNCH.collector_processes(lines, self.setup.binary)
                 timings = []
+                failures = []
                 for pid, server in collectors.items():
                     for row in LATENCY.collector_stderr_rows(lines, pid):
+                        code = row.get("failure_code")
+                        if (row.get("event") in ("mcp_verified_inputs_capture_failure", "mcp_real_transport_failure")
+                                and code in ("identity_lookup_changed", "identity_changed", "size_changed", "bytes_changed",
+                                             "lease_lost", "verity_unavailable", "verity_unsupported", "runtime_digest_mismatch",
+                                             "package_digest_mismatch", "profile_changed", "input_missing", "input_permission",
+                                             "input_io", "capture_failure", "unknown_transport_failure")):
+                            failures.append({"server": server, "event": row["event"], "failure_code": code})
                         elapsed, stage = row.get("elapsed_ms"), row.get("stage")
                         if (row.get("event") == "mcp_asset_verification_timing"
                                 and stage in ("selected_profile", "runtime_and_libraries", "package_tree")
                                 and type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0):
                             timings.append({"server": server, "stage": stage, "elapsed_ms": elapsed})
                 result["asset_timings"] = timings[:32]
+                result["collector_failures"] = failures[:16]
                 result["trace_sha256"] = LAUNCH.sha(self.trace)
             except (OSError, ValueError, UnicodeError):
                 result["trace_diagnostic"] = "incomplete_or_invalid_observation"
@@ -528,7 +537,7 @@ def qualify(args, private, report):
                     # The exact primary collector is selected by successful
                     # execve and server ID; a peer's proof cannot satisfy this.
                     if getattr(args, "require_verified_reuse", False):
-                        lines, pending = LAUNCH.normalized_syscalls(pilot.trace.read_text())
+                        lines, pending = LAUNCH.normalized_syscalls(pilot.trace.read_text(), thread_birth_order=True)
                         collectors = LAUNCH.collector_processes(lines, setup.binary)
                         selected = [pid for pid, server in collectors.items() if server == kind]
                         require(len(selected) == 1, "one_primary_collector_required")

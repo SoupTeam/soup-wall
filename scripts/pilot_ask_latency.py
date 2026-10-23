@@ -49,8 +49,19 @@ def collector_stderr_rows(lines, collector_pid):
     import re
     buffer = b""
     observations = []
+    active = {collector_pid}
     for line in lines:
-        if not re.match(rf"^{collector_pid}\s+(?:write|writev)\(2,", line):
+        owner = re.match(r'^(\d+)\s+', line)
+        if not owner or int(owner[1]) not in active:
+            continue
+        clone = re.match(r'^\d+\s+clone(?:3)?\(.*?flags=([^,}]+).*\)\s*=\s*(\d+)$', line)
+        if clone and 'CLONE_THREAD' in clone[1].split('|'):
+            active.add(int(clone[2]))
+        if re.match(r'^\d+\s+exit_group\(', line):
+            active.clear()
+        elif re.match(r'^\d+\s+(?:exit\(|\+\+\+ (?:exited with|killed by))', line):
+            active.discard(int(owner[1]))
+        if not re.match(r'^\d+\s+(?:write|writev)\(2,', line):
             continue
         scalar = re.fullmatch(r'\d+\s+write\(2,\s*("(?:[^"\\]|\\.)*"),\s*(\d+)\)\s*=\s*(\d+|-1 [^\n]+)', line)
         vector = re.fullmatch(r'\d+\s+writev\(2,\s*\[(.*)\],\s*\d+\)\s*=\s*(\d+|-1 [^\n]+)', line)

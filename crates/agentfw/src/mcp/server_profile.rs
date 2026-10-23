@@ -114,10 +114,55 @@ pub struct ProfileConfig {
     pub git_launcher: Option<Library>,
 }
 
+fn verified_capture_failure(error: &anyhow::Error) -> &'static str {
+    for cause in error.chain() {
+        match cause.to_string().as_str() {
+            "selected asset changed during identity lookup" => return "identity_lookup_changed",
+            "selected asset changed during verification" => return "identity_changed",
+            "selected asset identity or metadata changed during approval" => {
+                return "identity_changed"
+            }
+            "selected asset size changed during verification" => return "size_changed",
+            "selected asset changed during hashing" => return "bytes_changed",
+            "selected asset read lease lost during capture" | "selected asset read lease lost" => {
+                return "lease_lost"
+            }
+            "selected asset immutable proof unavailable" => return "verity_unavailable",
+            "unsupported selected asset immutable proof" => return "verity_unsupported",
+            "selected executable or library changed during approval" => {
+                return "runtime_digest_mismatch"
+            }
+            "selected package changed during approval" => return "package_digest_mismatch",
+            "selected profile changed before approval" => return "profile_changed",
+            _ => {}
+        }
+        if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+            return match io.kind() {
+                std::io::ErrorKind::NotFound => "input_missing",
+                std::io::ErrorKind::PermissionDenied => "input_permission",
+                _ => "input_io",
+            };
+        }
+    }
+    "capture_failure"
+}
+
 impl ProfileConfig {
     /// Recheck immutable installed assets after an operator wait. This only
     /// observes files; it creates no sandbox, budget, process or authority.
     pub(crate) fn capture_verified_assets(&self) -> anyhow::Result<VerifiedAssets> {
+        let result = self.capture_verified_assets_inner();
+        if let Err(error) = &result {
+            let code = verified_capture_failure(error);
+            eprintln!(
+                "{}",
+                serde_json::json!({"event":"mcp_verified_inputs_capture_failure", "failure_code":code})
+            );
+        }
+        result
+    }
+
+    fn capture_verified_assets_inner(&self) -> anyhow::Result<VerifiedAssets> {
         let profile_path = std::env::var_os(ENVIRONMENT)
             .map(PathBuf::from)
             .context("selected profile disappeared")?;
@@ -717,6 +762,43 @@ fn package_tree_sha256_with(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires an explicitly selected operator-owned installed native profile"]
+    fn native_installed_profile_ask_capture_resume() {
+        let profile = ProfileConfig::load_from_env()
+            .expect("read selected profile")
+            .expect("explicit selected profile required");
+        profile
+            .verify_assets()
+            .expect("initial selected asset verification");
+        let captured = profile
+            .capture_verified_assets()
+            .expect("selected input capture");
+        profile
+            .revalidate_assets(&captured)
+            .expect("selected input resume");
+        let (immutable, leased, _) = captured.inputs.counts();
+        assert!(
+            immutable + leased > 0,
+            "actual installed input kernel reuse required"
+        );
+    }
+
+    #[test]
+    fn capture_failure_codes_never_export_arbitrary_error_payloads() {
+        assert_eq!(
+            verified_capture_failure(&anyhow::anyhow!("private payload and token")),
+            "capture_failure"
+        );
+        assert_eq!(
+            verified_capture_failure(&anyhow::anyhow!(
+                "selected asset changed during identity lookup"
+            )),
+            "identity_lookup_changed"
+        );
+    }
 
     #[test]
     fn original_upstream_discovery_preserves_every_tool_and_classifies_support() {
