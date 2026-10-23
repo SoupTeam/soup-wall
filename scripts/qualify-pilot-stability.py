@@ -355,9 +355,17 @@ def run(args):
                 native_stopped.wait(5)
         native_thread = threading.Thread(target=sample_native, daemon=True)
         native_thread.start()
+        last_progress = started
         def tick():
+            nonlocal last_progress
             observer.check()
             require(not native_errors and native_thread.is_alive(), "native_observer_lost")
+            if time.monotonic() - last_progress >= 60:
+                last_progress = time.monotonic()
+                print(json.dumps({"event": "stability_progress", "elapsed_seconds": round(last_progress - started, 3),
+                    "completed_workflows": sum(row["completed_workflows"] for row in report["iterations"]),
+                    "process_samples": observer.samples, "native_samples": len(report["native_samples"]),
+                    "resource_peaks": observer.peaks, "observer_errors": observer.errors}), flush=True)
         for index in range(workload["rounds"]):
             target = started + index * workload["interval_seconds"]
             while time.monotonic() < target:

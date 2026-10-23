@@ -111,6 +111,8 @@ numeric process metadata. Original synthetic host/provider results and redacted
 collector/audit logs support review. Raw syscall traces and capabilities stay
 private; no host configuration or inherited credentials are published. The
 workflow retains failed attempts as well as successful ones for seven days.
+During the run, bounded minute-by-minute progress records expose completed
+workflow and observation counts plus measured peaks; silence is not a success.
 
 On a failure, retain the output directory and inspect `failure.txt`, the failed
 iteration and its owned logs. Do not increase limits or timeouts to conceal
