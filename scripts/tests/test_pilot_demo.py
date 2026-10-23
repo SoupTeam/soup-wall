@@ -1,4 +1,5 @@
 import importlib.util
+import argparse
 import io
 import json
 from pathlib import Path
@@ -59,6 +60,17 @@ class PilotDemoTests(unittest.TestCase):
         demo = self.load()
         self.assertEqual(demo.reason(ValueError("secret Bearer xyz")), "demo_failed")
         self.assertEqual(demo.reason(ValueError("demo_fixture_name_occupied")), "demo_fixture_name_occupied")
+
+    def test_demo_uses_original_host_qualifier_without_transition(self):
+        demo = self.load()
+        options = demo.qualification_args(argparse.Namespace(
+            selection=Path("/owned/selection.json"), expected_commit="a" * 40,
+            strace=Path("/usr/bin/strace"), validation_timeout_seconds=120))
+        self.assertIsNone(options.transition_target)
+        self.assertEqual(options.selection, Path("/owned/selection.json"))
+        self.assertEqual(options.expected_commit, "a" * 40)
+        self.assertEqual(options.strace, Path("/usr/bin/strace"))
+        self.assertEqual(options.validation_timeout_seconds, 120)
 
 
 if __name__ == "__main__":

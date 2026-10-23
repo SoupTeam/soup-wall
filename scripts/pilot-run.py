@@ -40,6 +40,7 @@ def load(name, filename):
 
 PREP = load("pilot_run_preparation", "prepare-installed-pilot.py")
 GROUPS = load("pilot_run_groups", "prepare-native-pilot-prerequisites.py")
+SELECTION_LOCK = load("pilot_run_selection_lock", "pilot-selection-lock.py")
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
@@ -85,6 +86,9 @@ PUBLIC_FAILURE_CODES = frozenset({
     'preparation_marker_mismatch',
     'prepared_assets_inside_checkout',
     'prepared_generation_required',
+    'selected_generation_in_use_or_transitioning',
+    'private_selection_root_required',
+    'owned_selection_lock_required',
     'prepared_selection_required',
     'private_output_limit',
     'registry_collision',
@@ -242,6 +246,15 @@ def confirmed_stop(home, launcher_pid, binary, env, cwd):
 
 def run(args, report):
     PREP.supported_platform()
+    # Main has already validated the selection under the lifetime lock. Refuse
+    # an occupied explicit port before the additional full generation recheck.
+    # The later bind remains authoritative if the port changes meanwhile.
+    if args.port:
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", args.port))
+            except OSError:
+                raise Failure("occupied_port_refused") from None
     selection, paths, profiles = selected(args)
     if "prepared_workspaces" in selection:
         PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent))
@@ -415,11 +428,19 @@ def main():
     args = parser.parse_args()
     report = {"format": "sw-prepared-pilot-run/1", "status": "plan", "executed": False}
     try:
-        selection, _, profiles = selected(args)
-        report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
-                      workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
         if args.run:
-            run(args, report)
+            PREP.supported_platform()
+            # The lock spans admission, daemon/host lifetime and owned cleanup.
+            # Transitions take the exclusive side before observing current.json.
+            with SELECTION_LOCK.hold(args.selection.parent.parent.parent, exclusive=False):
+                selection, _, profiles = selected(args)
+                report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
+                              workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
+                run(args, report)
+        else:
+            selection, _, profiles = selected(args)
+            report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
+                          workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
     except Exception as error:
         # Never echo subprocess output, raw paths, arguments, credentials or arbitrary exception strings.
         code = str(error)

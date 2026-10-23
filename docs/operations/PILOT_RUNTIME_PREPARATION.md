@@ -132,3 +132,8 @@ requires every selected job. A passing provisioning probe is not pilot
 qualification: the full enforcing-daemon/original-server qualifier must also pass.
 Do not disable AppArmor, remove network isolation, or treat prepared assets as an
 active pilot when either control fails.
+
+For later changes between two fully prepared generations, use the separate
+[prepared selection and rollback guide](PREPARED_PILOT_SWITCH.md). It validates
+each generation and coordinates with new pilot launches; preparation success
+still does not mean the runtime is active.
