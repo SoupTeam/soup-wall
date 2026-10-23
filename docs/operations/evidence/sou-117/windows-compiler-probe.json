@@ -1,0 +1,13 @@
+{
+  "kind": "failed_current_source_ci_probe",
+  "head": "32f08da0eb706cece24924e7d0cd7e0c292da33b",
+  "run": 39816401538,
+  "job": 119956029753,
+  "platform": "Windows",
+  "stage": "strict_clippy",
+  "error": "unused_mut",
+  "file": "crates/agentfw/src/pilot_launcher.rs",
+  "line": 655,
+  "runtime_acceptance_executed": false,
+  "resolution": "Keep the common builder immutable; apply mutable permissions configuration only under cfg(unix). No lint suppression."
+}

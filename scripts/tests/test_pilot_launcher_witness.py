@@ -73,6 +73,37 @@ class DispatchControls(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "forbidden_original_server_dispatch"):
             self.observe(self.trace() + [row])
 
+    def test_failed_writes_transfer_no_bytes_and_cannot_hide_a_forbidden_call(self):
+        frame = json.dumps({"method": "tools/call", "params": {"name": "git_reset"}}) + "\n"
+        failed = [
+            f'102 write(9, {json.dumps(frame)}, {len(frame)}) = -1 EPIPE (Broken pipe)',
+            f'102 writev(9, [{{iov_base={json.dumps(frame)}, iov_len={len(frame)}}}], 1) = -1 EINTR (Interrupted system call)',
+        ]
+        for row in failed:
+            with self.subTest(row=row):
+                self.assertEqual(self.observe(self.trace() + [row])["forbidden_dispatches"], 0)
+                successful = f'102 write(9, {json.dumps(frame)}, {len(frame)}) = {len(frame)}'
+                with self.assertRaisesRegex(ValueError, "forbidden_original_server_dispatch"):
+                    self.observe(self.trace() + [row, successful])
+
+    def test_failed_write_cannot_calibrate_or_finish_an_incomplete_frame(self):
+        rows = self.trace()
+        rows[2] = rows[2].rsplit(" = ", 1)[0] + " = -1 EAGAIN (Resource temporarily unavailable)"
+        with self.assertRaisesRegex(ValueError, "original_discovery_not_observed"):
+            self.observe(rows)
+        with self.assertRaisesRegex(ValueError, "incomplete_original_wire_frame"):
+            self.observe(self.trace() + [
+                '101 write(9, "partial", 7) = 7',
+                '101 write(9, "\\n", 1) = -1 EINTR (Interrupted system call)',
+            ])
+
+    def test_unknown_write_diagnostics_never_contain_raw_payload(self):
+        secret = "PRIVATE_OBSERVER_PAYLOAD"
+        with self.assertRaises(ValueError) as caught:
+            self.observe(self.trace() + [f'101 write(9, "{secret}"..., 999) = 999'])
+        self.assertEqual(str(caught.exception), "unobserved_collector_write:write:pid=101:fd=9")
+        self.assertNotIn(secret, str(caught.exception))
+
     def test_failed_exec_cannot_calibrate_original_collector(self):
         rows = self.trace()
         rows[0] = rows[0].replace("= 0", "= -1 ENOENT (No such file or directory)")

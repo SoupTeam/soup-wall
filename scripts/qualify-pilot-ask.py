@@ -19,6 +19,7 @@ import tempfile
 import time
 import uuid
 import traceback
+import threading
 
 import importlib.util
 
@@ -89,14 +90,53 @@ def stop(process):
             process.kill(); process.wait(timeout=5)
 
 
+class ProposalGate:
+    """Hold owned provider proposals until every independent host is ready."""
+    def __init__(self, deferred=False):
+        self.ready = threading.Event()
+        self.released = threading.Event()
+        self.cancelled = threading.Event()
+        if not deferred:
+            self.released.set()
+
+    def wait(self, timeout=60):
+        self.ready.set()
+        require(self.released.wait(timeout), "provider_proposal_barrier_timeout")
+        return not self.cancelled.is_set()
+
+    def release(self):
+        self.released.set()
+
+    def cancel(self):
+        self.cancelled.set()
+        self.released.set()
+
+
+def release_ready_pilots(pilots, seconds=60):
+    def ready():
+        require(all(pilot.process.poll() is None for pilot in pilots), "host_exited_before_proposal_barrier")
+        return all(pilot.proposals.ready.is_set() for pilot in pilots)
+    until(ready, "independent_hosts_not_ready", seconds=seconds)
+    # All checks precede every release. Startup cannot consume an Ask lease,
+    # and incomplete observations cannot be mistaken for zero dispatch.
+    for pilot in pilots:
+        require(not pilot.offered and pilot.operator("list") == [], "proposal_or_pending_before_barrier")
+        require(pilot.undispatched(), "original_dispatch_before_barrier")
+    released_at = time.time_ns() // 1_000_000
+    for pilot in pilots:
+        pilot.proposals.release()
+    return released_at
+
+
 class Pilot:
-    def __init__(self, setup, root, classifier, kind, enabled=True):
+    def __init__(self, setup, root, classifier, kind, enabled=True, deferred=False):
         self.setup, self.root, self.kind = setup, root, kind
         root.mkdir(mode=0o700)
         self.session, self.run_id = str(uuid.uuid4()), None
         self.trace = root / "syscalls.private"
         self.model = BASE.DEMO.ScriptedModel([])
         self.offered, self.result_times = set(), {}
+        self.proposals = ProposalGate(deferred)
         target = ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}) if kind == "filesystem" else (
             "git", "git_show", {"repo_path": "/workspace", "revision": setup.head_before})
         self.primary = target
@@ -107,6 +147,8 @@ class Pilot:
             names = {tool.get("name") for tool in body.get("tools", [])}
             if not {"mcp__filesystem__read_text_file", "mcp__git__git_show"}.issubset(names):
                 return [{"type": "text", "text": "Owned auxiliary request."}]
+            if not self.proposals.wait():
+                return [{"type": "text", "text": "Owned provider closed before proposals."}]
             for message in body.get("messages", []):
                 blocks = message.get("content", [])
                 for block in blocks if isinstance(blocks, list) else []:
@@ -162,7 +204,7 @@ class Pilot:
                     self.err.flush()
                     raise ValueError("launcher_before_publication_" + diagnostic((root / "host.stderr.private").read_text()[-16000:]))
             try:
-                until(identify, "run_metadata_missing")
+                until(identify, "run_metadata_missing", seconds=90)
             except Exception:
                 self.close()
                 raise
@@ -253,6 +295,7 @@ class Pilot:
         return cleanup
 
     def close(self):
+        self.proposals.cancel()
         if self.process.poll() is None and self.run_id:
             if BASE.ProcessWitness.identity(self.launcher_pid) == self.launcher_start:
                 try:
@@ -301,7 +344,9 @@ def qualify(args, private, report):
         for kind in ("git", "filesystem"):
             for case in ("expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"):
                 start_daemon(kind, 20 if case == "expire" else 30)
-                pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind, enabled=case != "default")
+                paired = kind == "filesystem" and case == "approve"
+                pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind,
+                              enabled=case != "default", deferred=paired)
                 active.append(pilot)
                 row = {"profile": kind, "case": case, "configured": case != "default", "pending":False,
                     "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
@@ -312,12 +357,16 @@ def qualify(args, private, report):
                     # Start both actual hosts before either pending lease is
                     # consumed by the other host's startup. Deadlines stay fixed.
                     row["stage"] = "start_independent_run"
-                    sibling = Pilot(setup, private / "independent-run", classifier, kind)
+                    sibling = Pilot(setup, private / "independent-run", classifier, kind, deferred=True)
                     active.append(sibling)
+                    row["proposals_released_at_ms"] = release_ready_pilots([pilot, sibling])
+                    row["both_hosts_ready_before_proposals"] = True
                 if case != "default":
                     row["stage"] = "wait_primary"
                     waiting = pilot.waiting()
-                    row.update(pending=True, binding_sha256=waiting["binding_sha256"])
+                    row.update(pending=True, binding_sha256=waiting["binding_sha256"],
+                               pending_expires_at_ms=waiting["expires_at_ms"],
+                               pending_observed_at_ms=time.time_ns() // 1_000_000)
                     row["stage"] = "before_decision_wire_check"
                     require(pilot.undispatched(), "dispatch_before_operator_decision")
                     if kind == "filesystem" and case == "approve":
@@ -349,6 +398,7 @@ def qualify(args, private, report):
                         pilot.metadata.write_bytes(saved)
                         require(pilot.undispatched(), "target_dispatched_before_exact_decision")
                         row["stage"] = "exact_decision"
+                        row["decision_attempt_at_ms"] = time.time_ns() // 1_000_000
                         pilot.operator(case, waiting["pending_id"], "--binding", waiting["binding_sha256"])
                         row["decision_submitted"] = case
                         pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)

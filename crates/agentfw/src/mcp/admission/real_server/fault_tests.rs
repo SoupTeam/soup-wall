@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, DuplexStream, ReadHalf, WriteHalf};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, DuplexStream, ReadHalf, WriteHalf};
 use tokio::task::JoinHandle;
 use wiremock::{
     matchers::{method, path},
@@ -457,6 +457,10 @@ impl Harness {
                     grants.lock().unwrap().insert(call_id.clone(),binding.clone());
                     receipt["call_id"]=json!(call_id);receipt["binding_sha256"]=json!(binding);
                 } else if value["event"]=="result" {
+                    if fault=="record-cap" && value["content"].as_str().unwrap().contains("OVER_DAEMON_RECORD") {
+                        // Refused before any state change; the grant stays unspent.
+                        return ResponseTemplate::new(413).set_body_json(json!({"contract_version":CONTRACT,"release":false,"error_code":"native_record_over_cap"}));
+                    }
                     let call_id=value["call_id"].as_str().unwrap();
                     let binding=grants.lock().unwrap().remove(call_id).expect("one independently correlated grant per result");
                     receipt["call_id"]=value["call_id"].clone();receipt["binding_sha256"]=json!(binding);
@@ -1014,4 +1018,277 @@ async fn selected_fault_exact_manifest_cannot_release_an_extra_error_channel() {
         Harness::read(&mut fixture.host_output).await.is_none(),
         "the valid pinned manifest must not carry an uninspected parallel error channel"
     );
+}
+
+fn original_result(id: &Value, text: &str) -> Value {
+    json!({"jsonrpc":"2.0","id":id,"result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}})
+}
+
+/// Every native completion carried by the daemon, in order.
+async fn completions(fixture: &Harness) -> Vec<Value> {
+    fixture
+        .daemon
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter_map(|request| serde_json::from_slice::<Value>(&request.body).ok())
+        .filter(|request| request["event"] == "result")
+        .collect()
+}
+
+#[tokio::test]
+async fn large_results_within_budget_are_released_exactly_on_both_channels() {
+    let mut fixture = Harness::new("ordinary").await;
+    fixture.ready().await;
+    let escaped = "quote \" back \\ tab \t nl \n ctl \u{1} кириллица 日本語 \u{1F963}\n";
+    let mut texts = vec![
+        "a".repeat(16_383),
+        "a".repeat(16_384),
+        "a".repeat(16_385),
+        "b".repeat(20 * 1024),
+        "c".repeat(60 * 1024),
+        "d".repeat(120 * 1024),
+        "e".repeat(server_profile::RESULT_TEXT_BYTES - 1),
+        "f".repeat(server_profile::RESULT_TEXT_BYTES),
+    ];
+    let mut utf8 = escaped.repeat(120 * 1024 / escaped.len());
+    utf8.truncate(utf8.floor_char_boundary(120 * 1024));
+    texts.push(utf8);
+    for (index, text) in texts.iter().enumerate() {
+        let id = json!(format!("large-{index}"));
+        fixture.call(id.clone(), "/workspace/large").await;
+        assert_eq!(fixture.dispatched().await["id"], id);
+        let original = original_result(&id, text);
+        fixture.server(original.clone()).await;
+        let released = fixture.host_reply().await;
+        assert_eq!(released, original, "result {index} changed");
+        assert_eq!(
+            released["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .len(),
+            text.len()
+        );
+    }
+    let inspected = completions(&fixture).await;
+    assert_eq!(inspected.len(), texts.len());
+    for (request, text) in inspected.iter().zip(&texts) {
+        // The complete original frame, both channels, reached inspection.
+        let frame: Value = serde_json::from_str(request["content"].as_str().unwrap()).unwrap();
+        assert_eq!(frame["result"]["structuredContent"]["content"], json!(text));
+        assert_eq!(request["result_kind"], "value");
+    }
+    fixture.useful(json!("after-large")).await;
+}
+
+#[tokio::test]
+async fn result_text_over_budget_is_withheld_correlated_and_the_session_continues() {
+    let mut fixture = Harness::new("ordinary").await;
+    fixture.ready().await;
+    let over = "OVER_TEXT_PAYLOAD".repeat(server_profile::RESULT_TEXT_BYTES / 17 + 1);
+    assert!(over.len() > server_profile::RESULT_TEXT_BYTES);
+    for (index, (content, structured)) in [(over.as_str(), "small"), ("small", over.as_str())]
+        .into_iter()
+        .enumerate()
+    {
+        let id = json!(index);
+        fixture.call(id.clone(), "/workspace/large").await;
+        assert_eq!(fixture.dispatched().await["id"], id);
+        fixture
+            .server(
+                json!({"jsonrpc":"2.0","id":id,"result":{"content":[{"type":"text","text":content}],
+                "structuredContent":{"content":structured}}}),
+            )
+            .await;
+        let refusal = fixture.host_reply().await;
+        assert_eq!(refusal["id"], id);
+        assert_eq!(refusal["error"]["code"], -32603);
+        assert_eq!(refusal["error"]["message"], TEXT_BUDGET_MESSAGE);
+        assert!(!refusal.to_string().contains("OVER_TEXT_PAYLOAD"));
+        fixture.useful(json!(format!("after-text-{index}"))).await;
+    }
+    assert!(TEXT_BUDGET_MESSAGE.contains(&server_profile::RESULT_TEXT_BYTES.to_string()));
+    let inspected = completions(&fixture).await;
+    // Each refusal spent its own grant with a local error; nothing leaked.
+    assert_eq!(inspected.len(), 4);
+    assert!(inspected.iter().all(|request| !request["content"]
+        .as_str()
+        .unwrap()
+        .contains("OVER_TEXT_PAYLOAD")));
+}
+
+#[tokio::test]
+async fn oversized_frames_are_drained_withheld_and_later_calls_still_work() {
+    let mut fixture = Harness::new("ordinary").await;
+    fixture.ready().await;
+    // Each text is within its budget, but JSON escaping of the duplicated
+    // channels exceeds the envelope; then a 2 MiB file and a huge error.
+    let quotes = "\"".repeat(server_profile::RESULT_TEXT_BYTES - 18) + "OVER_FRAME_PAYLOAD";
+    assert_eq!(quotes.len(), server_profile::RESULT_TEXT_BYTES);
+    let cases = [
+        original_result(&json!("escaped"), &quotes),
+        original_result(
+            &json!(7),
+            &"OVER_FRAME_PAYLOAD".repeat(2 * 1024 * 1024 / 18),
+        ),
+        json!({"jsonrpc":"2.0","id":"error","error":{"code":-32000,"message":"OVER_FRAME_PAYLOAD".repeat(70_000)}}),
+    ];
+    for (index, frame_value) in cases.iter().enumerate() {
+        assert!(frame(frame_value).len() > server_profile::RESULT_FRAME_BYTES);
+        let id = frame_value["id"].clone();
+        fixture.call(id.clone(), "/workspace/huge").await;
+        assert_eq!(fixture.dispatched().await["id"], id);
+        fixture.server(frame_value.clone()).await;
+        let refusal = fixture.host_reply().await;
+        assert_eq!(refusal["id"], id);
+        assert_eq!(refusal["error"]["message"], FRAME_BUDGET_MESSAGE);
+        assert!(!refusal.to_string().contains("OVER_FRAME_PAYLOAD"));
+        fixture.useful(json!(format!("after-frame-{index}"))).await;
+    }
+    assert!(FRAME_BUDGET_MESSAGE.contains(&server_profile::RESULT_FRAME_BYTES.to_string()));
+    let inspected = completions(&fixture).await;
+    assert_eq!(inspected.len(), 6);
+    assert!(inspected
+        .iter()
+        .all(|request| request["content"].as_str().unwrap().len() < 1024
+            || !request["content"]
+                .as_str()
+                .unwrap()
+                .contains("OVER_FRAME_PAYLOAD")));
+}
+
+#[tokio::test]
+async fn oversized_frame_correlates_among_concurrent_calls_and_late_cancelled_ones() {
+    let mut fixture = Harness::new("ordinary").await;
+    fixture.ready().await;
+    for id in ["a", "b", "c"] {
+        fixture.call(json!(id), "/workspace/large").await;
+        assert_eq!(fixture.dispatched().await["id"], id);
+    }
+    // Cancel "c" first: its later oversized result is a late frame.
+    fixture
+        .host(
+            json!({"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"c"}}),
+        )
+        .await;
+    let cancelled = fixture.host_reply().await;
+    assert_eq!(cancelled["id"], "c");
+    assert_eq!(cancelled["error"]["code"], -32800);
+    assert_eq!(
+        fixture.dispatched().await["method"],
+        "notifications/cancelled"
+    );
+    let huge = "OVER_FRAME_PAYLOAD".repeat(1024 * 1024 / 18 + 1);
+    fixture.server(original_result(&json!("c"), &huge)).await;
+    fixture.server(original_result(&json!("b"), &huge)).await;
+    let ordinary = original_result(&json!("a"), &"x".repeat(60 * 1024));
+    fixture.server(ordinary.clone()).await;
+    let mut replies = [fixture.host_reply().await, fixture.host_reply().await];
+    replies.sort_by_key(|reply| reply["id"].as_str().unwrap().to_owned());
+    assert_eq!(replies[0], ordinary);
+    assert_eq!(replies[1]["id"], "b");
+    assert_eq!(replies[1]["error"]["message"], FRAME_BUDGET_MESSAGE);
+    fixture.useful(json!("after-concurrent")).await;
+    // No second reply for the cancelled call ever reaches the host.
+    assert!(
+        tokio::time::timeout(Duration::from_millis(200), fixture.host_output.fill_buf())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn oversized_frames_that_cannot_be_proven_fail_closed() {
+    let huge = "q".repeat(server_profile::RESULT_FRAME_BYTES);
+    let cases: Vec<(Vec<u8>, &str)> = vec![
+        // Malformed inside the drained part.
+        (
+            {
+                let mut raw = frame(&original_result(&json!("m"), &huge));
+                let at = server_profile::RESULT_FRAME_BYTES + 100;
+                raw[at] = b'"';
+                raw
+            },
+            frames::MALFORMED_ERROR,
+        ),
+        // Unknown ID: valid framing but no admitted call.
+        (
+            frame(&original_result(&json!("nobody"), &huge)),
+            "unknown or duplicate MCP response ID",
+        ),
+        // Not a response.
+        (
+            frame(
+                &json!({"jsonrpc":"2.0","method":"notifications/message","params":{"data":huge}}),
+            ),
+            frames::MALFORMED_ERROR,
+        ),
+        // A response with no ID.
+        (
+            frame(&json!({"jsonrpc":"2.0","result":{"content":[{"type":"text","text":huge}]}})),
+            frames::UNCORRELATED_ERROR,
+        ),
+        // Unterminated at EOF.
+        (
+            {
+                let mut raw = frame(&original_result(&json!("m"), &huge));
+                raw.pop();
+                raw
+            },
+            frames::UNTERMINATED_ERROR,
+        ),
+    ];
+    for (raw, expected) in cases {
+        let mut fixture = Harness::new("ordinary").await;
+        fixture.ready().await;
+        fixture.call(json!("m"), "/workspace/large").await;
+        assert_eq!(fixture.dispatched().await["id"], "m");
+        let unterminated = !raw.ends_with(b"\n");
+        // The relay may stop reading as soon as it refuses the frame.
+        let _ = fixture.server_output.write_all(&raw).await;
+        if unterminated {
+            let _ = fixture.server_output.shutdown().await;
+        }
+        let failure = fixture.failed().await;
+        assert!(
+            failure.contains(expected),
+            "expected {expected:?}, got {failure:?}"
+        );
+        // No payload byte reached the host on any failure.
+        let mut rest = Vec::new();
+        let _ = tokio::time::timeout(
+            Duration::from_millis(200),
+            fixture.host_output.read_to_end(&mut rest),
+        )
+        .await;
+        assert!(!String::from_utf8_lossy(&rest).contains("qqqq"));
+    }
+}
+
+#[tokio::test]
+async fn daemon_size_refusal_spends_the_grant_with_a_correlated_error() {
+    let mut fixture = Harness::new("record-cap").await;
+    fixture.ready().await;
+    fixture.call(json!("capped"), "/workspace/large").await;
+    assert_eq!(fixture.dispatched().await["id"], "capped");
+    fixture
+        .server(original_result(
+            &json!("capped"),
+            "OVER_DAEMON_RECORD payload",
+        ))
+        .await;
+    let refusal = fixture.host_reply().await;
+    assert_eq!(refusal["id"], "capped");
+    assert_eq!(
+        refusal["error"]["message"],
+        DaemonSizeLimit("native_record_over_cap").message()
+    );
+    assert!(!refusal.to_string().contains("OVER_DAEMON_RECORD"));
+    fixture.useful(json!("after-daemon-limit")).await;
+    let inspected = completions(&fixture).await;
+    // The refused original, its correlated replacement, then the peer.
+    assert_eq!(inspected.len(), 3);
+    assert_eq!(inspected[1]["result_kind"], "error");
+    assert_eq!(inspected[0]["call_id"], inspected[1]["call_id"]);
 }

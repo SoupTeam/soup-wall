@@ -23,6 +23,8 @@ pub mod mcp;
 pub mod native;
 pub mod onboarding;
 pub mod pilot_approval;
+pub mod pilot_doctor;
+mod pilot_host;
 pub mod pilot_launcher;
 pub mod policy_transition;
 pub use native::child_authority;
@@ -88,7 +90,9 @@ pub fn app_with_diagnostics(
         )
         .route(
             "/native/v1",
-            post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
+            post(native::handler).layer(axum::extract::DefaultBodyLimit::max(
+                native::MAX_MCP_RESULT_BODY,
+            )),
         )
         .route(
             "/native/liveness/v1",
