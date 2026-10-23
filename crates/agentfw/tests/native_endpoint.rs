@@ -8161,3 +8161,128 @@ async fn sou125_stop_preserves_shared_host_hard_deny_on_fresh_reconnect() {
     assert_eq!(denied["release"], false);
     assert_eq!(denied["reason_codes"], json!(["deny-tainted-destructive"]));
 }
+
+async fn sou125_cleanup_request(f: &Fixture, start: &Value) -> Value {
+    let mut start = start.clone();
+    start["liveness"] = json!("sw-native-liveness/1");
+    let (status, started) = f.post(&start).await;
+    assert_allow(status, &started);
+    let session = start["session_id"].as_str().unwrap();
+    let mut enroll = reviewer_sou89_liveness(f, session, "enroll");
+    enroll["owner_token"] = started["owner_token"].clone();
+    let (status, enrolled) = post_liveness(f, &enroll).await;
+    assert_eq!(status, StatusCode::OK, "{enrolled}");
+    json!({"contract_version":agentfw::native::pilot_cleanup::CONTRACT,
+        "instance_id":f.state.native.as_ref().unwrap().instance_id(),
+        "registry_sha256":f.registry_sha256,"session_id":session,
+        "epoch":enrolled["epoch"],"owner_token":started["owner_token"],"action":"begin"})
+}
+
+async fn sou125_cleanup_observations(f: &Fixture) -> Value {
+    let response = app(f.state.clone())
+        .oneshot(
+            Request::builder()
+                .uri("/native/v1/instance")
+                .header("authorization", format!("Bearer {NATIVE_TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 2 * 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    body["pilot_cleanup"].clone()
+}
+
+#[tokio::test]
+async fn sou125_cleanup_requires_exact_owner_and_survives_authority_retirement() {
+    let f = Fixture::new(ALLOW);
+    let fs = child_start(&f, "cleanup-fs", "cleanup-host", Some("filesystem"));
+    let git = child_start(&f, "cleanup-git", "cleanup-host", Some("git"));
+    let request = sou125_cleanup_request(&f, &fs).await;
+    let endpoint = agentfw::native::pilot_cleanup::ENDPOINT;
+    for token in [None, Some("wrong-token")] {
+        let (status, _) = post(f.state.clone(), endpoint, &request, token).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+    }
+    for field in ["owner_token", "epoch", "instance_id", "registry_sha256"] {
+        let mut forged = request.clone();
+        forged[field] = json!("foreign");
+        let (status, _) = post(f.state.clone(), endpoint, &forged, Some(NATIVE_TOKEN)).await;
+        assert_ne!(status, StatusCode::OK, "{field}");
+    }
+    let (status, reply) = post(f.state.clone(), endpoint, &request, Some(NATIVE_TOKEN)).await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    assert_eq!(reply["status"], "registered");
+    let observations = sou125_cleanup_observations(&f).await;
+    assert_eq!(observations.as_array().unwrap().len(), 1);
+    assert_eq!(observations[0]["verified"], false);
+    let (status, reply) = post(
+        f.state.clone(),
+        agentfw::native::pilot_stop::ENDPOINT,
+        &sou125_stop_request(&f, &fs, &git),
+        Some(NATIVE_TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{reply}");
+    // Revocation never acknowledges process cleanup. A new begin cannot race
+    // the spent grant, but the exact old owner may discharge its obligation.
+    let (status, _) = post(f.state.clone(), endpoint, &request, Some(NATIVE_TOKEN)).await;
+    assert_ne!(status, StatusCode::OK);
+    assert_eq!(sou125_cleanup_observations(&f).await[0]["verified"], false);
+    let mut finish = request.clone();
+    finish["action"] = json!("finish");
+    let mut forged = finish.clone();
+    forged["owner_token"] = json!("wrong-owner");
+    let (status, _) = post(f.state.clone(), endpoint, &forged, Some(NATIVE_TOKEN)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(sou125_cleanup_observations(&f).await[0]["verified"], false);
+    for _ in 0..2 {
+        let (status, reply) = post(f.state.clone(), endpoint, &finish, Some(NATIVE_TOKEN)).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        assert_eq!(reply["status"], "verified");
+        assert_eq!(sou125_cleanup_observations(&f).await[0]["verified"], true);
+    }
+    let (_, refused) = f.post(&fs).await;
+    assert_ne!(
+        refused["release"], true,
+        "cleanup must never revive authority"
+    );
+}
+
+#[tokio::test]
+async fn sou125_cleanup_receipt_cannot_discharge_another_run_or_restart() {
+    let f = Fixture::new(ALLOW);
+    let fs = child_start(&f, "cleanup-a", "host-a", Some("filesystem"));
+    let other = child_start(&f, "cleanup-b", "host-b", Some("filesystem"));
+    let first = sou125_cleanup_request(&f, &fs).await;
+    let second = sou125_cleanup_request(&f, &other).await;
+    let endpoint = agentfw::native::pilot_cleanup::ENDPOINT;
+    for request in [&first, &second] {
+        let (status, reply) = post(f.state.clone(), endpoint, request, Some(NATIVE_TOKEN)).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+    }
+    let mut forged = first.clone();
+    forged["action"] = json!("finish");
+    forged["session_id"] = second["session_id"].clone();
+    forged["epoch"] = second["epoch"].clone();
+    let (status, _) = post(f.state.clone(), endpoint, &forged, Some(NATIVE_TOKEN)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let mut unknown = first.clone();
+    unknown["action"] = json!("finish");
+    unknown["epoch"] = json!("stale-epoch");
+    let (status, _) = post(f.state.clone(), endpoint, &unknown, Some(NATIVE_TOKEN)).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let fresh = Fixture::new(ALLOW);
+    let (status, _) = post(fresh.state.clone(), endpoint, &first, Some(NATIVE_TOKEN)).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (status, reply) = f
+        .post(&f.call("cleanup-b", "read_document", &json!({})))
+        .await;
+    assert_allow(status, &reply);
+}

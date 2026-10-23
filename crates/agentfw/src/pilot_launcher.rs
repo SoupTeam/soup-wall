@@ -958,20 +958,90 @@ fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
 
 #[cfg(unix)]
 #[allow(dead_code)]
-async fn terminate_process_group(pgid: u32, grace: Duration) {
-    let target = -(pgid as i32);
-    unsafe {
-        libc::kill(target, libc::SIGTERM);
-    }
+async fn terminate_process_group(pgid: u32, grace: Duration) -> Result<()> {
+    let signal = |kind| -> Result<()> {
+        if unsafe { libc::kill(-(pgid as i32), kind) } < 0 {
+            let error = std::io::Error::last_os_error();
+            ensure!(
+                error.raw_os_error() == Some(libc::ESRCH),
+                "owned host process group termination unconfirmed: {error}"
+            );
+        }
+        Ok(())
+    };
+    let term = signal(libc::SIGTERM);
     tokio::time::sleep(grace).await;
-    unsafe {
-        libc::kill(target, libc::SIGKILL);
-    }
+    let kill = signal(libc::SIGKILL);
+    term?;
+    kill?;
+    Ok(())
 }
 
 #[cfg(not(unix))]
 #[allow(dead_code)]
-async fn terminate_process_group(_pgid: u32, _grace: Duration) {}
+async fn terminate_process_group(_pgid: u32, _grace: Duration) -> Result<()> {
+    Ok(())
+}
+
+/// Observation only: never discover a PID to signal. The unreaped leader
+/// reserves this exact group identity throughout the kill/reap boundary.
+#[cfg(target_os = "linux")]
+fn host_group_has_children(group: u32) -> Result<bool> {
+    let mut count = 0usize;
+    for entry in fs::read_dir("/proc")? {
+        let entry = entry?;
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|s| s.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if pid == group {
+            continue;
+        }
+        count += 1;
+        ensure!(
+            count <= 32768,
+            "owned host cleanup process observation limit"
+        );
+        let stat = match fs::read_to_string(entry.path().join("stat")) {
+            Ok(stat) => stat,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error).context("owned host cleanup observation unavailable"),
+        };
+        let (_, fields) = stat
+            .rsplit_once(')')
+            .context("owned host cleanup process identity invalid")?;
+        let observed_group: u32 = fields
+            .split_whitespace()
+            .nth(2)
+            .context("owned host cleanup process identity incomplete")?
+            .parse()?;
+        if observed_group == group {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn reap_owned_host(child: &mut std::process::Child) -> Result<std::process::ExitStatus> {
+    #[cfg(target_os = "linux")]
+    {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if owned_host_exited(child)? && !host_group_has_children(child.id())? {
+                break;
+            }
+            ensure!(
+                tokio::time::Instant::now() < deadline,
+                "pilot stop incomplete: owned host group still has unreaped processes"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+    child.wait().context("reap owned host after group cleanup")
+}
 
 /// Mint HMAC-signed scoped child authority grants bound to the live daemon instance.
 pub fn mint_grants(
@@ -1457,6 +1527,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let current_token = daemon_token.clone();
 
     let mut host_stopped = false;
+    let mut intercepted_term = false;
+    let mut cleanup_waiter = pilot_run.as_ref().map(|run| run.cleanup_waiter());
     let exit_status = rt.block_on(async {
         let deadline = tokio::time::Instant::now() + timeout;
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
@@ -1466,9 +1538,16 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             // Check if child has exited
             match owned_host_exited(&mut child) {
                 Ok(true) => {
-                    terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    let result = child.wait().context("reap owned host after group cleanup");
-                    host_stopped = result.is_ok();
+                    // Revocation may make a host exit before its launcher's
+                    // queued TERM is handled. Preserve the same owner-ack
+                    // ordering on this branch, while the leader stays unreaped.
+                    if let Some(waiter) = cleanup_waiter.take() {
+                        let _ = tokio::task::spawn_blocking(waiter).await;
+                    }
+                    let group = terminate_process_group(child_pid, Duration::from_millis(50)).await;
+                    let result = reap_owned_host(&mut child).await;
+                    host_stopped = result.is_ok() && group.is_ok();
+                    group?;
                     return result;
                 }
                 Ok(false) => {}
@@ -1480,12 +1559,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
 
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => {
-                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
                     }
-                    host_stopped = child.wait().is_ok();
+                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
                 _ = async {
@@ -1494,12 +1573,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     #[cfg(not(unix))]
                     let _ = tokio::signal::ctrl_c().await;
                 } => {
-                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
                     }
-                    host_stopped = child.wait().is_ok();
+                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
                     bail!("pilot host interrupted by SIGINT");
                 }
                 _ = async {
@@ -1508,12 +1587,20 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     #[cfg(not(unix))]
                     futures_util::future::pending::<()>().await;
                 } => {
-                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                    intercepted_term = true;
+                    if let Some(waiter) = cleanup_waiter.take() {
+                        // A native revoke wakes the enrolled collectors first.
+                        // Give their existing owners time to acknowledge the
+                        // whole namespace before host-group termination.
+                        // finish() independently checks the actual observations.
+                        let _ = tokio::task::spawn_blocking(waiter).await;
+                    }
+                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
                     }
-                    host_stopped = child.wait().is_ok();
+                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
                     bail!("pilot host terminated by SIGTERM");
                 }
                 _ = interval.tick() => {
@@ -1521,12 +1608,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                         match probe_daemon_liveness(&home_path, &current_token).await {
                             Ok(live_id) if live_id == initial_instance => {}
                             _ => {
-                                terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                                let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
                                 #[cfg(not(unix))]
                                 {
                                     let _ = child.kill();
                                 }
-                                host_stopped = child.wait().is_ok();
+                                host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
                                 bail!("daemon instance lost or restarted during pilot session");
                             }
                         }
@@ -1535,20 +1622,30 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             }
         }
     });
+    // Cancellation, timeout, daemon loss and a crashing host cannot become a
+    // successful stop merely because a concurrent caller published intent.
+    let stop_can_complete = intercepted_term
+        || exit_status
+            .as_ref()
+            .is_ok_and(std::process::ExitStatus::success);
     let cleanup = pilot_run
         .as_ref()
-        .map(|run| run.finish(host_stopped))
+        .map(|run| run.finish(host_stopped && stop_can_complete))
         .transpose();
-    let exit_status = exit_status?;
-    cleanup?;
-
-    let exit_code = exit_status.code().unwrap_or(1);
+    let authenticated_stop = cleanup? == Some(true);
+    let exit_code = terminal_exit_code(exit_status, intercepted_term, authenticated_stop)?;
     if !args.json {
-        eprintln!("Pilot session completed with exit code: {}", exit_code);
+        if authenticated_stop {
+            eprintln!("Pilot owned run stopped; already dispatched effects were not rolled back");
+        } else {
+            eprintln!("Pilot session completed with exit code: {}", exit_code);
+        }
     } else {
         let report = PilotLaunchReport {
             contract_version: "sw-pilot-launcher/1".into(),
-            status: if exit_code == 0 {
+            status: if authenticated_stop {
+                "stopped".into()
+            } else if exit_code == 0 {
                 "completed".into()
             } else {
                 "failed".into()
@@ -1577,9 +1674,54 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     Ok(())
 }
 
+fn terminal_exit_code(
+    status: Result<std::process::ExitStatus>,
+    intercepted_term: bool,
+    authenticated_stop: bool,
+) -> Result<i32> {
+    if intercepted_term && authenticated_stop {
+        return Ok(0);
+    }
+    let status = status?;
+    ensure!(
+        !authenticated_stop || status.success(),
+        "pilot stop incomplete: host did not complete normally"
+    );
+    Ok(status.code().unwrap_or(1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(unix)]
+    fn intentional_stop_requires_authenticated_terminal_disposition() {
+        use std::os::unix::process::ExitStatusExt;
+        let interrupted = || Err(anyhow::anyhow!("pilot host terminated by SIGTERM"));
+        assert_eq!(terminal_exit_code(interrupted(), true, true).unwrap(), 0);
+        assert!(terminal_exit_code(interrupted(), true, false).is_err());
+        // An authenticated receipt cannot turn cancellation, timeout or daemon
+        // loss into a successful terminal outcome.
+        assert!(terminal_exit_code(interrupted(), false, true).is_err());
+        assert!(terminal_exit_code(interrupted(), false, false).is_err());
+        assert!(
+            terminal_exit_code(Ok(std::process::ExitStatus::from_raw(9)), false, true).is_err()
+        );
+        assert_eq!(
+            terminal_exit_code(Ok(std::process::ExitStatus::from_raw(0)), false, true).unwrap(),
+            0
+        );
+        assert_eq!(
+            terminal_exit_code(
+                Ok(std::process::ExitStatus::from_raw(17 << 8)),
+                false,
+                false
+            )
+            .unwrap(),
+            17
+        );
+    }
 
     fn dummy_script(path: &Path) {
         fs::write(path, "#!/bin/sh\nexit 0\n").unwrap();

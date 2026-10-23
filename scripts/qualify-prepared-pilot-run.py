@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Actual-host SOU-116 qualification of the prepared-selection entry point.
+"""Actual-host qualification of prepared selection, lifecycle and exact stop.
 
 Uses owned data and the accepted scripted provider; raw traces/logs remain private.
 """
@@ -14,6 +14,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 
@@ -30,6 +31,7 @@ def load(name, filename):
 RUN = load("sou116_entry", "pilot-run.py")
 LAUNCH = load("sou116_launch", "qualify-pilot-launcher.py")
 ASK = load("sou116_ask", "qualify-pilot-ask.py")
+STOP = load("sou125_prepared_stop", "prepared_stop_witness.py")
 BASE, require = LAUNCH.BASE, LAUNCH.require
 
 
@@ -68,7 +70,7 @@ def qualify(args, private, report):
     selected_before = {role: BASE.sha(path) for role, path in paths.items()}
     sentinel = private / "unrelated.txt"
     sentinel.write_text("must survive")
-    unrelated = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(600)"],
+    unrelated = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(1800)"],
                                  start_new_session=True, env=env, cwd=private)
     report.update(source_before=before, selected_sha256=selected_before, cases=[])
     try:
@@ -111,7 +113,7 @@ def qualify(args, private, report):
                 if args.selection.read_bytes() != original:
                     args.selection.write_bytes(original)
                 owner.close()
-        for case in ("useful-refusal", "ask", "default", "cancel", "daemon-loss", "timeout"):
+        for case in ("useful-refusal", "ask", "default", "cancel", "daemon-loss", "host-crash", "timeout"):
             report["active_case"] = case
             root = private / case
             root.mkdir(mode=0o700)
@@ -127,7 +129,8 @@ def qualify(args, private, report):
                              ("filesystem", "read_text_file", {"path": "/workspace/followup.txt"})]
             elif case == "default":
                 proposals = [proposals[0], ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"})]
-            hold = case in ("cancel", "daemon-loss", "timeout")
+            hold = case in ("cancel", "daemon-loss", "host-crash", "timeout")
+            lifecycle_ready = threading.Event()
             def next_step(body):
                 names = {tool.get("name") for tool in body.get("tools", [])}
                 if not {"mcp__filesystem__read_text_file", "mcp__git__git_status"}.issubset(names):
@@ -138,6 +141,7 @@ def qualify(args, private, report):
                             model.results[block["tool_use_id"]] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
                 if hold:
                     # Owned provider delay keeps an actual host alive for lifecycle controls.
+                    lifecycle_ready.set()  # Both original servers are in this host's tool catalog.
                     time.sleep(8)
                     return [{"type": "text", "text": "Owned lifecycle control."}]
                 for i, (server, tool, arguments) in enumerate(proposals):
@@ -212,8 +216,8 @@ def qualify(args, private, report):
                                     require(result.returncode == 0, "prepared_operator_decision_failed")
                                     decisions.append(waiting["pending_id"])
                             time.sleep(.1)
-                    elif case in ("cancel", "daemon-loss"):
-                        until(lambda: bool(model.requests), "actual_host_request_missing")
+                    elif case in ("cancel", "daemon-loss", "host-crash"):
+                        until(lambda: lifecycle_ready.is_set(), "actual_host_request_missing", seconds=75)
                         if case == "cancel":
                             # Trace wrapper is not the orchestrator: identify its actual Python exec.
                             supervisor = Path("/proc") / str(record["supervisor_pid"])
@@ -222,8 +226,24 @@ def qualify(args, private, report):
                                 (supervisor / "cmdline").read_bytes().split(b"\0"),
                                 "owned_orchestrator_identity_ambiguous")
                             os.kill(record["supervisor_pid"], signal.SIGTERM)
-                        else:
+                        elif case == "daemon-loss":
                             os.kill(record["daemon_pid"], signal.SIGKILL)
+                        else:
+                            def actual_host():
+                                witness.sample()
+                                matches = []
+                                for (pid, start), _ in list(witness.observed.items()):
+                                    if BASE.ProcessWitness.identity(pid) != start:
+                                        continue
+                                    try:
+                                        if Path(f"/proc/{pid}/exe").samefile(paths["claude"]):
+                                            matches.append((pid, start))
+                                    except OSError:
+                                        continue
+                                return matches[0] if len(matches) == 1 else None
+                            pid, start = until(actual_host, "prepared_owned_host_identity_missing")
+                            require(BASE.ProcessWitness.identity(pid) == start, "prepared_owned_host_identity_changed")
+                            os.kill(pid, signal.SIGKILL)
                     process.wait(timeout=100)
                 rows = (root / "stdout.private").read_text().splitlines()
                 outcome = json.loads(rows[-1])
@@ -231,8 +251,10 @@ def qualify(args, private, report):
                 require((process.returncode == 0) == success, "prepared_run_outcome_mismatch")
                 if not success:
                     expected = {"cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
+                                "host-crash": {"restricted_launcher_failed"},
                                 "timeout": {"restricted_launcher_failed", "pilot_timeout"}}
                     require(outcome.get("reason") in expected[case], "prepared_wrong_failure_reason")
+                    require(outcome["status"] == "failed", "prepared_false_terminal_success")
                 require(any('execve(' + json.dumps(str(paths["claude"])) + ',' in row and row.endswith(" = 0")
                             for row in LAUNCH.normalized_syscalls((root / "trace.private").read_text())[0]),
                         "actual_pinned_host_execution_not_observed")
@@ -313,6 +335,7 @@ def qualify(args, private, report):
                     process.kill()
                     process.wait(timeout=10)
                 model.close()
+        STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
         require(workspace_before == {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}, "prepared_workspace_changed")
         require(selected_before == {role: BASE.sha(path) for role, path in paths.items()}, "prepared_selected_assets_changed")
         require(sentinel.read_text() == "must survive" and unrelated.poll() is None, "unrelated_state_changed")

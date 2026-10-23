@@ -76,6 +76,7 @@ PUBLIC_FAILURE_CODES = frozenset({
     'owned_daemon_lost',
     'owned_daemon_not_ready',
     'owned_process_cleanup_failed',
+    'owned_stop_unconfirmed',
     'parent_death_signal_unavailable',
     'pilot_cancelled',
     'pilot_cancelled_before_host',
@@ -202,6 +203,33 @@ def readiness(paths, home, env, process, port, token, registry_sha, ask):
     raise Failure("owned_daemon_not_ready")
 
 
+def confirmed_stop(home, launcher_pid, binary, env, cwd):
+    """Confirm an exact durable receipt through the existing authenticated CLI.
+
+    A JSON status, an intent file, SIGTERM or a successful launcher exit alone
+    is not evidence. The CLI verifies the HMAC bound to these exact run bytes
+    and the expected private daemon home, without contacting a new daemon.
+    """
+    candidates = list((home / "pilot-runs").glob("*/stop.json"))
+    require(len(candidates) == 1, "owned_stop_unconfirmed")
+    record = candidates[0].parent / "run.json"
+    value = PREP.PILOT.strict_json(record.read_bytes())
+    require(value.get("contract") == "sw-pilot-run/1"
+            and value.get("run_id") == record.parent.name
+            and re.fullmatch(r"[0-9a-f]{32}", record.parent.name)
+            and value.get("home") == str(home)
+            and value.get("launcher_pid") == launcher_pid,
+            "owned_stop_unconfirmed")
+    result = subprocess.run([str(binary), "pilot-approval", "--home", str(home),
+        "--run", record.parent.name, "stop"], cwd=cwd, env=env,
+        stdin=subprocess.DEVNULL, capture_output=True, timeout=3)
+    require(result.returncode == 0 and len(result.stdout) <= 4096,
+            "owned_stop_unconfirmed")
+    response = PREP.PILOT.strict_json(result.stdout)
+    require(response == {"run": record.parent.name, "status": "already_stopped",
+                         "running_effects_rolled_back": False}, "owned_stop_unconfirmed")
+
+
 def run(args, report):
     PREP.supported_platform()
     selection, paths, profiles = selected(args)
@@ -314,7 +342,12 @@ def run(args, report):
             result = os.waitid(os.P_PID, launcher.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
             require(result is not None and result.si_code == os.CLD_EXITED and result.si_status == 0,
                     "restricted_launcher_failed")
-        report.update(status="completed", launcher_exit=0)
+        stops = list((home / "pilot-runs").glob("*/stop.json"))
+        if stops:
+            confirmed_stop(home, launcher.pid, paths["agentfw"], env, private)
+            report.update(status="stopped", launcher_exit=0, running_effects_rolled_back=False)
+        else:
+            report.update(status="completed", launcher_exit=0)
     finally:
         errors = []
         for name, process in (("launcher", launcher), ("daemon", daemon)):

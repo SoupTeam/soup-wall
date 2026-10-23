@@ -618,8 +618,38 @@ impl RunGuard {
     pub fn id(&self) -> &str {
         &self.run.run_id
     }
+    /// Allow existing collectors to finish their private namespace cleanup
+    /// before TERM reaches the host group. Never create or signal another owner.
+    pub(crate) fn cleanup_waiter(&self) -> impl FnOnce() -> Result<()> + Send + 'static {
+        let run = self.run.clone();
+        let dir = self.dir.clone();
+        move || {
+            if !has_stop(&dir)? {
+                return Ok(());
+            }
+            let bytes = read_file(&dir.join("run.json"), true)?;
+            read_stop(&dir, &run, &bytes)?;
+            let deadline = std::time::Instant::now() + Duration::from_secs(6);
+            loop {
+                let live = snapshot(&run.home)?;
+                ensure!(
+                    live["instance_id"] == run.instance_id,
+                    "daemon changed during selected-owner cleanup"
+                );
+                if selected_cleanup_complete(&run, &live)? {
+                    return Ok(());
+                }
+                ensure!(
+                    std::time::Instant::now() < deadline,
+                    "pilot stop incomplete: selected namespace cleanup unconfirmed"
+                );
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+
     /// Never broad-cancel a host/session label. Only retire exact observed bindings.
-    pub fn finish(&self, host_stopped: bool) -> Result<()> {
+    pub fn finish(&self, host_stopped: bool) -> Result<bool> {
         let live = snapshot(&self.run.home)?;
         ensure!(
             live["instance_id"] == self.run.instance_id,
@@ -658,8 +688,8 @@ impl RunGuard {
                 .unwrap()
                 .iter()
                 .any(|r| ids.contains(&r["pending_id"]));
-            if !owned && !pending {
-                if has_stop(&self.dir)? {
+            if !owned && !pending && selected_cleanup_complete(&self.run, &live)? {
+                let stopped = if has_stop(&self.dir)? {
                     ensure!(
                         host_stopped,
                         "pilot stop incomplete: host cleanup is unconfirmed"
@@ -671,10 +701,14 @@ impl RunGuard {
                         write_stop(&self.dir, &self.run, &bytes, "revoked")?;
                     }
                     write_stop(&self.dir, &self.run, &bytes, "stopped")?;
+                    // Return only the authenticated, exact-run terminal receipt,
+                    // never the presence of intent or an operator's exit code.
+                    read_stop(&self.dir, &self.run, &bytes)?.status == "stopped"
                 } else {
                     fs::remove_dir_all(&self.dir).context("owned run metadata cleanup failed")?;
-                }
-                return Ok(());
+                    false
+                };
+                return Ok(stopped);
             }
             ensure!(
                 std::time::Instant::now() < deadline,
@@ -693,6 +727,30 @@ impl Drop for RunGuard {
             let _ = fs::remove_dir_all(&self.dir);
         }
     }
+}
+
+fn selected_cleanup_complete(run: &Run, live: &Value) -> Result<bool> {
+    let rows = live["pilot_cleanup"]
+        .as_array()
+        .context("pilot stop incomplete: daemon has no selected-owner cleanup observations")?;
+    for row in rows {
+        if let Some((server, _)) = run
+            .authorities
+            .iter()
+            .find(|(_, digest)| row["authority_sha256"] == **digest)
+        {
+            ensure!(
+                row["host_session"] == run.host_session && row["server_id"] == *server,
+                "pilot stop incomplete: foreign namespace cleanup identity"
+            );
+            if row["verified"] != true {
+                return Ok(false);
+            }
+        }
+    }
+    // Absence means begin was never admitted. Begin and stop use the same
+    // session lock; a spent grant can never register/start a selected owner.
+    Ok(true)
 }
 
 fn string<'a>(v: &'a Value, key: &str) -> Result<&'a str> {
@@ -1401,6 +1459,25 @@ mod tests {
                 "authority_sha256":"c".repeat(64),"session_id":"native-one","session_epoch":"epoch-one"}],
             "pilot_pending":[{"pending_id":"pending-one","tool":"read_text_file","binding_sha256":"d".repeat(64),
                 "session_id":"native-one","session_epoch":"epoch-one"}]})
+    }
+
+    #[test]
+    fn retirement_without_namespace_confirmation_cannot_complete_stop() {
+        let run = run();
+        let retired = json!({"pilot_collectors":[], "pilot_pending":[]});
+        assert!(selected_cleanup_complete(&run, &retired).is_err());
+        let mut pending = json!({"pilot_cleanup":[{"authority_sha256":"c".repeat(64),
+            "host_session":"host-one","server_id":"filesystem","verified":false}]});
+        assert!(!selected_cleanup_complete(&run, &pending).unwrap());
+        pending["pilot_cleanup"][0]["verified"] = json!(true);
+        assert!(selected_cleanup_complete(&run, &pending).unwrap());
+        pending["pilot_cleanup"][0]["host_session"] = json!("foreign");
+        assert!(selected_cleanup_complete(&run, &pending).is_err());
+        // No owner ever registered for this (now spent) authority. Other runs'
+        // obligations may not block or satisfy this run's confirmation.
+        pending["pilot_cleanup"][0]["authority_sha256"] = json!("e".repeat(64));
+        pending["pilot_cleanup"][0]["verified"] = json!(false);
+        assert!(selected_cleanup_complete(&run, &pending).unwrap());
     }
 
     #[test]
