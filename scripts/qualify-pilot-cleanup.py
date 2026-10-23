@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -93,8 +94,10 @@ def main():
             report["native_acceptance"] = True
         except Exception as error:
             value = str(error)
+            frame = traceback.extract_tb(error.__traceback__)[-1]
             report.update(status="failed", reason=value if re.fullmatch(r"[a-z][a-z0-9_]{0,100}", value)
-                          else "cleanup_qualification_failed")
+                          else "cleanup_qualification_failed", error_type=type(error).__name__,
+                          failure_location={"function": frame.name, "line": frame.lineno})
         report["elapsed_seconds"] = round(time.monotonic() - started, 3)
         if args.output_created:
             CLEAN.NATIVE.write_json(args.output / "report.json", report)
