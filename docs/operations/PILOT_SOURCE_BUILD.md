@@ -38,6 +38,10 @@ The build enforces a 20-minute limit per Cargo phase, monitors the temporary
 generation against an 8 GiB / 200,000-entry limit every two seconds, caps each
 phase log at 1 MiB, and checks the 512 MiB completed-generation limit before
 publishing.
+Cargo may remove temporary files or child directories during a quota scan.
+Entries that disappear after enumeration are treated as removed. A missing
+generation root, unreadable entries or other inventory errors still fail closed;
+the byte, entry and time limits are unchanged.
 
 ```sh
 build_result="$(python3 -B scripts/build-native-pilot-inputs.py --build "${source_args[@]}")"
@@ -56,6 +60,7 @@ non-executable output, a wrong digest, or an interrupted build must fail
 closed. An unsuccessful attempt must leave the last selected generation and
 unrelated files intact. Keep its first bounded failure record and private
 logs for diagnosis; do not publish raw build logs as evidence.
+Unexpected errors include the source function and line, without exporting private paths.
 
 ## Use with the accepted preparation and qualification
 
