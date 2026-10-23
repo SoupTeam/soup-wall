@@ -575,7 +575,7 @@ class Pilot:
                 "original_write_observed": True, "receiver_positive_observed": True,
                 "original_evidence": original_evidence, **self.preserve()}
 
-    def host(self, label, batches, before_batch=None, host=None, proofs=None, *, direct=False):
+    def host(self, label, batches, before_batch=None, host=None, proofs=None, command_prefix=(), *, direct=False):
         """Run the actual selected host. A batch is one provider parallel proposal.
 
         The local provider observes the original returned tool results. It does
@@ -670,7 +670,8 @@ class Pilot:
         timed_out = False
         started = time.monotonic()
         try:
-            process = subprocess.Popen(command, cwd=self.workspace if getattr(self, "matched_workload", False) else project, env=env, stdin=subprocess.DEVNULL,
+            host_cwd = self.workspace if getattr(self, "matched_workload", False) else project
+            process = subprocess.Popen([*command_prefix, *command], cwd=host_cwd, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             witness = BASE.ProcessWitness(process.pid)
             stdout, stderr = BoundedStream(process.stdout), BoundedStream(process.stderr)
@@ -846,12 +847,14 @@ class Pilot:
                 "client_wire_file": f"client-{self.clients.index(client):02d}-wire.json"}
         return {**evidence, **self.preserve()}
 
-    def collector_recovery(self):
+    def collector_recovery(self, before_crash=None, after_reconnect=None):
         host = str(uuid.uuid4())
         with self.client("git", host, "surviving-git") as sibling:
             with self.client("filesystem", host, "interrupted-filesystem") as client:
                 response, _ = client.exchange(frame(10, "filesystem", "read_text_file", {"path": "/workspace/guide.txt"}))
                 require(BASE.result_text(response) == BASE.TEXT, "collector_precrash_useful_missing")
+                if before_crash:
+                    before_crash(client)
                 starts = [r for r in self.audit() if r.get("event") == "native_session_start" and r.get("host_session") == host
                           and r.get("agent_id") == "interrupted-filesystem"]
                 require(len(starts) == 1, "collector_epoch_ambiguous")
@@ -885,6 +888,8 @@ class Pilot:
                 new_starts = [r for r in self.audit() if r.get("event") == "native_session_start" and r.get("host_session") == host
                               and r.get("agent_id") == "interrupted-filesystem"]
                 require(len(new_starts) == 2 and new_starts[-1]["session"] != epoch, "collector_epoch_resurrected")
+                if after_reconnect:
+                    after_reconnect(replacement)
         return {"signal": "SIGKILL", "session_end_sent": False, "reclaimed_ms": reclaimed_ms,
                 "old_epoch_sha256": digest(epoch), "new_epoch_sha256": digest(new_starts[-1]["session"]),
                 "process_cleanup": process_cleanup, "surviving_sibling_useful": True,
