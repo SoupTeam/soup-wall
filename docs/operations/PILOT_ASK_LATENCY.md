@@ -44,6 +44,9 @@ The report retains each case and its original failure. If a run stops early,
 denominator prevents `target_met`. A missed target returns nonzero with status
 `performance_blocker`, even if the independent security controls passed. p50/p95 use nearest rank over successful
 observations and are accompanied by successful, failed and incomplete counts.
+If accounting itself fails, cleanup still attempts every active owned host and
+the daemon. A failed host cleanup cannot skip the remaining owners; any cleanup
+failure keeps the qualification unsuccessful.
 The outer metric measures the conservative monotonic duration from immediately
 before the operator approval command to the correlated original result.
 

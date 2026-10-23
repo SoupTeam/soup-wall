@@ -316,6 +316,30 @@ class Pilot:
                     pass
 
 
+def finish_qualification(report, cases, samples, active, daemon):
+    report["cases"] = cases
+    try:
+        if samples:
+            report["latency"] = LATENCY.summarize(cases, samples)
+    finally:
+        # Metrics never own cleanup. Attempt every owned host and the daemon,
+        # even when bookkeeping or an earlier host's cleanup raises.
+        cleanup_error = None
+        for pilot in active:
+            try:
+                pilot.close()
+            except Exception as error:
+                if cleanup_error is None:
+                    cleanup_error = error
+        try:
+            stop(daemon)
+        except Exception as error:
+            if cleanup_error is None:
+                cleanup_error = error
+        if cleanup_error is not None:
+            raise cleanup_error
+
+
 def qualify(args, private, report):
     setup = LAUNCH.prepare_original_launch(args, private, report)
     classifier = private / "classifier.py"
@@ -508,12 +532,7 @@ def qualify(args, private, report):
         require(all(LAUNCH.sha(path / "profile.json") == report["profiles"][kind]["profile_sha256"] for kind,path in setup.profiles.items()), "profile_changed")
         require(not list((setup.home / "pilot-runs").iterdir()), "run_metadata_remains")
     finally:
-        report["cases"] = cases
-        if getattr(args, "approval_samples", 0):
-            report["latency"] = LATENCY.summarize(cases, args.approval_samples)
-        for pilot in active:
-            pilot.close()
-        stop(daemon)
+        finish_qualification(report, cases, getattr(args, "approval_samples", 0), active, daemon)
 
 
 LATENCY = load("pilot_ask_latency", "pilot_ask_latency.py")

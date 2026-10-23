@@ -4,10 +4,11 @@ import importlib.util
 from pathlib import Path
 import unittest
 import io
+import itertools
 import json
 import sys
 import tempfile
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location("ask_latency", Path(__file__).resolve().parents[1] / "pilot_ask_latency.py")
 LATENCY = importlib.util.module_from_spec(SPEC)
@@ -62,6 +63,31 @@ class AskLatencyAccounting(unittest.TestCase):
 
 
 class AskPerformanceCli(unittest.TestCase):
+    def test_accounting_and_cleanup_failures_cannot_skip_remaining_owned_cleanup(self):
+        spec = importlib.util.spec_from_file_location("ask_cleanup_cli", Path(__file__).resolve().parents[1] / "qualify-pilot-ask.py")
+        ask = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ask)
+        for accounting_fails, host_fails, daemon_fails in itertools.product((False, True), repeat=3):
+            with self.subTest(accounting=accounting_fails, host=host_fails, daemon=daemon_fails):
+                report, cases = {}, []
+                first, second, daemon = Mock(), Mock(), Mock()
+                if host_fails:
+                    first.close.side_effect = RuntimeError("owned_cleanup_failed")
+                metric_error = ValueError("latency_sample_plan_invalid") if accounting_fails else None
+                daemon_error = RuntimeError("owned_daemon_cleanup_failed") if daemon_fails else None
+                with patch.object(ask.LATENCY, "summarize", side_effect=metric_error,
+                                  return_value={"status": "performance_blocker"}), patch.object(ask, "stop", side_effect=daemon_error) as stop:
+                    if accounting_fails or host_fails or daemon_fails:
+                        expected = RuntimeError if host_fails or daemon_fails else ValueError
+                        with self.assertRaises(expected):
+                            ask.finish_qualification(report, cases, 20, [first, second], daemon)
+                    else:
+                        ask.finish_qualification(report, cases, 20, [first, second], daemon)
+                self.assertIs(report["cases"], cases)
+                first.close.assert_called_once_with()
+                second.close.assert_called_once_with()
+                stop.assert_called_once_with(daemon)
+
     def test_cli_never_reports_success_for_a_missed_performance_target(self):
         spec = importlib.util.spec_from_file_location("ask_latency_cli", Path(__file__).resolve().parents[1] / "qualify-pilot-ask.py")
         ask = importlib.util.module_from_spec(spec)
