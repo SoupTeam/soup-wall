@@ -24,9 +24,8 @@
    "workflow": ".github/workflows/mcp-real-filesystem.yml",
    "job": "native-ubuntu-2404",
    "explicit_override": "RUSTUP_TOOLCHAIN=1.94.1",
-   "commit_prefix_source": "rustc -vV in CI run 39976331865 (native-ubuntu-2404, commit-hash e408947bfd200af42db322daf0fadfe7e26d3bd1)"
-  },
-  "commit_prefix": "e408947bf"
+   "commit_prefix_status": "recorded from the first verified CI run; not enforced until pinned here"
+  }
  },
  "python": {
   "classifier": {

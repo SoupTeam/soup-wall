@@ -34,7 +34,7 @@ python3 scripts/verify-pilot-toolchain.py --lane native --python "$(command -v p
 
 before building and uploads the report with the job artifacts. In this lane the compiler must be 1.94.1
 (release, host, cargo), `RUSTUP_TOOLCHAIN` must be set to it, and the checked-in file must name 1.99.1.
-The 1.94.1 rustc commit hash (`e408947bf…`, observed in CI run 39976331865) is pinned in the pins file and enforced like the main pin.
+The 1.94.1 commit hash is recorded in the report but is only enforced once pinned in the pins file.
 
 ## Separate older lane
 

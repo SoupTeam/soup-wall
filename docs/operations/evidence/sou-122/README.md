@@ -30,9 +30,9 @@ The native lane stays on Rust 1.94.1. The repository default
 | `Cargo.lock` | sha256 `b603e17ee717ea60c80db5a0eb0b2b0837659d9cea9e917654900610ae42798e` (443 packages, tracked) |
 | `rust-toolchain.toml` | sha256 `5a7b7b624394e3ece3fb4c9e0391aa400eeebf7a7a1efd18e74c5b68b71cd65e` |
 
-The 1.94.1 commit hash above is now pinned (`commit_prefix` `e408947bf`) in the
-pins file and enforced by `--lane native`. Before this change the lane
-recorded the hash but did not enforce it.
+The 1.94.1 commit hash above is recorded in the attestation but is not
+enforced: the pins file deliberately does not change in this PR (no pin or
+runtime policy change). Enforcing it would be a separate decision.
 
 Binaries built in the same run (`selected-hashes.txt`):
 
@@ -90,8 +90,9 @@ re-run.
 ## What is and is not reproduced
 
 - Reproducible by source identity: the same commit, pins file, lockfile hash
-  and toolchain file reproduce the same attestation checks. The Rust release,
-  rustc commit hash and host are enforced for both lanes.
+  and toolchain file reproduce the same attestation checks. The Rust release
+  and host are enforced for both lanes; the rustc commit hash is enforced for
+  the main pin only and recorded for the 1.94.1 lane.
 - Not claimed: byte-for-byte identical binaries. Executable hashes are
   retained as observations of this run, not as a promise of future equality.
 - Not covered: the digest-pinned Docker builder images (listed in the
