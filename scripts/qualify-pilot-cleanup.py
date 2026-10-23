@@ -30,6 +30,8 @@ def qualify(args, report):
         expected_commit=args.expected_commit, git_archive=args.git_archive, bwrap_archive=args.bwrap_archive,
         pkg_config_libdir=args.pkg_config_libdir, pkg_config_sysroot=args.pkg_config_sysroot,
         meson_pythonpath=args.meson_pythonpath)
+    _, missing = CLEAN.NATIVE.tool_inventory(options)
+    report["missing_dependencies"] = [item["dependency"] for item in missing]
     first = CLEAN.NATIVE.prepare(options)
     old = Path(first["receipt"]).parent.name
     retained = CLEAN.inspect(prefix, old)
