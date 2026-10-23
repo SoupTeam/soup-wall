@@ -575,7 +575,7 @@ class Pilot:
                 "original_write_observed": True, "receiver_positive_observed": True,
                 "original_evidence": original_evidence, **self.preserve()}
 
-    def host(self, label, batches, before_batch=None, host=None, proofs=None):
+    def host(self, label, batches, before_batch=None, host=None, proofs=None, command_prefix=()):
         """Run the actual selected host. A batch is one provider parallel proposal.
 
         The local provider observes the original returned tool results. It does
@@ -657,7 +657,7 @@ class Pilot:
         timed_out = False
         started = time.monotonic()
         try:
-            process = subprocess.Popen(command, cwd=project, env=env, stdin=subprocess.DEVNULL,
+            process = subprocess.Popen([*command_prefix, *command], cwd=project, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             witness = BASE.ProcessWitness(process.pid)
             stdout, stderr = BoundedStream(process.stdout), BoundedStream(process.stderr)
