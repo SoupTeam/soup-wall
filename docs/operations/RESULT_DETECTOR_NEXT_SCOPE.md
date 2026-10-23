@@ -72,3 +72,55 @@ Before any proposed production change:
 Review requested: is this inspection-only decomposition a useful next bounded
 increment, while retaining the full unresolved benign Git requirement? It is not
 a request to relax the boundary or silently reduce the task's completion criteria.
+
+## Runnable first increment after review 5627143745
+
+`scripts/inspect-result-framing.py` implements offline filesystem attribution,
+not a production detector correction. It reads a bounded JSON-RPC result file,
+rejects duplicate JSON keys and unsupported content channels, and independently
+attributes every supported `content[i].text` and `structuredContent.content`.
+Different channel values are never deduplicated or replaced by each other.
+
+```
+python scripts/inspect-result-framing.py crates/agent/tests/fixtures/result_detector/sou113-original/server-response-4files.jsonl
+python -m unittest discover -s scripts/tests -p test_result_framing.py -v
+```
+
+The grammar is deliberately flat: ASCII absolute path plus colon, nonempty body,
+standalone `---`, next path/body. LF only; no nested grammar. Paths remain
+unresolved values. Separator spans are only forgeable framing candidates.
+Non-string JSON scalar/issue-ID lines are typed atoms; all prose, commands,
+quoted strings and tails remain unresolved. Complete reports partition every
+UTF-8 byte, including line endings; failed parses return no partial spans and
+explicit incomplete status. A structural `complete=true` is not a safety verdict.
+
+Bounds: 256 KiB raw frame and total decoded text, 64 KiB per text channel,
+1024 lines, 256 records/content items. The CLI reads at most frame-limit + 1
+bytes; an oversized file has no whole-file hash rather than a misleading prefix
+hash. Reports contain hashes/offsets/kinds and never echo payload text. This is
+offline scope, not a change to the larger runtime budgets accepted in SOU-113.
+
+Seven test groups pass: exact original 2/3/4-file captures in both channels,
+different malicious secondary channel, multilingual/untrusted prose, byte-exact
+coverage and appended tails, malformed/oversize/record-limit cases, invalid or
+ambiguous JSON/channel shapes, and explicit unsupported Git input. Original
+captures remain unchanged and all 18 hashes still verify after incorporating
+accepted main 6fdbc56. No local model rerun was performed.
+
+**Remaining blocker:** both four-file bodies and original Git prose remain
+semantically unresolved. This tool cannot justify discounting their current
+findings or releasing them. Git framing is explicitly unsupported in this first
+increment, rather than parsed partially and called safe. Production scanner,
+policy, retained positive expectations and attack fixtures are unchanged. The
+30-attack independent delivery/useful-continuation qualification requested in
+review has not been performed for this increment. SOU-123 public pairs remain
+pending; no Ready, merge or Done qualification is claimed.
+
+After the main refresh, `cargo fmt --all -- --check` passed and all eight
+`result_detector` policy tests ran: six passed, two failed, zero ignored.
+The failures remain the original benign Git response and both four-file text
+channels. Existing attack controls passed. Initial local compilation was blocked
+by the newly locked `ctutils 0.4.4` missing from the local offline cache; fetching
+that exact crate with Cargo.lock SHA256 verification resolved the environment
+failure without editing the lockfile. This does not constitute the independent
+30-attack runtime qualification.
