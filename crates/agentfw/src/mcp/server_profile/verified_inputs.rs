@@ -402,6 +402,33 @@ impl Verification<'_> {
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn measure(file: &fs::File) -> anyhow::Result<Option<Vec<u8>>> {
     use std::os::fd::AsRawFd;
+    let mut value = std::mem::MaybeUninit::<libc::statfs>::uninit();
+    if unsafe { libc::fstatfs(file.as_raw_fd(), value.as_mut_ptr()) } != 0 {
+        return Ok(None); // Capture hashes; an existing proof cannot downgrade on resume.
+    }
+    verity_on_filesystem(unsafe { value.assume_init() }.f_type as u64, || {
+        measure_kernel(file)
+    })
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn verity_on_filesystem<T>(
+    kind: u64,
+    operation: impl FnOnce() -> anyhow::Result<Option<T>>,
+) -> anyhow::Result<Option<T>> {
+    // Only kernel-enforced ext4/f2fs/btrfs verity is content authority. FUSE
+    // forwards MEASURE_VERITY to its userspace server, which can forge a digest.
+    // https://github.com/torvalds/linux/blob/v6.17/fs/fuse/ioctl.c
+    if matches!(kind, 0xef53 | 0xf2f5_2010 | 0x9123_683e) {
+        operation()
+    } else {
+        Ok(None)
+    }
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn measure_kernel(file: &fs::File) -> anyhow::Result<Option<Vec<u8>>> {
+    use std::os::fd::AsRawFd;
     // _IOWR('f', 134, struct fsverity_digest): the UAPI header is four
     // bytes, independently of the capacity of its variable trailing digest.
     const FS_IOC_MEASURE_VERITY: libc::Ioctl = 0xc004_6686_u32 as libc::Ioctl;
@@ -443,6 +470,32 @@ fn measure(_file: &fs::File) -> anyhow::Result<Option<Vec<u8>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[test]
+    fn userspace_or_remote_verity_claim_never_becomes_content_authority() {
+        use std::cell::Cell;
+        for kind in [0x6573_5546, 0x6969, 0xff53_4d42, 0x794c_7630, 0] {
+            let queried = Cell::new(false);
+            let forged = verity_on_filesystem(kind, || {
+                queried.set(true);
+                Ok(Some(vec![7; 34]))
+            })
+            .unwrap();
+            assert!(
+                !queried.get(),
+                "untrusted filesystem ioctl must not be consulted"
+            );
+            assert!(
+                forged.is_none(),
+                "userspace measurement must force full hashing"
+            );
+        }
+        assert_eq!(
+            verity_on_filesystem(0xef53, || Ok(Some(vec![7; 34]))).unwrap(),
+            Some(vec![7; 34])
+        );
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

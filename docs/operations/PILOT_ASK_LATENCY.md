@@ -163,3 +163,20 @@ ancestor directory and symlink. This avoids repeated O_PATH opens of the same
 regular leaf without treating metadata as content authority. Files without a
 valid retained kernel proof are still hashed; standalone runtime/library paths
 keep the full independent path checks.
+
+The common before/after harness requests `strace --seccomp-bpf` with the exact
+same exec/open/write/clone/exit witness set. This avoids ptrace stops for syscalls
+which the trace was already discarding, without removing any observed original
+server effect, wire write or thread-lineage event. Strace may fall back to its
+ordinary tracer if kernel filtering is unavailable; the report records the
+requested mode, not an unproven successful filter installation. All existing
+deadlines and positive/negative effect assertions still apply. Both paired sides
+must use this same current harness; earlier ordinary-ptrace runs stay separately
+attributed and cannot be spliced into the new comparison.
+
+Fs-verity reuse is restricted to kernel implementations on ext4/f2fs/btrfs.
+FUSE forwards this ioctl to its userspace server, so an apparently successful
+measurement on FUSE, remote, layered or unknown storage cannot authorize reuse;
+those paths hash bytes instead. The filesystem type is read from the actual FD.
+See the [kernel FUSE implementation](https://github.com/torvalds/linux/blob/v6.17/fs/fuse/ioctl.c)
+and [strace internals](https://github.com/strace/strace/blob/master/doc/INTERNALS.md).

@@ -78,6 +78,8 @@ def validate_build(receipt, identity, selected):
 
 
 def validate_report(report, expected_source, selected, samples, candidate):
+    require(report.get('trace_requested') == METRICS.trace_request()
+            and report['trace_requested'].get('fallback_possible') is True, 'trace_mode_mismatch')
     require(report.get('status') in ('pass', 'performance_blocker'), 'qualification_failed')
     require(report.get('real_host_executed') is True and report.get('scripted_owned_provider') is True
             and type(report.get('paid_api_calls')) is int and report['paid_api_calls'] == 0,
@@ -110,6 +112,8 @@ def validate_report(report, expected_source, selected, samples, candidate):
 
 
 def validate_preflight(report, expected_source, selected):
+    require(report.get('trace_requested') == METRICS.trace_request()
+            and report['trace_requested'].get('fallback_possible') is True, 'trace_mode_mismatch')
     # Fail quickly before the long paired measurement. This two-row report can
     # never satisfy validate_report's 40+ sample denominator or latency proof.
     require(report.get('qualification_scope') == 'two_profile_correctness_probe_not_performance'

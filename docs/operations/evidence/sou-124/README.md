@@ -35,6 +35,16 @@ path opens while retaining the complete metadata/content checks and all parent
 closure checks. `descriptor-tree-correction.json` records passing local checks;
 its Linux branch and performance still require fresh native qualification.
 
+`native-attempt5-preflight.json` retains the ordinary-ptrace run on `9c5e87b`.
+Its stricter tree controls and untraced real-profile capture/resume passed, but
+the traced host still did not publish pending within its original deadline.
+The common paired harness now requests seccomp-assisted strace with the identical
+selected syscall/effect set; old ordinary-ptrace baseline samples are not reused.
+A separate Linux-only correction gates verity claims to known kernel filesystem
+implementations, since FUSE forwards that ioctl to userspace. Local and native
+check attribution remains explicit in `proof-fs-trace-boundary.json`; no passing
+native or performance result is claimed for this correction yet.
+
 The sections below are historical checkpoints, not current readiness claims.
 
 ## Verified input reuse follow-up

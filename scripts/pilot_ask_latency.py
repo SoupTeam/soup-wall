@@ -3,6 +3,13 @@
 import math
 
 
+TRACE_SYSCALLS = "execve,openat,write,writev,clone,clone3,exit,exit_group"
+
+
+def trace_request():
+    return {"mode": "seccomp-bpf", "fallback_possible": True, "syscalls": TRACE_SYSCALLS}
+
+
 def summarize(cases, planned_per_profile):
     if type(planned_per_profile) is not int or not 20 <= planned_per_profile <= 100:
         raise ValueError("latency_sample_plan_invalid")

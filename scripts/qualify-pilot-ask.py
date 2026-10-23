@@ -182,7 +182,11 @@ class Pilot:
         self.model.next = next_step
         env = dict(setup.env, ANTHROPIC_BASE_URL=self.model.url, ANTHROPIC_API_KEY="owned-loopback-only",
             HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
-        command = [str(setup.selected["strace"]), "-f", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev,clone,clone3,exit,exit_group",
+        # Keep the identical syscall/effect witness set, but avoid ptrace stops
+        # for unrelated stat/readlink calls during large verified-input walks.
+        # Both paired sides use this exact harness and request this mode.
+        # https://github.com/strace/strace/blob/master/doc/INTERNALS.md
+        command = [str(setup.selected["strace"]), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=" + LATENCY.TRACE_SYSCALLS,
             "-o", str(self.trace), str(setup.binary), "pilot-launch", "--claude", str(setup.selected["claude"]),
             "--workspace", str(setup.workspace), "--fs-profile", str(setup.profiles["filesystem"]),
             "--git-profile", str(setup.profiles["git"]), "--home", str(setup.home), "--policy", str(setup.policy),
@@ -626,7 +630,8 @@ def main():
                         help="Separate performance run: 20..100 fresh approvals per profile; no call resubmission")
     args = parser.parse_args(); args.output.mkdir(parents=True,exist_ok=True)
     report = {"contract_version":"sw-pilot-ask-acceptance/1", "status":"incomplete", "real_host_executed":False,
-        "scripted_owned_provider":True, "paid_api_calls":0, "physical_human_presence_proven":False}
+        "scripted_owned_provider":True, "paid_api_calls":0, "physical_human_presence_proven":False,
+        "trace_requested":LATENCY.trace_request()}
     if args.approval_smoke:
         report["qualification_scope"] = "two_profile_correctness_probe_not_performance"
     try:

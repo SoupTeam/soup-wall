@@ -23,6 +23,7 @@ class ComparisonProof(unittest.TestCase):
                          rehashed_files=2, observer='collector mcp_verified_inputs_resume'))
                 for p in C.PROFILES for i in range(20)]
         self.report = dict(status='pass', real_host_executed=True, scripted_owned_provider=True,
+                           trace_requested=C.METRICS.trace_request(),
                            paid_api_calls=0, source=self.source.copy(), source_after=self.source.copy(),
                            workspace_unchanged=True, selected_sha256=self.selected.copy(), cases=rows,
                            latency=C.METRICS.summarize(rows, 20))
@@ -72,6 +73,18 @@ class ComparisonProof(unittest.TestCase):
             with self.subTest(proof=proof), self.assertRaises(ValueError): self.validate(row)
         self.report['latency']['filesystem']['p95_ms'] = 1
         with self.assertRaisesRegex(ValueError, 'reported_metrics_disagree'): self.validate()
+
+    def test_different_trace_method_cannot_be_spliced_into_comparison(self):
+        self.report.pop('trace_requested')
+        with self.assertRaisesRegex(ValueError, 'trace_mode_mismatch'): self.validate()
+        self.report['trace_requested'] = dict(C.METRICS.trace_request(), mode='ordinary')
+        with self.assertRaisesRegex(ValueError, 'trace_mode_mismatch'): self.validate()
+
+    def test_trace_witness_set_and_boolean_metadata_must_match(self):
+        for update in ({'syscalls': 'execve,write'}, {'fallback_possible': 1}):
+            self.report['trace_requested'] = dict(C.METRICS.trace_request(), **update)
+            with self.subTest(update=update), self.assertRaisesRegex(ValueError, 'trace_mode_mismatch'):
+                self.validate()
 
     def test_reports_reject_duplicate_keys_nonfinite_numbers_and_nonobjects(self):
         with tempfile.TemporaryDirectory() as directory:
