@@ -87,7 +87,7 @@ Declared fault rounds are:
 | Round | Exercise | Required recovery |
 | --- | --- | --- |
 | 2 (10 minutes) | Eight actual blocked filesystem reads, queued and active cancellation | Queued call never executes; useful sibling and same-session follow-up |
-| 4 (20 minutes) | Kill one owned useful collector | Production cleanup, lease reclamation within 15 seconds, useful sibling and fresh epoch |
+| 4 (20 minutes) | Kill one owned useful collector after reading an untrusted path | Production cleanup, lease reclamation within 15 seconds, useful sibling, fresh epoch, sticky derived-read Ask and useful follow-up |
 | 6 (30 minutes) | Kill the exact owned original filesystem server through a pidfd | Bounded descendant cleanup, useful Git sibling and fresh-authority read |
 | 8 (40 minutes) | Daemon outage before a forbidden FIFO proposal | No FIFO execution, explicit old-grant instance mismatch and useful fresh conversation |
 | 10 (50 minutes) | Accepted SOU-72 provenance-pressure control on the same binary | Saturation/eviction, sticky Ask after reclamation, hard Deny, independent publication and capacity recovery |

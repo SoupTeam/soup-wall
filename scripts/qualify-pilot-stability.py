@@ -245,6 +245,32 @@ class Pilot(P.Pilot):
         return {"passed": True, "target": injected, "cleanup": cleanup, "sibling_useful": True,
                 "fresh_authority": True, **self.preserve()}
 
+    def collector_recovery(self):
+        probe = P.SHARED.FifoProbe(self.workspace / "forbidden.fifo")
+        sticky = {}
+        def seed(client):
+            response, _ = client.exchange(P.frame(11, "filesystem", "read_text_file", {"path": "/workspace/source.txt"}))
+            require(P.BASE.result_text(response) == P.POINTER, "precrash_untrusted_reference_missing")
+            sticky["host_session"] = client.host_session
+        def verify(client):
+            require(client.host_session == sticky["host_session"], "reclaimed_host_context_changed")
+            response, _ = client.exchange(P.frame(11, "filesystem", "read_text_file", {"path": "/workspace/forbidden.fifo"}))
+            require(P.BASE.refused(response) and self.expected_refusal["rule"] in P.BASE.result_text(response),
+                    "collector_reclamation_lost_sticky_ask")
+            rows = [r for r in self.audit() if r.get("event") == "native_call"
+                    and r.get("host_session") == client.host_session and r.get("rule") == self.expected_refusal["rule"]]
+            require(len(rows) == 1 and rows[0].get("released") is False
+                    and rows[0].get("verdict") == self.expected_refusal["verdict"], "reclaimed_native_refusal_missing")
+            follow, _ = client.exchange(P.frame(12, "filesystem", "read_text_file", {"path": "/workspace/guide.txt"}))
+            require(P.BASE.result_text(follow) == P.BASE.TEXT, "sticky_ask_broke_allowed_follow_up")
+            sticky.update(native_rule=rows[0]["rule"], useful_follow_up=True)
+        try:
+            recovery = super().collector_recovery(before_crash=seed, after_reconnect=verify)
+        finally:
+            fifo = probe.finish()
+        require(not fifo["reader_seen"] and fifo["bytes_written"] == 0, "reclaimed_forbidden_read_executed")
+        return {**recovery, "sticky_risk_after_crash_and_reclamation": sticky, "forbidden_fifo": fifo}
+
 
 def workflows(pilot, label, count):
     batches = []
