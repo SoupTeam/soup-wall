@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::time::Instant;
 
+use super::DaemonSizeLimit;
 use super::{canonical, id, keys, line, not_classified, parse, sha, withheld, write};
 use super::{AdmittedTool, ClassificationAuthority, Collector, ProductionVerdict, Snapshot};
 use crate::mcp::{server_profile, server_sandbox};
@@ -23,6 +24,14 @@ const MAX_MESSAGES: usize = 8192;
 const MAX_PROGRESS: usize = 128;
 const MAX_JSON_DEPTH: usize = 20;
 const MAX_JSON_NODES: usize = 16_384;
+
+// Fixed, bounded, correlated refusals. Each names the specific limit; none
+// copies server bytes. A withheld result may already have been executed.
+const TEXT_BUDGET_MESSAGE: &str = "MCP result withheld: a result text exceeds the 262144-byte per-result budget; the original call may have executed";
+const FRAME_BUDGET_MESSAGE: &str = "MCP result withheld: the response frame exceeds the 1048576-byte envelope budget; the original call may have executed";
+const OVERSIZED_CONTROL_ERROR: &str = "oversized MCP control response";
+
+mod frames;
 
 struct Grant {
     call_id: Value,
@@ -433,10 +442,32 @@ async fn inspect(
     kind: &str,
 ) -> anyhow::Result<Option<Release>> {
     let boundary = collector.policy_boundary().await?;
-    let content = std::str::from_utf8(&raw).context("selected MCP result is not UTF-8")?;
-    let receipt = collector.event("result",json!({"tool":call.tool,"args":call.args,
+    let fields = |kind: &str, content: &str| {
+        json!({"tool":call.tool,"args":call.args,
         "call_id":grant.call_id,"expected_binding_sha256":grant.binding,
-        "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})).await?;
+        "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})
+    };
+    let content = std::str::from_utf8(&raw).context("selected MCP result is not UTF-8")?;
+    let (raw, receipt) = match collector.event("result", fields(kind, content)).await {
+        Ok(receipt) => (raw, receipt),
+        Err(failure) => {
+            // A size refusal leaves the grant unspent at the daemon. Spend it
+            // with a small correlated error instead of ending the session.
+            let limit = failure
+                .downcast_ref::<DaemonSizeLimit>()
+                .copied()
+                .ok_or(failure)?;
+            eprintln!(
+                "{}",
+                json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
+                    "limit":limit.code(),"observed_bytes":raw.len(),"released":false})
+            );
+            let replacement = error(&call.id, -32603, limit.message());
+            let content = std::str::from_utf8(&replacement).expect("fixed UTF-8 error");
+            let receipt = collector.event("result", fields("error", content)).await?;
+            (replacement, receipt)
+        }
+    };
     let raw = if receipt["release"] == true {
         raw
     } else {
@@ -604,7 +635,7 @@ where
     let mut snapshot: Option<Arc<Snapshot>> = None;
     let mut server_info = Value::Null;
     let mut client_partial = Vec::new();
-    let mut server_partial = Vec::new();
+    let mut server_frames = frames::ServerFrames::default();
     let mut messages = 0usize;
     let mut client_closed = false;
     loop {
@@ -1006,8 +1037,52 @@ where
                     }
                 }
             },
-            raw=line(server,&mut server_partial)=>{
-                let raw = raw?.context("selected MCP server closed with incomplete state")?;
+            next=server_frames.next(server)=>{
+                let raw = match next?.context("selected MCP server closed with incomplete state")? {
+                    frames::Frame::Line(raw) => raw,
+                    frames::Frame::Oversized(oversized) => {
+                        // Complete and well-formed, but over the envelope
+                        // budget: never buffered, parsed or released. The
+                        // validated top-level ID binds it to one admitted call.
+                        messages += 1;
+                        ensure!(messages <= MAX_MESSAGES, "selected MCP message count limit");
+                        let key = rpc_key(&oversized.id)?;
+                        ensure!(
+                            control.as_ref().is_none_or(|item| item.id != oversized.id),
+                            OVERSIZED_CONTROL_ERROR
+                        );
+                        ensure!(
+                            wire.remove(&key).is_some(),
+                            "unknown or duplicate MCP response ID"
+                        );
+                        let Some(call) = calls.get_mut(&key) else {
+                            continue;
+                        };
+                        let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
+                        let Phase::Running(grant) = phase else {
+                            ensure!(
+                                call.cancelled,
+                                "MCP response arrived in an invalid call phase"
+                            );
+                            continue;
+                        };
+                        eprintln!(
+                            "{}",
+                            json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
+                                "limit":"result_frame_bytes","budget_bytes":server_profile::RESULT_FRAME_BYTES,
+                                "observed_bytes":oversized.bytes,"released":false})
+                        );
+                        let input = detached(call);
+                        let replacement = error(&call.id, -32603, FRAME_BUDGET_MESSAGE);
+                        workers.push(Box::pin(async move {
+                            WorkEvent::Inspected(
+                                key,
+                                inspect(collector, &input, grant, replacement, "error").await,
+                            )
+                        }));
+                        continue;
+                    }
+                };
                 let value = parse(&raw)?;
                 bounded(&value, 0, &mut 0)?;
                 messages += 1;
@@ -1226,13 +1301,28 @@ where
                             inspect(collector, &input, grant, raw, &kind).await,
                         )
                     })),
-                    Err(_) => {
+                    Err(failure) => {
                         // Unsupported output is never partially released. A local
                         // error completes this reservation and leaves other calls usable.
+                        let budget = failure
+                            .downcast_ref::<crate::mcp::input::ResultBudgetExceeded>()
+                            .is_some();
+                        if budget {
+                            eprintln!(
+                                "{}",
+                                json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
+                                    "limit":"result_text_bytes","budget_bytes":server_profile::RESULT_TEXT_BYTES,
+                                    "observed_bytes":raw.len(),"released":false})
+                            );
+                        }
                         let replacement = error(
                             &call.id,
                             -32603,
-                            "Unsupported MCP result withheld by the selected output profile",
+                            if budget {
+                                TEXT_BUDGET_MESSAGE
+                            } else {
+                                "Unsupported MCP result withheld by the selected output profile"
+                            },
                         );
                         workers.push(Box::pin(async move {
                             WorkEvent::Inspected(
@@ -1359,6 +1449,12 @@ fn relay_failure_code(error: &anyhow::Error) -> &'static str {
                 return "response_shape_invalid"
             }
             "server response ID missing" => return "response_id_missing",
+            OVERSIZED_CONTROL_ERROR => return "control_frame_oversized",
+            frames::DRAIN_BYTES_ERROR => return "result_drain_bytes",
+            frames::DRAIN_TIME_ERROR => return "result_drain_time",
+            frames::MALFORMED_ERROR => return "result_frame_malformed",
+            frames::UNCORRELATED_ERROR => return "result_frame_uncorrelated",
+            frames::UNTERMINATED_ERROR => return "server_frame_unterminated",
             _ => {}
         }
     }

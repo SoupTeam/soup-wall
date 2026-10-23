@@ -945,6 +945,60 @@ struct ClassificationAuthority {
     https_get: bool,
 }
 
+/// The native daemon refused a request for its size. The daemon checks these
+/// limits before it reads or changes any call state, so the same grant can
+/// still be completed with a small correlated error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DaemonSizeLimit(pub(crate) &'static str);
+
+impl DaemonSizeLimit {
+    fn from_refusal(status: reqwest::StatusCode, body: &[u8]) -> Option<Self> {
+        let code = serde_json::from_slice::<Value>(body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("error_code")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            });
+        match code.as_deref() {
+            Some("native_record_over_cap") => Some(Self("native_record_over_cap")),
+            Some("native_content_over_cap") => Some(Self("native_content_over_cap")),
+            Some("native_body_over_cap") => Some(Self("native_body_over_cap")),
+            // A route body limit answers 413 without a native receipt body.
+            _ if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE => {
+                Some(Self("native_body_over_cap"))
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn code(self) -> &'static str {
+        self.0
+    }
+
+    /// Fixed host-visible text; never derived from daemon or server bytes.
+    pub(crate) fn message(self) -> &'static str {
+        match self.0 {
+            "native_record_over_cap" => "MCP result withheld: the native daemon record limit (native_record_over_cap) refused its size; the original call may have executed",
+            "native_content_over_cap" => "MCP result withheld: the native daemon content limit (native_content_over_cap) refused its size; the original call may have executed",
+            _ => "MCP result withheld: the native daemon body limit (native_body_over_cap) refused its size; the original call may have executed",
+        }
+    }
+}
+
+impl std::fmt::Display for DaemonSizeLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MCP admission request rejected: native daemon size limit ({})",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for DaemonSizeLimit {}
+
 pub struct Collector<'a> {
     config: &'a AdmissionCfg,
     host_session: Option<String>,
@@ -1196,6 +1250,9 @@ impl<'a> Collector<'a> {
                 "MCP admission response exceeds limit"
             );
             bytes.extend_from_slice(&chunk);
+        }
+        if let Some(limit) = DaemonSizeLimit::from_refusal(status, &bytes) {
+            return Err(limit.into());
         }
         ensure!(
             status.is_success(),
