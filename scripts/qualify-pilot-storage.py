@@ -172,6 +172,44 @@ class StoragePilot(PILOT.Pilot):
     daemon_fault = None
     retained_limit = 128
 
+    def retain_state(self, phase):
+        """Archive only owned workspace metadata and independent guard witnesses."""
+        index = getattr(self, "state_snapshot_count", 0)
+        require(index < 64, "storage_state_snapshot_count_bound")
+        require(self.receiver.bodies == [], "storage_snapshot_receiver_not_empty")
+        record = {"format": "sw-pilot-storage-state-snapshot/1", "phase": phase,
+                  "source": self.report.get("source_before"),
+                  "filesystem": PILOT.BASE.snapshot(self.workspace),
+                  "git": PILOT.BASE.snapshot(self.git_workspace),
+                  "foreign_file_sha256": sha(self.sentinel),
+                  "foreign_process": {"pid": self.unrelated.pid,
+                      "expected_start_time_ticks": self.unrelated_start,
+                      "observed_start_time_ticks": PILOT.BASE.ProcessWitness.identity(self.unrelated.pid),
+                      "alive": self.unrelated.poll() is None},
+                  "receiver": {"bodies": list(self.receiver.bodies)}}
+        retained = self.retain_json(f"state-snapshot-{index:02d}.json", record)
+        if not hasattr(self, "state_snapshots"):
+            self.state_snapshots = []
+        self.state_snapshots.append(retained)
+        self.state_snapshot_count = index + 1
+        return retained
+
+    def prepare(self, fault=None):
+        evidence = super().prepare(fault)
+        return {**evidence, "state_snapshot": self.retain_state("prepared")}
+
+    def preserve(self):
+        # The accepted independent assertions must succeed before archiving any
+        # apparent preservation. Never turn capture into a substitute for them.
+        evidence = super().preserve()
+        return {**evidence, "state_snapshot": self.retain_state("preserved")}
+
+    def cleanup(self):
+        evidence = super().cleanup()
+        # Base cleanup calls preserve before tearing down the guard process;
+        # keep its final snapshot reference alongside the earlier captures.
+        return {**evidence, "state_snapshots": list(getattr(self, "state_snapshots", []))}
+
     def start_daemon(self):
         if self.daemon_fault is None:
             return super().start_daemon()

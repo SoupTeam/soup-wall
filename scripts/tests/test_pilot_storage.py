@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -143,6 +144,74 @@ class FaultBoundaryControls(unittest.TestCase):
             self.assertEqual(fault.evidence(["write"])["injections"], 1)
             with self.assertRaises(STORAGE.Failure):
                 fault.evidence(["open"])
+
+
+class StateSnapshotControls(unittest.TestCase):
+    def pilot(self, root):
+        pilot = object.__new__(STORAGE.StoragePilot)
+        pilot.output = root / "evidence"
+        pilot.output.mkdir()
+        pilot.workspace, pilot.git_workspace, pilot.home = root / "filesystem", root / "git", root / "home"
+        for path in (pilot.workspace, pilot.git_workspace, pilot.home):
+            path.mkdir()
+        (pilot.workspace / "guide.txt").write_text("owned guide")
+        (pilot.git_workspace / "tracked.txt").write_text("owned history")
+        (pilot.home / "native-token").write_text("private-token-must-not-be-archived")
+        (pilot.home / "config.yaml").write_text("private-config-must-not-be-archived")
+        pilot.sentinel = root / "foreign.txt"
+        pilot.sentinel.write_text("owned unrelated guard")
+        pilot.unrelated = SimpleNamespace(pid=12345, poll=lambda: None)
+        pilot.unrelated_start = 67890
+        pilot.receiver = SimpleNamespace(bodies=[])
+        pilot.secrets = ["private-token-must-not-be-archived"]
+        pilot.report = {"source_before": {"commit": "a" * 40, "dirty": False}}
+        return pilot
+
+    def test_archived_baseline_and_preserved_maps_match_and_exclude_private_home(self):
+        with tempfile.TemporaryDirectory() as folder:
+            pilot = self.pilot(Path(folder))
+            with patch.object(STORAGE.PILOT.Pilot, "prepare", return_value={"installed": True}) as prepare, \
+                 patch.object(STORAGE.PILOT.Pilot, "preserve", return_value={"unchanged": True}) as preserve, \
+                 patch.object(STORAGE.PILOT.BASE.ProcessWitness, "identity", return_value=67890):
+                baseline = pilot.prepare()["state_snapshot"]
+                current = pilot.preserve()["state_snapshot"]
+            prepare.assert_called_once_with(None)
+            preserve.assert_called_once_with()
+            self.assertNotEqual(baseline["file"], current["file"])
+            records = []
+            for reference in (baseline, current):
+                path = pilot.output / reference["file"]
+                self.assertEqual(STORAGE.sha(path), reference["sha256"])
+                raw = path.read_text()
+                self.assertNotIn("private-token", raw)
+                self.assertNotIn("private-config", raw)
+                record = json.loads(raw)
+                self.assertNotIn("home", record)
+                self.assertEqual(record["foreign_process"], {"pid": 12345, "expected_start_time_ticks": 67890,
+                    "observed_start_time_ticks": 67890, "alive": True})
+                self.assertEqual(record["receiver"], {"bodies": []})
+                self.assertEqual(record["foreign_file_sha256"], STORAGE.sha(pilot.sentinel))
+                records.append(record)
+            self.assertEqual(records[0]["filesystem"], STORAGE.PILOT.BASE.snapshot(pilot.workspace))
+            self.assertEqual(records[0]["filesystem"], records[1]["filesystem"])
+            self.assertEqual(records[0]["git"], records[1]["git"])
+            self.assertEqual([record["phase"] for record in records], ["prepared", "preserved"])
+            with patch.object(STORAGE.PILOT.Pilot, "cleanup", return_value={"all_owned_processes_stopped": True}):
+                self.assertEqual(pilot.cleanup()["state_snapshots"], [baseline, current])
+
+    def test_preservation_or_capture_failure_is_not_hidden(self):
+        with tempfile.TemporaryDirectory() as folder:
+            pilot = self.pilot(Path(folder))
+            with patch.object(STORAGE.PILOT.Pilot, "preserve", side_effect=STORAGE.Failure("workspace_effect_detected")), \
+                 patch.object(pilot, "retain_state") as capture:
+                with self.assertRaisesRegex(STORAGE.Failure, "workspace_effect_detected"):
+                    pilot.preserve()
+                capture.assert_not_called()
+            with patch.object(STORAGE.PILOT.Pilot, "preserve", return_value={"unchanged": True}), \
+                 patch.object(pilot, "retain_state", side_effect=OSError("owned write failure")):
+                with self.assertRaises(OSError):
+                    pilot.preserve()
+            self.assertEqual(list(pilot.output.iterdir()), [])
 
 
 @unittest.skipUnless(sys.platform == "linux" and shutil.which("cc"), "Linux C loader fixture required")
