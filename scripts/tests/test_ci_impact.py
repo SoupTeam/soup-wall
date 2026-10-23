@@ -91,6 +91,8 @@ class ImpactTests(unittest.TestCase):
             registered = set(re.findall(r"(?m)^  ([a-z][a-z0-9-]*):\s*$",
                                         text.split("jobs:\n", 1)[1]))
             auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
+            if filename == "mcp-real-filesystem.yml":
+                auxiliary.add("manual-long-session")
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
