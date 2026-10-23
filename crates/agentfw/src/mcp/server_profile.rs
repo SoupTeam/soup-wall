@@ -691,7 +691,10 @@ fn package_tree_sha256_with(
                 "invalid MCP package path"
             );
             let metadata = fs::symlink_metadata(entry.path())?;
-            verification.entry(&entry.path())?;
+            let descriptor_leaf = cfg!(target_os = "linux") && metadata.is_file();
+            if !descriptor_leaf {
+                verification.entry(&entry.path())?;
+            }
             let record = if metadata.is_symlink() {
                 let target = fs::read_link(entry.path())?;
                 ensure!(!target.is_absolute(), "MCP package link must be relative");
@@ -732,10 +735,12 @@ fn package_tree_sha256_with(
                     .checked_add(metadata.len())
                     .context("MCP package size overflow")?;
                 ensure!(*bytes <= MAX_TREE_BYTES, "MCP package byte limit");
-                let digest = verification.digest(&entry.path(), metadata.len())?;
+                let digest = verification.tree_digest(&entry.path(), &metadata)?;
                 format!("F\0{name}\0{digest}\n").into_bytes()
             };
-            verification.entry(&entry.path())?;
+            if !descriptor_leaf {
+                verification.entry(&entry.path())?;
+            }
             ensure!(
                 entries.insert(name.to_owned(), record).is_none()
                     && entries.len() <= MAX_TREE_FILES,

@@ -154,3 +154,12 @@ runner budget: two existing 3600-second measurement-side budgets plus bounded
 setup/preflight. The complete baseline alone took approximately 49 minutes in
 the retained attempt. Ordinary PR/native jobs retain 65 minutes. Host, approval,
 call and per-case deadlines are unchanged; a slow sample still misses 3000 ms.
+
+For regular Linux package-tree leaves, verification uses the existing opened
+read descriptor for canonical identity and hashes/proofs. It compares the walk's
+lstat identity before the read and a fresh lstat plus descriptor identity afterward.
+The walker retains canonical identity and before/after validation for every
+ancestor directory and symlink. This avoids repeated O_PATH opens of the same
+regular leaf without treating metadata as content authority. Files without a
+valid retained kernel proof are still hashed; standalone runtime/library paths
+keep the full independent path checks.

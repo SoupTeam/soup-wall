@@ -27,6 +27,14 @@ worker threads using successful kernel clone lineage. Actual installed-profile
 capture/resume now runs before any long measurement. A fresh complete native
 result remains required; local correction checks do not claim its success.
 
+`native-attempt4-preflight.json` records source `77fae98`: real installed-profile
+capture/resume passed, but the traced host's package-tree capture did not finish
+before the unchanged pending witness deadline. Runtime/library capture completed
+in 1466.78 ms. The descriptor-tree correction removes repeated regular-leaf
+path opens while retaining the complete metadata/content checks and all parent
+closure checks. `descriptor-tree-correction.json` records passing local checks;
+its Linux branch and performance still require fresh native qualification.
+
 The sections below are historical checkpoints, not current readiness claims.
 
 ## Verified input reuse follow-up

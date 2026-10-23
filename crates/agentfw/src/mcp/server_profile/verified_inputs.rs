@@ -30,10 +30,18 @@ struct Identity {
 
 impl Identity {
     fn read(path: &Path, metadata: &fs::Metadata) -> anyhow::Result<Self> {
+        Self::with_canonical(path, metadata, canonical_identity(path, metadata)?)
+    }
+
+    fn with_canonical(
+        _path: &Path,
+        metadata: &fs::Metadata,
+        canonical: PathBuf,
+    ) -> anyhow::Result<Self> {
         #[cfg(unix)]
         use std::os::unix::fs::MetadataExt;
         Ok(Self {
-            canonical: canonical_identity(path, metadata)?,
+            canonical,
             kind: metadata.file_type(),
             size: metadata.len(),
             modified: metadata.modified()?,
@@ -50,8 +58,28 @@ impl Identity {
                 metadata.mtime_nsec() as u64,
             ],
             #[cfg(windows)]
-            windows: windows_identity(path, metadata)?,
+            windows: windows_identity(_path, metadata)?,
         })
+    }
+    fn read_open(path: &Path, file: &fs::File) -> anyhow::Result<Self> {
+        let metadata = file.metadata()?;
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd;
+            let canonical = fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))
+                .or_else(|_| path.canonicalize())?;
+            ensure!(
+                canonical.is_absolute(),
+                "selected asset canonical identity invalid"
+            );
+            Self::with_canonical(path, &metadata, canonical)
+        }
+        #[cfg(not(target_os = "linux"))]
+        Self::read(path, &metadata)
+    }
+
+    fn matches_metadata(&self, path: &Path, metadata: &fs::Metadata) -> anyhow::Result<bool> {
+        Ok(*self == Self::with_canonical(path, metadata, self.canonical.clone())?)
     }
 }
 
@@ -188,6 +216,10 @@ impl Verification<'_> {
             return Ok(());
         }
         let identity = Identity::read(path, &fs::symlink_metadata(path)?)?;
+        self.observe_identity(path, identity)
+    }
+
+    fn observe_identity(&mut self, path: &Path, identity: Identity) -> anyhow::Result<()> {
         match self {
             Self::Full => return Ok(()),
             Self::Capture(inputs) => {
@@ -207,6 +239,47 @@ impl Verification<'_> {
     }
 
     pub(super) fn digest(&mut self, path: &Path, size: u64) -> anyhow::Result<String> {
+        self.digest_with(path, size, None)
+    }
+
+    pub(super) fn tree_digest(
+        &mut self,
+        path: &Path,
+        metadata: &fs::Metadata,
+    ) -> anyhow::Result<String> {
+        self.digest_with(path, metadata.len(), Some(metadata))
+    }
+
+    fn close_identity(
+        &mut self,
+        path: &Path,
+        file: &fs::File,
+        before: &Identity,
+        tree: bool,
+    ) -> anyhow::Result<()> {
+        if tree {
+            let after = Identity::read_open(path, file)?;
+            ensure!(
+                after == *before && before.matches_metadata(path, &fs::symlink_metadata(path)?)?,
+                "selected asset changed during verification"
+            );
+            self.observe_identity(path, after)
+        } else {
+            ensure!(
+                Identity::read(path, &file.metadata()?)? == *before
+                    && Identity::read(path, &fs::metadata(path)?)? == *before,
+                "selected asset metadata changed during verification"
+            );
+            self.entry(path)
+        }
+    }
+
+    fn digest_with(
+        &mut self,
+        path: &Path,
+        size: u64,
+        tree_metadata: Option<&fs::Metadata>,
+    ) -> anyhow::Result<String> {
         if matches!(self, Self::Full) {
             let file = super::open_regular(path)?;
             let mut hash = Sha256::new();
@@ -214,13 +287,32 @@ impl Verification<'_> {
             ensure!(count == size, "selected asset changed during hashing");
             return Ok(format!("{:x}", hash.finalize()));
         }
-        self.entry(path)?;
+        // Only the package walker uses this path: it binds every ancestor
+        // directory before/after descent and handles symlinks separately. A
+        // regular leaf is bound by its exact opened descriptor plus both lstat
+        // observations; no extra ancestor traversal/O_PATH open is necessary.
+        let tree = cfg!(target_os = "linux") && tree_metadata.is_some();
+        if !tree {
+            self.entry(path)?;
+        }
         let mut file = super::open_regular(path)?;
-        let before = Identity::read(path, &file.metadata()?)?;
+        let before = if tree {
+            Identity::read_open(path, &file)?
+        } else {
+            Identity::read(path, &file.metadata()?)?
+        };
+        let same_path = if let Some(metadata) = tree_metadata.filter(|_| tree) {
+            metadata.is_file() && before.matches_metadata(path, metadata)?
+        } else {
+            Identity::read(path, &fs::metadata(path)?)? == before
+        };
         ensure!(
-            before.size == size && Identity::read(path, &fs::metadata(path)?)? == before,
+            before.size == size && same_path,
             "selected asset size changed during verification"
         );
+        if tree {
+            self.observe_identity(path, before.clone())?;
+        }
         let verity = measure(&file)?;
         let previous = match self {
             Self::Resume(inputs) => Some(
@@ -250,13 +342,8 @@ impl Verification<'_> {
                 );
             }
             if previous.verity.is_some() || previous.lease.is_some() {
-                ensure!(
-                    Identity::read(path, &file.metadata()?)? == before
-                        && Identity::read(path, &fs::metadata(path)?)? == before,
-                    "selected asset metadata changed during verification"
-                );
+                self.close_identity(path, &file, &before, tree)?;
                 let sha256 = previous.sha256.clone();
-                self.entry(path)?;
                 return Ok(sha256);
             }
         }
@@ -277,12 +364,8 @@ impl Verification<'_> {
         };
         let mut hash = Sha256::new();
         let count = std::io::copy(&mut file.by_ref().take(size + 1), &mut hash)?;
-        ensure!(
-            count == size
-                && Identity::read(path, &file.metadata()?)? == before
-                && Identity::read(path, &fs::metadata(path)?)? == before,
-            "selected asset changed during hashing"
-        );
+        ensure!(count == size, "selected asset changed during hashing");
+        self.close_identity(path, &file, &before, tree)?;
         let sha256 = format!("{:x}", hash.finalize());
         if let Some(lease) = &lease {
             ensure!(
@@ -312,7 +395,6 @@ impl Verification<'_> {
                 );
             }
         }
-        self.entry(path)?;
         Ok(sha256)
     }
 }
@@ -493,6 +575,68 @@ mod tests {
         inputs.entries.insert(path.clone(), current.clone());
         inputs.files.get_mut(&path).unwrap().identity = current;
         assert!(Verification::Resume(&inputs).digest(&path, 8).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn descriptor_tree_leaf_refuses_stale_observation_and_all_mutations() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        for mutation in ["mode", "replacement", "link", "bytes"] {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("asset");
+            fs::write(&path, b"original").unwrap();
+            let mut inputs = Inputs::default();
+            let metadata = fs::symlink_metadata(&path).unwrap();
+            let digest = Verification::Capture(&mut inputs)
+                .tree_digest(&path, &metadata)
+                .unwrap();
+            assert_eq!(
+                Verification::Resume(&inputs)
+                    .tree_digest(&path, &metadata)
+                    .unwrap(),
+                digest
+            );
+            match mutation {
+                "mode" => fs::set_permissions(&path, fs::Permissions::from_mode(0o400)).unwrap(),
+                "replacement" => {
+                    fs::rename(&path, root.path().join("old")).unwrap();
+                    fs::write(&path, b"original").unwrap();
+                }
+                "link" => {
+                    fs::rename(&path, root.path().join("old")).unwrap();
+                    symlink("old", &path).unwrap();
+                }
+                _ => fs::write(&path, b"tampered").unwrap(),
+            }
+            // Stale read_dir metadata cannot authorize a changed inode/link.
+            assert!(Verification::Resume(&inputs)
+                .tree_digest(&path, &metadata)
+                .is_err());
+            let current = fs::symlink_metadata(&path).unwrap();
+            assert!(Verification::Resume(&inputs)
+                .tree_digest(&path, &current)
+                .is_err());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn descriptor_tree_metadata_is_never_content_authority() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("asset");
+        fs::write(&path, b"original").unwrap();
+        let mut inputs = Inputs::default();
+        Verification::Capture(&mut inputs)
+            .tree_digest(&path, &fs::symlink_metadata(&path).unwrap())
+            .unwrap();
+        fs::write(&path, b"tampered").unwrap();
+        let file = fs::File::open(&path).unwrap();
+        let current = Identity::read_open(&path, &file).unwrap();
+        inputs.entries.insert(path.clone(), current.clone());
+        inputs.files.get_mut(&path).unwrap().identity = current;
+        assert!(Verification::Resume(&inputs)
+            .tree_digest(&path, &fs::symlink_metadata(&path).unwrap())
+            .is_err());
     }
 
     #[test]
