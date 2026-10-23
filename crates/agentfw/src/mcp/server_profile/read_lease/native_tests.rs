@@ -85,10 +85,7 @@ fn leased(required: bool) -> Option<Leased> {
     let Some(guard) = proof else {
         assert!(
             !required,
-            "native qualification needs an unprivileged owner and working local read leases; local={}, uid={}, euid={}",
-            local(&fixture.file),
-            fixture.file.metadata().unwrap().uid(),
-            unsafe { libc::geteuid() }
+            "native qualification needs an unprivileged owner and working local read leases"
         );
         eprintln!(
             "sou124_native_read_lease: unsupported fixture; asserting fullhash fallback; native fast path remains unqualified"
@@ -487,7 +484,10 @@ fn only_explicit_local_filesystem_types_are_eligible() {
 #[test]
 fn unprivileged_caller_cannot_lease_foreign_owned_files() {
     let file = File::open("/bin/sh").unwrap();
-    assert_eq!(file.metadata().unwrap().uid(), 0);
+    assert!(
+        file.metadata().unwrap().uid() == 0,
+        "fixture must be root owned"
+    );
     if unsafe { libc::geteuid() } == 0 {
         // Root is the owner here, so this fixture cannot prove foreign-owner
         // refusal. The mandatory native qualification separately forbids root.
@@ -501,9 +501,8 @@ fn unprivileged_caller_cannot_lease_foreign_owned_files() {
 #[test]
 #[ignore = "native Linux qualification: set SOU124_LEASE_FIXTURE_DIR on an allowed local filesystem and run as its unprivileged owner"]
 fn native_read_lease_fast_path_qualification_requires_real_proofs() {
-    assert_ne!(
-        unsafe { libc::geteuid() },
-        0,
+    assert!(
+        unsafe { libc::geteuid() } != 0,
         "use an unprivileged fixture owner"
     );
     reuse_control(true);
