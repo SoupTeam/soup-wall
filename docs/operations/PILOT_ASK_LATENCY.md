@@ -1,6 +1,6 @@
 # Original-server Ask latency (SOU-124, development)
 
-This implementation uses accepted `main` `6fdbc56`. It profiles the approved
+This implementation uses accepted `main` `acf59af`. It profiles the approved
 path and retains per-Ask verified inputs with kernel fs-verity or a bounded local
 read lease. macOS development checks pass; native before/after qualification is
 required before claiming the p95 target. A missing or missed target stays an
