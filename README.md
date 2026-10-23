@@ -8,6 +8,34 @@
 [![Supply chain](https://github.com/SoupTeam/soup-wall/actions/workflows/supply-chain.yml/badge.svg)](https://github.com/SoupTeam/soup-wall/actions/workflows/supply-chain.yml)
 ![Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)
 
+## Try the Linux pilot
+
+The supported two-server pilot runs as an ordinary user on **native Ubuntu
+24.04 x86_64**. Start with the [first-use walkthrough](docs/operations/PILOT_QUICKSTART.md)
+to build the selected Agent, prepare pinned filesystem/Git servers and run the
+actual Claude Code host against a local scripted provider. The walkthrough uses
+synthetic files and needs no model account or provider credentials.
+
+From a clean checkout, inspect the demo without launching or downloading anything:
+
+```sh
+python3 -B scripts/pilot-demo.py
+```
+
+After completing the walkthrough's preparation, run its emitted selection:
+
+```sh
+python3 -B scripts/pilot-demo.py --run \
+  --selection "$selection" --expected-commit "$commit" \
+  --output "$HOME/pilot-demo-result-1"
+```
+
+Preparation alone does not activate protection. A passing demo proves the
+documented synthetic calls and recovery controls for its recorded inputs;
+live-model effectiveness remains unmeasured. Windows has a separate
+[native onboarding guide](docs/operations/WINDOWS_ONBOARDING.md). WSL and macOS
+are outside this Linux pilot's supported platform.
+
 ## Choose where to start
 
 Joining the development team? Start with the [development guide](docs/DEVELOPMENT.md), then read [CONTRIBUTING.md](CONTRIBUTING.md). The [documentation index](docs/README.md) links setup, architecture, operator procedures, and verification evidence.

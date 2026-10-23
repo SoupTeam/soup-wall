@@ -1617,6 +1617,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_measurement.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_run.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_demo.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_build_native_pilot_inputs.py -v
@@ -1917,6 +1918,15 @@ jobs:
           values['qualification_seconds'] = round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3)
           path.write_text(json.dumps(values, sort_keys=True) + '\n')
           PY
+      - name: Run the first-use demo through the prepared original host
+        shell: bash
+        run: |
+          set -euo pipefail
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          cd "$HOME"
+          python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" \
+            --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou120-demo"
       - name: Qualify owned prepared-selection launch and failures with the original host
         shell: bash
         run: |
@@ -1966,6 +1976,7 @@ jobs:
             ${{ runner.temp }}/sou111-assets/recovered.json
             ${{ runner.temp }}/sou111-qualification/**
             ${{ runner.temp }}/sou116-qualification/report.json
+            ${{ runner.temp }}/sou120-demo/report.json
             ${{ runner.temp }}/sou111-qualification/filesystem-sandbox.log
             ${{ runner.temp }}/sou111-qualification/git-sandbox.log
             ${{ runner.temp }}/sou111-qualification/sandbox-positive-failure.txt
