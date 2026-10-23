@@ -388,6 +388,8 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt
       - uses: Swatinem/rust-cache@v2
       - name: Focused preparation boundaries
         env:
