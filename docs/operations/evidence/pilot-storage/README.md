@@ -1,22 +1,29 @@
 # Pilot storage recovery evidence
 
-The [initial native report](native-report-initial.json) contains all 23 required passed cases
-from exact clean commit `2e57584c861c0a0ab0c29d2c487598fb4ca0aee8`, tree
-`cc1836c254dbf225995954adf8bddb2975f026f1`. The
-[native Ubuntu run](https://github.com/SoupTeam/soup-wall/actions/runs/39996830900)
+The [final native report](native-report.json) contains all 23 required passed cases
+from exact clean commit `7008678508c180f25fdffb97bc900b1d8a70ef39`, tree
+`cf18b6813fc31bdef2fefce2bd6d1dd6af51ecab`. The
+[native Ubuntu run](https://github.com/SoupTeam/soup-wall/actions/runs/39999978938)
 succeeded as a non-root operator. The selected original filesystem/Git servers
 and actual Claude Code host used an owned loopback scripted provider.
 
-[Initial verification metadata](verification-initial.json) records the independently checked
-archive/report hashes, 81 referenced file hash checks, source identities and
-test counts. It also separates WSL unit/helper checks and the native Python
+[Verification metadata](verification.json) records the independently checked
+archive/report hashes, 106 file reference checks covering 94 unique files,
+nine publication traces, source identities and test counts. It separates the native Python
 suite's one skipped adjacent cleanup control. The native job's separate cleanup
 qualification passed; the 23 storage cases have no skips or missing cases.
+The [final independent review](independent-review-final.json) rechecks the
+contracts and all 13 raw state snapshots from the downloaded archive.
 
 The native report retains publication outcomes, calibration, old/new daemon
 instances, explicit stale-authority refusal, useful original-server recovery,
 zero forbidden FIFO effects, foreign-process/file and workspace snapshots, and
-bounded process cleanup. Artifact `12521411043` retains the supporting sanitized
+bounded process cleanup. All 13 detailed owned-state snapshots were independently
+compared: filesystem/Git maps, foreign file and process identity stayed equal,
+and receiver journals were empty. The [baseline and final state maps](state-snapshots.json)
+remain in this PR along with all 13 original snapshot references. They contain
+metadata and content hashes of synthetic owned workspaces, not daemon home,
+configuration, tokens or authority. Artifact `12522700825` retains the supporting sanitized
 owned logs, wire records, event witnesses and publication traces under the job's
 normal seven-day development retention.
 
@@ -30,8 +37,12 @@ The faults are scoped to disposable owned paths. They do not establish physical
 capacity/quota limits, power-loss behavior, WSL full qualification or live-model
 effectiveness. Admission and main integration remain reviewer/TL work.
 
-The [independent artifact review](independent-review-initial.json) confirms these
-results and records their limits. Detailed file-state maps and the foreign
-process identity were originally checked by runner assertions but retained only
-as digest/boolean witnesses. A follow-up qualification will retain those safe
-owned-state snapshots explicitly, while preserving this initial successful run.
+The [initial report](native-report-initial.json),
+[initial verification](verification-initial.json) and
+[initial independent review](independent-review-initial.json) preserve the earlier
+successful run on `2e57584c`, before detailed snapshot retention was added. WSL
+unit/helper evidence is recorded separately there and is not native acceptance.
+
+This evidence is added after the final qualified commit. Only evidence
+documentation changes follow that commit; no runtime or qualification source
+changed after the final native run.
