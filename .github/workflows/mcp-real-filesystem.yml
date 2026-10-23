@@ -113,6 +113,17 @@ jobs:
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git "$RUNNER_TEMP/sou100-git-source/git" \
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --strace /usr/bin/strace --output "$RUNNER_TEMP/sou99-original-launcher"
+      - name: SOU-117 untrusted project configuration through the pinned actual host
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s scripts/tests -p test_project_isolation.py -v
+          python3 -B scripts/qualify-project-isolation.py \
+            --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git "$RUNNER_TEMP/sou100-git-source/git" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --strace /usr/bin/strace --output "$RUNNER_TEMP/sou117-project-isolation"
       - name: SOU-112 run-scoped operator Ask through actual pilot launcher
         shell: bash
         run: |
@@ -297,6 +308,7 @@ jobs:
         with:
           name: sou62-real-filesystem-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou117-project-isolation/report.json
             ${{ runner.temp }}/sou110-literals.log
             ${{ runner.temp }}/sou110-literals/report.json
             ${{ runner.temp }}/sou110-literals/*.log
