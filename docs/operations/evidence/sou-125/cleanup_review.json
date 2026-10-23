@@ -23,7 +23,7 @@
     "machine": "arm64"
   },
   "changes": [
-    "Added exact-owner namespace cleanup obligation registration and discharge at /native/v1/pilot-cleanup.",
+    "Added exact-owner namespace cleanup obligation registration and discharge at /native/pilot-cleanup/v1.",
     "Integrated authenticated terminal disposition confirmation in pilot-run.py and qualified stop witness in prepared_stop_witness.py.",
     "Synchronized host readiness via lifecycle_ready and verified host-crash qualification in qualify-prepared-pilot-run.py."
   ],

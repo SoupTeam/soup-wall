@@ -15,7 +15,7 @@ original source attribution.
 ## Cleanup confirmation and terminal disposition follow-up
 
 `cleanup_review.json` records implementation `219acb2` and the exact source hashes
-after adding exact-owner namespace cleanup obligations at `/native/v1/pilot-cleanup`,
+after adding exact-owner namespace cleanup obligations at `/native/pilot-cleanup/v1`,
 authenticated terminal disposition confirmation in `pilot-run.py`, and prepared stop
 witness qualification in `scripts/prepared_stop_witness.py`.
 The complete Rust workspace passes with 1671 passed, 0 failed and 13 ignored;
