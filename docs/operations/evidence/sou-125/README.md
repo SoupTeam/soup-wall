@@ -1,4 +1,16 @@
-# SOU-125 development evidence
+# SOU-125 evidence
+
+## Current native qualification
+
+`native-linux.json` retains the bounded report from native Ubuntu 24.04 job
+`120504983982`, run `39975116499`, on exact clean source `d5d7813`. All eleven
+prepared-run lifecycle controls and four stop scenarios passed. It includes
+actual concurrent original hosts/servers, selected-only process cleanup, useful
+peer progress, no future dispatch, interrupted stop and honest partial failures.
+Raw traces and credentials are excluded; this is scripted-provider qualification,
+not live-model effectiveness. Historical local-only reports below retain their
+original source attribution.
+
 
 ## Cleanup confirmation and terminal disposition follow-up
 
@@ -69,12 +81,9 @@ call initially omitted the previously read untrusted content. The final test
 reflects that content, checks shared-host taint before and after stop, and pins
 the existing `deny-tainted-destructive` rule; the detector/policy was not changed.
 
-## Explicit qualification blocker
+## Historical platform limitation
 
-The actual preparation platform probe refused this macOS arm64 host with
-`native_linux_x86_64_required`, without starting a process. The new Linux pidfd
-path and real host/collector cleanup have **not** been executed here. Two actual
-prepared runs plus an unrelated listener/process, zero future dispatch/orphans,
-host crash, daemon loss, stale/PID-reuse records, cancellation and interrupted
-cleanup still need exact-source native Linux witnesses. The PR remains Draft;
-there is no production-stop or live-model effectiveness certification here.
+The initial local macOS arm64 probe refused native Linux execution with
+`native_linux_x86_64_required`. That diagnostic remains valid for the local host.
+The current native Ubuntu evidence above closes this platform qualification gap
+for its exact source; it does not relabel earlier local-only reports.

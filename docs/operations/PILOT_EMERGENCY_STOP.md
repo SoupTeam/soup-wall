@@ -1,10 +1,10 @@
-# Stop one owned pilot run (SOU-125, development slice)
+# Stop one owned pilot run (SOU-125)
 
-This branch starts independently from accepted `main`
-`cdd9d36c65a592455e4f421268758adb6db744b8`. It extends the existing launcher and
-native session lifecycle; it does not add a service manager or remove installed
-asset generations. Keep the PR Draft until the Linux acceptance controls below
-have run on its exact source.
+This implementation uses accepted `main` `6fdbc56` and extends the existing
+launcher and native session lifecycle. The exact-source native Ubuntu 24.04
+qualification is retained in `evidence/sou-125/native-linux.json`. It uses the
+original host and installed servers with an owned scripted loopback provider;
+it does not measure live-model effectiveness.
 
 ## Baseline lifecycle inventory
 
@@ -115,11 +115,17 @@ wrong auth/host/instance/registry, malformed authority maps and fresh authority.
 Receipt tests cover exact run bytes, authentication, monotonic transitions and
 linked-file refusal. These tests do not prove real host process cleanup.
 
-Still required on current source: two simultaneous actual prepared runs plus an
-unrelated listener/process, selected-host and both-collector termination, zero
-future dispatch, no orphan children, a useful task on the other run, daemon loss,
-host crash, cancellation, stale/PID-reuse records, interrupted cleanup and hard
-Deny after reconnect. Retain sanitized original-server/kernel witnesses and
-failed attempts. This branch makes no native-host or safe-restart qualification
-claim until those controls pass. No paid provider calls, real secrets, private
-datasets, public release, CI-admission change or expensive duplicate matrix.
+Native Ubuntu 24.04 qualification on `d5d7813` passed all eleven prepared-run
+lifecycle controls and four emergency-stop scenarios. Two simultaneous actual
+prepared runs and an unrelated listener/process were observed: only the selected
+run stopped, its host, both collectors and namespace helpers disappeared, no
+future original dispatch occurred, and the peer completed useful filesystem and
+Git operations after the stop. Interrupted stop resumed successfully; daemon
+loss and frozen namespace cleanup retained honest incomplete outcomes.
+
+Stale/foreign record controls include forged process-start ticks; they do not
+claim to force kernel PID reuse. Native cancellation and host-crash controls
+also passed. Unit/router controls separately cover spent grant/receipt replay,
+fresh authority and shared-host hard Deny after reconnect. Raw authority,
+provider contents and syscall traces are excluded from retained evidence. No
+paid provider calls, real secrets, private datasets or public release are used.
