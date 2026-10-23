@@ -44,12 +44,12 @@ described in the [runtime preparation guide](PILOT_RUNTIME_PREPARATION.md).
 ```bash
 native_args=(--output "$assets/native" --expected-commit "$commit" --allow-download)
 python3 -B "$repo/scripts/prepare-native-pilot-prerequisites.py" "${native_args[@]}"
-time python3 -B "$repo/scripts/prepare-native-pilot-prerequisites.py" --prepare \
-  "${native_args[@]}" > "$assets/native-result.json" 2> "$assets/native-timing.log"
+{ time python3 -B "$repo/scripts/prepare-native-pilot-prerequisites.py" --prepare \
+  "${native_args[@]}" > "$assets/native-result.json"; } 2> "$assets/native-timing.log"
 source_args=(--output "$assets/agent" --expected-commit "$commit")
 python3 -B "$repo/scripts/build-native-pilot-inputs.py" "${source_args[@]}"
-time python3 -B "$repo/scripts/build-native-pilot-inputs.py" --build \
-  "${source_args[@]}" > "$assets/agent-result.json" 2> "$assets/agent-timing.log"
+{ time python3 -B "$repo/scripts/build-native-pilot-inputs.py" --build \
+  "${source_args[@]}" > "$assets/agent-result.json"; } 2> "$assets/agent-timing.log"
 field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2"; }
 git_path="$(field "$assets/native-result.json" git)"
 bwrap_path="$(field "$assets/native-result.json" bwrap)"
@@ -94,8 +94,8 @@ prep_args=(--output "$assets/prepared" --expected-commit "$commit"
   --git-classifier "$repo/rule_baseline/git_readonly_v1/rule_baseline.py"
   --policy "$assets/policy.yaml" --allow-download)
 python3 -B "$repo/scripts/prepare-installed-pilot.py" "${prep_args[@]}"
-time python3 -B "$repo/scripts/prepare-installed-pilot.py" --prepare \
-  "${prep_args[@]}" > "$assets/prepared-result.json" 2> "$assets/prepared-timing.log"
+{ time python3 -B "$repo/scripts/prepare-installed-pilot.py" --prepare \
+  "${prep_args[@]}" > "$assets/prepared-result.json"; } 2> "$assets/prepared-timing.log"
 selection="$(field "$assets/prepared-result.json" selection)"
 ```
 
@@ -110,9 +110,9 @@ Use a fresh result directory and an unused prepared generation. The four fixture
 names listed in the demo script must be absent. Existing files cause a refusal.
 
 ```bash
-time python3 -B "$repo/scripts/pilot-demo.py" --run \
+{ time python3 -B "$repo/scripts/pilot-demo.py" --run \
   --selection "$selection" --expected-commit "$commit" \
-  --output "$HOME/pilot-demo-result-1" > "$assets/demo-result.json" 2> "$assets/demo-timing.log"
+  --output "$HOME/pilot-demo-result-1" > "$assets/demo-result.json"; } 2> "$assets/demo-timing.log"
 python3 -m json.tool "$HOME/pilot-demo-result-1/report.json"
 ```
 
