@@ -237,6 +237,20 @@ def check_compiler(report, root, pins, lane="main"):
                 "host": host and host.group(1), "cargo_release": cargo and cargo.group(1)}
     report.resolved["compiler"] = resolved
     problems = []
+    # Hash the executables that were actually selected, not only their reported versions.
+    sysroot_code, sysroot_out = run(["rustc", "--print", "sysroot"], cwd=root)
+    executables = {}
+    if sysroot_code != 0 or not sysroot_out.strip():
+        problems.append("could not resolve the rustc sysroot to hash the selected executables")
+    else:
+        for name in ("rustc", "cargo"):
+            path = Path(sysroot_out.strip().splitlines()[0]) / "bin" / name
+            try:
+                real = path.resolve(strict=True)
+                executables[name] = {"path": str(real), "sha256": sha256_file(real)}
+            except (OSError, Refusal) as error:
+                problems.append("%s executable could not be hashed: %s" % (name, str(error)[:80]))
+    resolved["executables"] = executables
     if resolved["rustc_release"] != rust["version"]:
         problems.append(f"rustc {resolved['rustc_release']} is not the pinned {rust['version']}")
     if rust["commit_prefix"] is None:

@@ -20,6 +20,7 @@ VERIFY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(VERIFY)
 
 RUSTC = """#!/bin/sh
+if [ "$1" = "--print" ] && [ "$2" = "sysroot" ]; then echo "{sysroot}"; exit 0; fi
 cat <<OUT
 rustc {release} ({commit} 2026-10-13)
 binary: rustc
@@ -66,9 +67,14 @@ class Fixture(unittest.TestCase):
         for name in ("rustc", "cargo"):
             (self.bin / name).unlink(missing_ok=True)
         if rustc:
+            sysroot = self.bin / "sysroot"
+            (sysroot / "bin").mkdir(parents=True, exist_ok=True)
             body = RUSTC.format(release=release or rust["version"], commit=commit or rust["commit_prefix"],
-                                full=(commit or rust["commit_prefix"]) + "0" * 31, host=host or rust["host"])
+                                full=(commit or rust["commit_prefix"]) + "0" * 31, host=host or rust["host"],
+                                sysroot=sysroot)
             self.write_exec("rustc", body)
+            (sysroot / "bin/rustc").write_text(body)
+            (sysroot / "bin/cargo").write_text(CARGO.format(release=cargo or release or rust["version"]))
         self.write_exec("cargo", CARGO.format(release=cargo or release or rust["version"]))
 
     def write_exec(self, name, body):
@@ -102,6 +108,9 @@ class Attestation(Fixture):
         self.assertEqual((code, report["status"]), (0, "verified"), self.failed(report))
         self.assertFalse(report["reproducibility"]["byte_for_byte"] is True)
         self.assertEqual(report["resolved"]["compiler"]["host"], "x86_64-unknown-linux-gnu")
+        executables = report["resolved"]["compiler"]["executables"]
+        self.assertEqual(sorted(executables), ["cargo", "rustc"])
+        self.assertTrue(all(len(item["sha256"]) == 64 for item in executables.values()))
 
     def test_floating_channel_is_refused(self):
         (self.root / "rust-toolchain.toml").write_text('[toolchain]\nchannel = "stable"\n')
@@ -127,6 +136,12 @@ class Attestation(Fixture):
             code, report = self.attest()
             self.assertEqual(code, 2, kwargs)
             self.assertIn(text, self.failed(report)["compiler"])
+
+    def test_missing_cargo_executable_in_the_sysroot_is_refused(self):
+        (self.bin / "sysroot/bin/cargo").unlink()
+        code, report = self.attest()
+        self.assertEqual(code, 2)
+        self.assertIn("cargo executable could not be hashed", self.failed(report)["compiler"])
 
     def test_missing_compiler_is_refused_without_installing(self):
         self.fake_tools(rustc=False)

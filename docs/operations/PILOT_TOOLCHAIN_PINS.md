@@ -63,7 +63,8 @@ Options:
 - `--allow-dirty` is for development only.
 
 Exit code `0` means `verified`; `2` means `refused`. Each check in the report names what was
-declared and what was resolved. Every external command has a 20 second deadline.
+declared and what was resolved, including the real paths and SHA-256 of the selected `rustc` and `cargo`
+executables (resolved through the compiler's sysroot) and of the interpreter executable. Every external command has a 20 second deadline.
 
 Refusals include: floating or unrecorded compiler refs, `rustc`/`cargo` release, commit or host
 differing from the pin, a missing toolchain, a missing or untracked `Cargo.lock`, a missing or
