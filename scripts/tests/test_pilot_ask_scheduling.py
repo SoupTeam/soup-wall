@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import threading
 import json
 import tempfile
+from unittest.mock import patch
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -80,12 +81,13 @@ class ProposalScheduling(unittest.TestCase):
         secret = 'private-token-and-arguments-never-exported'
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / 'host.stderr.private').write_text(secret + ' selected asset read lease lost')
-            with (root / 'host.stderr.private').open('ab') as err:
-                pilot = SimpleNamespace(kind='git', process=SimpleNamespace(poll=lambda: None),
-                    offered={'toolu_primary'}, model=SimpleNamespace(requests=[{}], results={
-                        'primary': {'is_error': True, 'content': secret + ' selected asset changed during hashing'}}),
-                    root=root, trace=root / 'absent', err=err)
+            # The scrubber receives simulated input entirely in memory. No
+            # fixture token is written to a filesystem/log sink by the test.
+            pilot = SimpleNamespace(kind='git', process=SimpleNamespace(poll=lambda: None),
+                offered={'toolu_primary'}, model=SimpleNamespace(requests=[{}], results={
+                    'primary': {'is_error': True, 'content': secret + ' selected asset changed during hashing'}}),
+                root=root, trace=root / 'absent', err=SimpleNamespace(flush=lambda: None))
+            with patch.object(Path, 'read_bytes', return_value=(secret + ' selected asset read lease lost').encode()):
                 result = ASK.Pilot.failure_observation(pilot)
             self.assertNotIn(secret, json.dumps(result))
             self.assertEqual(result['primary_diagnostic'], 'capture_bytes_changed')
