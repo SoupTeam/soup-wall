@@ -1,0 +1,171 @@
+{
+  "source": "ce4f76d823f9f1b5a7ea1dec97a8ff260a5f94dc",
+  "policy_sha256": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+  "selected_sha256": {
+    "agentfw": "e4afd91c134584fb783c446d49c52c9a8af11ecb36573bfb294dc61c3fd07b6c",
+    "bwrap": "a50e462cdfa865a7d222de00246549e5d73d858228ad14e3a4336ebac8b6ac68",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "6a7514a539ff8a35d37ec6fef9b86967cb007c401e2be5923804b2e0eed173b4",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "cc9cf0b7ffe0f1f864d328283750bfa72fe0131deff5de2a27185fd0b0c11eca",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "6875e0b6f9228175b56c5cf5f720f46a675fb5219c2f909c9d8cfeda673ca67f"
+  },
+  "cases": [
+    {
+      "case": "search-read-status",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "search_files",
+            {
+              "path": "/workspace",
+              "pattern": "notes.txt"
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/notes.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ]
+      ],
+      "control_status": "passed",
+      "protected_status": "failed",
+      "protected_reason": "supported_benign_interrupted",
+      "decisions": [
+        {
+          "tool": "search_files",
+          "verdict": "allow",
+          "released": true,
+          "rule": null,
+          "taint": null
+        },
+        {
+          "tool": "read_text_file",
+          "verdict": "ask",
+          "released": false,
+          "rule": "combined-ask-mcp-derived-read",
+          "taint": {
+            "origin": "mcp",
+            "seq": 4,
+            "source": "mcp:filesystem",
+            "source_name": "filesystem",
+            "trust": "untrusted"
+          }
+        },
+        {
+          "tool": "git_status",
+          "verdict": "allow",
+          "released": true,
+          "rule": null,
+          "taint": null
+        }
+      ],
+      "input_sha256": "435bf0a2c029664a4e1f6e8e554bfd36e015217d777677918c24ff1b4db868b1",
+      "operation_sha256": "ac1ad6c5a8699ca71938c083d123b1685fa401ee0c635596532060302c87a9ef",
+      "control_result_evidence": {
+        "complete": true,
+        "file": "search-read-status-control-provider-results.json",
+        "sha256": "eb697b6b7f047a7383e462ce29a772fc0966ccb86bf654c6ac1257082ccb1ed5"
+      },
+      "protected_result_evidence": {
+        "complete": true,
+        "file": "search-read-status-protected-provider-results.json",
+        "sha256": "5b2d4240e27b5ee214167d33c6cd11e0b3bf848bb8f55bc8925f3ab0df07f0b0"
+      }
+    },
+    {
+      "case": "search-exclusion",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "search_files",
+            {
+              "excludePatterns": [
+                "source.txt"
+              ],
+              "path": "/workspace",
+              "pattern": "*.txt"
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "control_status": "passed",
+      "protected_status": "failed",
+      "protected_reason": "supported_benign_interrupted",
+      "decisions": [
+        {
+          "tool": "search_files",
+          "verdict": "allow",
+          "released": true,
+          "rule": null,
+          "taint": null
+        },
+        {
+          "tool": "read_text_file",
+          "verdict": "ask",
+          "released": false,
+          "rule": "combined-ask-mcp-derived-read",
+          "taint": {
+            "origin": "mcp",
+            "seq": 4,
+            "source": "mcp:filesystem",
+            "source_name": "filesystem",
+            "trust": "untrusted"
+          }
+        },
+        {
+          "tool": "git_show",
+          "verdict": "allow",
+          "released": true,
+          "rule": null,
+          "taint": null
+        }
+      ],
+      "input_sha256": "435bf0a2c029664a4e1f6e8e554bfd36e015217d777677918c24ff1b4db868b1",
+      "operation_sha256": "173d668d9b54db02ad8c0f9ac3ba212e57edbfba75242ec070472db45f3e395d",
+      "control_result_evidence": {
+        "complete": true,
+        "file": "search-exclusion-control-provider-results.json",
+        "sha256": "3e291c690ea9315fd94385c109e1030b31f1f860dbb2d84862677407319d52a7"
+      },
+      "protected_result_evidence": {
+        "complete": true,
+        "file": "search-exclusion-protected-provider-results.json",
+        "sha256": "175391990be595c68cd95b13f19f931300704ca22f966b66faa74270fdbc85c5"
+      }
+    }
+  ]
+}

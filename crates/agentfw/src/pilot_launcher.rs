@@ -378,6 +378,11 @@ impl PilotLaunchArgs {
             .unwrap_or_else(|| "Run the owned pilot sequence.".to_string());
         let model = self.model.clone();
 
+        crate::pilot_host::validate(
+            &claude_path,
+            self.allow_command_fixtures || self.mock_daemon_token.is_some(),
+        )?;
+
         Ok(ValidatedConfig {
             claude_path,
             workspace_path,
@@ -1191,15 +1196,12 @@ pub fn write_per_process_mcp_config(
             );
         }
 
-        if let Ok(py) = std::env::var("AGENTFW_CLASSIFIER_PYTHON") {
+        // The interpreter is part of the validated installed Git profile.
+        // An ambient project environment must not replace executable classifier authority.
+        if let Some(python) = config.git_runtime_cmd.first() {
             env_obj.insert(
                 "AGENTFW_CLASSIFIER_PYTHON".to_string(),
-                serde_json::Value::String(py),
-            );
-        } else if server_id == GIT_SERVER_ID && !runtime_cmd.is_empty() {
-            env_obj.insert(
-                "AGENTFW_CLASSIFIER_PYTHON".to_string(),
-                serde_json::Value::String(runtime_cmd[0].clone()),
+                serde_json::Value::String(python.clone()),
             );
         }
 
@@ -1394,7 +1396,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         }
     }
 
-    // Environment isolation
+    // Discard ambient executable settings before adding the fixed host flags.
+    crate::pilot_host::isolate(&mut cmd, &guard.path)?;
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL", "1")
@@ -1748,6 +1751,11 @@ mod tests {
         assert_eq!(
             mcp_data["mcpServers"]["git"]["env"]["AGENTFW_WORKSPACE"],
             git_workspace.canonicalize().unwrap().display().to_string()
+        );
+        assert_eq!(fs_env["AGENTFW_CLASSIFIER_PYTHON"], "/usr/bin/python3");
+        assert_eq!(
+            mcp_data["mcpServers"]["git"]["env"]["AGENTFW_CLASSIFIER_PYTHON"],
+            "/usr/bin/python3"
         );
         assert_eq!(fs_env["AGENTFW_HOST_SESSION"], "test-session-123");
         assert_eq!(fs_env["AGENTFW_NATIVE_LIVENESS"], "true");

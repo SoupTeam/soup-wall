@@ -84,10 +84,12 @@ must be the PR's current base and head. Every selected core/component must have 
 an `impact / Candidate <merge SHA>` job and every required OS/backend member in
 the latest attempt. Components share the `ci.yml` run; legacy separate runs are
 still verified when present.
-Missing, failed, cancelled, timed-out, neutral, duplicate or unexpectedly
-skipped required jobs fail admission. A pending run stays blocking until completion events provide the missing
-evidence; no runner waits idle for it. Moving the head or base invalidates the
-result and requires current-source qualification.
+Failed, cancelled, timed-out, neutral, duplicate or unexpectedly skipped
+required jobs block admission. A missing or incomplete job in an inconsistent
+API snapshot remains pending while its exact run attempt is re-evaluated; it
+cannot become a success by inference from the workflow conclusion. A genuinely
+absent required member remains blocking. Moving the head or base invalidates
+the result and requires current-source qualification.
 
 GitHub's managed CodeQL default setup currently records analyses on the **PR
 head SHA**, while PR runtime workflows check out the test-merge SHA. Admission
@@ -277,14 +279,68 @@ readback; each new candidate independently repeats the readback.
 
 ### Completion-driven admission
 
-The privileged admission workflow checks once on PR updates and again when the
-central CI or managed CodeQL run completes. Missing evidence remains a pending
-blocking status; it never becomes green from a timeout or skipped test. This
-avoids allocating an idle runner for up to 45 minutes. Routing reads the run and
-current PR from the repository API, ignores obsolete heads and validates the
-upstream workflow path/event; it never downloads artifacts or executes PR code.
-Default-setup CodeQL's workflow is named `CodeQL`; `PR #<number>` is an individual run title. The completion subscription includes `CodeQL` explicitly, while the trusted router still verifies the API event, path and current PR head. A run-title glob alone does not subscribe to the `CodeQL` workflow.
+The privileged admission workflow checks on PR updates and when central CI or
+managed CodeQL starts or completes. The `in_progress` event makes a restarted
+attempt replace an earlier green admission with a pending status; GitHub does
+not emit `workflow_run.requested` on reruns. Temporarily incomplete evidence
+remains a pending blocking status; it never becomes green from a timeout,
+missing member or skipped test. A focused rerun of the verifier re-reads the
+current candidate and exact attempt without rerunning the runtime suite. If a
+completion event is the last event and the API snapshot remains incomplete,
+the verifier makes bounded rechecks for at most 12 seconds, then leaves a
+blocking pending status. Rerun only that trusted admission job from Actions if
+the API settles later; pending never permits a merge. This avoids allocating
+an idle runner for up to 45 minutes. Routing reads the run
+and current PR from the repository API, ignores obsolete heads and validates
+the upstream workflow path/event; it never downloads artifacts or executes PR
+code.
+
+Default-setup CodeQL's workflow is named `CodeQL`; `PR #<number>` is an
+individual run title. The completion subscription includes `CodeQL` explicitly,
+while the trusted router still verifies the API event, path and current PR
+head. A run-title glob alone does not subscribe to the `CodeQL` workflow.
 Only trusted base/default-branch scripts are executed. An older PR that still
 uses legacy parallel workflows must refresh from current main before it can
 rely on the new completion orchestration. Full legacy manual qualification is
 still available and the trusted verifier retains its legacy evidence support.
+
+### SOU-118 completion evidence discrepancy
+
+At PR [#220](https://github.com/SoupTeam/soup-wall/pull/220) head
+`e58848b919e22d229ac8dd2d37757295c22b1616`, central CI
+[run 39794045474](https://github.com/SoupTeam/soup-wall/actions/runs/39794045474)
+attempt 1 eventually reported `completed/success`. Its filesystem
+[job 119876929275](https://github.com/SoupTeam/soup-wall/actions/runs/39794045474/job/119876929275)
+currently reports `completed/success`, with `completed_at`
+`2026-10-22T14:50:45Z` and the expected name
+`Components / mcp-real-filesystem / required-linux-sandbox-and-real-host`.
+The candidate test-merge was
+`f058d89f0920a7c73fc8e12ec00b926a3bc7e21c`, with parents
+`8e938768112a0663432847f9d4883790a5ced6eb` (base) and the head above.
+The retained runtime artifact is `12434921667`. Keep this runtime result
+separate from the admission result.
+
+Trusted admission
+[run 39800066846](https://github.com/SoupTeam/soup-wall/actions/runs/39800066846)
+attempt 1, [job 119897909381](https://github.com/SoupTeam/soup-wall/actions/runs/39800066846/job/119897909381),
+logged at `2026-10-22T14:56:15Z`:
+`failure: mcp-real-filesystem.yml: required job did not succeed: Components / mcp-real-filesystem / required-linux-sandbox-and-real-host`.
+The job ended in failure at `14:56:18Z`. This was the first incorrect
+decision: the verifier classified that required member as unsuccessful despite
+the retained successful runtime evidence. Its log did not retain the raw job
+row it received, so the exact field or API consistency failure at that moment
+is **not established**. Do not label it a proven stale `status` or
+`conclusion` value. The failed candidate status was `57000875122`.
+
+A verifier-only retry of the same admission run, attempt 2,
+[job 119900256783](https://github.com/SoupTeam/soup-wall/actions/runs/39800066846/job/119900256783),
+logged `pending: selected workflow missing: agent-doctor.yml` at
+`2026-10-22T15:00:28Z`. The workflow job completed successfully at
+`15:00:31Z`, but that exit code represents a **pending, blocking candidate
+status** (`57001285863`), not successful admission. Neither attempt alone
+proves that all selected jobs and all five CodeQL languages were accepted.
+Subsequent proof must name the current base, head, test-merge parents, run
+attempts and every selected matrix member. A genuine failed, skipped,
+duplicate or stale member must still block. A focused verifier retry should be
+preferred over repeating the full runtime suite while only admission evidence
+is in doubt.

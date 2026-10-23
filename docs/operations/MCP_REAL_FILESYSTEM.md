@@ -190,9 +190,10 @@ entire unchanged original JSON-RPC result envelope.
 | Request IDs | Original bounded string or safe JSON integer; string `"1"` and integer `1` remain distinct; duplicate/replayed IDs refused |
 | Session budget | 1024 request identifiers; 8192 total transport messages |
 | Time | 30-second per-call/control bound; a cancellation withdraws delivery and does not attest kernel I/O stopped |
-| Frames / discovery | 262144 bytes per frame and aggregate tools/list; at most 4 distinct pages and 64 tools |
+| Frames / discovery | 262144 bytes per client frame and aggregate tools/list; at most 4 distinct pages and 64 tools |
+| Results | 262144 decoded UTF-8 bytes per result text; 1048576 bytes per server response frame; see [large results](LARGE_MCP_RESULTS.md) |
 | Parsing | JSON depth 20 / 16384 nodes; schema depth 8 / 1024 nodes; arguments depth 8 / 4096 nodes |
-| Values | At most 256 object properties/array elements; default per decoded string 16384 UTF-8 bytes |
+| Values | At most 256 object properties/array elements; default per decoded argument string 16384 UTF-8 bytes |
 | Progress | Correlated bounded token, nonnegative finite monotonic counters, at most 128 per call; content is withheld |
 | Cleanup / stderr | Bounded 3-second process cleanup; server stderr is drained and suppressed with a 1 MiB quota |
 | Other channels | Server stderr suppressed; logging notifications withheld; callbacks/server requests are not released as content |
