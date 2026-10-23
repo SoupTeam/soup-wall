@@ -110,7 +110,7 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
     // The exported schema contains fixed enums/codes/timestamps/hashes only.
     // Never serialize raw config, host settings, tokens, errors or environment.
     let digest = format!("{:x}", Sha256::digest(&bytes));
-    let manifest = json!({
+    let mut manifest = json!({
         "schema": "sw-agent-doctor-support/1",
         "report_schema": "sw-agent-doctor/1",
         "created_at_ms": report.observed_at_ms,
@@ -118,6 +118,9 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
         "files": [{"name":"report.json", "sha256":digest, "bytes":bytes.len()}],
         "active_host_call_protection": "unknown"
     });
+    if let Some(pilot) = &report.pilot {
+        manifest["pilot_schema"] = json!(pilot.schema);
+    }
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
     ensure!(manifest_bytes.len() < 8192, "support manifest exceeds cap");
     let stage = CString::new(format!(".agentfw-doctor-{}", crate::token::generate()))?;
@@ -186,6 +189,7 @@ mod tests {
             active_host_call_protection: "unknown",
             scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
             checks: vec![],
+            pilot: None,
         }
     }
 
