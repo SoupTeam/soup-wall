@@ -1,0 +1,461 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Offline SOU-129 reconciliation of explicitly selected pilot evidence.
+
+No execution, policy decision, CI admission or release approval. Reuses the
+SOU-106 gate and SOU-80 bounded readers/support definitions.
+"""
+from __future__ import annotations
+import argparse
+import hashlib
+import io
+import json
+import math
+import os
+import re
+from pathlib import Path
+import stat
+import subprocess
+import sys
+import zipfile
+import zlib
+
+from roadmap_support import (Invalid, require, exact, source, digest, identifier,
+                             relative, safe_file, load_json, pairs_unique,
+                             bounded_tree, validate_index, write_private)
+from pilot_qualification import matched_gate, Failure, canonical
+
+VERSION = 'sw-pilot-dossier/1'
+SCOPE = 'internal-readonly-original-filesystem-git-scripted-provider'
+AREAS = ('install-start', 'useful-workflows', 'refusal-zero-effects', 'ask',
+         'daemon-loss', 'cancellation-cleanup', 'linux-platform', 'wsl-platform')
+OWNERS = dict(zip(AREAS, ('SOU-116', 'SOU-106', 'SOU-106', 'SOU-112',
+                         'SOU-116', 'SOU-116', 'SOU-115', 'TL/platform-owner')))
+IDENTITIES = ('policy', 'filesystem_profile', 'git_profile', 'filesystem_registry',
+              'git_registry', 'filesystem_classifier', 'git_classifier',
+              'agentfw', 'claude', 'node', 'git', 'bwrap')
+MAX_REPORT = 2 * 1024 * 1024
+MAX_ARCHIVE = 64 * 1024 * 1024
+
+
+def sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def finite_float(value):
+    parsed = float(value)
+    require(math.isfinite(parsed), 'nonfinite_json')
+    return parsed
+
+
+def parse(raw):
+    require(len(raw) <= MAX_REPORT, 'report_byte_limit')
+    try:
+        value = json.loads(raw.decode('utf-8'), object_pairs_hook=pairs_unique, parse_float=finite_float,
+                           parse_constant=lambda _: (_ for _ in ()).throw(Invalid('nonfinite_json')))
+        bounded_tree(value)
+        require(type(value) is dict, 'object_required')
+        return value
+    except (UnicodeError, ValueError, RecursionError) as exc:
+        raise Invalid('invalid_report_json') from exc
+
+
+def validate_reference(ref):
+    exact(ref, {'path', 'sha256', 'member', 'member_sha256'}, 'file_reference')
+    path = relative(ref['path'], 'path')
+    require(re.fullmatch(r'[A-Za-z0-9_./-]+', path) is not None, 'unsafe_display_path')
+    digest(ref['sha256'], 'file_sha256')
+    if ref['member'] is None:
+        require(ref['member_sha256'] is None, 'unexpected_member_hash')
+    else:
+        member = relative(ref['member'], 'member')
+        require(re.fullmatch(r'[A-Za-z0-9_./-]+', member) is not None, 'unsafe_display_member')
+        digest(ref['member_sha256'], 'member_sha256')
+    return ref
+
+
+def selected_bytes(root, ref):
+    """No directory discovery or extraction; archive and selected member pinned."""
+    validate_reference(ref)
+    path = ref['path']
+    raw = safe_file(root / path, MAX_ARCHIVE if ref['member'] is not None else MAX_REPORT)
+    require(sha(raw) == ref['sha256'], 'file_hash_mismatch')
+    if ref['member'] is None:
+        require(ref['member_sha256'] is None, 'unexpected_member_hash')
+        return raw
+    member = relative(ref['member'], 'member')
+    require(re.fullmatch(r'[A-Za-z0-9_./-]+', member) is not None, 'unsafe_display_member')
+    digest(ref['member_sha256'], 'member_sha256')
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            infos = archive.infolist()
+            require(0 < len(infos) <= 256, 'archive_member_limit')
+            names = set()
+            total = 0
+            for info in infos:
+                name = info.filename.rstrip('/') if info.is_dir() else info.filename
+                relative(name, 'archive_path')
+                require(info.filename not in names, 'duplicate_archive_member')
+                names.add(info.filename)
+                mode = info.external_attr >> 16
+                require(stat.S_IFMT(mode) in (0, stat.S_IFREG, stat.S_IFDIR) and not info.flag_bits & 1,
+                        'archive_link_or_encryption')
+                require(info.file_size <= MAX_REPORT, 'archive_member_size_limit')
+                total += info.file_size
+                require(total <= MAX_ARCHIVE, 'archive_expansion_limit')
+            require(member in names, 'missing_archive_member')
+            raw = archive.read(member)
+    except (zipfile.BadZipFile, KeyError, RuntimeError, NotImplementedError, zlib.error, EOFError) as exc:
+        raise Invalid('invalid_archive') from exc
+    require(sha(raw) == ref['member_sha256'], 'member_hash_mismatch')
+    return raw
+
+
+def git_tree(repo, commit):
+    source(commit, 'commit')
+    env = dict(os.environ, GIT_NO_LAZY_FETCH='1', GIT_TERMINAL_PROMPT='0')
+    size = subprocess.run(['git', '-C', str(repo), 'cat-file', '-s', commit],
+                          capture_output=True, timeout=15, env=env)
+    require(size.returncode == 0 and int(size.stdout) <= 65536, 'source_object_unavailable')
+    result = subprocess.run(['git', '-C', str(repo), 'cat-file', '-p', commit],
+                            capture_output=True, timeout=15, env=env)
+    require(result.returncode == 0, 'source_object_unavailable')
+    lines = result.stdout.splitlines()
+    require(lines and lines[0].startswith(b'tree '), 'source_not_commit')
+    tree = lines[0][5:].decode('ascii')
+    source(tree, 'tree')
+    return tree
+
+
+def git_json(repo, commit, path):
+    env = dict(os.environ, GIT_NO_LAZY_FETCH='1', GIT_TERMINAL_PROMPT='0')
+    ref = commit + ':' + path
+    size = subprocess.run(['git', '-C', str(repo), 'cat-file', '-s', ref],
+                          capture_output=True, timeout=15, env=env)
+    require(size.returncode == 0 and int(size.stdout) <= MAX_REPORT, 'published_object_unavailable')
+    data = subprocess.run(['git', '-C', str(repo), 'cat-file', 'blob', ref],
+                          capture_output=True, timeout=15, env=env)
+    require(data.returncode == 0, 'published_object_unavailable')
+    return parse(data.stdout)
+
+
+def report_source(value):
+    require(type(value) is dict and value.get('dirty') is False, 'unclean_or_absent_source')
+    source(value.get('commit'), 'report_commit')
+    source(value.get('tree'), 'report_tree')
+    return {k: value[k] for k in ('commit', 'tree')}
+
+
+def identities(report, kind):
+    selected = report.get('selected_sha256', {})
+    profiles = report.get('profiles', {})
+    if kind == 'matched':
+        selected = report['identity'].get('selected', {})
+        profiles = report['identity'].get('profiles', {})
+        require(report['identity'].get('policy_sha256') == selected.get('policy'), 'conflicting_policy_identity')
+    values = {key: selected.get(key) for key in IDENTITIES}
+    if kind == 'ask':
+        policies = {r.get('policy_sha256') for r in report['cases']}
+        values['policy'] = next(iter(policies)) if len(policies) == 1 else None
+    for name in ('filesystem', 'git'):
+        profile = profiles.get(name, {})
+        values[name + '_profile'] = profile.get('profile_sha256')
+        values[name + '_registry'] = profile.get('registry_sha256')
+        values[name + '_classifier'] = profile.get('classifier_sha256', selected.get(name + '_classifier'))
+        if profile.get('classifier_sha256') is not None and selected.get(name + '_classifier') is not None:
+            require(profile['classifier_sha256'] == selected[name + '_classifier'], 'conflicting_classifier_identity')
+    for key, value in values.items():
+        digest(value, key, optional=True)
+    return values
+
+
+def count(passed, required):
+    require(type(passed) is int and type(required) is int and 0 <= passed <= required <= 10000,
+            'invalid_denominator')
+    return {'passed': passed, 'required': required}
+
+
+def observation(area, passed, required, details=None):
+    counts = count(passed, required)
+    return {'area': area, 'observed_status': 'pass' if required and passed == required else
+            'fail' if required else 'incomplete', 'counts': counts, 'details': details or {}}
+
+
+def project(report, workload):
+    """Read original outcomes, never replace their runtime assertions."""
+    version = report.get('format', report.get('contract_version'))
+    observations = []
+    if version == 'sw-installed-pilot-matched/1':
+        kind = 'matched'
+        require(report.get('live_model_effectiveness') == 'not_measured', 'scope_mismatch')
+        before = report_source(report['identity']['source'])
+        gate = matched_gate(workload, report)
+        require(gate == report['gate'], 'stored_gate_disagrees_with_existing_gate')
+        metrics = gate['metrics']
+        observations.append(observation('useful-workflows', metrics['benign_completed'],
+            metrics['benign_required'], {'false_interruptions': metrics['false_interruptions'],
+            'failed_cases': [c['id'] for c in workload['cases'] if c['kind'] == 'benign' and
+                any(r['status'] != 'passed' for r in report['rows'] if r['case'] == c['id'])]}))
+        refusal_cases = [c for c in workload['cases'] if c['kind'] == 'refusal']
+        passed = sum(all(r['status'] == 'passed' for r in report['rows'] if r['case'] == c['id'])
+                     for c in refusal_cases)
+        if metrics['forbidden_effects'] or metrics['forbidden_result_delivery_count']:
+            passed = 0
+        observations.append(observation('refusal-zero-effects', passed, len(refusal_cases),
+            {k: metrics[k] for k in ('forbidden_effects', 'denied_execution_count',
+                                     'forbidden_result_delivery_count')}))
+    elif version == 'sw-prepared-pilot-acceptance/1':
+        kind = 'prepared'
+        require(report.get('provider') == 'owned-scripted-loopback' and
+                report.get('live_model_effectiveness') == 'not_tested', 'scope_mismatch')
+        before = report_source(report['source_before'])
+        rows = report['cases']
+        expected = ('plan', 'occupied-port', 'stale-source', 'changed-selection', 'useful-refusal',
+                    'ask', 'default', 'cancel', 'daemon-loss', 'timeout')
+        require([r['case'] for r in rows] == list(expected), 'prepared_case_denominator_changed')
+        require(all(r['status'] in ('passed', 'failed', 'incomplete', 'unsupported') for r in rows),
+                'invalid_prepared_status')
+        require((report['status'] == 'passed') == all(r['status'] == 'passed' for r in rows),
+                'prepared_summary_mismatch')
+        if report['status'] == 'passed':
+            require(all(report.get(k) is True for k in ('workspace_unchanged', 'selected_assets_unchanged',
+                                                       'unrelated_preserved')), 'prepared_integrity_missing')
+        for row in rows:
+            if row['status'] == 'passed':
+                digest(row.get('trace_sha256'), 'prepared_trace')
+                if row['case'] in ('useful-refusal', 'ask', 'default', 'cancel', 'daemon-loss', 'timeout'):
+                    require(row.get('cleanup') == 'owned_state_removed' and
+                            row.get('process_cleanup', {}).get('all_stopped') is True and
+                            row.get('process_cleanup', {}).get('remaining') == [], 'prepared_cleanup_missing')
+        by = {r['case']: r for r in rows}
+        for area, names in [('install-start', ('plan', 'useful-refusal', 'default')),
+                            ('daemon-loss', ('daemon-loss',)),
+                            ('cancellation-cleanup', ('cancel', 'timeout'))]:
+            observations.append(observation(area, sum(by[n]['status'] == 'passed' for n in names),
+                                            len(names), {'cases': list(names)}))
+    elif version == 'sw-pilot-ask-acceptance/1':
+        kind = 'ask'
+        require(report.get('real_host_executed') is True and report.get('scripted_owned_provider') is True
+                and type(report.get('paid_api_calls')) is int and report['paid_api_calls'] == 0,
+                'scope_mismatch')
+        before = report_source(report['source'])
+        rows = report['cases']
+        require(type(rows) is list and 1 <= len(rows) <= 64, 'ask_case_bound')
+        keys = [(r['profile'], r['case']) for r in rows]
+        expected = [(profile, case) for profile in ('git', 'filesystem') for case in
+                    ('expire', 'restart', 'approve', 'reject', 'cancel', 'approved_cancel', 'default')]
+        require(keys == expected, 'ask_case_denominator_changed')
+        require(len(set(keys)) == len(keys) and all(type(r['passed']) is bool for r in rows),
+                'invalid_ask_cases')
+        require((report['status'] == 'pass') == all(r['passed'] for r in rows), 'ask_summary_mismatch')
+        for row in rows:
+            if row['passed']:
+                digest(row.get('policy_sha256'), 'ask_policy')
+                if row['case'] not in ('restart', 'cancel', 'approved_cancel'):
+                    digest(row.get('trace_sha256'), 'ask_trace')
+                expected_effects = 1 if row['case'] == 'approve' else 0
+                require(type(row.get('dispatched')) is int and type(row.get('kernel_effects')) is int
+                        and row['dispatched'] == row['kernel_effects'] == expected_effects,
+                        'ask_effect_witness_mismatch')
+                require(row.get('cleanup', {}).get('all_stopped') is True and
+                        row.get('cleanup', {}).get('remaining') == [], 'ask_cleanup_missing')
+        observations.append(observation('ask', sum(r['passed'] for r in rows), len(rows),
+            {'physical_human_presence_proven': report.get('physical_human_presence_proven') is True}))
+    else:
+        raise Invalid('unsupported_report_schema')
+    original = report['identity']['source'] if kind == 'matched' else report['source_before'] if kind == 'prepared' else report['source']
+    require(original == report['source_after'] and before == report_source(report['source_after']),
+            'source_changed_during_run')
+    return kind, before, identities(report, kind), observations
+
+
+def validate_manifest(m):
+    exact(m, {'format', 'scope', 'candidate', 'environment', 'identities', 'support_index',
+              'workload', 'evidence', 'accepted_main'}, 'manifest')
+    require(m['format'] == 'sw-pilot-dossier-selection/1' and m['scope'] == SCOPE, 'selection_scope')
+    exact(m['candidate'], {'commit', 'tree'}, 'candidate')
+    source(m['candidate']['commit'], 'candidate_commit'); source(m['candidate']['tree'], 'candidate_tree')
+    source(m['accepted_main'], 'accepted_main', optional=True)
+    exact(m['environment'], {'platform', 'architecture', 'host', 'provider', 'transport'}, 'environment')
+    require(m['environment']['platform'] in ('linux', 'wsl2'), 'selected_platform_unsupported')
+    require(m['environment']['architecture'] == 'x86_64' and m['environment']['transport'] == 'stdio'
+            and m['environment']['provider'] == 'owned-scripted-loopback'
+            and m['environment']['host'] == 'Claude Code 2.1.251', 'unsupported_environment')
+    exact(m['identities'], set(IDENTITIES), 'identities')
+    for key, value in m['identities'].items(): digest(value, key, optional=True)
+    require(type(m['evidence']) is list and len(m['evidence']) <= 16, 'evidence_count_limit')
+    validate_reference(m['support_index'])
+    validate_reference(m['workload'])
+    seen = set()
+    for e in m['evidence']:
+        exact(e, {'id', 'file', 'scope', 'owner', 'role'}, 'evidence')
+        require(e['role'] in ('candidate', 'history'), 'invalid_evidence_role')
+        identifier(e['id'], 'evidence_id'); identifier(e['owner'], 'owner')
+        validate_reference(e['file'])
+        require(e['id'] not in seen and e['scope'] == SCOPE, 'duplicate_id_or_scope_mismatch')
+        seen.add(e['id'])
+    return m
+
+
+def build(m, root, repo):
+    validate_manifest(m)
+    require(git_tree(repo, m['candidate']['commit']) == m['candidate']['tree'], 'candidate_tree_mismatch')
+    if m['accepted_main'] is not None:
+        require(m['accepted_main'] == m['candidate']['commit'], 'accepted_source_not_candidate')
+    index_raw = selected_bytes(root, m['support_index'])
+    index = validate_index(parse(index_raw))
+    workload_raw = selected_bytes(root, m['workload'])
+    workload = parse(workload_raw)
+    require(workload.get('format') == 'sw-installed-pilot-workload/1', 'unsupported_workload')
+    published = git_json(repo, m['candidate']['commit'], 'docs/operations/roadmap-support-index.json')
+    require(index == published, 'published_support_index_mismatch')
+    require(workload == git_json(repo, m['candidate']['commit'],
+            'scripts/benchmarks/installed-pilot-workload-v2.json'), 'published_workload_mismatch')
+    caps = [c for c in index['capabilities'] if c['id'] in ('filesystem-linux', 'git-linux')]
+    require(len(caps) == 2, 'missing_published_profile_definitions')
+    records = []
+    for entry in m['evidence']:
+        record = {'id': entry['id'], 'owner': entry['owner'], 'file': entry['file'],
+                  'source': None, 'identities': {}, 'observations': [], 'blockers': [], 'role': entry['role']}
+        try:
+            raw = selected_bytes(root, entry['file'])
+            report = parse(raw)
+            if entry['role'] == 'history':
+                require(report.get('format') == 'sw-installed-pilot-matched/1', 'unsupported_history_schema')
+                before = report_source(report['identity']['source'])
+                require(git_tree(repo, before['commit']) == before['tree'], 'evidence_tree_mismatch')
+                status = report.get('gate', {}).get('status', 'incomplete')
+                require(status in ('passed', 'failed', 'incomplete'), 'invalid_historical_status')
+                record.update(source=before, schema=report['format'], content_sha256=sha(raw),
+                              reported_historical_status=status)
+                record['blockers'].append('historical_attempt_not_candidate_evidence')
+                records.append(record)
+                continue
+            kind, before, ids, obs = project(report, workload)
+            record.update(schema=report.get('format', report.get('contract_version')), source=before,
+                          identities=ids, observations=obs, content_sha256=sha(raw))
+            require(git_tree(repo, before['commit']) == before['tree'], 'evidence_tree_mismatch')
+            if before != m['candidate']: record['blockers'].append('historical_source')
+            for key in IDENTITIES:
+                if ids[key] is None or m['identities'][key] is None:
+                    record['blockers'].append('missing_identity:' + key)
+                elif ids[key] != m['identities'][key]: record['blockers'].append('identity_mismatch:' + key)
+            # Existing schemas often omit an environment record. Never infer it
+            # from a filename, the reporter's OS, or a Linux-only code path.
+            if report.get('environment') != m['environment']:
+                record['blockers'].append('environment_absent_or_mismatched')
+        except (Invalid, Failure, KeyError, TypeError, ValueError, OSError,
+                subprocess.SubprocessError) as exc:
+            code = str(exc) if isinstance(exc, (Invalid, Failure)) and re.fullmatch(r'[A-Za-z0-9_:. -]{1,160}', str(exc)) else type(exc).__name__
+            record['blockers'].append('invalid_evidence:' + code)
+        records.append(record)
+    ledger = []
+    for area in AREAS:
+        observations = []
+        for record in records:
+            for obs in record['observations']:
+                if obs['area'] == area:
+                    observations.append(dict(obs, evidence=record['id'], source=record['source'],
+                        eligible=not record['blockers'], blockers=record['blockers']))
+        current = [o for o in observations if o['eligible']]
+        status = 'incomplete'
+        if current:
+            status = 'fail' if any(o['observed_status'] == 'fail' for o in current) else (
+                'pass' if all(o['observed_status'] == 'pass' for o in current) else 'incomplete')
+        # Preserve a failed historical measurement visibly, never turn it into
+        # a current success. A separately selected exact current run can resolve it.
+        if not current and any(o['observed_status'] == 'fail' for o in observations): status = 'fail'
+        reasons = sorted({b for o in observations for b in o['blockers']})
+        if not observations: reasons.append('missing_selected_evidence')
+        if area == 'linux-platform':
+            status = 'pass' if all(c['support'] == 'supported' for c in caps) and any(
+                not r['blockers'] for r in records) and m['environment']['platform'] == 'linux' else 'incomplete'
+            reasons = [] if status == 'pass' else ['no_exact_bound_linux_runtime_evidence']
+        if area == 'wsl-platform':
+            # The published index does not qualify a WSL environment for this
+            # combined pilot. A Linux result cannot stand in for one.
+            status = 'incomplete'; reasons = ['wsl_not_qualified_by_selected_support_index']
+        ledger.append({'item': area, 'status': status, 'owner': OWNERS[area],
+                       'observations': observations, 'reasons': reasons,
+                       'counts': current[0]['counts'] if len(current) == 1 else None})
+    required = [r for r in ledger if r['item'] != ('wsl-platform' if m['environment']['platform'] == 'linux' else 'linux-platform')]
+    ready = all(r['status'] == 'pass' for r in required) and all(
+        not r['blockers'] for r in records if r['role'] == 'candidate') and not any(
+        any(b.startswith('invalid_evidence:') for b in r['blockers']) for r in records)
+    return {'format': VERSION, 'scope': SCOPE, 'candidate': m['candidate'],
+            'accepted_main_declared': m['accepted_main'], 'status': 'READY' if ready else 'NOT_READY',
+            'meaning': 'evidence completeness only; TL decision, CI admission and release excluded',
+            'environment': m['environment'], 'selected_identities': m['identities'],
+            'support_index_sha256': sha(index_raw), 'support': caps,
+            'workload_sha256': sha(workload_raw), 'evidence': records, 'ledger': ledger,
+            'live_model_effectiveness': 'not_measured', 'phase4_acceptance': False,
+            'public_release': False, 'unsupported_scopes': [
+                {'scope': 'native-Windows-and-macOS-combined-pilot', 'status': 'unsupported',
+                 'reason': 'outside selected filesystem-linux/git-linux capabilities'},
+                {'scope': 'live-model-effectiveness', 'status': 'unsupported',
+                 'reason': 'scripted-provider evidence only'}]}
+
+
+def scorecard(report):
+    lines = ['# Internal pilot evidence dossier', '', f"Status: **{report['status']}**",
+             '', 'Candidate: `' + report['candidate']['commit'] + '`',
+             'Tree: `' + report['candidate']['tree'] + '`', '',
+             'This is evidence reconciliation, not product approval or live-model effectiveness.', '',
+             '| Item | State | Owner | Observations (actual source and denominator) |',
+             '| --- | --- | --- | --- |']
+    for row in report['ledger']:
+        obs = '; '.join(f"{o['evidence']}: {o['observed_status']} {o['counts']['passed']}/{o['counts']['required']} at {o['source']['commit']}" for o in row['observations']) or 'No qualified observation'
+        lines.append(f"| {row['item']} | {row['status']} | {row['owner']} | {obs} |")
+    lines += ['', '## Blockers and root-cause references', '']
+    for r in report['evidence']:
+        lines.append('- `' + r['id'] + '` (selected file `' + r['file']['path'] + '`): ' +
+                     (', '.join(r['blockers']) or 'identities match'))
+    for row in report['ledger']:
+        if row['status'] != 'pass': lines.append('- ' + row['item'] + ': ' + ', '.join(row['reasons']))
+    for row in report['ledger']:
+        for obs in row['observations']:
+            if obs['details']:
+                lines.append('- ' + obs['evidence'] + ' / ' + row['item'] + ': `' +
+                             json.dumps(obs['details'], sort_keys=True) + '`')
+    lines += ['', 'Historical failed attempts remain selected records; later evidence never overwrites them.',
+              'A passing reporter test is not a passing pilot. Missing environment/identity evidence stays incomplete.',
+              'Linux evidence does not qualify WSL, Windows or macOS. No paid model or release claim.', '']
+    return '\n'.join(lines)
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--selection', required=True, type=Path)
+    p.add_argument('--root', required=True, type=Path, help='base for explicitly selected files only')
+    p.add_argument('--repo', required=True, type=Path)
+    p.add_argument('--candidate', required=True, help='full candidate SHA; must match selection')
+    p.add_argument('--output', required=True, type=Path, help='new output directory')
+    args = p.parse_args(argv)
+    try:
+        m, manifest_sha = load_json(args.selection, 128 * 1024)
+        source(args.candidate, 'candidate')
+        require(m.get('candidate', {}).get('commit') == args.candidate, 'selected_candidate_mismatch')
+        report = build(m, args.root, args.repo)
+        report['selection_sha256'] = manifest_sha
+        report['reporter_sha256'] = sha(safe_file(Path(__file__), MAX_REPORT))
+        report['reporter_dependencies'] = {name: sha(safe_file(Path(__file__).parent / name, MAX_REPORT))
+            for name in ('pilot_qualification.py', 'roadmap_support.py', 'benchmarks/agentdojo_protocol.py')}
+        report['reporter_accepted_sha'] = None
+        payload = (json.dumps(report, indent=2, ensure_ascii=True, allow_nan=False) + '\n').encode()
+        require(len(payload) <= MAX_REPORT, 'dossier_output_bound')
+        for parent in (args.output.absolute().parent, *args.output.absolute().parent.parents):
+            require(parent.is_dir() and not parent.is_symlink() and
+                    not (getattr(parent.lstat(), 'st_file_attributes', 0) & 0x400),
+                    'output_parent_required')
+        args.output.mkdir(mode=0o700, exist_ok=False)
+        write_private(args.output, 'dossier.json', payload)
+        write_private(args.output, 'scorecard.md', scorecard(report).encode())
+        print(report['status'] + ': dossier.json and scorecard.md written; no runtime executed')
+        return 0 if report['status'] == 'READY' else 1
+    except (Invalid, Failure, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        # Never echo raw report content, filesystem paths or subprocess stderr.
+        print('pilot-dossier: ' + (str(exc) if isinstance(exc, (Invalid, Failure)) else type(exc).__name__), file=sys.stderr)
+        return 2
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
