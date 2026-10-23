@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":3002,"method":"tools/call","params":{"name":"read_multiple_files","arguments":{"paths":["/workspace/multi00.txt","/workspace/multi01.txt"]},"_meta":{"claudecode/toolUseId":"toolu_sou62_3002","progressToken":3002}}}

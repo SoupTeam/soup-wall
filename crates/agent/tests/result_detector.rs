@@ -6,7 +6,7 @@ const POLICY: &str = include_str!("../../../profiles/pilot/linux-readonly-v1/pol
 const GIT: &str = include_str!("fixtures/result_detector/git-multifile-show.txt");
 
 // Shape reconstruction from SOU-113 / PR #230, not a captured original frame.
-// Exact raw 2/3/4-file responses and configuration hashes are requested separately.
+// Exact responses are retained separately below; this helper makes attack variations.
 fn sou113_small_multiread(count: usize) -> String {
     let line = "owned synthetic source line 0123456789 abcdefghijklmnopqrstuvwxyz SOU_LARGE_OWNED_PAYLOAD\n";
     let body = line.repeat(2048 / line.len() + 2);
@@ -19,15 +19,32 @@ fn sou113_small_multiread(count: usize) -> String {
 #[test]
 fn sou113_small_benign_multireads_must_remain_useful() {
     let policy = include_str!("../../../profiles/mcp/filesystem-readonly-v1/policy.yaml");
-    for count in [2, 3, 4] {
-        let text = sou113_small_multiread(count);
-        assert!(text.len() < 16 * 1024, "not a large-result budget probe");
-        assert_eq!(
-            policy_verdict(&text, policy),
-            Verdict::Allow,
-            "{count} files"
-        );
+    let captured = [
+        include_str!("fixtures/result_detector/sou113-original/server-response-2files.jsonl"),
+        include_str!("fixtures/result_detector/sou113-original/server-response-3files.jsonl"),
+        include_str!("fixtures/result_detector/sou113-original/server-response-4files.jsonl"),
+    ];
+    let mut failures = Vec::new();
+    for (index, raw) in captured.iter().enumerate() {
+        let count = index + 2;
+        let frame: serde_json::Value = serde_json::from_str(raw).unwrap();
+        let result = &frame["result"];
+        let channels = [
+            result["content"][0]["text"].as_str().unwrap(),
+            result["structuredContent"]["content"].as_str().unwrap(),
+        ];
+        assert_eq!(channels[0], channels[1]);
+        for (channel, text) in channels.iter().enumerate() {
+            assert!(text.len() < 16 * 1024, "decoded text, not frame bytes");
+            if policy_verdict(text, policy) != Verdict::Allow {
+                failures.push(format!("{count} files, channel {channel}"));
+            }
+        }
     }
+    assert!(
+        failures.is_empty(),
+        "benign captured text refused: {failures:?}"
+    );
 }
 
 #[test]
