@@ -403,6 +403,8 @@ jobs:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: python3 -B scripts/ci_bwrap_userns.py check
       - name: Build accepted selected runtimes without global installation
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         shell: bash
         run: |
           set -euo pipefail
@@ -507,6 +509,7 @@ jobs:
           PY
           export SOU115_GIT="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["git"])')"
           export SOU115_BWRAP="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["bwrap"])')"
+          bash scripts/ci-pilot-cleanup.sh
           source_args=(--output "$RUNNER_TEMP/sou119-agent-build"
             --expected-commit "$(git rev-parse HEAD)")
           python3 -B scripts/build-native-pilot-inputs.py "${source_args[@]}" \
@@ -705,38 +708,6 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --validation-timeout-seconds 120 \
             --output "$RUNNER_TEMP/sou116-qualification"
-      - name: Qualify receipt-aware cleanup with native preparation generations
-        shell: bash
-        run: |
-          set -euo pipefail
-          account="sw121${GITHUB_RUN_ID}"
-          fixture="$(mktemp -d /tmp/sw121-ci.XXXXXXXX)"
-          [[ "$fixture" == /tmp/sw121-ci.* && -d "$fixture" && ! -L "$fixture" ]]
-          sudo useradd --no-create-home --shell /usr/sbin/nologin "$account"
-          trap 'sudo userdel "$account"' EXIT
-          cp "$RUNNER_TEMP/sou111-assets/git.tar.xz" "$fixture/git.tar.xz"
-          cp "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" "$fixture/bwrap.tar.xz"
-          cp -a "$RUNNER_TEMP/sou111-assets/build-tools" "$fixture/build-tools"
-          cp -a "$RUNNER_TEMP/sou111-assets/libcap" "$fixture/libcap"
-          ln -sfn "$fixture/libcap/usr/lib/x86_64-linux-gnu" "$fixture/libcap/usr/lib64"
-          sudo chown -R "$account:$account" "$fixture"
-          mkdir -m 700 "$RUNNER_TEMP/sou121-cleanup"
-          status=0
-          sudo -u "$account" env \
-            HOME="$fixture" PATH="$fixture/build-tools/bin:/usr/bin:/bin" \
-            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$GITHUB_WORKSPACE" \
-            /usr/bin/python3 -B scripts/qualify-pilot-cleanup.py --run \
-              --output "$fixture/result" --expected-commit "$(git rev-parse HEAD)" \
-              --git-archive "$fixture/git.tar.xz" --bwrap-archive "$fixture/bwrap.tar.xz" \
-              --pkg-config-libdir "$fixture/libcap/usr/lib/x86_64-linux-gnu/pkgconfig" \
-              --pkg-config-sysroot "$fixture/libcap" --meson-pythonpath "$fixture/build-tools" || status=$?
-          for report in report.json dry-run.json; do
-            if sudo test -f "$fixture/result/$report"; then
-              sudo install -m 600 -o "$(id -u)" -g "$(id -g)" \
-                "$fixture/result/$report" "$RUNNER_TEMP/sou121-cleanup/$report"
-            fi
-          done
-          exit "$status"
       - name: Remove only this job's sandbox permission and executable
         if: always()
         shell: bash
