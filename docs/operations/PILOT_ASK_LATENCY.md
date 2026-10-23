@@ -132,3 +132,19 @@ skips and no failures. These checks are not native performance evidence. Current
 native measurements and any failed attempts are retained separately in
 `evidence/sou-124/`. No paid provider, real secret, private dataset, release or
 CI-admission change is part of this implementation.
+
+### Native follow-up
+
+Linux canonical identity uses an `O_PATH | O_NOFOLLOW` descriptor and its kernel
+`/proc/self/fd` path after checking the complete retained metadata against that
+descriptor. This avoids repeated userspace ancestor traversal. Symlinks retain
+resolved-target canonical checks; unavailable proc paths use normal canonical
+resolution. Neither a pathname label nor matching metadata authorizes SHA reuse.
+
+The paired measurement first runs a two-profile correctness preflight using the
+same exact candidate and all existing approval/effect/peer controls. Its report
+is explicitly outside performance acceptance and cannot replace the required
+20 filesystem plus 20 Git samples per side. Failure captures finite codes and
+bounded stage timings, never raw tool arguments, credentials or host output.
+The failed native attempt and its full baseline measurements are retained;
+current candidate performance remains unqualified until a complete run passes.

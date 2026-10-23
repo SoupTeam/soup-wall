@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! A single Ask's observations, never a persisted authority or an mtime cache.
 //!
-//! Only an already enabled kernel fs-verity measurement permits skipping byte
-//! reads. All other inputs are hashed again. This code never enables fs-verity
-//! or changes an installed asset. Metadata checks supplement, not replace, the
+//! Only an already enabled kernel fs-verity measurement or retained valid local
+//! read lease permits skipping byte reads. Other inputs are hashed again. This
+//! code never enables fs-verity or changes an installed asset. Metadata checks supplement, not replace, the
 //! kernel proof, whose digest is deliberately distinct from the profile SHA.
 
 use std::{
@@ -33,7 +33,7 @@ impl Identity {
         #[cfg(unix)]
         use std::os::unix::fs::MetadataExt;
         Ok(Self {
-            canonical: path.canonicalize()?,
+            canonical: canonical_identity(path, metadata)?,
             kind: metadata.file_type(),
             size: metadata.len(),
             modified: metadata.modified()?,
@@ -53,6 +53,51 @@ impl Identity {
             windows: windows_identity(path, metadata)?,
         })
     }
+}
+
+#[cfg(target_os = "linux")]
+fn canonical_identity(path: &Path, observed: &fs::Metadata) -> anyhow::Result<PathBuf> {
+    use std::os::{
+        fd::AsRawFd,
+        unix::fs::{MetadataExt, OpenOptionsExt},
+    };
+    if observed.is_symlink() {
+        // Preserve resolved-target identity for links, including chains/escapes.
+        return Ok(path.canonicalize()?);
+    }
+    // O_PATH resolves the same path in the kernel without opening its bytes.
+    // /proc/self/fd reports that exact retained dentry's canonical path, avoiding
+    // a separate userspace lstat traversal for every ancestor of every file.
+    // Compare all retained metadata before accepting its path; a raced lookup
+    // is an error, not a metadata/cache shortcut. Unsupported proc uses realpath.
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)?;
+    let current = file.metadata()?;
+    ensure!(
+        current.file_type() == observed.file_type()
+            && current.len() == observed.len()
+            && current.modified()? == observed.modified()?
+            && current.dev() == observed.dev()
+            && current.ino() == observed.ino()
+            && current.mode() == observed.mode()
+            && current.uid() == observed.uid()
+            && current.gid() == observed.gid()
+            && current.nlink() == observed.nlink()
+            && current.ctime() == observed.ctime()
+            && current.ctime_nsec() == observed.ctime_nsec(),
+        "selected asset changed during identity lookup"
+    );
+    match fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd())) {
+        Ok(value) if value.is_absolute() => Ok(value),
+        _ => Ok(path.canonicalize()?),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn canonical_identity(path: &Path, _observed: &fs::Metadata) -> anyhow::Result<PathBuf> {
+    Ok(path.canonicalize()?)
 }
 
 #[cfg(windows)]
@@ -315,6 +360,36 @@ fn measure(_file: &fs::File) -> anyhow::Result<Option<Vec<u8>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn kernel_path_identity_preserves_resolved_links_and_rejects_raced_metadata() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("actual");
+        fs::create_dir(&directory).unwrap();
+        let file = directory.join("asset");
+        fs::write(&file, b"original").unwrap();
+        let alias = root.path().join("alias");
+        symlink(&directory, &alias).unwrap();
+        for path in [&file, &alias.join("asset"), &directory, &alias] {
+            let metadata = fs::symlink_metadata(path).unwrap();
+            assert_eq!(
+                canonical_identity(path, &metadata).unwrap(),
+                path.canonicalize().unwrap()
+            );
+        }
+        let observed = fs::metadata(&file).unwrap();
+        fs::rename(&file, directory.join("old")).unwrap();
+        fs::write(&file, b"original").unwrap();
+        assert!(canonical_identity(&file, &observed).is_err());
+        let link_metadata = fs::symlink_metadata(&alias).unwrap();
+        assert!(link_metadata.is_symlink());
+        assert_eq!(
+            canonical_identity(&alias, &link_metadata).unwrap(),
+            directory.canonicalize().unwrap()
+        );
+    }
 
     #[test]
     fn mutable_files_are_read_again_and_replacement_is_rejected() {

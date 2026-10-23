@@ -1,0 +1,42 @@
+{
+  "accepted_main": "acf59afb35df0bfd113bef5147dd48146323cd1c",
+  "changes": [
+    "Resolve Linux canonical identity via a no-follow O_PATH descriptor after exact metadata comparison; preserve symlink chain checks and realpath fallback.",
+    "Perform two-profile correctness preflight before the unchanged full before/after sample plan.",
+    "Retain finite failure diagnoses and bounded internal timing observations, without raw arguments or tokens."
+  ],
+  "checks": {
+    "cargo_fmt": "passed",
+    "clippy_all_targets_warnings_denied": "passed",
+    "focused_controls": 22,
+    "generated_workflow_check": "passed",
+    "python": {
+      "failed": 0,
+      "passed": 1112,
+      "run": 1191,
+      "skipped": 79
+    },
+    "rust_workspace_macos": {
+      "failed": 0,
+      "ignored": 13,
+      "passed": 1694
+    }
+  },
+  "files_sha256": {
+    ".github/workflows/ci-components.yml": "d0f4c9bc3976f32293eae786cc6c37647e9262cebad73a8c6891440ed2e77cc2",
+    ".github/workflows/mcp-real-filesystem.yml": "f0bc958e5e5d2d4c89b932386788aa98243f044053d4999c8dc2ad2980bf7aef",
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "3a63686a283e215cedb1904a5aaee1da38dc42b00097f597f4aa9788aa654f3c",
+    "scripts/pilot_ask_latency.py": "dfe61cf352fc45cd3883efd450083a6733dcdc1619f576b6e75e65774ebb9ce3",
+    "scripts/qualify-pilot-ask-comparison.py": "2070dd978bb1cc8f7aa9d5b7056a3ca332b8cf1a7182eda4c92b802ef146345c",
+    "scripts/qualify-pilot-ask.py": "c4ffd22ea34031cebc90393485cc1ec4deb62d2e2307ceb5a297181ec7972a22"
+  },
+  "format": "sw-sou124-preflight-correction/1",
+  "logs_sha256": {
+    "clippy-kernelpath.log": "4cc512b9f399b5ea1d6b3aa9468b9e7d07fe81f4b48f305662fcea9b8323dd5b",
+    "preflight-controls.log": "f4449f29cb154e8d5c834e36406fa1d3ccb4919c343afdb2dde98403597987cc",
+    "python-preflight.log": "4edd2e2f2b6b36721901bd152b9216bb2c7279d8d69a0272cab7f4e741cf9c18",
+    "workspace-kernelpath.log": "7bf87a4ac358c239d2632912ef6d0d112d3c614b391222abed0466003d7fa3c2"
+  },
+  "native_status": "Pending; macOS tests do not execute the Linux O_PATH branch. Explicit Linux verified-input tests and strict kernel lease witness precede actual-host preflight. Baseline/candidate failure from prior source remains retained.",
+  "parent_commit": "a35e0f6cc90f4d8b66a1db598b0c6936d650ffa0"
+}

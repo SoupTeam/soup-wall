@@ -80,6 +80,25 @@ class ComparisonProof(unittest.TestCase):
                 path.write_text(text)
                 with self.subTest(text=text), self.assertRaises(ValueError): C.json_file(path)
 
+    def test_preflight_cannot_replace_full_latency_qualification(self):
+        probe = copy.deepcopy(self.report)
+        probe['qualification_scope'] = 'two_profile_correctness_probe_not_performance'
+        probe.pop('latency')
+        probe['cases'] = [probe['cases'][0], probe['cases'][20]]
+        C.validate_preflight(probe, self.source, self.selected)
+        with self.assertRaisesRegex(ValueError, 'complete_denominator_required'):
+            self.validate(probe)
+        for change in ('failure', 'missing', 'reuse', 'peer', 'binary', 'latency'):
+            bad = copy.deepcopy(probe)
+            if change == 'failure': bad['status'] = 'failed'
+            elif change == 'missing': bad['cases'].pop()
+            elif change == 'reuse': bad['cases'][0]['verified_inputs_resume']['leased_files'] = 0
+            elif change == 'peer': bad['cases'][0]['allow_peer_while_pending'] = False
+            elif change == 'binary': bad['selected_sha256'] = {}
+            else: bad['latency'] = {}
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                C.validate_preflight(bad, self.source, self.selected)
+
     def test_build_receipt_requires_exact_source_and_actual_binary_digest(self):
         receipt = dict(format='sw-native-pilot-agent-source-build/1', source=self.source,
                        binaries={role: dict(sha256=self.selected[role]) for role in ('agentfw', 'git_launcher')})

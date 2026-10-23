@@ -109,6 +109,36 @@ def validate_report(report, expected_source, selected, samples, candidate):
     return metrics
 
 
+def validate_preflight(report, expected_source, selected):
+    # Fail quickly before the long paired measurement. This two-row report can
+    # never satisfy validate_report's 40+ sample denominator or latency proof.
+    require(report.get('qualification_scope') == 'two_profile_correctness_probe_not_performance'
+            and 'latency' not in report, 'preflight_scope_invalid')
+    require(report.get('status') == 'pass' and report.get('real_host_executed') is True
+            and report.get('workspace_unchanged') is True, 'candidate_preflight_failed')
+    require(report.get('selected_sha256') == selected, 'preflight_binary_mismatch')
+    for key in ('source', 'source_after'):
+        require(all(report.get(key, {}).get(k) == expected_source[k]
+                    for k in ('commit', 'tree', 'dirty')), 'preflight_source_mismatch')
+    rows = report.get('cases', [])
+    require(isinstance(rows, list) and len(rows) == 2
+            and {row.get('profile') for row in rows} == set(PROFILES), 'preflight_profiles_missing')
+    for row in rows:
+        require(row.get('case') == 'approve' and row.get('passed') is True
+                and row.get('approved') is True and row.get('released') is True
+                and type(row.get('dispatched')) is int and row['dispatched'] == 1
+                and type(row.get('kernel_effects')) is int and row['kernel_effects'] == 1,
+                'preflight_effect_missing')
+        proof = row.get('verified_inputs_resume', {})
+        require(proof.get('observer') == 'collector mcp_verified_inputs_resume'
+                and all(type(proof.get(k)) is int and proof[k] >= 0
+                        for k in ('immutable_files', 'leased_files', 'rehashed_files'))
+                and proof['immutable_files'] + proof['leased_files'] > 0, 'preflight_reuse_missing')
+        if row['profile'] == 'filesystem':
+            require(row.get('allow_peer_while_pending') is True
+                    and row.get('cross_run_isolation_and_cleanup') is True, 'preflight_peer_missing')
+
+
 def run(args, report):
     require(platform.system() == 'Linux' and platform.machine() == 'x86_64', 'native_linux_x86_64_required')
     roots = {side: getattr(args, side + '_root').resolve(strict=True) for side in ('baseline', 'candidate')}
@@ -132,18 +162,20 @@ def run(args, report):
                                'machine': platform.machine()}, samples_per_profile=args.samples,
                   sides={side: {'status': 'incomplete', 'metrics': METRICS.summarize([], args.samples)}
                          for side in ('baseline', 'candidate')})
-    for side in ('baseline', 'candidate'):
+    for phase in ('preflight', 'baseline', 'candidate'):
+        side = 'candidate' if phase == 'preflight' else phase
         root = roots[side]
-        private = output / (side + '-private')
+        private = output / (phase + '-private')
         private.mkdir(mode=0o700)
-        result_dir = output / side
+        result_dir = output / phase
         result_dir.mkdir(mode=0o700)
         selected_paths = {name: getattr(args, side + '_' + name).resolve(strict=True)
                           for name in ('agentfw', 'git_launcher')}
         selected = {k: sha(v) for k, v in selected_paths.items()} | shared_hashes
         validate_build(json_file(getattr(args, side + '_receipt')), before[side], selected)
         command = [sys.executable, '-B', str(ROOT / 'scripts/qualify-pilot-ask.py'),
-                   '--approval-samples', str(args.samples), '--offline-inputs', str(offline), '--output', str(result_dir)]
+                   '--offline-inputs', str(offline), '--output', str(result_dir)]
+        command += (['--approval-smoke'] if phase == 'preflight' else ['--approval-samples', str(args.samples)])
         if side == 'candidate':
             command += ['--require-verified-reuse']
         for name, path in (selected_paths | common).items():
@@ -153,17 +185,25 @@ def run(args, report):
                'HTTP_PROXY': 'http://127.0.0.1:9', 'HTTPS_PROXY': 'http://127.0.0.1:9',
                'NO_PROXY': '127.0.0.1,localhost,::1'}
         exit_code = 0
-        stage = 'comparison_' + side
+        stage = 'comparison_' + phase
         try:
             # Reuse the existing bounded log/cancellation/process-group owner.
             # This is a total measurement budget, not a host/call deadline.
             NATIVE.build(command, cwd=root, env=env, log=private / 'qualification.log',
-                         seconds=3600, stage=stage)
+                         seconds=300 if phase == 'preflight' else 3600, stage=stage)
         except NATIVE.Failure as error:
             if error.stage != stage or error.exit_code != 1:
                 raise
             exit_code = 1  # Still requires a complete, honest report below.
         raw = json_file(result_dir / 'qualification.json')
+        if phase == 'preflight':
+            report['preflight'] = dict(exit_code=exit_code, qualification=raw,
+                                      runtime_implementation_source=before[side])
+            validate_preflight(raw, before['candidate'], selected)
+            require(exit_code == 0, 'preflight_exit_mismatch')
+            require(source(root, before[side]['commit']) == before[side], 'source_changed_during_preflight')
+            require(all(sha(p) == selected[k] for k, p in (selected_paths | common).items()), 'selected_asset_changed')
+            continue
         report['sides'][side].update(exit_code=exit_code, qualification=raw,
                                    runtime_implementation_source=before[side], status=raw.get('status'))
         if isinstance(raw.get('cases', []), list):

@@ -750,6 +750,7 @@ jobs:
           SOU124_LEASE_FIXTURE_DIR="$fixture" "$SOU119_SANDBOX_TESTS" --exact \
             mcp::server_profile::read_lease::linux::native_tests::native_read_lease_fast_path_qualification_requires_real_proofs \
             --ignored --nocapture --test-threads=1 | tee "$RUNNER_TEMP/sou111-assets/native-read-lease.log"
+          "$SOU119_SANDBOX_TESTS" 'mcp::server_profile::verified_inputs::tests::' --test-threads=1
           python3 -B - <<'PY'
           import json, os, subprocess, sys
           from pathlib import Path
@@ -845,6 +846,7 @@ jobs:
             ${{ runner.temp }}/sou111-assets/recovered.json
             ${{ runner.temp }}/sou111-qualification/**
             ${{ runner.temp }}/sou116-qualification/report.json
+            ${{ runner.temp }}/sou124-ask-comparison/preflight/qualification.json
             ${{ runner.temp }}/sou124-ask-comparison/comparison.json
             ${{ runner.temp }}/sou124-ask-comparison/baseline/qualification.json
             ${{ runner.temp }}/sou124-ask-comparison/candidate/qualification.json

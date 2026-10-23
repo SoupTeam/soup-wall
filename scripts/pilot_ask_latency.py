@@ -42,12 +42,8 @@ def summarize(cases, planned_per_profile):
     return report
 
 
-def reuse_observation(lines, collector_pid):
-    """Read only the selected collector's kernel-observed diagnostic writes.
-
-    Counts come from the post-verification event, never inferred from timing or
-    metadata. Raw diagnostic text and arguments are not retained in the report.
-    """
+def collector_stderr_rows(lines, collector_pid):
+    """Decode only a selected collector's bounded, kernel-observed stderr."""
     import ast
     import json
     import re
@@ -85,12 +81,21 @@ def reuse_observation(lines, collector_pid):
                 row = json.loads(payload)
             except (ValueError, UnicodeError):
                 continue
-            if not isinstance(row, dict) or row.get("event") != "mcp_verified_inputs_resume":
-                continue
-            keys = ("immutable_files", "leased_files", "rehashed_files")
-            if any(type(row.get(key)) is not int or row[key] < 0 for key in keys):
-                raise ValueError("reuse_counts_invalid")
-            observations.append({key: row[key] for key in keys})
+            if isinstance(row, dict):
+                observations.append(row)
+    return observations
+
+
+def reuse_observation(lines, collector_pid):
+    """Counts are an exact selected collector event, not a timing inference."""
+    observations = []
+    for row in collector_stderr_rows(lines, collector_pid):
+        if row.get("event") != "mcp_verified_inputs_resume":
+            continue
+        keys = ("immutable_files", "leased_files", "rehashed_files")
+        if any(type(row.get(key)) is not int or row[key] < 0 for key in keys):
+            raise ValueError("reuse_counts_invalid")
+        observations.append({key: row[key] for key in keys})
     if len(observations) != 1:
         raise ValueError("one_selected_reuse_observation_required")
     return dict(observations[0], observer="collector mcp_verified_inputs_resume")

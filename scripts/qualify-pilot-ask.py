@@ -10,6 +10,7 @@ independent of approval files and CLI success messages.
 from __future__ import annotations
 import argparse
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -46,6 +47,11 @@ def diagnostic(text):
         ("accepted two-server", "classifier_identity"),
         ("failed pinned", "asset_identity"),
         ("selected executable or library changed", "asset_identity"),
+        ("read lease lost", "read_lease_lost"),
+        ("changed during hashing", "capture_bytes_changed"),
+        ("immutable proof", "immutable_proof"),
+        ("changed during verification", "capture_identity_changed"),
+        ("identity or metadata changed", "resume_identity_changed"),
         ("policy mismatch", "policy_identity"),
         ("approval/liveness/registry", "daemon_prerequisites"),
         ("native.approval and native.liveness", "daemon_prerequisites"),
@@ -222,6 +228,9 @@ class Pilot:
     def waiting(self):
         def check():
             rows = self.operator("list")
+            if not rows and "primary" in self.model.results:
+                raise ValueError("primary_result_before_pending_" + diagnostic(json.dumps(self.model.results["primary"])))
+            require(self.process.poll() is None, "host_exited_before_pending")
             return rows[0] if len(rows) == 1 else None
         return until(check, "selected_pending_missing")
 
@@ -294,6 +303,35 @@ class Pilot:
         cleanup = self.witness.finish()
         require(cleanup["all_stopped"], "owned_descendant_survived")
         return cleanup
+
+    def failure_observation(self):
+        # Finite diagnostics only. Never retain raw errors, arguments or tokens.
+        result = {"profile": self.kind, "entry_returncode": self.process.poll(),
+                  "offered_count": len(self.offered), "provider_requests": len(self.model.requests),
+                  "primary_present": "primary" in self.model.results}
+        primary = self.model.results.get("primary")
+        if primary is not None:
+            result["primary_is_error"] = primary.get("is_error")
+            result["primary_diagnostic"] = diagnostic(json.dumps(primary))
+        self.err.flush()
+        result["stderr_diagnostic"] = diagnostic((self.root / "host.stderr.private").read_bytes()[-16000:].decode('utf-8', errors='replace'))
+        if self.trace.exists() and self.trace.stat().st_size <= 32 * 1024 * 1024:
+            try:
+                lines, _ = LAUNCH.normalized_syscalls(self.trace.read_text())
+                collectors = LAUNCH.collector_processes(lines, self.setup.binary)
+                timings = []
+                for pid, server in collectors.items():
+                    for row in LATENCY.collector_stderr_rows(lines, pid):
+                        elapsed, stage = row.get("elapsed_ms"), row.get("stage")
+                        if (row.get("event") == "mcp_asset_verification_timing"
+                                and stage in ("selected_profile", "runtime_and_libraries", "package_tree")
+                                and type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0):
+                            timings.append({"server": server, "stage": stage, "elapsed_ms": elapsed})
+                result["asset_timings"] = timings[:32]
+                result["trace_sha256"] = LAUNCH.sha(self.trace)
+            except (OSError, ValueError, UnicodeError):
+                result["trace_diagnostic"] = "incomplete_or_invalid_observation"
+        return result
 
     def close(self):
         self.proposals.cancel()
@@ -368,7 +406,7 @@ def qualify(args, private, report):
     try:
         samples = getattr(args, "approval_samples", 0)
         for kind in ("git", "filesystem"):
-            selected_cases = (["approve"] * samples if samples else
+            selected_cases = (["approve"] * (samples or 1) if samples or getattr(args, "approval_smoke", False) else
                 ["expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"])
             for sample_index, case in enumerate(selected_cases):
                 start_daemon(kind, 20 if case == "expire" else 30)
@@ -541,6 +579,15 @@ def qualify(args, private, report):
         require(all(LAUNCH.sha(path) == report["selected_sha256"][name] for name,path in setup.selected.items()), "selected_asset_changed")
         require(all(LAUNCH.sha(path / "profile.json") == report["profiles"][kind]["profile_sha256"] for kind,path in setup.profiles.items()), "profile_changed")
         require(not list((setup.home / "pilot-runs").iterdir()), "run_metadata_remains")
+    except Exception:
+        observations = []
+        for pilot in active:
+            try:
+                observations.append(pilot.failure_observation())
+            except (OSError, ValueError):
+                observations.append({"profile": pilot.kind, "diagnostic": "unavailable"})
+        report["failure_observations"] = observations
+        raise
     finally:
         finish_qualification(report, cases, getattr(args, "approval_samples", 0), active, daemon)
 
@@ -563,11 +610,16 @@ def main():
                         help="Prepared npm cache, pinned Python archive and hash-locked wheelhouse")
     parser.add_argument("--require-verified-reuse", action="store_true",
                         help="Require an actual selected-collector kernel reuse event for each approval")
-    parser.add_argument("--approval-samples", type=approval_samples, default=0,
+    samples_group = parser.add_mutually_exclusive_group()
+    samples_group.add_argument("--approval-smoke", action="store_true",
+                              help="One correctness probe per profile; never performance acceptance")
+    samples_group.add_argument("--approval-samples", type=approval_samples, default=0,
                         help="Separate performance run: 20..100 fresh approvals per profile; no call resubmission")
     args = parser.parse_args(); args.output.mkdir(parents=True,exist_ok=True)
     report = {"contract_version":"sw-pilot-ask-acceptance/1", "status":"incomplete", "real_host_executed":False,
         "scripted_owned_provider":True, "paid_api_calls":0, "physical_human_presence_proven":False}
+    if args.approval_smoke:
+        report["qualification_scope"] = "two_profile_correctness_probe_not_performance"
     try:
         with tempfile.TemporaryDirectory(prefix="sou112-private-") as directory:
             qualify(args,Path(directory),report)

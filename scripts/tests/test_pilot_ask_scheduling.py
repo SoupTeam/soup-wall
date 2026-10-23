@@ -4,6 +4,8 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import threading
+import json
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +57,22 @@ class ProposalScheduling(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ASK.release_ready_pilots(pilots, seconds=.1)
             self.assertFalse(any(p.proposals.released.is_set() for p in pilots))
+
+    def test_failure_observation_never_exports_raw_results_or_stderr(self):
+        secret = 'private-token-and-arguments-never-exported'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'host.stderr.private').write_text(secret + ' selected asset read lease lost')
+            with (root / 'host.stderr.private').open('ab') as err:
+                pilot = SimpleNamespace(kind='git', process=SimpleNamespace(poll=lambda: None),
+                    offered={'toolu_primary'}, model=SimpleNamespace(requests=[{}], results={
+                        'primary': {'is_error': True, 'content': secret + ' selected asset changed during hashing'}}),
+                    root=root, trace=root / 'absent', err=err)
+                result = ASK.Pilot.failure_observation(pilot)
+            self.assertNotIn(secret, json.dumps(result))
+            self.assertEqual(result['primary_diagnostic'], 'capture_bytes_changed')
+            self.assertEqual(result['stderr_diagnostic'], 'read_lease_lost')
+            self.assertTrue(result['primary_is_error'])
 
     def test_cancellation_wakes_provider_without_authorizing_proposals(self):
         gate = ASK.ProposalGate(deferred=True)

@@ -1,5 +1,26 @@
 # SOU-124 development evidence
 
+## Current native result and correction
+
+The second native attempt (`39989703005`, exact source `d37383e`) passed the
+strict real-kernel lease witness. Its baseline completed all 20 filesystem and
+20 Git approvals, with no failed/incomplete samples. Baseline p50/p95 were
+8742.44/8840.96 ms for filesystem and 11216.22/11310.10 ms for Git. The candidate
+failed to publish its first Git pending approval within the unchanged witness
+deadline; the other 39 planned samples remain explicitly incomplete. This is
+not a completed before/after comparison or a passing optimization.
+
+`native-attempt2-{comparison,baseline,candidate}.json` preserve those bounded
+reports and their raw SHA-256 values. Current follow-up replaces repeated Linux
+userspace ancestor traversal with O_PATH/descriptor canonical identity, retaining
+all metadata and link checks, and adds a two-profile correctness preflight before
+the full paired measurement. Preflight cannot satisfy or shrink the 40-row
+performance denominator; original deadlines and effect assertions are unchanged.
+Only finite diagnostic codes, stage timings and trace hashes are retained on
+failure. A fresh native run is required; the PR remains Draft.
+
+The sections below are historical checkpoints, not current readiness claims.
+
 ## Verified input reuse follow-up
 
 `input_reuse_review.json` records implementation `e571245` and exact source hashes
@@ -55,7 +76,7 @@ The final runs used separate targets with all workspace package artifacts
 cleaned and rebuilt. Private raw logs remain outside the repository; the
 successful log hashes are recorded in `development.json`.
 
-## Explicit blocker
+## Historical initial platform blocker
 
 The real preparation platform check was invoked on this host. It returned
 `ValueError: native_linux_x86_64_required` before starting a process. There is
