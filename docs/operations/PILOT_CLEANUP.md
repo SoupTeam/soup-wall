@@ -73,7 +73,9 @@ generation with the accepted `--prepare --rebuild` command. There is no broad
 prune, force flag, service uninstall or process-name kill.
 
 Process inspection covers same-account executable/cwd/root links, command and
-environment paths, mappings and open descriptors. A protected same-account
+environment paths, mappings and open descriptors. Processes using an asset
+through another path are also detected by device/inode
+identity, including mapped files and open descriptors. A protected same-account
 service can make the result uncertain even if it is unrelated. Retain that
 refusal and use an account/environment where the necessary inspection is
 available; do not relax system security settings to make cleanup pass.

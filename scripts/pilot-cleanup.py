@@ -161,6 +161,17 @@ def in_target(value, target):
 
 
 def active_use(target):
+    def unreadable(error):
+        raise error
+    objects = set()
+    count = 0
+    for base, directories, files in os.walk(target, followlinks=False, onerror=unreadable):
+        for path in [Path(base), *(Path(base) / name for name in directories + files)]:
+            count += 1
+            require(count <= MAX_ENTRIES * 2, "process_inventory_limit")
+            info = path.lstat()
+            objects.add((info.st_dev, info.st_ino))
+    mappings = {(os.major(device), os.minor(device), inode) for device, inode in objects}
     for process in Path("/proc").iterdir():
         if not process.name.isdecimal() or int(process.name) == os.getpid():
             continue
@@ -171,7 +182,9 @@ def active_use(target):
             if state == "Z":
                 continue
             for name in ("cwd", "exe", "root"):
-                if in_target(os.readlink(process / name), target):
+                reference = process / name
+                info = reference.stat()
+                if (info.st_dev, info.st_ino) in objects or in_target(os.readlink(reference), target):
                     return True
             for name in ("cmdline", "environ"):
                 with (process / name).open("rb") as stream:
@@ -182,11 +195,15 @@ def active_use(target):
                     return True
             with (process / "maps").open() as stream:
                 for index, line in enumerate(stream):
-                    if index > 100000 or (len(line.split(None, 5)) == 6
-                                          and in_target(line.split(None, 5)[5].strip(), target)):
+                    fields = line.split(None, 5)
+                    device = fields[3].split(":")
+                    identity = (int(device[0], 16), int(device[1], 16), int(fields[4]))
+                    if index > 100000 or identity in mappings or (len(fields) == 6
+                                                                 and in_target(fields[5].strip(), target)):
                         return True
             for index, descriptor in enumerate((process / "fd").iterdir()):
-                if index > 10000 or in_target(os.readlink(descriptor), target):
+                info = descriptor.stat()
+                if index > 10000 or (info.st_dev, info.st_ino) in objects or in_target(os.readlink(descriptor), target):
                     return True
         except FileNotFoundError:
             if process.exists():

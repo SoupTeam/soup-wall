@@ -136,6 +136,35 @@ class PilotCleanupTests(unittest.TestCase):
                     child.terminate()
                     child.wait(timeout=5)
 
+    def test_process_holding_file_by_an_alias_is_active(self):
+        cleanup = self.load()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "generation"
+            target.mkdir(mode=0o700)
+            asset = target / "asset"
+            asset.write_text("owned bytes")
+            alias = root / "alias"
+            os.link(asset, alias)
+            ready = root / "ready"
+            child = subprocess.Popen([sys.executable, "-c",
+                "import pathlib,sys,time; stream=open(sys.argv[1]); pathlib.Path(sys.argv[2]).touch(); time.sleep(60)",
+                str(alias), str(ready)])
+            try:
+                import time
+                deadline = time.monotonic() + 5
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertTrue(ready.exists())
+                original = Path.iterdir
+                def only_owned_process(path):
+                    return iter([Path("/proc") / str(child.pid)]) if str(path) == "/proc" else original(path)
+                with patch.object(Path, "iterdir", only_owned_process):
+                    self.assertTrue(cleanup.active_use(target))
+            finally:
+                child.terminate()
+                child.wait(timeout=5)
+
     def test_runtime_workspace_is_preserved_by_asset_prune(self):
         cleanup = self.load()
         with tempfile.TemporaryDirectory() as temporary:
