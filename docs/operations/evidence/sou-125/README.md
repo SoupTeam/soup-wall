@@ -1,12 +1,23 @@
 # SOU-125 evidence
 
-## Latest correction and rerun
+## Current native qualification
 
-`native-attempt2.json` retains the later failed native run `39988027408` on
-`00ba0c5`: sequential cold startup of the peer consumed the selected host deadline.
-`correction-checks.json` records concurrent startup, unchanged deadlines/assertions,
-strict macOS group-error handling and the complete passing local qualification.
-A fresh native rerun is required for the corrected harness.
+`native-linux-current.json` retains the source-attributed report and raw digest
+from run `39996709348`, native job `120562074333`, on exact clean source `07972b4`.
+All eleven prepared lifecycle controls and four emergency-stop scenarios passed.
+The selected run's seven required host/collector/helper roles stopped; no future
+original dispatch/kernel read occurred. The independent peer completed both
+original filesystem/Git calls strictly after the selected stop, and the unrelated
+listener/process identity remained useful and unchanged. Interrupted stop resumed;
+daemon loss and unconfirmed namespace cleanup honestly remained failed. Both
+source identity and selected assets/workspace remained unchanged. Full descendant
+identity lists stay in the CI artifact; this bounded report retains their count
+and canonical JSON digest plus the seven explicit required roles per run.
+
+`native-attempt2.json` preserves the earlier sequential-start timeout.
+`correction-checks.json` and `integration-checks.json` record unchanged deadlines,
+concurrent startup, strict macOS signal handling and local checks. Those failures
+and earlier successes are not relabelled as current evidence.
 
 ## Earlier passing native qualification
 

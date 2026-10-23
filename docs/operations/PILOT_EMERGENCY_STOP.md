@@ -2,7 +2,7 @@
 
 This implementation uses accepted `main` `acf59af` and extends the existing
 launcher and native session lifecycle. The exact-source native Ubuntu 24.04
-qualification is retained in `evidence/sou-125/native-linux.json`. It uses the
+qualification is retained in `evidence/sou-125/native-linux-current.json`. It uses the
 original host and installed servers with an owned scripted loopback provider;
 it does not measure live-model effectiveness.
 
