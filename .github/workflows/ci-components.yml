@@ -1615,6 +1615,7 @@ jobs:
         env:
           PILOT_CLEANUP_PRIVILEGED_FIXTURE: '1'
         run: |
+          cargo fmt --all -- --check
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_measurement.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
