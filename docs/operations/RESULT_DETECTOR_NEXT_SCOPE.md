@@ -124,3 +124,30 @@ by the newly locked `ctutils 0.4.4` missing from the local offline cache; fetchi
 that exact crate with Cargo.lock SHA256 verification resolved the environment
 failure without editing the lockfile. This does not constitute the independent
 30-attack runtime qualification.
+
+## Git attribution follow-up
+
+The offline inspector now also accounts for the retained Git fixture in full.
+Use `--text` to inspect exact text bytes rather than a JSON-RPC response:
+
+```
+python scripts/inspect-result-framing.py --text crates/agent/tests/fixtures/result_detector/git-multifile-show.txt
+```
+
+Supported grammar: lowercase 40/64-digit commit ID, Author/Date lines, indented
+message, old/new path pairs, counted unified hunks and binary summary lines.
+Hunk added/removed/context counts must match. Limits remain unchanged. CRLF,
+quoted/extended Git headers, hunk function suffixes, no-newline markers and
+unconsumed tails remain explicitly unsupported; no partial parse is successful.
+This is not a generic Git parser or a trusted provenance check. All paths,
+metadata values, body lines and binary summaries remain unresolved and present
+in the original byte ranges. No downstream scanner receives stripped content.
+
+Nine test groups pass, including the exact original Git bytes, destructive and
+Russian body substitutions, multihunk/context counts, under/over-counts and
+appended tails. The ordinary response and harmful substitutions all have valid
+framing and unresolved bodies. This demonstrates why attribution alone is not
+enough evidence to release the original positive. No production scoring change,
+new model trial or successful production acceptance is claimed. The earlier
+paragraphs describe the filesystem-only first increment; Git attribution is now
+available within this narrow offline grammar, not production support.

@@ -13,6 +13,75 @@ MAX_LINES = 1024
 MAX_RECORDS = 256
 ATOM = re.compile(rb'(?:null|true|false|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|[A-Z][A-Z0-9]*-[0-9]+)')
 HEADER = re.compile(rb'/[A-Za-z0-9/._-]+:')
+HUNK = re.compile(rb'@@ -(\d{1,9})(?:,(\d{1,9}))? \+(\d{1,9})(?:,(\d{1,9}))? @@')
+
+
+def git_spans(lines):
+    """Narrow git-show grammar; all metadata values and hunk bodies untrusted."""
+    if len(lines) < 4 or not re.fullmatch(rb'commit [0-9a-f]{40}(?:[0-9a-f]{24})?\n', lines[0]):
+        return None
+    if not lines[1].startswith(b'Author: ') or not lines[2].startswith(b'Date: '):
+        return None
+    if lines[3] != b'\n':
+        return None
+    kinds = ['hash_framing_candidate', 'metadata_unresolved', 'metadata_unresolved', 'blank']
+    index = 4
+    while index < len(lines) and (lines[index].startswith(b'    ') or lines[index] == b'\n'):
+        kinds.append('metadata_unresolved' if lines[index] != b'\n' else 'blank')
+        index += 1
+    files = 0
+    while index < len(lines):
+        if lines[index] == b'\n':
+            kinds.append('blank')
+            index += 1
+            continue
+        if not lines[index].startswith(b'--- ') or index + 2 >= len(lines) or not lines[index + 1].startswith(b'+++ '):
+            return None
+        # Path spelling never acts as authority; reject empty or multiline paths.
+        if not lines[index][4:].strip() or not lines[index + 1][4:].strip():
+            return None
+        kinds.extend(['path_unresolved', 'path_unresolved'])
+        index += 2
+        files += 1
+        if files > MAX_RECORDS:
+            return None
+        if re.fullmatch(rb'Binary files .+ and .+ differ\n?', lines[index]):
+            kinds.append('binary_summary_unresolved')
+            index += 1
+            continue
+        hunks = 0
+        while index < len(lines) and lines[index].startswith(b'@@ '):
+            match = HUNK.fullmatch(lines[index].removesuffix(b'\n'))
+            if not match:
+                return None
+            old = int(match[2]) if match[2] is not None else 1
+            new = int(match[4]) if match[4] is not None else 1
+            if old > MAX_LINES or new > MAX_LINES:
+                return None
+            kinds.append('hunk_framing_candidate')
+            index += 1
+            hunks += 1
+            while old or new:
+                if index >= len(lines):
+                    return None
+                prefix = lines[index][:1]
+                if prefix == b' ':
+                    old -= 1
+                    new -= 1
+                elif prefix == b'+':
+                    new -= 1
+                elif prefix == b'-':
+                    old -= 1
+                else:
+                    return None
+                if old < 0 or new < 0:
+                    return None
+                # Keep content and its prefix together; never strip before scanning.
+                kinds.append('body_unresolved')
+                index += 1
+        if not hunks:
+            return None
+    return (kinds, files) if files else None
 
 
 def inspect(raw):
@@ -35,6 +104,20 @@ def inspect(raw):
         lines = []
     if not lines or len(lines) > MAX_LINES or b'\x00' in raw:
         report['reason'] = 'unsupported_lines'
+        return report
+    if raw.startswith(b'commit '):
+        parsed = git_spans(lines)
+        if parsed is None:
+            report['reason'] = 'unsupported_git_grammar'
+            return report
+        kinds, files = parsed
+        offset = 0
+        for line, kind in zip(lines, kinds):
+            report['spans'].append(dict(start=offset, end=offset + len(line), kind=kind))
+            offset += len(line)
+        assert len(kinds) == len(lines) and offset == len(raw)
+        report.update(complete=True, supported=True, reason='parsed_untrusted_git',
+                      records=files, unresolved_body=True)
         return report
     spans = []
     offset = 0
@@ -124,13 +207,14 @@ def inspect_frame(raw):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('frame', type=Path)
+    parser.add_argument('--text', action='store_true', help='Inspect exact UTF-8 bytes instead of a JSON-RPC frame')
     args = parser.parse_args()
     with args.frame.open('rb') as stream:
         raw = stream.read(MAX_FRAME + 1)
-    report = inspect_frame(raw)
+    report = inspect(raw) if args.text else inspect_frame(raw)
     if len(raw) > MAX_FRAME:
         # The prefix hash is not the hash of the entire file.
-        report['frame_sha256'] = None
+        report['sha256' if args.text else 'frame_sha256'] = None
     print(json.dumps(report, ensure_ascii=True, sort_keys=True))
 
 
