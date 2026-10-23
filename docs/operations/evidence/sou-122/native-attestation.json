@@ -1,0 +1,214 @@
+{
+  "checks": [
+    {
+      "check": "source",
+      "declared": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+      "resolved": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+      "status": "pass"
+    },
+    {
+      "check": "toolchain-file",
+      "declared": {
+        "env_RUSTUP_TOOLCHAIN": "1.94.1",
+        "file_channel": "1.99.1"
+      },
+      "resolved": {
+        "env_RUSTUP_TOOLCHAIN": "1.94.1",
+        "file_channel": "1.99.1"
+      },
+      "status": "pass"
+    },
+    {
+      "check": "workflow-toolchain-refs",
+      "declared": {
+        "legacy": "1.94.1",
+        "pinned": "1.99.1"
+      },
+      "resolved": {
+        "1.94.1": 16,
+        "1.99.1": 73
+      },
+      "status": "pass"
+    },
+    {
+      "check": "compiler",
+      "declared": {
+        "commit_prefix": null,
+        "host": "x86_64-unknown-linux-gnu",
+        "lane": "native",
+        "version": "1.94.1"
+      },
+      "resolved": {
+        "cargo_release": "1.94.1",
+        "commit_pinned": false,
+        "executables": {
+          "cargo": {
+            "path": "/home/runner/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "sha256": "b7561ebe947acf816451536f19871ea4810f6be3f82fd252feab6ca7be8396f5"
+          },
+          "rustc": {
+            "path": "/home/runner/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/rustc",
+            "sha256": "ef6d716e5d1c6c93def277c0afa037c21e7a74f7de3aed4ee0700646c3301b1d"
+          }
+        },
+        "host": "x86_64-unknown-linux-gnu",
+        "rustc_commit": "e408947bfd200af42db322daf0fadfe7e26d3bd1",
+        "rustc_release": "1.94.1"
+      },
+      "status": "pass"
+    },
+    {
+      "check": "lockfile",
+      "resolved": {
+        "format_version": 4,
+        "packages": 443,
+        "sha256": "b603e17ee717ea60c80db5a0eb0b2b0837659d9cea9e917654900610ae42798e",
+        "tracked": true
+      },
+      "status": "pass"
+    },
+    {
+      "check": "interpreter",
+      "declared": {
+        "implementation": "CPython",
+        "minimum_version": "3.9",
+        "role": "classifier"
+      },
+      "resolved": {
+        "executable": "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python3.12",
+        "implementation": "CPython",
+        "sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+        "version": "3.12.15"
+      },
+      "status": "pass"
+    },
+    {
+      "check": "pinned-inputs",
+      "resolved": {
+        "filesystem_package_lock": "98afd2e0fe566a9a9ca626953934c96b23411b8feb619ddeb1cadff341b6d693",
+        "git_requirements_lock": "a2cfeda583ce58ab092610ee5b8902ef2f6ab1c97dabebf7eb67bcc512f5f1e5",
+        "git_source_sha256": "233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3",
+        "python_archive_sha256": "91ab434738647ab45d630aaa02e3808bb516239beeb52f7799c12a12d1557a38"
+      },
+      "status": "pass"
+    },
+    {
+      "check": "build-scripts",
+      "resolved": {
+        "files": 7
+      },
+      "status": "pass"
+    }
+  ],
+  "declared": {
+    "legacy_lane": {
+      "version": "1.94.1",
+      "workflows": [
+        ".github/workflows/ci-components.yml",
+        ".github/workflows/mcp-real-filesystem.yml",
+        ".github/workflows/mcp-real-git.yml",
+        ".github/workflows/native-mcp-stderr.yml",
+        ".github/workflows/provenance-memory.yml",
+        ".github/workflows/sou79-resource-budgets.yml",
+        ".github/workflows/sou86-crash-supervision.yml"
+      ]
+    },
+    "python": {
+      "classifier": {
+        "implementation": "CPython",
+        "minimum_version": "3.9"
+      },
+      "git_runtime": {
+        "implementation": "CPython",
+        "version": "3.11.14"
+      }
+    },
+    "rust": {
+      "commit_prefix": "58cf8f9c3",
+      "declared_in": "rust-toolchain.toml",
+      "host": "x86_64-unknown-linux-gnu",
+      "release_date": "2026-10-13",
+      "version": "1.99.1",
+      "workflow_action": "dtolnay/rust-toolchain"
+    }
+  },
+  "docker_lane_note": "Docker builder images are separate digest-pinned lanes and are listed, not verified here.",
+  "elapsed_seconds": 0.237,
+  "format": "sw-pilot-toolchain-attestation/1",
+  "reproducibility": {
+    "by_source_identity": true,
+    "byte_for_byte": "not claimed; deterministic binary equality is not demonstrated by this command"
+  },
+  "resolved": {
+    "build_scripts": {
+      "Cargo.lock": "b603e17ee717ea60c80db5a0eb0b2b0837659d9cea9e917654900610ae42798e",
+      "rust-toolchain.toml": "5a7b7b624394e3ece3fb4c9e0391aa400eeebf7a7a1efd18e74c5b68b71cd65e",
+      "scripts/install-sou62-filesystem-profile.py": "f8ff270d14e8d98f20992a0ddd6d3fe23754ceb9311dde37d51574dfd98691ac",
+      "scripts/install-sou68-git-profile.py": "0dfff4f8839df513540618cc7f337eeb5d4ef3783f427f07df3340174359c716",
+      "scripts/prepare-installed-pilot.py": "ade16b25f804660e234be471adaebdf0ebdcb87acdffcff2afe3df13c8c6d5a5",
+      "scripts/prepare-native-pilot-prerequisites.py": "ec0d29706dc2fc4462574b31f2c9ae9fb2577b92e7002e7d87d1d206f7ef5f97",
+      "scripts/qualify-installed-pilot.py": "3be04dd7b66078f72a65606adc307415198ed3338628164b238df3c7ae9f59c5"
+    },
+    "compiler": {
+      "cargo_release": "1.94.1",
+      "commit_pinned": false,
+      "executables": {
+        "cargo": {
+          "path": "/home/runner/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/cargo",
+          "sha256": "b7561ebe947acf816451536f19871ea4810f6be3f82fd252feab6ca7be8396f5"
+        },
+        "rustc": {
+          "path": "/home/runner/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/rustc",
+          "sha256": "ef6d716e5d1c6c93def277c0afa037c21e7a74f7de3aed4ee0700646c3301b1d"
+        }
+      },
+      "host": "x86_64-unknown-linux-gnu",
+      "rustc_commit": "e408947bfd200af42db322daf0fadfe7e26d3bd1",
+      "rustc_release": "1.94.1"
+    },
+    "docker_rust_images_declared": {
+      "deploy/Dockerfile": [
+        "rust:1.98-bookworm"
+      ],
+      "deploy/Dockerfile.test": [
+        "rust:1.98-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e"
+      ],
+      "deploy/Dockerfile.tls": [
+        "rust:1.99-bookworm@sha256:114c7a4425406451c2866b6aafe69fe29b1b298832db1277d411ac73c82d04d6"
+      ]
+    },
+    "interpreter": {
+      "executable": "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python3.12",
+      "implementation": "CPython",
+      "sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+      "version": "3.12.15"
+    },
+    "lockfile": {
+      "format_version": 4,
+      "packages": 443,
+      "sha256": "b603e17ee717ea60c80db5a0eb0b2b0837659d9cea9e917654900610ae42798e",
+      "tracked": true
+    },
+    "pinned_inputs": {
+      "filesystem_package_lock": "98afd2e0fe566a9a9ca626953934c96b23411b8feb619ddeb1cadff341b6d693",
+      "git_requirements_lock": "a2cfeda583ce58ab092610ee5b8902ef2f6ab1c97dabebf7eb67bcc512f5f1e5",
+      "git_source_sha256": "233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3",
+      "python_archive_sha256": "91ab434738647ab45d630aaa02e3808bb516239beeb52f7799c12a12d1557a38"
+    },
+    "source": {
+      "commit": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+      "dirty": false,
+      "tree": "f6706709177f584d33737ccc148290954ad37385"
+    },
+    "toolchain_file": {
+      "channel": "1.99.1",
+      "env_RUSTUP_TOOLCHAIN": "1.94.1",
+      "sha256": "5a7b7b624394e3ece3fb4c9e0391aa400eeebf7a7a1efd18e74c5b68b71cd65e"
+    },
+    "workflow_toolchain_refs": {
+      "1.94.1": 16,
+      "1.99.1": 73
+    }
+  },
+  "status": "verified"
+}

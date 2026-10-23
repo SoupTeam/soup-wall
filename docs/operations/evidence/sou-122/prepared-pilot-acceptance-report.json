@@ -1,0 +1,1902 @@
+{
+  "active_case": "timeout",
+  "cases": [
+    {
+      "case": "plan",
+      "reason": null,
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "755ca96b3a87d80b3c543f3f609415bb3aff01313638e02118ddfd29915de465"
+    },
+    {
+      "case": "occupied-port",
+      "reason": "occupied_port_refused",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "74c3f393ba890c4719b75cacabebd9df5817e61baaf814a892ea98ff685df934"
+    },
+    {
+      "case": "stale-source",
+      "reason": "candidate_source_mismatch",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "d0f4de2f1e046688f490f294b389686c16406d14ab38f882c07994b098265da9"
+    },
+    {
+      "case": "changed-selection",
+      "reason": "selected_executable_changed",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "00e73fd9a3d45dbcefedca185382d4634e92c92fa4dcc4f2e0ce1f0d17eb1a5a"
+    },
+    {
+      "case": "useful-refusal",
+      "cleanup": "owned_state_removed",
+      "correlated_useful_continuation": true,
+      "dispatch_counts": [
+        1,
+        1,
+        0
+      ],
+      "exact_once_kernel_read": true,
+      "explicit_harness_decisions": 0,
+      "kernel_git_status_count": 1,
+      "outcome": "completed",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 58,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 12216,
+            "start_time_ticks": 50839
+          },
+          {
+            "parent_process": false,
+            "pid": 12220,
+            "start_time_ticks": 50839
+          },
+          {
+            "parent_process": false,
+            "pid": 12221,
+            "start_time_ticks": 50877
+          },
+          {
+            "parent_process": false,
+            "pid": 12222,
+            "start_time_ticks": 50879
+          },
+          {
+            "parent_process": false,
+            "pid": 12223,
+            "start_time_ticks": 50880
+          },
+          {
+            "parent_process": false,
+            "pid": 12227,
+            "start_time_ticks": 50894
+          },
+          {
+            "parent_process": false,
+            "pid": 12232,
+            "start_time_ticks": 52162
+          },
+          {
+            "parent_process": false,
+            "pid": 12233,
+            "start_time_ticks": 52163
+          },
+          {
+            "parent_process": false,
+            "pid": 12234,
+            "start_time_ticks": 52165
+          },
+          {
+            "parent_process": false,
+            "pid": 12238,
+            "start_time_ticks": 52178
+          },
+          {
+            "parent_process": false,
+            "pid": 12239,
+            "start_time_ticks": 52359
+          },
+          {
+            "parent_process": false,
+            "pid": 12240,
+            "start_time_ticks": 52361
+          },
+          {
+            "parent_process": false,
+            "pid": 12241,
+            "start_time_ticks": 52362
+          },
+          {
+            "parent_process": false,
+            "pid": 12245,
+            "start_time_ticks": 52375
+          },
+          {
+            "parent_process": false,
+            "pid": 12248,
+            "start_time_ticks": 53660
+          },
+          {
+            "parent_process": false,
+            "pid": 12249,
+            "start_time_ticks": 53662
+          },
+          {
+            "parent_process": false,
+            "pid": 12250,
+            "start_time_ticks": 53663
+          },
+          {
+            "parent_process": false,
+            "pid": 12254,
+            "start_time_ticks": 53677
+          },
+          {
+            "parent_process": false,
+            "pid": 12255,
+            "start_time_ticks": 53855
+          },
+          {
+            "parent_process": false,
+            "pid": 12256,
+            "start_time_ticks": 53856
+          },
+          {
+            "parent_process": false,
+            "pid": 12257,
+            "start_time_ticks": 53858
+          },
+          {
+            "parent_process": false,
+            "pid": 12261,
+            "start_time_ticks": 53871
+          },
+          {
+            "parent_process": false,
+            "pid": 12264,
+            "start_time_ticks": 55159
+          },
+          {
+            "parent_process": false,
+            "pid": 12265,
+            "start_time_ticks": 55161
+          },
+          {
+            "parent_process": false,
+            "pid": 12266,
+            "start_time_ticks": 55162
+          },
+          {
+            "parent_process": false,
+            "pid": 12270,
+            "start_time_ticks": 55175
+          },
+          {
+            "parent_process": false,
+            "pid": 12271,
+            "start_time_ticks": 55355
+          },
+          {
+            "parent_process": false,
+            "pid": 12276,
+            "start_time_ticks": 55417
+          },
+          {
+            "parent_process": false,
+            "pid": 12277,
+            "start_time_ticks": 55419
+          },
+          {
+            "parent_process": false,
+            "pid": 12278,
+            "start_time_ticks": 55420
+          },
+          {
+            "parent_process": false,
+            "pid": 12279,
+            "start_time_ticks": 55422
+          },
+          {
+            "parent_process": false,
+            "pid": 12283,
+            "start_time_ticks": 55437
+          },
+          {
+            "parent_process": false,
+            "pid": 12285,
+            "start_time_ticks": 56722
+          },
+          {
+            "parent_process": false,
+            "pid": 12286,
+            "start_time_ticks": 56724
+          },
+          {
+            "parent_process": false,
+            "pid": 12287,
+            "start_time_ticks": 56726
+          },
+          {
+            "parent_process": false,
+            "pid": 12291,
+            "start_time_ticks": 56741
+          },
+          {
+            "parent_process": false,
+            "pid": 12292,
+            "start_time_ticks": 56916
+          },
+          {
+            "parent_process": false,
+            "pid": 12294,
+            "start_time_ticks": 57550
+          },
+          {
+            "parent_process": false,
+            "pid": 12304,
+            "start_time_ticks": 57600
+          },
+          {
+            "parent_process": false,
+            "pid": 12305,
+            "start_time_ticks": 57602
+          },
+          {
+            "parent_process": false,
+            "pid": 12307,
+            "start_time_ticks": 57604
+          },
+          {
+            "parent_process": false,
+            "pid": 12309,
+            "start_time_ticks": 57611
+          },
+          {
+            "parent_process": false,
+            "pid": 12308,
+            "start_time_ticks": 57610
+          },
+          {
+            "parent_process": false,
+            "pid": 12310,
+            "start_time_ticks": 57612
+          },
+          {
+            "parent_process": false,
+            "pid": 12317,
+            "start_time_ticks": 57620
+          },
+          {
+            "parent_process": false,
+            "pid": 12320,
+            "start_time_ticks": 57621
+          },
+          {
+            "parent_process": false,
+            "pid": 12319,
+            "start_time_ticks": 57621
+          },
+          {
+            "parent_process": false,
+            "pid": 12318,
+            "start_time_ticks": 57621
+          },
+          {
+            "parent_process": false,
+            "pid": 12321,
+            "start_time_ticks": 57623
+          },
+          {
+            "parent_process": false,
+            "pid": 12322,
+            "start_time_ticks": 57624
+          },
+          {
+            "parent_process": false,
+            "pid": 12332,
+            "start_time_ticks": 58495
+          },
+          {
+            "parent_process": false,
+            "pid": 12333,
+            "start_time_ticks": 58496
+          },
+          {
+            "parent_process": false,
+            "pid": 12334,
+            "start_time_ticks": 58497
+          },
+          {
+            "parent_process": false,
+            "pid": 12335,
+            "start_time_ticks": 58502
+          },
+          {
+            "parent_process": false,
+            "pid": 12359,
+            "start_time_ticks": 58820
+          },
+          {
+            "parent_process": false,
+            "pid": 12360,
+            "start_time_ticks": 58822
+          },
+          {
+            "parent_process": false,
+            "pid": 12361,
+            "start_time_ticks": 58823
+          },
+          {
+            "parent_process": false,
+            "pid": 12362,
+            "start_time_ticks": 58836
+          },
+          {
+            "parent_process": false,
+            "pid": 12374,
+            "start_time_ticks": 59051
+          }
+        ],
+        "remaining": []
+      },
+      "status": "passed",
+      "trace_sha256": "dbb601682c157fa61737307f3b8b9360d74f91d72048fce8e5c8e5637c2737d4"
+    },
+    {
+      "case": "ask",
+      "cleanup": "owned_state_removed",
+      "correlated_useful_continuation": true,
+      "dispatch_counts": [
+        1,
+        1,
+        1
+      ],
+      "exact_once_kernel_read": true,
+      "explicit_harness_decisions": 2,
+      "outcome": "completed",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 58,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 12378,
+            "start_time_ticks": 59410
+          },
+          {
+            "parent_process": false,
+            "pid": 12382,
+            "start_time_ticks": 59411
+          },
+          {
+            "parent_process": false,
+            "pid": 12383,
+            "start_time_ticks": 59451
+          },
+          {
+            "parent_process": false,
+            "pid": 12384,
+            "start_time_ticks": 59453
+          },
+          {
+            "parent_process": false,
+            "pid": 12385,
+            "start_time_ticks": 59454
+          },
+          {
+            "parent_process": false,
+            "pid": 12389,
+            "start_time_ticks": 59468
+          },
+          {
+            "parent_process": false,
+            "pid": 12392,
+            "start_time_ticks": 60739
+          },
+          {
+            "parent_process": false,
+            "pid": 12393,
+            "start_time_ticks": 60741
+          },
+          {
+            "parent_process": false,
+            "pid": 12394,
+            "start_time_ticks": 60742
+          },
+          {
+            "parent_process": false,
+            "pid": 12398,
+            "start_time_ticks": 60756
+          },
+          {
+            "parent_process": false,
+            "pid": 12399,
+            "start_time_ticks": 60931
+          },
+          {
+            "parent_process": false,
+            "pid": 12400,
+            "start_time_ticks": 60933
+          },
+          {
+            "parent_process": false,
+            "pid": 12401,
+            "start_time_ticks": 60934
+          },
+          {
+            "parent_process": false,
+            "pid": 12405,
+            "start_time_ticks": 60949
+          },
+          {
+            "parent_process": false,
+            "pid": 12412,
+            "start_time_ticks": 62206
+          },
+          {
+            "parent_process": false,
+            "pid": 12413,
+            "start_time_ticks": 62208
+          },
+          {
+            "parent_process": false,
+            "pid": 12414,
+            "start_time_ticks": 62209
+          },
+          {
+            "parent_process": false,
+            "pid": 12418,
+            "start_time_ticks": 62224
+          },
+          {
+            "parent_process": false,
+            "pid": 12419,
+            "start_time_ticks": 62409
+          },
+          {
+            "parent_process": false,
+            "pid": 12420,
+            "start_time_ticks": 62411
+          },
+          {
+            "parent_process": false,
+            "pid": 12421,
+            "start_time_ticks": 62412
+          },
+          {
+            "parent_process": false,
+            "pid": 12425,
+            "start_time_ticks": 62427
+          },
+          {
+            "parent_process": false,
+            "pid": 12430,
+            "start_time_ticks": 63693
+          },
+          {
+            "parent_process": false,
+            "pid": 12431,
+            "start_time_ticks": 63695
+          },
+          {
+            "parent_process": false,
+            "pid": 12432,
+            "start_time_ticks": 63696
+          },
+          {
+            "parent_process": false,
+            "pid": 12436,
+            "start_time_ticks": 63710
+          },
+          {
+            "parent_process": false,
+            "pid": 12437,
+            "start_time_ticks": 63892
+          },
+          {
+            "parent_process": false,
+            "pid": 12442,
+            "start_time_ticks": 63953
+          },
+          {
+            "parent_process": false,
+            "pid": 12443,
+            "start_time_ticks": 63955
+          },
+          {
+            "parent_process": false,
+            "pid": 12444,
+            "start_time_ticks": 63957
+          },
+          {
+            "parent_process": false,
+            "pid": 12445,
+            "start_time_ticks": 63958
+          },
+          {
+            "parent_process": false,
+            "pid": 12449,
+            "start_time_ticks": 63974
+          },
+          {
+            "parent_process": false,
+            "pid": 12452,
+            "start_time_ticks": 65247
+          },
+          {
+            "parent_process": false,
+            "pid": 12453,
+            "start_time_ticks": 65249
+          },
+          {
+            "parent_process": false,
+            "pid": 12454,
+            "start_time_ticks": 65250
+          },
+          {
+            "parent_process": false,
+            "pid": 12458,
+            "start_time_ticks": 65266
+          },
+          {
+            "parent_process": false,
+            "pid": 12459,
+            "start_time_ticks": 65438
+          },
+          {
+            "parent_process": false,
+            "pid": 12463,
+            "start_time_ticks": 67881
+          },
+          {
+            "parent_process": false,
+            "pid": 12477,
+            "start_time_ticks": 67928
+          },
+          {
+            "parent_process": false,
+            "pid": 12478,
+            "start_time_ticks": 67929
+          },
+          {
+            "parent_process": false,
+            "pid": 12481,
+            "start_time_ticks": 67932
+          },
+          {
+            "parent_process": false,
+            "pid": 12482,
+            "start_time_ticks": 67937
+          },
+          {
+            "parent_process": false,
+            "pid": 12484,
+            "start_time_ticks": 67938
+          },
+          {
+            "parent_process": false,
+            "pid": 12483,
+            "start_time_ticks": 67937
+          },
+          {
+            "parent_process": false,
+            "pid": 12492,
+            "start_time_ticks": 67945
+          },
+          {
+            "parent_process": false,
+            "pid": 12495,
+            "start_time_ticks": 67946
+          },
+          {
+            "parent_process": false,
+            "pid": 12494,
+            "start_time_ticks": 67945
+          },
+          {
+            "parent_process": false,
+            "pid": 12493,
+            "start_time_ticks": 67945
+          },
+          {
+            "parent_process": false,
+            "pid": 12497,
+            "start_time_ticks": 67950
+          },
+          {
+            "parent_process": false,
+            "pid": 12496,
+            "start_time_ticks": 67949
+          },
+          {
+            "parent_process": false,
+            "pid": 12577,
+            "start_time_ticks": 68739
+          },
+          {
+            "parent_process": false,
+            "pid": 12579,
+            "start_time_ticks": 68740
+          },
+          {
+            "parent_process": false,
+            "pid": 12580,
+            "start_time_ticks": 68741
+          },
+          {
+            "parent_process": false,
+            "pid": 12581,
+            "start_time_ticks": 68746
+          },
+          {
+            "parent_process": false,
+            "pid": 12635,
+            "start_time_ticks": 69090
+          },
+          {
+            "parent_process": false,
+            "pid": 12636,
+            "start_time_ticks": 69092
+          },
+          {
+            "parent_process": false,
+            "pid": 12637,
+            "start_time_ticks": 69093
+          },
+          {
+            "parent_process": false,
+            "pid": 12640,
+            "start_time_ticks": 69103
+          },
+          {
+            "parent_process": false,
+            "pid": 12656,
+            "start_time_ticks": 69265
+          }
+        ],
+        "remaining": []
+      },
+      "status": "passed",
+      "trace_sha256": "fca2417ae1d17b896f55252300b72a618b55e13d02f8b9152b56e3724c5c8aca"
+    },
+    {
+      "case": "default",
+      "cleanup": "owned_state_removed",
+      "correlated_useful_continuation": false,
+      "dispatch_counts": [
+        1,
+        0
+      ],
+      "exact_once_kernel_read": true,
+      "explicit_harness_decisions": 0,
+      "outcome": "completed",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 58,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 12833,
+            "start_time_ticks": 71449
+          },
+          {
+            "parent_process": false,
+            "pid": 12837,
+            "start_time_ticks": 71449
+          },
+          {
+            "parent_process": false,
+            "pid": 12838,
+            "start_time_ticks": 71487
+          },
+          {
+            "parent_process": false,
+            "pid": 12839,
+            "start_time_ticks": 71489
+          },
+          {
+            "parent_process": false,
+            "pid": 12840,
+            "start_time_ticks": 71490
+          },
+          {
+            "parent_process": false,
+            "pid": 12844,
+            "start_time_ticks": 71504
+          },
+          {
+            "parent_process": false,
+            "pid": 12846,
+            "start_time_ticks": 72812
+          },
+          {
+            "parent_process": false,
+            "pid": 12847,
+            "start_time_ticks": 72814
+          },
+          {
+            "parent_process": false,
+            "pid": 12848,
+            "start_time_ticks": 72815
+          },
+          {
+            "parent_process": false,
+            "pid": 12852,
+            "start_time_ticks": 72830
+          },
+          {
+            "parent_process": false,
+            "pid": 12853,
+            "start_time_ticks": 73035
+          },
+          {
+            "parent_process": false,
+            "pid": 12854,
+            "start_time_ticks": 73036
+          },
+          {
+            "parent_process": false,
+            "pid": 12855,
+            "start_time_ticks": 73038
+          },
+          {
+            "parent_process": false,
+            "pid": 12859,
+            "start_time_ticks": 73051
+          },
+          {
+            "parent_process": false,
+            "pid": 12860,
+            "start_time_ticks": 74391
+          },
+          {
+            "parent_process": false,
+            "pid": 12861,
+            "start_time_ticks": 74392
+          },
+          {
+            "parent_process": false,
+            "pid": 12862,
+            "start_time_ticks": 74394
+          },
+          {
+            "parent_process": false,
+            "pid": 12866,
+            "start_time_ticks": 74407
+          },
+          {
+            "parent_process": false,
+            "pid": 12867,
+            "start_time_ticks": 74606
+          },
+          {
+            "parent_process": false,
+            "pid": 12868,
+            "start_time_ticks": 74608
+          },
+          {
+            "parent_process": false,
+            "pid": 12869,
+            "start_time_ticks": 74609
+          },
+          {
+            "parent_process": false,
+            "pid": 12873,
+            "start_time_ticks": 74623
+          },
+          {
+            "parent_process": false,
+            "pid": 12878,
+            "start_time_ticks": 75954
+          },
+          {
+            "parent_process": false,
+            "pid": 12879,
+            "start_time_ticks": 75955
+          },
+          {
+            "parent_process": false,
+            "pid": 12880,
+            "start_time_ticks": 75957
+          },
+          {
+            "parent_process": false,
+            "pid": 12884,
+            "start_time_ticks": 75972
+          },
+          {
+            "parent_process": false,
+            "pid": 12885,
+            "start_time_ticks": 76177
+          },
+          {
+            "parent_process": false,
+            "pid": 12890,
+            "start_time_ticks": 76239
+          },
+          {
+            "parent_process": false,
+            "pid": 12891,
+            "start_time_ticks": 76241
+          },
+          {
+            "parent_process": false,
+            "pid": 12892,
+            "start_time_ticks": 76242
+          },
+          {
+            "parent_process": false,
+            "pid": 12893,
+            "start_time_ticks": 76244
+          },
+          {
+            "parent_process": false,
+            "pid": 12897,
+            "start_time_ticks": 76257
+          },
+          {
+            "parent_process": false,
+            "pid": 12899,
+            "start_time_ticks": 77551
+          },
+          {
+            "parent_process": false,
+            "pid": 12900,
+            "start_time_ticks": 77552
+          },
+          {
+            "parent_process": false,
+            "pid": 12901,
+            "start_time_ticks": 77554
+          },
+          {
+            "parent_process": false,
+            "pid": 12905,
+            "start_time_ticks": 77567
+          },
+          {
+            "parent_process": false,
+            "pid": 12906,
+            "start_time_ticks": 77745
+          },
+          {
+            "parent_process": false,
+            "pid": 12908,
+            "start_time_ticks": 78379
+          },
+          {
+            "parent_process": false,
+            "pid": 12918,
+            "start_time_ticks": 78426
+          },
+          {
+            "parent_process": false,
+            "pid": 12919,
+            "start_time_ticks": 78427
+          },
+          {
+            "parent_process": false,
+            "pid": 12921,
+            "start_time_ticks": 78430
+          },
+          {
+            "parent_process": false,
+            "pid": 12922,
+            "start_time_ticks": 78435
+          },
+          {
+            "parent_process": false,
+            "pid": 12924,
+            "start_time_ticks": 78436
+          },
+          {
+            "parent_process": false,
+            "pid": 12923,
+            "start_time_ticks": 78435
+          },
+          {
+            "parent_process": false,
+            "pid": 12931,
+            "start_time_ticks": 78443
+          },
+          {
+            "parent_process": false,
+            "pid": 12934,
+            "start_time_ticks": 78444
+          },
+          {
+            "parent_process": false,
+            "pid": 12933,
+            "start_time_ticks": 78444
+          },
+          {
+            "parent_process": false,
+            "pid": 12932,
+            "start_time_ticks": 78444
+          },
+          {
+            "parent_process": false,
+            "pid": 12935,
+            "start_time_ticks": 78446
+          },
+          {
+            "parent_process": false,
+            "pid": 12936,
+            "start_time_ticks": 78447
+          },
+          {
+            "parent_process": false,
+            "pid": 12946,
+            "start_time_ticks": 79230
+          },
+          {
+            "parent_process": false,
+            "pid": 12947,
+            "start_time_ticks": 79231
+          },
+          {
+            "parent_process": false,
+            "pid": 12948,
+            "start_time_ticks": 79232
+          },
+          {
+            "parent_process": false,
+            "pid": 12949,
+            "start_time_ticks": 79237
+          },
+          {
+            "parent_process": false,
+            "pid": 12972,
+            "start_time_ticks": 79589
+          },
+          {
+            "parent_process": false,
+            "pid": 12973,
+            "start_time_ticks": 79591
+          },
+          {
+            "parent_process": false,
+            "pid": 12974,
+            "start_time_ticks": 79591
+          },
+          {
+            "parent_process": false,
+            "pid": 12975,
+            "start_time_ticks": 79604
+          },
+          {
+            "parent_process": false,
+            "pid": 12976,
+            "start_time_ticks": 79764
+          }
+        ],
+        "remaining": []
+      },
+      "status": "passed",
+      "trace_sha256": "bfd839614cc96af46a586b4d4a43f401f077506383150f16668fd60cae314cd9"
+    },
+    {
+      "case": "cancel",
+      "cleanup": "owned_state_removed",
+      "failure_reason": "pilot_cancelled",
+      "outcome": "failed",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 58,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 12989,
+            "start_time_ticks": 80121
+          },
+          {
+            "parent_process": false,
+            "pid": 12993,
+            "start_time_ticks": 80121
+          },
+          {
+            "parent_process": false,
+            "pid": 12994,
+            "start_time_ticks": 80159
+          },
+          {
+            "parent_process": false,
+            "pid": 12995,
+            "start_time_ticks": 80160
+          },
+          {
+            "parent_process": false,
+            "pid": 12996,
+            "start_time_ticks": 80162
+          },
+          {
+            "parent_process": false,
+            "pid": 13000,
+            "start_time_ticks": 80176
+          },
+          {
+            "parent_process": false,
+            "pid": 13002,
+            "start_time_ticks": 81452
+          },
+          {
+            "parent_process": false,
+            "pid": 13003,
+            "start_time_ticks": 81453
+          },
+          {
+            "parent_process": false,
+            "pid": 13004,
+            "start_time_ticks": 81455
+          },
+          {
+            "parent_process": false,
+            "pid": 13008,
+            "start_time_ticks": 81469
+          },
+          {
+            "parent_process": false,
+            "pid": 13009,
+            "start_time_ticks": 81649
+          },
+          {
+            "parent_process": false,
+            "pid": 13010,
+            "start_time_ticks": 81651
+          },
+          {
+            "parent_process": false,
+            "pid": 13011,
+            "start_time_ticks": 81652
+          },
+          {
+            "parent_process": false,
+            "pid": 13015,
+            "start_time_ticks": 81666
+          },
+          {
+            "parent_process": false,
+            "pid": 13018,
+            "start_time_ticks": 82934
+          },
+          {
+            "parent_process": false,
+            "pid": 13019,
+            "start_time_ticks": 82936
+          },
+          {
+            "parent_process": false,
+            "pid": 13020,
+            "start_time_ticks": 82937
+          },
+          {
+            "parent_process": false,
+            "pid": 13024,
+            "start_time_ticks": 82950
+          },
+          {
+            "parent_process": false,
+            "pid": 13025,
+            "start_time_ticks": 83123
+          },
+          {
+            "parent_process": false,
+            "pid": 13026,
+            "start_time_ticks": 83125
+          },
+          {
+            "parent_process": false,
+            "pid": 13027,
+            "start_time_ticks": 83127
+          },
+          {
+            "parent_process": false,
+            "pid": 13031,
+            "start_time_ticks": 83140
+          },
+          {
+            "parent_process": false,
+            "pid": 13032,
+            "start_time_ticks": 84419
+          },
+          {
+            "parent_process": false,
+            "pid": 13033,
+            "start_time_ticks": 84421
+          },
+          {
+            "parent_process": false,
+            "pid": 13034,
+            "start_time_ticks": 84423
+          },
+          {
+            "parent_process": false,
+            "pid": 13038,
+            "start_time_ticks": 84436
+          },
+          {
+            "parent_process": false,
+            "pid": 13039,
+            "start_time_ticks": 84611
+          },
+          {
+            "parent_process": false,
+            "pid": 13044,
+            "start_time_ticks": 84673
+          },
+          {
+            "parent_process": false,
+            "pid": 13045,
+            "start_time_ticks": 84675
+          },
+          {
+            "parent_process": false,
+            "pid": 13046,
+            "start_time_ticks": 84676
+          },
+          {
+            "parent_process": false,
+            "pid": 13047,
+            "start_time_ticks": 84678
+          },
+          {
+            "parent_process": false,
+            "pid": 13051,
+            "start_time_ticks": 84693
+          },
+          {
+            "parent_process": false,
+            "pid": 13053,
+            "start_time_ticks": 85973
+          },
+          {
+            "parent_process": false,
+            "pid": 13054,
+            "start_time_ticks": 85975
+          },
+          {
+            "parent_process": false,
+            "pid": 13055,
+            "start_time_ticks": 85976
+          },
+          {
+            "parent_process": false,
+            "pid": 13059,
+            "start_time_ticks": 85992
+          },
+          {
+            "parent_process": false,
+            "pid": 13060,
+            "start_time_ticks": 86169
+          },
+          {
+            "parent_process": false,
+            "pid": 13061,
+            "start_time_ticks": 86802
+          },
+          {
+            "parent_process": false,
+            "pid": 13071,
+            "start_time_ticks": 86848
+          },
+          {
+            "parent_process": false,
+            "pid": 13072,
+            "start_time_ticks": 86850
+          },
+          {
+            "parent_process": false,
+            "pid": 13074,
+            "start_time_ticks": 86852
+          },
+          {
+            "parent_process": false,
+            "pid": 13076,
+            "start_time_ticks": 86858
+          },
+          {
+            "parent_process": false,
+            "pid": 13075,
+            "start_time_ticks": 86857
+          },
+          {
+            "parent_process": false,
+            "pid": 13077,
+            "start_time_ticks": 86859
+          },
+          {
+            "parent_process": false,
+            "pid": 13084,
+            "start_time_ticks": 86866
+          },
+          {
+            "parent_process": false,
+            "pid": 13087,
+            "start_time_ticks": 86866
+          },
+          {
+            "parent_process": false,
+            "pid": 13086,
+            "start_time_ticks": 86866
+          },
+          {
+            "parent_process": false,
+            "pid": 13085,
+            "start_time_ticks": 86866
+          },
+          {
+            "parent_process": false,
+            "pid": 13088,
+            "start_time_ticks": 86869
+          },
+          {
+            "parent_process": false,
+            "pid": 13089,
+            "start_time_ticks": 86870
+          },
+          {
+            "parent_process": false,
+            "pid": 13100,
+            "start_time_ticks": 87646
+          },
+          {
+            "parent_process": false,
+            "pid": 13101,
+            "start_time_ticks": 87647
+          },
+          {
+            "parent_process": false,
+            "pid": 13102,
+            "start_time_ticks": 87648
+          },
+          {
+            "parent_process": false,
+            "pid": 13103,
+            "start_time_ticks": 87653
+          },
+          {
+            "parent_process": false,
+            "pid": 13126,
+            "start_time_ticks": 88013
+          },
+          {
+            "parent_process": false,
+            "pid": 13127,
+            "start_time_ticks": 88015
+          },
+          {
+            "parent_process": false,
+            "pid": 13128,
+            "start_time_ticks": 88015
+          },
+          {
+            "parent_process": false,
+            "pid": 13129,
+            "start_time_ticks": 88028
+          },
+          {
+            "parent_process": false,
+            "pid": 13130,
+            "start_time_ticks": 88188
+          }
+        ],
+        "remaining": []
+      },
+      "status": "passed",
+      "trace_sha256": "b5d2c0cad93b175a395c5f34d00818fb0d8649af33283cc3c273c78cd49c4fcc"
+    },
+    {
+      "case": "daemon-loss",
+      "cleanup": "owned_state_removed",
+      "failure_reason": "owned_daemon_lost",
+      "outcome": "failed",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 58,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 13138,
+            "start_time_ticks": 88363
+          },
+          {
+            "parent_process": false,
+            "pid": 13142,
+            "start_time_ticks": 88363
+          },
+          {
+            "parent_process": false,
+            "pid": 13143,
+            "start_time_ticks": 88401
+          },
+          {
+            "parent_process": false,
+            "pid": 13144,
+            "start_time_ticks": 88403
+          },
+          {
+            "parent_process": false,
+            "pid": 13145,
+            "start_time_ticks": 88404
+          },
+          {
+            "parent_process": false,
+            "pid": 13149,
+            "start_time_ticks": 88419
+          },
+          {
+            "parent_process": false,
+            "pid": 13152,
+            "start_time_ticks": 89697
+          },
+          {
+            "parent_process": false,
+            "pid": 13153,
+            "start_time_ticks": 89698
+          },
+          {
+            "parent_process": false,
+            "pid": 13154,
+            "start_time_ticks": 89700
+          },
+          {
+            "parent_process": false,
+            "pid": 13158,
+            "start_time_ticks": 89714
+          },
+          {
+            "parent_process": false,
+            "pid": 13159,
+            "start_time_ticks": 89895
+          },
+          {
+            "parent_process": false,
+            "pid": 13160,
+            "start_time_ticks": 89897
+          },
+          {
+            "parent_process": false,
+            "pid": 13161,
+            "start_time_ticks": 89898
+          },
+          {
+            "parent_process": false,
+            "pid": 13165,
+            "start_time_ticks": 89913
+          },
+          {
+            "parent_process": false,
+            "pid": 13170,
+            "start_time_ticks": 91183
+          },
+          {
+            "parent_process": false,
+            "pid": 13171,
+            "start_time_ticks": 91184
+          },
+          {
+            "parent_process": false,
+            "pid": 13172,
+            "start_time_ticks": 91186
+          },
+          {
+            "parent_process": false,
+            "pid": 13176,
+            "start_time_ticks": 91199
+          },
+          {
+            "parent_process": false,
+            "pid": 13177,
+            "start_time_ticks": 91373
+          },
+          {
+            "parent_process": false,
+            "pid": 13178,
+            "start_time_ticks": 91375
+          },
+          {
+            "parent_process": false,
+            "pid": 13179,
+            "start_time_ticks": 91376
+          },
+          {
+            "parent_process": false,
+            "pid": 13183,
+            "start_time_ticks": 91390
+          },
+          {
+            "parent_process": false,
+            "pid": 13188,
+            "start_time_ticks": 92692
+          },
+          {
+            "parent_process": false,
+            "pid": 13189,
+            "start_time_ticks": 92693
+          },
+          {
+            "parent_process": false,
+            "pid": 13190,
+            "start_time_ticks": 92695
+          },
+          {
+            "parent_process": false,
+            "pid": 13194,
+            "start_time_ticks": 92710
+          },
+          {
+            "parent_process": false,
+            "pid": 13195,
+            "start_time_ticks": 92891
+          },
+          {
+            "parent_process": false,
+            "pid": 13200,
+            "start_time_ticks": 92953
+          },
+          {
+            "parent_process": false,
+            "pid": 13201,
+            "start_time_ticks": 92955
+          },
+          {
+            "parent_process": false,
+            "pid": 13202,
+            "start_time_ticks": 92957
+          },
+          {
+            "parent_process": false,
+            "pid": 13203,
+            "start_time_ticks": 92959
+          },
+          {
+            "parent_process": false,
+            "pid": 13207,
+            "start_time_ticks": 92972
+          },
+          {
+            "parent_process": false,
+            "pid": 13210,
+            "start_time_ticks": 94247
+          },
+          {
+            "parent_process": false,
+            "pid": 13211,
+            "start_time_ticks": 94248
+          },
+          {
+            "parent_process": false,
+            "pid": 13212,
+            "start_time_ticks": 94249
+          },
+          {
+            "parent_process": false,
+            "pid": 13216,
+            "start_time_ticks": 94263
+          },
+          {
+            "parent_process": false,
+            "pid": 13217,
+            "start_time_ticks": 94439
+          },
+          {
+            "parent_process": false,
+            "pid": 13218,
+            "start_time_ticks": 95073
+          },
+          {
+            "parent_process": false,
+            "pid": 13228,
+            "start_time_ticks": 95117
+          },
+          {
+            "parent_process": false,
+            "pid": 13229,
+            "start_time_ticks": 95119
+          },
+          {
+            "parent_process": false,
+            "pid": 13231,
+            "start_time_ticks": 95121
+          },
+          {
+            "parent_process": false,
+            "pid": 13232,
+            "start_time_ticks": 95127
+          },
+          {
+            "parent_process": false,
+            "pid": 13233,
+            "start_time_ticks": 95127
+          },
+          {
+            "parent_process": false,
+            "pid": 13234,
+            "start_time_ticks": 95128
+          },
+          {
+            "parent_process": false,
+            "pid": 13241,
+            "start_time_ticks": 95135
+          },
+          {
+            "parent_process": false,
+            "pid": 13244,
+            "start_time_ticks": 95136
+          },
+          {
+            "parent_process": false,
+            "pid": 13243,
+            "start_time_ticks": 95135
+          },
+          {
+            "parent_process": false,
+            "pid": 13242,
+            "start_time_ticks": 95135
+          },
+          {
+            "parent_process": false,
+            "pid": 13245,
+            "start_time_ticks": 95139
+          },
+          {
+            "parent_process": false,
+            "pid": 13246,
+            "start_time_ticks": 95139
+          },
+          {
+            "parent_process": false,
+            "pid": 13256,
+            "start_time_ticks": 95935
+          },
+          {
+            "parent_process": false,
+            "pid": 13257,
+            "start_time_ticks": 95937
+          },
+          {
+            "parent_process": false,
+            "pid": 13258,
+            "start_time_ticks": 95937
+          },
+          {
+            "parent_process": false,
+            "pid": 13259,
+            "start_time_ticks": 95943
+          },
+          {
+            "parent_process": false,
+            "pid": 13283,
+            "start_time_ticks": 96286
+          },
+          {
+            "parent_process": false,
+            "pid": 13284,
+            "start_time_ticks": 96287
+          },
+          {
+            "parent_process": false,
+            "pid": 13285,
+            "start_time_ticks": 96288
+          },
+          {
+            "parent_process": false,
+            "pid": 13286,
+            "start_time_ticks": 96300
+          },
+          {
+            "parent_process": false,
+            "pid": 13289,
+            "start_time_ticks": 96460
+          }
+        ],
+        "remaining": []
+      },
+      "status": "passed",
+      "trace_sha256": "0fa4f4b3669429683c6840eb266e33a9f3cd792392cf51d39a8ef2685bfa28c0"
+    },
+    {
+      "case": "timeout",
+      "cleanup": "owned_state_removed",
+      "failure_reason": "restricted_launcher_failed",
+      "outcome": "failed",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 49,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 13297,
+            "start_time_ticks": 96631
+          },
+          {
+            "parent_process": false,
+            "pid": 13301,
+            "start_time_ticks": 96632
+          },
+          {
+            "parent_process": false,
+            "pid": 13302,
+            "start_time_ticks": 96670
+          },
+          {
+            "parent_process": false,
+            "pid": 13303,
+            "start_time_ticks": 96671
+          },
+          {
+            "parent_process": false,
+            "pid": 13304,
+            "start_time_ticks": 96673
+          },
+          {
+            "parent_process": false,
+            "pid": 13308,
+            "start_time_ticks": 96687
+          },
+          {
+            "parent_process": false,
+            "pid": 13312,
+            "start_time_ticks": 98011
+          },
+          {
+            "parent_process": false,
+            "pid": 13313,
+            "start_time_ticks": 98012
+          },
+          {
+            "parent_process": false,
+            "pid": 13314,
+            "start_time_ticks": 98013
+          },
+          {
+            "parent_process": false,
+            "pid": 13318,
+            "start_time_ticks": 98028
+          },
+          {
+            "parent_process": false,
+            "pid": 13319,
+            "start_time_ticks": 98232
+          },
+          {
+            "parent_process": false,
+            "pid": 13320,
+            "start_time_ticks": 98233
+          },
+          {
+            "parent_process": false,
+            "pid": 13321,
+            "start_time_ticks": 98235
+          },
+          {
+            "parent_process": false,
+            "pid": 13325,
+            "start_time_ticks": 98249
+          },
+          {
+            "parent_process": false,
+            "pid": 13328,
+            "start_time_ticks": 99563
+          },
+          {
+            "parent_process": false,
+            "pid": 13329,
+            "start_time_ticks": 99565
+          },
+          {
+            "parent_process": false,
+            "pid": 13330,
+            "start_time_ticks": 99566
+          },
+          {
+            "parent_process": false,
+            "pid": 13334,
+            "start_time_ticks": 99579
+          },
+          {
+            "parent_process": false,
+            "pid": 13335,
+            "start_time_ticks": 99778
+          },
+          {
+            "parent_process": false,
+            "pid": 13336,
+            "start_time_ticks": 99780
+          },
+          {
+            "parent_process": false,
+            "pid": 13337,
+            "start_time_ticks": 99782
+          },
+          {
+            "parent_process": false,
+            "pid": 13341,
+            "start_time_ticks": 99796
+          },
+          {
+            "parent_process": false,
+            "pid": 13344,
+            "start_time_ticks": 101118
+          },
+          {
+            "parent_process": false,
+            "pid": 13345,
+            "start_time_ticks": 101120
+          },
+          {
+            "parent_process": false,
+            "pid": 13346,
+            "start_time_ticks": 101122
+          },
+          {
+            "parent_process": false,
+            "pid": 13350,
+            "start_time_ticks": 101136
+          },
+          {
+            "parent_process": false,
+            "pid": 13351,
+            "start_time_ticks": 101344
+          },
+          {
+            "parent_process": false,
+            "pid": 13356,
+            "start_time_ticks": 101405
+          },
+          {
+            "parent_process": false,
+            "pid": 13357,
+            "start_time_ticks": 101407
+          },
+          {
+            "parent_process": false,
+            "pid": 13358,
+            "start_time_ticks": 101409
+          },
+          {
+            "parent_process": false,
+            "pid": 13359,
+            "start_time_ticks": 101410
+          },
+          {
+            "parent_process": false,
+            "pid": 13363,
+            "start_time_ticks": 101425
+          },
+          {
+            "parent_process": false,
+            "pid": 13364,
+            "start_time_ticks": 102683
+          },
+          {
+            "parent_process": false,
+            "pid": 13365,
+            "start_time_ticks": 102684
+          },
+          {
+            "parent_process": false,
+            "pid": 13366,
+            "start_time_ticks": 102686
+          },
+          {
+            "parent_process": false,
+            "pid": 13370,
+            "start_time_ticks": 102700
+          },
+          {
+            "parent_process": false,
+            "pid": 13371,
+            "start_time_ticks": 102883
+          },
+          {
+            "parent_process": false,
+            "pid": 13372,
+            "start_time_ticks": 103516
+          },
+          {
+            "parent_process": false,
+            "pid": 13382,
+            "start_time_ticks": 103562
+          },
+          {
+            "parent_process": false,
+            "pid": 13383,
+            "start_time_ticks": 103563
+          },
+          {
+            "parent_process": false,
+            "pid": 13385,
+            "start_time_ticks": 103566
+          },
+          {
+            "parent_process": false,
+            "pid": 13387,
+            "start_time_ticks": 103571
+          },
+          {
+            "parent_process": false,
+            "pid": 13386,
+            "start_time_ticks": 103570
+          },
+          {
+            "parent_process": false,
+            "pid": 13388,
+            "start_time_ticks": 103572
+          },
+          {
+            "parent_process": false,
+            "pid": 13397,
+            "start_time_ticks": 103581
+          },
+          {
+            "parent_process": false,
+            "pid": 13396,
+            "start_time_ticks": 103580
+          },
+          {
+            "parent_process": false,
+            "pid": 13398,
+            "start_time_ticks": 103582
+          },
+          {
+            "parent_process": false,
+            "pid": 13401,
+            "start_time_ticks": 103583
+          },
+          {
+            "parent_process": false,
+            "pid": 13400,
+            "start_time_ticks": 103583
+          },
+          {
+            "parent_process": false,
+            "pid": 13399,
+            "start_time_ticks": 103583
+          }
+        ],
+        "remaining": []
+      },
+      "status": "passed",
+      "trace_sha256": "18f62456cebd0bfd25bd2a560dab82260e4a403da42084761c1df2937a8a0352"
+    }
+  ],
+  "format": "sw-prepared-pilot-acceptance/1",
+  "live_model_effectiveness": "not_tested",
+  "provider": "owned-scripted-loopback",
+  "selected_assets_unchanged": true,
+  "selected_sha256": {
+    "agentfw": "af73df828a8ba1e8cbdf0016c2bc58de1bde2386f27abb27648fef848be6c564",
+    "bwrap": "4d2044d04519dad2d47068676c95d0e9348fb3ad73db7497e18810a0e6e3134e",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "e23c5a17c6673d5ea46e59730ec38889313d97b43d9d7ce90ada37ddaab707ba",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "509f51a56bd1861c337d662e4b89dd56cf98fa6e6ce0701413f16c71f9d65da9",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "15453352962dd0ba64ec1942a847f1dfd88a911d04f61a3cf554a3575ad85da4"
+  },
+  "source_after": {
+    "commit": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+    "dirty": false,
+    "files_sha256": "54d9eada3681cbb992689e0834a8ebb81d39b6bb1f7a04f8a0ca3b628ac02a1f",
+    "tree": "f6706709177f584d33737ccc148290954ad37385"
+  },
+  "source_before": {
+    "commit": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+    "dirty": false,
+    "files_sha256": "54d9eada3681cbb992689e0834a8ebb81d39b6bb1f7a04f8a0ca3b628ac02a1f",
+    "tree": "f6706709177f584d33737ccc148290954ad37385"
+  },
+  "status": "passed",
+  "unrelated_preserved": true,
+  "workspace_unchanged": true
+}
