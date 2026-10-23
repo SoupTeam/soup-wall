@@ -956,22 +956,87 @@ fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
     child.try_wait().map(|status| status.is_some())
 }
 
+#[cfg(target_os = "macos")]
+fn mac_group_has_running_processes(output: &str, group: u32) -> Result<bool> {
+    let mut observed = false;
+    for row in output.lines().filter(|line| !line.trim().is_empty()) {
+        let mut fields = row.split_ascii_whitespace();
+        let id: u32 = fields
+            .next()
+            .context("missing group observation")?
+            .parse()?;
+        let state = fields.next().context("missing group state")?;
+        ensure!(fields.next().is_none(), "invalid group observation");
+        observed = true;
+        if id == group && !state.starts_with('Z') {
+            return Ok(true);
+        }
+    }
+    ensure!(observed, "empty process group observation");
+    Ok(false)
+}
+
+#[cfg(target_os = "macos")]
+async fn mac_group_is_zombie_only(group: u32) -> Result<bool> {
+    use tokio::io::AsyncReadExt;
+    // Read-only observation of the pinned, unreaped leader's existing group.
+    // No observed PID is ever selected for a signal. Fixed system ps reports
+    // only group/state, never command arguments or user identifiers.
+    let mut command = tokio::process::Command::new("/bin/ps");
+    command
+        .args(["-axo", "pgid=,stat="])
+        .env_clear()
+        .env("LC_ALL", "C")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    let mut child = command.spawn().context("observe owned group")?;
+    let stdout = child.stdout.take().context("group observation pipe")?;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        let mut bytes = Vec::new();
+        stdout
+            .take(4 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .await?;
+        ensure!(
+            bytes.len() <= 4 * 1024 * 1024,
+            "group observation byte limit"
+        );
+        ensure!(child.wait().await?.success(), "group observation failed");
+        Ok::<_, anyhow::Error>(!mac_group_has_running_processes(
+            std::str::from_utf8(&bytes)?,
+            group,
+        )?)
+    })
+    .await
+    .context("group observation deadline")?
+}
+
+#[cfg(unix)]
+async fn signal_owned_group(pgid: u32, kind: i32) -> Result<()> {
+    if unsafe { libc::kill(-(pgid as i32), kind) } < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            return Ok(());
+        }
+        #[cfg(target_os = "macos")]
+        if error.raw_os_error() == Some(libc::EPERM) && mac_group_is_zombie_only(pgid).await? {
+            // Seatbelt refuses a signal to an unreaped zombie. That process
+            // cannot execute; a live/unknown member still fails closed.
+            return Ok(());
+        }
+        anyhow::bail!("owned host process group termination unconfirmed: {error}");
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 #[allow(dead_code)]
 async fn terminate_process_group(pgid: u32, grace: Duration) -> Result<()> {
-    let signal = |kind| -> Result<()> {
-        if unsafe { libc::kill(-(pgid as i32), kind) } < 0 {
-            let error = std::io::Error::last_os_error();
-            ensure!(
-                error.raw_os_error() == Some(libc::ESRCH),
-                "owned host process group termination unconfirmed: {error}"
-            );
-        }
-        Ok(())
-    };
-    let term = signal(libc::SIGTERM);
+    let term = signal_owned_group(pgid, libc::SIGTERM).await;
     tokio::time::sleep(grace).await;
-    let kill = signal(libc::SIGKILL);
+    let kill = signal_owned_group(pgid, libc::SIGKILL).await;
     term?;
     kill?;
     Ok(())
@@ -1692,6 +1757,38 @@ fn terminal_exit_code(
 
 #[cfg(test)]
 mod tests {
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn mac_group_observation_refuses_live_unknown_or_malformed_members() {
+        assert!(!super::mac_group_has_running_processes("10 S\n20 Z+\n", 20).unwrap());
+        assert!(super::mac_group_has_running_processes("20 Z\n20 S\n", 20).unwrap());
+        assert!(super::mac_group_has_running_processes("20 ?\n", 20).unwrap());
+        for value in ["", "unreadable", "20 Z extra", "20"] {
+            assert!(super::mac_group_has_running_processes(value, 20).is_err());
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn mac_zombie_only_group_does_not_fake_a_signal_permission_failure() {
+        use std::os::unix::process::CommandExt;
+        let mut child = std::process::Command::new("/usr/bin/true")
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        for _ in 0..100 {
+            if super::owned_host_exited(&mut child).unwrap() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(super::owned_host_exited(&mut child).unwrap());
+        let result =
+            super::terminate_process_group(child.id(), std::time::Duration::from_millis(5)).await;
+        assert!(child.wait().unwrap().success());
+        result.unwrap();
+    }
     use super::*;
 
     #[test]

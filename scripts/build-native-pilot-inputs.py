@@ -208,7 +208,12 @@ def target_within_limit(target):
         if entries > MAX_TARGET_ENTRIES:
             return False
         for name in files:
-            info = (Path(base) / name).lstat()
+            try:
+                info = (Path(base) / name).lstat()
+            except FileNotFoundError:
+                # Cargo atomically renames/removes intermediates while this
+                # bounded live sampler runs. Other I/O errors still fail closed.
+                continue
             total += info.st_size
             if total > MAX_TARGET_BYTES:
                 return False

@@ -152,7 +152,7 @@ class Provider:
 
 
 class Prepared:
-    def __init__(self, context, root, hold_after=True):
+    def __init__(self, context, root, hold_after=True, defer_ready=False):
         self.c, self.root = context, root
         root.mkdir(mode=0o700)
         self.state = root / "state"
@@ -178,32 +178,36 @@ class Prepared:
         self.witness = context.base.ProcessWitness(self.process.pid)
         self.record = self.run = self.manifest = None
         self.identities = {}
-        try:
-            def identify():
-                for path in self.state.glob("*/run.json"):
-                    try:
-                        record = json.loads(path.read_bytes())
-                        home = Path(record["home"])
-                        for manifest in (home / "pilot-runs").glob("*/run.json"):
-                            run = json.loads(manifest.read_bytes())
-                            require(run["launcher_pid"] == record["launcher_pid"]
-                                    and run["home"] == str(home)
-                                    and run["run_id"] == manifest.parent.name,
-                                    "stop_prepared_run_identity_mismatch")
-                            self.record, self.home = record, home
-                            self.run, self.manifest = run, manifest
-                            return True
-                    except (OSError, json.JSONDecodeError):
-                        continue
-                require(self.process.poll() is None, "stop_prepared_entry_exited_before_publication")
-            until(identify, "stop_prepared_run_not_published", seconds=90)
-            until(lambda: self.provider.ready.is_set(), "stop_actual_host_not_ready", seconds=90)
-            self.observe()
-            self.capture_identities()
-            self.initial_owners = enrolled_owners(self.run, self.native(), False)
-        except Exception:
-            self.close()
-            raise
+        if not defer_ready:
+            try:
+                self.wait_ready()
+            except Exception:
+                self.close()
+                raise
+
+    def wait_ready(self):
+        def identify():
+            for path in self.state.glob("*/run.json"):
+                try:
+                    record = json.loads(path.read_bytes())
+                    home = Path(record["home"])
+                    for manifest in (home / "pilot-runs").glob("*/run.json"):
+                        run = json.loads(manifest.read_bytes())
+                        require(run["launcher_pid"] == record["launcher_pid"]
+                                and run["home"] == str(home)
+                                and run["run_id"] == manifest.parent.name,
+                                "stop_prepared_run_identity_mismatch")
+                        self.record, self.home = record, home
+                        self.run, self.manifest = run, manifest
+                        return True
+                except (OSError, json.JSONDecodeError):
+                    continue
+            require(self.process.poll() is None, "stop_prepared_entry_exited_before_publication")
+        until(identify, "stop_prepared_run_not_published", seconds=90)
+        until(lambda: self.provider.ready.is_set(), "stop_actual_host_not_ready", seconds=90)
+        self.observe()
+        self.capture_identities()
+        self.initial_owners = enrolled_owners(self.run, self.native(), False)
 
     def native(self):
         return self.c.run.native_instance(self.record["port"], (self.home / "native-token").read_text().strip())
@@ -297,7 +301,10 @@ class Prepared:
 
     def useful(self):
         self.provider.release.set()
-        until(lambda: self.provider.after_ready.is_set(), "stop_useful_baseline_missing", seconds=60)
+        def ready():
+            require(self.process.poll() is None, "stop_entry_exited_before_useful_baseline")
+            return self.provider.after_ready.is_set()
+        until(ready, "stop_useful_baseline_missing", seconds=60)
         self.check_useful()
         require(len(self.observe()["calls"]) == 2, "stop_baseline_dispatch_count_wrong")
 
@@ -430,18 +437,26 @@ def concurrent(context, private, report, unrelated):
     listener_identity = listener.getsockname()
     unrelated_identity = context.base.ProcessWitness.identity(unrelated.pid)
     try:
-        selected = Prepared(context, private / "selected")
+        # Spawn both entries before waiting for either costly native startup.
+        # Sequential startup consumed the first host's unchanged 90s budget.
+        selected = Prepared(context, private / "selected", defer_ready=True)
         active.append(selected)
-        peer = Prepared(context, private / "peer", hold_after=False)
+        peer = Prepared(context, private / "peer", hold_after=False, defer_ready=True)
         active.append(peer)
-        require(selected.run["run_id"] != peer.run["run_id"]
-                and selected.home != peer.home and selected.record["port"] != peer.record["port"],
-                "stop_independent_prepared_runs_required")
-        require(not selected.observe()["calls"] and not peer.observe()["calls"],
-                "stop_dispatch_before_provider_barrier")
+        selected.wait_ready()
+        require(not selected.observe()["calls"], "stop_dispatch_before_provider_barrier")
+        # The peer is already starting, with its provider barrier closed. Run
+        # independent selected controls now instead of spending its live budget
+        # waiting for the peer's cold setup. Both peers are proven ready before
+        # stop; both useful peer dispatches still happen strictly after stop.
         record_controls(selected, unrelated, report)
         selected.useful()
         baseline = selected.observe()["calls"]
+        peer.wait_ready()
+        require(selected.run["run_id"] != peer.run["run_id"]
+                and selected.home != peer.home and selected.record["port"] != peer.record["port"],
+                "stop_independent_prepared_runs_required")
+        require(not peer.observe()["calls"], "stop_dispatch_before_provider_barrier")
         require(not peer.observe()["calls"] and not peer.provider.offered,
                 "stop_peer_original_action_occurred_early")
         selected.operator(True)

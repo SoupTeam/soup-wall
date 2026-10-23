@@ -1,6 +1,14 @@
 # SOU-125 evidence
 
-## Current native qualification
+## Latest correction and rerun
+
+`native-attempt2.json` retains the later failed native run `39988027408` on
+`00ba0c5`: sequential cold startup of the peer consumed the selected host deadline.
+`correction-checks.json` records concurrent startup, unchanged deadlines/assertions,
+strict macOS group-error handling and the complete passing local qualification.
+A fresh native rerun is required for the corrected harness.
+
+## Earlier passing native qualification
 
 `native-linux.json` retains the bounded report from native Ubuntu 24.04 job
 `120504983982`, run `39975116499`, on exact clean source `d5d7813`. All eleven

@@ -364,6 +364,13 @@ def main():
         frame = traceback.extract_tb(error.__traceback__)[-1]
         report.update(status="failed", reason=value if RUN.re.fullmatch(r"[a-z0-9_]{1,100}", value) else "qualification_failure",
                       failure_location={"function": frame.name, "line": frame.lineno})
+    if "source_before" in report:
+        try:
+            report["source_after"] = RUN.PREP.PILOT.source()
+            if report["source_after"] != report["source_before"]:
+                report.update(status="failed", reason="source_changed_during_qualification")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            report.update(status="failed", reason="closing_source_identity_unavailable")
     (args.output / "report.json").write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
     print(json.dumps({"status": report["status"], "reason": report.get("reason"), "cases": len(report["cases"])}))
     return 0 if report["status"] == "passed" else 1

@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import threading
 import unittest
+import tempfile
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("prepared_stop_witness", ROOT / "scripts/prepared_stop_witness.py")
@@ -15,6 +17,26 @@ SPEC.loader.exec_module(STOP)
 
 
 class EvidenceControls(unittest.TestCase):
+    def test_both_native_entries_start_before_either_readiness_wait(self):
+        events = []
+        class Entry:
+            def __init__(self, _context, root, hold_after=True, defer_ready=False):
+                self.name = root.name
+                events.append(('spawn', self.name))
+                if not defer_ready:
+                    self.wait_ready()
+            def wait_ready(self):
+                events.append(('ready', self.name))
+                raise ValueError('bounded_test_checkpoint')
+            def diagnostic(self): return {'entry_report': 'test_only'}
+            def close(self): events.append(('close', self.name))
+        context = SimpleNamespace(base=SimpleNamespace(ProcessWitness=SimpleNamespace(identity=lambda _pid: 1)))
+        with tempfile.TemporaryDirectory() as directory, patch.object(STOP, 'Prepared', Entry):
+            with self.assertRaisesRegex(ValueError, 'bounded_test_checkpoint'):
+                STOP.concurrent(context, Path(directory), {}, SimpleNamespace(pid=1))
+        self.assertEqual(events[:3], [('spawn', 'selected'), ('spawn', 'peer'), ('ready', 'selected')])
+        self.assertEqual(events[-2:], [('close', 'peer'), ('close', 'selected')])
+
     def test_launch_arguments_cannot_impersonate_the_executed_host_or_namespace_pid1(self):
         self.assertIsNone(STOP.process_role([b"/agentfw", b"pilot-launch", b"--claude", b"/claude"], 10, {}, "/claude"))
         self.assertIsNone(STOP.process_role([b"/bwrap", b"--unshare-all", b"--", b"/mcp-runtime/owner",
