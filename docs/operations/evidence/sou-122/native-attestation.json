@@ -2,8 +2,8 @@
   "checks": [
     {
       "check": "source",
-      "declared": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
-      "resolved": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+      "declared": "b8d369b1adce52edf5328214d4d7c40cd73ec4ff",
+      "resolved": "b8d369b1adce52edf5328214d4d7c40cd73ec4ff",
       "status": "pass"
     },
     {
@@ -25,7 +25,7 @@
         "pinned": "1.99.1"
       },
       "resolved": {
-        "1.94.1": 16,
+        "1.94.1": 17,
         "1.99.1": 73
       },
       "status": "pass"
@@ -44,10 +44,12 @@
         "executables": {
           "cargo": {
             "path": "/home/runner/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "resolved_via": "rustup-shim",
             "sha256": "b7561ebe947acf816451536f19871ea4810f6be3f82fd252feab6ca7be8396f5"
           },
           "rustc": {
             "path": "/home/runner/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/rustc",
+            "resolved_via": "rustup-shim",
             "sha256": "ef6d716e5d1c6c93def277c0afa037c21e7a74f7de3aed4ee0700646c3301b1d"
           }
         },
@@ -133,7 +135,7 @@
     }
   },
   "docker_lane_note": "Docker builder images are separate digest-pinned lanes and are listed, not verified here.",
-  "elapsed_seconds": 0.237,
+  "elapsed_seconds": 0.148,
   "format": "sw-pilot-toolchain-attestation/1",
   "reproducibility": {
     "by_source_identity": true,
@@ -147,7 +149,7 @@
       "scripts/install-sou68-git-profile.py": "0dfff4f8839df513540618cc7f337eeb5d4ef3783f427f07df3340174359c716",
       "scripts/prepare-installed-pilot.py": "ade16b25f804660e234be471adaebdf0ebdcb87acdffcff2afe3df13c8c6d5a5",
       "scripts/prepare-native-pilot-prerequisites.py": "ec0d29706dc2fc4462574b31f2c9ae9fb2577b92e7002e7d87d1d206f7ef5f97",
-      "scripts/qualify-installed-pilot.py": "3be04dd7b66078f72a65606adc307415198ed3338628164b238df3c7ae9f59c5"
+      "scripts/qualify-installed-pilot.py": "599a010ff8bd353e3ff86abb2ed3c0485d1a711596754cf1d49a68d7b8862ab8"
     },
     "compiler": {
       "cargo_release": "1.94.1",
@@ -155,10 +157,12 @@
       "executables": {
         "cargo": {
           "path": "/home/runner/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/cargo",
+          "resolved_via": "rustup-shim",
           "sha256": "b7561ebe947acf816451536f19871ea4810f6be3f82fd252feab6ca7be8396f5"
         },
         "rustc": {
           "path": "/home/runner/.rustup/toolchains/1.94.1-x86_64-unknown-linux-gnu/bin/rustc",
+          "resolved_via": "rustup-shim",
           "sha256": "ef6d716e5d1c6c93def277c0afa037c21e7a74f7de3aed4ee0700646c3301b1d"
         }
       },
@@ -196,9 +200,9 @@
       "python_archive_sha256": "91ab434738647ab45d630aaa02e3808bb516239beeb52f7799c12a12d1557a38"
     },
     "source": {
-      "commit": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+      "commit": "b8d369b1adce52edf5328214d4d7c40cd73ec4ff",
       "dirty": false,
-      "tree": "f6706709177f584d33737ccc148290954ad37385"
+      "tree": "ce56802a6d83fdf991168f53a26d978b9e738860"
     },
     "toolchain_file": {
       "channel": "1.99.1",
@@ -206,7 +210,7 @@
       "sha256": "5a7b7b624394e3ece3fb4c9e0391aa400eeebf7a7a1efd18e74c5b68b71cd65e"
     },
     "workflow_toolchain_refs": {
-      "1.94.1": 16,
+      "1.94.1": 17,
       "1.99.1": 73
     }
   },

@@ -6,28 +6,28 @@
       "reason": null,
       "selected_execution": 0,
       "status": "passed",
-      "trace_sha256": "755ca96b3a87d80b3c543f3f609415bb3aff01313638e02118ddfd29915de465"
+      "trace_sha256": "028e0fc2a502f24e39ace144f7f67abaad7b392123c15a912714332fab7bfe57"
     },
     {
       "case": "occupied-port",
       "reason": "occupied_port_refused",
       "selected_execution": 0,
       "status": "passed",
-      "trace_sha256": "74c3f393ba890c4719b75cacabebd9df5817e61baaf814a892ea98ff685df934"
+      "trace_sha256": "09d5c0d86494701368aa71588d556f43e69ecfad6d8ce76802b01ca8ca45d3d7"
     },
     {
       "case": "stale-source",
       "reason": "candidate_source_mismatch",
       "selected_execution": 0,
       "status": "passed",
-      "trace_sha256": "d0f4de2f1e046688f490f294b389686c16406d14ab38f882c07994b098265da9"
+      "trace_sha256": "78b20ccdd7b6fb790b6aa616efea6643b907f01d471f7d8a2cb6a5f26c5745be"
     },
     {
       "case": "changed-selection",
       "reason": "selected_executable_changed",
       "selected_execution": 0,
       "status": "passed",
-      "trace_sha256": "00e73fd9a3d45dbcefedca185382d4634e92c92fa4dcc4f2e0ce1f0d17eb1a5a"
+      "trace_sha256": "314bb09555ad91a2df8722114be2998f2f22365c2388430e6176f1cee4e5b17b"
     },
     {
       "case": "useful-refusal",
@@ -44,308 +44,303 @@
       "outcome": "completed",
       "process_cleanup": {
         "all_stopped": true,
-        "descendant_count": 58,
+        "descendant_count": 57,
         "observed": [
           {
             "parent_process": true,
-            "pid": 12216,
-            "start_time_ticks": 50839
+            "pid": 16077,
+            "start_time_ticks": 42154
           },
           {
             "parent_process": false,
-            "pid": 12220,
-            "start_time_ticks": 50839
+            "pid": 16081,
+            "start_time_ticks": 42155
           },
           {
             "parent_process": false,
-            "pid": 12221,
-            "start_time_ticks": 50877
+            "pid": 16082,
+            "start_time_ticks": 42178
           },
           {
             "parent_process": false,
-            "pid": 12222,
-            "start_time_ticks": 50879
+            "pid": 16083,
+            "start_time_ticks": 42179
           },
           {
             "parent_process": false,
-            "pid": 12223,
-            "start_time_ticks": 50880
+            "pid": 16084,
+            "start_time_ticks": 42180
           },
           {
             "parent_process": false,
-            "pid": 12227,
-            "start_time_ticks": 50894
+            "pid": 16088,
+            "start_time_ticks": 42189
           },
           {
             "parent_process": false,
-            "pid": 12232,
-            "start_time_ticks": 52162
+            "pid": 16090,
+            "start_time_ticks": 42883
           },
           {
             "parent_process": false,
-            "pid": 12233,
-            "start_time_ticks": 52163
+            "pid": 16091,
+            "start_time_ticks": 42884
           },
           {
             "parent_process": false,
-            "pid": 12234,
-            "start_time_ticks": 52165
+            "pid": 16092,
+            "start_time_ticks": 42885
           },
           {
             "parent_process": false,
-            "pid": 12238,
-            "start_time_ticks": 52178
+            "pid": 16096,
+            "start_time_ticks": 42894
           },
           {
             "parent_process": false,
-            "pid": 12239,
-            "start_time_ticks": 52359
+            "pid": 16097,
+            "start_time_ticks": 43006
           },
           {
             "parent_process": false,
-            "pid": 12240,
-            "start_time_ticks": 52361
+            "pid": 16098,
+            "start_time_ticks": 43007
           },
           {
             "parent_process": false,
-            "pid": 12241,
-            "start_time_ticks": 52362
+            "pid": 16099,
+            "start_time_ticks": 43008
           },
           {
             "parent_process": false,
-            "pid": 12245,
-            "start_time_ticks": 52375
+            "pid": 16103,
+            "start_time_ticks": 43018
           },
           {
             "parent_process": false,
-            "pid": 12248,
-            "start_time_ticks": 53660
+            "pid": 16104,
+            "start_time_ticks": 43729
           },
           {
             "parent_process": false,
-            "pid": 12249,
-            "start_time_ticks": 53662
+            "pid": 16105,
+            "start_time_ticks": 43730
           },
           {
             "parent_process": false,
-            "pid": 12250,
-            "start_time_ticks": 53663
+            "pid": 16106,
+            "start_time_ticks": 43731
           },
           {
             "parent_process": false,
-            "pid": 12254,
-            "start_time_ticks": 53677
+            "pid": 16110,
+            "start_time_ticks": 43740
           },
           {
             "parent_process": false,
-            "pid": 12255,
-            "start_time_ticks": 53855
+            "pid": 16111,
+            "start_time_ticks": 43850
           },
           {
             "parent_process": false,
-            "pid": 12256,
-            "start_time_ticks": 53856
+            "pid": 16112,
+            "start_time_ticks": 43852
           },
           {
             "parent_process": false,
-            "pid": 12257,
-            "start_time_ticks": 53858
+            "pid": 16113,
+            "start_time_ticks": 43853
           },
           {
             "parent_process": false,
-            "pid": 12261,
-            "start_time_ticks": 53871
+            "pid": 16117,
+            "start_time_ticks": 43862
           },
           {
             "parent_process": false,
-            "pid": 12264,
-            "start_time_ticks": 55159
+            "pid": 16119,
+            "start_time_ticks": 44572
           },
           {
             "parent_process": false,
-            "pid": 12265,
-            "start_time_ticks": 55161
+            "pid": 16120,
+            "start_time_ticks": 44573
           },
           {
             "parent_process": false,
-            "pid": 12266,
-            "start_time_ticks": 55162
+            "pid": 16121,
+            "start_time_ticks": 44574
           },
           {
             "parent_process": false,
-            "pid": 12270,
-            "start_time_ticks": 55175
+            "pid": 16125,
+            "start_time_ticks": 44584
           },
           {
             "parent_process": false,
-            "pid": 12271,
-            "start_time_ticks": 55355
+            "pid": 16126,
+            "start_time_ticks": 44708
           },
           {
             "parent_process": false,
-            "pid": 12276,
-            "start_time_ticks": 55417
+            "pid": 16131,
+            "start_time_ticks": 44747
           },
           {
             "parent_process": false,
-            "pid": 12277,
-            "start_time_ticks": 55419
+            "pid": 16132,
+            "start_time_ticks": 44748
           },
           {
             "parent_process": false,
-            "pid": 12278,
-            "start_time_ticks": 55420
+            "pid": 16134,
+            "start_time_ticks": 44750
           },
           {
             "parent_process": false,
-            "pid": 12279,
-            "start_time_ticks": 55422
+            "pid": 16138,
+            "start_time_ticks": 44759
           },
           {
             "parent_process": false,
-            "pid": 12283,
-            "start_time_ticks": 55437
+            "pid": 16139,
+            "start_time_ticks": 45462
           },
           {
             "parent_process": false,
-            "pid": 12285,
-            "start_time_ticks": 56722
+            "pid": 16140,
+            "start_time_ticks": 45463
           },
           {
             "parent_process": false,
-            "pid": 12286,
-            "start_time_ticks": 56724
+            "pid": 16141,
+            "start_time_ticks": 45465
           },
           {
             "parent_process": false,
-            "pid": 12287,
-            "start_time_ticks": 56726
+            "pid": 16145,
+            "start_time_ticks": 45474
           },
           {
             "parent_process": false,
-            "pid": 12291,
-            "start_time_ticks": 56741
+            "pid": 16147,
+            "start_time_ticks": 45584
           },
           {
             "parent_process": false,
-            "pid": 12292,
-            "start_time_ticks": 56916
+            "pid": 16149,
+            "start_time_ticks": 45918
           },
           {
             "parent_process": false,
-            "pid": 12294,
-            "start_time_ticks": 57550
+            "pid": 16160,
+            "start_time_ticks": 45947
           },
           {
             "parent_process": false,
-            "pid": 12304,
-            "start_time_ticks": 57600
+            "pid": 16162,
+            "start_time_ticks": 45948
           },
           {
             "parent_process": false,
-            "pid": 12305,
-            "start_time_ticks": 57602
+            "pid": 16164,
+            "start_time_ticks": 45952
           },
           {
             "parent_process": false,
-            "pid": 12307,
-            "start_time_ticks": 57604
+            "pid": 16163,
+            "start_time_ticks": 45951
           },
           {
             "parent_process": false,
-            "pid": 12309,
-            "start_time_ticks": 57611
+            "pid": 16165,
+            "start_time_ticks": 45952
           },
           {
             "parent_process": false,
-            "pid": 12308,
-            "start_time_ticks": 57610
+            "pid": 16172,
+            "start_time_ticks": 45957
           },
           {
             "parent_process": false,
-            "pid": 12310,
-            "start_time_ticks": 57612
+            "pid": 16175,
+            "start_time_ticks": 45957
           },
           {
             "parent_process": false,
-            "pid": 12317,
-            "start_time_ticks": 57620
+            "pid": 16174,
+            "start_time_ticks": 45957
           },
           {
             "parent_process": false,
-            "pid": 12320,
-            "start_time_ticks": 57621
+            "pid": 16173,
+            "start_time_ticks": 45957
           },
           {
             "parent_process": false,
-            "pid": 12319,
-            "start_time_ticks": 57621
+            "pid": 16176,
+            "start_time_ticks": 45959
           },
           {
             "parent_process": false,
-            "pid": 12318,
-            "start_time_ticks": 57621
+            "pid": 16177,
+            "start_time_ticks": 45960
           },
           {
             "parent_process": false,
-            "pid": 12321,
-            "start_time_ticks": 57623
+            "pid": 16187,
+            "start_time_ticks": 46390
           },
           {
             "parent_process": false,
-            "pid": 12322,
-            "start_time_ticks": 57624
+            "pid": 16188,
+            "start_time_ticks": 46390
           },
           {
             "parent_process": false,
-            "pid": 12332,
-            "start_time_ticks": 58495
+            "pid": 16189,
+            "start_time_ticks": 46391
           },
           {
             "parent_process": false,
-            "pid": 12333,
-            "start_time_ticks": 58496
+            "pid": 16190,
+            "start_time_ticks": 46394
           },
           {
             "parent_process": false,
-            "pid": 12334,
-            "start_time_ticks": 58497
+            "pid": 16213,
+            "start_time_ticks": 46597
           },
           {
             "parent_process": false,
-            "pid": 12335,
-            "start_time_ticks": 58502
+            "pid": 16214,
+            "start_time_ticks": 46598
           },
           {
             "parent_process": false,
-            "pid": 12359,
-            "start_time_ticks": 58820
+            "pid": 16215,
+            "start_time_ticks": 46598
           },
           {
             "parent_process": false,
-            "pid": 12360,
-            "start_time_ticks": 58822
+            "pid": 16216,
+            "start_time_ticks": 46605
           },
           {
             "parent_process": false,
-            "pid": 12361,
-            "start_time_ticks": 58823
+            "pid": 16217,
+            "start_time_ticks": 46701
           },
           {
             "parent_process": false,
-            "pid": 12362,
-            "start_time_ticks": 58836
-          },
-          {
-            "parent_process": false,
-            "pid": 12374,
-            "start_time_ticks": 59051
+            "pid": 16228,
+            "start_time_ticks": 46735
           }
         ],
         "remaining": []
       },
       "status": "passed",
-      "trace_sha256": "dbb601682c157fa61737307f3b8b9360d74f91d72048fce8e5c8e5637c2737d4"
+      "trace_sha256": "4e8cb67a63129d3cc482ee03dd9bd64330cded877c80bf7a57f7ce4d0e939222"
     },
     {
       "case": "ask",
@@ -365,304 +360,304 @@
         "observed": [
           {
             "parent_process": true,
-            "pid": 12378,
-            "start_time_ticks": 59410
+            "pid": 16232,
+            "start_time_ticks": 46990
           },
           {
             "parent_process": false,
-            "pid": 12382,
-            "start_time_ticks": 59411
+            "pid": 16236,
+            "start_time_ticks": 46990
           },
           {
             "parent_process": false,
-            "pid": 12383,
-            "start_time_ticks": 59451
+            "pid": 16237,
+            "start_time_ticks": 47015
           },
           {
             "parent_process": false,
-            "pid": 12384,
-            "start_time_ticks": 59453
+            "pid": 16238,
+            "start_time_ticks": 47016
           },
           {
             "parent_process": false,
-            "pid": 12385,
-            "start_time_ticks": 59454
+            "pid": 16239,
+            "start_time_ticks": 47017
           },
           {
             "parent_process": false,
-            "pid": 12389,
-            "start_time_ticks": 59468
+            "pid": 16243,
+            "start_time_ticks": 47026
           },
           {
             "parent_process": false,
-            "pid": 12392,
-            "start_time_ticks": 60739
+            "pid": 16249,
+            "start_time_ticks": 47720
           },
           {
             "parent_process": false,
-            "pid": 12393,
-            "start_time_ticks": 60741
+            "pid": 16250,
+            "start_time_ticks": 47721
           },
           {
             "parent_process": false,
-            "pid": 12394,
-            "start_time_ticks": 60742
+            "pid": 16251,
+            "start_time_ticks": 47722
           },
           {
             "parent_process": false,
-            "pid": 12398,
-            "start_time_ticks": 60756
+            "pid": 16255,
+            "start_time_ticks": 47731
           },
           {
             "parent_process": false,
-            "pid": 12399,
-            "start_time_ticks": 60931
+            "pid": 16256,
+            "start_time_ticks": 47843
           },
           {
             "parent_process": false,
-            "pid": 12400,
-            "start_time_ticks": 60933
+            "pid": 16257,
+            "start_time_ticks": 47844
           },
           {
             "parent_process": false,
-            "pid": 12401,
-            "start_time_ticks": 60934
+            "pid": 16258,
+            "start_time_ticks": 47845
           },
           {
             "parent_process": false,
-            "pid": 12405,
-            "start_time_ticks": 60949
+            "pid": 16262,
+            "start_time_ticks": 47855
           },
           {
             "parent_process": false,
-            "pid": 12412,
-            "start_time_ticks": 62206
+            "pid": 16264,
+            "start_time_ticks": 48558
           },
           {
             "parent_process": false,
-            "pid": 12413,
-            "start_time_ticks": 62208
+            "pid": 16265,
+            "start_time_ticks": 48559
           },
           {
             "parent_process": false,
-            "pid": 12414,
-            "start_time_ticks": 62209
+            "pid": 16266,
+            "start_time_ticks": 48561
           },
           {
             "parent_process": false,
-            "pid": 12418,
-            "start_time_ticks": 62224
+            "pid": 16270,
+            "start_time_ticks": 48570
           },
           {
             "parent_process": false,
-            "pid": 12419,
-            "start_time_ticks": 62409
+            "pid": 16271,
+            "start_time_ticks": 48677
           },
           {
             "parent_process": false,
-            "pid": 12420,
-            "start_time_ticks": 62411
+            "pid": 16272,
+            "start_time_ticks": 48678
           },
           {
             "parent_process": false,
-            "pid": 12421,
-            "start_time_ticks": 62412
+            "pid": 16273,
+            "start_time_ticks": 48680
           },
           {
             "parent_process": false,
-            "pid": 12425,
-            "start_time_ticks": 62427
+            "pid": 16277,
+            "start_time_ticks": 48688
           },
           {
             "parent_process": false,
-            "pid": 12430,
-            "start_time_ticks": 63693
+            "pid": 16280,
+            "start_time_ticks": 49392
           },
           {
             "parent_process": false,
-            "pid": 12431,
-            "start_time_ticks": 63695
+            "pid": 16281,
+            "start_time_ticks": 49393
           },
           {
             "parent_process": false,
-            "pid": 12432,
-            "start_time_ticks": 63696
+            "pid": 16282,
+            "start_time_ticks": 49394
           },
           {
             "parent_process": false,
-            "pid": 12436,
-            "start_time_ticks": 63710
+            "pid": 16286,
+            "start_time_ticks": 49403
           },
           {
             "parent_process": false,
-            "pid": 12437,
-            "start_time_ticks": 63892
+            "pid": 16287,
+            "start_time_ticks": 49509
           },
           {
             "parent_process": false,
-            "pid": 12442,
-            "start_time_ticks": 63953
+            "pid": 16292,
+            "start_time_ticks": 49547
           },
           {
             "parent_process": false,
-            "pid": 12443,
-            "start_time_ticks": 63955
+            "pid": 16293,
+            "start_time_ticks": 49548
           },
           {
             "parent_process": false,
-            "pid": 12444,
-            "start_time_ticks": 63957
+            "pid": 16294,
+            "start_time_ticks": 49549
           },
           {
             "parent_process": false,
-            "pid": 12445,
-            "start_time_ticks": 63958
+            "pid": 16295,
+            "start_time_ticks": 49550
           },
           {
             "parent_process": false,
-            "pid": 12449,
-            "start_time_ticks": 63974
+            "pid": 16299,
+            "start_time_ticks": 49559
           },
           {
             "parent_process": false,
-            "pid": 12452,
-            "start_time_ticks": 65247
+            "pid": 16302,
+            "start_time_ticks": 50252
           },
           {
             "parent_process": false,
-            "pid": 12453,
-            "start_time_ticks": 65249
+            "pid": 16303,
+            "start_time_ticks": 50253
           },
           {
             "parent_process": false,
-            "pid": 12454,
-            "start_time_ticks": 65250
+            "pid": 16304,
+            "start_time_ticks": 50254
           },
           {
             "parent_process": false,
-            "pid": 12458,
-            "start_time_ticks": 65266
+            "pid": 16308,
+            "start_time_ticks": 50262
           },
           {
             "parent_process": false,
-            "pid": 12459,
-            "start_time_ticks": 65438
+            "pid": 16309,
+            "start_time_ticks": 50377
           },
           {
             "parent_process": false,
-            "pid": 12463,
-            "start_time_ticks": 67881
+            "pid": 16311,
+            "start_time_ticks": 51733
           },
           {
             "parent_process": false,
-            "pid": 12477,
-            "start_time_ticks": 67928
+            "pid": 16324,
+            "start_time_ticks": 51762
           },
           {
             "parent_process": false,
-            "pid": 12478,
-            "start_time_ticks": 67929
+            "pid": 16325,
+            "start_time_ticks": 51763
           },
           {
             "parent_process": false,
-            "pid": 12481,
-            "start_time_ticks": 67932
+            "pid": 16327,
+            "start_time_ticks": 51765
           },
           {
             "parent_process": false,
-            "pid": 12482,
-            "start_time_ticks": 67937
+            "pid": 16328,
+            "start_time_ticks": 51768
           },
           {
             "parent_process": false,
-            "pid": 12484,
-            "start_time_ticks": 67938
+            "pid": 16330,
+            "start_time_ticks": 51769
           },
           {
             "parent_process": false,
-            "pid": 12483,
-            "start_time_ticks": 67937
+            "pid": 16329,
+            "start_time_ticks": 51768
           },
           {
             "parent_process": false,
-            "pid": 12492,
-            "start_time_ticks": 67945
+            "pid": 16338,
+            "start_time_ticks": 51774
           },
           {
             "parent_process": false,
-            "pid": 12495,
-            "start_time_ticks": 67946
+            "pid": 16341,
+            "start_time_ticks": 51774
           },
           {
             "parent_process": false,
-            "pid": 12494,
-            "start_time_ticks": 67945
+            "pid": 16340,
+            "start_time_ticks": 51774
           },
           {
             "parent_process": false,
-            "pid": 12493,
-            "start_time_ticks": 67945
+            "pid": 16339,
+            "start_time_ticks": 51774
           },
           {
             "parent_process": false,
-            "pid": 12497,
-            "start_time_ticks": 67950
+            "pid": 16343,
+            "start_time_ticks": 51776
           },
           {
             "parent_process": false,
-            "pid": 12496,
-            "start_time_ticks": 67949
+            "pid": 16342,
+            "start_time_ticks": 51776
           },
           {
             "parent_process": false,
-            "pid": 12577,
-            "start_time_ticks": 68739
+            "pid": 16393,
+            "start_time_ticks": 52215
           },
           {
             "parent_process": false,
-            "pid": 12579,
-            "start_time_ticks": 68740
+            "pid": 16394,
+            "start_time_ticks": 52216
           },
           {
             "parent_process": false,
-            "pid": 12580,
-            "start_time_ticks": 68741
+            "pid": 16395,
+            "start_time_ticks": 52217
           },
           {
             "parent_process": false,
-            "pid": 12581,
-            "start_time_ticks": 68746
+            "pid": 16397,
+            "start_time_ticks": 52220
           },
           {
             "parent_process": false,
-            "pid": 12635,
-            "start_time_ticks": 69090
+            "pid": 16439,
+            "start_time_ticks": 52428
           },
           {
             "parent_process": false,
-            "pid": 12636,
-            "start_time_ticks": 69092
+            "pid": 16440,
+            "start_time_ticks": 52429
           },
           {
             "parent_process": false,
-            "pid": 12637,
-            "start_time_ticks": 69093
+            "pid": 16441,
+            "start_time_ticks": 52429
           },
           {
             "parent_process": false,
-            "pid": 12640,
-            "start_time_ticks": 69103
+            "pid": 16443,
+            "start_time_ticks": 52437
           },
           {
             "parent_process": false,
-            "pid": 12656,
-            "start_time_ticks": 69265
+            "pid": 16455,
+            "start_time_ticks": 52544
           }
         ],
         "remaining": []
       },
       "status": "passed",
-      "trace_sha256": "fca2417ae1d17b896f55252300b72a618b55e13d02f8b9152b56e3724c5c8aca"
+      "trace_sha256": "5a277f9eb872c33fcb18ba58de99f3e0b74b4458fee0185d862b6be19ac1d418"
     },
     {
       "case": "default",
@@ -681,304 +676,304 @@
         "observed": [
           {
             "parent_process": true,
-            "pid": 12833,
-            "start_time_ticks": 71449
+            "pid": 16575,
+            "start_time_ticks": 53897
           },
           {
             "parent_process": false,
-            "pid": 12837,
-            "start_time_ticks": 71449
+            "pid": 16579,
+            "start_time_ticks": 53897
           },
           {
             "parent_process": false,
-            "pid": 12838,
-            "start_time_ticks": 71487
+            "pid": 16580,
+            "start_time_ticks": 53923
           },
           {
             "parent_process": false,
-            "pid": 12839,
-            "start_time_ticks": 71489
+            "pid": 16581,
+            "start_time_ticks": 53924
           },
           {
             "parent_process": false,
-            "pid": 12840,
-            "start_time_ticks": 71490
+            "pid": 16582,
+            "start_time_ticks": 53925
           },
           {
             "parent_process": false,
-            "pid": 12844,
-            "start_time_ticks": 71504
+            "pid": 16586,
+            "start_time_ticks": 53935
           },
           {
             "parent_process": false,
-            "pid": 12846,
-            "start_time_ticks": 72812
+            "pid": 16589,
+            "start_time_ticks": 54672
           },
           {
             "parent_process": false,
-            "pid": 12847,
-            "start_time_ticks": 72814
+            "pid": 16590,
+            "start_time_ticks": 54673
           },
           {
             "parent_process": false,
-            "pid": 12848,
-            "start_time_ticks": 72815
+            "pid": 16591,
+            "start_time_ticks": 54674
           },
           {
             "parent_process": false,
-            "pid": 12852,
-            "start_time_ticks": 72830
+            "pid": 16595,
+            "start_time_ticks": 54684
           },
           {
             "parent_process": false,
-            "pid": 12853,
-            "start_time_ticks": 73035
+            "pid": 16596,
+            "start_time_ticks": 54796
           },
           {
             "parent_process": false,
-            "pid": 12854,
-            "start_time_ticks": 73036
+            "pid": 16597,
+            "start_time_ticks": 54797
           },
           {
             "parent_process": false,
-            "pid": 12855,
-            "start_time_ticks": 73038
+            "pid": 16598,
+            "start_time_ticks": 54798
           },
           {
             "parent_process": false,
-            "pid": 12859,
-            "start_time_ticks": 73051
+            "pid": 16602,
+            "start_time_ticks": 54808
           },
           {
             "parent_process": false,
-            "pid": 12860,
-            "start_time_ticks": 74391
+            "pid": 16603,
+            "start_time_ticks": 55509
           },
           {
             "parent_process": false,
-            "pid": 12861,
-            "start_time_ticks": 74392
+            "pid": 16604,
+            "start_time_ticks": 55510
           },
           {
             "parent_process": false,
-            "pid": 12862,
-            "start_time_ticks": 74394
+            "pid": 16605,
+            "start_time_ticks": 55512
           },
           {
             "parent_process": false,
-            "pid": 12866,
-            "start_time_ticks": 74407
+            "pid": 16609,
+            "start_time_ticks": 55521
           },
           {
             "parent_process": false,
-            "pid": 12867,
-            "start_time_ticks": 74606
+            "pid": 16610,
+            "start_time_ticks": 55632
           },
           {
             "parent_process": false,
-            "pid": 12868,
-            "start_time_ticks": 74608
+            "pid": 16611,
+            "start_time_ticks": 55633
           },
           {
             "parent_process": false,
-            "pid": 12869,
-            "start_time_ticks": 74609
+            "pid": 16612,
+            "start_time_ticks": 55634
           },
           {
             "parent_process": false,
-            "pid": 12873,
-            "start_time_ticks": 74623
+            "pid": 16616,
+            "start_time_ticks": 55643
           },
           {
             "parent_process": false,
-            "pid": 12878,
-            "start_time_ticks": 75954
+            "pid": 16618,
+            "start_time_ticks": 56374
           },
           {
             "parent_process": false,
-            "pid": 12879,
-            "start_time_ticks": 75955
+            "pid": 16619,
+            "start_time_ticks": 56375
           },
           {
             "parent_process": false,
-            "pid": 12880,
-            "start_time_ticks": 75957
+            "pid": 16620,
+            "start_time_ticks": 56377
           },
           {
             "parent_process": false,
-            "pid": 12884,
-            "start_time_ticks": 75972
+            "pid": 16624,
+            "start_time_ticks": 56387
           },
           {
             "parent_process": false,
-            "pid": 12885,
-            "start_time_ticks": 76177
+            "pid": 16625,
+            "start_time_ticks": 56497
           },
           {
             "parent_process": false,
-            "pid": 12890,
-            "start_time_ticks": 76239
+            "pid": 16630,
+            "start_time_ticks": 56535
           },
           {
             "parent_process": false,
-            "pid": 12891,
-            "start_time_ticks": 76241
+            "pid": 16632,
+            "start_time_ticks": 56538
           },
           {
             "parent_process": false,
-            "pid": 12892,
-            "start_time_ticks": 76242
+            "pid": 16633,
+            "start_time_ticks": 56539
           },
           {
             "parent_process": false,
-            "pid": 12893,
-            "start_time_ticks": 76244
+            "pid": 16637,
+            "start_time_ticks": 56548
           },
           {
             "parent_process": false,
-            "pid": 12897,
-            "start_time_ticks": 76257
+            "pid": 16638,
+            "start_time_ticks": 57263
           },
           {
             "parent_process": false,
-            "pid": 12899,
-            "start_time_ticks": 77551
+            "pid": 16639,
+            "start_time_ticks": 57264
           },
           {
             "parent_process": false,
-            "pid": 12900,
-            "start_time_ticks": 77552
+            "pid": 16640,
+            "start_time_ticks": 57265
           },
           {
             "parent_process": false,
-            "pid": 12901,
-            "start_time_ticks": 77554
+            "pid": 16644,
+            "start_time_ticks": 57274
           },
           {
             "parent_process": false,
-            "pid": 12905,
-            "start_time_ticks": 77567
+            "pid": 16645,
+            "start_time_ticks": 57382
           },
           {
             "parent_process": false,
-            "pid": 12906,
-            "start_time_ticks": 77745
+            "pid": 16647,
+            "start_time_ticks": 57720
           },
           {
             "parent_process": false,
-            "pid": 12908,
-            "start_time_ticks": 78379
+            "pid": 16657,
+            "start_time_ticks": 57750
           },
           {
             "parent_process": false,
-            "pid": 12918,
-            "start_time_ticks": 78426
+            "pid": 16658,
+            "start_time_ticks": 57751
           },
           {
             "parent_process": false,
-            "pid": 12919,
-            "start_time_ticks": 78427
+            "pid": 16660,
+            "start_time_ticks": 57753
           },
           {
             "parent_process": false,
-            "pid": 12921,
-            "start_time_ticks": 78430
+            "pid": 16662,
+            "start_time_ticks": 57756
           },
           {
             "parent_process": false,
-            "pid": 12922,
-            "start_time_ticks": 78435
+            "pid": 16661,
+            "start_time_ticks": 57756
           },
           {
             "parent_process": false,
-            "pid": 12924,
-            "start_time_ticks": 78436
+            "pid": 16663,
+            "start_time_ticks": 57757
           },
           {
             "parent_process": false,
-            "pid": 12923,
-            "start_time_ticks": 78435
+            "pid": 16670,
+            "start_time_ticks": 57762
           },
           {
             "parent_process": false,
-            "pid": 12931,
-            "start_time_ticks": 78443
+            "pid": 16673,
+            "start_time_ticks": 57762
           },
           {
             "parent_process": false,
-            "pid": 12934,
-            "start_time_ticks": 78444
+            "pid": 16672,
+            "start_time_ticks": 57762
           },
           {
             "parent_process": false,
-            "pid": 12933,
-            "start_time_ticks": 78444
+            "pid": 16671,
+            "start_time_ticks": 57762
           },
           {
             "parent_process": false,
-            "pid": 12932,
-            "start_time_ticks": 78444
+            "pid": 16675,
+            "start_time_ticks": 57765
           },
           {
             "parent_process": false,
-            "pid": 12935,
-            "start_time_ticks": 78446
+            "pid": 16674,
+            "start_time_ticks": 57764
           },
           {
             "parent_process": false,
-            "pid": 12936,
-            "start_time_ticks": 78447
+            "pid": 16685,
+            "start_time_ticks": 58200
           },
           {
             "parent_process": false,
-            "pid": 12946,
-            "start_time_ticks": 79230
+            "pid": 16686,
+            "start_time_ticks": 58201
           },
           {
             "parent_process": false,
-            "pid": 12947,
-            "start_time_ticks": 79231
+            "pid": 16687,
+            "start_time_ticks": 58202
           },
           {
             "parent_process": false,
-            "pid": 12948,
-            "start_time_ticks": 79232
+            "pid": 16688,
+            "start_time_ticks": 58205
           },
           {
             "parent_process": false,
-            "pid": 12949,
-            "start_time_ticks": 79237
+            "pid": 16711,
+            "start_time_ticks": 58409
           },
           {
             "parent_process": false,
-            "pid": 12972,
-            "start_time_ticks": 79589
+            "pid": 16712,
+            "start_time_ticks": 58410
           },
           {
             "parent_process": false,
-            "pid": 12973,
-            "start_time_ticks": 79591
+            "pid": 16713,
+            "start_time_ticks": 58411
           },
           {
             "parent_process": false,
-            "pid": 12974,
-            "start_time_ticks": 79591
+            "pid": 16714,
+            "start_time_ticks": 58418
           },
           {
             "parent_process": false,
-            "pid": 12975,
-            "start_time_ticks": 79604
+            "pid": 16715,
+            "start_time_ticks": 58526
           },
           {
             "parent_process": false,
-            "pid": 12976,
-            "start_time_ticks": 79764
+            "pid": 16716,
+            "start_time_ticks": 58526
           }
         ],
         "remaining": []
       },
       "status": "passed",
-      "trace_sha256": "bfd839614cc96af46a586b4d4a43f401f077506383150f16668fd60cae314cd9"
+      "trace_sha256": "0ed411eb73881eff9176d52cec621d73928abfd96e11d964ba2527f9a4745ab3"
     },
     {
       "case": "cancel",
@@ -991,304 +986,304 @@
         "observed": [
           {
             "parent_process": true,
-            "pid": 12989,
-            "start_time_ticks": 80121
+            "pid": 16727,
+            "start_time_ticks": 58764
           },
           {
             "parent_process": false,
-            "pid": 12993,
-            "start_time_ticks": 80121
+            "pid": 16731,
+            "start_time_ticks": 58764
           },
           {
             "parent_process": false,
-            "pid": 12994,
-            "start_time_ticks": 80159
+            "pid": 16732,
+            "start_time_ticks": 58787
           },
           {
             "parent_process": false,
-            "pid": 12995,
-            "start_time_ticks": 80160
+            "pid": 16733,
+            "start_time_ticks": 58788
           },
           {
             "parent_process": false,
-            "pid": 12996,
-            "start_time_ticks": 80162
+            "pid": 16734,
+            "start_time_ticks": 58789
           },
           {
             "parent_process": false,
-            "pid": 13000,
-            "start_time_ticks": 80176
+            "pid": 16738,
+            "start_time_ticks": 58798
           },
           {
             "parent_process": false,
-            "pid": 13002,
-            "start_time_ticks": 81452
+            "pid": 16740,
+            "start_time_ticks": 59484
           },
           {
             "parent_process": false,
-            "pid": 13003,
-            "start_time_ticks": 81453
+            "pid": 16741,
+            "start_time_ticks": 59485
           },
           {
             "parent_process": false,
-            "pid": 13004,
-            "start_time_ticks": 81455
+            "pid": 16742,
+            "start_time_ticks": 59486
           },
           {
             "parent_process": false,
-            "pid": 13008,
-            "start_time_ticks": 81469
+            "pid": 16746,
+            "start_time_ticks": 59495
           },
           {
             "parent_process": false,
-            "pid": 13009,
-            "start_time_ticks": 81649
+            "pid": 16747,
+            "start_time_ticks": 59602
           },
           {
             "parent_process": false,
-            "pid": 13010,
-            "start_time_ticks": 81651
+            "pid": 16748,
+            "start_time_ticks": 59603
           },
           {
             "parent_process": false,
-            "pid": 13011,
-            "start_time_ticks": 81652
+            "pid": 16749,
+            "start_time_ticks": 59604
           },
           {
             "parent_process": false,
-            "pid": 13015,
-            "start_time_ticks": 81666
+            "pid": 16753,
+            "start_time_ticks": 59613
           },
           {
             "parent_process": false,
-            "pid": 13018,
-            "start_time_ticks": 82934
+            "pid": 16754,
+            "start_time_ticks": 60320
           },
           {
             "parent_process": false,
-            "pid": 13019,
-            "start_time_ticks": 82936
+            "pid": 16755,
+            "start_time_ticks": 60321
           },
           {
             "parent_process": false,
-            "pid": 13020,
-            "start_time_ticks": 82937
+            "pid": 16756,
+            "start_time_ticks": 60322
           },
           {
             "parent_process": false,
-            "pid": 13024,
-            "start_time_ticks": 82950
+            "pid": 16760,
+            "start_time_ticks": 60331
           },
           {
             "parent_process": false,
-            "pid": 13025,
-            "start_time_ticks": 83123
+            "pid": 16761,
+            "start_time_ticks": 60442
           },
           {
             "parent_process": false,
-            "pid": 13026,
-            "start_time_ticks": 83125
+            "pid": 16762,
+            "start_time_ticks": 60443
           },
           {
             "parent_process": false,
-            "pid": 13027,
-            "start_time_ticks": 83127
+            "pid": 16763,
+            "start_time_ticks": 60444
           },
           {
             "parent_process": false,
-            "pid": 13031,
-            "start_time_ticks": 83140
+            "pid": 16767,
+            "start_time_ticks": 60454
           },
           {
             "parent_process": false,
-            "pid": 13032,
-            "start_time_ticks": 84419
+            "pid": 16776,
+            "start_time_ticks": 61159
           },
           {
             "parent_process": false,
-            "pid": 13033,
-            "start_time_ticks": 84421
+            "pid": 16777,
+            "start_time_ticks": 61160
           },
           {
             "parent_process": false,
-            "pid": 13034,
-            "start_time_ticks": 84423
+            "pid": 16778,
+            "start_time_ticks": 61161
           },
           {
             "parent_process": false,
-            "pid": 13038,
-            "start_time_ticks": 84436
+            "pid": 16782,
+            "start_time_ticks": 61170
           },
           {
             "parent_process": false,
-            "pid": 13039,
-            "start_time_ticks": 84611
+            "pid": 16783,
+            "start_time_ticks": 61272
           },
           {
             "parent_process": false,
-            "pid": 13044,
-            "start_time_ticks": 84673
+            "pid": 16788,
+            "start_time_ticks": 61310
           },
           {
             "parent_process": false,
-            "pid": 13045,
-            "start_time_ticks": 84675
+            "pid": 16789,
+            "start_time_ticks": 61311
           },
           {
             "parent_process": false,
-            "pid": 13046,
-            "start_time_ticks": 84676
+            "pid": 16790,
+            "start_time_ticks": 61312
           },
           {
             "parent_process": false,
-            "pid": 13047,
-            "start_time_ticks": 84678
+            "pid": 16791,
+            "start_time_ticks": 61313
           },
           {
             "parent_process": false,
-            "pid": 13051,
-            "start_time_ticks": 84693
+            "pid": 16795,
+            "start_time_ticks": 61322
           },
           {
             "parent_process": false,
-            "pid": 13053,
-            "start_time_ticks": 85973
+            "pid": 16796,
+            "start_time_ticks": 62027
           },
           {
             "parent_process": false,
-            "pid": 13054,
-            "start_time_ticks": 85975
+            "pid": 16797,
+            "start_time_ticks": 62028
           },
           {
             "parent_process": false,
-            "pid": 13055,
-            "start_time_ticks": 85976
+            "pid": 16798,
+            "start_time_ticks": 62029
           },
           {
             "parent_process": false,
-            "pid": 13059,
-            "start_time_ticks": 85992
+            "pid": 16802,
+            "start_time_ticks": 62038
           },
           {
             "parent_process": false,
-            "pid": 13060,
-            "start_time_ticks": 86169
+            "pid": 16805,
+            "start_time_ticks": 62146
           },
           {
             "parent_process": false,
-            "pid": 13061,
-            "start_time_ticks": 86802
+            "pid": 16808,
+            "start_time_ticks": 62493
           },
           {
             "parent_process": false,
-            "pid": 13071,
-            "start_time_ticks": 86848
+            "pid": 16818,
+            "start_time_ticks": 62523
           },
           {
             "parent_process": false,
-            "pid": 13072,
-            "start_time_ticks": 86850
+            "pid": 16819,
+            "start_time_ticks": 62524
           },
           {
             "parent_process": false,
-            "pid": 13074,
-            "start_time_ticks": 86852
+            "pid": 16821,
+            "start_time_ticks": 62526
           },
           {
             "parent_process": false,
-            "pid": 13076,
-            "start_time_ticks": 86858
+            "pid": 16823,
+            "start_time_ticks": 62529
           },
           {
             "parent_process": false,
-            "pid": 13075,
-            "start_time_ticks": 86857
+            "pid": 16822,
+            "start_time_ticks": 62529
           },
           {
             "parent_process": false,
-            "pid": 13077,
-            "start_time_ticks": 86859
+            "pid": 16824,
+            "start_time_ticks": 62530
           },
           {
             "parent_process": false,
-            "pid": 13084,
-            "start_time_ticks": 86866
+            "pid": 16831,
+            "start_time_ticks": 62535
           },
           {
             "parent_process": false,
-            "pid": 13087,
-            "start_time_ticks": 86866
+            "pid": 16832,
+            "start_time_ticks": 62535
           },
           {
             "parent_process": false,
-            "pid": 13086,
-            "start_time_ticks": 86866
+            "pid": 16834,
+            "start_time_ticks": 62535
           },
           {
             "parent_process": false,
-            "pid": 13085,
-            "start_time_ticks": 86866
+            "pid": 16833,
+            "start_time_ticks": 62535
           },
           {
             "parent_process": false,
-            "pid": 13088,
-            "start_time_ticks": 86869
+            "pid": 16836,
+            "start_time_ticks": 62537
           },
           {
             "parent_process": false,
-            "pid": 13089,
-            "start_time_ticks": 86870
+            "pid": 16835,
+            "start_time_ticks": 62537
           },
           {
             "parent_process": false,
-            "pid": 13100,
-            "start_time_ticks": 87646
+            "pid": 16846,
+            "start_time_ticks": 62966
           },
           {
             "parent_process": false,
-            "pid": 13101,
-            "start_time_ticks": 87647
+            "pid": 16847,
+            "start_time_ticks": 62967
           },
           {
             "parent_process": false,
-            "pid": 13102,
-            "start_time_ticks": 87648
+            "pid": 16848,
+            "start_time_ticks": 62967
           },
           {
             "parent_process": false,
-            "pid": 13103,
-            "start_time_ticks": 87653
+            "pid": 16849,
+            "start_time_ticks": 62971
           },
           {
             "parent_process": false,
-            "pid": 13126,
-            "start_time_ticks": 88013
+            "pid": 16872,
+            "start_time_ticks": 63180
           },
           {
             "parent_process": false,
-            "pid": 13127,
-            "start_time_ticks": 88015
+            "pid": 16873,
+            "start_time_ticks": 63181
           },
           {
             "parent_process": false,
-            "pid": 13128,
-            "start_time_ticks": 88015
+            "pid": 16874,
+            "start_time_ticks": 63182
           },
           {
             "parent_process": false,
-            "pid": 13129,
-            "start_time_ticks": 88028
+            "pid": 16875,
+            "start_time_ticks": 63189
           },
           {
             "parent_process": false,
-            "pid": 13130,
-            "start_time_ticks": 88188
+            "pid": 16876,
+            "start_time_ticks": 63285
           }
         ],
         "remaining": []
       },
       "status": "passed",
-      "trace_sha256": "b5d2c0cad93b175a395c5f34d00818fb0d8649af33283cc3c273c78cd49c4fcc"
+      "trace_sha256": "afe650acd1157c314909908e326284a6a4dc2d0fe66de43caacee7a67a3e78c2"
     },
     {
       "case": "daemon-loss",
@@ -1297,308 +1292,298 @@
       "outcome": "failed",
       "process_cleanup": {
         "all_stopped": true,
-        "descendant_count": 58,
+        "descendant_count": 56,
         "observed": [
           {
             "parent_process": true,
-            "pid": 13138,
-            "start_time_ticks": 88363
+            "pid": 16884,
+            "start_time_ticks": 63401
           },
           {
             "parent_process": false,
-            "pid": 13142,
-            "start_time_ticks": 88363
+            "pid": 16888,
+            "start_time_ticks": 63401
           },
           {
             "parent_process": false,
-            "pid": 13143,
-            "start_time_ticks": 88401
+            "pid": 16889,
+            "start_time_ticks": 63425
           },
           {
             "parent_process": false,
-            "pid": 13144,
-            "start_time_ticks": 88403
+            "pid": 16890,
+            "start_time_ticks": 63426
           },
           {
             "parent_process": false,
-            "pid": 13145,
-            "start_time_ticks": 88404
+            "pid": 16891,
+            "start_time_ticks": 63427
           },
           {
             "parent_process": false,
-            "pid": 13149,
-            "start_time_ticks": 88419
+            "pid": 16895,
+            "start_time_ticks": 63437
           },
           {
             "parent_process": false,
-            "pid": 13152,
-            "start_time_ticks": 89697
+            "pid": 16901,
+            "start_time_ticks": 64133
           },
           {
             "parent_process": false,
-            "pid": 13153,
-            "start_time_ticks": 89698
+            "pid": 16902,
+            "start_time_ticks": 64134
           },
           {
             "parent_process": false,
-            "pid": 13154,
-            "start_time_ticks": 89700
+            "pid": 16906,
+            "start_time_ticks": 64143
           },
           {
             "parent_process": false,
-            "pid": 13158,
-            "start_time_ticks": 89714
+            "pid": 16907,
+            "start_time_ticks": 64247
           },
           {
             "parent_process": false,
-            "pid": 13159,
-            "start_time_ticks": 89895
+            "pid": 16908,
+            "start_time_ticks": 64248
           },
           {
             "parent_process": false,
-            "pid": 13160,
-            "start_time_ticks": 89897
+            "pid": 16909,
+            "start_time_ticks": 64249
           },
           {
             "parent_process": false,
-            "pid": 13161,
-            "start_time_ticks": 89898
+            "pid": 16913,
+            "start_time_ticks": 64258
           },
           {
             "parent_process": false,
-            "pid": 13165,
-            "start_time_ticks": 89913
+            "pid": 16914,
+            "start_time_ticks": 64937
           },
           {
             "parent_process": false,
-            "pid": 13170,
-            "start_time_ticks": 91183
+            "pid": 16915,
+            "start_time_ticks": 64938
           },
           {
             "parent_process": false,
-            "pid": 13171,
-            "start_time_ticks": 91184
+            "pid": 16916,
+            "start_time_ticks": 64939
           },
           {
             "parent_process": false,
-            "pid": 13172,
-            "start_time_ticks": 91186
+            "pid": 16920,
+            "start_time_ticks": 64949
           },
           {
             "parent_process": false,
-            "pid": 13176,
-            "start_time_ticks": 91199
+            "pid": 16921,
+            "start_time_ticks": 65059
           },
           {
             "parent_process": false,
-            "pid": 13177,
-            "start_time_ticks": 91373
+            "pid": 16922,
+            "start_time_ticks": 65060
           },
           {
             "parent_process": false,
-            "pid": 13178,
-            "start_time_ticks": 91375
+            "pid": 16923,
+            "start_time_ticks": 65061
           },
           {
             "parent_process": false,
-            "pid": 13179,
-            "start_time_ticks": 91376
+            "pid": 16927,
+            "start_time_ticks": 65070
           },
           {
             "parent_process": false,
-            "pid": 13183,
-            "start_time_ticks": 91390
+            "pid": 16930,
+            "start_time_ticks": 65765
           },
           {
             "parent_process": false,
-            "pid": 13188,
-            "start_time_ticks": 92692
+            "pid": 16931,
+            "start_time_ticks": 65766
           },
           {
             "parent_process": false,
-            "pid": 13189,
-            "start_time_ticks": 92693
+            "pid": 16932,
+            "start_time_ticks": 65767
           },
           {
             "parent_process": false,
-            "pid": 13190,
-            "start_time_ticks": 92695
+            "pid": 16936,
+            "start_time_ticks": 65777
           },
           {
             "parent_process": false,
-            "pid": 13194,
-            "start_time_ticks": 92710
+            "pid": 16937,
+            "start_time_ticks": 65880
           },
           {
             "parent_process": false,
-            "pid": 13195,
-            "start_time_ticks": 92891
+            "pid": 16942,
+            "start_time_ticks": 65919
           },
           {
             "parent_process": false,
-            "pid": 13200,
-            "start_time_ticks": 92953
+            "pid": 16944,
+            "start_time_ticks": 65921
           },
           {
             "parent_process": false,
-            "pid": 13201,
-            "start_time_ticks": 92955
+            "pid": 16945,
+            "start_time_ticks": 65922
           },
           {
             "parent_process": false,
-            "pid": 13202,
-            "start_time_ticks": 92957
+            "pid": 16949,
+            "start_time_ticks": 65932
           },
           {
             "parent_process": false,
-            "pid": 13203,
-            "start_time_ticks": 92959
+            "pid": 16950,
+            "start_time_ticks": 66625
           },
           {
             "parent_process": false,
-            "pid": 13207,
-            "start_time_ticks": 92972
+            "pid": 16951,
+            "start_time_ticks": 66626
           },
           {
             "parent_process": false,
-            "pid": 13210,
-            "start_time_ticks": 94247
+            "pid": 16952,
+            "start_time_ticks": 66627
           },
           {
             "parent_process": false,
-            "pid": 13211,
-            "start_time_ticks": 94248
+            "pid": 16956,
+            "start_time_ticks": 66636
           },
           {
             "parent_process": false,
-            "pid": 13212,
-            "start_time_ticks": 94249
+            "pid": 16957,
+            "start_time_ticks": 66744
           },
           {
             "parent_process": false,
-            "pid": 13216,
-            "start_time_ticks": 94263
+            "pid": 16958,
+            "start_time_ticks": 67079
           },
           {
             "parent_process": false,
-            "pid": 13217,
-            "start_time_ticks": 94439
+            "pid": 16968,
+            "start_time_ticks": 67110
           },
           {
             "parent_process": false,
-            "pid": 13218,
-            "start_time_ticks": 95073
+            "pid": 16969,
+            "start_time_ticks": 67111
           },
           {
             "parent_process": false,
-            "pid": 13228,
-            "start_time_ticks": 95117
+            "pid": 16971,
+            "start_time_ticks": 67112
           },
           {
             "parent_process": false,
-            "pid": 13229,
-            "start_time_ticks": 95119
+            "pid": 16973,
+            "start_time_ticks": 67116
           },
           {
             "parent_process": false,
-            "pid": 13231,
-            "start_time_ticks": 95121
+            "pid": 16972,
+            "start_time_ticks": 67116
           },
           {
             "parent_process": false,
-            "pid": 13232,
-            "start_time_ticks": 95127
+            "pid": 16974,
+            "start_time_ticks": 67117
           },
           {
             "parent_process": false,
-            "pid": 13233,
-            "start_time_ticks": 95127
+            "pid": 16981,
+            "start_time_ticks": 67121
           },
           {
             "parent_process": false,
-            "pid": 13234,
-            "start_time_ticks": 95128
+            "pid": 16982,
+            "start_time_ticks": 67121
           },
           {
             "parent_process": false,
-            "pid": 13241,
-            "start_time_ticks": 95135
+            "pid": 16984,
+            "start_time_ticks": 67121
           },
           {
             "parent_process": false,
-            "pid": 13244,
-            "start_time_ticks": 95136
+            "pid": 16983,
+            "start_time_ticks": 67121
           },
           {
             "parent_process": false,
-            "pid": 13243,
-            "start_time_ticks": 95135
+            "pid": 16985,
+            "start_time_ticks": 67123
           },
           {
             "parent_process": false,
-            "pid": 13242,
-            "start_time_ticks": 95135
+            "pid": 16986,
+            "start_time_ticks": 67124
           },
           {
             "parent_process": false,
-            "pid": 13245,
-            "start_time_ticks": 95139
+            "pid": 16997,
+            "start_time_ticks": 67556
           },
           {
             "parent_process": false,
-            "pid": 13246,
-            "start_time_ticks": 95139
+            "pid": 16998,
+            "start_time_ticks": 67556
           },
           {
             "parent_process": false,
-            "pid": 13256,
-            "start_time_ticks": 95935
+            "pid": 16999,
+            "start_time_ticks": 67557
           },
           {
             "parent_process": false,
-            "pid": 13257,
-            "start_time_ticks": 95937
+            "pid": 17000,
+            "start_time_ticks": 67560
           },
           {
             "parent_process": false,
-            "pid": 13258,
-            "start_time_ticks": 95937
+            "pid": 17023,
+            "start_time_ticks": 67775
           },
           {
             "parent_process": false,
-            "pid": 13259,
-            "start_time_ticks": 95943
+            "pid": 17024,
+            "start_time_ticks": 67776
           },
           {
             "parent_process": false,
-            "pid": 13283,
-            "start_time_ticks": 96286
+            "pid": 17025,
+            "start_time_ticks": 67776
           },
           {
             "parent_process": false,
-            "pid": 13284,
-            "start_time_ticks": 96287
+            "pid": 17026,
+            "start_time_ticks": 67784
           },
           {
             "parent_process": false,
-            "pid": 13285,
-            "start_time_ticks": 96288
-          },
-          {
-            "parent_process": false,
-            "pid": 13286,
-            "start_time_ticks": 96300
-          },
-          {
-            "parent_process": false,
-            "pid": 13289,
-            "start_time_ticks": 96460
+            "pid": 17027,
+            "start_time_ticks": 67880
           }
         ],
         "remaining": []
       },
       "status": "passed",
-      "trace_sha256": "0fa4f4b3669429683c6840eb266e33a9f3cd792392cf51d39a8ef2685bfa28c0"
+      "trace_sha256": "3210fd3a31468537e0cdf70494b54e993cd30bdd76a768ed4d0027c4e2574890"
     },
     {
       "case": "timeout",
@@ -1607,263 +1592,253 @@
       "outcome": "failed",
       "process_cleanup": {
         "all_stopped": true,
-        "descendant_count": 49,
+        "descendant_count": 47,
         "observed": [
           {
             "parent_process": true,
-            "pid": 13297,
-            "start_time_ticks": 96631
+            "pid": 17034,
+            "start_time_ticks": 67993
           },
           {
             "parent_process": false,
-            "pid": 13301,
-            "start_time_ticks": 96632
+            "pid": 17038,
+            "start_time_ticks": 67993
           },
           {
             "parent_process": false,
-            "pid": 13302,
-            "start_time_ticks": 96670
+            "pid": 17039,
+            "start_time_ticks": 68016
           },
           {
             "parent_process": false,
-            "pid": 13303,
-            "start_time_ticks": 96671
+            "pid": 17040,
+            "start_time_ticks": 68017
           },
           {
             "parent_process": false,
-            "pid": 13304,
-            "start_time_ticks": 96673
+            "pid": 17041,
+            "start_time_ticks": 68018
           },
           {
             "parent_process": false,
-            "pid": 13308,
-            "start_time_ticks": 96687
+            "pid": 17045,
+            "start_time_ticks": 68027
           },
           {
             "parent_process": false,
-            "pid": 13312,
-            "start_time_ticks": 98011
+            "pid": 17051,
+            "start_time_ticks": 68730
           },
           {
             "parent_process": false,
-            "pid": 13313,
-            "start_time_ticks": 98012
+            "pid": 17052,
+            "start_time_ticks": 68731
           },
           {
             "parent_process": false,
-            "pid": 13314,
-            "start_time_ticks": 98013
+            "pid": 17053,
+            "start_time_ticks": 68732
           },
           {
             "parent_process": false,
-            "pid": 13318,
-            "start_time_ticks": 98028
+            "pid": 17057,
+            "start_time_ticks": 68741
           },
           {
             "parent_process": false,
-            "pid": 13319,
-            "start_time_ticks": 98232
+            "pid": 17058,
+            "start_time_ticks": 68848
           },
           {
             "parent_process": false,
-            "pid": 13320,
-            "start_time_ticks": 98233
+            "pid": 17059,
+            "start_time_ticks": 68849
           },
           {
             "parent_process": false,
-            "pid": 13321,
-            "start_time_ticks": 98235
+            "pid": 17060,
+            "start_time_ticks": 68850
           },
           {
             "parent_process": false,
-            "pid": 13325,
-            "start_time_ticks": 98249
+            "pid": 17064,
+            "start_time_ticks": 68859
           },
           {
             "parent_process": false,
-            "pid": 13328,
-            "start_time_ticks": 99563
+            "pid": 17065,
+            "start_time_ticks": 69553
           },
           {
             "parent_process": false,
-            "pid": 13329,
-            "start_time_ticks": 99565
+            "pid": 17066,
+            "start_time_ticks": 69554
           },
           {
             "parent_process": false,
-            "pid": 13330,
-            "start_time_ticks": 99566
+            "pid": 17067,
+            "start_time_ticks": 69555
           },
           {
             "parent_process": false,
-            "pid": 13334,
-            "start_time_ticks": 99579
+            "pid": 17071,
+            "start_time_ticks": 69565
           },
           {
             "parent_process": false,
-            "pid": 13335,
-            "start_time_ticks": 99778
+            "pid": 17073,
+            "start_time_ticks": 69671
           },
           {
             "parent_process": false,
-            "pid": 13336,
-            "start_time_ticks": 99780
+            "pid": 17074,
+            "start_time_ticks": 69672
           },
           {
             "parent_process": false,
-            "pid": 13337,
-            "start_time_ticks": 99782
+            "pid": 17075,
+            "start_time_ticks": 69674
           },
           {
             "parent_process": false,
-            "pid": 13341,
-            "start_time_ticks": 99796
+            "pid": 17079,
+            "start_time_ticks": 69683
           },
           {
             "parent_process": false,
-            "pid": 13344,
-            "start_time_ticks": 101118
+            "pid": 17080,
+            "start_time_ticks": 70366
           },
           {
             "parent_process": false,
-            "pid": 13345,
-            "start_time_ticks": 101120
+            "pid": 17081,
+            "start_time_ticks": 70367
           },
           {
             "parent_process": false,
-            "pid": 13346,
-            "start_time_ticks": 101122
+            "pid": 17082,
+            "start_time_ticks": 70368
           },
           {
             "parent_process": false,
-            "pid": 13350,
-            "start_time_ticks": 101136
+            "pid": 17086,
+            "start_time_ticks": 70378
           },
           {
             "parent_process": false,
-            "pid": 13351,
-            "start_time_ticks": 101344
+            "pid": 17087,
+            "start_time_ticks": 70488
           },
           {
             "parent_process": false,
-            "pid": 13356,
-            "start_time_ticks": 101405
+            "pid": 17092,
+            "start_time_ticks": 70526
           },
           {
             "parent_process": false,
-            "pid": 13357,
-            "start_time_ticks": 101407
+            "pid": 17094,
+            "start_time_ticks": 70528
           },
           {
             "parent_process": false,
-            "pid": 13358,
-            "start_time_ticks": 101409
+            "pid": 17095,
+            "start_time_ticks": 70530
           },
           {
             "parent_process": false,
-            "pid": 13359,
-            "start_time_ticks": 101410
+            "pid": 17099,
+            "start_time_ticks": 70539
           },
           {
             "parent_process": false,
-            "pid": 13363,
-            "start_time_ticks": 101425
+            "pid": 17101,
+            "start_time_ticks": 71229
           },
           {
             "parent_process": false,
-            "pid": 13364,
-            "start_time_ticks": 102683
+            "pid": 17102,
+            "start_time_ticks": 71230
           },
           {
             "parent_process": false,
-            "pid": 13365,
-            "start_time_ticks": 102684
+            "pid": 17103,
+            "start_time_ticks": 71231
           },
           {
             "parent_process": false,
-            "pid": 13366,
-            "start_time_ticks": 102686
+            "pid": 17107,
+            "start_time_ticks": 71241
           },
           {
             "parent_process": false,
-            "pid": 13370,
-            "start_time_ticks": 102700
+            "pid": 17108,
+            "start_time_ticks": 71346
           },
           {
             "parent_process": false,
-            "pid": 13371,
-            "start_time_ticks": 102883
+            "pid": 17110,
+            "start_time_ticks": 71680
           },
           {
             "parent_process": false,
-            "pid": 13372,
-            "start_time_ticks": 103516
+            "pid": 17121,
+            "start_time_ticks": 71711
           },
           {
             "parent_process": false,
-            "pid": 13382,
-            "start_time_ticks": 103562
+            "pid": 17123,
+            "start_time_ticks": 71713
           },
           {
             "parent_process": false,
-            "pid": 13383,
-            "start_time_ticks": 103563
+            "pid": 17125,
+            "start_time_ticks": 71717
           },
           {
             "parent_process": false,
-            "pid": 13385,
-            "start_time_ticks": 103566
+            "pid": 17124,
+            "start_time_ticks": 71716
           },
           {
             "parent_process": false,
-            "pid": 13387,
-            "start_time_ticks": 103571
+            "pid": 17126,
+            "start_time_ticks": 71717
           },
           {
             "parent_process": false,
-            "pid": 13386,
-            "start_time_ticks": 103570
+            "pid": 17133,
+            "start_time_ticks": 71722
           },
           {
             "parent_process": false,
-            "pid": 13388,
-            "start_time_ticks": 103572
+            "pid": 17136,
+            "start_time_ticks": 71722
           },
           {
             "parent_process": false,
-            "pid": 13397,
-            "start_time_ticks": 103581
+            "pid": 17135,
+            "start_time_ticks": 71722
           },
           {
             "parent_process": false,
-            "pid": 13396,
-            "start_time_ticks": 103580
+            "pid": 17134,
+            "start_time_ticks": 71722
           },
           {
             "parent_process": false,
-            "pid": 13398,
-            "start_time_ticks": 103582
+            "pid": 17137,
+            "start_time_ticks": 71724
           },
           {
             "parent_process": false,
-            "pid": 13401,
-            "start_time_ticks": 103583
-          },
-          {
-            "parent_process": false,
-            "pid": 13400,
-            "start_time_ticks": 103583
-          },
-          {
-            "parent_process": false,
-            "pid": 13399,
-            "start_time_ticks": 103583
+            "pid": 17138,
+            "start_time_ticks": 71724
           }
         ],
         "remaining": []
       },
       "status": "passed",
-      "trace_sha256": "18f62456cebd0bfd25bd2a560dab82260e4a403da42084761c1df2937a8a0352"
+      "trace_sha256": "57acd4787c5d7996a0dbfa187567e1cfd7e617a226182c9c6129a9f4e250d64b"
     }
   ],
   "format": "sw-prepared-pilot-acceptance/1",
@@ -1871,30 +1846,30 @@
   "provider": "owned-scripted-loopback",
   "selected_assets_unchanged": true,
   "selected_sha256": {
-    "agentfw": "af73df828a8ba1e8cbdf0016c2bc58de1bde2386f27abb27648fef848be6c564",
-    "bwrap": "4d2044d04519dad2d47068676c95d0e9348fb3ad73db7497e18810a0e6e3134e",
+    "agentfw": "d9d2c000b4f279d0e3be05cb33e1550f69efa413ac6ce48d2656cf3b6bdaa11b",
+    "bwrap": "48785c2018cf6f3b6ec45c5ae2fff9df9784316e86211201bb8dbb8af1d414a8",
     "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
     "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
-    "git": "e23c5a17c6673d5ea46e59730ec38889313d97b43d9d7ce90ada37ddaab707ba",
+    "git": "2176191737ea70888df8ba9ce47353ae45611c7197f832c9a235c00926663d35",
     "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
-    "git_launcher": "509f51a56bd1861c337d662e4b89dd56cf98fa6e6ce0701413f16c71f9d65da9",
+    "git_launcher": "ff5a971ec12db6a234da1d2f9ba6b1679ffaf5be918a165376728cdba49e19d7",
     "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
     "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
     "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
     "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
-    "sandbox_tests": "15453352962dd0ba64ec1942a847f1dfd88a911d04f61a3cf554a3575ad85da4"
+    "sandbox_tests": "c577fb0da6839ef3e7716e687a7ae6611d922b6fdfb22421cf72c8cb249d2099"
   },
   "source_after": {
-    "commit": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+    "commit": "b8d369b1adce52edf5328214d4d7c40cd73ec4ff",
     "dirty": false,
-    "files_sha256": "54d9eada3681cbb992689e0834a8ebb81d39b6bb1f7a04f8a0ca3b628ac02a1f",
-    "tree": "f6706709177f584d33737ccc148290954ad37385"
+    "files_sha256": "2791fbde64a0ad4427178d6ee89a8706129e45bdf5a352578d270369fbe11fd9",
+    "tree": "ce56802a6d83fdf991168f53a26d978b9e738860"
   },
   "source_before": {
-    "commit": "2d45bc3c9981f0cdb44d52bf89368287375f49a2",
+    "commit": "b8d369b1adce52edf5328214d4d7c40cd73ec4ff",
     "dirty": false,
-    "files_sha256": "54d9eada3681cbb992689e0834a8ebb81d39b6bb1f7a04f8a0ca3b628ac02a1f",
-    "tree": "f6706709177f584d33737ccc148290954ad37385"
+    "files_sha256": "2791fbde64a0ad4427178d6ee89a8706129e45bdf5a352578d270369fbe11fd9",
+    "tree": "ce56802a6d83fdf991168f53a26d978b9e738860"
   },
   "status": "passed",
   "unrelated_preserved": true,
