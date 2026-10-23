@@ -116,6 +116,15 @@ def load_pins(path: Path):
     return pins
 
 
+def lane_pin(pins, lane):
+    """Compiler identity the selected lane must resolve to (main pin, or the documented native lane)."""
+    rust = pins["rust"]
+    if lane == "main":
+        return {"version": rust["version"], "commit_prefix": rust["commit_prefix"], "host": rust["host"]}
+    legacy = pins["legacy_lane"]
+    return {"version": legacy["version"], "commit_prefix": legacy.get("commit_prefix"), "host": rust["host"]}
+
+
 def check_source(report, root, expected_commit, allow_dirty):
     code, head = run(["git", "-C", str(root), "rev-parse", "HEAD"])
     if code != 0:
@@ -141,9 +150,23 @@ def toolchain_channel(text):
     return match.group(1) if match else None
 
 
-def check_toolchain_file(report, root, pins):
+def check_toolchain_file(report, root, pins, lane="main"):
     expected = pins["rust"]["version"]
     path = root / "rust-toolchain.toml"
+    if lane == "native":
+        wanted = pins["legacy_lane"]["version"]
+        override = os.environ.get("RUSTUP_TOOLCHAIN")
+        try:
+            channel = toolchain_channel(read_text(path))
+        except OSError as error:
+            report.check("toolchain-file", False, declared=wanted, detail=str(error)[:120])
+            return
+        ok = override == wanted and channel == expected
+        report.resolved["toolchain_file"] = {"channel": channel, "sha256": sha256_file(path), "env_RUSTUP_TOOLCHAIN": override}
+        report.check("toolchain-file", ok, declared={"env_RUSTUP_TOOLCHAIN": wanted, "file_channel": expected},
+                     resolved={"env_RUSTUP_TOOLCHAIN": override, "file_channel": channel},
+                     detail=None if ok else "native lane needs RUSTUP_TOOLCHAIN=%s (the explicit override) and the checked-in file at %s" % (wanted, expected))
+        return
     try:
         channel = toolchain_channel(read_text(path))
     except OSError as error:
@@ -198,8 +221,8 @@ def docker_declarations(root):
     return found
 
 
-def check_compiler(report, root, pins):
-    rust = pins["rust"]
+def check_compiler(report, root, pins, lane="main"):
+    rust = lane_pin(pins, lane)
     code, out = run(["rustc", "-Vv"], cwd=root)
     if code != 0:
         report.check("compiler", False, declared=rust["version"],
@@ -216,13 +239,15 @@ def check_compiler(report, root, pins):
     problems = []
     if resolved["rustc_release"] != rust["version"]:
         problems.append(f"rustc {resolved['rustc_release']} is not the pinned {rust['version']}")
-    if not (resolved["rustc_commit"] or "").startswith(rust["commit_prefix"]):
+    if rust["commit_prefix"] is None:
+        resolved["commit_pinned"] = False  # recorded in the report, not yet enforced for this lane
+    elif not (resolved["rustc_commit"] or "").startswith(rust["commit_prefix"]):
         problems.append("rustc commit hash does not match the pin")
     if resolved["host"] != rust["host"]:
         problems.append(f"host target {resolved['host']} is not the pinned {rust['host']}")
     if cargo_code != 0 or resolved["cargo_release"] != rust["version"]:
         problems.append(f"cargo {resolved['cargo_release']} is not the pinned {rust['version']}")
-    report.check("compiler", not problems, declared={k: rust[k] for k in ("version", "commit_prefix", "host")},
+    report.check("compiler", not problems, declared=dict(rust, lane=lane),
                  resolved=resolved, detail="; ".join(problems) or None)
 
 
@@ -344,9 +369,9 @@ def attest(args):
                        "python": pins["python"]}
     root = args.root
     for step in (lambda: check_source(report, root, args.expected_commit, args.allow_dirty),
-                 lambda: check_toolchain_file(report, root, pins),
+                 lambda: check_toolchain_file(report, root, pins, getattr(args, "lane", "main")),
                  lambda: check_workflow_refs(report, root, pins),
-                 lambda: check_compiler(report, root, pins),
+                 lambda: check_compiler(report, root, pins, getattr(args, "lane", "main")),
                  lambda: check_lockfile(report, root),
                  lambda: check_interpreter(report, args.python, args.python_role, pins),
                  lambda: check_inputs(report, root, pins, args.git_archive, args.python_archive),
@@ -391,6 +416,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--pins", type=Path, default=PINS)
     parser.add_argument("--root", type=Path, default=ROOT)
+    parser.add_argument("--lane", choices=("main", "native"), default="main",
+                        help="main: the pinned compiler; native: the documented native Ubuntu lane (explicit RUSTUP_TOOLCHAIN)")
     parser.add_argument("--expected-commit", help="full 40-hex commit the checkout must be at")
     parser.add_argument("--python", help="absolute path of the interpreter to attest (never chosen silently)")
     parser.add_argument("--python-role", choices=("classifier", "git_runtime"), default="classifier")

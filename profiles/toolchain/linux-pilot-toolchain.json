@@ -1,49 +1,55 @@
 {
-  "format": "sw-pilot-toolchain-pins/1",
-  "rust": {
-    "version": "1.99.1",
-    "commit_prefix": "58cf8f9c3",
-    "host": "x86_64-unknown-linux-gnu",
-    "release_date": "2026-10-13",
-    "declared_in": "rust-toolchain.toml",
-    "workflow_action": "dtolnay/rust-toolchain"
+ "format": "sw-pilot-toolchain-pins/1",
+ "rust": {
+  "version": "1.99.1",
+  "commit_prefix": "58cf8f9c3",
+  "host": "x86_64-unknown-linux-gnu",
+  "release_date": "2026-10-13",
+  "declared_in": "rust-toolchain.toml",
+  "workflow_action": "dtolnay/rust-toolchain"
+ },
+ "legacy_lane": {
+  "version": "1.94.1",
+  "reason": "Existing real-server and native acceptance lanes recorded on 1.94.1; kept explicit instead of silently upgraded.",
+  "workflows": [
+   ".github/workflows/ci-components.yml",
+   ".github/workflows/mcp-real-filesystem.yml",
+   ".github/workflows/mcp-real-git.yml",
+   ".github/workflows/native-mcp-stderr.yml",
+   ".github/workflows/provenance-memory.yml",
+   ".github/workflows/sou79-resource-budgets.yml",
+   ".github/workflows/sou86-crash-supervision.yml"
+  ],
+  "native_job": {
+   "workflow": ".github/workflows/mcp-real-filesystem.yml",
+   "job": "native-ubuntu-2404",
+   "explicit_override": "RUSTUP_TOOLCHAIN=1.94.1",
+   "commit_prefix_status": "recorded from the first verified CI run; not enforced until pinned here"
+  }
+ },
+ "python": {
+  "classifier": {
+   "implementation": "CPython",
+   "minimum_version": "3.9"
   },
-  "legacy_lane": {
-    "version": "1.94.1",
-    "reason": "Existing real-server and native acceptance lanes recorded on 1.94.1; kept explicit instead of silently upgraded.",
-    "workflows": [
-      ".github/workflows/ci-components.yml",
-      ".github/workflows/mcp-real-filesystem.yml",
-      ".github/workflows/mcp-real-git.yml",
-      ".github/workflows/native-mcp-stderr.yml",
-      ".github/workflows/provenance-memory.yml",
-      ".github/workflows/sou79-resource-budgets.yml",
-      ".github/workflows/sou86-crash-supervision.yml"
-    ]
-  },
-  "python": {
-    "classifier": {
-      "implementation": "CPython",
-      "minimum_version": "3.9"
-    },
-    "git_runtime": {
-      "implementation": "CPython",
-      "version": "3.11.14"
-    }
-  },
-  "inputs": {
-    "git_profile_identity": "profiles/mcp/git-readonly-v1/upstream-identity.json",
-    "git_requirements_lock": "profiles/mcp/git-readonly-v1/requirements.lock",
-    "filesystem_profile_identity": "profiles/mcp/filesystem-readonly-v1/upstream-identity.json",
-    "filesystem_package_lock": "profiles/mcp/filesystem-readonly-v1/package-lock.json"
-  },
-  "build_scripts": [
-    "rust-toolchain.toml",
-    "Cargo.lock",
-    "scripts/prepare-native-pilot-prerequisites.py",
-    "scripts/prepare-installed-pilot.py",
-    "scripts/qualify-installed-pilot.py",
-    "scripts/install-sou62-filesystem-profile.py",
-    "scripts/install-sou68-git-profile.py"
-  ]
+  "git_runtime": {
+   "implementation": "CPython",
+   "version": "3.11.14"
+  }
+ },
+ "inputs": {
+  "git_profile_identity": "profiles/mcp/git-readonly-v1/upstream-identity.json",
+  "git_requirements_lock": "profiles/mcp/git-readonly-v1/requirements.lock",
+  "filesystem_profile_identity": "profiles/mcp/filesystem-readonly-v1/upstream-identity.json",
+  "filesystem_package_lock": "profiles/mcp/filesystem-readonly-v1/package-lock.json"
+ },
+ "build_scripts": [
+  "rust-toolchain.toml",
+  "Cargo.lock",
+  "scripts/prepare-native-pilot-prerequisites.py",
+  "scripts/prepare-installed-pilot.py",
+  "scripts/qualify-installed-pilot.py",
+  "scripts/install-sou62-filesystem-profile.py",
+  "scripts/install-sou68-git-profile.py"
+ ]
 }

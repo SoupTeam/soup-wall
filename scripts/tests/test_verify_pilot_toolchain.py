@@ -79,10 +79,11 @@ class Fixture(unittest.TestCase):
     def attest(self, **overrides):
         values = dict(pins=self.root / "profiles/toolchain/linux-pilot-toolchain.json", root=self.root,
                       expected_commit=None, python=sys.executable, python_role="classifier", git_archive=None,
-                      python_archive=None, allow_dirty=False, output=None)
+                      python_archive=None, allow_dirty=False, output=None, lane="main")
+        env = overrides.pop("env", {})
         values.update(overrides)
         out = io.StringIO()
-        with patch.dict(os.environ, {"PATH": f"{self.bin}:{os.environ['PATH']}"}), redirect_stdout(out):
+        with patch.dict(os.environ, {"PATH": f"{self.bin}:{os.environ['PATH']}", **env}), redirect_stdout(out):
             code = VERIFY.attest(type("Args", (), values))
         return code, json.loads(out.getvalue())
 
@@ -218,6 +219,30 @@ class Attestation(Fixture):
             code = VERIFY.finish(VERIFY.Report(), 0.0, type("A", (), {"output": target}))
         self.assertEqual(code, 2)
         self.assertEqual(target.read_text(), "old")
+
+
+class NativeLane(Fixture):
+    def test_native_lane_verifies_1_94_1_with_explicit_override(self):
+        self.fake_tools(release=self.pins["legacy_lane"]["version"])
+        code, report = self.attest(lane="native", env={"RUSTUP_TOOLCHAIN": self.pins["legacy_lane"]["version"]})
+        self.assertEqual((code, report["status"]), (0, "verified"), self.failed(report))
+        self.assertFalse(report["resolved"]["compiler"].get("commit_pinned", True))
+
+    def test_native_lane_refuses_without_the_override_or_with_the_wrong_compiler(self):
+        self.fake_tools(release=self.pins["legacy_lane"]["version"])
+        with patch.dict(os.environ):
+            os.environ.pop("RUSTUP_TOOLCHAIN", None)
+            code, report = self.attest(lane="native")
+        self.assertIn("RUSTUP_TOOLCHAIN", self.failed(report)["toolchain-file"])
+        self.fake_tools()  # the 1.99.1 compiler is not the native lane
+        code, report = self.attest(lane="native", env={"RUSTUP_TOOLCHAIN": self.pins["legacy_lane"]["version"]})
+        self.assertIn("is not the pinned 1.94.1", self.failed(report)["compiler"])
+
+    def test_main_lane_still_refuses_the_native_compiler(self):
+        self.fake_tools(release=self.pins["legacy_lane"]["version"])
+        code, report = self.attest()
+        self.assertEqual(code, 2)
+        self.assertIn("is not the pinned 1.99.1", self.failed(report)["compiler"])
 
 
 class RepositoryPins(unittest.TestCase):

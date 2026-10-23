@@ -385,6 +385,17 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
       - uses: Swatinem/rust-cache@v2
+      - name: Attest compiler and interpreter inputs for the native lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/sou122-toolchain"
+          status=0
+          python3 -B scripts/verify-pilot-toolchain.py --lane native \
+            --python "$(command -v python3)" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou122-toolchain/native-attestation.json" || status=$?
+          cat "$RUNNER_TEMP/sou122-toolchain/native-attestation.json"
+          exit "$status"
       - name: Focused preparation boundaries
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
@@ -716,6 +727,7 @@ jobs:
           name: sou111-native-preparation-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/sou111-assets/selected-hashes.txt
+            ${{ runner.temp }}/sou122-toolchain/native-attestation.json
             ${{ runner.temp }}/sou111-assets/native-summary.json
             ${{ runner.temp }}/sou111-assets/native-timing.json
             ${{ runner.temp }}/sou111-assets/native-rejected.json

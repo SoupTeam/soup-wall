@@ -22,6 +22,20 @@ They now name `1.99.1`. A version-shaped action ref (for example `@1.99.1`) is a
 branch, not proof that a release exists; the report therefore checks the real `rustc -Vv`
 output (release, commit hash, host) instead of trusting the ref.
 
+## Native Ubuntu lane (stays on 1.94.1)
+
+The `native-ubuntu-2404` job in `mcp-real-filesystem.yml` and the source-build entry point
+(`scripts/build-native-pilot-inputs.py`) deliberately keep Rust **1.94.1**, selected by an explicit
+`RUSTUP_TOOLCHAIN=1.94.1` override that wins over `rust-toolchain.toml`. That job runs
+
+```
+python3 scripts/verify-pilot-toolchain.py --lane native --python "$(command -v python3)" --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou122-toolchain/native-attestation.json"
+```
+
+before building and uploads the report with the job artifacts. In this lane the compiler must be 1.94.1
+(release, host, cargo), `RUSTUP_TOOLCHAIN` must be set to it, and the checked-in file must name 1.99.1.
+The 1.94.1 commit hash is recorded in the report but is only enforced once pinned in the pins file.
+
 ## Separate older lane
 
 Some existing acceptance workflows stay on `1.94.1` because their recorded results were produced
@@ -43,6 +57,7 @@ python3 scripts/verify-pilot-toolchain.py --python /absolute/path/to/python3 --e
 
 Options:
 
+- `--lane native` attests the native 1.94.1 lane instead of the 1.99.1 pin.
 - `--python-role git_runtime` attests the Git runtime interpreter (must be exactly 3.11.14).
 - `--git-archive` and `--python-archive` digest-check locally supplied archives against their pins.
 - `--allow-dirty` is for development only.
