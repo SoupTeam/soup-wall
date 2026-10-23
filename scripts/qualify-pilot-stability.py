@@ -287,7 +287,8 @@ def workflows(pilot, label, count):
                     pilot.controls[("git", "git_diff" if second else "git_show", "default")]]
         for offset, kind in enumerate(("filesystem", "git")):
             actual = results[f"toolu_pilot_{2 * index + offset}"]
-            require(not actual["is_error"] and P.host_text(actual, kind) == expected[offset], "benign_workflow_interrupted")
+            require(not actual["is_error"], "benign_workflow_interrupted")
+            require(P.host_text(actual, kind) == expected[offset], "useful_workflow_result_changed")
     calls = evidence["independent_dispatch_witness"]["dispatch"]["calls"]
     require(len(calls) == count * 2, "useful_dispatch_count_changed")
     return {"completed_workflows": count, "host": evidence}
@@ -372,7 +373,8 @@ def run(args):
                 tick()
                 time.sleep(min(0.5, max(0, target - time.monotonic())))
             iteration = {"index": index, "status": "incomplete", "completed_workflows": 0,
-                         "false_interruptions": 0, "started_seconds": round(time.monotonic() - started, 3)}
+                         "false_interruptions": 0, "technical_interruptions": 0,
+                         "started_seconds": round(time.monotonic() - started, 3)}
             report["iterations"].append(iteration)
             P.private_json(output / f"iteration-{index:02d}.json", iteration)
             P.private_json(output / "report.json", report)
@@ -414,9 +416,13 @@ def run(args):
                             expected_outage.clear()
                     report["faults"][fault] = evidence
                 tick()
-            except Exception:
+            except Exception as error:
                 iteration["status"] = "fail"
-                iteration["false_interruptions"] = 1
+                # An unavailable observer cannot establish a benign policy
+                # interruption or a completion. Keep the unknown denominator.
+                field = "false_interruptions" if str(error) == "benign_workflow_interrupted" else "technical_interruptions"
+                iteration[field] = 1
+                iteration["unverified_workflows"] = max(0, 2 * workload["workflows_per_host"] - iteration["completed_workflows"])
                 raise
             finally:
                 P.private_json(output / f"iteration-{index:02d}.json", iteration)

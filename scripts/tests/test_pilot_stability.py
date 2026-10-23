@@ -21,7 +21,7 @@ def complete():
         "source_before": {"commit": "a" * 40, "dirty": False},
         "source_after": {"commit": "a" * 40, "dirty": False}, "selected_unchanged": True, "skipped": 0,
         "iterations": [{"index": i, "status": "pass", "completed_workflows": 20,
-                        "false_interruptions": 0, "elapsed_seconds": 20, "started_seconds": i * 300,
+                        "false_interruptions": 0, "technical_interruptions": 0, "elapsed_seconds": 20, "started_seconds": i * 300,
                         "idle": idle.copy()} for i in range(12)],
         **{key: {"passed": True} for key in ("sandbox", "calibration", "protection_before", "protection_after", "final_follow_up", "cleanup", "observer_calibration")},
         "faults": {key: {"passed": True} for key in S.FAULTS.values()},
@@ -59,6 +59,7 @@ class StabilityControls(unittest.TestCase):
                          lambda r: r["iterations"][2].update(false_interruptions=1)):
             with self.subTest(mutation=mutation):
                 self.rejects(mutation)
+        self.rejects(lambda r: r["iterations"][2].update(technical_interruptions=1))
 
     def test_empty_stale_unsupported_observers_are_not_safe(self):
         for mutation in (lambda r: r["observer"].update(samples=0), lambda r: r["observer"].update(errors=["PermissionError"]),

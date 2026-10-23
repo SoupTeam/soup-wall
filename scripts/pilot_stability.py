@@ -148,7 +148,8 @@ def grade(report):
     rounds = report["iterations"]
     require(len(rounds) == 12 and [r["index"] for r in rounds] == list(range(12)), "incomplete_iterations")
     require(all(r["status"] == "pass" and r["completed_workflows"] == 20
-                and r["false_interruptions"] == 0 and r["elapsed_seconds"] <= 180 for r in rounds), "workflow_incomplete")
+                and r["false_interruptions"] == 0 and r["technical_interruptions"] == 0
+                and r["elapsed_seconds"] <= 180 for r in rounds), "workflow_incomplete")
     require(sum(r["completed_workflows"] for r in rounds) == 240, "workload_denominator_changed")
     require(all(abs(r["started_seconds"] - i * 300) <= 15 for i, r in enumerate(rounds)), "sustained_schedule_not_observed")
     for key in ("sandbox", "calibration", "protection_before", "protection_after", "final_follow_up", "cleanup", "observer_calibration"):
