@@ -23,6 +23,7 @@ import subprocess
 import sys
 import time
 import tomllib
+import traceback
 from urllib.parse import unquote, urlparse
 import uuid
 
@@ -202,8 +203,21 @@ def bounded_tree_size(generation):
 
 
 def target_within_limit(target):
+    target = Path(target)
+    if not stat.S_ISDIR(target.lstat().st_mode):
+        return False
+
+    def walk_error(error):
+        # Cargo may remove a child directory after its parent was enumerated.
+        # A missing root or any unreadable inventory must still fail closed.
+        if isinstance(error, FileNotFoundError) and error.filename:
+            vanished = Path(error.filename)
+            if vanished != target and vanished.is_relative_to(target):
+                return
+        raise error
+
     total, entries = 0, 0
-    for base, dirs, files in os.walk(target, followlinks=False):
+    for base, dirs, files in os.walk(target, followlinks=False, onerror=walk_error):
         entries += len(dirs) + len(files)
         if entries > MAX_TARGET_ENTRIES:
             return False
@@ -211,7 +225,7 @@ def target_within_limit(target):
             try:
                 info = (Path(base) / name).lstat()
             except FileNotFoundError:
-                continue  # Cargo removed a temporary file between listing and stat; it no longer counts.
+                continue  # Cargo deleted this temporary file since enumeration.
             total += info.st_size
             if total > MAX_TARGET_BYTES:
                 return False
@@ -501,6 +515,12 @@ def main(argv=None):
                    Failure(type(error).__name__ + "_failed", "build"))
         record = {"status": "failed", "stage": failure.stage,
                   "reason": failure.reason[:300], "active_protection": False}
+        if not isinstance(error, (Failure, native.Failure)):
+            frames = [frame for frame in traceback.extract_tb(error.__traceback__)
+                      if frame.filename == __file__]
+            if frames:
+                record["failure_location"] = {"function": frames[-1].name,
+                                              "line": frames[-1].lineno}
         if args.build:
             try:
                 native.failure_record(args.output, failure)

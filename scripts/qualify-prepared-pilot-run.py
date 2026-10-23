@@ -49,7 +49,14 @@ def useful_result(results, identifier, marker):
             "prepared_useful_result_missing")
 
 
+def validation_timeout(args):
+    value = getattr(args, "validation_timeout_seconds", 30)
+    require(type(value) is int and 30 <= value <= 180, "validation_deadline_out_of_range")
+    return value
+
+
 def qualify(args, private, report):
+    control_seconds = validation_timeout(args)
     before = RUN.PREP.PILOT.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
     config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
@@ -95,7 +102,7 @@ def qualify(args, private, report):
                     changed["files"]["agentfw"]["sha256"] = "0" * 64
                     args.selection.write_text(json.dumps(changed))
                 result = subprocess.run([str(args.strace), "-f", "-qq", "-s", "4096", "-e", "trace=execve",
-                    "-o", str(trace), *words], cwd=private, env=env, capture_output=True, timeout=30)
+                    "-o", str(trace), *words], cwd=private, env=env, capture_output=True, timeout=control_seconds)
                 value = json.loads(result.stdout)
                 require((result.returncode == 0) == (control == "plan") and value["executed"] is False,
                         "refusal_or_plan_executed")
@@ -328,6 +335,7 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
+    parser.add_argument("--validation-timeout-seconds", type=int, default=30)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(mode=0o700)
