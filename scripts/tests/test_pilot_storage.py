@@ -129,9 +129,10 @@ class FaultBoundaryControls(unittest.TestCase):
     def test_fault_arm_is_explicit_and_event_witness_required(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder).resolve()
+            original_env = dict(os.environ)
             fault = STORAGE.Fault(root, root / "unused.so", root / "owned", "case", errno.ENOSPC, "write")
             self.assertFalse(fault.arm.exists())
-            self.assertNotIn("LD_PRELOAD", os.environ)
+            self.assertEqual(dict(os.environ), original_env)
             with self.assertRaises(STORAGE.Failure):
                 fault.evidence()
             fault.enable()
