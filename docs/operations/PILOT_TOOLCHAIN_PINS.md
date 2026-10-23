@@ -64,7 +64,7 @@ Options:
 
 Exit code `0` means `verified`; `2` means `refused`. Each check in the report names what was
 declared and what was resolved, including the real paths and SHA-256 of the selected `rustc` and `cargo`
-executables (resolved through the compiler's sysroot) and of the interpreter executable. Every external command has a 20 second deadline.
+executables and of the interpreter executable. The `rustc` and `cargo` that are hashed are the ones that are run: the command resolves them from `PATH` (a rustup shim is resolved explicitly with `rustup which`), runs those exact files, and refuses the run if they are not the executables in the sysroot that `rustc` reports. Every external command has a 20 second deadline.
 
 Refusals include: floating or unrecorded compiler refs, `rustc`/`cargo` release, commit or host
 differing from the pin, a missing toolchain, a missing or untracked `Cargo.lock`, a missing or

@@ -2,6 +2,7 @@
 """Drift and unsupported-input controls for the pilot toolchain attestation (SOU-122)."""
 from contextlib import redirect_stdout
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -72,10 +73,13 @@ class Fixture(unittest.TestCase):
             body = RUSTC.format(release=release or rust["version"], commit=commit or rust["commit_prefix"],
                                 full=(commit or rust["commit_prefix"]) + "0" * 31, host=host or rust["host"],
                                 sysroot=sysroot)
-            self.write_exec("rustc", body)
             (sysroot / "bin/rustc").write_text(body)
             (sysroot / "bin/cargo").write_text(CARGO.format(release=cargo or release or rust["version"]))
-        self.write_exec("cargo", CARGO.format(release=cargo or release or rust["version"]))
+            for name in ("rustc", "cargo"):
+                (sysroot / "bin" / name).chmod(0o755)
+                (self.bin / name).symlink_to(sysroot / "bin" / name)  # PATH names the sysroot executables
+        else:
+            self.write_exec("cargo", CARGO.format(release=cargo or release or rust["version"]))
 
     def write_exec(self, name, body):
         path = self.bin / name
@@ -139,7 +143,7 @@ class Attestation(Fixture):
 
     def test_real_sized_executables_are_hashed_but_oversized_input_files_are_not(self):
         big = self.bin / "sysroot/bin/cargo"
-        big.write_bytes(b"#!/bin/sh\n" + b"0" * (9 * 1024 * 1024))
+        big.write_bytes(CARGO.format(release=self.pins["rust"]["version"]).encode() + b"#" * (9 * 1024 * 1024))
         big.chmod(0o755)
         code, report = self.attest()
         self.assertEqual(code, 0, self.failed(report))
@@ -155,7 +159,65 @@ class Attestation(Fixture):
         (self.bin / "sysroot/bin/cargo").unlink()
         code, report = self.attest()
         self.assertEqual(code, 2)
-        self.assertIn("cargo executable could not be hashed", self.failed(report)["compiler"])
+        # Whatever else is on PATH (nothing, or another cargo) must not be attested in its place.
+        self.assertIn("cargo", self.failed(report)["compiler"])
+        self.assertNotIn("cargo", report["resolved"]["compiler"]["executables"])
+
+    def test_a_same_version_cargo_elsewhere_on_path_is_refused_not_attested(self):
+        # The invoked PATH cargo reports the pinned version but is not the sysroot executable.
+        (self.bin / "cargo").unlink()
+        self.write_exec("cargo", CARGO.format(release=self.pins["rust"]["version"]) + "# different bytes\n")
+        code, report = self.attest()
+        self.assertEqual(code, 2)
+        self.assertIn("ambiguous resolution refused", self.failed(report)["compiler"])
+        self.assertNotIn("cargo", report["resolved"]["compiler"]["executables"])
+
+    def test_a_same_version_rustc_elsewhere_on_path_is_refused_not_attested(self):
+        (self.bin / "rustc").unlink()
+        self.write_exec("rustc", (self.bin / "sysroot/bin/rustc").read_text() + "# different bytes\n")
+        code, report = self.attest()
+        self.assertEqual(code, 2)
+        self.assertIn("ambiguous resolution refused", self.failed(report)["compiler"])
+
+    def test_the_attested_hash_is_the_invoked_executable(self):
+        code, report = self.attest()
+        self.assertEqual(code, 0, self.failed(report))
+        executables = report["resolved"]["compiler"]["executables"]
+        for name in ("rustc", "cargo"):
+            real = (self.bin / name).resolve()
+            self.assertEqual(executables[name]["path"], str(real))
+            self.assertEqual(executables[name]["sha256"], hashlib.sha256(real.read_bytes()).hexdigest())
+            self.assertEqual(executables[name]["resolved_via"], "path")
+
+    def install_rustup_shims(self, which_output=None):
+        sysroot = self.bin / "sysroot"
+        target = sysroot / "bin" / "cargo" if which_output is None else which_output
+        self.write_exec("rustup", '#!/bin/sh\nif [ "$1" = which ]; then echo "%s"; exit 0; fi\nexit 1\n' % target)
+        (self.bin / "cargo").unlink()
+        (self.bin / "cargo").symlink_to(self.bin / "rustup")  # a shim is the rustup binary under another name
+
+    def test_a_rustup_shim_is_resolved_explicitly_and_the_real_binary_is_hashed(self):
+        self.install_rustup_shims()
+        code, report = self.attest()
+        self.assertEqual(code, 0, self.failed(report))
+        cargo = report["resolved"]["compiler"]["executables"]["cargo"]
+        real = self.bin / "sysroot/bin/cargo"
+        self.assertEqual(cargo["resolved_via"], "rustup-shim")
+        self.assertEqual(cargo["path"], str(real))
+        self.assertEqual(cargo["sha256"], hashlib.sha256(real.read_bytes()).hexdigest())
+
+    def test_a_rustup_shim_that_resolves_elsewhere_or_unclearly_is_refused(self):
+        other = self.bin / "other-cargo"
+        other.write_text(CARGO.format(release=self.pins["rust"]["version"]))
+        other.chmod(0o755)
+        self.install_rustup_shims(which_output=other)
+        code, report = self.attest()
+        self.assertEqual(code, 2)
+        self.assertIn("ambiguous resolution refused", self.failed(report)["compiler"])
+        self.install_rustup_shims(which_output="relative/cargo")
+        code, report = self.attest()
+        self.assertEqual(code, 2)
+        self.assertIn("did not give one absolute path", self.failed(report)["compiler"])
 
     def test_missing_compiler_is_refused_without_installing(self):
         self.fake_tools(rustc=False)

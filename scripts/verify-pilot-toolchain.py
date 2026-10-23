@@ -20,6 +20,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -222,9 +223,49 @@ def docker_declarations(root):
     return found
 
 
+def effective_executable(name, root):
+    """Resolve the concrete file that running `name` would execute, or explain why it is ambiguous.
+
+    A rustup shim (a proxy that is the `rustup` binary under another name) is resolved explicitly with
+    `rustup which`, which honours RUSTUP_TOOLCHAIN and the toolchain file. Anything else on PATH must be
+    the executable itself. Returns (path, how, problem).
+    """
+    found = shutil.which(name, path=os.environ.get("PATH", ""))
+    if not found:
+        return None, None, f"{name} was not found on PATH"
+    try:
+        real = Path(found).resolve(strict=True)
+        sibling = Path(found).parent / "rustup"
+        shim = real.name == "rustup" or (sibling.is_file() and os.path.samefile(sibling, found))
+    except OSError as error:
+        return None, None, f"{name} on PATH could not be resolved: {str(error)[:80]}"
+    if not shim:
+        return real, "path", None
+    code, out = run([str(real if real.name == "rustup" else sibling), "which", name], cwd=root)
+    lines = out.strip().splitlines() if code == 0 else []
+    target = Path(lines[0]) if len(lines) == 1 else None
+    if target is None or not target.is_absolute():
+        return None, None, f"{name} is a rustup shim and `rustup which {name}` did not give one absolute path"
+    try:
+        return target.resolve(strict=True), "rustup-shim", None
+    except OSError as error:
+        return None, None, f"{name} resolved by rustup does not exist: {str(error)[:80]}"
+
+
 def check_compiler(report, root, pins, lane="main"):
     rust = lane_pin(pins, lane)
-    code, out = run(["rustc", "-Vv"], cwd=root)
+    chosen, problems = {}, []
+    for name in ("rustc", "cargo"):
+        path, how, problem = effective_executable(name, root)
+        if problem:
+            problems.append(problem)
+        else:
+            chosen[name] = (path, how)
+    if "rustc" not in chosen:
+        report.check("compiler", False, declared=rust["version"],
+                     detail="rustc unavailable or ambiguous (no toolchain is installed by this command): " + "; ".join(problems)[:200])
+        return
+    code, out = run([str(chosen["rustc"][0]), "-Vv"], cwd=root)
     if code != 0:
         report.check("compiler", False, declared=rust["version"],
                      detail="rustc unavailable or failed (no toolchain is installed by this command): " + out.strip()[:160])
@@ -232,25 +273,29 @@ def check_compiler(report, root, pins, lane="main"):
     release = re.search(r"^release:\s*(\S+)", out, re.MULTILINE)
     commit = re.search(r"^commit-hash:\s*([0-9a-f]+)", out, re.MULTILINE)
     host = re.search(r"^host:\s*(\S+)", out, re.MULTILINE)
-    cargo_code, cargo_out = run(["cargo", "-V"], cwd=root)
+    cargo_code, cargo_out = run([str(chosen["cargo"][0]), "-V"], cwd=root) if "cargo" in chosen else (None, "")
     cargo = re.search(r"^cargo\s+(\S+)", cargo_out)
     resolved = {"rustc_release": release and release.group(1), "rustc_commit": commit and commit.group(1),
                 "host": host and host.group(1), "cargo_release": cargo and cargo.group(1)}
     report.resolved["compiler"] = resolved
-    problems = []
-    # Hash the executables that were actually selected, not only their reported versions.
-    sysroot_code, sysroot_out = run(["rustc", "--print", "sysroot"], cwd=root)
+    # Hash the executables that were actually invoked, and refuse if they are not the ones in the
+    # sysroot that rustc reports: a same-version binary elsewhere on PATH must not pass unrecorded.
+    sysroot_code, sysroot_out = run([str(chosen["rustc"][0]), "--print", "sysroot"], cwd=root)
     executables = {}
     if sysroot_code != 0 or not sysroot_out.strip():
-        problems.append("could not resolve the rustc sysroot to hash the selected executables")
-    else:
-        for name in ("rustc", "cargo"):
-            path = Path(sysroot_out.strip().splitlines()[0]) / "bin" / name
-            try:
-                real = path.resolve(strict=True)
-                executables[name] = {"path": str(real), "sha256": sha256_file(real, EXECUTABLE_MAX_BYTES)}
-            except (OSError, Refusal) as error:
-                problems.append("%s executable could not be hashed: %s" % (name, str(error)[:80]))
+        problems.append("could not resolve the rustc sysroot to check the selected executables")
+    for name, (real, how) in chosen.items():
+        try:
+            if sysroot_code == 0 and sysroot_out.strip():
+                expected = (Path(sysroot_out.strip().splitlines()[0]) / "bin" / name).resolve(strict=True)
+                if expected != real:
+                    problems.append("invoked %s (%s) is not the sysroot executable (%s); ambiguous resolution refused"
+                                    % (name, real, expected))
+                    continue
+            executables[name] = {"path": str(real), "resolved_via": how,
+                                 "sha256": sha256_file(real, EXECUTABLE_MAX_BYTES)}
+        except (OSError, Refusal) as error:
+            problems.append("%s executable could not be hashed: %s" % (name, str(error)[:80]))
     resolved["executables"] = executables
     if resolved["rustc_release"] != rust["version"]:
         problems.append(f"rustc {resolved['rustc_release']} is not the pinned {rust['version']}")
@@ -260,7 +305,7 @@ def check_compiler(report, root, pins, lane="main"):
         problems.append("rustc commit hash does not match the pin")
     if resolved["host"] != rust["host"]:
         problems.append(f"host target {resolved['host']} is not the pinned {rust['host']}")
-    if cargo_code != 0 or resolved["cargo_release"] != rust["version"]:
+    if "cargo" in chosen and (cargo_code != 0 or resolved["cargo_release"] != rust["version"]):
         problems.append(f"cargo {resolved['cargo_release']} is not the pinned {rust['version']}")
     report.check("compiler", not problems, declared=dict(rust, lane=lane),
                  resolved=resolved, detail="; ".join(problems) or None)
