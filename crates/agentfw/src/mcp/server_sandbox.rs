@@ -22,6 +22,9 @@ use tokio::process::Child;
 use tokio::process::Command;
 
 use super::server_profile::ProfileConfig;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "git_local_clone_sandbox_tests.rs"]
+mod git_local_clone_tests;
 #[cfg(target_os = "linux")]
 use super::server_profile::{package_tree_sha256, SERVER_ENTRYPOINT};
 
@@ -30,7 +33,9 @@ pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
-    if format == super::server_profile::git::FORMAT {
+    if format == super::server_profile::git_local_clone::FORMAT {
+        "sw-mcp/git-local-clone-readonly/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git::FORMAT {
         "sw-mcp/git-readonly/linux-bwrap-landlock/1"
     } else {
         SANDBOX_PROFILE
@@ -570,7 +575,7 @@ fn require_budget_mount_support(exposed_roots: &[&Path], pins: &[&File]) -> anyh
 
 #[cfg(target_os = "linux")]
 fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbox> {
-    if profile.format == super::server_profile::git::FORMAT {
+    if super::server_profile::git_selected(&profile.format) {
         return prepare_linux_command(
             profile,
             &[
@@ -601,11 +606,15 @@ fn prepare_linux_command(
     use std::os::fd::AsRawFd;
 
     let (workspace, workspace_pin) = open_directory(&profile.workspace)?;
-    let git_profile = profile.format == super::server_profile::git::FORMAT;
+    let git_profile = super::server_profile::git_selected(&profile.format);
+    let clone_profile = profile.format == super::server_profile::git_local_clone::FORMAT;
     if git_profile {
-        super::server_profile::git::validate_repository(
-            &descriptor_path(&workspace_pin).join("."),
-        )?;
+        let root = descriptor_path(&workspace_pin).join(".");
+        if clone_profile {
+            super::server_profile::git_local_clone::validate_repository(&root)?;
+        } else {
+            super::server_profile::git::validate_repository(&root)?;
+        }
     }
     let (package_root, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
@@ -642,7 +651,14 @@ fn prepare_linux_command(
     ];
     if let Some(git) = &profile.git {
         let pin = open_verified_file(&git.path, &git.sha256, true)?;
-        mounts.push((pins.len(), PathBuf::from("/mcp-runtime/git")));
+        mounts.push((
+            pins.len(),
+            PathBuf::from(if clone_profile {
+                super::server_profile::git_local_clone::ORIGINAL_GIT
+            } else {
+                "/mcp-runtime/git"
+            }),
+        ));
         pins.push(pin);
     }
     if git_profile {
@@ -656,6 +672,16 @@ fn prepare_linux_command(
             PathBuf::from("/mcp-runtime/git-profile-launcher"),
         ));
         pins.push(pin);
+        if clone_profile {
+            // bubblewrap consumes each mount fd, so use a separate verified fd
+            // for the same exact launcher image used as the per-Git guard.
+            let pin = open_verified_file(&launcher.path, &launcher.sha256, true)?;
+            mounts.push((
+                pins.len(),
+                PathBuf::from(super::server_profile::git_local_clone::EXECUTABLE),
+            ));
+            pins.push(pin);
+        }
     }
     if profile.libraries.is_empty() || profile.libraries.len() > 32 {
         bail!("MCP sandbox requires a bounded, explicit library list");
