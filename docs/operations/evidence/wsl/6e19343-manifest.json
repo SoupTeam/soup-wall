@@ -1,0 +1,31 @@
+{
+  "source": {
+    "commit": "6e193431b1ecba706c882bc5ee10357c00dcd779",
+    "tree": "b3f2454488a7d0dccde14dcfe5f725bccc4dab1b",
+    "dirty": false,
+    "files_sha256": "53a4cd8dc8ba03f3ec0d9352b3db665df33b1fe440b915c8ddb720c14dd60b9e"
+  },
+  "observed_at": "2026-10-22T14:36:27.069094+05:00",
+  "status": "passed",
+  "counts": {
+    "passed": 12,
+    "failed": 0,
+    "incomplete": 0,
+    "unsupported": 0
+  },
+  "benign_workflows": {
+    "required": 2,
+    "completed": 2,
+    "false_interruptions": 0,
+    "incomplete": 0
+  },
+  "scope": "development-installed-host-scripted-provider",
+  "live_model_effectiveness": "not_measured",
+  "wsl_vm_memory": "See recorded environment; no temporary host setting used for this run",
+  "archive": {
+    "name": "installed-wsl2-6e19343.zip",
+    "files": 68,
+    "bytes": 128105,
+    "sha256": "a9c2ed0b3286556d44a4866325da3b70ccdf67298dc3605324f6c37758cca80d"
+  }
+}

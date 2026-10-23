@@ -22,6 +22,18 @@ VERIFY_SPEC.loader.exec_module(VERIFY)
 
 
 class GitProfile(unittest.TestCase):
+    def test_missing_elf_dependencies_report_only_bounded_library_names(self):
+        from types import SimpleNamespace
+        output = ('private-operator-path\n libtk8.6.so => not found\n'
+                  ' libtcl8.6.so => not found\n libtk8.6.so => not found\n'
+                  ' /private/credential.so => not found\n')
+        with patch.object(INSTALL.subprocess, "run", return_value=SimpleNamespace(stdout=output)):
+            with self.assertRaises(INSTALL.RuntimeLibrariesUnavailable) as caught:
+                INSTALL.dependencies([Path("selected")], Path("package"))
+        self.assertEqual(caught.exception.missing_libraries, ["libtcl8.6.so", "libtk8.6.so"])
+        self.assertNotIn("private", str(caught.exception))
+        self.assertLessEqual(len(INSTALL.RuntimeLibrariesUnavailable([f"lib{i}.so" for i in range(100)]).missing_libraries), 32)
+
     def test_original_discovery_lock_and_registry_are_bound(self):
         identity = json.loads((INSTALL.ASSETS / "upstream-identity.json").read_text())
         self.assertEqual(len(identity["python"]["sha256"]), 64)

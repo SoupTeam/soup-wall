@@ -92,6 +92,33 @@ class OutcomeControls(unittest.TestCase):
 
 
 class RuntimeBoundaryControls(unittest.TestCase):
+    def test_wsl_preflight_refusal_prevents_installation_and_keeps_denominator(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selection = self.selection(Path(sys.executable).resolve())
+            selected = root / "selection.json"
+            selected.write_text(json.dumps(selection))
+            args = SimpleNamespace(output=root / "report", selection=selected,
+                                   expected_commit="a" * 40, fault=None, wsl_root=root / "stage")
+            diagnosis = {"status": "unsupported", "checks": [
+                {"id": "filesystem_stage_root", "status": "unsupported",
+                 "reason": "unsupported_filesystem_or_location"}]}
+            with patch.object(PILOT, "source", return_value=selection["source"]), \
+                 patch.object(PILOT.platform, "system", return_value="Linux"), \
+                 patch.object(PILOT.platform, "machine", return_value="x86_64"), \
+                 patch.object(PILOT.wsl_preflight, "inspect", return_value=diagnosis), \
+                 patch.object(PILOT, "Pilot") as installed, \
+                 patch.object(PILOT.tempfile, "TemporaryDirectory") as stage:
+                self.assertEqual(PILOT.run(args), 1)
+            installed.assert_not_called()
+            stage.assert_not_called()
+            report = json.loads((args.output / "report.json").read_text())
+            self.assertEqual(report["wsl_preflight"], diagnosis)
+            self.assertEqual(report["cases"][0]["reason"], "wsl_prerequisites_not_ready")
+            self.assertEqual(report["required"], 12)
+            self.assertEqual(report["counts"]["passed"], 0)
+            self.assertEqual(report["host_runs"], [])
+
     def selection(self, executable):
         before = {"commit": "a" * 40, "tree": "b" * 40, "dirty": False, "files_sha256": "c" * 64}
         paths = {role: executable for role in PILOT.EXECUTABLE_ROLES}
