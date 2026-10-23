@@ -45,9 +45,25 @@ grants immediately. Existing terminal retirement then closes sessions and their
 pending/approved proposals without clearing shared-host risk history.
 
 The CLI durably records intent before requesting revocation, then signals only
-the pinned launcher. The existing supervisor cleans its host group and verifies
-collector/pending retirement. A signed, exact-run `stopped` receipt is written
-only after host cleanup and revocation are confirmed. No rollback of already
+the pinned launcher. A bound selected collector registers its cleanup obligation
+before preparing/spawning the existing namespace owner, under the same native
+session lock used by revocation. A grant spent before registration cannot start
+that owner. The collector discharges the obligation only after its existing
+namespace owner, resource budget, child reap and stderr boundaries confirm
+cleanup. Registration and confirmation require the exact enrolled session epoch
+and private owner capability as well as native authentication. The one-purpose
+confirmation remains possible after session retirement, without reviving the
+session or its authority. Obligations are bounded; an unconfirmed one remains a
+failure even after its grant expires. This is a trusted-collector protocol,
+not remote process attestation.
+
+The launcher allows these existing owners a bounded cleanup opportunity before
+host-group termination, including when the host exits before its queued TERM is
+handled. It keeps the group leader unreaped, checks TERM/KILL errors and bounds
+Linux reap/group-empty observation. It then independently verifies that all
+selected cleanup obligations, collector sessions and pending approvals have
+closed. A signed, exact-run `stopped` receipt is written only after those checks
+and revocation are confirmed. No rollback of already
 dispatched effects is claimed. Repeating the command with that receipt returns
 `already_stopped` without contacting a potentially replaced service or signalling
 a process. Stop transitions cannot move backwards under concurrent callers.
@@ -56,6 +72,12 @@ metadata lock instead of abandoning final confirmation on ordinary contention.
 An occupied or failed lock still reports an error. Terminal output and daemon
 requests never hold that lock: a blocked `inspect` pipe cannot prevent stop,
 and an inspection interrupted by stop cannot persist a fresh inspection receipt.
+
+An intercepted TERM can become a successful `stopped` outcome only with the
+exact authenticated terminal receipt. Requested/revoked intent, cancellation,
+timeout, daemon loss or a failed host cannot substitute for it. The prepared-run
+supervisor independently verifies the exact run/launcher/home receipt through
+the installed operator CLI; an exit code or a JSON status alone is insufficient.
 
 The prepared-run supervisor still stops its owned launcher and daemon. It retains
 the private run directory when stop intent exists so an interrupted operation or
@@ -83,6 +105,10 @@ instance-bound authority even if the old private token file remains available.
 ## Required Linux acceptance before Ready
 
 The local development host is macOS arm64; this is not native Linux qualification.
+The cleanup-confirmation and terminal-disposition follow-up has verified local
+formatting, clippy and unit suites on macOS arm64 (1671 passed in the Rust
+workspace, 10/10 in stop witness, 16/16 in pilot-run). Keep the PR Draft until
+the required current-source native Linux witnesses pass.
 The socket-free native-router tests cover selected-vs-unrelated run authority,
 unenrolled grants, signed-grant replay, pending and approved proposal cleanup,
 wrong auth/host/instance/registry, malformed authority maps and fresh authority.

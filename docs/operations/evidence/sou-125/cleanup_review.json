@@ -1,0 +1,51 @@
+{
+  "format": "sw-sou125-cleanup-review/1",
+  "status": "local_review_pass_native_qualification_incomplete",
+  "implementation_commit": "219acb204fc6a79720ed01b05492e601748ff723",
+  "implementation_git_tree": "a462b35aa6a21da2a730242bee7dfb3d27a6c872",
+  "source_files_sha256": {
+    "crates/agentfw/src/lib.rs": "be2caa2ad72ff3a1425101e89732c6528ff97ce5485a3414fb14360dee92bde2",
+    "crates/agentfw/src/mcp/admission/real_server.rs": "7112185fbf90faaf25525fff4836fee0a29a11ca36d9d020c4c22c0d9f558b21",
+    "crates/agentfw/src/native.rs": "df8f2d1d303ba3cf70ee1da8fa1525fa36b663477990e1e8fc27a29e8a21ebe4",
+    "crates/agentfw/src/native/liveness.rs": "47afb4bbd78028d9cdf9788f1570d852a7e6c0bd47f84ea7d285a499e8b48c08",
+    "crates/agentfw/src/native/pilot_cleanup.rs": "a879c0d6026040d7c0b16ab5d982f6c2158bce2082bee1f70647076eae2fa4e4",
+    "crates/agentfw/src/pilot_approval.rs": "aa2c92c4bd17edcb70dea3aa4bdbffa3a42408b03c276686ae746a4262a5568b",
+    "crates/agentfw/src/pilot_launcher.rs": "ba90b7fc14e30a3dc1fabdacc9cfd908aec93d6a6fbeb571057336c404fdb0de",
+    "crates/agentfw/tests/native_endpoint.rs": "e3d1b97b54bf9dcf09c97146025cd296a8effd6e26563f6ccbfa76c23c1fbf56",
+    "scripts/pilot-run.py": "6200db02534ad3d1e0e8c075bba2b630ec01b6743a5ecfbf4c80eb7a88ce2edf",
+    "scripts/prepared_stop_witness.py": "757210cbdd21910659774c299c9d722f92cd679d484bafa7c91925b0ec5ae868",
+    "scripts/qualify-prepared-pilot-run.py": "eba9553cd1a368dfdb1fb9076e02f2415159723fbefe21609e789863728819da",
+    "scripts/tests/test_pilot_run.py": "4adee1e5c0ae342cc00a97798c8fe633e41327be58a07a24c3f37d32fe57631d",
+    "scripts/tests/test_prepared_stop_witness.py": "9e4da34fb98cb55e5dd10f4a6a9a6b0d98de3e6e4ed9f2a22af269715e5ea7c0"
+  },
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "changes": [
+    "Added exact-owner namespace cleanup obligation registration and discharge at /native/v1/pilot-cleanup.",
+    "Integrated authenticated terminal disposition confirmation in pilot-run.py and qualified stop witness in prepared_stop_witness.py.",
+    "Synchronized host readiness via lifecycle_ready and verified host-crash qualification in qualify-prepared-pilot-run.py."
+  ],
+  "rust_workspace": {
+    "command": "TMPDIR=/private/tmp CARGO_TARGET_DIR=/tmp/soup-wall-build125 cargo test --offline --workspace --locked -- --test-threads=1",
+    "passed": 1671,
+    "failed": 0,
+    "ignored": 13,
+    "loopback_fixture_permission": true
+  },
+  "checks": {
+    "strict_workspace_all_targets_clippy": "pass",
+    "cargo_fmt": "pass",
+    "diff_whitespace": "pass",
+    "changed_python_ast": "pass"
+  },
+  "python": {
+    "test_prepared_stop_witness": "10 passed, 0 failed",
+    "test_pilot_run": "16 passed, 0 failed",
+    "full_suite": "1100 passed, 0 regressions; 8 known Linux /proc and process-group controls unsupported on macOS"
+  },
+  "native_linux_qualified": false,
+  "remaining_acceptance": "All native process/collector/daemon-loss/crash/PID-reuse/interrupted-cleanup witnesses listed in PILOT_EMERGENCY_STOP.md remain required on real Linux x86_64.",
+  "raw_logs_exported": false
+}

@@ -1,5 +1,17 @@
 # SOU-125 development evidence
 
+## Cleanup confirmation and terminal disposition follow-up
+
+`cleanup_review.json` records implementation `219acb2` and the exact source hashes
+after adding exact-owner namespace cleanup obligations at `/native/v1/pilot-cleanup`,
+authenticated terminal disposition confirmation in `pilot-run.py`, and prepared stop
+witness qualification in `scripts/prepared_stop_witness.py`.
+The complete Rust workspace passes with 1671 passed, 0 failed and 13 ignored;
+strict clippy, formatting and whitespace checks pass. Both unit suites in Python
+pass: `test_prepared_stop_witness.py` (10/10) and `test_pilot_run.py` (16/16).
+Full Python test suite: 1100 passed, 0 regressions; 8 known Linux `/proc` and process-group
+controls remain unsupported on macOS. These remain macOS observations, not Linux qualification.
+
 Implementation checkpoint: `22c3dbe6059afe1e4a7a4669d3816b245459364e`, based
 independently on accepted main `cdd9d36c65a592455e4f421268758adb6db744b8`.
 `development.json` records its tree and exact changed-file SHA-256 values.
