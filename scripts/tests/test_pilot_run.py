@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Prepared launch refusal and ownership controls (SOU-116)."""
 import importlib.util
+import errno
 import io
 import json
 import os
@@ -19,6 +20,40 @@ SPEC.loader.exec_module(RUN)
 
 
 class PreparedRunBoundary(unittest.TestCase):
+    def test_storage_diagnostics_are_finite_and_never_echo_paths(self):
+        for number, reason in ((errno.ENOSPC, "storage_full"), (errno.EROFS, "storage_read_only"),
+                               (errno.EACCES, "storage_permission_denied"), (errno.EIO, "storage_io_failed")):
+            with self.subTest(errno=number), \
+                 patch.object(RUN, "selected", side_effect=OSError(number, "Bearer private-secret", "/private/path")), \
+                 patch.object(sys, "argv", ["pilot-run", "--selection", "/unused", "--expected-commit", "b" * 40]), \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 1)
+                value = json.loads(output.getvalue())
+                self.assertEqual(value["storage_failure"], reason)
+                self.assertFalse(value["executed"])
+                self.assertEqual(value["effects"], "Protected host was not started.")
+                self.assertNotIn("private-secret", output.getvalue())
+                self.assertNotIn("/private/path", output.getvalue())
+
+    def test_cleanup_failure_preserves_original_storage_failure_and_effect_uncertainty(self):
+        def failed_run(_args, report):
+            report.update(executed=True, host_started=True, stage="run_publication",
+                          storage_failure="storage_full", cleanup="failed",
+                          cleanup_storage_failure="storage_permission_denied")
+            raise RUN.Failure("owned_process_cleanup_failed")
+        with patch.object(RUN, "selected", return_value=({"source": {}}, {}, {})), \
+             patch.object(RUN.PREP.FS, "sha", return_value="a" * 64), \
+             patch.object(RUN, "run", side_effect=failed_run), \
+             patch.object(sys, "argv", ["pilot-run", "--run", "--selection", "/unused", "--expected-commit", "b" * 40]), \
+             patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(RUN.main(), 1)
+            value = json.loads(output.getvalue())
+            self.assertEqual(value["reason"], "owned_process_cleanup_failed")
+            self.assertEqual(value["storage_failure"], "storage_full")
+            self.assertEqual(value["cleanup_storage_failure"], "storage_permission_denied")
+            self.assertIn("may have occurred", value["effects"])
+            self.assertEqual(value["stage"], "run_publication")
+
     def args(self, root):
         return SimpleNamespace(selection=root / "generations" / ("a" * 32) / "selection.json",
             expected_commit="b" * 40, run=False, state_root=root, port=0,

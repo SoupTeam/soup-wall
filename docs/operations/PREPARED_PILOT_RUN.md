@@ -23,6 +23,9 @@ package trees, libraries and the completion marker, and prints a plan. It does
 not execute selected programs, connect to a daemon, create state or launch Claude.
 An invalid selection returns nonzero with a finite reason code.
 
+For storage errors, interrupted writes or incomplete cleanup, follow the
+[storage recovery runbook](PILOT_STORAGE_RECOVERY.md) before starting a fresh run.
+
 After reviewing the plan, add `--run`:
 
 ```sh
