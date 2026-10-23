@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -58,6 +59,80 @@ def fake_inputs(build):
 
 
 class SourceBuildBoundary(unittest.TestCase):
+    def test_unexpected_build_error_reports_code_location_without_private_path(self):
+        build = builder()
+        output = io.StringIO()
+        with patch.object(build, "run_build", side_effect=FileNotFoundError("/private-fixture/secret")), \
+             patch.object(sys, "stdout", output):
+            code = build.main(["--build"])
+        self.assertEqual(code, 2)
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["reason"], "FileNotFoundError_failed")
+        self.assertEqual(report["failure_location"]["function"], "main")
+        self.assertGreater(report["failure_location"]["line"], 0)
+        self.assertNotIn("private-fixture", output.getvalue())
+
+    def test_quota_inventory_tolerates_removed_cargo_temporary_files(self):
+        build = builder()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            transient = root / "cargo-download.part"
+            retained = root / "retained"
+            retained.write_bytes(b"123456")
+            original = Path.lstat
+
+            def removed_before_stat(path, *args, **kwargs):
+                if path == transient:
+                    transient.unlink()
+                return original(path, *args, **kwargs)
+
+            for limit, expected in ((6, True), (5, False)):
+                with self.subTest(limit=limit):
+                    transient.write_bytes(b"temporary")
+                    with patch.object(Path, "lstat", removed_before_stat), \
+                         patch.object(build, "MAX_TARGET_BYTES", limit):
+                        self.assertEqual(build.target_within_limit(root), expected)
+                    self.assertFalse(transient.exists())
+
+    def test_quota_inventory_refuses_missing_root_and_unreadable_entries(self):
+        build = builder()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaises(FileNotFoundError):
+                build.target_within_limit(root / "missing")
+            retained = root / "retained"
+            retained.write_bytes(b"retained")
+            original = Path.lstat
+
+            def unreadable(path, *args, **kwargs):
+                if path == retained:
+                    raise PermissionError("owned fixture is unreadable")
+                return original(path, *args, **kwargs)
+
+            with patch.object(Path, "lstat", unreadable), self.assertRaises(PermissionError):
+                build.target_within_limit(root)
+
+    def test_quota_inventory_distinguishes_removed_directories_from_unreadable_walk(self):
+        build = builder()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "retained").write_bytes(b"123456")
+
+            def vanished_directory(path, *, followlinks, onerror):
+                onerror(FileNotFoundError(2, "removed", str(root / "cargo-temp")))
+                yield str(path), [], ["retained"]
+
+            with patch.object(build.os, "walk", vanished_directory), \
+                 patch.object(build, "MAX_TARGET_BYTES", 5):
+                self.assertFalse(build.target_within_limit(root), "retained bytes must still enforce the quota")
+
+            def unreadable_directory(path, *, followlinks, onerror):
+                onerror(PermissionError(13, "unreadable", str(root / "private")))
+                yield str(path), [], []
+
+            with patch.object(build.os, "walk", unreadable_directory), self.assertRaises(PermissionError):
+                build.target_within_limit(root)
+
     def test_cargo_artifacts_bind_exact_workspace_package(self):
         build = builder()
         with tempfile.TemporaryDirectory() as temporary:
