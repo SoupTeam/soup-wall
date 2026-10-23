@@ -32,6 +32,7 @@ def qualify(args, report):
         meson_pythonpath=args.meson_pythonpath)
     _, missing = CLEAN.NATIVE.tool_inventory(options)
     report["missing_dependencies"] = [item["dependency"] for item in missing]
+    CLEAN.require(not missing, "missing_native_dependencies")
     first = CLEAN.NATIVE.prepare(options)
     old = Path(first["receipt"]).parent.name
     retained = CLEAN.inspect(prefix, old)
