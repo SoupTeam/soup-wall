@@ -63,6 +63,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-${{ runner.os }}-${{ runner.arch }}
