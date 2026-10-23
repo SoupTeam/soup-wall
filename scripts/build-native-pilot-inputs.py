@@ -208,7 +208,10 @@ def target_within_limit(target):
         if entries > MAX_TARGET_ENTRIES:
             return False
         for name in files:
-            info = (Path(base) / name).lstat()
+            try:
+                info = (Path(base) / name).lstat()
+            except FileNotFoundError:
+                continue  # Cargo removed a temporary file between listing and stat; it no longer counts.
             total += info.st_size
             if total > MAX_TARGET_BYTES:
                 return False
