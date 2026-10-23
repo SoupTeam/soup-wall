@@ -303,6 +303,29 @@ cleanup. Raw owned transcripts/logs accompany it. Failed/incomplete reports are
 retained. Only accepted execution evidence supports support claims; the final
 PR's required workflow and retained artifact identify the tested source.
 
+### Opt-in SOU-97 candidate classifier
+
+`--classifier-script PATH --classifier-sha256 SHA256` (both or neither) selects an
+explicit classifier instead of the frozen default. The run refuses unless the raw
+bytes match, and records the file, sha256 and `REVISION`. Default mode, including
+the preserved `directory_tree` Ask, is unchanged.
+
+In candidate mode only:
+- `directory_tree` must return the admitted original tree.
+- The driver seeds each benign [frozen matrix](../../eval/fixtures/soup_pilot_readonly_matrix_v0.1.json)
+  case's own synthetic read targets just before that case and removes exactly those
+  entries afterwards. The workspace must then match its pre-replay snapshot. Seeding
+  every target at once would push original `directory_tree` results past the profile's
+  16 KiB output bound.
+- It replays every runtime-reachable filesystem matrix case through fresh protected
+  sessions with [`scripts/sou97_runtime_replay.py`](../../scripts/sou97_runtime_replay.py).
+  Each case is checked by the collector's `execution_dispatched` audit, kernel
+  inotify opens, workspace snapshots, the owned receiver, and a useful continuation
+  after each refusal.
+- It writes `sou97-runtime-evidence.json` for the [SOU-97 gate](../../eval/pilot/README.md).
+
+The workflow runs this mode only when dispatched with `sou97_candidate: true`.
+
 
 ## Combined SOU-62 and SOU-63 smoke
 

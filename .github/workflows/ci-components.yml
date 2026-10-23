@@ -1508,6 +1508,19 @@ jobs:
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
             --out "$RUNNER_TEMP/profile-onboarding-filesystem" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou62-profile-onboarding.log"
+      - name: SOU-97 opt-in candidate classifier through the original filesystem server
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA256="$(python3 -c 'import json; print(json.load(open("eval/pilot/sou97_gate_manifest_v1.json"))["candidate"]["sha256"])')"
+          python3 -B scripts/verify-sou62-real-mcp.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
+            --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
+            --output "$RUNNER_TEMP/sou97-filesystem-candidate" 2>&1 | tee "$RUNNER_TEMP/sou97-filesystem-candidate.log"
       - name: Publish bounded outcome
         if: always()
         shell: bash
@@ -1592,6 +1605,10 @@ jobs:
             ${{ runner.temp }}/sou62-sou63-combined/*.json
             ${{ runner.temp }}/sou62-sou63-combined/*.log
             ${{ runner.temp }}/profile-onboarding-filesystem/*.json
+            ${{ runner.temp }}/sou97-*.log
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.json
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.jsonl
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.log
           if-no-files-found: error
           retention-days: 30
 
@@ -2094,6 +2111,88 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --out "$RUNNER_TEMP/profile-onboarding-git" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou68-profile-onboarding.log"
+      - name: SOU-97 opt-in candidate classifier through the original Git server
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA256="$(python3 -c 'import json; print(json.load(open("eval/pilot/sou97_gate_manifest_v1.json"))["candidate"]["sha256"])')"
+          python3 -B scripts/verify-sou68-real-mcp.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --sandbox-test-binary "$SOU68_TEST_BINARY" \
+            --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" \
+            --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
+            --output "$RUNNER_TEMP/sou97-git-candidate" 2>&1 | tee "$RUNNER_TEMP/sou97-git-candidate.log"
+      - name: SOU-97 diagnostic only (never acceptance) - original Git server cancellation overlap
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 20
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Required first: every diagnostic test, including the Linux-only ones, must run and pass; a skip fails.
+          if ! python3 -B - <<'PY' 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git-tests.log"; then
+          import sys, unittest
+          suite = unittest.defaultTestLoader.discover("scripts/tests", pattern="test_sou97_git_cancellation_diagnostic.py")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          print(f"diagnostic tests: run={result.testsRun} failures={len(result.failures)} errors={len(result.errors)} skipped={len(result.skipped)}")
+          sys.exit(0 if result.wasSuccessful() and result.testsRun > 0 and not result.skipped else 1)
+          PY
+            echo "::error title=SOU-97 Git diagnostic tests::diagnostic tests failed or skipped; the experiment did not run"
+            exit 1
+          fi
+          python3 -B scripts/diagnose-sou97-git-cancellation.py --run \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" --trials 20 --max-seconds 480 \
+            --output "$RUNNER_TEMP/diagnostic-sou97-git" 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git.log"
+      - name: Retain SOU-97 diagnostic-only output (never acceptance evidence)
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou97-git-cancellation-diagnostic
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/diagnostic-sou97-git-tests.log
+            ${{ runner.temp }}/diagnostic-sou97-git.log
+            ${{ runner.temp }}/diagnostic-sou97-git/diagnostic.json
+      - name: SOU-97 diagnostic only (never acceptance) - protected Git overlap through sandbox and native relay
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_protected_diagnostic == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Required first: every diagnostic test, including the Linux-only ones, must run and pass; a skip fails.
+          if ! python3 -B - <<'PY' 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git-protected-tests.log"; then
+          import sys, unittest
+          suite = unittest.defaultTestLoader.discover("scripts/tests", pattern="test_sou97_git_protected_overlap_diagnostic.py")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          print(f"diagnostic tests: run={result.testsRun} failures={len(result.failures)} errors={len(result.errors)} skipped={len(result.skipped)}")
+          sys.exit(0 if result.wasSuccessful() and result.testsRun > 0 and not result.skipped else 1)
+          PY
+            echo "::error title=SOU-97 Git protected diagnostic tests::diagnostic tests failed or skipped; the experiment did not run"
+            exit 1
+          fi
+          CANDIDATE_SHA256="$(python3 -c 'import json; print(json.load(open("eval/pilot/sou97_gate_manifest_v1.json"))["candidate"]["sha256"])')"
+          python3 -B scripts/diagnose-sou97-git-protected-overlap.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" \
+            --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
+            --sessions 6 --replay-iterations 2 --replay-arm auto --max-seconds 900 \
+            --output "$RUNNER_TEMP/diagnostic-sou97-git-protected" 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git-protected.log"
+      - name: Retain SOU-97 protected overlap diagnostic output (never acceptance evidence)
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_protected_diagnostic == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou97-git-protected-overlap-diagnostic
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/diagnostic-sou97-git-protected-tests.log
+            ${{ runner.temp }}/diagnostic-sou97-git-protected.log
+            ${{ runner.temp }}/diagnostic-sou97-git-protected/diagnostic.json
       - name: Retain exact-source synthetic evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -2109,6 +2208,10 @@ jobs:
             ${{ runner.temp }}/sou68-acceptance/*.json
             ${{ runner.temp }}/sou68-acceptance/*.log
             ${{ runner.temp }}/profile-onboarding-git/*.json
+            ${{ runner.temp }}/sou97-*.log
+            ${{ runner.temp }}/sou97-git-candidate/*.json
+            ${{ runner.temp }}/sou97-git-candidate/*.jsonl
+            ${{ runner.temp }}/sou97-git-candidate/*.log
           if-no-files-found: error
           retention-days: 30
 

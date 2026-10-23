@@ -170,6 +170,25 @@ witness coverage and the positive Linux run remain required before completion.
 Existing filesystem acceptance runs alongside this profile in CI. Neither this
 profile nor its synthetic fixture constitutes general Git repository support.
 
+### Opt-in SOU-97 candidate classifier
+
+`--classifier-script PATH --classifier-sha256 SHA256` (both or neither) replaces the
+default `git_readonly_v1` classifier with an explicitly selected one. The run refuses
+unless the raw bytes match. The existing reads, refusals, overlap and daemon-loss
+checks are unchanged.
+
+Before them, candidate mode replays every runtime-reachable Git case of the
+[frozen matrix](../../eval/fixtures/soup_pilot_readonly_matrix_v0.1.json) through the
+protected chain. It checks dispatch with the collector audit and the
+`RepositoryWitness` inotify opens, and effects with repository snapshots and an
+owned receiver, then writes `sou97-runtime-evidence.json` for the
+[SOU-97 gate](../../eval/pilot/README.md).
+
+Four cases (PMG-B07, B08, B19 and B20) name synthetic revisions that no repository
+contains. The manifest lists them by ID, and the original server's own error is
+the required outcome for them. The workflow runs this mode only when dispatched
+with `sou97_candidate: true`.
+
 ## Failed-run diagnostics
 
 Selected-server stderr remains withheld from the MCP host and is not written as

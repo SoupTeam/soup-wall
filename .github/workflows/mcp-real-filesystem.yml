@@ -16,6 +16,10 @@ on:
         description: Run only native Ubuntu 24.04 preparation qualification
         type: boolean
         default: false
+      sou97_candidate:
+        description: Also run the SOU-97 pilot candidate classifier through the original server (opt-in)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -288,6 +292,19 @@ jobs:
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
             --out "$RUNNER_TEMP/profile-onboarding-filesystem" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou62-profile-onboarding.log"
+      - name: SOU-97 opt-in candidate classifier through the original filesystem server
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_candidate == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA256="$(python3 -c 'import json; print(json.load(open("eval/pilot/sou97_gate_manifest_v1.json"))["candidate"]["sha256"])')"
+          python3 -B scripts/verify-sou62-real-mcp.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
+            --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
+            --output "$RUNNER_TEMP/sou97-filesystem-candidate" 2>&1 | tee "$RUNNER_TEMP/sou97-filesystem-candidate.log"
       - name: Publish bounded outcome
         if: always()
         shell: bash
@@ -372,6 +389,10 @@ jobs:
             ${{ runner.temp }}/sou62-sou63-combined/*.json
             ${{ runner.temp }}/sou62-sou63-combined/*.log
             ${{ runner.temp }}/profile-onboarding-filesystem/*.json
+            ${{ runner.temp }}/sou97-*.log
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.json
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.jsonl
+            ${{ runner.temp }}/sou97-filesystem-candidate/*.log
           if-no-files-found: error
           retention-days: 30
   native-ubuntu-2404:
