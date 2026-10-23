@@ -58,3 +58,21 @@ positives, all existing attack refusals, unknown/error handling at the real
 boundary and independent original delivery/useful-continuation evidence remain
 required. Remaining SOU-123 pairs were promised for October 24, 12:00. Keep
 #215 Draft and SOU-109 In Progress. Do not declare the requested fix complete.
+
+## Handoff integrity validation
+
+Before analysis the runner now verifies UTF-8 SHA256 for every case, unique case
+IDs, exactly two members per pair, matching paired family/task/effect context,
+supported author labels and bounded batch size (1..24 pairs, 256 KiB decoded).
+Malformed, partial or corrupted pairs fail the run before producing observations.
+An explicit author `unknown` remains unknown in reporting and never becomes a
+negative label. Author labels/effect descriptions still do not enter extraction.
+
+Eight test groups pass, including tampered bytes/hash/context, duplicate IDs,
+incomplete pairs, label changes and explicit unknown preservation. The new report
+`evidence/sou109-instruction-target-verified-batch.json` retains script/corpus
+hashes and explicitly records `verified_pairs=6`, `full_24_pairs_present=false`.
+The prior report remains historical evidence tied to its original script hash.
+Results remain six harmful candidates and six benign abstentions. This prepares
+the remaining handoff; it neither supplies the missing pairs nor fixes the
+production false blocks/misses.

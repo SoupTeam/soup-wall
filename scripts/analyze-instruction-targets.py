@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from collections import defaultdict
 
 MAX_TEXT = 65536
 MAX_CHANNELS = 16
@@ -68,10 +69,54 @@ def analyze_channels(channels, authorized_task_kind):
                 channels=reports)
 
 
+def validate_corpus(corpus):
+    """Integrity before inference; author unknown labels remain unknown."""
+    cases = corpus.get('cases') if isinstance(corpus, dict) else None
+    if not isinstance(cases, list) or not 2 <= len(cases) <= 48:
+        raise ValueError('expected 1..24 public pairs')
+    seen = set()
+    pairs = defaultdict(list)
+    labels = {'benign (no instruction aimed at the assistant)',
+              'harmful instruction inside the tool result', 'unknown'}
+    total = 0
+    for case in cases:
+        if not isinstance(case, dict):
+            raise ValueError('invalid case')
+        for key in ('case_id', 'pair_id', 'exact_text', 'sha256', 'expected_label',
+                    'permitted_task', 'forbidden_effect', 'original_server_tool'):
+            if not isinstance(case.get(key), str) or not case[key]:
+                raise ValueError('missing/invalid field: ' + key)
+        if case['case_id'] in seen:
+            raise ValueError('duplicate case_id')
+        seen.add(case['case_id'])
+        raw = case['exact_text'].encode('utf-8')
+        total += len(raw)
+        if len(raw) > MAX_TEXT or total > MAX_TOTAL:
+            raise ValueError('corpus decoded limit')
+        if hashlib.sha256(raw).hexdigest() != case['sha256']:
+            raise ValueError('text hash mismatch')
+        if case['expected_label'] not in labels:
+            raise ValueError('unsupported author label; do not coerce')
+        if case['original_server_tool'] not in ('git_show', 'read_multiple_files'):
+            raise ValueError('unsupported family')
+        pairs[case['pair_id']].append(case)
+    for pair in pairs.values():
+        if len(pair) != 2:
+            raise ValueError('incomplete or oversized pair')
+        for field in ('permitted_task', 'forbidden_effect', 'original_server_tool'):
+            if pair[0][field] != pair[1][field]:
+                raise ValueError('paired context mismatch')
+        pair_labels = {case['expected_label'] for case in pair}
+        if 'unknown' not in pair_labels and len(pair_labels) != 2:
+            raise ValueError('pair must preserve opposing labels or explicit unknown')
+    return cases, len(pairs)
+
+
 def evaluate(corpus):
+    cases, pairs = validate_corpus(corpus)
     observations = []
     counts = {}
-    for case in corpus['cases']:
+    for case in cases:
         # Author label and forbidden_effect never enter the analyzer.
         result = analyze_channels([case['exact_text']], 'read_and_summarize')
         label = case['expected_label']
@@ -79,6 +124,7 @@ def evaluate(corpus):
         counts[key] = counts.get(key, 0) + 1
         observations.append(dict(case_id=case['case_id'], author_label=label, **result))
     return dict(mode='offline_additive_evidence_only', production_authority=False,
+                verified_pairs=pairs, full_24_pairs_present=pairs == 24,
                 corpus_scope='public_development_not_held_out', counts=counts,
                 observations=observations)
 
