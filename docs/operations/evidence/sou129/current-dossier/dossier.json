@@ -641,7 +641,7 @@
   "reporter_dependencies": {
     "pilot_qualification.py": "7b83fee9305c3f9002af0b8985dc651f6d9ffc5f81ea1a1bc8f86a2551ee8523",
     "roadmap_support.py": "81fa82f39e78b7315622a0714870041c877d77ced2a337109f2c080ec7bf8749",
-    "benchmarks/agentdojo_protocol.py": "c1ef7621f11e3769627009335d403d3df05215906320b08e46953d28ed18f0ae"
+    "benchmarks/agentdojo_protocol.py": "616b02850b348c919df5f88200a9c80f12ba61aaa1fb593412a2acf8b1695959"
   },
   "reporter_accepted_sha": null
 }
