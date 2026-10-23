@@ -394,7 +394,9 @@ def run(args):
         report["status"] = "fail"
         report["error"] = {"type": type(error).__name__, "code": str(error) if isinstance(error, ValueError) else "execution_failed"}
         diagnostic = traceback.format_exc().encode()
-        P.owned_bytes(output / "failure.txt", pilot.redact(diagnostic) if pilot else diagnostic)
+        safe_diagnostic = pilot.redact(diagnostic) if pilot else diagnostic
+        P.owned_bytes(output / "failure.txt", safe_diagnostic[:65536])
+        print(json.dumps({"event": "stability_failure", "diagnostic": safe_diagnostic[:65536].decode(errors="replace")}), flush=True)
     finally:
         if "native_stopped" in locals():
             native_stopped.set()

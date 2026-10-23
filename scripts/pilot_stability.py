@@ -109,6 +109,7 @@ def snapshot(root, expected_start, known=None, proc=Path("/proc")):
         if row is None:
             continue
         known[pid] = row["start_ticks"]
+        require(len(known) <= 16384, "owned_identity_storage_bound")
         pending.extend(row.pop("children"))
         rows.append(row)
         require(len(rows) <= BOUNDS["processes"], "owned_process_bound_exceeded")

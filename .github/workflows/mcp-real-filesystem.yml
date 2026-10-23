@@ -6,8 +6,8 @@ on:
       stability_mode:
         description: Opt-in SOU-127 development exercise; off preserves ordinary qualification
         type: choice
-        options: [off, smoke, soak]
-        default: off
+        options: ['off', smoke, soak]
+        default: 'off'
       native_preparation_only:
         description: Run only native Ubuntu 24.04 preparation qualification
         type: boolean

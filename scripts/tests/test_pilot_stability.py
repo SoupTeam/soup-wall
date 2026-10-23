@@ -103,7 +103,8 @@ class StabilityControls(unittest.TestCase):
         self.assertIn("if: github.event_name == 'workflow_dispatch' && contains(fromJSON('[\"smoke\",\"soak\"]'), github.event.inputs.stability_mode)", manual)
         self.assertNotIn("manual-long-session", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
         self.assertNotIn("manual-long-session:", generated())
-        self.assertIn("default: off", workflow)
+        self.assertIn("default: 'off'", workflow)
+        self.assertIn("options: ['off', smoke, soak]", workflow)
         self.assertIn("--property=KillMode=control-group", manual)
         self.assertIn("if: always()", manual)
 
