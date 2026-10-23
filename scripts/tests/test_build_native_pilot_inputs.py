@@ -80,6 +80,11 @@ class SourceBuildBoundary(unittest.TestCase):
             retained = root / "retained"
             retained.write_bytes(b"123456")
             original = Path.lstat
+            original_walk = os.walk
+
+            def temporary_first(*args, **kwargs):
+                for base, directories, files in original_walk(*args, **kwargs):
+                    yield base, directories, sorted(files, key=lambda name: name != transient.name)
 
             def removed_before_stat(path, *args, **kwargs):
                 if path == transient:
@@ -90,6 +95,7 @@ class SourceBuildBoundary(unittest.TestCase):
                 with self.subTest(limit=limit):
                     transient.write_bytes(b"temporary")
                     with patch.object(Path, "lstat", removed_before_stat), \
+                         patch.object(build.os, "walk", temporary_first), \
                          patch.object(build, "MAX_TARGET_BYTES", limit):
                         self.assertEqual(build.target_within_limit(root), expected)
                     self.assertFalse(transient.exists())
