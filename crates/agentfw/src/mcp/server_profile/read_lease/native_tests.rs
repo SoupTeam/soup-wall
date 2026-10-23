@@ -401,6 +401,42 @@ fn capacity_control(required: bool) {
     assert!(owner.acquire(&overflow).unwrap().is_none());
 }
 
+fn process_capacity_control() {
+    assert_eq!(ACTIVE_LEASES.load(Ordering::Acquire), 0);
+    let Leased {
+        _directory,
+        path,
+        owner,
+        guard,
+    } = leased(true).unwrap();
+    let file = File::open(&path).unwrap();
+    let second = Owner::new(&file).unwrap();
+    let third = Owner::new(&file).unwrap();
+    let mut guards = vec![guard];
+    for _ in 1..MAX_LEASES {
+        guards.push(owner.acquire(&File::open(&path).unwrap()).unwrap().unwrap());
+    }
+    for _ in MAX_LEASES..MAX_PROCESS_LEASES {
+        guards.push(
+            second
+                .acquire(&File::open(&path).unwrap())
+                .unwrap()
+                .unwrap(),
+        );
+    }
+    assert_eq!(ACTIVE_LEASES.load(Ordering::Acquire), MAX_PROCESS_LEASES);
+    assert!(third.acquire(&file).unwrap().is_none());
+    assert!(guards.iter().all(|guard| guard.valid()));
+    drop(guards);
+    wait_until(
+        || ACTIVE_LEASES.load(Ordering::Acquire) == 0,
+        "disposed proofs did not return the process descriptor budget",
+    );
+    // Disposing a different Ask returns the process budget, while an Ask's
+    // own used slots remain non-recyclable (covered by capacity_control).
+    assert!(third.acquire(&file).unwrap().unwrap().valid());
+}
+
 fn worker_loss_control(required: bool) {
     let Some(lease) = leased(required) else {
         return;
@@ -513,5 +549,6 @@ fn native_read_lease_fast_path_qualification_requires_real_proofs() {
     disposal_control(true);
     cloexec_control(true);
     capacity_control(true);
+    process_capacity_control();
     worker_loss_control(true);
 }

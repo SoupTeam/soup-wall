@@ -76,13 +76,19 @@ Ordinary installed files of at least 64 KiB may instead retain a read lease on
 that same description, through a private CLOEXEC descriptor and a dedicated
 thread-directed, blocked SIGIO receiver. Only ext4, XFS, btrfs and tmpfs are
 eligible. Remote, FUSE, layered and unknown filesystems always rehash. Acquisition
-failure, writable mappings, foreign ownership or the 96-proof cap falls back to
+failure, writable mappings, foreign ownership or the 256-proof per-Ask cap falls back to
 full hashing. An established proof is never reacquired. Pending/forced breaks,
 worker loss and unlocks invalidate it permanently; the worker marks it invalid
 before releasing a blocked writer. A cancelled write-open cannot heal a proof.
 Fresh path/descriptor identities and retained leases are checked again after
 verification. This preserves the existing validation boundary; it does not claim
 an atomic snapshot of the entire tree through later execution.
+The collector process additionally caps all its concurrent retained leases at
+512 descriptors; exhaustion falls back to hashing. A slot is returned only when
+the private descriptor closes, without recycling any Ask's previous proof.
+Directory descent retains its before/after observations without duplicating
+them in the caller. A resume remeasures every captured verity proof; files with
+no captured verity proof use their retained lease or full byte hashing directly.
 
 See the [kernel fs-verity contract](https://www.kernel.org/doc/html/latest/filesystems/fsverity.html)
 and [Linux lease contract](https://man7.org/linux/man-pages/man2/F_SETLEASE.2const.html).

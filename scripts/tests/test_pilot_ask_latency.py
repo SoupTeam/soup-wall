@@ -59,6 +59,22 @@ class ReuseObservation(unittest.TestCase):
             with self.subTest(prefix=prefix), self.assertRaises(ValueError):
                 LATENCY.reuse_observation(prefix + [event], 7)
 
+    def test_timings_are_bounded_finite_selected_collector_diagnostics(self):
+        def timing(pid=7, **updates):
+            row = dict(event="mcp_real_approval_timing", stage="profile_and_assets",
+                       stage_ms=123, post_observed_ms=124, args="must-never-be-retained")
+            row.update(updates)
+            raw = json.dumps(row) + "\n"
+            return f'{pid} write(2, {json.dumps(raw)}, {len(raw)}) = {len(raw)}'
+        rows = [timing(8), timing(stage="unknown"), timing(stage_ms=True),
+                timing(stage_ms=float("inf")), timing(stage_ms=-1)]
+        rows += [timing() for _ in range(40)] + [self.event()]
+        proof = LATENCY.reuse_observation(rows, 7)
+        self.assertEqual(proof["diagnostic_timings"], [dict(
+            event="mcp_real_approval_timing", stage="profile_and_assets",
+            stage_ms=123, post_observed_ms=124)] * 32)
+        self.assertEqual(proof["leased_files"], 2)
+
 
 
 class AskLatencyAccounting(unittest.TestCase):

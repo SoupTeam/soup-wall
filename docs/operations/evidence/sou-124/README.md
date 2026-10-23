@@ -1,6 +1,31 @@
 # SOU-124 development evidence
 
-## Current native result and correction
+## Current native result
+
+`native-attempt6.json` retains the same-runner comparison from run `40010363488`
+on exact candidate `d95e000a445708aaa4446d910576cf929baaf740`. All forty baseline
+and forty candidate approvals completed with original effects and verified
+cleanup; no sample failed or remained incomplete. Candidate filesystem p50/p95
+were 2015.973892/2053.221803 ms; Git was 3212.695048/3274.838387 ms. Baseline
+filesystem was 5566.812997/5976.986912 ms and Git 6456.692781/6493.114153 ms.
+The strict real-lease witness, ten Linux identity controls and original-profile
+capture/resume passed; the optional already-verity-enabled fixture was not run.
+
+**Git still misses the 3000 ms p95 target. This is a performance blocker.**
+Raw report hashes and all sample durations/proof counts are retained, and the
+nearest-rank percentiles were independently recomputed. Every candidate used
+actual retained kernel leases. No previous ordinary-ptrace baseline was mixed
+into this seccomp-assisted comparison. Neither side made paid provider calls.
+
+The next bounded correction increases the per-Ask lease capacity from 96 to 256
+for the larger Python package (with a 512-descriptor process-wide cap), and avoids
+unused verity queries when no verity proof was captured. Redundant caller-side
+directory observations are removed while retaining both descent closure checks.
+Files without a retained proof are still fully rehashed;
+existing verity proofs are still remeasured, and lost leases still refuse.
+The follow-up requires fresh native measurements before Ready for review.
+
+## Historical native attempts
 
 The second native attempt (`39989703005`, exact source `d37383e`) passed the
 strict real-kernel lease witness. Its baseline completed all 20 filesystem and

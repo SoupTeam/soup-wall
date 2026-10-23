@@ -313,7 +313,6 @@ impl Verification<'_> {
         if tree {
             self.observe_identity(path, before.clone())?;
         }
-        let verity = measure(&file)?;
         let previous = match self {
             Self::Resume(inputs) => Some(
                 inputs
@@ -324,6 +323,15 @@ impl Verification<'_> {
             ),
             Self::Capture(inputs) => inputs.files.get(path).cloned(),
             Self::Full => None,
+        };
+        // Resume cannot adopt a new immutable proof: only a proof captured for
+        // this exact Ask can authorize reuse. In the rehash/read-lease cases a
+        // fresh verity ioctl would be unused; do not query it for every leaf.
+        // Existing verity proofs must still be measured and compared below.
+        let verity = if previous.as_ref().is_none_or(|proof| proof.verity.is_some()) {
+            measure(&file)?
+        } else {
+            None
         };
         if let Some(previous) = &previous {
             ensure!(

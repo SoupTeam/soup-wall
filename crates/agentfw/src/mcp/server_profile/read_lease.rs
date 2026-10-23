@@ -34,14 +34,38 @@ mod linux {
         fs::File,
         os::fd::AsRawFd,
         sync::{
-            atomic::{AtomicBool, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
             mpsc, Arc, Mutex, Weak,
         },
         thread,
         time::Duration,
     };
 
-    const MAX_LEASES: usize = 96;
+    // A Python profile has more large extension/data files than the smaller
+    // filesystem profile. Keep the per-Ask descriptor budget bounded, while
+    // allowing more of those proofs to avoid rehashing large pinned inputs.
+    const MAX_LEASES: usize = 256;
+    // Several pending calls share a collector process. Never multiply the
+    // larger per-Ask allowance into thousands of retained descriptors.
+    const MAX_PROCESS_LEASES: usize = 512;
+    static ACTIVE_LEASES: AtomicUsize = AtomicUsize::new(0);
+
+    struct LeaseSlot;
+    impl LeaseSlot {
+        fn acquire() -> Option<Self> {
+            ACTIVE_LEASES
+                .fetch_update(Ordering::AcqRel, Ordering::Relaxed, |current| {
+                    (current < MAX_PROCESS_LEASES).then_some(current + 1)
+                })
+                .ok()
+                .map(|_| Self)
+        }
+    }
+    impl Drop for LeaseSlot {
+        fn drop(&mut self) {
+            ACTIVE_LEASES.fetch_sub(1, Ordering::AcqRel);
+        }
+    }
     const F_SETOWN_EX: libc::c_int = 15;
     const F_GETOWN_EX: libc::c_int = 16;
     const F_GETSIG: libc::c_int = 11;
@@ -55,6 +79,8 @@ mod linux {
     struct FileState {
         file: File,
         broken: AtomicBool,
+        // Declared after file: return the slot only after closing its FD.
+        _slot: LeaseSlot,
     }
     struct Shared {
         alive: AtomicBool,
@@ -193,6 +219,9 @@ mod linux {
             if files.len() >= MAX_LEASES {
                 return Ok(None);
             }
+            let Some(slot) = LeaseSlot::acquire() else {
+                return Ok(None);
+            };
             // A private CLOEXEC duplicate of this very open file description;
             // never inherited by the server/owner or returned to another caller.
             let Ok(file) = file.try_clone() else {
@@ -223,6 +252,7 @@ mod linux {
             let state = Arc::new(FileState {
                 file,
                 broken: AtomicBool::new(false),
+                _slot: slot,
             });
             files.push(Arc::downgrade(&state));
             drop(files);

@@ -107,7 +107,24 @@ def collector_stderr_rows(lines, collector_pid):
 def reuse_observation(lines, collector_pid):
     """Counts are an exact selected collector event, not a timing inference."""
     observations = []
+    timings = []
     for row in collector_stderr_rows(lines, collector_pid):
+        event, stage = row.get("event"), row.get("stage")
+        if event == "mcp_asset_verification_timing" and stage in (
+                "selected_profile", "runtime_and_libraries", "package_tree"):
+            keys = ("elapsed_ms",)
+        elif event == "mcp_real_approval_timing" and stage in (
+                "profile_and_assets", "policy_boundary", "classifier", "daemon_redemption",
+                "original_dispatch", "original_response", "result_inspection"):
+            keys = ("stage_ms", "post_observed_ms")
+        else:
+            keys = ()
+        if (keys and len(timings) < 32
+                and all(type(row.get(k)) in (int, float) and math.isfinite(row[k])
+                        and row[k] >= 0 for k in keys)):
+            # Fixed fields only; these observations never replace the outer
+            # end-to-end clock or participate in approval/target decisions.
+            timings.append(dict(event=event, stage=stage, **{k: row[k] for k in keys}))
         if row.get("event") != "mcp_verified_inputs_resume":
             continue
         keys = ("immutable_files", "leased_files", "rehashed_files")
@@ -116,4 +133,5 @@ def reuse_observation(lines, collector_pid):
         observations.append({key: row[key] for key in keys})
     if len(observations) != 1:
         raise ValueError("one_selected_reuse_observation_required")
-    return dict(observations[0], observer="collector mcp_verified_inputs_resume")
+    return dict(observations[0], observer="collector mcp_verified_inputs_resume",
+                diagnostic_timings=timings)

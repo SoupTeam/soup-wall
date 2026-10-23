@@ -692,7 +692,11 @@ fn package_tree_sha256_with(
             );
             let metadata = fs::symlink_metadata(entry.path())?;
             let descriptor_leaf = cfg!(target_os = "linux") && metadata.is_file();
-            if !descriptor_leaf {
+            // walk() already binds directories immediately before and after
+            // descent, and tree_digest() closes descriptor leaves itself. Only
+            // links/other entries need the surrounding observations here.
+            let observe_here = !descriptor_leaf && !metadata.is_dir();
+            if observe_here {
                 verification.entry(&entry.path())?;
             }
             let record = if metadata.is_symlink() {
@@ -738,7 +742,7 @@ fn package_tree_sha256_with(
                 let digest = verification.tree_digest(&entry.path(), &metadata)?;
                 format!("F\0{name}\0{digest}\n").into_bytes()
             };
-            if !descriptor_leaf {
+            if observe_here {
                 verification.entry(&entry.path())?;
             }
             ensure!(
