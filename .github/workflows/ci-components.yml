@@ -1731,13 +1731,19 @@ jobs:
           export SOU115_BWRAP="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["bwrap"])')"
           source_args=(--output "$RUNNER_TEMP/sou119-agent-build"
             --expected-commit "$(git rev-parse HEAD)")
-          python3 -B scripts/build-native-pilot-inputs.py "${source_args[@]}" \
-            > "$RUNNER_TEMP/sou111-assets/source-plan.json"
-          python3 -B scripts/build-native-pilot-inputs.py --build "${source_args[@]}" \
-            > "$RUNNER_TEMP/sou111-assets/source-first.json"
+          source_build() {
+            local record="$1" status=0
+            shift
+            python3 -B scripts/build-native-pilot-inputs.py "$@" > "$record" || status=$?
+            if ((status != 0)); then
+              cat "$record"
+              return "$status"
+            fi
+          }
+          source_build "$RUNNER_TEMP/sou111-assets/source-plan.json" "${source_args[@]}"
+          source_build "$RUNNER_TEMP/sou111-assets/source-first.json" --build "${source_args[@]}"
           reuse_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
-          python3 -B scripts/build-native-pilot-inputs.py --build "${source_args[@]}" \
-            > "$RUNNER_TEMP/sou111-assets/source-reused.json"
+          source_build "$RUNNER_TEMP/sou111-assets/source-reused.json" --build "${source_args[@]}"
           reuse_finish="$(python3 -c 'import time; print(time.monotonic_ns())')"
           source_marker="$RUNNER_TEMP/sou119-agent-build/current.json"
           marker_before="$(sha256sum "$source_marker" | cut -d ' ' -f1)"
@@ -1748,8 +1754,7 @@ jobs:
             echo 'Changed source identity unexpectedly rebuilt the Agent inputs' >&2; exit 1
           fi
           test "$marker_before" = "$(sha256sum "$source_marker" | cut -d ' ' -f1)"
-          python3 -B scripts/build-native-pilot-inputs.py --build "${source_args[@]}" \
-            > "$RUNNER_TEMP/sou111-assets/source-recovered.json"
+          source_build "$RUNNER_TEMP/sou111-assets/source-recovered.json" --build "${source_args[@]}"
           python3 - "$reuse_start" "$reuse_finish" <<'PY'
           import hashlib, json, os, subprocess, sys
           from pathlib import Path
