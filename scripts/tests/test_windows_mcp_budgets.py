@@ -5,6 +5,8 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / "verify-windows-mcp-budgets.py"
 SPEC = importlib.util.spec_from_file_location("windows_budget_acceptance", SCRIPT)
@@ -43,6 +45,164 @@ def memory_controls():
              **{phase: {"private_committed_bytes": 30 * 1024**2, "raw_job_peak_bytes": 128 * 1024**2}
                 for phase in ("after_virtual", "after_heap")}}
             for mode in ("hard_only", "with_notification")]
+
+
+class ProcessAPI:
+    """Deterministic Toolhelp/handle races, not native Windows acceptance."""
+    def __init__(self):
+        self.k = self.p = self
+        self.clock, self.next_handle = 10000, 0
+        self.current, self.open_handles, self.closed, self.snapshot_rows = {}, {}, [], []
+        self.add(10, 0, 100)
+
+    def add(self, pid, parent, created, exited=0):
+        self.current[pid] = SimpleNamespace(created=created, exited=exited, private=1024,
+                                            kernel=2, user=3)
+        self.snapshot_rows = [(p, pp) for p, pp in self.snapshot_rows if p != pid] + [(pid, parent)]
+        return self.current[pid]
+
+    def now_100ns(self):
+        return self.clock
+
+    def snapshot(self):
+        return list(self.snapshot_rows)
+
+    def OpenProcess(self, access, inherit, pid):
+        if pid not in self.current:
+            return None
+        self.next_handle += 1
+        self.open_handles[self.next_handle] = self.current[pid]
+        return self.next_handle
+
+    def CloseHandle(self, handle):
+        self.closed.append(handle)
+        del self.open_handles[handle]
+        return True
+
+    def times(self, handle):
+        p = self.open_handles[handle]
+        return p.created, p.exited, p.kernel, p.user
+
+    def WaitForSingleObject(self, handle, timeout):
+        return 0 if self.open_handles[handle].exited else 258
+
+    def GetProcessMemoryInfo(self, handle, memory, size):
+        memory._obj.private = self.open_handles[handle].private
+        return True
+
+
+def observed(api):
+    thread = mock.Mock()
+    thread.is_alive.return_value = False
+    with mock.patch.object(H.threading, "Thread", return_value=thread):
+        return H.Witness(api, SimpleNamespace(pid=10))
+
+
+class ProcessAttribution(unittest.TestCase):
+    def test_stale_parent_pids_cannot_expand_foreign_tree_or_exhaust_bound(self):
+        api = ProcessAPI()
+        # These predate the collector; Toolhelp still names its recycled PID.
+        for pid in range(100, 180):
+            api.add(pid, 10, 50)
+        api.add(11, 10, 110)
+        api.add(12, 11, 120)
+        witness = observed(api)
+        self.assertEqual({r["pid"] for r in witness.rows.values()}, {10, 11, 12})
+        self.assertEqual(witness.peak_alive, 3)
+        self.assertEqual(witness.peak_child_private, 2048)
+        witness.finish()
+        self.assertEqual(api.open_handles, {})
+
+    def test_child_must_be_born_within_pinned_parent_lifetime(self):
+        api = ProcessAPI()
+        api.add(11, 10, 110, exited=150)
+        api.add(12, 11, 140)  # A real child can outlive its parent.
+        api.add(13, 11, 160)  # A later reuse of the numeric parent is foreign.
+        witness = observed(api)
+        self.assertEqual({r["pid"] for r in witness.rows.values()}, {10, 11, 12})
+        self.assertEqual(witness.peak_alive, 2)
+        witness.finish()
+        self.assertEqual(api.open_handles, {})
+
+    def test_new_process_after_snapshot_cannot_inherit_stale_parent_row(self):
+        api = ProcessAPI()
+        api.add(11, 10, 10001)
+        witness = observed(api)
+        self.assertEqual(set(witness.handles), {(10, 100)})
+        # A later fresh snapshot can positively attribute that generation.
+        api.clock = 10002
+        witness.sample()
+        self.assertEqual(set(witness.handles), {(10, 100), (11, 10001)})
+        witness.finish()
+
+    def test_reused_child_pid_keeps_distinct_handles_births_and_cleanup(self):
+        api = ProcessAPI()
+        original = api.add(11, 10, 110)
+        witness = observed(api)
+        original.exited = 120
+        api.add(11, 10, 130)
+        witness.sample()
+        self.assertEqual(set(witness.handles), {(10, 100), (11, 110), (11, 130)})
+        self.assertTrue(witness.rows[(11, 110)]["stopped"])
+        self.assertFalse(witness.rows[(11, 130)]["stopped"])
+        proof = witness.finish()
+        self.assertFalse(proof["all_stopped"])
+        self.assertEqual(api.open_handles, {})
+
+    def test_actual_owned_generations_still_fail_at_unchanged_64_bound(self):
+        api = ProcessAPI()
+        witness = observed(api)
+        for pid in range(100, 164):
+            api.add(pid, 10, 110)
+        with self.assertRaisesRegex(ValueError, "owned_process_count_bound"):
+            witness.sample()
+        self.assertEqual(len(witness.handles), 64)
+        self.assertEqual(len(api.open_handles), 64)
+        proof = witness.finish()
+        self.assertEqual(proof["observer_error"], "owned_process_count_bound")
+        self.assertEqual(api.open_handles, {})
+
+    def test_process_disappearing_before_open_never_becomes_evidence(self):
+        api = ProcessAPI()
+        api.snapshot_rows.append((11, 10))
+        witness = observed(api)
+        self.assertEqual(set(witness.handles), {(10, 100)})
+        witness.finish()
+
+    def test_parent_exit_during_candidate_open_cannot_attribute_later_child(self):
+        api = ProcessAPI()
+        parent = api.add(11, 10, 110)
+        witness = observed(api)
+        api.add(12, 11, 160)
+        open_process = api.OpenProcess
+
+        def raced_open(access, inherit, pid):
+            handle = open_process(access, inherit, pid)
+            if pid == 12:
+                parent.exited = 150
+            return handle
+
+        with mock.patch.object(api, "OpenProcess", side_effect=raced_open):
+            witness.sample()
+        self.assertEqual(set(witness.handles), {(10, 100), (11, 110)})
+        witness.finish()
+        self.assertEqual(api.open_handles, {})
+
+    def test_initial_snapshot_bound_failure_closes_every_acquired_handle(self):
+        api = ProcessAPI()
+        for pid in range(100, 164):
+            api.add(pid, 10, 110)
+        with self.assertRaisesRegex(ValueError, "owned_process_count_bound"):
+            observed(api)
+        self.assertEqual(api.open_handles, {})
+
+    def test_collector_alone_cannot_satisfy_breakaway_grade(self):
+        candidate = row("breakaway")
+        candidate.update(exit_code=0, breakaway_refused=True)
+        candidate["budget_events"][0]["budget"]["observed"]["reason"] = None
+        candidate["witness"]["processes"] = candidate["witness"]["processes"][:1]
+        with self.assertRaisesRegex(ValueError, "owned_child_memory_witness_missing"):
+            H.grade(candidate)
 
 
 class ReportGrading(unittest.TestCase):

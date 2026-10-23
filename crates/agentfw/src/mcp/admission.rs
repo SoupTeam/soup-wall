@@ -1197,12 +1197,34 @@ impl<'a> Collector<'a> {
             );
             bytes.extend_from_slice(&chunk);
         }
-        ensure!(
-            status.is_success(),
-            "MCP admission request rejected: status {}, body: {}",
-            status,
-            String::from_utf8_lossy(&bytes)
-        );
+        if !status.is_success() {
+            let status = status.as_u16();
+            // Log only the daemon's stable, low-entropy failure code.
+            // Never echo request arguments, tokens or a raw response body.
+            let body = &bytes;
+            let reason = if body.len() <= 1024 {
+                serde_json::from_slice::<Value>(body)
+                    .ok()
+                    .and_then(|reply| {
+                        reply
+                            .get("error_code")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .filter(|code| {
+                        code.len() <= 96
+                            && code
+                                .bytes()
+                                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+                    })
+            } else {
+                None
+            };
+            anyhow::bail!(
+                "MCP admission request rejected: status={status} code={}",
+                reason.as_deref().unwrap_or("unavailable")
+            );
+        }
         let Strict(reply) =
             serde_json::from_slice(&bytes).context("malformed MCP admission receipt")?;
         Ok(reply)

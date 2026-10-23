@@ -134,6 +134,47 @@ pub(crate) fn prepare(profile: &ProfileConfig) -> anyhow::Result<PreparedServerS
     }
 }
 
+/// Prepare a *fresh* original filesystem server instance against an
+/// already-created owner-private empty staging root, not the user workspace.
+/// Only the new profile may acquire this writable host-backed namespace mount.
+#[allow(dead_code)] // this Linux-only caller has no equivalent on unsupported targets
+pub(crate) fn prepare_create_stage(
+    profile: &ProfileConfig,
+    stage: &Path,
+) -> anyhow::Result<PreparedServerSandbox> {
+    anyhow::ensure!(
+        profile.format == super::server_profile::filesystem_create::FORMAT,
+        "only the selected original-create profile can stage writes"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = std::fs::symlink_metadata(stage)?;
+        anyhow::ensure!(
+            meta.file_type().is_dir()
+                && meta.uid() == unsafe { libc::geteuid() }
+                && meta.mode() & 0o777 == 0o700,
+            "original-create staging directory is unsafe"
+        );
+        anyhow::ensure!(stage.is_absolute(), "staging path must be absolute");
+        let mut isolated = profile.clone();
+        isolated.workspace = stage.to_path_buf();
+        prepare_linux_command(
+            &isolated,
+            &[
+                format!("/mcp-server/{SERVER_ENTRYPOINT}"),
+                SANDBOX_WORKSPACE.to_owned(),
+            ],
+            true,
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (profile, stage);
+        anyhow::bail!("original-create sandbox requires Linux")
+    }
+}
+
 /// Open and verify every pin of a selected profile (workspace, package tree,
 /// runtime, bubblewrap, Git binaries, libraries and repository rules) without
 /// starting anything. Used by setup previews before a launch is persisted.
@@ -287,6 +328,20 @@ fn descriptor_path(file: &File) -> PathBuf {
 /// do not isolate such filesystem sockets. Anonymous socketpair IPC stays usable.
 #[cfg(target_os = "linux")]
 fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
+    filter_instructions_mode(git_landlock, false)
+}
+
+/// The writable variant is used only for an isolated ephemeral create-stage
+/// mount; it never becomes a fallback for an installed read-only profile.
+#[cfg(target_os = "linux")]
+fn filter_instructions_mode(
+    git_landlock: bool,
+    writable_owned_stage: bool,
+) -> anyhow::Result<Vec<(u16, u8, u8, u32)>> {
+    anyhow::ensure!(
+        !git_landlock || !writable_owned_stage,
+        "invalid isolated stage flags"
+    );
     #[cfg(target_arch = "x86_64")]
     let architecture = 0xc000_003e_u32;
     #[cfg(target_arch = "aarch64")]
@@ -359,7 +414,7 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
     }
     #[cfg(target_arch = "x86_64")]
     {
-        if !git_landlock {
+        if !git_landlock && !writable_owned_stage {
             instructions.push((0x15, 0, 1, libc::SYS_creat as u32));
             instructions.push((0x06, 0, 0, deny));
         }
@@ -402,6 +457,13 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
         instructions.push((0x06, 0, 0, 0x7fff_0000));
         return Ok(instructions);
     }
+    if writable_owned_stage {
+        // Namespace mounts—not path name strings—confine writes: the only
+        // host-backed writable mount is one owner-private, isolated stage.
+        // Network/io_uring/ioctl and cross-ABI syscall denies stay active.
+        instructions.push((0x06, 0, 0, 0x7fff_0000));
+        return Ok(instructions);
+    }
     let write_flags = (libc::O_WRONLY
         | libc::O_RDWR
         | libc::O_CREAT
@@ -428,10 +490,19 @@ fn filter_instructions(git_landlock: bool) -> anyhow::Result<Vec<(u16, u8, u8, u
 
 #[cfg(target_os = "linux")]
 fn network_filter(git_landlock: bool) -> anyhow::Result<File> {
+    network_filter_mode(git_landlock, false)
+}
+
+#[cfg(target_os = "linux")]
+fn network_filter_mode(git_landlock: bool, writable_owned_stage: bool) -> anyhow::Result<File> {
     use std::io::{Seek, SeekFrom, Write};
     use std::os::fd::FromRawFd;
 
-    let instructions = filter_instructions(git_landlock)?;
+    let instructions = if writable_owned_stage {
+        filter_instructions_mode(git_landlock, true)?
+    } else {
+        filter_instructions(git_landlock)?
+    };
     let fd = unsafe {
         libc::memfd_create(
             c"sou62-network-filter".as_ptr(),
@@ -582,6 +653,7 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
                 SANDBOX_WORKSPACE,
             ]
             .map(str::to_owned),
+            false,
         );
     }
     prepare_linux_command(
@@ -590,6 +662,7 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
             format!("/mcp-server/{SERVER_ENTRYPOINT}"),
             SANDBOX_WORKSPACE.to_owned(),
         ],
+        false,
     )
 }
 
@@ -597,11 +670,17 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
 fn prepare_linux_command(
     profile: &ProfileConfig,
     node_args: &[String],
+    writable_owned_stage: bool,
 ) -> anyhow::Result<PreparedServerSandbox> {
     use std::os::fd::AsRawFd;
+    use std::os::unix::process::CommandExt;
 
     let (workspace, workspace_pin) = open_directory(&profile.workspace)?;
     let git_profile = profile.format == super::server_profile::git::FORMAT;
+    anyhow::ensure!(
+        !writable_owned_stage || profile.format == super::server_profile::filesystem_create::FORMAT,
+        "writable staging must use the separately selected original-create profile"
+    );
     if git_profile {
         super::server_profile::git::validate_repository(
             &descriptor_path(&workspace_pin).join("."),
@@ -698,6 +777,16 @@ fn prepare_linux_command(
         "/tmp",
     ]);
     for (index, destination) in mounts {
+        // Only the descriptor-pinned ephemeral staging directory is writable.
+        // Read-only profile, runtime and all library/dependency mounts remain
+        // unchanged. No actual user workspace is ever given a writable mount.
+        if writable_owned_stage && index == 0 {
+            command
+                .arg("--bind-fd")
+                .arg(pins[index].as_raw_fd().to_string())
+                .arg(destination);
+            continue;
+        }
         // --ro-bind-fd consumes and closes the descriptor before exec. Older
         // bwrap versions without this primitive must fail closed: spelling the
         // source as /proc/self/fd/N with --ro-bind would leak host descriptors
@@ -707,7 +796,11 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
-    let seccomp = network_filter(git_profile)?;
+    let seccomp = if writable_owned_stage {
+        network_filter_mode(git_profile, true)?
+    } else {
+        network_filter(git_profile)?
+    };
     command
         .arg("--seccomp")
         .arg(seccomp.as_raw_fd().to_string());
@@ -746,6 +839,16 @@ fn prepare_linux_command(
             ("GIT_CONFIG_VALUE_2", "never"),
         ] {
             command.args(["--setenv", name, value]);
+        }
+    }
+    if writable_owned_stage {
+        // The pinned original Node process defaults to 0666 & umask; make its
+        // isolated-stage output owner-private before reading it back.
+        unsafe {
+            command.as_std_mut().pre_exec(|| {
+                libc::umask(0o077);
+                Ok(())
+            });
         }
     }
     command
@@ -982,7 +1085,7 @@ print(json.dumps(result))
             normal_scheduler = libc::SCHED_OTHER,
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
-        let mut prepared = prepare_linux_command(&profile, &args).unwrap();
+        let mut prepared = prepare_linux_command(&profile, &args, false).unwrap();
         // Add an owned FIFO after repository validation to prove that read-only
         // mounts alone are insufficient, and that Landlock still blocks IPC.
         let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
@@ -1264,6 +1367,151 @@ print(json.dumps(result))
         }
     }
 
+    /// The writable stage uses a different seccomp branch from read-only.
+    /// Exercise that branch against independently calibrated receivers; an
+    /// idle upstream server making no network calls is not an egress probe.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "requires SOU62_SANDBOX_TEST_PROFILE and real Linux namespaces"]
+    async fn original_create_stage_confines_active_egress_and_runtime_writes() {
+        use std::io::{Read, Write};
+        use std::net::{TcpListener, TcpStream};
+        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::net::{UnixListener, UnixStream};
+        use tokio::io::AsyncReadExt;
+
+        let config = std::env::var_os("SOU62_SANDBOX_TEST_PROFILE").unwrap();
+        let mut profile = ProfileConfig::read(&std::fs::read(config).unwrap()).unwrap();
+        profile.format = super::super::server_profile::filesystem_create::FORMAT.to_owned();
+        let owned = tempfile::tempdir().unwrap();
+        let stage = owned.path().join("stage");
+        std::fs::create_dir(&stage).unwrap();
+        std::fs::set_permissions(&stage, std::fs::Permissions::from_mode(0o700)).unwrap();
+        profile.workspace = stage.clone();
+        let outside = owned.path().join("outside");
+        std::fs::write(&outside, b"unchanged").unwrap();
+        let receiver = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = receiver.local_addr().unwrap();
+        let mut sender = TcpStream::connect(address).unwrap();
+        sender.write_all(b"calibrate").unwrap();
+        let (mut received, _) = receiver.accept().unwrap();
+        let mut bytes = [0; 9];
+        received.read_exact(&mut bytes).unwrap();
+        assert_eq!(&bytes, b"calibrate");
+        drop((sender, received));
+        receiver.set_nonblocking(true).unwrap();
+        let socket_path = stage.join("egress.sock");
+        let unix = UnixListener::bind(&socket_path).unwrap();
+        let calibration = UnixStream::connect(&socket_path).unwrap();
+        drop(unix.accept().unwrap());
+        drop(calibration);
+        unix.set_nonblocking(true).unwrap();
+        let script = format!(
+            r#"
+const fs = require('node:fs'), net = require('node:net');
+const denied = f => {{ try {{ f(); return false; }} catch {{ return true; }} }};
+fs.writeFileSync('/workspace/created.txt', 'private stage');
+const result = {{
+  stageWrite: fs.readFileSync('/workspace/created.txt','utf8') === 'private stage',
+  runtimeWriteDenied: denied(() => fs.writeFileSync('/mcp-runtime/node','bad')),
+  packageWriteDenied: denied(() => fs.writeFileSync('/mcp-server/escape','bad')),
+  outsideReadDenied: denied(() => fs.readFileSync({outside})),
+  outsideWriteDenied: denied(() => fs.writeFileSync({outside},'bad')),
+  inheritedSecretAbsent: process.env.SOU83_INHERITED_SECRET === undefined,
+  netNamespace: fs.readlinkSync('/proc/self/ns/net'),
+  pidNamespace: fs.readlinkSync('/proc/self/ns/pid')
+}};
+const probe = options => new Promise(resolve => {{
+  let socket, done = false;
+  const finish = denied => {{ if(done) return; done=true; if(socket) socket.destroy(); resolve(denied); }};
+  try {{ socket = net.connect(options); socket.on('connect', () => finish(false));
+    socket.on('error', () => finish(true)); socket.setTimeout(500, () => finish(true));
+  }} catch {{ finish(true); }}
+}});
+Promise.all([probe({{host:'127.0.0.1',port:{port}}}),probe({{path:'/workspace/egress.sock'}})])
+ .then(([tcp,unix]) => {{ result.tcpDenied=tcp; result.unixDenied=unix; console.log(JSON.stringify(result)); }});
+"#,
+            outside = serde_json::to_string(&outside).unwrap(),
+            port = address.port()
+        );
+        let mut prepared = prepare_linux_command(&profile, &["-e".into(), script], true).unwrap();
+        prepared
+            .command
+            .env("SOU83_INHERITED_SECRET", "must-not-reach-stage");
+        let (mut child, mut budget, mut owner, _) = prepared.spawn().await.unwrap();
+        drop(child.stdin.take());
+        let mut stdout = child.stdout.take().unwrap();
+        let mut stderr = child.stderr.take().unwrap();
+        let collected = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            let mut output = Vec::new();
+            let mut errors = Vec::new();
+            let (out, err) = tokio::join!(
+                stdout.read_to_end(&mut output),
+                stderr.read_to_end(&mut errors)
+            );
+            out.unwrap();
+            err.unwrap();
+            // The owner intentionally stays alive until its explicit stop.
+            // Do not wait for that process before completing the handshake.
+            owner.quiesce().await.unwrap();
+            if let Some(budget) = budget.as_mut() {
+                budget.finish().await.unwrap();
+            }
+            owner.finish().await.unwrap();
+            (output, errors, child.wait().await.unwrap())
+        })
+        .await;
+        // Always stop the owner and reap the child, including on timeout.
+        let budget_cleanup = if let Some(budget) = budget.as_mut() {
+            budget.finish().await
+        } else {
+            Ok(())
+        };
+        let owner_cleanup = owner.finish().await;
+        let child_cleanup = terminate(&mut child).await;
+        budget_cleanup.unwrap();
+        owner_cleanup.unwrap();
+        child_cleanup.unwrap();
+        let (output, errors, status) = collected.expect("bounded create-stage probe");
+        assert!(status.success(), "{}", String::from_utf8_lossy(&errors));
+        let result: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        for key in [
+            "stageWrite",
+            "runtimeWriteDenied",
+            "packageWriteDenied",
+            "outsideReadDenied",
+            "outsideWriteDenied",
+            "inheritedSecretAbsent",
+            "tcpDenied",
+            "unixDenied",
+        ] {
+            assert_eq!(result[key], true, "create sandbox boundary: {key}");
+        }
+        for namespace in ["net", "pid"] {
+            assert_ne!(
+                result[format!("{namespace}Namespace")].as_str().unwrap(),
+                std::fs::read_link(format!("/proc/self/ns/{namespace}"))
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+            );
+        }
+        assert_eq!(std::fs::read(&outside).unwrap(), b"unchanged");
+        assert_eq!(
+            std::fs::read(stage.join("created.txt")).unwrap(),
+            b"private stage"
+        );
+        assert_eq!(
+            receiver.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        assert_eq!(
+            unix.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        println!("SOU83_CREATE_SANDBOX_POSITIVE {result}");
+    }
+
     /// An explicitly invoked positive acceptance test. A missing runtime,
     /// bubblewrap feature, or namespace permission is a failure, never a skip.
     #[cfg(target_os = "linux")]
@@ -1377,7 +1625,8 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
 "#,
             port = address.port()
         );
-        let mut prepared = prepare_linux_command(&profile, &["-e".to_owned(), script]).unwrap();
+        let mut prepared =
+            prepare_linux_command(&profile, &["-e".to_owned(), script], false).unwrap();
         prepared
             .command
             .env("SOU62_INHERITED_SECRET", "must-not-reach-server");

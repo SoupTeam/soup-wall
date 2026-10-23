@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use anyhow::{bail, ensure, Context};
 use futures_util::stream::{FuturesUnordered, StreamExt};
@@ -14,6 +14,8 @@ use tokio::time::Instant;
 
 use super::{canonical, id, keys, line, not_classified, parse, sha, withheld, write};
 use super::{AdmittedTool, ClassificationAuthority, Collector, ProductionVerdict, Snapshot};
+#[cfg(target_os = "linux")]
+use crate::mcp::original_create::{run_original_upstream, VerifiedOutput};
 use crate::mcp::{server_profile, server_sandbox};
 use crate::native::CONTRACT;
 
@@ -32,6 +34,8 @@ struct Grant {
 
 struct Release {
     raw: Vec<u8>,
+    #[cfg(target_os = "linux")]
+    authorized: bool,
     _boundary: Option<crate::policy_transition::Boundary>,
 }
 
@@ -39,6 +43,10 @@ enum Phase {
     Queued,
     Admitting,
     Running(Grant),
+    #[cfg(target_os = "linux")]
+    Creating(Grant),
+    #[cfg(target_os = "linux")]
+    Staging,
     Inspecting,
     Reclaiming,
 }
@@ -58,6 +66,45 @@ struct Call {
     progress: Option<Value>,
     progress_count: usize,
     last_progress: f64,
+    // Cancellation spends native authority before the producer necessarily
+    // finishes cleanup. Workers retain this lease independently of the call.
+    create_lease: Option<Arc<()>>,
+    // Pin the exact operator workspace *before* native admission.
+    // Never reopen a substituted root after native result Allow.
+    #[cfg(target_os = "linux")]
+    pinned_workspace: Option<Arc<crate::sandbox::PinnedWorkspace>>,
+}
+
+#[derive(Default)]
+struct CreateSlot(Weak<()>);
+
+impl CreateSlot {
+    fn reserve(&mut self) -> Option<Arc<()>> {
+        if self.0.upgrade().is_some() {
+            return None;
+        }
+        let lease = Arc::new(());
+        self.0 = Arc::downgrade(&lease);
+        Some(lease)
+    }
+}
+
+#[cfg(any(test, target_os = "linux"))]
+async fn retain_create_slot<T>(lease: Option<Arc<()>>, work: impl Future<Output = T>) -> T {
+    let _lease = lease;
+    work.await
+}
+
+#[cfg(target_os = "linux")]
+async fn produce_original_create(
+    profile: &server_profile::ProfileConfig,
+    args: &Value,
+) -> anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)> {
+    #[cfg(test)]
+    if let Some(result) = fault_tests::controlled_create_output(args) {
+        return result;
+    }
+    run_original_upstream(profile, args).await
 }
 
 enum Decision {
@@ -68,6 +115,16 @@ enum Decision {
 enum WorkEvent {
     Admitted(String, anyhow::Result<Decision>),
     Inspected(String, anyhow::Result<Option<Release>>),
+    #[cfg(target_os = "linux")]
+    Created(String, anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)>),
+    #[cfg(target_os = "linux")]
+    CreateInspected(String, anyhow::Result<Option<Release>>, VerifiedOutput),
+    #[cfg(target_os = "linux")]
+    CreateStaged(
+        String,
+        anyhow::Result<crate::mcp::create_file::StagedCreate>,
+        Release,
+    ),
     Reclaimed(String, anyhow::Result<()>),
 }
 
@@ -173,6 +230,15 @@ async fn admit(
     call: &Call,
     profile: &server_profile::ProfileConfig,
 ) -> anyhow::Result<Decision> {
+    let creating =
+        call.profile == server_profile::filesystem_create::FORMAT && call.tool == "write_file";
+    if creating && (!cfg!(target_os = "linux") || collector.config.classifier.is_none()) {
+        return Ok(Decision::Refused(withheld(
+            &call.id,
+            "invocation",
+            &json!(["original_create_classifier_or_platform_unavailable"]),
+        )));
+    }
     let installed = collector
         .config
         .native
@@ -190,7 +256,7 @@ async fn admit(
             installed.action_class,
             ClassificationAuthority {
                 egress_declared: false,
-                create_file_profile: None,
+                create_file_profile: creating.then_some(server_profile::filesystem_create::FORMAT),
                 https_get: false,
             },
         )
@@ -206,7 +272,10 @@ async fn admit(
     if assessment.verdict == ProductionVerdict::Deny {
         return Ok(refusal("classifier_deny"));
     }
-    if !assessment.known_read_only {
+    // Selected read-only Ask continuation must not disable the independently
+    // selected create-only Allow path, or acquire approval authority for it.
+    if !assessment.known_read_only && !(creating && assessment.verdict == ProductionVerdict::Allow)
+    {
         return Ok(refusal(if collector.config.approval.is_some() {
             "classifier_unknown_approval_unsupported"
         } else {
@@ -232,6 +301,13 @@ async fn admit(
         None
     };
     if let Some(source) = source {
+        if creating {
+            return Ok(if let Some(reply) = receipt {
+                Decision::Refused(withheld(&call.id, "invocation", &reply["reason_codes"]))
+            } else {
+                refusal("classifier_ask")
+            });
+        }
         // No transition gate is held across a human wait. Acquire a fresh
         // boundary, rerun classification and redeem under the current policy.
         drop(boundary.take());
@@ -437,13 +513,16 @@ async fn inspect(
     let receipt = collector.event("result",json!({"tool":call.tool,"args":call.args,
         "call_id":grant.call_id,"expected_binding_sha256":grant.binding,
         "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})).await?;
-    let raw = if receipt["release"] == true {
+    let authorized = receipt["release"] == true;
+    let raw = if authorized {
         raw
     } else {
         withheld(&call.id, "result", &receipt["reason_codes"])
     };
     Ok(Some(Release {
         raw,
+        #[cfg(target_os = "linux")]
+        authorized,
         _boundary: boundary,
     }))
 }
@@ -477,6 +556,9 @@ fn detached(call: &Call) -> Call {
         progress: call.progress.clone(),
         progress_count: 0,
         last_progress: 0.0,
+        create_lease: call.create_lease.clone(),
+        #[cfg(target_os = "linux")]
+        pinned_workspace: call.pinned_workspace.clone(),
     }
 }
 
@@ -495,7 +577,9 @@ fn validate_registry(
     // them to this relay's callable profiles or advertised discovery result.
     // Arbitrary unadvertised registry entries remain a startup refusal.
     let peer_format = match format {
-        server_profile::FORMAT => server_profile::git::FORMAT,
+        server_profile::FORMAT | server_profile::filesystem_create::FORMAT => {
+            server_profile::git::FORMAT
+        }
         server_profile::git::FORMAT => server_profile::FORMAT,
         _ => bail!("unsupported selected registry profile"),
     };
@@ -510,6 +594,11 @@ fn validate_registry(
             .find(|value| value["name"] == tool.name)
             .map(|definition| (definition, &profiles[&tool.name], format))
             .or_else(|| {
+                // The separately installed create-only profile does not acquire
+                // the readonly pilot's union-registry authority.
+                if format == server_profile::filesystem_create::FORMAT {
+                    return None;
+                }
                 peer_tools
                     .iter()
                     .find(|value| value["name"] == tool.name)
@@ -525,15 +614,22 @@ fn validate_registry(
             "selected server cannot acquire built-in resource authority"
         );
         if profile.unsupported_reason.is_none() {
+            let required_action = if expected_format == server_profile::filesystem_create::FORMAT
+                && tool.name == "write_file"
+            {
+                soup_wall_agent::ActionClass::SideEffecting
+            } else {
+                soup_wall_agent::ActionClass::ReadOnly
+            };
             ensure!(
-                tool.action_class == soup_wall_agent::ActionClass::ReadOnly
+                tool.action_class == required_action
                     && tool.egress.is_empty()
                     && matches!(
                         tool.result_provenance,
                         crate::native::ResultProvenance::Untrusted
                     )
                     && tool.mcp_result_profile.as_deref() == Some(expected_format),
-                "selected read authority is not explicitly installed"
+                "selected per-tool authority is not explicitly installed"
             );
         }
     }
@@ -547,7 +643,7 @@ fn validate_registry(
                     .tools
                     .iter()
                     .any(|tool| tool.name == *name),
-                "selected read tool is not installed"
+                "selected supported tool is not installed"
             );
         }
     }
@@ -593,6 +689,7 @@ where
     let mut ready = false;
     let mut control: Option<Control> = None;
     let mut calls: BTreeMap<String, Call> = BTreeMap::new();
+    let mut create_slot = CreateSlot::default();
     let mut queue = VecDeque::new();
     let mut used = BTreeSet::new();
     let mut wire: BTreeMap<String, (Instant, bool)> = BTreeMap::new();
@@ -723,6 +820,17 @@ where
                                     WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
                                 }));
                             }
+                            #[cfg(target_os = "linux")]
+                            Phase::Creating(grant) => {
+                                let input = detached(call);
+                                let worker_key = key.clone();
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Reclaimed(worker_key,
+                                        reclaim(collector, &input, grant).await)
+                                }));
+                            }
+                            #[cfg(target_os = "linux")]
+                            Phase::Staging => { calls.remove(&key); }
                             Phase::Admitting => call.phase = Phase::Admitting,
                             Phase::Inspecting => call.phase = Phase::Inspecting,
                             Phase::Reclaiming => {}
@@ -744,10 +852,15 @@ where
                 }
                 let request_id = &value["id"];
                 let key = rpc_key(request_id)?;
-                ensure!(
-                    used.len() < super::MAX_REQUESTS && used.insert(key.clone()),
-                    "duplicate MCP ID or request-count limit"
-                );
+                ensure!(used.len() < super::MAX_REQUESTS, "MCP request-count limit");
+                if !used.insert(key.clone()) {
+                    // A replayed/previously spent host ID must never reach
+                    // another native admission. Preserve useful read/write
+                    // peers instead of terminating the entire session.
+                    write(host, &error(request_id, -32600,
+                        "Replayed or spent MCP request ID refused")).await?;
+                    continue;
+                }
                 if !params.is_object() {
                     write(
                         host,
@@ -849,7 +962,7 @@ where
                             .await?;
                             continue;
                         };
-                        let Some(profile) = profiles.get(name) else {
+                        let Some(tool_profile) = profiles.get(name) else {
                             write(
                                 host,
                                 &error(
@@ -861,7 +974,7 @@ where
                             .await?;
                             continue;
                         };
-                        if profile.unsupported_reason.is_some() {
+                        if tool_profile.unsupported_reason.is_some() {
                             write(
                                 host,
                                 &error(
@@ -878,7 +991,12 @@ where
                             .cloned()
                             .unwrap_or_else(|| json!({}));
                         let progress = match metadata(&params).and_then(|progress| {
-                            profile.validate_arguments(&args)?;
+                            tool_profile.validate_arguments(&args)?;
+                            if format == server_profile::filesystem_create::FORMAT
+                                && name == "write_file"
+                            {
+                                server_profile::filesystem_create::validate_request(&args)?;
+                            }
                             Ok(progress)
                         }) {
                             Ok(progress) => progress,
@@ -895,6 +1013,20 @@ where
                                 continue;
                             }
                         };
+                        // One original mutator at a time. Each selected
+                        // create receives a new heavy isolated Node/owner
+                        // process; native read-only calls stay concurrent.
+                        let create_lease = if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file" {
+                            match create_slot.reserve() {
+                                Some(lease) => Some(lease),
+                                None => {
+                                    write(host, &error(request_id, -32003,
+                                        "An original create operation is already active")).await?;
+                                    continue;
+                                }
+                            }
+                        } else { None };
                         let (active, queued) = counts(&calls);
                         if active >= ACTIVE_LIMIT && queued >= QUEUE_LIMIT {
                             write(
@@ -904,6 +1036,21 @@ where
                             .await?;
                             continue;
                         }
+                        #[cfg(target_os = "linux")]
+                        let pinned_workspace = if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file"
+                        {
+                            match crate::sandbox::PinnedWorkspace::open(&profile.workspace) {
+                                Ok(workspace) => Some(Arc::new(workspace)),
+                                Err(_) => {
+                                    write(host, &error(request_id, -32603,
+                                        "Original create workspace identity unavailable")).await?;
+                                    continue;
+                                }
+                            }
+                        } else {
+                            None
+                        };
                         let call = Call {
                             profile: format.to_owned(),
                             id: request_id.clone(),
@@ -911,6 +1058,7 @@ where
                             args,
                             request_sha256: sha(&raw),
                             raw,
+                            create_lease,
                             phase: Phase::Queued,
                             cancelled: false,
                             cancel: tokio::sync::watch::channel(false).0,
@@ -919,6 +1067,8 @@ where
                             progress,
                             progress_count: 0,
                             last_progress: 0.0,
+                            #[cfg(target_os = "linux")]
+                            pinned_workspace,
                         };
                         audit(&call, "queued", active, queued + 1);
                         calls.insert(key.clone(), call);
@@ -943,6 +1093,12 @@ where
                         let Some(call) = calls.get_mut(&key) else {
                             bail!("unbound native admission completion");
                         };
+                        // A disconnected host cannot authorize new execution.
+                        // Reclaim any late native Allow rather than launching
+                        // an ephemeral writer after the client has disappeared.
+                        if client_closed {
+                            call.cancelled = true;
+                        }
                         match result? {
                             Decision::Refused(raw) => {
                                 if !call.cancelled {
@@ -974,6 +1130,34 @@ where
                                         )
                                     }));
                                 } else {
+                                    #[cfg(target_os = "linux")]
+                                    if format == server_profile::filesystem_create::FORMAT
+                                        && call.tool == "write_file"
+                                    {
+                                        // The installed server stays read-only.
+                                        // Only an isolated fresh ORIGINAL server
+                                        // can run the mutating upstream tool.
+                                        let worker_key = key.clone();
+                                        let args = call.args.clone();
+                                        let runner = profile.clone();
+                                        let lease = call.create_lease.clone();
+                                        call.phase = Phase::Creating(grant);
+                                        call.dispatched = true;
+                                        // The external Linux acceptance can
+                                        // observe actual post-admission creation
+                                        // without exposing content or credentials.
+                                        eprintln!("{}", json!({
+                                            "event":"mcp_original_create_state",
+                                            "host_call_id":call.id,
+                                            "state":"creating"
+                                        }));
+                                        workers.push(Box::pin(async move {
+                                            WorkEvent::Created(worker_key,
+                                                retain_create_slot(lease,
+                                                    produce_original_create(&runner, &args)).await)
+                                        }));
+                                        continue;
+                                    }
                                     write(child, &call.raw).await?;
                                     call.dispatched = true;
                                     drop(grant.boundary.take());
@@ -984,6 +1168,174 @@ where
                                 }
                             }
                         }
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::Created(key, produced) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        if call.cancelled { continue; }
+                        if client_closed {
+                            // A host EOF before native result release must
+                            // spend the admission grant and drop the isolated
+                            // output. No publication occurs and relay can exit.
+                            let phase = std::mem::replace(&mut call.phase, Phase::Reclaiming);
+                            let Phase::Creating(grant) = phase else {
+                                bail!("orphaned original create without native grant");
+                            };
+                            let input = detached(call);
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(key,
+                                    reclaim(collector, &input, grant).await)
+                            }));
+                            continue;
+                        }
+                        let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
+                        let Phase::Creating(grant) = phase else {
+                            bail!("original create returned without its bound native grant");
+                        };
+                        let input = detached(call);
+                        let worker_key = key.clone();
+                        match produced {
+                            Ok((raw, verified)) => {
+                                // Internal original-server RPC always uses id=3.
+                                // The host must receive its own opaque request ID.
+                                // Only the JSON-RPC transport ID is changed;
+                                // original result/error fields are untouched.
+                                let mut decoded = parse(&raw)?;
+                                ensure!(decoded["id"] == 3,
+                                    "unexpected original-server response correlation");
+                                decoded["id"] = call.id.clone();
+                                let raw = frame(&decoded);
+                                if let Some(verified) = verified {
+                                    workers.push(Box::pin(async move {
+                                        let receipt = inspect(collector, &input, grant, raw, "value").await;
+                                        #[cfg(test)]
+                                        fault_tests::pause_create_completion("inspected").await;
+                                        WorkEvent::CreateInspected(worker_key,
+                                            receipt, verified)
+                                    }));
+                                } else {
+                                    // Preserve the valid ORIGINAL error. It
+                                    // has no output/publication capability.
+                                    workers.push(Box::pin(async move {
+                                        WorkEvent::Inspected(worker_key,
+                                            inspect(collector, &input, grant, raw, "error").await)
+                                    }));
+                                }
+                            }
+                            Err(_) => {
+                                let failure = error(&call.id, -32603,
+                                    "Original isolated MCP create failed; workspace unchanged");
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Inspected(worker_key,
+                                        inspect(collector, &input, grant, failure, "error").await)
+                                }));
+                            }
+                        }
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::CreateInspected(key, receipt, output) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if call.deadline <= Instant::now() {
+                            write(host, &error(&call.id, -32001,
+                                "Original create timed out before publication; no file committed")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        let release = receipt?.context("native original-create result missing")?;
+                        if !release.authorized {
+                            write(host, &release.raw).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if collector.is_uncertain() {
+                            write(host, &error(&call.id, -32603,
+                                "Native collector became uncertain before publication")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        let prepared = call.pinned_workspace.as_deref()
+                            .context("original create workspace pin not held")
+                            .and_then(|workspace| output.prepare_atomic_publication(workspace));
+                        let prepared = match prepared {
+                            Ok(value) => value,
+                            Err(_) => {
+                                write(host, &error(&call.id, -32603,
+                                    "Unsafe or existing original-create destination; no publication")).await?;
+                                calls.remove(&key);
+                                continue;
+                            }
+                        };
+                        call.phase = Phase::Staging;
+                        let lease = call.create_lease.clone();
+                        workers.push(Box::pin(async move {
+                            let stage = tokio::task::spawn_blocking(move || {
+                                let _lease = lease;
+                                prepared.stage()
+                            })
+                                .await.map_err(anyhow::Error::from)
+                                .and_then(|value| value.map_err(anyhow::Error::from));
+                            #[cfg(test)]
+                            fault_tests::pause_create_completion("staged").await;
+                            WorkEvent::CreateStaged(key, stage, release)
+                        }));
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::CreateStaged(key, stage, release) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        // Cancellation after native result Allow, but before
+                        // linkat, closes only an anonymous stage.
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if collector.is_uncertain() || call.deadline <= Instant::now() {
+                            write(host, &error(&call.id,
+                                if collector.is_uncertain() { -32603 } else { -32001 },
+                                "Original create authority expired or became uncertain; no file committed")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        // release owns the native result policy boundary until
+                        // this synchronous publication point is finished.
+                        match stage {
+                            Ok(stage) => match stage.publish() {
+                                Ok(result) if result.committed && result.file_synced
+                                    && result.directory_synced => {
+                                    eprintln!("{}", json!({
+                                        "event":"mcp_original_create_commit",
+                                        "committed":true,
+                                        "bytes":result.bytes_written,
+                                        "content_disclosed":false
+                                    }));
+                                    write(host, &release.raw).await?;
+                                }
+                                Ok(_) => bail!("incomplete original-create publication"),
+                                Err(publish_error) => {
+                                    eprintln!("{}", json!({
+                                        "event":"mcp_original_create_commit",
+                                        "committed":publish_error.committed,
+                                        "bytes":publish_error.committed_bytes,
+                                        "reason":publish_error.code,
+                                        "content_disclosed":false
+                                    }));
+                                    write(host, &error(&call.id, -32603,
+                                        if publish_error.committed {
+                                            "Create failed after commit; file effect may remain"
+                                        } else {
+                                            "Create publication refused; no file committed"
+                                        })).await?;
+                                }
+                            },
+                            Err(_) => {
+                                write(host, &error(&call.id, -32603,
+                                    "Original create staging failed; no file committed")).await?;
+                            }
+                        }
+                        calls.remove(&key);
                     }
                     WorkEvent::Inspected(key, result) => {
                         let call = calls
@@ -1287,6 +1639,17 @@ where
                                 WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
                             }));
                         }
+                        #[cfg(target_os = "linux")]
+                        Phase::Creating(grant) => {
+                            let input = detached(call);
+                            let worker_key = key.clone();
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(worker_key,
+                                    reclaim(collector, &input, grant).await)
+                            }));
+                        }
+                        #[cfg(target_os = "linux")]
+                        Phase::Staging => { calls.remove(&key); }
                         Phase::Admitting => call.phase = Phase::Admitting,
                         Phase::Inspecting => call.phase = Phase::Inspecting,
                         Phase::Reclaiming => {}
@@ -1660,6 +2023,53 @@ pub(super) async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn original_create_cancelled_call_keeps_slot_until_producer_cleanup() {
+        let mut slot = CreateSlot::default();
+        let call = slot.reserve().unwrap();
+        let reclaim = call.clone();
+        let (finish, cleanup) = tokio::sync::oneshot::channel::<()>();
+        let worker = tokio::spawn(retain_create_slot(Some(call.clone()), async move {
+            cleanup.await.unwrap();
+        }));
+        // Native reclamation and logical removal do not stop the isolated
+        // producer. A fresh writer must wait for its real cleanup completion.
+        drop(call);
+        drop(reclaim);
+        assert!(slot.reserve().is_none());
+        finish.send(()).unwrap();
+        worker.await.unwrap();
+        assert!(slot.reserve().is_some());
+    }
+
+    #[tokio::test]
+    async fn original_create_blocking_stage_keeps_slot_after_waiter_is_aborted() {
+        let mut slot = CreateSlot::default();
+        let call = slot.reserve().unwrap();
+        let stage_lease = call.clone();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (finish, cleanup) = std::sync::mpsc::channel();
+        let worker = tokio::task::spawn_blocking(move || {
+            let _lease = stage_lease;
+            started.send(()).unwrap();
+            cleanup.recv().unwrap();
+        });
+        let waiter = tokio::spawn(async move { worker.await.unwrap() });
+        ready.await.unwrap();
+        waiter.abort();
+        let _ = waiter.await;
+        drop(call);
+        assert!(slot.reserve().is_none());
+        finish.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while slot.reserve().is_none() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
     #[test]
     fn relay_failure_metadata_does_not_echo_untrusted_context_or_suffixes() {
         let error = anyhow::anyhow!("unknown or duplicate MCP response ID")

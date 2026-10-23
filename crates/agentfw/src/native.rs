@@ -641,9 +641,23 @@ impl NativeState {
                 workspace::validate(tool)?;
             }
             if let Some(profile) = &tool.mcp_result_profile {
+                // One explicitly installed ORIGINAL filesystem create is the
+                // only side-effecting selected MCP schema. Keep every other
+                // selected name/profile read-only, including the legacy
+                // filesystem and Git profiles. A generic writable registry
+                // must not opt into this exceptional authority.
+                let create_profile =
+                    profile == crate::mcp::server_profile::filesystem_create::FORMAT;
+                let original_write = create_profile && tool.name == "write_file";
+                let expected_action = if original_write {
+                    ActionClass::SideEffecting
+                } else {
+                    ActionClass::ReadOnly
+                };
                 anyhow::ensure!(
                     crate::mcp::server_profile::selected(Some(profile))
-                        && tool.action_class == ActionClass::ReadOnly
+                        && (!create_profile || registry.registry_id == "filesystem-create-only-v1")
+                        && tool.action_class == expected_action
                         && matches!(tool.result_provenance, ResultProvenance::Untrusted)
                         && tool.egress.is_empty()
                         && tool.resource_policy.is_none(),
@@ -2656,6 +2670,14 @@ fn inspect_bound(
             } else if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT)
             {
                 selected_mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
+            } else if tool.mcp_result_profile.as_deref()
+                == Some(crate::mcp::server_profile::filesystem_create::FORMAT)
+            {
+                // The pinned ORIGINAL filesystem server emits both plain
+                // content and independently inspected structuredContent even
+                // for write_file. Require both original channels, exactly as
+                // for its readonly tools; never loosen its result envelope.
+                selected_mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
             } else {
                 mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
             }
@@ -3839,6 +3861,142 @@ mod tests {
         ] {
             assert_eq!(
                 selected_mcp_host_text_profile(original, "value", false).err(),
+                Some("native_mcp_result_shape")
+            );
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn actual_sou83_installer_registry_loads_and_other_mutators_stay_denied() {
+        // Read the FULL registry produced by the actual opt-in installer
+        // transformation, not a synthetic write_file-only manifest. This
+        // catches install-time/runtime mismatches before any relay starts.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let program = r#"
+import importlib.util, json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+path = root / "scripts/install-sou83-filesystem-create-profile.py"
+spec = importlib.util.spec_from_file_location("sou83_exact_installer", path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+upstream = json.loads((module.readonly.ASSETS / "upstream-tools-list.json").read_text(encoding="utf-8"))
+profile = {"format": module.READONLY_FORMAT}
+reg = module.readonly.registry(upstream)
+policy = (module.readonly.ASSETS / "policy.yaml").read_text(encoding="utf-8")
+_, selected, _ = module.select_documents(profile, reg, policy)
+print(json.dumps(selected, separators=(",",":")))
+"#;
+        let output = std::process::Command::new("python3")
+            .arg("-I")
+            .arg("-c")
+            .arg(program)
+            .arg(&root)
+            .output()
+            .expect("offline Python3 original installer not available");
+        assert!(
+            output.status.success(),
+            "original installer failed offline: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let actual: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(actual["registry_id"], "filesystem-create-only-v1");
+        let bytes = serde_json::to_vec(&actual).unwrap();
+        let native = NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into())
+            .expect("full exact original opt-in installer registry rejected by NativeState");
+        let writable: Vec<_> = native
+            .registry
+            .tools
+            .iter()
+            .filter(|tool| tool.action_class != ActionClass::ReadOnly)
+            .collect();
+        assert_eq!(writable.len(), 4);
+        assert_eq!(
+            native
+                .registry
+                .tools
+                .iter()
+                .filter(|tool| tool.mcp_result_profile.as_deref()
+                    == Some(crate::mcp::server_profile::filesystem_create::FORMAT)
+                    && tool.action_class == ActionClass::SideEffecting)
+                .map(|tool| tool.name.as_str())
+                .collect::<Vec<_>>(),
+            ["write_file"]
+        );
+
+        let mut bad = actual.clone();
+        let tools = bad["tools"].as_array_mut().unwrap();
+        let write = tools
+            .iter()
+            .position(|tool| tool["name"] == "write_file")
+            .unwrap();
+        let check_bad = |edited: Value| {
+            let bytes = serde_json::to_vec(&edited).unwrap();
+            assert!(
+                NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).is_err()
+            );
+        };
+        bad["registry_id"] = json!("arbitrary-registry-id");
+        check_bad(bad);
+        let mutate = |index: usize, key: &str, value: Value| {
+            let mut copy = actual.clone();
+            copy["tools"][index][key] = value;
+            copy
+        };
+        let original = &actual["tools"].as_array().unwrap()[write];
+        check_bad(mutate(write, "action_class", json!("read_only")));
+        check_bad(mutate(
+            write,
+            "mcp_result_profile",
+            json!(crate::mcp::server_profile::FORMAT),
+        ));
+        check_bad(mutate(write, "result_provenance", json!("local_project")));
+        check_bad(mutate(write, "resource_policy", json!({})));
+        check_bad(mutate(
+            write,
+            "egress",
+            json!([
+                {"pointer":"/url","kind":"url_host","optional":true}
+            ]),
+        ));
+        let read = actual["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|tool| tool["name"] == "read_text_file")
+            .unwrap();
+        check_bad(mutate(read, "action_class", json!("side_effecting")));
+        let edit = actual["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|tool| tool["name"] == "edit_file")
+            .unwrap();
+        check_bad(mutate(
+            edit,
+            "mcp_result_profile",
+            json!(crate::mcp::server_profile::filesystem_create::FORMAT),
+        ));
+        assert_eq!(
+            original["mcp_result_profile"],
+            crate::mcp::server_profile::filesystem_create::FORMAT
+        );
+    }
+
+    #[test]
+    fn original_create_result_requires_both_pinned_upstream_text_channels() {
+        let original = r#"{"jsonrpc":"2.0","id":"sou83-1","result":{"content":[{"type":"text","text":"Successfully wrote"}],"structuredContent":{"content":"Successfully wrote"}}}"#;
+        assert_eq!(
+            selected_mcp_host_text(original, "value").unwrap(),
+            ["Successfully wrote", "Successfully wrote"]
+        );
+        for refused in [
+            r#"{"jsonrpc":"2.0","id":"sou83-1","result":{"content":[{"type":"text","text":"partial"}]}}"#,
+            r#"{"jsonrpc":"2.0","id":"sou83-1","result":{"content":[{"type":"text","text":"ok"}],"structuredContent":{"content":"ok"},"_meta":{"secret":"extra"}}}"#,
+            r#"{"jsonrpc":"2.0","id":"sou83-1","result":{"content":[{"type":"image","data":"secret"}],"structuredContent":{"content":"ok"}}}"#,
+        ] {
+            assert_eq!(
+                selected_mcp_host_text(refused, "value").err(),
                 Some("native_mcp_result_shape")
             );
         }

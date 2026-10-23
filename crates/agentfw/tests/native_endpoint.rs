@@ -3078,6 +3078,231 @@ fn https_get_result(
     body
 }
 
+fn sou83_original_write_fixture() -> (Fixture, Value) {
+    let pinned: Value = serde_json::from_str(include_str!(
+        "../../../profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json"
+    ))
+    .unwrap();
+    let write = pinned["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "write_file")
+        .unwrap();
+    let digest = agentfw::native::canonical_digest(&write["inputSchema"]);
+    let format = "sw-mcp/filesystem-create-only/1";
+    let registry = json!({
+        "contract_version": CONTRACT,
+        "registry_id": "filesystem-create-only-v1",
+        "tools": [{
+            "name":"write_file",
+            "schema_sha256":digest,
+            "action_class":"side_effecting",
+            "result_provenance":"untrusted",
+            "egress":[],
+            "mcp_result_profile":format
+        }]
+    });
+    let mut fixture = Fixture::new(ALLOW);
+    let bytes = serde_json::to_vec(&registry).unwrap();
+    fixture.registry_sha256 = sha(&bytes);
+    fixture.state = make_state(
+        fixture.dir.path(),
+        Config {
+            enforce: true,
+            ..Config::default()
+        },
+        ALLOW,
+        &bytes,
+        &fixture.registry_sha256,
+    );
+    (fixture, registry)
+}
+
+#[tokio::test]
+async fn sou83_original_write_policy_transition_spends_old_authority_and_recovers() {
+    for verdict in ["deny", "ask"] {
+        let (fixture, registry) = sou83_original_write_fixture();
+        let activate = |sequence, text: &str| {
+            fixture
+                .state
+                .firewall
+                .lock()
+                .unwrap()
+                .activate_managed_policy(
+                    AgentPolicySet::from_yaml(text).unwrap(),
+                    format!("sou83-revision-{sequence}"),
+                    sequence,
+                    sha(text.as_bytes()),
+                );
+        };
+        activate(1, ALLOW);
+        let mut start = fixture.event("sou83-policy", "session_start");
+        start["policy_transition"] = json!(agentfw::policy_transition::CONTRACT);
+        let (status, started) = fixture.post(&start).await;
+        assert_allow(status, &started);
+        let args = json!({"path":"/workspace/epoch.txt","content":"exact epoch bytes"});
+        let mut call = fixture.call("sou83-policy", "write_file", &args);
+        call["schema_sha256"] = registry["tools"][0]["schema_sha256"].clone();
+        call["mcp_host_call_id"] = json!("epoch-before");
+        let (status, old) = fixture.post(&call).await;
+        assert_allow(status, &old);
+        let original = |id: &str| {
+            json!({"jsonrpc":"2.0","id":id,"result":{
+            "content":[{"type":"text","text":"Successfully wrote"}],
+            "structuredContent":{"content":"Successfully wrote"}}})
+            .to_string()
+        };
+        let mut result = fixture.result(
+            "sou83-policy",
+            &old,
+            "write_file",
+            &args,
+            "value",
+            &original("epoch-before"),
+        );
+        result["delivery"] = json!("mcp_host");
+        let changed = format!("default: allow\nagent_policies:\n  - name: changed-create\n    when: {{min_action_class: side_effecting}}\n    action: {verdict}\n");
+        activate(2, &changed);
+        let (status, refused) = fixture.post(&result).await;
+        assert_eq!(status, StatusCode::OK, "{refused}");
+        assert_eq!(refused["release"], false, "{refused}");
+        assert_eq!(refused["verdict"], verdict);
+        assert!(refused["reason_codes"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("native_policy_transition_result_refused")));
+        let (_, spent) = fixture.post(&result).await;
+        assert_eq!(spent["error_code"], "native_call_unknown_or_spent");
+        call["mcp_host_call_id"] = json!("epoch-denied");
+        let (_, blocked) = fixture.post(&call).await;
+        assert_eq!(blocked["release"], false, "{blocked}");
+        activate(3, ALLOW);
+        // Restoring policy must not resurrect an already-spent grant.
+        let (_, still_spent) = fixture.post(&result).await;
+        assert_eq!(still_spent["error_code"], "native_call_unknown_or_spent");
+        call["mcp_host_call_id"] = json!("epoch-after");
+        let (status, fresh) = fixture.post(&call).await;
+        assert_allow(status, &fresh);
+        assert_ne!(fresh["call_id"], old["call_id"]);
+        let mut continued = fixture.result(
+            "sou83-policy",
+            &fresh,
+            "write_file",
+            &args,
+            "value",
+            &original("epoch-after"),
+        );
+        continued["delivery"] = json!("mcp_host");
+        let (status, released) = fixture.post(&continued).await;
+        assert_eq!(status, StatusCode::OK, "{released}");
+        assert_eq!(released["release"], true, "{released}");
+        assert!(
+            !fixture.dir.path().join("epoch.txt").exists(),
+            "native admission alone must never publish original-create bytes"
+        );
+    }
+}
+
+#[tokio::test]
+async fn sou83_original_write_reused_native_result_authority_is_spent_and_peer_continues() {
+    let (fixture, registry) = sou83_original_write_fixture();
+    fixture.start("sou83-spent-native").await;
+
+    let args = json!({"path":"/workspace/approved.txt","content":"known approved bytes"});
+    let mut call = fixture.call("sou83-spent-native", "write_file", &args);
+    call["schema_sha256"] = registry["tools"][0]["schema_sha256"].clone();
+    // Selected original MCP tools bind the exact host JSON-RPC ID at native call admission.
+    call["mcp_host_call_id"] = json!("create-one");
+    let (status, admitted) = fixture.post(&call).await;
+    assert_allow(status, &admitted);
+    let original = json!({"jsonrpc":"2.0","id":"create-one","result":{
+        "content":[{"type":"text","text":"Successfully wrote"}],
+        "structuredContent":{"content":"Successfully wrote"}
+    }})
+    .to_string();
+    let mut result = fixture.result(
+        "sou83-spent-native",
+        &admitted,
+        "write_file",
+        &args,
+        "value",
+        &original,
+    );
+    // The selected native result contract is closed: no expected_* fields.
+    result["delivery"] = json!("mcp_host");
+    let (status, allowed) = fixture.post(&result).await;
+    assert_eq!(status, StatusCode::OK, "{allowed}");
+    assert_eq!(allowed["release"], true, "{allowed}");
+    let (status, replay) = fixture.post(&result).await;
+    assert_failure(status, &replay, StatusCode::CONFLICT);
+    assert_eq!(replay["error_code"], "native_call_unknown_or_spent");
+
+    let mut tampered = result.clone();
+    tampered["content"] = json!(original.replace("Successfully wrote", "TAMPERED"));
+    let (status, denied) = fixture.post(&tampered).await;
+    assert_failure(status, &denied, StatusCode::CONFLICT);
+    assert_eq!(denied["error_code"], "native_call_unknown_or_spent");
+
+    let mut followup = fixture.call(
+        "sou83-spent-native",
+        "write_file",
+        &json!({"path":"/workspace/other.txt","content":"another authorized call"}),
+    );
+    followup["schema_sha256"] = registry["tools"][0]["schema_sha256"].clone();
+    followup["mcp_host_call_id"] = json!("create-two");
+    let (status, continued) = fixture.post(&followup).await;
+    assert_allow(status, &continued);
+    assert_ne!(continued["call_id"], admitted["call_id"]);
+
+    // A mismatch on an unused original-create receipt must fail and spend
+    // that receipt, not just fail because the first successful call was spent.
+    for mismatch in ["target", "content", "host"] {
+        let host_id = format!("create-binding-{mismatch}");
+        let mut request = call.clone();
+        request["mcp_host_call_id"] = json!(host_id);
+        let (status, grant) = fixture.post(&request).await;
+        assert_allow(status, &grant);
+        let original = json!({"jsonrpc":"2.0","id":host_id,"result":{
+            "content":[{"type":"text","text":"Successfully wrote"}],
+            "structuredContent":{"content":"Successfully wrote"}
+        }})
+        .to_string();
+        let mut valid = fixture.result(
+            "sou83-spent-native",
+            &grant,
+            "write_file",
+            &args,
+            "value",
+            &original,
+        );
+        valid["delivery"] = json!("mcp_host");
+        let mut altered = valid.clone();
+        match mismatch {
+            "target" => altered["args"]["path"] = json!("/workspace/substituted.txt"),
+            "content" => altered["args"]["content"] = json!("substituted bytes"),
+            _ => {
+                let mut decoded: Value = serde_json::from_str(&original).unwrap();
+                decoded["id"] = json!("foreign-host-call");
+                altered["content"] = json!(decoded.to_string());
+            }
+        }
+        let (status, denied) = fixture.post(&altered).await;
+        assert_failure(status, &denied, StatusCode::CONFLICT);
+        assert_eq!(
+            denied["error_code"],
+            if mismatch == "host" {
+                "native_host_call_mismatch"
+            } else {
+                "native_call_binding_mismatch"
+            }
+        );
+        let (status, replay) = fixture.post(&valid).await;
+        assert_failure(status, &replay, StatusCode::CONFLICT);
+        assert_eq!(replay["error_code"], "native_call_unknown_or_spent");
+    }
+}
+
 #[tokio::test]
 async fn https_get_v3_native_binds_original_host_session_and_exact_resources() {
     let (fixture, policy) = https_get_fixture(HTTPS_ALLOW);
