@@ -4,6 +4,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
 
 SPEC = importlib.util.spec_from_file_location('ask_comparison', Path(__file__).resolve().parents[1] / 'qualify-pilot-ask-comparison.py')
 C = importlib.util.module_from_spec(SPEC)
@@ -71,6 +72,13 @@ class ComparisonProof(unittest.TestCase):
             with self.subTest(proof=proof), self.assertRaises(ValueError): self.validate(row)
         self.report['latency']['filesystem']['p95_ms'] = 1
         with self.assertRaisesRegex(ValueError, 'reported_metrics_disagree'): self.validate()
+
+    def test_reports_reject_duplicate_keys_nonfinite_numbers_and_nonobjects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'report.json'
+            for text in ('{"status":"failed","status":"pass"}', '{"latency":NaN}', '[]'):
+                path.write_text(text)
+                with self.subTest(text=text), self.assertRaises(ValueError): C.json_file(path)
 
     def test_build_receipt_requires_exact_source_and_actual_binary_digest(self):
         receipt = dict(format='sw-native-pilot-agent-source-build/1', source=self.source,

@@ -114,7 +114,10 @@ The optional manual `mcp-real-filesystem.yml` input
 `native_preparation_only=true`, uses the existing native Ubuntu job. It does not
 add a matrix or change admission. The baseline predates verified-input reuse.
 Both exact-source binaries have source-build receipts and share pinned runtime
-assets on the same runner. The strict kernel read-lease witness must pass first.
+assets and one current measurement harness on the same runner. Harness source
+and each runtime implementation source are attributed separately. Hash-locked
+npm/Python/wheel inputs are prepared before the external-network-denied
+measurement; profile installation during measurement is explicitly offline. The strict kernel read-lease witness must pass first.
 
 `scripts/qualify-pilot-ask-comparison.py` runs twenty filesystem and twenty Git
 samples on each side and independently validates full denominators, effects,
@@ -124,7 +127,7 @@ either profile exits nonzero. Only bounded JSON reports and the kernel control
 summary are exported; raw provider/authority traces remain private.
 
 Local macOS checks include 1694 Rust tests passed, 13 ignored; strict workspace
-all-target clippy and formatting; 1172 Python tests run, 64 platform/optional
+all-target clippy and formatting; 1173 Python tests run, 64 platform/optional
 skips and no failures. These checks are not native performance evidence. Current
 native measurements and any failed attempts are retained separately in
 `evidence/sou-124/`. No paid provider, real secret, private dataset, release or

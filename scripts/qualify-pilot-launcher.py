@@ -200,8 +200,12 @@ def prepare_original_launch(args, private, report):
     (workspace / "benign_notes.txt").write_text(notes)
     (workspace / "untrusted_input.txt").write_text(injection)
     profiles = {kind: private / (kind + "-profile") for kind in ("filesystem", "git")}
-    BASE.INSTALL.install(profiles["filesystem"], workspace, selected["node"], selected["bwrap"], selected["npm"])
-    GIT.INSTALL.install(profiles["git"], workspace, selected["git"], sha(selected["git"]), selected["bwrap"], launcher)
+    offline = getattr(args, "offline_inputs", None)
+    fs_inputs = {} if offline is None else {"npm_cache": offline / "npm-cache", "offline": True}
+    git_inputs = {} if offline is None else {"python_archive": offline / "python.tar.gz",
+        "wheelhouse": offline / "wheelhouse", "allow_download": False}
+    BASE.INSTALL.install(profiles["filesystem"], workspace, selected["node"], selected["bwrap"], selected["npm"], **fs_inputs)
+    GIT.INSTALL.install(profiles["git"], workspace, selected["git"], sha(selected["git"]), selected["bwrap"], launcher, **git_inputs)
     tools = []
     report["profiles"] = {}
     for kind, path in profiles.items():

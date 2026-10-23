@@ -489,11 +489,14 @@ def qualify(args, private, report):
                     row["decision_to_result_ms"] = (pilot.result_monotonic["primary"] - decision_monotonic) / 1_000_000
                     # The exact primary collector is selected by successful
                     # execve and server ID; a peer's proof cannot satisfy this.
-                    lines, pending = LAUNCH.normalized_syscalls(pilot.trace.read_text())
-                    collectors = LAUNCH.collector_processes(lines, setup.binary)
-                    selected = [pid for pid, server in collectors.items() if server == kind]
-                    require(len(selected) == 1, "one_primary_collector_required")
-                    row["verified_inputs_resume"] = LATENCY.reuse_observation(lines, selected[0])
+                    if getattr(args, "require_verified_reuse", False):
+                        lines, pending = LAUNCH.normalized_syscalls(pilot.trace.read_text())
+                        collectors = LAUNCH.collector_processes(lines, setup.binary)
+                        selected = [pid for pid, server in collectors.items() if server == kind]
+                        require(len(selected) == 1, "one_primary_collector_required")
+                        proof = LATENCY.reuse_observation(lines, selected[0])
+                        row["verified_inputs_resume"] = proof
+                        require(proof["immutable_files"] + proof["leased_files"] > 0, "actual_reuse_missing")
                 primary_text = json.dumps(primary)
                 row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
                 if case == "expire":
@@ -556,6 +559,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--offline-inputs", type=Path,
+                        help="Prepared npm cache, pinned Python archive and hash-locked wheelhouse")
+    parser.add_argument("--require-verified-reuse", action="store_true",
+                        help="Require an actual selected-collector kernel reuse event for each approval")
     parser.add_argument("--approval-samples", type=approval_samples, default=0,
                         help="Separate performance run: 20..100 fresh approvals per profile; no call resubmission")
     args = parser.parse_args(); args.output.mkdir(parents=True,exist_ok=True)

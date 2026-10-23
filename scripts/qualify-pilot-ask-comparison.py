@@ -55,7 +55,17 @@ def json_file(path):
     info = path.lstat()
     require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_size <= 16 * 1024 * 1024,
             'bounded_regular_report_required')
-    return json.loads(path.read_text())
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            require(key not in value, 'duplicate_report_key')
+            value[key] = item
+        return value
+    def nonfinite(_):
+        raise ValueError('nonfinite_report_number')
+    value = json.loads(path.read_text(), object_pairs_hook=unique, parse_constant=nonfinite)
+    require(isinstance(value, dict), 'report_object_required')
+    return value
 
 
 def validate_build(receipt, identity, selected):
@@ -115,9 +125,13 @@ def run(args, report):
     shared_hashes = {k: sha(v) for k, v in common.items()}
     before = {side: source(root, getattr(args, side + '_commit')) for side, root in roots.items()}
     require(before['baseline']['commit'] != before['candidate']['commit'], 'distinct_before_after_required')
-    report.update(source_before=before, shared_sha256=shared_hashes,
+    offline = args.offline_inputs.resolve(strict=True)
+    require(offline.is_dir() and all((offline / p).exists() for p in ('npm-cache', 'wheelhouse', 'python.tar.gz')), 'offline_preparation_required')
+    report.update(source_before=before, harness_source=before['candidate'], shared_sha256=shared_hashes,
                   environment={'system': platform.system(), 'release': platform.release(),
-                               'machine': platform.machine()}, samples_per_profile=args.samples, sides={})
+                               'machine': platform.machine()}, samples_per_profile=args.samples,
+                  sides={side: {'status': 'incomplete', 'metrics': METRICS.summarize([], args.samples)}
+                         for side in ('baseline', 'candidate')})
     for side in ('baseline', 'candidate'):
         root = roots[side]
         private = output / (side + '-private')
@@ -128,8 +142,10 @@ def run(args, report):
                           for name in ('agentfw', 'git_launcher')}
         selected = {k: sha(v) for k, v in selected_paths.items()} | shared_hashes
         validate_build(json_file(getattr(args, side + '_receipt')), before[side], selected)
-        command = [sys.executable, '-B', str(root / 'scripts/qualify-pilot-ask.py'),
-                   '--approval-samples', str(args.samples), '--output', str(result_dir)]
+        command = [sys.executable, '-B', str(ROOT / 'scripts/qualify-pilot-ask.py'),
+                   '--approval-samples', str(args.samples), '--offline-inputs', str(offline), '--output', str(result_dir)]
+        if side == 'candidate':
+            command += ['--require-verified-reuse']
         for name, path in (selected_paths | common).items():
             command += ['--' + name.replace('_', '-'), str(path)]
         env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'LANG': 'C.UTF-8',
@@ -148,8 +164,11 @@ def run(args, report):
                 raise
             exit_code = 1  # Still requires a complete, honest report below.
         raw = json_file(result_dir / 'qualification.json')
-        report['sides'][side] = {'exit_code': exit_code, 'qualification': raw}
-        metrics = validate_report(raw, before[side], selected, args.samples, side == 'candidate')
+        report['sides'][side].update(exit_code=exit_code, qualification=raw,
+                                   runtime_implementation_source=before[side], status=raw.get('status'))
+        if isinstance(raw.get('cases', []), list):
+            report['sides'][side]['metrics'] = METRICS.summarize(raw.get('cases', []), args.samples)
+        metrics = validate_report(raw, before['candidate'], selected, args.samples, side == 'candidate')
         require(exit_code == (0 if raw['status'] == 'pass' else 1), 'qualification_exit_mismatch')
         report['sides'][side]['metrics'] = metrics
         require(source(root, before[side]['commit']) == before[side], 'source_changed_during_measurement')
@@ -166,8 +185,8 @@ def main():
         for name in ('root', 'agentfw', 'git_launcher', 'receipt'):
             parser.add_argument('--' + side + '-' + name.replace('_', '-'), type=Path, required=True)
         parser.add_argument('--' + side + '-commit', required=True)
-    for name in (*SHARED, 'output'):
-        parser.add_argument('--' + name, type=Path, required=True)
+    for name in (*SHARED, 'output', 'offline_inputs'):
+        parser.add_argument('--' + name.replace('_', '-'), type=Path, required=True)
     parser.add_argument('--samples', type=int, default=20, choices=range(20, 101))
     args = parser.parse_args()
     report = {'format': 'sw-pilot-ask-comparison/1', 'status': 'incomplete', 'paid_api_calls': 0,
@@ -178,6 +197,18 @@ def main():
         report.update(status='failed', error_type=type(error).__name__)
         if isinstance(error, ValueError):
             report['error'] = str(error)[:160]
+        elif isinstance(error, NATIVE.Failure):
+            report['error'] = error.reason[:160]
+    if 'source_before' in report:
+        closing = {}
+        for side in ('baseline', 'candidate'):
+            try:
+                closing[side] = source(getattr(args, side + '_root'), getattr(args, side + '_commit'))
+            except (ValueError, OSError, subprocess.SubprocessError) as error:
+                closing[side] = {'capture': 'failed', 'error_type': type(error).__name__}
+        report['source_after'] = closing
+        if closing != report['source_before']:
+            report.update(status='failed', error='comparison_source_changed')
     if report.pop('_output_ready', False):
         with (args.output / 'comparison.json').open('x') as stream:
             json.dump(report, stream, indent=2, allow_nan=False)

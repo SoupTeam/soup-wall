@@ -687,6 +687,32 @@ jobs:
           assert rows['first-failure']['status'] == 'failed'
           assert rows['first']['selection'] == rows['reused']['selection'] == rows['recovered']['selection']
           PY
+      - name: Prepare hash-locked offline inputs before Ask measurement
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import json, os, shutil, subprocess
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          first = json.loads((temp / 'sou111-assets/first.json').read_text())
+          generation = Path(first['selection']).resolve(strict=True).parent
+          assert generation.is_relative_to(temp / 'sou111-preparation/generations')
+          inputs = temp / 'sou124-offline-inputs'
+          inputs.mkdir(mode=0o700)
+          shutil.copytree(generation / 'filesystem-profile/npm-cache', inputs / 'npm-cache')
+          shutil.copyfile(generation / 'git-profile/python.tar.gz', inputs / 'python.tar.gz')
+          wheels = inputs / 'wheelhouse'
+          wheels.mkdir(mode=0o700)
+          python = generation / 'git-profile/package/python/bin/python3.11'
+          subprocess.run([str(python), '-I', '-m', 'pip', '--isolated', 'download',
+              '--require-hashes', '--only-binary=:all:', '--no-cache-dir',
+              '--disable-pip-version-check', '--index-url', 'https://pypi.org/simple',
+              '--dest', str(wheels), '-r', 'profiles/mcp/git-readonly-v1/requirements.lock'],
+              env={'PATH': '/usr/bin:/bin', 'HOME': str(inputs), 'LANG': 'C.UTF-8'},
+              check=True, timeout=300)
+          PY
       - name: Measure exact-source native Ask before and after with real kernel reuse
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
         shell: bash
@@ -728,7 +754,8 @@ jobs:
               '--baseline-commit', os.environ['ASK_BASELINE_SHA'],
               '--candidate-root', str(Path.cwd()),
               '--candidate-commit', subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
-              '--output', str(temp / 'sou124-ask-comparison')]
+              '--output', str(temp / 'sou124-ask-comparison'),
+              '--offline-inputs', str(temp / 'sou124-offline-inputs')]
           for side, record in [('baseline', baseline), ('candidate', first)]:
               for role in ['agentfw', 'git_launcher', 'receipt']:
                   command += ['--' + side + '-' + role.replace('_', '-'), record[role]]
