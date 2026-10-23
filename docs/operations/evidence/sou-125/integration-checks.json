@@ -1,0 +1,23 @@
+{
+  "accepted_main": "acf59afb35df0bfd113bef5147dd48146323cd1c",
+  "changes": "Integrate accepted receipt-aware asset cleanup; preserve its validation deadline and add stop/source-closing controls. No Rust implementation changed by this integration.",
+  "checks": {
+    "ci_components_check": "passed",
+    "diff_check": "passed",
+    "python": {
+      "failed": 0,
+      "log_sha256": "88487b5c775aee8c5fc91f60abc961f48ea3f3af3093e52804c83b5f8af2bf6c",
+      "passed": 1109,
+      "run": 1188,
+      "skipped": 79
+    }
+  },
+  "files_sha256": {
+    ".github/workflows/ci-components.yml": "ab520389effb03300bf2a0f9d1c624e5fc70b1b7852fe1cca89c15fe759f089e",
+    ".github/workflows/mcp-real-filesystem.yml": "a85aaea62218b96f3382b1ca15e0515cf6c5030da08a5013369ee9732a51217a",
+    "scripts/qualify-prepared-pilot-run.py": "f9cf26b53d1f972bf9b022be94ca313191fcd241c5873480820cd00d3669d643"
+  },
+  "format": "sw-sou125-integration-checks/1",
+  "implementation_before_merge": "5cea041",
+  "native_qualification": "Fresh exact-source qualification required; prior successes and failed attempts retain their original attribution."
+}
