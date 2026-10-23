@@ -1,0 +1,305 @@
+{
+  "metadata": {
+    "timestamp": "2026-10-24T21:20:07.350167Z",
+    "receipt_source": "./profiles/mcp/git-readonly-v1/upstream-identity.json",
+    "commit": "e17d273ceb42a89a04acaf9d8f55e12c597d2a13"
+  },
+  "receipt_verification": {
+    "files": {
+      "upstream-initialize.json": {
+        "status": "verified",
+        "sha256": "d3cf3433f2e2fe8bef9389e8aa93f9bb3f7f00082f7b14a7c915d06aabae042d"
+      },
+      "upstream-tools-list.json": {
+        "status": "verified",
+        "sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b"
+      },
+      "requirements.lock": {
+        "status": "verified",
+        "sha256": "ff350c609df5a919e93b9c70b8430a2485478d53500373d71b70cfb919281085"
+      }
+    },
+    "status": "success"
+  },
+  "advisories": {
+    "rust": {
+      "database": {
+        "advisory-count": 1352,
+        "last-commit": "21d909e4c8bd4e14c7aea58bf980c881a0053ab1",
+        "last-updated": "2026-10-24T10:30:13+02:00"
+      },
+      "lockfile": {
+        "dependency-count": 443
+      },
+      "settings": {
+        "target_arch": [],
+        "target_os": [],
+        "severity": null,
+        "ignore": [],
+        "informational_warnings": [
+          "unmaintained",
+          "unsound",
+          "notice"
+        ]
+      },
+      "vulnerabilities": {
+        "found": false,
+        "count": 0,
+        "list": []
+      },
+      "warnings": {
+        "unmaintained": [
+          {
+            "kind": "unmaintained",
+            "package": {
+              "name": "paste",
+              "version": "1.0.15",
+              "source": "registry+https://github.com/rust-lang/crates.io-index",
+              "checksum": "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a",
+              "replace": null
+            },
+            "advisory": {
+              "id": "RUSTSEC-2024-0436",
+              "package": "paste",
+              "title": "paste - no longer maintained",
+              "description": "The creator of the crate `paste` has stated in the [`README.md`](https://github.com/dtolnay/paste/blob/master/README.md) \nthat this project is not longer maintained as well as archived the repository\n\n## Possible Alternative(s)\n\n- [`pastey`]: a fork of paste and is aimed to be a drop-in replacement with additional features for paste crate\n- [`with_builtin_macros`]: crate providing a [superset of `paste`'s functionality including general `macro_rules!` eager expansions](https://docs.rs/with_builtin_macros/0.1.0/with_builtin_macros/macro.with_eager_expansions.html)  and `concat!`/`concat_idents!` macros\n\n[`pastey`]: https://crates.io/crates/pastey\n[`with_builtin_macros`]: https://crates.io/crates/with_builtin_macros",
+              "date": "2024-10-07",
+              "aliases": [],
+              "related": [],
+              "collection": "crates",
+              "categories": [],
+              "keywords": [],
+              "cvss": null,
+              "informational": "unmaintained",
+              "references": [],
+              "source": null,
+              "url": "https://github.com/dtolnay/paste",
+              "withdrawn": null,
+              "license": "CC0-1.0",
+              "expect-deleted": false
+            },
+            "affected": null,
+            "versions": {
+              "patched": [],
+              "unaffected": []
+            }
+          },
+          {
+            "kind": "unmaintained",
+            "package": {
+              "name": "unsafe-libyaml",
+              "version": "0.2.11",
+              "source": "registry+https://github.com/rust-lang/crates.io-index",
+              "checksum": "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861",
+              "replace": null
+            },
+            "advisory": {
+              "id": "RUSTSEC-2024-0449",
+              "package": "unsafe-libyaml",
+              "title": "unsafe-libyaml is unmaintained",
+              "description": "The [repository](https://github.com/dtolnay/unsafe-libyaml) was archived by\nits owner on 2024-03-25 and is read-only. The last release is 0.2.11\n(March 2024).\n\n`unsafe-libyaml` is a machine translation of libyaml's C code into unsafe\nRust (c2rust). Bugs found in it will not be fixed upstream. It is used by\n`serde_yaml` (itself deprecated) and by forks such as `serde_yaml_ng`.\n\n## Alternatives\n\nConsider a YAML parser written in safe Rust, for example:\n\n- [saphyr](https://crates.io/crates/saphyr) ([serde-saphyr](https://crates.io/crates/serde-saphyr) for serde users)\n- [noyalib](https://crates.io/crates/noyalib)",
+              "date": "2024-03-25",
+              "aliases": [],
+              "related": [],
+              "collection": "crates",
+              "categories": [],
+              "keywords": [],
+              "cvss": null,
+              "informational": "unmaintained",
+              "references": [],
+              "source": null,
+              "url": "https://github.com/dtolnay/unsafe-libyaml",
+              "withdrawn": null,
+              "license": "CC0-1.0",
+              "expect-deleted": false
+            },
+            "affected": null,
+            "versions": {
+              "patched": [],
+              "unaffected": []
+            }
+          }
+        ]
+      }
+    },
+    "osv_universal": {
+      "results": [
+        {
+          "source": {
+            "path": "/mnt/c/Users/tamik/soup-wall/Cargo.lock",
+            "type": "lockfile"
+          },
+          "packages": [
+            {
+              "package": {
+                "name": "paste",
+                "version": "1.0.15",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/paste@1.0.15"
+              },
+              "groups": [
+                {
+                  "ids": [
+                    "RUSTSEC-2024-0436"
+                  ],
+                  "aliases": [
+                    "RUSTSEC-2024-0436"
+                  ],
+                  "max_severity": ""
+                }
+              ],
+              "vulnerabilities": [
+                {
+                  "affected": [
+                    {
+                      "database_specific": {
+                        "categories": [],
+                        "cvss": null,
+                        "informational": "unmaintained",
+                        "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2024-0436.json"
+                      },
+                      "ecosystem_specific": {
+                        "affected_functions": null,
+                        "affects": {
+                          "arch": [],
+                          "functions": [],
+                          "os": []
+                        }
+                      },
+                      "package": {
+                        "ecosystem": "crates.io",
+                        "name": "paste",
+                        "purl": "pkg:cargo/paste"
+                      },
+                      "ranges": [
+                        {
+                          "events": [
+                            {
+                              "introduced": "0.0.0-0"
+                            }
+                          ],
+                          "type": "SEMVER"
+                        }
+                      ]
+                    }
+                  ],
+                  "database_specific": {
+                    "license": "CC0-1.0"
+                  },
+                  "details": "The creator of the crate `paste` has stated in the [`README.md`](https://github.com/dtolnay/paste/blob/master/README.md) \nthat this project is not longer maintained as well as archived the repository\n\n## Possible Alternative(s)\n\n- [`pastey`]: a fork of paste and is aimed to be a drop-in replacement with additional features for paste crate\n- [`with_builtin_macros`]: crate providing a [superset of `paste`'s functionality including general `macro_rules!` eager expansions](https://docs.rs/with_builtin_macros/0.1.0/with_builtin_macros/macro.with_eager_expansions.html)  and `concat!`/`concat_idents!` macros\n\n[`pastey`]: https://crates.io/crates/pastey\n[`with_builtin_macros`]: https://crates.io/crates/with_builtin_macros",
+                  "id": "RUSTSEC-2024-0436",
+                  "modified": "2026-01-27T22:03:15.694766Z",
+                  "published": "2024-10-07T12:00:00Z",
+                  "references": [
+                    {
+                      "type": "PACKAGE",
+                      "url": "https://crates.io/crates/paste"
+                    },
+                    {
+                      "type": "ADVISORY",
+                      "url": "https://rustsec.org/advisories/RUSTSEC-2024-0436.html"
+                    },
+                    {
+                      "type": "WEB",
+                      "url": "https://github.com/dtolnay/paste"
+                    }
+                  ],
+                  "schema_version": "1.7.3",
+                  "summary": "paste - no longer maintained"
+                }
+              ]
+            },
+            {
+              "package": {
+                "name": "unsafe-libyaml",
+                "version": "0.2.11",
+                "ecosystem": "crates.io",
+                "purl": "pkg:cargo/unsafe-libyaml@0.2.11"
+              },
+              "groups": [
+                {
+                  "ids": [
+                    "RUSTSEC-2024-0449"
+                  ],
+                  "aliases": [
+                    "RUSTSEC-2024-0449"
+                  ],
+                  "max_severity": ""
+                }
+              ],
+              "vulnerabilities": [
+                {
+                  "affected": [
+                    {
+                      "database_specific": {
+                        "categories": [],
+                        "cvss": null,
+                        "informational": "unmaintained",
+                        "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2024-0449.json"
+                      },
+                      "ecosystem_specific": {
+                        "affected_functions": null,
+                        "affects": {
+                          "arch": [],
+                          "functions": [],
+                          "os": []
+                        }
+                      },
+                      "package": {
+                        "ecosystem": "crates.io",
+                        "name": "unsafe-libyaml",
+                        "purl": "pkg:cargo/unsafe-libyaml"
+                      },
+                      "ranges": [
+                        {
+                          "events": [
+                            {
+                              "introduced": "0.0.0-0"
+                            }
+                          ],
+                          "type": "SEMVER"
+                        }
+                      ]
+                    }
+                  ],
+                  "database_specific": {
+                    "license": "CC0-1.0"
+                  },
+                  "details": "The [repository](https://github.com/dtolnay/unsafe-libyaml) was archived by\nits owner on 2024-03-25 and is read-only. The last release is 0.2.11\n(March 2024).\n\n`unsafe-libyaml` is a machine translation of libyaml's C code into unsafe\nRust (c2rust). Bugs found in it will not be fixed upstream. It is used by\n`serde_yaml` (itself deprecated) and by forks such as `serde_yaml_ng`.\n\n## Alternatives\n\nConsider a YAML parser written in safe Rust, for example:\n\n- [saphyr](https://crates.io/crates/saphyr) ([serde-saphyr](https://crates.io/crates/serde-saphyr) for serde users)\n- [noyalib](https://crates.io/crates/noyalib)",
+                  "id": "RUSTSEC-2024-0449",
+                  "modified": "2026-10-12T11:45:02.518189315Z",
+                  "published": "2024-03-25T12:00:00Z",
+                  "references": [
+                    {
+                      "type": "PACKAGE",
+                      "url": "https://crates.io/crates/unsafe-libyaml"
+                    },
+                    {
+                      "type": "ADVISORY",
+                      "url": "https://rustsec.org/advisories/RUSTSEC-2024-0449.html"
+                    },
+                    {
+                      "type": "WEB",
+                      "url": "https://github.com/dtolnay/unsafe-libyaml"
+                    }
+                  ],
+                  "schema_version": "1.9.0",
+                  "summary": "unsafe-libyaml is unmaintained"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "experimental_config": {
+        "licenses": {
+          "summary": false,
+          "allowlist": null
+        }
+      }
+    }
+  },
+  "licenses": {
+    "rust_status": "ok"
+  }
+}
