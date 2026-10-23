@@ -1291,7 +1291,15 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .context("verify daemon active policy against selected policy")?;
 
     let grants = mint_grants(&config, now_ms, &instance_id)?;
-    let pilot_run = if config.ask_wait_seconds > 0 && !config.dry_run {
+    let pilot_run = if !config.dry_run
+        && cfg!(target_os = "linux")
+        && !config.allow_command_fixtures
+        && config.mock_daemon_token.is_none()
+        && config.mock_instance_id.is_none()
+        && config.classifier_path.is_some()
+        && config.policy_path.is_some()
+        && crate::pilot_approval::liveness_configured(&config.home_path)?
+    {
         Some(crate::pilot_approval::RunGuard::create(
             &config,
             &instance_id,
@@ -1414,11 +1422,15 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .env("CLAUDE_CODE_MAX_RETRIES", "0");
 
     if let Some(run) = &pilot_run {
-        eprintln!("Pilot Ask configured; run: {}", run.id());
-        eprintln!(
-            "Second terminal (same daemon home): agentfw pilot-approval --run {} list",
-            run.id()
-        );
+        if config.ask_wait_seconds > 0 {
+            eprintln!("Pilot Ask configured; run: {}", run.id());
+            eprintln!(
+                "Second terminal (same daemon home): agentfw pilot-approval --run {} list",
+                run.id()
+            );
+        }
+        eprintln!("Pilot owned run: {}; stop from another terminal: agentfw pilot-approval --home {} --run {} stop",
+            run.id(), config.home_path.display(), run.id());
     }
     // Install interception before creating the separate host process group.
     // A TERM during runtime/signal initialization must never strand a live host.
@@ -1444,6 +1456,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let initial_instance = instance_id.clone();
     let current_token = daemon_token.clone();
 
+    let mut host_stopped = false;
     let exit_status = rt.block_on(async {
         let deadline = tokio::time::Instant::now() + timeout;
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
@@ -1454,7 +1467,9 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             match owned_host_exited(&mut child) {
                 Ok(true) => {
                     terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return child.wait().context("reap owned host after group cleanup");
+                    let result = child.wait().context("reap owned host after group cleanup");
+                    host_stopped = result.is_ok();
+                    return result;
                 }
                 Ok(false) => {}
                 Err(error) => {
@@ -1470,7 +1485,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     {
                         let _ = child.kill();
                     }
-                    let _ = child.wait();
+                    host_stopped = child.wait().is_ok();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
                 _ = async {
@@ -1484,7 +1499,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     {
                         let _ = child.kill();
                     }
-                    let _ = child.wait();
+                    host_stopped = child.wait().is_ok();
                     bail!("pilot host interrupted by SIGINT");
                 }
                 _ = async {
@@ -1498,7 +1513,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                     {
                         let _ = child.kill();
                     }
-                    let _ = child.wait();
+                    host_stopped = child.wait().is_ok();
                     bail!("pilot host terminated by SIGTERM");
                 }
                 _ = interval.tick() => {
@@ -1511,7 +1526,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                                 {
                                     let _ = child.kill();
                                 }
-                                let _ = child.wait();
+                                host_stopped = child.wait().is_ok();
                                 bail!("daemon instance lost or restarted during pilot session");
                             }
                         }
@@ -1520,7 +1535,10 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             }
         }
     });
-    let cleanup = pilot_run.as_ref().map(|run| run.finish()).transpose();
+    let cleanup = pilot_run
+        .as_ref()
+        .map(|run| run.finish(host_stopped))
+        .transpose();
     let exit_status = exit_status?;
     cleanup?;
 

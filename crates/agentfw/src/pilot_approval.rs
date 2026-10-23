@@ -35,6 +35,8 @@ pub struct OperatorArgs {
 
 #[derive(Subcommand)]
 pub enum OperatorAction {
+    /// Revoke both collectors, then stop this exact owned launcher and host group.
+    Stop,
     /// Digests and expiry only. Never displays raw arguments.
     List,
     /// Explicitly inspect the exact arguments before deciding.
@@ -77,6 +79,7 @@ struct Run {
     launcher_start: u64,
     manifest_fd: i32,
     expires_at_ms: u64,
+    authority_expires_at_ms: u64,
     authorities: BTreeMap<String, String>,
     files: Vec<FileIdentity>,
 }
@@ -413,6 +416,14 @@ fn snapshot(home: &Path) -> Result<Value> {
         })
 }
 
+/// Prepared pilots already opt in to bounded liveness; leave legacy direct
+/// non-Ask launchers without that lifecycle on their existing path.
+pub(crate) fn liveness_configured(home: &Path) -> Result<bool> {
+    Ok(daemon_config(home)?
+        .native
+        .is_some_and(|native| native.liveness.is_some()))
+}
+
 pub fn preflight(config: &ValidatedConfig) -> Result<()> {
     ensure!(cfg!(target_os = "linux") && !config.allow_command_fixtures
         && config.mock_daemon_token.is_none() && config.mock_instance_id.is_none(),
@@ -546,6 +557,11 @@ impl RunGuard {
             launcher_start: process_start(std::process::id())?,
             manifest_fd: descriptor(&manifest),
             expires_at_ms: approval::now_ms().saturating_add(config.timeout.as_millis() as u64),
+            authority_expires_at_ms: grants
+                .values()
+                .map(|g| g.expires_at_ms)
+                .max()
+                .context("missing authority expiry")?,
             authorities: grants
                 .iter()
                 .map(|(server, grant)| {
@@ -586,7 +602,7 @@ impl RunGuard {
         &self.run.run_id
     }
     /// Never broad-cancel a host/session label. Only retire exact observed bindings.
-    pub fn finish(&self) -> Result<()> {
+    pub fn finish(&self, host_stopped: bool) -> Result<()> {
         let live = snapshot(&self.run.home)?;
         ensure!(
             live["instance_id"] == self.run.instance_id,
@@ -626,7 +642,21 @@ impl RunGuard {
                 .iter()
                 .any(|r| ids.contains(&r["pending_id"]));
             if !owned && !pending {
-                fs::remove_dir_all(&self.dir).context("owned run metadata cleanup failed")?;
+                if has_stop(&self.dir)? {
+                    ensure!(
+                        host_stopped,
+                        "pilot stop incomplete: host cleanup is unconfirmed"
+                    );
+                    let bytes = read_file(&self.dir.join("run.json"), true)?;
+                    let marker = read_stop(&self.dir, &self.run, &bytes)?;
+                    if marker.status == "requested" {
+                        revoke(&self.run)?;
+                        write_stop(&self.dir, &self.run, &bytes, "revoked")?;
+                    }
+                    write_stop(&self.dir, &self.run, &bytes, "stopped")?;
+                } else {
+                    fs::remove_dir_all(&self.dir).context("owned run metadata cleanup failed")?;
+                }
                 return Ok(());
             }
             ensure!(
@@ -640,7 +670,11 @@ impl RunGuard {
 
 impl Drop for RunGuard {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.dir);
+        // Preserve interrupted stops for truthful retry/recovery. Never erase the
+        // only evidence that revocation or process cleanup remains incomplete.
+        if matches!(has_stop(&self.dir), Ok(false)) {
+            let _ = fs::remove_dir_all(&self.dir);
+        }
     }
 }
 
@@ -733,6 +767,257 @@ fn escaped(value: &Value) -> Result<String> {
     Ok(out)
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StopMarker {
+    contract: String,
+    run_sha256: String,
+    status: String,
+    signature: String,
+}
+
+fn has_stop(dir: &Path) -> Result<bool> {
+    match fs::symlink_metadata(dir.join("stop.json")) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn stop_mac(marker: &StopMarker, key: &str) -> Result<Vec<u8>> {
+    use hmac::{Hmac, Mac};
+    let mut mac = Hmac::<Sha256>::new_from_slice(key.as_bytes())?;
+    mac.update(b"agentfw/pilot-stop-receipt/v1\0");
+    mac.update(&serde_json::to_vec(&(
+        &marker.contract,
+        &marker.run_sha256,
+        &marker.status,
+    ))?);
+    Ok(mac.finalize().into_bytes().to_vec())
+}
+
+fn read_stop(dir: &Path, run: &Run, bytes: &[u8]) -> Result<StopMarker> {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use subtle::ConstantTimeEq;
+    let marker: StopMarker = serde_json::from_slice(&read_file(&dir.join("stop.json"), true)?)?;
+    ensure!(
+        marker.contract == "sw-pilot-stop/1"
+            && marker.run_sha256 == digest(bytes)
+            && matches!(marker.status.as_str(), "requested" | "revoked" | "stopped"),
+        "invalid pilot stop receipt"
+    );
+    let signature = URL_SAFE_NO_PAD.decode(&marker.signature)?;
+    ensure!(
+        bool::from(signature.ct_eq(&stop_mac(&marker, &token(&run.home, "native-token")?)?)),
+        "pilot stop receipt authentication failed"
+    );
+    Ok(marker)
+}
+
+fn write_stop(dir: &Path, run: &Run, bytes: &[u8], status: &str) -> Result<()> {
+    let _reservation = lock_dir(dir)?;
+    if has_stop(dir)? {
+        let current = read_stop(dir, run, bytes)?;
+        let rank = |value: &str| match value {
+            "requested" => 0,
+            "revoked" => 1,
+            "stopped" => 2,
+            _ => 3,
+        };
+        if rank(&current.status) >= rank(status) {
+            return Ok(());
+        }
+    }
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    let mut marker = StopMarker {
+        contract: "sw-pilot-stop/1".into(),
+        run_sha256: digest(bytes),
+        status: status.into(),
+        signature: String::new(),
+    };
+    marker.signature =
+        URL_SAFE_NO_PAD.encode(stop_mac(&marker, &token(&run.home, "native-token")?)?);
+    let temporary = dir.join(format!(".stop-{:032x}", rand::random::<u128>()));
+    write_new(&temporary, &marker)?;
+    fs::rename(&temporary, dir.join("stop.json"))?;
+    fs::File::open(dir)?.sync_all()?;
+    Ok(())
+}
+
+fn stop_config(run: &Run) -> Result<Config> {
+    let identity = run
+        .files
+        .first()
+        .context("pilot stop lacks daemon configuration identity")?;
+    ensure!(
+        identity.path == run.home.join("config.yaml"),
+        "pilot stop configuration ownership mismatch"
+    );
+    let bytes = read_file(&identity.path, false)?;
+    ensure!(
+        digest(&bytes) == identity.sha256,
+        "pilot stop incomplete: daemon configuration changed"
+    );
+    // Parse the same verified bytes; never reopen a mutable endpoint selection.
+    Config::from_yaml(std::str::from_utf8(&bytes)?)
+}
+
+fn revoke(run: &Run) -> Result<()> {
+    let cfg = stop_config(run)?;
+    let address: std::net::SocketAddr = cfg.socket_address().parse()?;
+    ensure!(
+        address.ip().is_loopback(),
+        "pilot stop requires a loopback daemon"
+    );
+    let request = crate::native::pilot_stop::Request {
+        contract_version: crate::native::pilot_stop::CONTRACT.into(),
+        instance_id: run.instance_id.clone(),
+        registry_sha256: run.registry_sha256.clone(),
+        host_session: run.host_session.clone(),
+        authorities: run.authorities.clone(),
+        expires_at_ms: run.authority_expires_at_ms,
+    };
+    let key = token(&run.home, "native-token")?;
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(async {
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(2))
+                .build()?;
+            let mut response = client
+                .post(cfg.endpoint_url(crate::native::pilot_stop::ENDPOINT))
+                .bearer_auth(key)
+                .json(&request)
+                .send()
+                .await?;
+            ensure!(
+                response.status().is_success(),
+                "pilot stop incomplete: daemon did not confirm revocation"
+            );
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await? {
+                ensure!(
+                    bytes.len().saturating_add(chunk.len()) <= 4096,
+                    "pilot stop response exceeds limit"
+                );
+                bytes.extend_from_slice(&chunk);
+            }
+            let value: Value = serde_json::from_slice(&bytes)?;
+            ensure!(
+                value["contract_version"] == crate::native::pilot_stop::CONTRACT
+                    && value["instance_id"] == run.instance_id
+                    && value["host_session"] == run.host_session
+                    && value["status"] == "revoked",
+                "pilot stop revocation identity mismatch"
+            );
+            Ok(())
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn launcher_handle(run: &Run) -> Result<fs::File> {
+    use std::os::fd::FromRawFd;
+    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, run.launcher_pid, 0) as i32 };
+    ensure!(fd >= 0, "pilot stop cannot pin launcher identity");
+    let file = unsafe { fs::File::from_raw_fd(fd) };
+    ensure!(
+        process_start(run.launcher_pid)? == run.launcher_start,
+        "pilot stop launcher identity changed"
+    );
+    Ok(file)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn launcher_handle(_run: &Run) -> Result<fs::File> {
+    anyhow::bail!("pilot stop requires qualified Linux")
+}
+
+#[cfg(target_os = "linux")]
+fn signal_launcher(handle: &fs::File) -> Result<()> {
+    use std::os::fd::AsRawFd;
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            handle.as_raw_fd(),
+            libc::SIGTERM,
+            std::ptr::null::<libc::siginfo_t>(),
+            0,
+        )
+    };
+    ensure!(
+        result == 0,
+        "pilot stop incomplete: pinned launcher could not be signalled"
+    );
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn signal_launcher(_handle: &fs::File) -> Result<()> {
+    anyhow::bail!("pilot stop requires qualified Linux")
+}
+
+fn stop(dir: &Path, run: &Run, bytes: &[u8], expected: &str, home: &Path) -> Result<()> {
+    ensure!(
+        run.contract == "sw-pilot-run/1"
+            && run.run_id == expected
+            && run.home == home
+            && run.authorities.len() == 2,
+        "invalid pilot stop ownership"
+    );
+    let existing = if has_stop(dir)? {
+        Some(read_stop(dir, run, bytes)?)
+    } else {
+        None
+    };
+    if existing
+        .as_ref()
+        .is_some_and(|marker| marker.status == "stopped")
+    {
+        println!(
+            "{}",
+            json!({"run":run.run_id,"status":"already_stopped","running_effects_rolled_back":false})
+        );
+        return Ok(());
+    }
+    // A stale/forged durable record is never sufficient to signal a process.
+    // Pin the live owner before revocation; pidfd prevents PID reuse during the request.
+    let handle = launcher_handle(run).with_context(|| {
+        if existing.is_some() {
+            "pilot stop incomplete: recorded request has no confirmed live launcher"
+        } else {
+            "pilot stop unknown ownership: launcher identity is unavailable"
+        }
+    })?;
+    verify_manifest(run, bytes)
+        .context("pilot stop unknown ownership: sealed owner verification failed")?;
+    write_stop(dir, run, bytes, "requested")?;
+    let revoked = revoke(run);
+    if revoked.is_ok() {
+        write_stop(dir, run, bytes, "revoked")?;
+    }
+    // Even on daemon loss, request owned process cleanup; do not claim complete revocation.
+    signal_launcher(&handle)?;
+    revoked?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if read_stop(dir, run, bytes)?.status == "stopped" {
+            println!(
+                "{}",
+                json!({"run":run.run_id,"status":"stopped","running_effects_rolled_back":false})
+            );
+            return Ok(());
+        }
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "pilot stop incomplete: owned cleanup was not confirmed"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
 pub fn operator(args: OperatorArgs) -> Result<()> {
     ensure!(
         cfg!(target_os = "linux"),
@@ -753,6 +1038,10 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
     private_dir(&dir)?;
     let bytes = read_file(&dir.join("run.json"), true)?;
     let run: Run = serde_json::from_slice(&bytes)?;
+    if matches!(args.action, OperatorAction::Stop) {
+        return stop(&dir, &run, &bytes, &args.run, &home);
+    }
+    ensure!(!has_stop(&dir)?, "pilot run is stopping or stopped");
     verify_manifest(&run, &bytes)?;
     ensure!(
         run.contract == "sw-pilot-run/1"
@@ -790,7 +1079,7 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
         OperatorAction::Inspect { id }
         | OperatorAction::Approve { id, .. }
         | OperatorAction::Reject { id, .. } => id.clone(),
-        OperatorAction::List => unreachable!(),
+        OperatorAction::List | OperatorAction::Stop => unreachable!(),
     };
     id(&identifier)?;
     let (observed, server) = rows
@@ -878,7 +1167,7 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                 json!({"pending_id":identifier,"state":"rejected","released":false})
             );
         }
-        OperatorAction::List => unreachable!(),
+        OperatorAction::List | OperatorAction::Stop => unreachable!(),
     }
     Ok(())
 }
@@ -899,9 +1188,73 @@ mod tests {
             launcher_start: 1,
             manifest_fd: 3,
             expires_at_ms: u64::MAX,
+            authority_expires_at_ms: u64::MAX,
             authorities: BTreeMap::from([("filesystem".into(), "c".repeat(64))]),
             files: vec![],
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn stop_receipts_bind_exact_run_bytes_and_authentication_and_never_regress() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        create_dir(&home).unwrap();
+        write_new(&home.join("native-token"), &"owned-test-key").unwrap();
+        let dir = root.path().join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        let bytes = serde_json::to_vec(&run).unwrap();
+        for status in ["requested", "revoked", "stopped"] {
+            write_stop(&dir, &run, &bytes, status).unwrap();
+            assert_eq!(read_stop(&dir, &run, &bytes).unwrap().status, status);
+        }
+        write_stop(&dir, &run, &bytes, "requested").unwrap();
+        assert_eq!(read_stop(&dir, &run, &bytes).unwrap().status, "stopped");
+        assert!(read_stop(&dir, &run, b"foreign run bytes").is_err());
+        let mut altered: Value =
+            serde_json::from_slice(&fs::read(dir.join("stop.json")).unwrap()).unwrap();
+        altered["status"] = json!("revoked");
+        fs::write(dir.join("stop.json"), serde_json::to_vec(&altered).unwrap()).unwrap();
+        assert!(read_stop(&dir, &run, &bytes).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn linked_stop_receipt_is_never_accepted() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        create_dir(&home).unwrap();
+        write_new(&home.join("native-token"), &"owned-test-key").unwrap();
+        let dir = root.path().join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        let bytes = serde_json::to_vec(&run).unwrap();
+        write_stop(&dir, &run, &bytes, "requested").unwrap();
+        fs::rename(dir.join("stop.json"), dir.join("linked.json")).unwrap();
+        symlink(dir.join("linked.json"), dir.join("stop.json")).unwrap();
+        assert!(read_stop(&dir, &run, &bytes).is_err());
+    }
+
+    #[test]
+    fn stop_never_sends_credentials_to_a_changed_daemon_destination() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().canonicalize().unwrap();
+        let path = home.join("config.yaml");
+        write_new(&path, &json!({"bind":"127.0.0.1","port":12345})).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let mut run = run();
+        run.home = home;
+        run.files = vec![FileIdentity {
+            path: path.clone(),
+            sha256: digest(&bytes),
+        }];
+        assert!(stop_config(&run).is_ok());
+        fs::write(&path, b"bind: 127.0.0.1\nport: 54321\n").unwrap();
+        assert!(stop_config(&run).is_err());
     }
 
     fn live() -> Value {
@@ -937,7 +1290,7 @@ mod tests {
                     OperatorAction::Inspect { id }
                     | OperatorAction::Approve { id, .. }
                     | OperatorAction::Reject { id, .. } => id,
-                    OperatorAction::List => unreachable!(),
+                    OperatorAction::List | OperatorAction::Stop => unreachable!(),
                 };
                 assert_eq!(parsed_id, id);
             }

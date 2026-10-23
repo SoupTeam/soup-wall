@@ -23,6 +23,7 @@ pub mod child_authority;
 pub mod continuity;
 mod invocation;
 pub mod liveness;
+pub mod pilot_stop;
 pub mod resource;
 pub mod resource_approval;
 pub mod workspace;
@@ -499,6 +500,14 @@ pub(crate) fn validate_lineage(
 ) -> Result<(), &'static str> {
     let mut current = session;
     for _ in 0..=MAX_SESSIONS {
+        if current.authority_digest.as_ref().is_some_and(|digest| {
+            state
+                .spent_authorities
+                .get(digest)
+                .is_some_and(|expiry| *expiry > now_ms)
+        }) {
+            return Err("native_child_authority_revoked");
+        }
         if current.terminal {
             return Err("native_child_parent_unavailable");
         }

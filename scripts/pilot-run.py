@@ -338,13 +338,22 @@ def run(args, report):
                 errors.append("private_log")
         for sig, handler in previous.items():
             signal.signal(sig, handler)
-        # No unbounded output or secret-bearing state survives normal exit/failure.
+        # Remove ordinary private state; retain explicit stop/recovery receipts below.
         if not errors and private is not None:
             try:
-                shutil.rmtree(private)
+                # An authenticated stop may have completed, or may still need
+                # operator recovery. Preserve its private receipt and identity;
+                # deletion here would make a repeated stop indistinguishable
+                # from an unknown/forged run. No process is preserved.
+                stops = list((private / ".agentfw" / "pilot-runs").glob("*/stop.json"))
+                if stops:
+                    report["retained_stop_state"] = str(private)
+                else:
+                    shutil.rmtree(private)
             except OSError:
                 errors.append("private_state")
-        report["cleanup"] = "failed" if errors else "owned_state_removed"
+        report["cleanup"] = ("failed" if errors else "owned_processes_stopped_state_retained"
+                             if report.get("retained_stop_state") else "owned_state_removed")
         require(not errors, "owned_process_cleanup_failed")
 
 
