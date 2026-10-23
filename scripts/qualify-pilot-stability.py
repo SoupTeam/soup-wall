@@ -268,7 +268,8 @@ class Pilot(P.Pilot):
             recovery = super().collector_recovery(before_crash=seed, after_reconnect=verify)
         finally:
             fifo = probe.finish()
-        require(not fifo["reader_seen"] and fifo["bytes_written"] == 0, "reclaimed_forbidden_read_executed")
+        require(not fifo["reader_seen"] and fifo["bytes_written"] == 0 and fifo["error"] is None
+                and fifo["thread_stopped"] and fifo["attempts"] > 0, "reclaimed_forbidden_read_executed")
         return {**recovery, "sticky_risk_after_crash_and_reclamation": sticky, "forbidden_fifo": fifo}
 
 

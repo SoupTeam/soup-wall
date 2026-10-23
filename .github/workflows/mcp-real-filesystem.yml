@@ -776,6 +776,15 @@ jobs:
               report = json.loads(raw)
               summary = {key: report.get(key) for key in ('status', 'error', 'summary', 'elapsed_seconds', 'workload_sha256', 'observer')}
               print(json.dumps({'format':'sw-pilot-stability-public/1', 'report_sha256':hashlib.sha256(raw).hexdigest(), 'summary':summary}))
+              # The same public report can be independently regraded from the
+              # ordinary rendered job log when artifact download is unavailable.
+              # Never mirror raw traces, environment or authority files.
+              assert len(raw) <= 2 * 1024 * 1024, 'bounded public report required'
+              text = raw.decode('utf-8')
+              for offset in range(0, len(text), 8192):
+                  print(json.dumps({'format':'sw-pilot-stability-public-file/1', 'name':'report.json',
+                      'offset':offset, 'total_chars':len(text), 'sha256':hashlib.sha256(raw).hexdigest(),
+                      'text':text[offset:offset+8192]}, separators=(',',':')))
               for row in report.get('iterations', []):
                   print(json.dumps({'format':'sw-pilot-stability-iteration/1', 'iteration':row}, separators=(',',':')))
       - name: Retain every completed, failed or aborted iteration
