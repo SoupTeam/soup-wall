@@ -130,6 +130,7 @@ jobs:
           python3 -B scripts/verify-sou137-local-git-refs.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --sandbox-test-binary "$SOU68_TEST_BINARY" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou137-acceptance" \
             2>&1 | tee "$RUNNER_TEMP/sou137-acceptance.log"
       - name: Retain exact-source synthetic evidence

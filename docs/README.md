@@ -89,6 +89,7 @@ overview. Choose a guide below for development, operation or evaluation.
 ## Status and retained evidence
 
 - [Read-only Git MCP profile](operations/GIT_MCP_PROFILE.md): original-server pins, bounded operations, private installation and exact-source Linux acceptance.
+- [Explicit local Git references](operations/GIT_LOCAL_REFERENCES.md): opt-in bounded branch/tag reads, immutable metadata, source withdrawal and original-server acceptance.
 
 [ROADMAP](ROADMAP.md) records the tagged baseline, product principles,
 dependency-ordered phases, open decisions and one final release gate. Internal

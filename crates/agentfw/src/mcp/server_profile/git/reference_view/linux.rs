@@ -513,8 +513,11 @@ impl View {
         ]);
         for (path, image) in &self.images {
             let image = image.try_clone()?;
+            // An anonymous memfd has no host pathname to resolve across the
+            // new user namespace. Copy its sealed bytes using bwrap's bounded
+            // data-file primitive; bwrap closes the input before server exec.
             command
-                .arg("--ro-bind-fd")
+                .arg("--ro-bind-data")
                 .arg(image.as_raw_fd().to_string())
                 .arg(path);
             pins.push(image);
