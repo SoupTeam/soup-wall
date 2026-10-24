@@ -222,5 +222,77 @@ class PreparedRunBoundary(unittest.TestCase):
                 self.assertEqual(json.loads(output.getvalue())["reason"], "pilot_input_or_runtime_failure")
 
 
+    def test_interrupted_stop_retains_private_state_instead_of_erasing_ownership(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            args, selection, paths, profiles = self.fixture(root)
+            report = {}
+            def interrupted(_paths, private):
+                stop_dir = private / ".agentfw" / "pilot-runs" / ("a" * 32)
+                stop_dir.mkdir(parents=True, mode=0o700)
+                (stop_dir / "stop.json").write_text("synthetic retained intent")
+                raise RuntimeError("owned interrupted stop fixture")
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "environment", side_effect=interrupted), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaisesRegex(RuntimeError, "owned interrupted stop fixture"):
+                    RUN.run(args, report)
+                spawn.assert_not_called()
+            retained = Path(report["retained_stop_state"])
+            self.assertTrue((retained / ".agentfw" / "pilot-runs" / ("a" * 32) / "stop.json").is_file())
+            self.assertEqual(report["cleanup"], "owned_processes_stopped_state_retained")
+            self.assertNotEqual(report.get("status"), "stopped")
+
+    def stop_fixture(self, root):
+        home = root / ".agentfw"
+        record = home / "pilot-runs" / ("a" * 32) / "run.json"
+        record.parent.mkdir(parents=True, mode=0o700)
+        value = {"contract": "sw-pilot-run/1", "home": str(home),
+                 "run_id": record.parent.name, "launcher_pid": 1234}
+        record.write_text(json.dumps(value))
+        (record.parent / "stop.json").write_text('{"status":"stopped"}')
+        response = {"run": value["run_id"], "status": "already_stopped",
+                    "running_effects_rolled_back": False}
+        return home, record, value, response
+
+    def test_terminal_stop_uses_authenticated_exact_run_confirmation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home, _, _, response = self.stop_fixture(root)
+            with patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(
+                    returncode=0, stdout=json.dumps(response).encode())) as operator:
+                RUN.confirmed_stop(home, 1234, Path("/trusted/agentfw"), {}, root)
+            words = operator.call_args.args[0]
+            self.assertEqual(words, ["/trusted/agentfw", "pilot-approval", "--home",
+                str(home), "--run", "a" * 32, "stop"])
+
+    def test_stop_intent_status_or_failed_authentication_cannot_report_stopped(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home, _, _, response = self.stop_fixture(root)
+            for status in ("requested", "revoked", "stopped", "completed"):
+                with self.subTest(status=status), patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(
+                        returncode=0, stdout=json.dumps({**response, "status": status}).encode())):
+                    with self.assertRaisesRegex(RUN.Failure, "owned_stop_unconfirmed"):
+                        RUN.confirmed_stop(home, 1234, Path("/trusted/agentfw"), {}, root)
+            with patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(
+                    returncode=1, stdout=json.dumps(response).encode())):
+                with self.assertRaisesRegex(RUN.Failure, "owned_stop_unconfirmed"):
+                    RUN.confirmed_stop(home, 1234, Path("/trusted/agentfw"), {}, root)
+
+    def test_foreign_stop_record_cannot_select_another_owner(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home, record, value, _ = self.stop_fixture(root)
+            for changes in ({"launcher_pid": 5678}, {"home": "/foreign"},
+                            {"run_id": "b" * 32}, {"contract": "other"}):
+                record.write_text(json.dumps({**value, **changes}))
+                with patch.object(RUN.subprocess, "run") as operator:
+                    with self.assertRaisesRegex(RUN.Failure, "owned_stop_unconfirmed"):
+                        RUN.confirmed_stop(home, 1234, Path("/trusted/agentfw"), {}, root)
+                    operator.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

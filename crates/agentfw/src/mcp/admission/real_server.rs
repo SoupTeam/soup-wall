@@ -1588,7 +1588,28 @@ pub(super) async fn run(
     workspace: &std::path::Path,
 ) -> anyhow::Result<()> {
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
-    let prepared = server_sandbox::prepare(profile)?;
+    // Register before even preparing/starting the selected owner's namespace.
+    // Stop spends grants under the same native lock, so a late registration
+    // cannot start a server after an unenrolled grant was revoked.
+    let cleanup_owner = if collector.host_session.is_some()
+        && matches!(collector.config.server_id.as_str(), "filesystem" | "git")
+    {
+        collector.liveness.as_ref()
+    } else {
+        None
+    };
+    if let Some(owner) = cleanup_owner {
+        owner.pilot_cleanup("begin").await?;
+    }
+    let prepared = match server_sandbox::prepare(profile) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            if let Some(owner) = cleanup_owner {
+                owner.pilot_cleanup("finish").await?;
+            }
+            return Err(error);
+        }
+    };
     ensure!(
         prepared.workspace() == workspace,
         "selected sandbox workspace changed"
@@ -1803,6 +1824,23 @@ pub(super) async fn run(
         "transport_complete":operation.is_ok()&&budget_check.is_ok()&&!budget_failed&&!owner_failed
             &&cleanup.is_ok()&&stderr_cleanup.is_ok()&&budget_cleanup.is_ok()&&owner_cleanup.is_ok()})
     );
+    // Only the existing independent owner/budget/reap/stderr boundaries can
+    // discharge this obligation. A transport error (including revoked lease)
+    // does not prevent cleanup confirmation, and a failed boundary never does.
+    let cleanup_confirmation = if cleanup.is_ok()
+        && stderr_cleanup.is_ok()
+        && budget_cleanup.is_ok()
+        && owner_cleanup.is_ok()
+    {
+        if let Some(owner) = cleanup_owner {
+            owner.pilot_cleanup("finish").await
+        } else {
+            Ok(())
+        }
+    } else {
+        Err(anyhow::anyhow!("pilot_cleanup_unconfirmed"))
+    };
+    cleanup_confirmation?;
     operation?;
     budget_check?;
     owner_check?;
