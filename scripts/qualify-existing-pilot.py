@@ -123,8 +123,9 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
             require(outcome.get("reason") == ("pilot_cancelled" if case == "cancel" else "owned_daemon_lost"),
                     "existing_lifecycle_wrong_failure")
         cleanup = witness.finish()
-        require(cleanup["all_stopped"] and outcome["cleanup"] == "owned_state_removed"
-                and not list(state.iterdir()), "existing_owned_state_survived")
+        require(cleanup["all_stopped"] and outcome["cleanup"] == "owned_processes_stopped_audit_retained"
+                and len(list(state.iterdir())) == 1, "existing_owned_state_survived")
+        PREPARED.RUN.AUDIT.verify_cleanup(Path(outcome["audit"]["directory"]))
         raw = trace.read_text()
         rows = LAUNCH.normalized_syscalls(raw)[0]
         require(any('execve(' + json.dumps(str(paths["claude"])) + ',' in row and row.endswith(" = 0")
