@@ -133,6 +133,12 @@ pub(super) struct PackedReferences {
 #[cfg(any(target_os = "linux", test))]
 pub(super) fn packed_references(bytes: &[u8]) -> anyhow::Result<PackedReferences> {
     ensure!(bytes.len() <= 65_536, "Git packed references exceed limit");
+    ensure!(
+        (bytes.is_empty() || bytes.ends_with(b"\n"))
+            && !bytes.contains(&b'\r')
+            && !bytes.contains(&0),
+        "Git packed reference framing unsupported"
+    );
     let mut packed = PackedReferences::default();
     let mut can_peel: Option<String> = None;
     for line in std::str::from_utf8(bytes)?.lines() {
@@ -237,6 +243,8 @@ mod tests {
             format!("{id} refs/tags/owned\n^{id}\n^{id}\n"),
             format!("{id} refs/remotes/origin/main\n"),
             format!("{id} refs/heads/a~1\n"),
+            format!("{id} refs/heads/main\r\n"),
+            format!("{id} refs/heads/main"),
             format!("{id} refs/heads/a\n{id} refs/heads/a\n"),
         ] {
             assert!(packed_references(invalid.as_bytes()).is_err(), "{invalid}");
