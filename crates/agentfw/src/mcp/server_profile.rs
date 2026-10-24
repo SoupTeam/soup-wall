@@ -28,7 +28,10 @@ pub(crate) struct VerifiedAssets {
 }
 
 pub fn selected(format: Option<&str>) -> bool {
-    matches!(format, Some(FORMAT | git::FORMAT | git::LOCAL_REFS_FORMAT))
+    matches!(
+        format,
+        Some(FORMAT | git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT)
+    )
 }
 
 pub const FORMAT: &str = "sw-mcp/filesystem-readonly/1";
@@ -440,7 +443,7 @@ pub fn original_manifest() -> Value {
 pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
     match format {
         FORMAT => Ok(original_manifest()),
-        git::FORMAT | git::LOCAL_REFS_FORMAT => Ok(git::original_manifest()),
+        git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT => Ok(git::original_manifest()),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -448,7 +451,9 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
 pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
     match format {
         FORMAT => validate_initialization(value),
-        git::FORMAT | git::LOCAL_REFS_FORMAT => git::validate_initialization(value),
+        git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT => {
+            git::validate_initialization(value)
+        }
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -461,6 +466,7 @@ pub fn classify_manifest_for(
         FORMAT => classify_manifest(value),
         git::FORMAT => git::classify_manifest(value),
         git::LOCAL_REFS_FORMAT => git::classify_manifest_with_local_refs(value, true),
+        git::SHALLOW_FORMAT => git::classify_manifest(value),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
