@@ -433,7 +433,10 @@ def prepare(args):
                                 paths["bwrap"], paths["git_launcher"], python_archive=args.python_archive,
                                 wheelhouse=args.wheelhouse, allow_download=args.allow_download, log=log)
             except subprocess.CalledProcessError as error:
-                raise ValueError(f"{kind}_installer_failed_exit_{error.returncode}; private_log={log_path}") from None
+                diag = ""
+                if log_path.exists():
+                    diag = ": " + log_path.read_text(errors="replace")[-800:].replace("\n", " -- ")
+                raise ValueError(f"{kind}_installer_failed_exit_{error.returncode}{diag}") from None
         require(log_path.stat().st_size <= 1024 * 1024, kind + "_installer_log_limit")
         if requested:
             bind_profile_workspace(generation / (kind + "-profile"), requested["roots"][kind])
@@ -537,7 +540,7 @@ def main():
         return 0
     except (OSError, ValueError, KeyError, TypeError, AttributeError, tarfile.TarError, subprocess.SubprocessError,
             PILOT.Failure) as error:
-        print(json.dumps({"status": "failed", "reason": str(error)[:240]}))
+        print(json.dumps({"status": "failed", "reason": str(error)[:1500]}))
         return 2
 
 

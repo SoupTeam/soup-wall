@@ -3265,6 +3265,7 @@ jobs:
             ${{ runner.temp }}/sou142-prepared-host/budget-runtime-attempt.json
             ${{ runner.temp }}/sou142-prepared-host/runtime-unit-exit.json
             ${{ runner.temp }}/sou142-prepared-host/budget-host-public.json
+            ${{ runner.temp }}/sou142-prepared-host/preparation/generations/*/*-install.log
             ${{ runner.temp }}/sou142-prepared-host/cleanup-public.json
           if-no-files-found: error
           retention-days: 30
