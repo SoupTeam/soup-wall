@@ -7,7 +7,8 @@ eighty same-runner before/after approvals with zero failed/incomplete samples.
 Candidate p95 was 1938.429574 ms for filesystem and 2914.567600 ms for Git, both
 within 3000 ms. Full denominators, source identities and historical failures are
 retained in `evidence/sou-124/`. A missing or missed target remains an explicit
-performance blocker.
+performance blocker. The later tree-completeness/portable-atomic correction
+requires fresh current-source qualification; the prior source is not relabelled.
 
 ## What the measurements mean
 
@@ -135,7 +136,7 @@ A slow but complete baseline is retained. A candidate missing p95 <= 3000 ms for
 either profile exits nonzero. Only bounded JSON reports and the kernel control
 summary are exported; raw provider/authority traces remain private.
 
-Local macOS checks include 1696 Rust tests passed, 13 ignored; strict workspace
+Local macOS checks include 1697 Rust tests passed, 13 ignored; strict workspace
 all-target clippy and formatting; 1220 Python tests run, 79 platform/optional
 skips and no failures. These checks are not native performance evidence. Current
 native measurements and any failed attempts are retained separately in

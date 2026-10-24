@@ -174,6 +174,7 @@ struct FileProof {
 pub(super) struct Inputs {
     files: BTreeMap<PathBuf, FileProof>,
     entries: BTreeMap<PathBuf, Identity>,
+    trees: BTreeMap<PathBuf, usize>,
     lease_owner: Option<std::sync::Arc<super::read_lease::Owner>>,
 }
 
@@ -211,6 +212,27 @@ pub(super) enum Verification<'a> {
 }
 
 impl Verification<'_> {
+    pub(super) fn tree_entries(&mut self, root: &Path, count: usize) -> anyhow::Result<()> {
+        // Every visited path is checked against entries/files on resume. Equal
+        // cardinality therefore also proves that no captured path disappeared,
+        // independently of directory timestamp granularity.
+        let previous = match self {
+            Self::Full => return Ok(()),
+            Self::Capture(inputs) => inputs.trees.insert(root.to_owned(), count),
+            Self::Resume(inputs) => Some(
+                *inputs
+                    .trees
+                    .get(root)
+                    .context("selected package was not verified before approval")?,
+            ),
+        };
+        ensure!(
+            previous.is_none_or(|previous| previous == count),
+            "selected package entry set changed during approval"
+        );
+        Ok(())
+    }
+
     pub(super) fn entry(&mut self, path: &Path) -> anyhow::Result<()> {
         if matches!(self, Self::Full) {
             return Ok(());
@@ -538,7 +560,9 @@ mod tests {
             Verification::Resume(&inputs).digest(&file_link, 8).unwrap(),
             digest
         );
-        fs::remove_file(&file_link).unwrap();
+        // Keep the old inode allocated: an unlink/recreate may immediately
+        // reuse its number within the filesystem's timestamp granularity.
+        fs::rename(&file_link, root.path().join("old-runtime-link")).unwrap();
         symlink(&file, &file_link).unwrap();
         assert!(Verification::Resume(&inputs).digest(&file_link, 8).is_err());
         let observed = fs::metadata(&file).unwrap();
@@ -590,7 +614,7 @@ mod tests {
         );
         fs::write(&path, b"tampered").unwrap();
         assert!(Verification::Resume(&inputs).digest(&path, 8).is_err());
-        fs::remove_file(&path).unwrap();
+        fs::rename(&path, dir.path().join("old-asset")).unwrap();
         fs::write(&path, b"original").unwrap();
         assert!(Verification::Resume(&inputs).digest(&path, 8).is_err());
     }
@@ -732,6 +756,32 @@ mod tests {
         assert!(
             super::super::package_tree_sha256_with(&root, &mut Verification::Resume(&inputs))
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn removal_refuses_even_when_directory_metadata_matches() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("package");
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("kept"), b"original").unwrap();
+        fs::write(root.join("removed"), b"original").unwrap();
+        let mut inputs = Inputs::default();
+        super::super::package_tree_sha256_with(&root, &mut Verification::Capture(&mut inputs))
+            .unwrap();
+        fs::remove_file(root.join("removed")).unwrap();
+        // Model a filesystem whose directory times do not distinguish these
+        // operations. Completeness must not depend on a metadata difference.
+        inputs.entries.insert(
+            root.clone(),
+            Identity::read(&root, &fs::symlink_metadata(&root).unwrap()).unwrap(),
+        );
+        let error =
+            super::super::package_tree_sha256_with(&root, &mut Verification::Resume(&inputs))
+                .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "selected package entry set changed during approval"
         );
     }
 

@@ -2,7 +2,7 @@
 
 ## Current native result
 
-`native-linux-current.json` records passing run `40038036266` on exact clean
+`native-linux-1137780.json` records passing run `40038036266` on exact clean
 runtime/harness source `11377802ba4fa9868bf7502fc798fd0f3f06e7a4`. Both sides
 completed twenty filesystem and twenty Git approvals on one native Linux runner,
 with zero failed/incomplete samples. Candidate filesystem p50/p95 was
@@ -21,6 +21,19 @@ effectiveness is claimed. Full raw report hashes and per-sample proof/effect
 receipts remain attributable to the workflow artifact. Historical failures below
 remain failures. Final main integration and current required CI are separate
 checks; they do not relabel the measured source.
+
+The first full Ready CI on `ba9441c` found a newer-stable Rust deprecation and
+three non-deterministic identity tests. Two unlink/recreate fixtures could reuse
+the same inode within one timestamp quantum; they now retain the displaced inode
+with rename, keeping the replacement assertion. The third exposed missing
+completeness validation inside the tree-walk helper: its production caller
+already compared the full tree digest, but the helper now independently checks
+the captured cardinality. Each visited path must already exist in the captured
+set, so equal cardinality also proves no path disappeared, even with matching
+directory timestamps. A new negative control models that exact condition.
+Lease slot reservation now uses portable compare-exchange instead of a
+deprecated API, without warning suppression. The follow-up requires fresh native
+qualification and current CI; the `1137780` timings are not relabelled.
 
 ## Historical native attempt 6
 

@@ -53,12 +53,19 @@ mod linux {
     struct LeaseSlot;
     impl LeaseSlot {
         fn acquire() -> Option<Self> {
-            ACTIVE_LEASES
-                .fetch_update(Ordering::AcqRel, Ordering::Relaxed, |current| {
-                    (current < MAX_PROCESS_LEASES).then_some(current + 1)
-                })
-                .ok()
-                .map(|_| Self)
+            let mut current = ACTIVE_LEASES.load(Ordering::Relaxed);
+            while current < MAX_PROCESS_LEASES {
+                match ACTIVE_LEASES.compare_exchange_weak(
+                    current,
+                    current + 1,
+                    Ordering::AcqRel,
+                    Ordering::Relaxed,
+                ) {
+                    Ok(_) => return Some(Self),
+                    Err(observed) => current = observed,
+                }
+            }
+            None
         }
     }
     impl Drop for LeaseSlot {

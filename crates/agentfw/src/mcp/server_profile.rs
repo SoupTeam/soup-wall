@@ -760,6 +760,7 @@ fn package_tree_sha256_with(
     );
     let mut entries = BTreeMap::new();
     walk(root, Path::new(""), &mut entries, &mut 0, 0, verification)?;
+    verification.tree_entries(root, entries.len())?;
     let mut hash = Sha256::new();
     for record in entries.values() {
         hash.update(record);
