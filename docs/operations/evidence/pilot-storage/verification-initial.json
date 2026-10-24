@@ -1,0 +1,45 @@
+{
+  "format": "pilot-storage-verification/1",
+  "qualified_commit": "2e57584c861c0a0ab0c29d2c487598fb4ca0aee8",
+  "qualified_tree": "cc1836c254dbf225995954adf8bddb2975f026f1",
+  "source_files_sha256": "90055dac794bc10a57d04445a3337540ae0378db3ca4e2c2d981fb8c22838847",
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/39996830900",
+  "job_id": 120562495115,
+  "job_conclusion": "success",
+  "artifact_id": 12521411043,
+  "artifact_sha256": "7093656bb7fd62d45bc1a51132780a0ec07dbec5d0ace136c18d17f4cd7fcd34",
+  "artifact_digest_independently_verified": true,
+  "native_report_sha256": "d4ed33675436c7c32df1e16eaf558839af2946e48a9fc34527febbd5fafbc28f",
+  "referenced_file_hashes_independently_verified": 81,
+  "publication_trace_hashes_independently_verified": 9,
+  "report_regraded_with_checked_in_finish_function": true,
+  "native_cases": {"passed": 23, "failed": 0, "incomplete": 0, "unsupported": 0},
+  "rust_tests": {"serve_config": 5, "audit": 11, "native_audit_result_withheld": 1, "failed": 0},
+  "rustfmt": "passed",
+  "native_python": {
+    "discovered": 125,
+    "passed": 124,
+    "failed": 0,
+    "skipped": 1,
+    "skip": "test_real_unused_generation_without_process_mock requires an inspectable native host account; separate native cleanup qualification also passed"
+  },
+  "wsl_unit_and_helper_results": {
+    "scope": "WSL2 ordinary-user tests; not native Ubuntu acceptance",
+    "preparation_and_run_source_commit": "2661d3dc5306d50c1112691a304de413a87856a2",
+    "preparation_passed": 15,
+    "prepared_run_passed": 15,
+    "qualification_helper_source_commit": "fbd2f96834fcb057a9bce98b7278d066f6f281dc",
+    "qualification_helper_passed": 13,
+    "qualification_helper_skipped": 0,
+    "adjacent_source_commit": "8b7b6962888a109c5b00af3bf0f844c96a7c6288",
+    "adjacent_passed": 98,
+    "blocked_suite": "test_pilot_launch.py: Cargo unavailable; zero tests executed"
+  },
+  "limitations": [
+    "Owned exact-path errno injection, not physical disk filling or actual quota configuration",
+    "No physical power-loss durability or live-model effectiveness claim",
+    "Windows legacy durability unchanged; WSL helper results reported separately",
+    "Draft PR; admission and main integration remain TL work",
+    "Subsequent evidence-only documentation commits do not change qualified runtime or qualification sources"
+  ]
+}

@@ -1,0 +1,152 @@
+{
+  "format": "sou124-current-base-77b-qualification/1",
+  "source": "77b84177c50977f8bf699c777998570dd88348b6",
+  "run": 40076670007,
+  "whole_ci_conclusion": "failure",
+  "ask_lifecycle": {
+    "status": "pass",
+    "report_sha256": "b20a20efcd2034a07b83931c69db63bf8a3f2e32719224659ad5e82ebb1639bf",
+    "passed": 15,
+    "failed": 0,
+    "cases": [
+      {
+        "profile": "git",
+        "case": "expire",
+        "passed": true
+      },
+      {
+        "profile": "git",
+        "case": "restart",
+        "passed": true
+      },
+      {
+        "profile": "git",
+        "case": "approve",
+        "passed": true
+      },
+      {
+        "profile": "git",
+        "case": "reject",
+        "passed": true
+      },
+      {
+        "profile": "git",
+        "case": "cancel",
+        "passed": true
+      },
+      {
+        "profile": "git",
+        "case": "approved_cancel",
+        "passed": true
+      },
+      {
+        "profile": "git",
+        "case": "default",
+        "passed": true
+      },
+      {
+        "profile": "git",
+        "case": "collector_term",
+        "passed": true
+      },
+      {
+        "profile": "filesystem",
+        "case": "expire",
+        "passed": true
+      },
+      {
+        "profile": "filesystem",
+        "case": "restart",
+        "passed": true
+      },
+      {
+        "profile": "filesystem",
+        "case": "approve",
+        "passed": true
+      },
+      {
+        "profile": "filesystem",
+        "case": "reject",
+        "passed": true
+      },
+      {
+        "profile": "filesystem",
+        "case": "cancel",
+        "passed": true
+      },
+      {
+        "profile": "filesystem",
+        "case": "approved_cancel",
+        "passed": true
+      },
+      {
+        "profile": "filesystem",
+        "case": "default",
+        "passed": true
+      }
+    ],
+    "independent_rejected_sibling_confirmed": true,
+    "git_term": {
+      "collector_sigterm": "pidfd_pinned_graceful_cleanup_confirmed",
+      "dispatched": 0,
+      "kernel_effects": 0
+    }
+  },
+  "windows": "agent-windows-security passed, including explicit unsupported-private-contract no-network test",
+  "other_native": {
+    "sou111-qualification/report.json": {
+      "sha256": "cca060e565291bc8148c391a1dcbd7424080914a0fcf9d9a9e58febbefbcbb3d",
+      "status": "passed",
+      "cases_passed": 12,
+      "cases_total": 12
+    },
+    "sou120-demo/report.json": {
+      "sha256": "749e5f2db47c0a07ff5ae987db5fc2b6ffe09e06837006ff456a2f5995cb072b",
+      "status": "passed",
+      "cases_passed": 11,
+      "cases_total": 11,
+      "emergency_stop": {
+        "passed": 4,
+        "total": 4
+      }
+    },
+    "sou116-qualification/report.json": {
+      "sha256": "afb2c2d644684bcbdc223e27da86d0c980b8827c5fcbd2b23f6db5d99c3ea6d0",
+      "status": "passed",
+      "cases_passed": 11,
+      "cases_total": 11,
+      "emergency_stop": {
+        "passed": 4,
+        "total": 4
+      }
+    }
+  },
+  "failed_liveness": "grandchild_expiry_not_audited; corrected under same lock, see expiry-retirement-cause-correction.json",
+  "failed_single_use_approval": {
+    "report_sha256": "c725cec20dbc9d573b2953d3ab87158774cbb2451979fef67abac2851b36220e",
+    "error": "pending approval state missed declared deadline",
+    "planned": 26,
+    "passed": 0,
+    "failed": 1,
+    "incomplete": 25,
+    "case": "filesystem/approve, before first pending publication",
+    "declared_pending_seconds": 5,
+    "retained_capture_timings": [
+      {
+        "profile": "sw-mcp/filesystem-readonly/1",
+        "stage": "runtime_and_libraries",
+        "elapsed_ms": 3957.488061
+      },
+      {
+        "profile": "sw-mcp/filesystem-readonly/1",
+        "stage": "package_tree",
+        "elapsed_ms": 1563.550195
+      }
+    ],
+    "original_target_effects": 0,
+    "stderr_log_sha256": "936402f8e57bcde0b088de40b051d9fc9a7f4f37e0b49a91d196855ff42f3975",
+    "explanation": "First verified-input capture reported runtime/libraries plus package work exceeding the existing 5-second pending-observation bound. No explicit approval was issued; the sample remains failed.",
+    "correction_claim": "No timeout relaxation or single-use harness change. This failure is not claimed fixed by the terminal logging/audit changes; those independently reproduced source changes require fresh full qualification."
+  },
+  "scope": "This receipt qualifies only source77b. Later closed-diagnostic and expiry-cause code still requires current native/CI evidence."
+}

@@ -13,6 +13,7 @@ use std::path::Component;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::process::Stdio;
+use std::sync::Arc;
 
 use anyhow::{bail, Context};
 #[cfg(target_os = "linux")]
@@ -30,7 +31,9 @@ pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
-    if format == super::server_profile::git::FORMAT {
+    if format == super::server_profile::git::LOCAL_REFS_FORMAT {
+        "sw-mcp/git-readonly-local-refs/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git::FORMAT {
         "sw-mcp/git-readonly/linux-bwrap-landlock/1"
     } else {
         SANDBOX_PROFILE
@@ -46,6 +49,7 @@ pub(crate) struct PreparedServerSandbox {
     command: Command,
     _pins: Vec<File>,
     workspace: PathBuf,
+    local_references: Option<Arc<super::server_profile::git::reference_view::View>>,
     #[cfg(target_os = "linux")]
     budget: Option<super::linux_budget::OwnedBudget>,
     #[cfg(target_os = "linux")]
@@ -55,6 +59,12 @@ pub(crate) struct PreparedServerSandbox {
 }
 
 impl PreparedServerSandbox {
+    pub(crate) fn local_references(
+        &self,
+    ) -> Option<Arc<super::server_profile::git::reference_view::View>> {
+        self.local_references.clone()
+    }
+
     pub(crate) fn workspace(&self) -> &Path {
         &self.workspace
     }
@@ -570,7 +580,7 @@ fn require_budget_mount_support(exposed_roots: &[&Path], pins: &[&File]) -> anyh
 
 #[cfg(target_os = "linux")]
 fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbox> {
-    if profile.format == super::server_profile::git::FORMAT {
+    if super::server_profile::git::is_profile(&profile.format) {
         return prepare_linux_command(
             profile,
             &[
@@ -601,12 +611,29 @@ fn prepare_linux_command(
     use std::os::fd::AsRawFd;
 
     let (workspace, workspace_pin) = open_directory(&profile.workspace)?;
-    let git_profile = profile.format == super::server_profile::git::FORMAT;
+    if let Some(expected) = &profile.workspace_identity {
+        let metadata = workspace_pin.metadata()?;
+        if super::server_profile::WorkspaceIdentity::from_metadata(&metadata) != *expected {
+            bail!("selected workspace identity changed");
+        }
+        use std::os::unix::fs::MetadataExt;
+        if metadata.uid() != unsafe { libc::geteuid() } || metadata.mode() & 0o022 != 0 {
+            bail!("selected workspace must remain owned and not shared writable");
+        }
+    }
+    let git_profile = super::server_profile::git::is_profile(&profile.format);
     if git_profile {
         super::server_profile::git::validate_repository(
             &descriptor_path(&workspace_pin).join("."),
         )?;
     }
+    let local_references = if profile.format == super::server_profile::git::LOCAL_REFS_FORMAT {
+        Some(super::server_profile::git::reference_view::View::capture(
+            &workspace_pin,
+        )?)
+    } else {
+        None
+    };
     let (package_root, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
     {
@@ -707,6 +734,9 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
+    if let Some(view) = &local_references {
+        view.mount(&mut command, &mut pins)?;
+    }
     let seccomp = network_filter(git_profile)?;
     command
         .arg("--seccomp")
@@ -787,6 +817,7 @@ fn prepare_linux_command(
         command,
         _pins: pins,
         workspace,
+        local_references,
         budget,
         bwrap_fd,
         owner_executable_fd,
@@ -796,6 +827,29 @@ fn prepare_linux_command(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn pinned_existing_workspace_refuses_replacement() {
+        use super::super::server_profile::{WorkspaceIdentity, FORMAT};
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        let identity = WorkspaceIdentity::from_metadata(&root.metadata().unwrap());
+        let profile = ProfileConfig::read(serde_json::json!({
+            "format": FORMAT, "workspace": root, "workspaceIdentity": identity,
+            "runtimePath": temporary.path().join("node"), "runtimeSha256": "a".repeat(64),
+            "packageRoot": temporary.path().join("package"), "packageTreeSha256": "b".repeat(64),
+            "bwrapPath": temporary.path().join("bwrap"), "bwrapSha256": "c".repeat(64), "libraries": []
+        }).to_string().as_bytes()).unwrap();
+        std::fs::rename(&root, temporary.path().join("original")).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        // Fails on the opened workspace fd, before any other assets or process.
+        let error = prepare_linux_command(&profile, &[]).err().unwrap();
+        assert!(error
+            .to_string()
+            .contains("selected workspace identity changed"));
+    }
 
     #[test]
     fn budget_mountinfo_accepts_regular_and_unexposed_hugetlb_filesystems() {
@@ -879,7 +933,9 @@ mod tests {
         let profile_path = std::env::var("SOU68_SANDBOX_TEST_PROFILE")
             .expect("explicit Git sandbox profile required");
         let profile = ProfileConfig::read(&std::fs::read(profile_path).unwrap()).unwrap();
-        assert_eq!(profile.format, super::super::server_profile::git::FORMAT);
+        assert!(super::super::server_profile::git::is_profile(
+            &profile.format
+        ));
         let owned = tempfile::tempdir().unwrap();
         let outside = owned.path().join("outside-secret");
         std::fs::write(&outside, b"outside unchanged").unwrap();

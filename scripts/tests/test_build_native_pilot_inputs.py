@@ -349,6 +349,17 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({"leader": os.getpid(), "child":
                     except ProcessLookupError:
                         pass
 
+    def test_live_target_sampler_tolerates_removed_intermediate_only(self):
+        build = builder()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vanished = root / "renamed-intermediate"
+            with patch.object(build.os, "walk", return_value=[(root, [], [vanished.name])]):
+                self.assertTrue(build.target_within_limit(root))
+                with patch.object(build.Path, "lstat", side_effect=PermissionError("denied")):
+                    with self.assertRaises(PermissionError):
+                        build.target_within_limit(root)
+
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process groups required")
     def test_bounded_build_refuses_target_quota_overrun(self):
         build = builder()
@@ -368,6 +379,23 @@ time.sleep(10)
                                         root=root, env={"PATH": "/usr/bin:/bin"}, target=target,
                                         log=root / "build.log", stage="fixture")
             self.assertLessEqual((root / "build.log").stat().st_size, build.native.MAX_LOG)
+
+    def test_target_quota_ignores_files_cargo_removes_during_the_scan(self):
+        build = builder()
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / "kept").write_bytes(b"x" * 10)
+            real_walk = os.walk
+
+            def walk_with_vanished_file(*args, **kwargs):
+                for base, dirs, files in real_walk(*args, **kwargs):
+                    yield base, dirs, [*files, "vanished-temporary-file"]
+
+            with patch.object(build.os, "walk", walk_with_vanished_file):
+                self.assertTrue(build.target_within_limit(target))
+            with patch.object(build.os, "walk", walk_with_vanished_file), \
+                 patch.object(build, "MAX_TARGET_BYTES", 5):
+                self.assertFalse(build.target_within_limit(target))
 
 
 if __name__ == "__main__":

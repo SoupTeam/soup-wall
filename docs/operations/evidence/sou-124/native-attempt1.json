@@ -1,0 +1,95 @@
+{
+  "format": "sw-pilot-ask-comparison/1",
+  "status": "failed",
+  "paid_api_calls": 0,
+  "provider": "owned-scripted-loopback",
+  "live_model_effectiveness": "not_tested",
+  "source_before": {
+    "baseline": {
+      "commit": "8c275fcc9abdee99d4997cd4a985e6ce14d751e6",
+      "tree": "0ad938290c9aa62c64d78a2ca8543172ad0ad84a",
+      "dirty": false,
+      "files_sha256": "198d658305439fec6c8727e980ef7b2946a23ee706419cfd35e7735194db53ee"
+    },
+    "candidate": {
+      "commit": "27338061812c45c525162e73c8adab8b24c22132",
+      "tree": "cd28e4bf053ae70743a24479a8cb764bae1e13fb",
+      "dirty": false,
+      "files_sha256": "ca9a0d527c25699a0071cfb70b0e59aee6531371c28366078ccef4a07b97c3eb"
+    }
+  },
+  "shared_sha256": {
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "bwrap": "88713a4d9f22a5c6a3e72b50743685ba96115e665f057a0447d85fe90a8ca1eb",
+    "git": "30df0fdd17dd48754a244aa8d558118662159b8dcfe7c715cf3245816ee04563",
+    "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+  },
+  "environment": {
+    "system": "Linux",
+    "release": "6.17.0-1022-azure",
+    "machine": "x86_64"
+  },
+  "samples_per_profile": 20,
+  "sides": {
+    "baseline": {
+      "exit_code": 1,
+      "qualification": {
+        "contract_version": "sw-pilot-ask-acceptance/1",
+        "status": "failed",
+        "real_host_executed": false,
+        "scripted_owned_provider": true,
+        "paid_api_calls": 0,
+        "physical_human_presence_proven": false,
+        "source": {
+          "commit": "8c275fcc9abdee99d4997cd4a985e6ce14d751e6",
+          "tree": "0ad938290c9aa62c64d78a2ca8543172ad0ad84a",
+          "dirty": false
+        },
+        "selected_sha256": {
+          "agentfw": "54e2861a7f3b99e05ac926f90ab04ac43713e885347c4195d5e975a70b6fd50e",
+          "git_launcher": "6830451b610f64a3211c4373656c6feecd7e9cdbc09fe63401b9f1422222eeeb",
+          "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+          "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+          "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+          "bwrap": "88713a4d9f22a5c6a3e72b50743685ba96115e665f057a0447d85fe90a8ca1eb",
+          "git": "30df0fdd17dd48754a244aa8d558118662159b8dcfe7c715cf3245816ee04563",
+          "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+        },
+        "error_type": "URLError",
+        "error_location": [
+          {
+            "function": "urlopen",
+            "line": 215
+          },
+          {
+            "function": "open",
+            "line": 515
+          },
+          {
+            "function": "_open",
+            "line": 532
+          },
+          {
+            "function": "_call_chain",
+            "line": 492
+          },
+          {
+            "function": "https_open",
+            "line": 1405
+          },
+          {
+            "function": "do_open",
+            "line": 1360
+          }
+        ]
+      }
+    }
+  },
+  "error_type": "ValueError",
+  "error": "qualification_failed",
+  "workflow_run": 39987054307,
+  "raw_report_sha256": "6e8ebb2c3eb15792c69b7d063031aac002e36ed2ce6c1d023078dee4325b8880",
+  "failure_attribution": "Setup failed before hosts: inherited deny proxy blocked the pinned Git Python archive download; no latency samples collected. Strict real read-lease control passed."
+}

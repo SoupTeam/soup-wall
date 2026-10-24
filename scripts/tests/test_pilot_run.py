@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Prepared launch refusal and ownership controls (SOU-116)."""
 import importlib.util
+import errno
 import io
 import json
 import os
@@ -19,6 +20,78 @@ SPEC.loader.exec_module(RUN)
 
 
 class PreparedRunBoundary(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Linux owned file-descriptor fault control")
+    def test_authority_sync_storage_failure_refuses_before_daemon_and_cleans_only_owned_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args, selection, paths, profiles = self.fixture(root)
+            paths.update(agentfw=Path("/trusted/agentfw"), claude=Path("/trusted/claude"),
+                         node=Path("/trusted/node"), python=Path("/trusted/python"), policy=Path("/trusted/policy"))
+            for role in ("agentfw", "policy"):
+                paths[role] = root / (role + ".fixture")
+                paths[role].write_bytes(b"owned selected input")
+            (root / "registry.json").write_text('{"tools": []}')
+            sentinel = root / "foreign.txt"
+            sentinel.write_bytes(b"preserve")
+            sync = RUN.os.fsync
+            faults = []
+            def fail_authority(fd):
+                if Path(os.readlink(f"/proc/self/fd/{fd}")).name == "native-token":
+                    faults.append("authority_sync")
+                    raise OSError(errno.ENOSPC, "owned storage fault")
+                return sync(fd)
+            report = {}
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN.os, "fsync", side_effect=fail_authority), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaises(OSError):
+                    RUN.run(args, report)
+                spawn.assert_not_called()
+            self.assertEqual(faults, ["authority_sync"])
+            self.assertEqual(report["storage_failure"], "storage_full")
+            self.assertFalse(report["host_started"])
+            self.assertEqual(report["cleanup"], "owned_processes_stopped_audit_retained")
+            retained = list(root.glob("soup-wall-run-*"))
+            self.assertEqual(len(retained), 1)
+            RUN.AUDIT.verify_cleanup(retained[0])
+            self.assertEqual(report["audit"]["snapshot"]["state"], "unavailable")
+            self.assertEqual(sentinel.read_bytes(), b"preserve")
+
+    def test_storage_diagnostics_are_finite_and_never_echo_paths(self):
+        for number, reason in ((errno.ENOSPC, "storage_full"), (errno.EROFS, "storage_read_only"),
+                               (errno.EACCES, "storage_permission_denied"), (errno.EIO, "storage_io_failed")):
+            with self.subTest(errno=number), \
+                 patch.object(RUN, "selected", side_effect=OSError(number, "Bearer private-secret", "/private/path")), \
+                 patch.object(sys, "argv", ["pilot-run", "--selection", "/unused", "--expected-commit", "b" * 40]), \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 1)
+                value = json.loads(output.getvalue())
+                self.assertEqual(value["storage_failure"], reason)
+                self.assertFalse(value["executed"])
+                self.assertEqual(value["effects"], "Protected host was not started.")
+                self.assertNotIn("private-secret", output.getvalue())
+                self.assertNotIn("/private/path", output.getvalue())
+
+    def test_cleanup_failure_preserves_original_storage_failure_and_effect_uncertainty(self):
+        def failed_run(_args, report):
+            report.update(executed=True, host_started=True, stage="run_publication",
+                          storage_failure="storage_full", cleanup="failed",
+                          cleanup_storage_failure="storage_permission_denied")
+            raise RUN.Failure("owned_process_cleanup_failed")
+        with patch.object(RUN, "selected", return_value=({"source": {}}, {}, {})), \
+             patch.object(RUN.PREP.FS, "sha", return_value="a" * 64), \
+             patch.object(RUN, "run", side_effect=failed_run), \
+             patch.object(sys, "argv", ["pilot-run", "--run", "--selection", "/unused", "--expected-commit", "b" * 40]), \
+             patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(RUN.main(), 1)
+            value = json.loads(output.getvalue())
+            self.assertEqual(value["reason"], "owned_process_cleanup_failed")
+            self.assertEqual(value["storage_failure"], "storage_full")
+            self.assertEqual(value["cleanup_storage_failure"], "storage_permission_denied")
+            self.assertIn("may have occurred", value["effects"])
+            self.assertEqual(value["stage"], "run_publication")
+
     def args(self, root):
         return SimpleNamespace(selection=root / "generations" / ("a" * 32) / "selection.json",
             expected_commit="b" * 40, run=False, state_root=root, port=0,
@@ -146,8 +219,9 @@ class PreparedRunBoundary(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             args, selection, paths, profiles = self.fixture(root)
-            paths.update(agentfw=Path("/trusted/agentfw"), claude=Path("/trusted/claude"),
-                         node=Path("/trusted/node"), python=Path("/trusted/python"), policy=Path("/trusted/policy"))
+            for role in ("agentfw", "claude", "node", "python", "policy"):
+                paths[role] = root / ("trusted-" + role)
+                paths[role].write_text("owned selected " + role)
             (root / "registry.json").write_text('{"tools": []}')
             read_fd, write_fd = os.pipe()
             os.close(write_fd)
@@ -169,7 +243,10 @@ class PreparedRunBoundary(unittest.TestCase):
                     RUN.run(args, {})
             self.assertEqual(count, 3)
             self.assertEqual(spawn.call_count, 1)  # Only the owned daemon, never a host.
-            self.assertFalse(list(root.glob("soup-wall-run-*")))
+            retained = list(root.glob("soup-wall-run-*"))
+            self.assertEqual(len(retained), 1)
+            self.assertEqual({p.name for p in retained[0].iterdir()},
+                             {"audit", "audit-run.json", "audit-finished.json"})
 
     def test_correlated_dispatch_without_useful_result_cannot_pass_qualification(self):
         spec = importlib.util.spec_from_file_location("sou116_acceptance", ROOT / "scripts/qualify-prepared-pilot-run.py")
@@ -220,6 +297,78 @@ class PreparedRunBoundary(unittest.TestCase):
                 self.assertEqual(RUN.main(), 1)
                 self.assertNotIn(secret, output.getvalue())
                 self.assertEqual(json.loads(output.getvalue())["reason"], "pilot_input_or_runtime_failure")
+
+
+    def test_interrupted_stop_retains_private_state_instead_of_erasing_ownership(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            args, selection, paths, profiles = self.fixture(root)
+            report = {}
+            def interrupted(_paths, private):
+                stop_dir = private / ".agentfw" / "pilot-runs" / ("a" * 32)
+                stop_dir.mkdir(parents=True, mode=0o700)
+                (stop_dir / "stop.json").write_text("synthetic retained intent")
+                raise RuntimeError("owned interrupted stop fixture")
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "environment", side_effect=interrupted), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaisesRegex(RuntimeError, "owned interrupted stop fixture"):
+                    RUN.run(args, report)
+                spawn.assert_not_called()
+            retained = Path(report["retained_stop_state"])
+            self.assertTrue((retained / ".agentfw" / "pilot-runs" / ("a" * 32) / "stop.json").is_file())
+            self.assertEqual(report["cleanup"], "owned_processes_stopped_state_retained")
+            self.assertNotEqual(report.get("status"), "stopped")
+
+    def stop_fixture(self, root):
+        home = root / ".agentfw"
+        record = home / "pilot-runs" / ("a" * 32) / "run.json"
+        record.parent.mkdir(parents=True, mode=0o700)
+        value = {"contract": "sw-pilot-run/1", "home": str(home),
+                 "run_id": record.parent.name, "launcher_pid": 1234}
+        record.write_text(json.dumps(value))
+        (record.parent / "stop.json").write_text('{"status":"stopped"}')
+        response = {"run": value["run_id"], "status": "already_stopped",
+                    "running_effects_rolled_back": False}
+        return home, record, value, response
+
+    def test_terminal_stop_uses_authenticated_exact_run_confirmation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home, _, _, response = self.stop_fixture(root)
+            with patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(
+                    returncode=0, stdout=json.dumps(response).encode())) as operator:
+                RUN.confirmed_stop(home, 1234, Path("/trusted/agentfw"), {}, root)
+            words = operator.call_args.args[0]
+            self.assertEqual(words, ["/trusted/agentfw", "pilot-approval", "--home",
+                str(home), "--run", "a" * 32, "stop"])
+
+    def test_stop_intent_status_or_failed_authentication_cannot_report_stopped(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home, _, _, response = self.stop_fixture(root)
+            for status in ("requested", "revoked", "stopped", "completed"):
+                with self.subTest(status=status), patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(
+                        returncode=0, stdout=json.dumps({**response, "status": status}).encode())):
+                    with self.assertRaisesRegex(RUN.Failure, "owned_stop_unconfirmed"):
+                        RUN.confirmed_stop(home, 1234, Path("/trusted/agentfw"), {}, root)
+            with patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(
+                    returncode=1, stdout=json.dumps(response).encode())):
+                with self.assertRaisesRegex(RUN.Failure, "owned_stop_unconfirmed"):
+                    RUN.confirmed_stop(home, 1234, Path("/trusted/agentfw"), {}, root)
+
+    def test_foreign_stop_record_cannot_select_another_owner(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home, record, value, _ = self.stop_fixture(root)
+            for changes in ({"launcher_pid": 5678}, {"home": "/foreign"},
+                            {"run_id": "b" * 32}, {"contract": "other"}):
+                record.write_text(json.dumps({**value, **changes}))
+                with patch.object(RUN.subprocess, "run") as operator:
+                    with self.assertRaisesRegex(RUN.Failure, "owned_stop_unconfirmed"):
+                        RUN.confirmed_stop(home, 1234, Path("/trusted/agentfw"), {}, root)
+                    operator.assert_not_called()
 
 
 if __name__ == "__main__":

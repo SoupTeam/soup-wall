@@ -265,3 +265,11 @@ expected content. Search-followed-by-read interruptions remain failures.
 Delivery counters refer to original tool results withheld from the host. This
 filesystem/Git workload has no network-send operations and does not claim a
 calibrated network-delivery prevention result.
+
+## Exact-candidate evidence reconciliation
+
+Use the [pilot dossier procedure](PILOT_EVIDENCE_DOSSIER.md) to reconcile explicitly
+selected original reports against one candidate. It retains the SOU-106 failed
+10/12 result and both Ask interruptions, and distinguishes historical component
+success from complete current evidence. It does not run another evaluation or
+change production policy.

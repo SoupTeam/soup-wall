@@ -1,0 +1,67 @@
+{
+  "format": "sw-sou125-review/1",
+  "status": "local_review_pass_native_qualification_incomplete",
+  "implementation_commit": "fa6619b7111c53da58695925a5434a6aea041248",
+  "implementation_git_tree": "2f3cadcbfcd0d15891f83d9a3d3ae8f6dbd9371e",
+  "source_files_sha256": {
+    "crates/agentfw/src/lib.rs": "e4d3301ddf5e6f2cdaf1bd6d92c64254ca527a1e32723ef9fcb78edf6c90140e",
+    "crates/agentfw/src/native.rs": "25c3175068f774881c23989e58c6b4f008ce8e9a641a27b22410f8682d5348a6",
+    "crates/agentfw/src/native/pilot_stop.rs": "25912f68892e11e70096ea7fe612ea8f5089e35c3222da6f5f0792c71ebc8032",
+    "crates/agentfw/src/pilot_approval.rs": "8684bbbaa46c8573cfb5cca997081d53b0505c80036a71e9b284b4365914a4eb",
+    "crates/agentfw/src/pilot_launcher.rs": "6b3697471d01eeae5032202c8c9deb00bbb3a90767023b057ba2b29680c1756b",
+    "crates/agentfw/tests/native_endpoint.rs": "24e8abd1825ad5c96cf9312d95f744212f081ee3223e9dd388a5749a89bd168c",
+    "docs/operations/PILOT_EMERGENCY_STOP.md": "7649fc1b63b97ec9bc8c5357992f96673447fd5ce947fd2287d4cdd23fdf0eb4",
+    "scripts/pilot-run.py": "c20e281c4bba77c336aef0fe8d0afb5d3a1c702cb98bb83ca90f9fe4d3ac78a4",
+    "scripts/tests/test_pilot_run.py": "dfe4d0665fcc12b2d41b0178c816ac20655645bece5c872d606b62a153e8c4cc"
+  },
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "changes": [
+    "Bounded wait for concurrent stop receipt updates; final receipt does not fail on momentary contention.",
+    "No metadata lock during terminal output; an inspection racing with stop cannot create a new receipt."
+  ],
+  "rust_workspace": {
+    "command": "TMPDIR=/private/tmp CARGO_TARGET_DIR=/tmp/soup-wall-build125 cargo test --offline --workspace --locked -- --test-threads=1",
+    "passed": 1667,
+    "failed": 0,
+    "ignored": 13,
+    "groups": 69,
+    "log_sha256": "46c6b61883e0db2751e061365de02a368a55971dc7d0a2b8567a83d66ea829e8",
+    "loopback_fixture_permission": true
+  },
+  "checks": {
+    "strict_workspace_all_targets_clippy": "pass",
+    "clippy_log_sha256": "10f590aa1d1da767b5b16019e301576285c0d71894c63607174d2008c6dbe517",
+    "cargo_fmt": "pass",
+    "diff_whitespace": "pass"
+  },
+  "regression_mutations": [
+    {
+      "mutation": "immediate-lock",
+      "result": "regression_test_failed_as_required",
+      "log_sha256": "074b2b75aac402ee2f82a96c200b3c81eeb7aaa68f24583dfc86ea1882f2a8ee"
+    },
+    {
+      "mutation": "locked-output",
+      "result": "regression_test_failed_as_required",
+      "log_sha256": "a332d834dceb284042412c1e278ec689b240771b8e3081715d50cb753d4f00ed"
+    }
+  ],
+  "retained_attempt": {
+    "status": "sandbox_loopback_binding_refused",
+    "passed": 537,
+    "failed": 26,
+    "ignored": 1,
+    "log_sha256": "73e072b9ff16cb42a3db5543514b9d7bfe98751c36cc822510d1610f6702e2a9",
+    "cause": "Sandbox denied local mock-server bind with EPERM; same source passed after allowing owned loopback fixture ports."
+  },
+  "python": {
+    "rerun": false,
+    "reason": "Python implementation is unchanged from development.json; this follow-up changes Rust and the operator guide."
+  },
+  "native_linux_qualified": false,
+  "remaining_acceptance": "All native process/collector/daemon-loss/crash/PID-reuse/interrupted-cleanup witnesses listed in PILOT_EMERGENCY_STOP.md remain required.",
+  "raw_logs_exported": false
+}

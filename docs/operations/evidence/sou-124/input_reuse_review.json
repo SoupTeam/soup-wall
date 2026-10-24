@@ -1,0 +1,37 @@
+{
+  "format": "sw-sou124-input-reuse-review/1",
+  "status": "local_review_pass_native_qualification_incomplete",
+  "implementation_commit": "e571245041ff9589d6e87a216beec4cbb5558941",
+  "implementation_git_tree": "b2f4074a5f44f1e233c98dbfc3f68dbda0b5de1a",
+  "source_files_sha256": {
+    "crates/agentfw/src/mcp/admission/real_server.rs": "ce6331db5529838d9d191d04c8a666ac5261c77449dd859369beca51173cc2bd",
+    "crates/agentfw/src/mcp/server_profile.rs": "01f08ad36f60332c0b12ab3967dade632c6668784a9b72df9b09d243eb705e8c",
+    "crates/agentfw/src/mcp/server_profile/read_lease.rs": "e9dce371f0ef542b0da3e279cd3f4f1fc5e125e544d5562ddd12b9050adceace",
+    "crates/agentfw/src/mcp/server_profile/read_lease/native_tests.rs": "d160ee2dc1121b8861de5f9288542761f29902159f6f37c38e9a1cc6fb5a327c",
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "c664e475fd3207de935ccd1985fe364aaf8185aa6299fc5dfbdbcdeef07a7de0"
+  },
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "changes": [
+    "Added per-Ask verified input observations in verified_inputs.rs.",
+    "Integrated conditional fs-verity reuse path with strict fallback to byte rehash for mutable files.",
+    "Added unit and relay controls in read_lease.rs and native_tests.rs."
+  ],
+  "rust_workspace": {
+    "command": "TMPDIR=/private/tmp CARGO_TARGET_DIR=/tmp/soup-wall-build124 cargo test --offline --workspace --locked -- --test-threads=1",
+    "passed": 1661,
+    "failed": 0,
+    "ignored": 13,
+    "loopback_fixture_permission": true
+  },
+  "checks": {
+    "strict_workspace_all_targets_clippy": "pass",
+    "cargo_fmt": "pass",
+    "diff_whitespace": "pass"
+  },
+  "native_linux_qualified": false,
+  "remaining_acceptance": "Native Linux x86_64 fs-verity measurements, before/after p95 <= 3s target and original-server qualification remain required.",
+  "raw_logs_exported": false
+}

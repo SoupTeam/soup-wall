@@ -24,7 +24,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Build and identify the exact candidate
         shell: bash

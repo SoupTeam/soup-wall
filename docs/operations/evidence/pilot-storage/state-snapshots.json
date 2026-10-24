@@ -1,0 +1,795 @@
+{
+  "all_snapshot_refs": [
+    {
+      "file": "state-snapshot-00.json",
+      "sha256": "1b17865961c094879c68d5fe28b88002ef786c6f51aca097206d96c53ebc0018"
+    },
+    {
+      "file": "state-snapshot-01.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-02.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-03.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-04.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-05.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-06.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-07.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-08.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-09.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-10.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-11.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    },
+    {
+      "file": "state-snapshot-12.json",
+      "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+    }
+  ],
+  "baseline": {
+    "file": "state-snapshot-00.json",
+    "record": {
+      "filesystem": {
+        ".": {
+          "device": 2049,
+          "inode": 9225946,
+          "kind": 16384,
+          "links": 2,
+          "mode": 448
+        },
+        "forbidden.fifo": {
+          "device": 2049,
+          "inode": 9225979,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "guide.txt": {
+          "device": 2049,
+          "inode": 9225976,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "e6bfed3dba7d1ef2b8c072127e7ad443fd791bf487c8396189d64548dc0d78ee",
+          "size": 60
+        },
+        "notes.txt": {
+          "device": 2049,
+          "inode": 9225977,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "7b4675448d856808920c4c5bb6678e927bcd08201d21b80a2b5f1177ca462b45",
+          "size": 78
+        },
+        "outage.fifo": {
+          "device": 2049,
+          "inode": 9225980,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-0.fifo": {
+          "device": 2049,
+          "inode": 9225981,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-1.fifo": {
+          "device": 2049,
+          "inode": 9225982,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-2.fifo": {
+          "device": 2049,
+          "inode": 9225983,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-3.fifo": {
+          "device": 2049,
+          "inode": 9225984,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-4.fifo": {
+          "device": 2049,
+          "inode": 9225985,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-5.fifo": {
+          "device": 2049,
+          "inode": 9225986,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-6.fifo": {
+          "device": 2049,
+          "inode": 9225987,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-7.fifo": {
+          "device": 2049,
+          "inode": 9225988,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-8.fifo": {
+          "device": 2049,
+          "inode": 9225989,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "source.txt": {
+          "device": 2049,
+          "inode": 9225978,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "388285e286390a76374e37e189ccff629bd8a40fadcc05d9174a00b29a96743f",
+          "size": 26
+        }
+      },
+      "foreign_file_sha256": "9d505f82a69a2db0556f2f8f8c734f122f383e9d78dc738bb68f788ff2799cb4",
+      "foreign_process": {
+        "alive": true,
+        "expected_start_time_ticks": 54307,
+        "observed_start_time_ticks": 54307,
+        "pid": 15625
+      },
+      "format": "sw-pilot-storage-state-snapshot/1",
+      "git": {
+        ".": {
+          "device": 2049,
+          "inode": 9225947,
+          "kind": 16384,
+          "links": 3,
+          "mode": 448
+        },
+        ".git": {
+          "device": 2049,
+          "inode": 9225948,
+          "kind": 16384,
+          "links": 5,
+          "mode": 493
+        },
+        ".git/COMMIT_EDITMSG": {
+          "device": 2049,
+          "inode": 9225958,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "dc2434c43a50b4b8eff827240fa613076d950b42963a9075048e4d273ea9a70c",
+          "size": 32
+        },
+        ".git/HEAD": {
+          "device": 2049,
+          "inode": 9225953,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80",
+          "size": 21
+        },
+        ".git/config": {
+          "device": 2049,
+          "inode": 9225950,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "cfe7ba1238c9a78be7535d7c63bcaf5a4d5011d46b07c9b45d3bbf7d6c312dfe",
+          "size": 92
+        },
+        ".git/index": {
+          "device": 2049,
+          "inode": 9225966,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "a472fc915946b600194ac827857feb925ffeafb2d22f353860ea33dc1e7e1216",
+          "size": 118
+        },
+        ".git/logs": {
+          "device": 2049,
+          "inode": 9225968,
+          "kind": 16384,
+          "links": 3,
+          "mode": 493
+        },
+        ".git/logs/HEAD": {
+          "device": 2049,
+          "inode": 9225969,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "fc9c26d07dad1d8d2b4f45176e02e4062e1c7f6b541ed09e2f38db29e47a7671",
+          "size": 189
+        },
+        ".git/logs/refs": {
+          "device": 2049,
+          "inode": 9225970,
+          "kind": 16384,
+          "links": 3,
+          "mode": 493
+        },
+        ".git/logs/refs/heads": {
+          "device": 2049,
+          "inode": 9225971,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/logs/refs/heads/main": {
+          "device": 2049,
+          "inode": 9225972,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "fc9c26d07dad1d8d2b4f45176e02e4062e1c7f6b541ed09e2f38db29e47a7671",
+          "size": 189
+        },
+        ".git/objects": {
+          "device": 2049,
+          "inode": 9225954,
+          "kind": 16384,
+          "links": 9,
+          "mode": 493
+        },
+        ".git/objects/14": {
+          "device": 2049,
+          "inode": 9225973,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/14/73c63f9f994b57875e02b2364c2d813b71b024": {
+          "device": 2049,
+          "inode": 9225974,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "d7a2a2c95040cb7c4d007f78b579576d71c230881828f0d93a348a504ef7f3ca",
+          "size": 38
+        },
+        ".git/objects/4f": {
+          "device": 2049,
+          "inode": 9225962,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/4f/d3c4cecd88c07b6e17d7224e7ab972daf8f40a": {
+          "device": 2049,
+          "inode": 9225963,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "59aef6b482e73f2f76962170d84c2aa5af2d171a30d3d43c307ceb6954e48dcc",
+          "size": 54
+        },
+        ".git/objects/59": {
+          "device": 2049,
+          "inode": 9225959,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/59/cf462a69bd69e22c9061bdfd6f85aaf24d49ee": {
+          "device": 2049,
+          "inode": 9225960,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "c6c6ef658af7da9cae28d3e798c5eb94f56c73fe7e997cac1dc5d5ebc5938500",
+          "size": 40
+        },
+        ".git/objects/c2": {
+          "device": 2049,
+          "inode": 9225961,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/c2/7d6ac36cf2d10fe3471523a72b0e4cfbffa413": {
+          "device": 2049,
+          "inode": 9225975,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "40e499a368abb4e62a97a7c4630e6ac75ebb5080430bb8cc5ebf906157186fc5",
+          "size": 74
+        },
+        ".git/objects/e7": {
+          "device": 2049,
+          "inode": 9225964,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/e7/534f0b7118b9e9817c52ad73de15cce3d7eed2": {
+          "device": 2049,
+          "inode": 9225965,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "4f2479f510048087138951821990add165d55249153be55bebc8d2ed24a46359",
+          "size": 145
+        },
+        ".git/objects/info": {
+          "device": 2049,
+          "inode": 9225956,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/pack": {
+          "device": 2049,
+          "inode": 9225955,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/refs": {
+          "device": 2049,
+          "inode": 9225949,
+          "kind": 16384,
+          "links": 4,
+          "mode": 493
+        },
+        ".git/refs/heads": {
+          "device": 2049,
+          "inode": 9225951,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/refs/heads/main": {
+          "device": 2049,
+          "inode": 9225967,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "1fd29c9d8aa5d34cff6e02526d8f4a670ee02c01b549ac411d483ee14309a804",
+          "size": 41
+        },
+        ".git/refs/tags": {
+          "device": 2049,
+          "inode": 9225952,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        "notes.txt": {
+          "device": 2049,
+          "inode": 9225957,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "895839334b39f13cd5addb5dd9436812bd553ef676d43515163631309f8697e4",
+          "size": 23
+        }
+      },
+      "phase": "prepared",
+      "receiver": {
+        "bodies": []
+      },
+      "source": {
+        "commit": "7008678508c180f25fdffb97bc900b1d8a70ef39",
+        "dirty": false,
+        "files_sha256": "9427c2d04091d40b13a0a3b0bd441fb8980a9673fad1275b61198f7ff0c7287c",
+        "tree": "cf18b6813fc31bdef2fefce2bd6d1dd6af51ecab"
+      }
+    },
+    "sha256": "1b17865961c094879c68d5fe28b88002ef786c6f51aca097206d96c53ebc0018"
+  },
+  "final": {
+    "file": "state-snapshot-12.json",
+    "record": {
+      "filesystem": {
+        ".": {
+          "device": 2049,
+          "inode": 9225946,
+          "kind": 16384,
+          "links": 2,
+          "mode": 448
+        },
+        "forbidden.fifo": {
+          "device": 2049,
+          "inode": 9225979,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "guide.txt": {
+          "device": 2049,
+          "inode": 9225976,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "e6bfed3dba7d1ef2b8c072127e7ad443fd791bf487c8396189d64548dc0d78ee",
+          "size": 60
+        },
+        "notes.txt": {
+          "device": 2049,
+          "inode": 9225977,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "7b4675448d856808920c4c5bb6678e927bcd08201d21b80a2b5f1177ca462b45",
+          "size": 78
+        },
+        "outage.fifo": {
+          "device": 2049,
+          "inode": 9225980,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-0.fifo": {
+          "device": 2049,
+          "inode": 9225981,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-1.fifo": {
+          "device": 2049,
+          "inode": 9225982,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-2.fifo": {
+          "device": 2049,
+          "inode": 9225983,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-3.fifo": {
+          "device": 2049,
+          "inode": 9225984,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-4.fifo": {
+          "device": 2049,
+          "inode": 9225985,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-5.fifo": {
+          "device": 2049,
+          "inode": 9225986,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-6.fifo": {
+          "device": 2049,
+          "inode": 9225987,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-7.fifo": {
+          "device": 2049,
+          "inode": 9225988,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-8.fifo": {
+          "device": 2049,
+          "inode": 9225989,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "source.txt": {
+          "device": 2049,
+          "inode": 9225978,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "388285e286390a76374e37e189ccff629bd8a40fadcc05d9174a00b29a96743f",
+          "size": 26
+        }
+      },
+      "foreign_file_sha256": "9d505f82a69a2db0556f2f8f8c734f122f383e9d78dc738bb68f788ff2799cb4",
+      "foreign_process": {
+        "alive": true,
+        "expected_start_time_ticks": 54307,
+        "observed_start_time_ticks": 54307,
+        "pid": 15625
+      },
+      "format": "sw-pilot-storage-state-snapshot/1",
+      "git": {
+        ".": {
+          "device": 2049,
+          "inode": 9225947,
+          "kind": 16384,
+          "links": 3,
+          "mode": 448
+        },
+        ".git": {
+          "device": 2049,
+          "inode": 9225948,
+          "kind": 16384,
+          "links": 5,
+          "mode": 493
+        },
+        ".git/COMMIT_EDITMSG": {
+          "device": 2049,
+          "inode": 9225958,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "dc2434c43a50b4b8eff827240fa613076d950b42963a9075048e4d273ea9a70c",
+          "size": 32
+        },
+        ".git/HEAD": {
+          "device": 2049,
+          "inode": 9225953,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80",
+          "size": 21
+        },
+        ".git/config": {
+          "device": 2049,
+          "inode": 9225950,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "cfe7ba1238c9a78be7535d7c63bcaf5a4d5011d46b07c9b45d3bbf7d6c312dfe",
+          "size": 92
+        },
+        ".git/index": {
+          "device": 2049,
+          "inode": 9225966,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "a472fc915946b600194ac827857feb925ffeafb2d22f353860ea33dc1e7e1216",
+          "size": 118
+        },
+        ".git/logs": {
+          "device": 2049,
+          "inode": 9225968,
+          "kind": 16384,
+          "links": 3,
+          "mode": 493
+        },
+        ".git/logs/HEAD": {
+          "device": 2049,
+          "inode": 9225969,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "fc9c26d07dad1d8d2b4f45176e02e4062e1c7f6b541ed09e2f38db29e47a7671",
+          "size": 189
+        },
+        ".git/logs/refs": {
+          "device": 2049,
+          "inode": 9225970,
+          "kind": 16384,
+          "links": 3,
+          "mode": 493
+        },
+        ".git/logs/refs/heads": {
+          "device": 2049,
+          "inode": 9225971,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/logs/refs/heads/main": {
+          "device": 2049,
+          "inode": 9225972,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "fc9c26d07dad1d8d2b4f45176e02e4062e1c7f6b541ed09e2f38db29e47a7671",
+          "size": 189
+        },
+        ".git/objects": {
+          "device": 2049,
+          "inode": 9225954,
+          "kind": 16384,
+          "links": 9,
+          "mode": 493
+        },
+        ".git/objects/14": {
+          "device": 2049,
+          "inode": 9225973,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/14/73c63f9f994b57875e02b2364c2d813b71b024": {
+          "device": 2049,
+          "inode": 9225974,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "d7a2a2c95040cb7c4d007f78b579576d71c230881828f0d93a348a504ef7f3ca",
+          "size": 38
+        },
+        ".git/objects/4f": {
+          "device": 2049,
+          "inode": 9225962,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/4f/d3c4cecd88c07b6e17d7224e7ab972daf8f40a": {
+          "device": 2049,
+          "inode": 9225963,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "59aef6b482e73f2f76962170d84c2aa5af2d171a30d3d43c307ceb6954e48dcc",
+          "size": 54
+        },
+        ".git/objects/59": {
+          "device": 2049,
+          "inode": 9225959,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/59/cf462a69bd69e22c9061bdfd6f85aaf24d49ee": {
+          "device": 2049,
+          "inode": 9225960,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "c6c6ef658af7da9cae28d3e798c5eb94f56c73fe7e997cac1dc5d5ebc5938500",
+          "size": 40
+        },
+        ".git/objects/c2": {
+          "device": 2049,
+          "inode": 9225961,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/c2/7d6ac36cf2d10fe3471523a72b0e4cfbffa413": {
+          "device": 2049,
+          "inode": 9225975,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "40e499a368abb4e62a97a7c4630e6ac75ebb5080430bb8cc5ebf906157186fc5",
+          "size": 74
+        },
+        ".git/objects/e7": {
+          "device": 2049,
+          "inode": 9225964,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/e7/534f0b7118b9e9817c52ad73de15cce3d7eed2": {
+          "device": 2049,
+          "inode": 9225965,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "4f2479f510048087138951821990add165d55249153be55bebc8d2ed24a46359",
+          "size": 145
+        },
+        ".git/objects/info": {
+          "device": 2049,
+          "inode": 9225956,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/pack": {
+          "device": 2049,
+          "inode": 9225955,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/refs": {
+          "device": 2049,
+          "inode": 9225949,
+          "kind": 16384,
+          "links": 4,
+          "mode": 493
+        },
+        ".git/refs/heads": {
+          "device": 2049,
+          "inode": 9225951,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/refs/heads/main": {
+          "device": 2049,
+          "inode": 9225967,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "1fd29c9d8aa5d34cff6e02526d8f4a670ee02c01b549ac411d483ee14309a804",
+          "size": 41
+        },
+        ".git/refs/tags": {
+          "device": 2049,
+          "inode": 9225952,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        "notes.txt": {
+          "device": 2049,
+          "inode": 9225957,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "895839334b39f13cd5addb5dd9436812bd553ef676d43515163631309f8697e4",
+          "size": 23
+        }
+      },
+      "phase": "preserved",
+      "receiver": {
+        "bodies": []
+      },
+      "source": {
+        "commit": "7008678508c180f25fdffb97bc900b1d8a70ef39",
+        "dirty": false,
+        "files_sha256": "9427c2d04091d40b13a0a3b0bd441fb8980a9673fad1275b61198f7ff0c7287c",
+        "tree": "cf18b6813fc31bdef2fefce2bd6d1dd6af51ecab"
+      }
+    },
+    "sha256": "eb5e9329889c06fa2cbfa7cc02506062f1f3c16948507d0a57e8903f726bd685"
+  },
+  "format": "pilot-storage-retained-state-maps/1",
+  "qualified_commit": "7008678508c180f25fdffb97bc900b1d8a70ef39",
+  "snapshot_count": 13
+}

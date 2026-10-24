@@ -23,6 +23,8 @@ pub mod child_authority;
 pub mod continuity;
 mod invocation;
 pub mod liveness;
+pub mod pilot_cleanup;
+pub mod pilot_stop;
 pub mod resource;
 pub mod resource_approval;
 pub mod workspace;
@@ -475,6 +477,7 @@ pub(crate) struct Sessions {
     // Spent child authority ledger: maps authority_digest to expires_at_ms.
     // Prevents reuse of signed child authority grants across sessions or after reclamation.
     pub(crate) spent_authorities: BTreeMap<String, u64>,
+    pub(crate) pilot_cleanup: BTreeMap<String, pilot_cleanup::Record>,
 }
 
 pub fn now_ms() -> u64 {
@@ -499,6 +502,14 @@ pub(crate) fn validate_lineage(
 ) -> Result<(), &'static str> {
     let mut current = session;
     for _ in 0..=MAX_SESSIONS {
+        if current.authority_digest.as_ref().is_some_and(|digest| {
+            state
+                .spent_authorities
+                .get(digest)
+                .is_some_and(|expiry| *expiry > now_ms)
+        }) {
+            return Err("native_child_authority_revoked");
+        }
         if current.terminal {
             return Err("native_child_parent_unavailable");
         }
@@ -1535,6 +1546,10 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
             "registry_sha256": native.registry_sha256,
             "bindings": bindings,
             "pilot_collectors": pilot_collectors,
+            "pilot_cleanup": sessions.pilot_cleanup.iter().map(|(digest, row)| json!({
+                "authority_sha256":digest,"host_session":row.host_session,
+                "server_id":row.server_id,"verified":row.verified
+            })).collect::<Vec<_>>(),
             "pilot_pending": pilot_pending,
             "approval_enabled": native.approval.is_some(),
             "liveness_enabled": st.config.native.as_ref().and_then(|n| n.liveness.as_ref()).is_some(),
@@ -1668,34 +1683,48 @@ pub(crate) fn retire_sessions_terminal(
     let now = native.monotonic_now();
     let now_ms = wall_time_ms().unwrap_or(0) + native.test_time_offset();
 
-    let mut to_retire = Vec::new();
-    for (id, expected_epoch) in targets {
-        if let Some(session) = sessions.entries.get(id) {
-            if let Some(epoch) = expected_epoch {
-                if &session.epoch != epoch {
-                    continue;
-                }
-            }
-            if reason == "expired" && !session.is_dead(now, now_ms, &sessions) {
-                continue;
-            }
-            let mut session = sessions.entries.remove(id).unwrap();
-            session.terminal = true;
-            if let Some(lease) = &mut session.liveness_lease {
-                lease.state = liveness::LeaseState::Terminal(reason);
-            }
-            if session.parent_id.is_none() || reason != "ended" || session.liveness_lease.is_some()
+    // Resolve every exact target against one locked snapshot before removing
+    // any ancestor. Collector shutdown can beat maintenance after a rejected
+    // renewal; it must not relabel an already expired lineage as healthy retire.
+    let terminal_causes: BTreeMap<String, &'static str> = targets
+        .iter()
+        .filter_map(|(id, expected_epoch)| {
+            let session = sessions.entries.get(id)?;
+            if expected_epoch
+                .as_ref()
+                .is_some_and(|epoch| epoch != &session.epoch)
             {
-                if let (Some(digest), Some(exp)) =
-                    (&session.authority_digest, session.authority_expires_at_ms)
-                {
-                    if exp > now_ms {
-                        sessions.spent_authorities.insert(digest.clone(), exp);
-                    }
+                return None;
+            }
+            let dead = session.is_dead(now, now_ms, &sessions);
+            if reason == "expired" && !dead {
+                return None;
+            }
+            let cause = if reason == "retired" && dead {
+                "expired"
+            } else {
+                reason
+            };
+            Some((id.clone(), cause))
+        })
+        .collect();
+    let mut to_retire = Vec::new();
+    for (id, cause) in terminal_causes {
+        let mut session = sessions.entries.remove(&id).unwrap();
+        session.terminal = true;
+        if let Some(lease) = &mut session.liveness_lease {
+            lease.state = liveness::LeaseState::Terminal(cause);
+        }
+        if session.parent_id.is_none() || cause != "ended" || session.liveness_lease.is_some() {
+            if let (Some(digest), Some(exp)) =
+                (&session.authority_digest, session.authority_expires_at_ms)
+            {
+                if exp > now_ms {
+                    sessions.spent_authorities.insert(digest.clone(), exp);
                 }
             }
-            to_retire.push((id.clone(), session));
         }
+        to_retire.push((id, session, cause));
     }
 
     if to_retire.is_empty() {
@@ -1704,28 +1733,28 @@ pub(crate) fn retire_sessions_terminal(
 
     // A leased session's explicit end is terminal for its complete lineage,
     // just like retirement or expiry. Keep legacy unleased end semantics.
-    if reason != "ended" || to_retire.iter().any(|(_, s)| s.liveness_lease.is_some()) {
-        let mut all_retired_epochs: BTreeSet<String> =
-            to_retire.iter().map(|(_, s)| s.epoch.clone()).collect();
+    if reason != "ended" || to_retire.iter().any(|(_, s, _)| s.liveness_lease.is_some()) {
+        let mut all_retired_epochs: BTreeMap<String, &'static str> = to_retire
+            .iter()
+            .map(|(_, s, cause)| (s.epoch.clone(), *cause))
+            .collect();
         loop {
-            let child_ids: Vec<String> = sessions
+            let child_ids: Vec<(String, &'static str)> = sessions
                 .entries
                 .iter()
-                .filter(|(_, s)| {
-                    s.parent_epoch
-                        .as_ref()
-                        .is_some_and(|pe| all_retired_epochs.contains(pe))
+                .filter_map(|(id, s)| {
+                    let cause = all_retired_epochs.get(s.parent_epoch.as_ref()?)?;
+                    Some((id.clone(), *cause))
                 })
-                .map(|(id, _)| id.clone())
                 .collect();
             if child_ids.is_empty() {
                 break;
             }
-            for cid in child_ids {
+            for (cid, cause) in child_ids {
                 if let Some(mut session) = sessions.entries.remove(&cid) {
                     session.terminal = true;
                     if let Some(lease) = &mut session.liveness_lease {
-                        lease.state = liveness::LeaseState::Terminal(reason);
+                        lease.state = liveness::LeaseState::Terminal(cause);
                     }
                     if let (Some(digest), Some(exp)) =
                         (&session.authority_digest, session.authority_expires_at_ms)
@@ -1734,8 +1763,8 @@ pub(crate) fn retire_sessions_terminal(
                             sessions.spent_authorities.insert(digest.clone(), exp);
                         }
                     }
-                    all_retired_epochs.insert(session.epoch.clone());
-                    to_retire.push((cid, session));
+                    all_retired_epochs.insert(session.epoch.clone(), cause);
+                    to_retire.push((cid, session, cause));
                 }
             }
         }
@@ -1746,8 +1775,8 @@ pub(crate) fn retire_sessions_terminal(
     let count = to_retire.len();
 
     if let Some(approval) = &native.approval {
-        for (id, _) in &to_retire {
-            approval.close_session(id, reason);
+        for (id, _, cause) in &to_retire {
+            approval.close_session(id, cause);
         }
     }
 
@@ -1755,7 +1784,7 @@ pub(crate) fn retire_sessions_terminal(
         return 0;
     };
 
-    for (id, session) in &to_retire {
+    for (id, session, cause) in &to_retire {
         if let (Some(host), Some(agent)) = (&session.host_session, &session.agent_id) {
             firewall.end_agent(host, agent);
         }
@@ -1767,7 +1796,7 @@ pub(crate) fn retire_sessions_terminal(
             "session": session.epoch,
             "session_id": id,
             "seq": session.seq + 1,
-            "event": format!("native_session_{reason}"),
+            "event": format!("native_session_{cause}"),
             "verdict": "allow",
             "shadow": false,
             "released": false,
@@ -2685,7 +2714,11 @@ fn inspect_bound(
             return Err("native_delivery");
         }
         if request.delivery.as_deref() == Some("mcp_host") {
-            if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::git::FORMAT) {
+            if tool
+                .mcp_result_profile
+                .as_deref()
+                .is_some_and(crate::mcp::server_profile::git::is_profile)
+            {
                 selected_mcp_host_text_profile(
                     content,
                     request.result_kind.as_deref().unwrap_or(""),
