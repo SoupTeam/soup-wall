@@ -21,7 +21,10 @@ class Pressure(unittest.TestCase):
         class Model:
             def __init__(self, _steps): self.server = SimpleNamespace()
             def close(self): pass
-        def refused(*_args, **_kwargs): raise ValueError('owned setup refusal')
+        def refused(peer_context, *_args, **_kwargs):
+            self.assertTrue(all(isinstance(value, Path) for value in peer_context.paths.values()))
+            self.assertIsInstance(peer_context.paths['claude'], Path)
+            raise ValueError('owned setup refusal')
         def snapshot(path): return {p.name: p.read_bytes() for p in path.iterdir() if p.is_file()}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -41,7 +44,7 @@ class Pressure(unittest.TestCase):
             delegation = root / 'delegation'
             delegation.mkdir(mode=0o700)
             with patch.object(P, 'PRESSURE_BYTES', 1024):
-                result = P.qualify(context, root / 'unused-selection', {}, profiles, delegation,
+                result = P.qualify(context, root / 'unused-selection', {'claude': str(root / 'unused-host')}, profiles, delegation,
                                    root / 'output', 'a' * 40)
             self.assertEqual(result['status'], 'incomplete')
             self.assertTrue(result['workspace_unchanged'])

@@ -21,6 +21,7 @@ PRESSURE_BYTES = 40 * 1024 * 1024
 
 def qualify(context, selection, paths, profiles, delegation, output, commit):
     base, resource = context.BASE, context.RESOURCE
+    paths = {key: Path(value) for key, value in paths.items()}
     output.mkdir(mode=0o700)
     normal = {'format': 'sw-mcp/linux-cgroup-budget/1', 'delegationRoot': str(delegation),
         'memoryMaxBytes': 512 * 1024 * 1024, 'pidsMax': 64, 'cpuQuotaMicros': 100000,
