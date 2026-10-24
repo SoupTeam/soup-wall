@@ -819,10 +819,22 @@ fn pending(run: &Run, live: &Value) -> Result<Vec<(Value, String)>> {
 fn checked_record(home: &Path, observed: &Value) -> Result<Value> {
     let identifier = string(observed, "pending_id")?;
     id(identifier)?;
-    let value: Value = serde_json::from_slice(&read_file(
-        &approval::pending_dir(home).join(format!("{identifier}.json")),
-        true,
-    )?)?;
+    let value: Value = serde_json::from_slice(
+        &read_file(
+            &approval::pending_dir(home).join(format!("{identifier}.json")),
+            true,
+        )
+        .map_err(|error| {
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|cause| cause.kind() == std::io::ErrorKind::NotFound)
+            {
+                tag(error, Reason::PendingUnavailable)
+            } else {
+                error
+            }
+        })?,
+    )?;
     for key in [
         "pending_id",
         "session_id",
@@ -1891,6 +1903,18 @@ mod tests {
         foreign["authority_sha256"] = json!("e".repeat(64));
         value["pilot_collectors"] = json!([foreign]);
         assert!(pending(&run(), &value).unwrap().is_empty());
+    }
+
+    #[test]
+    fn pending_record_removed_after_snapshot_has_a_producer_reason() {
+        let home = tempfile::tempdir().unwrap();
+        create_dir(&approval::pending_dir(home.path())).unwrap();
+        let observed = live()["pilot_pending"][0].clone();
+        let path = approval::pending_dir(home.path()).join("pending-one.json");
+        write_new(&path, &observed).unwrap();
+        fs::remove_file(path).unwrap();
+        let error = checked_record(home.path(), &observed).unwrap_err();
+        assert!(matches!(result::reason(&error), Reason::PendingUnavailable));
     }
 
     #[test]
