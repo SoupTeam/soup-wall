@@ -17,10 +17,12 @@ are retained here with their original references.
 Supporting sanitized traces and host/wire observations remain in
 [artifact 12569320061](https://github.com/SoupTeam/soup-wall/actions/runs/40115658348/artifacts/12569320061)
 under the workflow's seven-day development retention. Verification was performed
-by the delivery assistant and is not a separate human approval. Only CI coverage
-tests and evidence documentation follow that qualified source; the runtime,
-storage qualification driver and build inputs remain unchanged. Full candidate
-CI and admission must separately qualify the publication head.
+by the delivery assistant and is not a separate human approval. Publication
+`cbea7623` followed that source with only CI coverage tests and evidence
+documentation. A later refresh integrates accepted Git-profile main
+`6f4eac92e661d2587dcc8195b636f76a17c59ba4`; its changed runtime/build inputs
+require a fresh source-attributed native report. Full candidate CI and admission
+must separately qualify the final publication head.
 
 ## Historical qualification
 
