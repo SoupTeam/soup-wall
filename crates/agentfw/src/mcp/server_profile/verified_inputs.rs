@@ -170,15 +170,37 @@ struct FileProof {
     lease: Option<std::sync::Arc<super::read_lease::Guard>>,
 }
 
+// Timing is diagnostic only; never read by proof/admission decisions.
+#[derive(Clone, Default)]
+struct CaptureCost {
+    hashed_files: u64,
+    hashed_bytes: u64,
+    digest_time: std::time::Duration,
+    proof_time: std::time::Duration,
+    hash_time: std::time::Duration,
+}
+
 #[derive(Clone, Default)]
 pub(super) struct Inputs {
     files: BTreeMap<PathBuf, FileProof>,
     entries: BTreeMap<PathBuf, Identity>,
     trees: BTreeMap<PathBuf, usize>,
     lease_owner: Option<std::sync::Arc<super::read_lease::Owner>>,
+    capture_cost: CaptureCost,
 }
 
 impl Inputs {
+    pub(super) fn capture_cost(&self) -> serde_json::Value {
+        let cost = &self.capture_cost;
+        serde_json::json!({"event":"mcp_verified_inputs_capture_cost",
+            "hashed_files":cost.hashed_files,"hashed_bytes":cost.hashed_bytes,
+            "digest_ms":cost.digest_time.as_secs_f64()*1000.0,
+            "proof_ms":cost.proof_time.as_secs_f64()*1000.0,
+            "hash_ms":cost.hash_time.as_secs_f64()*1000.0,
+            "identity_and_overhead_ms":cost.digest_time.saturating_sub(cost.proof_time)
+                .saturating_sub(cost.hash_time).as_secs_f64()*1000.0})
+    }
+
     pub(super) fn validate_leases(&self) -> anyhow::Result<()> {
         ensure!(
             self.files
@@ -309,6 +331,12 @@ impl Verification<'_> {
             ensure!(count == size, "selected asset changed during hashing");
             return Ok(format!("{:x}", hash.finalize()));
         }
+        let timed_capture = matches!(self, Self::Capture(_));
+        let start_timing = || timed_capture.then(std::time::Instant::now);
+        let elapsed = |started: Option<std::time::Instant>| {
+            started.map_or(std::time::Duration::ZERO, |started| started.elapsed())
+        };
+        let digest_started = start_timing();
         // Only the package walker uses this path: it binds every ancestor
         // directory before/after descent and handles symlinks separately. A
         // regular leaf is bound by its exact opened descriptor plus both lstat
@@ -350,11 +378,13 @@ impl Verification<'_> {
         // this exact Ask can authorize reuse. In the rehash/read-lease cases a
         // fresh verity ioctl would be unused; do not query it for every leaf.
         // Existing verity proofs must still be measured and compared below.
+        let proof_started = start_timing();
         let verity = if previous.as_ref().is_none_or(|proof| proof.verity.is_some()) {
             measure(&file)?
         } else {
             None
         };
+        let mut proof_time = elapsed(proof_started);
         if let Some(previous) = &previous {
             ensure!(
                 previous.identity == before,
@@ -377,6 +407,7 @@ impl Verification<'_> {
                 return Ok(sha256);
             }
         }
+        let lease_started = start_timing();
         let lease = if verity.is_none() && previous.is_none() && size >= 65_536 {
             if let Self::Capture(inputs) = self {
                 if inputs.lease_owner.is_none() {
@@ -392,11 +423,16 @@ impl Verification<'_> {
         } else {
             None
         };
+        proof_time += elapsed(lease_started);
+        let hash_started = start_timing();
         let mut hash = Sha256::new();
         let count = std::io::copy(&mut file.by_ref().take(size + 1), &mut hash)?;
         ensure!(count == size, "selected asset changed during hashing");
+        let mut hash_time = elapsed(hash_started);
         self.close_identity(path, &file, &before, tree)?;
+        let finalize_started = start_timing();
         let sha256 = format!("{:x}", hash.finalize());
+        hash_time += elapsed(finalize_started);
         if let Some(lease) = &lease {
             ensure!(
                 lease.valid(),
@@ -410,6 +446,11 @@ impl Verification<'_> {
             );
         }
         if let Self::Capture(inputs) = self {
+            inputs.capture_cost.hashed_files += 1;
+            inputs.capture_cost.hashed_bytes += count;
+            inputs.capture_cost.digest_time += elapsed(digest_started);
+            inputs.capture_cost.proof_time += proof_time;
+            inputs.capture_cost.hash_time += hash_time;
             let proof = FileProof {
                 identity: before,
                 sha256: sha256.clone(),

@@ -96,11 +96,35 @@ pub struct Library {
     pub sha256: String,
 }
 
+/// Optional existing-project identity. Content remains mutable, untrusted data;
+/// replacing the selected directory never transfers its execution authority.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceIdentity {
+    pub device: u64,
+    pub inode: u64,
+    pub uid: u32,
+}
+
+impl WorkspaceIdentity {
+    #[cfg(unix)]
+    pub fn from_metadata(metadata: &fs::Metadata) -> Self {
+        use std::os::unix::fs::MetadataExt;
+        Self {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            uid: metadata.uid(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProfileConfig {
     pub format: String,
     pub workspace: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_identity: Option<WorkspaceIdentity>,
     pub runtime_path: PathBuf,
     pub runtime_sha256: String,
     pub package_root: PathBuf,
@@ -180,6 +204,12 @@ impl ProfileConfig {
         self.verify_assets_with(&mut verification)?;
         verification.entry(&profile_path)?;
         inputs.validate_leases()?;
+        // Diagnostic output cannot interrupt a completed input observation.
+        // Only bounded counts/durations are reported, never paths or authority.
+        {
+            use std::io::Write as _;
+            let _ = writeln!(std::io::stderr().lock(), "{}", inputs.capture_cost());
+        }
         Ok(VerifiedAssets {
             profile,
             profile_path,

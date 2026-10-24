@@ -366,3 +366,20 @@ The performance target is unmet/unmeasured and repeated full verification is
 still present. The implementation is a runnable profiling first slice, **not**
 the completed optimization. No timeouts, witnesses or authority checks were
 weakened, and no paid provider call or live-model effectiveness claim was made.
+
+## Subsequent accepted-main integration and capture diagnosis
+
+Main `8485a51` adds accepted existing-project workspace identity support. Its
+runtime/profile fields, read-only workspace validators and qualification remain
+intact. Workflow resolution retains both existing-project-only and optional Ask
+comparison entry points; ordinary PR admission still runs the full native lanes.
+The generated component workflow is regenerated from the resolved source.
+
+The unresolved 5-second pending-publication failure is being measured rather
+than hidden by a larger timeout or an omitted first hash. A diagnostic-only
+aggregate reports the number/bytes actually hashed, time in initial byte hashing,
+verity/lease acquisition and residual identity/overhead work. It contains no
+paths, authorities or tool arguments and never feeds a proof/admission decision.
+The original full hash, metadata closure, lease and approval checks are unchanged.
+Current native output is needed to identify the dominant cost before choosing
+another optimization; no performance fix is claimed by adding these counters.
