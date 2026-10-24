@@ -16,6 +16,14 @@ on:
         description: Run only native Ubuntu 24.04 preparation qualification
         type: boolean
         default: false
+      ask_latency_baseline_sha:
+        description: Optional full pre-optimization SHA for native-only SOU-124 before/after qualification
+        type: string
+        default: ''
+      existing_project_only:
+        description: Run targeted native Ubuntu SOU-134 existing-project acceptance only
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,7 +40,7 @@ jobs:
       workflow: mcp-real-filesystem.yml
   required-linux-sandbox-and-real-host:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true'))
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.existing_project_only == 'true'))
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -124,6 +132,18 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/large-results" \
             2>&1 | tee "$RUNNER_TEMP/large-results.log"
+      - name: Required filesystem names, expected errors and useful continuation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s scripts/tests -p test_filesystem_paths.py -v
+          python3 -B scripts/verify-filesystem-paths.py --run \
+            --agentfw "$PWD/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --strace /usr/bin/strace \
+            --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/filesystem-paths" \
+            2>&1 | tee "$RUNNER_TEMP/filesystem-paths.log"
       - name: SOU-114 read-only installed pilot diagnosis and private incident export
         shell: bash
         run: |
@@ -351,6 +371,10 @@ jobs:
             ${{ runner.temp }}/large-results/report.json
             ${{ runner.temp }}/large-results/*/collector.log
             ${{ runner.temp }}/large-results/*/daemon.log
+            ${{ runner.temp }}/filesystem-paths.log
+            ${{ runner.temp }}/filesystem-paths/report.json
+            ${{ runner.temp }}/filesystem-paths/enforcing/collector.log
+            ${{ runner.temp }}/filesystem-paths/enforcing/daemon.log
             ${{ runner.temp }}/sou105-approval.log
             ${{ runner.temp }}/sou105-approval/report.json
             ${{ runner.temp }}/sou105-approval/**/*.log
@@ -377,9 +401,11 @@ jobs:
   native-ubuntu-2404:
     name: native-ubuntu-2404
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && github.event.inputs.matched_development_only == 'true')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 65
+    # The optional paired measurement owns two <=3600s side budgets plus setup.
+    # Ordinary PR/default native qualification retains its existing 65 minutes.
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != '' && 140 || 65 }}
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
@@ -391,15 +417,39 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
       - uses: Swatinem/rust-cache@v2
+      - name: Validate optional native Ask comparison
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
+        shell: bash
+        env:
+          ASK_BASELINE_SHA: ${{ github.event.inputs.ask_latency_baseline_sha }}
+          NATIVE_ONLY: ${{ github.event.inputs.native_preparation_only }}
+        run: |
+          set -euo pipefail
+          [[ "$NATIVE_ONLY" == true ]]
+          [[ "$ASK_BASELINE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ASK_BASELINE_SHA" == 8c275fcc9abdee99d4997cd4a985e6ce14d751e6 ]]
+      - name: Attest compiler and interpreter inputs for the native lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/sou122-toolchain"
+          status=0
+          python3 -B scripts/verify-pilot-toolchain.py --lane native \
+            --python "$(command -v python3)" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou122-toolchain/native-attestation.json" || status=$?
+          cat "$RUNNER_TEMP/sou122-toolchain/native-attestation.json"
+          exit "$status"
       - name: Focused preparation boundaries
         env:
           PILOT_CLEANUP_PRIVILEGED_FIXTURE: '1'
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_existing_pilot_workspaces.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_measurement.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_run.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_validation.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_demo.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_cleanup.py -v
@@ -690,7 +740,117 @@ jobs:
           assert rows['first-failure']['status'] == 'failed'
           assert rows['first']['selection'] == rows['reused']['selection'] == rows['recovered']['selection']
           PY
+      - name: Verify real installed Ask capture and resume before comparison
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          first = json.loads((temp / 'sou111-assets/first.json').read_text())
+          generation = Path(first['selection']).resolve(strict=True).parent
+          assert generation.is_relative_to(temp / 'sou111-preparation/generations')
+          for role in ('filesystem', 'git'):
+              profile = generation / (role + '-profile') / 'profile.json'
+              env = dict(os.environ, AGENTFW_MCP_SERVER_PROFILE=str(profile))
+              subprocess.run([os.environ['SOU119_SANDBOX_TESTS'], '--exact',
+                  'mcp::server_profile::tests::native_installed_profile_ask_capture_resume',
+                  '--ignored', '--nocapture', '--test-threads=1'], env=env, check=True, timeout=60)
+          PY
+      - name: Prepare hash-locked offline inputs before Ask measurement
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import importlib.util, json, os, shutil, subprocess
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          first = json.loads((temp / 'sou111-assets/first.json').read_text())
+          generation = Path(first['selection']).resolve(strict=True).parent
+          assert generation.is_relative_to(temp / 'sou111-preparation/generations')
+          spec = importlib.util.spec_from_file_location('prepared_inputs', 'scripts/prepare-installed-pilot.py')
+          prepared = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(prepared)
+          package = generation / 'git-profile/package'
+          expected = json.loads((generation / 'git-profile/profile.json').read_text())['packageTreeSha256']
+          assert prepared.FS.tree_sha(package) == expected, 'profile_package_changed_before_download'
+          inputs = temp / 'sou124-offline-inputs'
+          inputs.mkdir(mode=0o700)
+          shutil.copytree(generation / 'filesystem-profile/npm-cache', inputs / 'npm-cache')
+          shutil.copyfile(generation / 'git-profile/python.tar.gz', inputs / 'python.tar.gz')
+          wheels = inputs / 'wheelhouse'
+          wheels.mkdir(mode=0o700)
+          python = generation / 'git-profile/package/python/bin/python3.11'
+          # -I ignores PYTHONDONTWRITEBYTECODE; -B prevents pip imports from
+          # adding __pycache__ to the already authenticated package tree.
+          subprocess.run([str(python), '-I', '-B', '-m', 'pip', '--isolated', 'download',
+              '--require-hashes', '--only-binary=:all:', '--no-cache-dir',
+              '--disable-pip-version-check', '--index-url', 'https://pypi.org/simple',
+              '--dest', str(wheels), '-r', 'profiles/mcp/git-readonly-v1/requirements.lock'],
+              env={'PATH': '/usr/bin:/bin', 'HOME': str(inputs), 'LANG': 'C.UTF-8'},
+              check=True, timeout=300)
+          assert prepared.FS.tree_sha(package) == expected, 'profile_package_changed_during_download'
+          PY
+      - name: Measure exact-source native Ask before and after with real kernel reuse
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
+        shell: bash
+        env:
+          ASK_BASELINE_SHA: ${{ github.event.inputs.ask_latency_baseline_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ASK_BASELINE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ASK_BASELINE_SHA" == 8c275fcc9abdee99d4997cd4a985e6ce14d751e6 ]]
+          git fetch --no-tags origin "$ASK_BASELINE_SHA" --depth=1
+          baseline="$RUNNER_TEMP/sou124-baseline-source"
+          git worktree add --detach "$baseline" "$ASK_BASELINE_SHA"
+          export SOU124_BASELINE_ROOT="$baseline"
+          python3 -B - <<'PY'
+          import importlib.util, json, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('build_baseline', 'scripts/build-native-pilot-inputs.py')
+          build = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(build)
+          root = Path(os.environ['SOU124_BASELINE_ROOT'])
+          result = build.run_build(root, Path(os.environ['RUNNER_TEMP']) / 'sou124-baseline-build',
+                                   os.environ['ASK_BASELINE_SHA'])
+          path = Path(os.environ['RUNNER_TEMP']) / 'sou111-assets/baseline-build.json'
+          path.write_text(json.dumps(result) + '\n')
+          PY
+          fixture="$RUNNER_TEMP/sou124-lease-fixture"
+          mkdir -m 700 "$fixture"
+          SOU124_LEASE_FIXTURE_DIR="$fixture" "$SOU119_SANDBOX_TESTS" --exact \
+            mcp::server_profile::read_lease::linux::native_tests::native_read_lease_fast_path_qualification_requires_real_proofs \
+            --ignored --nocapture --test-threads=1 | tee "$RUNNER_TEMP/sou111-assets/native-read-lease.log"
+          "$SOU119_SANDBOX_TESTS" 'mcp::server_profile::verified_inputs::tests::' --test-threads=1
+          python3 -B - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          first = json.loads((temp / 'sou111-assets/source-first.json').read_text())
+          baseline = json.loads((temp / 'sou111-assets/baseline-build.json').read_text())
+          command = [sys.executable, '-B', 'scripts/qualify-pilot-ask-comparison.py',
+              '--baseline-root', os.environ['SOU124_BASELINE_ROOT'],
+              '--baseline-commit', os.environ['ASK_BASELINE_SHA'],
+              '--candidate-root', str(Path.cwd()),
+              '--candidate-commit', subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              '--output', str(temp / 'sou124-ask-comparison'),
+              '--offline-inputs', str(temp / 'sou124-offline-inputs')]
+          for side, record in [('baseline', baseline), ('candidate', first)]:
+              for role in ['agentfw', 'git_launcher', 'receipt']:
+                  command += ['--' + side + '-' + role.replace('_', '-'), record[role]]
+          for role, path in {'node': temp / 'sou111-assets/node/bin/node',
+                  'npm': temp / 'sou111-assets/node/bin/npm',
+                  'claude': temp / 'sou111-assets/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude',
+                  'bwrap': os.environ['SOU111_BWRAP'], 'git': os.environ['SOU115_GIT'],
+                  'strace': subprocess.check_output(['which', 'strace'], text=True).strip()}.items():
+              command += ['--' + role, str(path)]
+          raise SystemExit(subprocess.call(command))
+          PY
       - name: Qualify exact prepared selection through enforcing daemon and original servers
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -709,7 +869,18 @@ jobs:
           values['qualification_seconds'] = round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3)
           path.write_text(json.dumps(values, sort_keys=True) + '\n')
           PY
+      - name: Run the first-use demo through the prepared original host
+        if: github.event.inputs.existing_project_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          cd "$HOME"
+          python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" \
+            --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
+            --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou120-demo"
       - name: Qualify owned prepared-selection launch and failures with the original host
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -719,6 +890,18 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --validation-timeout-seconds 120 \
             --output "$RUNNER_TEMP/sou116-qualification"
+      - name: Targeted existing-project read-only pilot with actual host and independent effects
+        if: github.event_name == 'workflow_dispatch' && (github.event.inputs.existing_project_only == 'true' || github.event.inputs.native_preparation_only == 'true')
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement --list > "$RUNNER_TEMP/sou134-tests.list"
+          python3 -c 'import pathlib,sys; assert "pinned_existing_workspace_refuses_replacement: test" in pathlib.Path(sys.argv[1]).read_text()' "$RUNNER_TEMP/sou134-tests.list"
+          "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \
+            --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
+            --output "$RUNNER_TEMP/sou134-qualification"
       - name: Remove only this job's sandbox permission and executable
         if: always()
         shell: bash
@@ -735,6 +918,7 @@ jobs:
           name: sou111-native-preparation-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/sou111-assets/selected-hashes.txt
+            ${{ runner.temp }}/sou122-toolchain/native-attestation.json
             ${{ runner.temp }}/sou111-assets/native-summary.json
             ${{ runner.temp }}/sou111-assets/native-timing.json
             ${{ runner.temp }}/sou111-assets/native-rejected.json
@@ -759,6 +943,14 @@ jobs:
             ${{ runner.temp }}/sou111-assets/recovered.json
             ${{ runner.temp }}/sou111-qualification/**
             ${{ runner.temp }}/sou116-qualification/report.json
+            ${{ runner.temp }}/sou124-ask-comparison/preflight/qualification.json
+            ${{ runner.temp }}/sou124-ask-comparison/comparison.json
+            ${{ runner.temp }}/sou124-ask-comparison/baseline/qualification.json
+            ${{ runner.temp }}/sou124-ask-comparison/candidate/qualification.json
+            ${{ runner.temp }}/sou111-assets/native-read-lease.log
+            ${{ runner.temp }}/sou111-assets/baseline-build.json
+            ${{ runner.temp }}/sou134-qualification/report.json
+            ${{ runner.temp }}/sou120-demo/report.json
             ${{ runner.temp }}/sou121-cleanup/report.json
             ${{ runner.temp }}/sou121-cleanup/dry-run.json
             ${{ runner.temp }}/sou111-qualification/filesystem-sandbox.log

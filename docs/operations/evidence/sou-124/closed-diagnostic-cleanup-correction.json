@@ -1,0 +1,35 @@
+{
+  "format": "sou124-closed-diagnostic-cleanup-correction/1",
+  "baseline": "77b84177c50977f8bf699c777998570dd88348b6",
+  "defect": "real_server eprintln! diagnostics can panic when a host-owned collector stderr pipe loses its reader. Terminal owner/budget/server records precede the authenticated cleanup ACK; the stderr-drain worker also emits metadata before returning its actual result. Panic can therefore skip ACK or change a successful drain into JoinError.",
+  "historical_attribution": "The e340 failed sample retained verified owner/budget records but no terminal signal/errno; neither EPIPE nor SIGTERM is claimed as that exact sample cause.",
+  "correction": "Only diagnostic stderr write errors are ignored, using a local non-panicking writer with unchanged formatting. Actual transport, stderr-drain quota/read result, owner/budget/process cleanup and authenticated ACK still determine success or failure.",
+  "regression": {
+    "mechanism": "Real Unix child test process waits on stdin until its parent has closed the diagnostic stderr reader. It then calls the actual drain_stderr on real child stderr: normal EOF must succeed and >1MiB must still refuse. The parent requires normal successful exit and an exact completion marker.",
+    "parent_bound_seconds": 5,
+    "timeout_behavior": "kill and reap the exact test child, then fail",
+    "before": "fails on eprintln implementation: closed stderr aborted cleanup",
+    "after": "passes, including original quota refusal",
+    "limits": "Local subprocess/diagnostic-drain proof, not a native namespace-owner or daemon ACK acceptance claim."
+  },
+  "log_sha256": {
+    "closed-diagnostic-before-correction.log": "5119d461e6d4b37274313d454fbf357d47ca72f0b806bee9b9a51ac2841d1d6b",
+    "closed-diagnostic-after-correction.log": "e16e80c877cf8286492d3dc557757dbd223d6196fa8e0a78fb99f0723932018a",
+    "workspace-closed-diagnostic-final.log": "bd4382fbf0ccd0e4bb0d228c93165e73ad809c72493f2786d4f839f6191601a5",
+    "clippy-closed-diagnostic-final.log": "6aef7f60f07e3284b3c52f0adf078c56d5e5ea31c3c68a61ade7c4673f415d31",
+    "docs-closed-diagnostic-final.log": "2fb1a2a2835d32fd4a58f1a8d9138493cc2a3f91ab24087891cf4db77a77fbad"
+  },
+  "native_readiness": "Current-source full Linux qualification and Windows CI still required; no readiness inferred from the unit subprocess witness.",
+  "local_checks": {
+    "rust_workspace": {
+      "passed": 1717,
+      "failed": 0,
+      "ignored": 13
+    },
+    "strict_all_target_clippy": "passed, -D warnings",
+    "fmt": "passed",
+    "docs": "Checked 252 Markdown files and 920 local links; 0 errors.",
+    "python": "Unchanged since 77b8417: 1273 run, 1194 passed, 79 platform/optional skips, 0 failures; no needless repeat.",
+    "source_sha256": "0c36cecb4c4153d3524ad0d4b0e3f04f8c78f053502e5282f63ba0cb086820ac"
+  }
+}

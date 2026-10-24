@@ -76,6 +76,7 @@ PUBLIC_FAILURE_CODES = frozenset({
     'owned_daemon_lost',
     'owned_daemon_not_ready',
     'owned_process_cleanup_failed',
+    'owned_stop_unconfirmed',
     'parent_death_signal_unavailable',
     'pilot_cancelled',
     'pilot_cancelled_before_host',
@@ -94,6 +95,16 @@ PUBLIC_FAILURE_CODES = frozenset({
     'state_inside_checkout',
     'state_inside_workspace',
     'unsafe_state_parent',
+    'canonical_existing_workspace_required',
+    'existing_workspace_missing_or_moved',
+    'owned_workspace_without_shared_write_required',
+    'home_directory_workspace_refused',
+    'workspace_binding_invalid',
+    'selected_workspace_changed',
+    'preparation_overlaps_workspace',
+    'private_assets_inside_workspace',
+    'profile_workspace_identity_mismatch',
+    'unsupported_existing_git_layout_use_supported_standalone_repository',
 })
 
 
@@ -202,9 +213,38 @@ def readiness(paths, home, env, process, port, token, registry_sha, ask):
     raise Failure("owned_daemon_not_ready")
 
 
+def confirmed_stop(home, launcher_pid, binary, env, cwd):
+    """Confirm an exact durable receipt through the existing authenticated CLI.
+
+    A JSON status, an intent file, SIGTERM or a successful launcher exit alone
+    is not evidence. The CLI verifies the HMAC bound to these exact run bytes
+    and the expected private daemon home, without contacting a new daemon.
+    """
+    candidates = list((home / "pilot-runs").glob("*/stop.json"))
+    require(len(candidates) == 1, "owned_stop_unconfirmed")
+    record = candidates[0].parent / "run.json"
+    value = PREP.PILOT.strict_json(record.read_bytes())
+    require(value.get("contract") == "sw-pilot-run/1"
+            and value.get("run_id") == record.parent.name
+            and re.fullmatch(r"[0-9a-f]{32}", record.parent.name)
+            and value.get("home") == str(home)
+            and value.get("launcher_pid") == launcher_pid,
+            "owned_stop_unconfirmed")
+    result = subprocess.run([str(binary), "pilot-approval", "--home", str(home),
+        "--run", record.parent.name, "stop"], cwd=cwd, env=env,
+        stdin=subprocess.DEVNULL, capture_output=True, timeout=3)
+    require(result.returncode == 0 and len(result.stdout) <= 4096,
+            "owned_stop_unconfirmed")
+    response = PREP.PILOT.strict_json(result.stdout)
+    require(response == {"run": record.parent.name, "status": "already_stopped",
+                         "running_effects_rolled_back": False}, "owned_stop_unconfirmed")
+
+
 def run(args, report):
     PREP.supported_platform()
     selection, paths, profiles = selected(args)
+    if "prepared_workspaces" in selection:
+        PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent))
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()
@@ -276,8 +316,8 @@ def run(args, report):
                                            args.ask_wait_seconds)
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
             require(selected(args)[0] == selection, "selection_changed_before_host")
-            workspace = Path(profiles["filesystem"]["profile"]["path"]).parent.parent / "filesystem-workspace"
-            git_workspace = Path(profiles["git"]["profile"]["path"]).parent.parent / "git-workspace"
+            roots = PREP.workspace_paths(selection, args.selection.parent)
+            workspace, git_workspace = roots["filesystem"], roots["git"]
             command = [str(paths["agentfw"]), "pilot-launch", "--claude", str(paths["claude"]),
                 "--agent-bin", str(paths["agentfw"]), "--home", str(home), "--workspace", str(workspace),
                 "--git-workspace", str(git_workspace), "--fs-profile", profiles["filesystem"]["profile"]["path"],
@@ -314,7 +354,12 @@ def run(args, report):
             result = os.waitid(os.P_PID, launcher.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
             require(result is not None and result.si_code == os.CLD_EXITED and result.si_status == 0,
                     "restricted_launcher_failed")
-        report.update(status="completed", launcher_exit=0)
+        stops = list((home / "pilot-runs").glob("*/stop.json"))
+        if stops:
+            confirmed_stop(home, launcher.pid, paths["agentfw"], env, private)
+            report.update(status="stopped", launcher_exit=0, running_effects_rolled_back=False)
+        else:
+            report.update(status="completed", launcher_exit=0)
     finally:
         errors = []
         for name, process in (("launcher", launcher), ("daemon", daemon)):
@@ -338,13 +383,22 @@ def run(args, report):
                 errors.append("private_log")
         for sig, handler in previous.items():
             signal.signal(sig, handler)
-        # No unbounded output or secret-bearing state survives normal exit/failure.
+        # Remove ordinary private state; retain explicit stop/recovery receipts below.
         if not errors and private is not None:
             try:
-                shutil.rmtree(private)
+                # An authenticated stop may have completed, or may still need
+                # operator recovery. Preserve its private receipt and identity;
+                # deletion here would make a repeated stop indistinguishable
+                # from an unknown/forged run. No process is preserved.
+                stops = list((private / ".agentfw" / "pilot-runs").glob("*/stop.json"))
+                if stops:
+                    report["retained_stop_state"] = str(private)
+                else:
+                    shutil.rmtree(private)
             except OSError:
                 errors.append("private_state")
-        report["cleanup"] = "failed" if errors else "owned_state_removed"
+        report["cleanup"] = ("failed" if errors else "owned_processes_stopped_state_retained"
+                             if report.get("retained_stop_state") else "owned_state_removed")
         require(not errors, "owned_process_cleanup_failed")
 
 
@@ -362,7 +416,8 @@ def main():
     report = {"format": "sw-prepared-pilot-run/1", "status": "plan", "executed": False}
     try:
         selection, _, profiles = selected(args)
-        report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles)
+        report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
+                      workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
         if args.run:
             run(args, report)
     except Exception as error:

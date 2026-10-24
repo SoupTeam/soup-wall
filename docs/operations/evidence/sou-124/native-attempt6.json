@@ -1,0 +1,1508 @@
+{
+  "format": "sou124-native-qualification-attempt/1",
+  "run_id": 40010363488,
+  "status": "performance_blocker",
+  "artifact": "sou111-native-preparation-40010363488",
+  "comparison_sha256": "b11c2b3da3509996da4551900902774593dbdd71a5ba5ce3af804e87773ebdd5",
+  "source_before": {
+    "baseline": {
+      "commit": "8c275fcc9abdee99d4997cd4a985e6ce14d751e6",
+      "tree": "0ad938290c9aa62c64d78a2ca8543172ad0ad84a",
+      "dirty": false,
+      "files_sha256": "198d658305439fec6c8727e980ef7b2946a23ee706419cfd35e7735194db53ee"
+    },
+    "candidate": {
+      "commit": "d95e000a445708aaa4446d910576cf929baaf740",
+      "tree": "c399caa78c4a378ddeaa39ff78b7e33d5a3def4b",
+      "dirty": false,
+      "files_sha256": "abc635e05fd5f45fba841b1efb57c11bf0d5164f47ec1e8bbed93258aea7d23a"
+    }
+  },
+  "source_after": {
+    "baseline": {
+      "commit": "8c275fcc9abdee99d4997cd4a985e6ce14d751e6",
+      "tree": "0ad938290c9aa62c64d78a2ca8543172ad0ad84a",
+      "dirty": false,
+      "files_sha256": "198d658305439fec6c8727e980ef7b2946a23ee706419cfd35e7735194db53ee"
+    },
+    "candidate": {
+      "commit": "d95e000a445708aaa4446d910576cf929baaf740",
+      "tree": "c399caa78c4a378ddeaa39ff78b7e33d5a3def4b",
+      "dirty": false,
+      "files_sha256": "abc635e05fd5f45fba841b1efb57c11bf0d5164f47ec1e8bbed93258aea7d23a"
+    }
+  },
+  "environment": {
+    "system": "Linux",
+    "release": "6.17.0-1022-azure",
+    "machine": "x86_64"
+  },
+  "harness_source": {
+    "commit": "d95e000a445708aaa4446d910576cf929baaf740",
+    "tree": "c399caa78c4a378ddeaa39ff78b7e33d5a3def4b",
+    "dirty": false,
+    "files_sha256": "abc635e05fd5f45fba841b1efb57c11bf0d5164f47ec1e8bbed93258aea7d23a"
+  },
+  "shared_sha256": {
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "bwrap": "d743af6cf5b2bb4cd244cff9c8eead854f8f495ff75204cb6ee800c2c3810dec",
+    "git": "082d9d1618b0dfcd452f8b5a4f5d6c7c1f9ee7f4dc4913ab6a3add98a3b2ae08",
+    "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+  },
+  "paid_api_calls": 0,
+  "physical_human_presence_proven": false,
+  "preflight_status": "pass",
+  "sides": {
+    "baseline": {
+      "status": "performance_blocker",
+      "metrics": {
+        "filesystem": {
+          "planned": 20,
+          "successful": 20,
+          "failed": 0,
+          "incomplete": 0,
+          "p50_ms": 5566.812997,
+          "p95_ms": 5976.986912,
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "target_ms": 3000,
+          "target_met": false
+        },
+        "git": {
+          "planned": 20,
+          "successful": 20,
+          "failed": 0,
+          "incomplete": 0,
+          "p50_ms": 6456.692781,
+          "p95_ms": 6493.114153,
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "target_ms": 3000,
+          "target_met": false
+        },
+        "status": "performance_blocker"
+      },
+      "runtime_implementation_source": {
+        "commit": "8c275fcc9abdee99d4997cd4a985e6ce14d751e6",
+        "tree": "0ad938290c9aa62c64d78a2ca8543172ad0ad84a",
+        "dirty": false,
+        "files_sha256": "198d658305439fec6c8727e980ef7b2946a23ee706419cfd35e7735194db53ee"
+      },
+      "qualification_sha256": "6ad9974794cfba4e89875fc2cd9fc3567a710cdedaf4a274c39cfabd7608bc5b",
+      "source": {
+        "commit": "d95e000a445708aaa4446d910576cf929baaf740",
+        "tree": "c399caa78c4a378ddeaa39ff78b7e33d5a3def4b",
+        "dirty": false
+      },
+      "source_after": {
+        "commit": "d95e000a445708aaa4446d910576cf929baaf740",
+        "tree": "c399caa78c4a378ddeaa39ff78b7e33d5a3def4b",
+        "dirty": false
+      },
+      "selected_sha256": {
+        "agentfw": "6c76ea42de0312eeda2fdae706aaf1525653197dc45227b6eececbf46a47fa29",
+        "git_launcher": "5902c0e44318e438b262fa1928c2c2f6258ad3b0f0ecf0b1a3c793c59e5b6334",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "bwrap": "d743af6cf5b2bb4cd244cff9c8eead854f8f495ff75204cb6ee800c2c3810dec",
+        "git": "082d9d1618b0dfcd452f8b5a4f5d6c7c1f9ee7f4dc4913ab6a3add98a3b2ae08",
+        "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+      },
+      "trace_requested": {
+        "mode": "seccomp-bpf",
+        "fallback_possible": true,
+        "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
+      },
+      "workspace_unchanged": true,
+      "all_40_original_effects_and_cleanup_verified": true,
+      "cases": [
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 0,
+          "passed": true,
+          "decision_to_result_ms": 6458.852569,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "1ef28626336855bbf9741df35390408ea62d89463a19de4dc3970dec53a13aab",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 1,
+          "passed": true,
+          "decision_to_result_ms": 6442.336064,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "73f580bae9e98ee643d8db65ab84fd4890c14117cddcd5e32e20360456820e98",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 2,
+          "passed": true,
+          "decision_to_result_ms": 6443.276468,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "03ef94044adf49e406a201b0c7368c6f44272bf731b5af0f287c566ae66cdf37",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 3,
+          "passed": true,
+          "decision_to_result_ms": 6441.764964,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "a8e1075b5b1bb4dd3090b3a143a9acebc76caf90be42f0758a8662fbab508111",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 4,
+          "passed": true,
+          "decision_to_result_ms": 6478.385099,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "1746702ab8184d73173e90d53b43b73a2eb8ae5b0ad3d3b28cf0c4a862666561",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 5,
+          "passed": true,
+          "decision_to_result_ms": 6445.40002,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "2ca930c2a2daa65959483f9dd3b4a1b45586f1104d7607ee0d21c65cf81a0817",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 6,
+          "passed": true,
+          "decision_to_result_ms": 6474.93198,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "652a21fb5c7343d70d3f492f12ec97ed9c2dc5fb23ef1aee15db4da11ec71510",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 7,
+          "passed": true,
+          "decision_to_result_ms": 6475.956945,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "06859b87f717d1e2b07e33bce4dc324d3f5be01bbbe263df2dc0dcf24d502258",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 8,
+          "passed": true,
+          "decision_to_result_ms": 6437.126891,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "cfb3a2768ebb8085c3a0a7f1a370a5b9bc3352b4729a9d7c84393bf0ba2ed6e3",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 9,
+          "passed": true,
+          "decision_to_result_ms": 6465.83925,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "53058e32c82eee4afba5f8ee17503a94898c2b408898d3dad8ef4a444848cc83",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 10,
+          "passed": true,
+          "decision_to_result_ms": 6430.952673,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "6180eb4b7109f3977961fa1a736ab3344bbdc218940972564093bd91d015e4cf",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 11,
+          "passed": true,
+          "decision_to_result_ms": 6456.692781,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "c35c9b271140dd2c0f9afaa1dca1c940576de1a5176f37045011d892450d08a8",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 12,
+          "passed": true,
+          "decision_to_result_ms": 6493.114153,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "6e5e5c4335452b5faec7cf4fd42b265f0bd5c0e506cb721da1f87f77712fbc8d",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 13,
+          "passed": true,
+          "decision_to_result_ms": 6438.294203,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "4ad73a60f9b8a53902acda000b35d977b4373ff7b1f6f032532ff6f0ec260696",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 14,
+          "passed": true,
+          "decision_to_result_ms": 6451.627538,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "4ef5802ba2a5c540aaa2df37c953e70b4dd225313aefdb8a0bf2745e4cc06e48",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 15,
+          "passed": true,
+          "decision_to_result_ms": 6458.708651,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "117bdbc057eed380825f0757577d9842d414ec2ce5694ac56511dda76a8682de",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 16,
+          "passed": true,
+          "decision_to_result_ms": 6462.153276,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "87a72ba083816ccae0283694e171a054b290ee5e48f9ee69e7fa311afc8ef9d4",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 17,
+          "passed": true,
+          "decision_to_result_ms": 6452.7808,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "f242bb1b36104b1212b2d61d19640ebb36e05fccdcffdf59589d929cc6d0a40e",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 18,
+          "passed": true,
+          "decision_to_result_ms": 6502.409532,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "eaa9c0fbcea89368a96c04224395b6d6c9b5e69d84c18079dd61f43ca8b2b77f",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 19,
+          "passed": true,
+          "decision_to_result_ms": 6486.66642,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "95199506b62bf2713b1e13b1c3497b84f70d28bf934848a638da66e364a5138e",
+          "host_result_sha256": "07b75d69fcedf96f0c8a5b6063ace757f83264a7cf406954de88aa4029af367e",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 0,
+          "passed": true,
+          "decision_to_result_ms": 5582.175964,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "4b969888c803a129a0f9532d52b85cf72845140cc1a08a05b667674a41bb772f",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 1,
+          "passed": true,
+          "decision_to_result_ms": 5566.812997,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "69a1e32a6287c25e9b85c78bd66d0b8a485261dd3e2119642883eb5b3a1e95e6",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 2,
+          "passed": true,
+          "decision_to_result_ms": 5621.546576,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "9f2c97801358dee26babeb651880d41cfede5052c1fd71700eb90195d36a4af9",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 3,
+          "passed": true,
+          "decision_to_result_ms": 5551.066119,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "43e2f107d764205a3a3bf1d42be0c5f83c7dd104f7ba74bd9aa9bcd92ee0b375",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 4,
+          "passed": true,
+          "decision_to_result_ms": 5570.808371,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "996ad003a0029f44a6a8182866b74712259ab8bef4c1a0c1a051cabcdba47876",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 5,
+          "passed": true,
+          "decision_to_result_ms": 5583.855938,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "988d60766585cd805f65224ef198e211e2bf056d67bef265c6077b83e1e672eb",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 6,
+          "passed": true,
+          "decision_to_result_ms": 5549.096728,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "806c6f6c35621e4c70d24018bd534f5875ad6d7bef5d16f887c0e5a329173b22",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 7,
+          "passed": true,
+          "decision_to_result_ms": 5543.097228,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "362a3d3551b51f55eac95a71774a1eb1d737ef1e7508dfa9fb1eac2b3c698144",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 8,
+          "passed": true,
+          "decision_to_result_ms": 5555.347885,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "9d2c9a1186817b8b75b92797cc92dc6eb8a71e0e79b40fd00af6df1a8ed0c854",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 9,
+          "passed": true,
+          "decision_to_result_ms": 5528.173983,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "2f66872c2a4f95d3879eaf8f741c24036b0ce1e90a454e9d53871d294a7ce05f",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 10,
+          "passed": true,
+          "decision_to_result_ms": 5558.180505,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "b0021bf7f103bb93bf3c091e7f2455e458a42adb7d774d163c736c23479b8499",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 11,
+          "passed": true,
+          "decision_to_result_ms": 5563.232997,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "366177173b9c13698c6bdd42163a6a3239ae574d4abb50e0d7bd5eafd5967589",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 12,
+          "passed": true,
+          "decision_to_result_ms": 5552.48837,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "cdfb4759fc22c18b293b43e97fade68a867656a931384802737f37407bdb5eca",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 13,
+          "passed": true,
+          "decision_to_result_ms": 5590.233853,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "fbf0b71d2821690e85c403fb7e190d650422cc11da8fb977c025a75bcf02a681",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 14,
+          "passed": true,
+          "decision_to_result_ms": 5976.986912,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "7e0306ad1607d3f700bce05320ad289b7b59c474a38b454f20c463e684e30bad",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 15,
+          "passed": true,
+          "decision_to_result_ms": 5584.513423,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "540a2635d41b2dfa464fc6524ef2a00f05cf69dfc8ae1e02d8170a6154adc1a7",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 16,
+          "passed": true,
+          "decision_to_result_ms": 5585.70996,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "4aaf28bea0fb2082b31226ee95ddf096f4b169f2611e6f5943aefca67cde95a0",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 17,
+          "passed": true,
+          "decision_to_result_ms": 5995.428732,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "846cc16e82af470ae1ee5bce74a384cca805f90b62fcb029e8e3ed603866b111",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 18,
+          "passed": true,
+          "decision_to_result_ms": 5577.795116,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "1a7b668a7e24be48a82d19ed380484ffc4de60923f7957a592e02057984eccbb",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 19,
+          "passed": true,
+          "decision_to_result_ms": 5512.271417,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "80f1e44f0dd920deb5c39f691d6b28d3bbd646b509e71820a62b89116ce106ea",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        }
+      ]
+    },
+    "candidate": {
+      "status": "performance_blocker",
+      "metrics": {
+        "filesystem": {
+          "planned": 20,
+          "successful": 20,
+          "failed": 0,
+          "incomplete": 0,
+          "p50_ms": 2015.973892,
+          "p95_ms": 2053.221803,
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "target_ms": 3000,
+          "target_met": true
+        },
+        "git": {
+          "planned": 20,
+          "successful": 20,
+          "failed": 0,
+          "incomplete": 0,
+          "p50_ms": 3212.695048,
+          "p95_ms": 3274.838387,
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "target_ms": 3000,
+          "target_met": false
+        },
+        "status": "performance_blocker"
+      },
+      "runtime_implementation_source": {
+        "commit": "d95e000a445708aaa4446d910576cf929baaf740",
+        "tree": "c399caa78c4a378ddeaa39ff78b7e33d5a3def4b",
+        "dirty": false,
+        "files_sha256": "abc635e05fd5f45fba841b1efb57c11bf0d5164f47ec1e8bbed93258aea7d23a"
+      },
+      "qualification_sha256": "06be813d9ccad527e603835850c6493748412b1797b571f29b363dfde06b70ec",
+      "source": {
+        "commit": "d95e000a445708aaa4446d910576cf929baaf740",
+        "tree": "c399caa78c4a378ddeaa39ff78b7e33d5a3def4b",
+        "dirty": false
+      },
+      "source_after": {
+        "commit": "d95e000a445708aaa4446d910576cf929baaf740",
+        "tree": "c399caa78c4a378ddeaa39ff78b7e33d5a3def4b",
+        "dirty": false
+      },
+      "selected_sha256": {
+        "agentfw": "0b227c488c48a5a97d0b9d3204ccfb2ed558a7ebcc4da394a865414c159a95bc",
+        "git_launcher": "0b8e470d5d3e35d87c22c55a2677b77457f30b2b640a2d26d528e04a07f8cb8e",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "bwrap": "d743af6cf5b2bb4cd244cff9c8eead854f8f495ff75204cb6ee800c2c3810dec",
+        "git": "082d9d1618b0dfcd452f8b5a4f5d6c7c1f9ee7f4dc4913ab6a3add98a3b2ae08",
+        "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+      },
+      "trace_requested": {
+        "mode": "seccomp-bpf",
+        "fallback_possible": true,
+        "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
+      },
+      "workspace_unchanged": true,
+      "all_40_original_effects_and_cleanup_verified": true,
+      "cases": [
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 0,
+          "passed": true,
+          "decision_to_result_ms": 3264.079298,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "19342e9ddf612a85ab2d48b76b6f21a82fba16423b2c4d0d9cb7e763ebba0572",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 1,
+          "passed": true,
+          "decision_to_result_ms": 3267.901406,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "0c102657de88b78af2f3100068f42df57f4d6bf3f06dccf069e490e4daf9f211",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 2,
+          "passed": true,
+          "decision_to_result_ms": 3296.819802,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "2467c549ecbc7583364c29d68ba0c8f1b62d1ce28ab35fa477a8c6bd5b0b80df",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 3,
+          "passed": true,
+          "decision_to_result_ms": 3155.175193,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "ed3d1c48f01a67680945a69f4dd4427f548027815bcdcb6512f6a3045c7d0919",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 4,
+          "passed": true,
+          "decision_to_result_ms": 3186.145525,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "e409998a5100ac70f557a2fab5d1fc0f7637dda1fe8aee7fe3935b468b5291cd",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 5,
+          "passed": true,
+          "decision_to_result_ms": 3191.209579,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "f0aced560c0b70a7a5dcd20ad47743034c1c2840101896bdf6b505799fef758a",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 6,
+          "passed": true,
+          "decision_to_result_ms": 3238.281218,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "bce3e80fa275edfd6882da1e95a39255c69c5bdef16328d51e5e9ffd087354b1",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 7,
+          "passed": true,
+          "decision_to_result_ms": 3132.70063,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "c6d34aa2f20929d338a56f2f6df7b6f9018ccb404d3e7c074abce1d7c9e782f7",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 8,
+          "passed": true,
+          "decision_to_result_ms": 3186.071787,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "d6870adeb9d7110d494b3d359790b002651896df9bb16359084d4ff34a4bbfd5",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 9,
+          "passed": true,
+          "decision_to_result_ms": 3247.048211,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "99fd36eb6d0a39eb24866f3bcb0eae162eabbbec3e106b1f2ac02df87b798ac0",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 10,
+          "passed": true,
+          "decision_to_result_ms": 3201.17321,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "c10112da306e53bc1325d6f5f73c5a8715bfaa499331832768525b632a030937",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 11,
+          "passed": true,
+          "decision_to_result_ms": 3212.695048,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "c9e60a423061233c113c55d89d34229244c462e831b648d17b8095e723b17587",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 12,
+          "passed": true,
+          "decision_to_result_ms": 3274.838387,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "d6f0e419c412ae08d014d79eeb514266d228dc1aa8675e1a44df527a5e670b66",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 13,
+          "passed": true,
+          "decision_to_result_ms": 3217.956247,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "104ff0e31dbdeae99887737b74961217c844130113a5832213f0321d23569df9",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 14,
+          "passed": true,
+          "decision_to_result_ms": 3184.078986,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "fb8f7acee5c83924cf7a9d9c4b1eb3b6ae0cf43f85112b1e14b6342aab685afc",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 15,
+          "passed": true,
+          "decision_to_result_ms": 3260.824276,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "f40950567f4038783a646119b8c70ee796fd0098e167e946b32eb9dd1a07af59",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 16,
+          "passed": true,
+          "decision_to_result_ms": 3166.400799,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "fec42f279cf464727545efaf38f9049708d8fcdff964e16229be79290fb9b2ff",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 17,
+          "passed": true,
+          "decision_to_result_ms": 3220.815937,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "130b9e6c74575eb0a108e6e62691308f815ae4b95ddbd1f11ce3f8ee620a01f1",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 18,
+          "passed": true,
+          "decision_to_result_ms": 3245.16779,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "3e2217613c885b049a5b8e65e36952ef073abe14093b3897619cf89eb36f9286",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 19,
+          "passed": true,
+          "decision_to_result_ms": 3178.305826,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 96,
+            "rehashed_files": 5721,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "trace_sha256": "8e6159648754338b3fbe7882861eeef71933907fe56862f135a9b7b50e500076",
+          "host_result_sha256": "414aab4073a0e35ec7a3bfc5b7eaa19c3c700d7b8337f4707d3e3e949861ca2d",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 0,
+          "passed": true,
+          "decision_to_result_ms": 2029.202761,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "57a28b3744da181ac3f1f891a7f115342155115d244ece5b624f0ef9971fe312",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 1,
+          "passed": true,
+          "decision_to_result_ms": 1984.805747,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "034bab09672104cf41ac2f285480b280a6470eb7472b56ceeac64cd9c34898a8",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 2,
+          "passed": true,
+          "decision_to_result_ms": 2032.693921,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "69843b9ff24175edb0139a515808f7629fceb6444479fad2ae0ad829666d87b0",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 3,
+          "passed": true,
+          "decision_to_result_ms": 2033.098364,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "85eefad5419888ffb99ee565c21be4e80abab0ee565a809957c0a93ae4590fc5",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 4,
+          "passed": true,
+          "decision_to_result_ms": 2038.058966,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "b7610cff9c7a0faa79804935cf5575f58ed90373d40bc3e64bfa5885c36aaa8f",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 5,
+          "passed": true,
+          "decision_to_result_ms": 2046.907779,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "54a72d425e20a3a02bdd0253f1cbef918f967b06ebb4b46b3cef072cbc95112a",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 6,
+          "passed": true,
+          "decision_to_result_ms": 2024.732582,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "a3a787c82c4535656d9f0591cf3c348eb2c4d2123456c8df62a2f7aff9efafd5",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 7,
+          "passed": true,
+          "decision_to_result_ms": 1978.396173,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "348b0a87adc5504e30708107a532630262c8ec2f83109f9aaf0f83854bf997f1",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 8,
+          "passed": true,
+          "decision_to_result_ms": 2041.404747,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "7d629b83a54805eb97ff3cb84f2fc6156b3ce80b93f9c4c18ddcf34a8686fe19",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 9,
+          "passed": true,
+          "decision_to_result_ms": 1998.669252,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "998c5c3ae150c3ca0bb72fab22a7299326d976806cf933cd683ae9165b516706",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 10,
+          "passed": true,
+          "decision_to_result_ms": 1986.389755,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "fcf0e367bd22ee39fc0809450d231f12a95dfbb204d83b9c7a8bcd515ae25a6e",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 11,
+          "passed": true,
+          "decision_to_result_ms": 2036.145728,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "df342e23f0d9a6933f175e282f4a17f3e41411491ae1e04d06a943e78ffbf320",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 12,
+          "passed": true,
+          "decision_to_result_ms": 1983.430477,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "b499adc9495db2bf49752fa07c9c1f4bbfc0afca2c46e88801c5653ce08cc233",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 13,
+          "passed": true,
+          "decision_to_result_ms": 1965.309027,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "7919409996845de8928a6b9b87156fff987ecc8a19b5314ed5b87f440d182daa",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 14,
+          "passed": true,
+          "decision_to_result_ms": 1992.281589,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "b663179f86eb910fd6e10416030ac4c30592dc3a882b3490a8cda34c5225d485",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 15,
+          "passed": true,
+          "decision_to_result_ms": 2066.0671,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "42d5de2d36f68ead5eeb69b2bedbcaf4550fb7b30338789321b966c2d8b50684",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 16,
+          "passed": true,
+          "decision_to_result_ms": 2015.973892,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "add0adb558ed4d5a68280ec65dedcde1e38445ef460b3c67be891dc1fce45e85",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 17,
+          "passed": true,
+          "decision_to_result_ms": 2053.221803,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "9e4636a4b3dff0d45c10d04c17eccf0c34a3e2db3f3b37ca92860a74589546b6",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 18,
+          "passed": true,
+          "decision_to_result_ms": 2004.481708,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "089c566546b08fefed12eed0491c246056e37213b7ebf5c578aff88b9b4fb039",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 19,
+          "passed": true,
+          "decision_to_result_ms": 1991.741357,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 52,
+            "rehashed_files": 4037,
+            "observer": "collector mcp_verified_inputs_resume"
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true,
+          "cross_run_isolation_and_cleanup": true,
+          "trace_sha256": "1dc99d13d5293f04c75c5698a05878530c9e34b6a11cad58ca018f1681cd438c",
+          "host_result_sha256": "fff22620284395df79c720ca8e4820448a1c84b59a40cd938289a3cbb9bde194",
+          "raw_arguments_exported": false
+        }
+      ]
+    }
+  },
+  "verdict": "Filesystem meets 3000 ms; Git p95 3274.838387 ms remains a performance blocker. No timeout or target relaxation."
+}
