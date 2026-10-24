@@ -19,6 +19,8 @@ def fixture():
     attempt = {'format': 'sou142-offline-budget-host-attempt/1',
         'status': 'partial-runtime-completed-pending-parent-projection', 'source_commit': COMMIT,
         'selected_sha256': selected, 'selection_sha256': SHA, 'budget_sha256': SHA,
+        'peer_budget_sha256': SHA, 'owned_peer_budget_root_empty': True,
+        'budgeted_emergency_stop_qualified': True,
         'owned_budget_root_empty': True, 'actual_original_host_covered': True, 'owner_controls': []}
     for server in ('filesystem', 'git'):
         for handoff in (False, True):
@@ -56,6 +58,17 @@ def fixture():
                 if name == 'useful-refusal':
                     row['kernel_git_status_count'] = 1
         raw['cases'].append(row)
+    stops = []
+    for name in ('two-prepared-runs', 'interrupted-stop', 'daemon-loss-stop', 'unconfirmed-namespace-stop'):
+        row = copy.deepcopy(raw['cases'][4])
+        row.update(case=name, future_dispatches=0)
+        if name == 'two-prepared-runs':
+            row = {'case': name, 'status': 'passed', 'future_dispatches': 0,
+                'selected': row, 'peer': copy.deepcopy(row), 'peer_useful_after_stop': True,
+                'peer_original_dispatches_after_stop': 2, 'unrelated_process_identity_preserved': True,
+                'unrelated_listener_preserved': True}
+        stops.append(row)
+    raw['emergency_stop'] = {'status': 'passed', 'source_commit': COMMIT, 'cases': stops}
     raw['private-marker'] = 'private-owned-do-not-export'
     return attempt, raw
 
@@ -88,6 +101,9 @@ class Projection(unittest.TestCase):
             lambda x, y: y['cases'][4].update(kernel_git_status_count=0),
             lambda x, y: y['cases'][5].update(explicit_harness_decisions=0),
             lambda x, y: y['selected_sha256'].update(agentfw='c' * 64),
+            lambda x, y: x.update(owned_peer_budget_root_empty=False),
+            lambda x, y: y['emergency_stop']['cases'][0].update(peer_useful_after_stop=False),
+            lambda x, y: y['emergency_stop']['cases'].pop(),
         ]
         for mutate in mutations:
             with self.subTest(mutation=mutations.index(mutate)):

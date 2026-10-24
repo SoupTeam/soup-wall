@@ -1022,7 +1022,9 @@ mod linux {
                         .strip_prefix("agentfw-mcp-")
                         .is_some_and(|name| {
                             name.len() == 32
-                                && name.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+                                && name
+                                    .bytes()
+                                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
                         }),
                 "mcp_budget_prepared_invalid"
             );

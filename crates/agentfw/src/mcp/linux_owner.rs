@@ -62,7 +62,6 @@ pub fn early_dispatch() -> Option<i32> {
 }
 
 #[cfg(target_os = "linux")]
-#[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
 mod linux {
     use std::collections::BTreeSet;
     use std::ffi::CString;
@@ -382,7 +381,6 @@ mod linux {
         Ok(())
     }
 
-    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
     fn receive_budget_fds(socket: &UnixDatagram) -> std::io::Result<(BudgetPrepared, Vec<File>)> {
         let invalid = || {
             std::io::Error::new(
@@ -433,7 +431,7 @@ mod linux {
                 {
                     valid_headers += 1;
                     let length = (*header).cmsg_len - minimum;
-                    headers_valid = headers_valid && length.is_multiple_of(std::mem::size_of::<RawFd>());
+                    headers_valid &= length.is_multiple_of(std::mem::size_of::<RawFd>());
                     for index in 0..length / std::mem::size_of::<RawFd>() {
                         let descriptor = std::ptr::read_unaligned(
                             libc::CMSG_DATA(header).cast::<RawFd>().add(index),
@@ -462,7 +460,6 @@ mod linux {
         Ok((prepared, files))
     }
 
-    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
     async fn adopt_budget(
         socket: UnixDatagram,
         requested: &BudgetPrepare,
@@ -517,7 +514,6 @@ mod linux {
         Ok((budget, prepared.instance))
     }
 
-    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
     fn await_budget_adoption(
         transfer: &UnixDatagram,
         collector: &File,
@@ -1470,10 +1466,10 @@ mod linux {
             .copied()
             .filter(|fd| {
                 *fd != spec.bwrap_fd
-                    && !spec
+                    && spec
                         .budget_prepare
                         .as_ref()
-                        .is_some_and(|request| request.root_fd == *fd)
+                        .is_none_or(|request| request.root_fd != *fd)
                     && Some(*fd) != spec.budget_attach_fd
                     && !spec.budget_cleanup.as_ref().is_some_and(|cleanup| {
                         [

@@ -30,7 +30,7 @@ OWNER_TESTS = (
 )
 HOST_CASES = frozenset(('useful-refusal', 'ask', 'default', 'cancel', 'daemon-loss',
                         'host-crash', 'timeout'))
-GAPS = ('original-memory-pid-wall-calibration', 'budgeted-emergency-stop',
+GAPS = ('original-memory-pid-wall-calibration',
         'owner-loss-before-descriptor-handback')
 
 
@@ -123,7 +123,7 @@ def main():
         temporary.replace(destination)
 
     save()
-    delegated = None
+    delegated = peer_root = None
     try:
         require(re.fullmatch(r'[0-9a-f]{40}', args.expected_commit), 'full_candidate_source_required')
         require(not out.is_relative_to(src) and stat.S_IMODE(out.stat().st_mode) == 0o700
@@ -220,8 +220,20 @@ def main():
         budget = out / 'linux-budget.json'
         with budget.open('x') as stream:
             stream.write(json.dumps(config, sort_keys=True) + '\n')
+        # The simultaneous stop peer owns a separate explicit substrate. This
+        # is disposable acceptance setup; the product never creates roots or
+        # changes delegation. Both peers retain identical accepted limits.
+        peer_root = delegated.with_name('peer-budgets')
+        peer_root.mkdir(mode=0o700)
+        (peer_root / 'cgroup.subtree_control').write_text('+cpu +memory +pids')
+        peer_config = dict(config, delegationRoot=str(peer_root))
+        peer_budget = out / 'linux-budget-peer.json'
+        with peer_budget.open('x') as stream:
+            stream.write(json.dumps(peer_config, sort_keys=True) + '\n')
         budget_digest = hashlib.sha256(json.dumps(config, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-        record.update(budget_sha256=budget_digest, budget_limits=NORMAL,
+        record.update(budget_sha256=budget_digest,
+                      peer_budget_sha256=hashlib.sha256(json.dumps(peer_config, sort_keys=True,
+                          separators=(',', ':')).encode()).hexdigest(), budget_limits=NORMAL,
                       delegation={'unprivileged': delegation['unprivileged'],
                                   'controllers': delegation['controllers'],
                                   'manager_membership_verified': delegation['manager_membership_verified']})
@@ -256,7 +268,7 @@ def main():
         # explicit collector binding/digest, not RESOURCE.Client constructors.
         run('actual-host-budget-qualification', [sys.executable, '-B', src / 'scripts/qualify-prepared-pilot-run.py',
             '--selection', selection, '--expected-commit', args.expected_commit,
-            '--strace', '/usr/bin/strace', '--linux-budget', budget,
+            '--strace', '/usr/bin/strace', '--linux-budget', budget, '--linux-budget-peer', peer_budget,
             '--validation-timeout-seconds', '120', '--output', out / 'prepared-budget-native'], 850)
         record['qualifier_exit_code'] = 0
         result = bounded_json(out / 'prepared-budget-native/report.json', 4 * 1024 * 1024)
@@ -279,8 +291,25 @@ def main():
                             'budget_status': observed['status'],
                             'observed_children': observed['observed_children']})
         empty_root(delegated)
+        empty_root(peer_root)
         record['actual_host_cases'] = summary
-        record['unbudgeted_stop_section_present'] = bool(result.get('emergency_stop'))
+        section = result.get('emergency_stop', {})
+        require(section.get('status') == 'passed' and len(section.get('cases', [])) == 4,
+                'budgeted_stop_qualification_incomplete')
+        record['budgeted_emergency_stop_qualified'] = True
+        sys.path.insert(0, str(src / 'scripts'))
+        pressure = load(src, 'sou142_original_pressure', 'scripts/prepared_budget_pressure.py')
+        from types import SimpleNamespace
+        context = SimpleNamespace(BASE=load(src, 'sou142_actual_host_baseline',
+            'scripts/qualify-prepared-pilot-run.py').BASE,
+            LAUNCH=None, RESOURCE=resource, ROOT=src)
+        record['original_pressure'] = pressure.qualify(context, selection, paths, profiles,
+            delegated, out / 'original-pressure', args.expected_commit)
+        # Failed/non-exhausting calibration remains a retained environmental
+        # outcome. This partial slice never asserts final acceptance.
+        if record['original_pressure']['status'] == 'passed':
+            record['remaining_gaps'].remove('original-memory-pid-wall-calibration')
+        save()
         clean_source()
         for role, digest in identity['binaries'].items():
             require(sha(paths[role]) == digest, 'closing_runtime_identity_changed')
@@ -298,6 +327,12 @@ def main():
                 record['owned_budget_root_empty'] = True
             except (Refusal, OSError):
                 record.update(status='failed', owned_budget_root_empty=False)
+        if peer_root is not None:
+            try:
+                empty_root(peer_root)
+                record['owned_peer_budget_root_empty'] = True
+            except (Refusal, OSError):
+                record.update(status='failed', owned_peer_budget_root_empty=False)
         save()
     return 0 if record['status'] == 'partial-runtime-completed-pending-parent-projection' else 1
 

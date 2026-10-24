@@ -1,0 +1,171 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Owned actual-host calibration attempts over original FS/Git servers.
+
+No injected workers, substituted servers or observer cleanup. Non-exhaustion is
+retained as incomplete, never silently changed into a successful refusal.
+"""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+from prepared_budget_observer import BudgetObserver
+
+
+def qualify(context, selection, paths, profiles, delegation, output, commit):
+    base, launch, resource = context.BASE, context.LAUNCH, context.RESOURCE
+    output.mkdir(mode=0o700)
+    normal = {'format': 'sw-mcp/linux-cgroup-budget/1', 'delegationRoot': str(delegation),
+        'memoryMaxBytes': 512 * 1024 * 1024, 'pidsMax': 64, 'cpuQuotaMicros': 100000,
+        'wallMillis': 120000}
+    runtimes = {server: Path(json.loads(Path(value['profile']['path']).read_bytes())['runtimePath'])
+                for server, value in profiles.items()}
+    workspaces = {server: Path(json.loads(Path(value['profile']['path']).read_bytes())['workspace'])
+                  for server, value in profiles.items()}
+    before = {key: base.snapshot(path) for key, path in workspaces.items()}
+    env = {'PATH': '/usr/bin:/bin', 'HOME': str(output), 'TMPDIR': str(output), 'LANG': 'C.UTF-8'}
+    attempts = []
+
+    def classify(pid):
+        start = base.ProcessWitness.identity(pid)
+        if start is None:
+            return None
+        try:
+            for server, runtime in runtimes.items():
+                if Path(f'/proc/{pid}/exe').samefile(runtime) and base.ProcessWitness.identity(pid) == start:
+                    return {'server': server, 'original_runtime_seen': True}
+        except (OSError, ValueError):
+            pass
+        return None
+
+    for server in ('filesystem', 'git'):
+        for kind in ('memory', 'pids', 'wall'):
+            label = server + '-' + kind
+            root = output / label
+            root.mkdir(mode=0o700)
+            state = root / 'state'
+            state.mkdir(mode=0o700)
+            limits = dict(normal)
+            limits.update({'memoryMaxBytes': 64 * 1024 * 1024} if kind == 'memory' else
+                          {'pidsMax': 16} if kind == 'pids' else {'wallMillis': 1000})
+            budget = root / 'budget.json'
+            budget.write_text(json.dumps(limits, sort_keys=True) + '\n')
+            budget.chmod(0o600)
+            digest = hashlib.sha256(json.dumps(limits, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            row = {'server': server, 'resource': kind, 'status': 'incomplete', 'budget_sha256': digest,
+                   'limits': {key: limits[key] for key in ('memoryMaxBytes', 'pidsMax', 'cpuQuotaMicros', 'wallMillis')},
+                   'server_origin': 'pinned-original', 'forced_cleanup': False}
+            attempts.append(row)
+            payload, original = None, None
+            if kind == 'memory':
+                payload = workspaces[server] / ('sou142-pressure.txt' if server == 'filesystem' else 'tracked.txt')
+                original = payload.read_bytes() if payload.exists() else None
+                # Fixed owned calibration bytes; original package and executable
+                # remain unchanged. No data or payload bytes are exported.
+                payload.write_bytes(b'owned-resource-calibration\n' * (40 * 1024 * 1024 // 27))
+            model = base.DEMO.ScriptedModel([])
+            model.server.handle_error = lambda *_: None
+            offered = set()
+            def next_step(body):
+                for message in body.get('messages', []):
+                    for block in message.get('content', []) if isinstance(message.get('content'), list) else []:
+                        if isinstance(block, dict) and block.get('type') == 'tool_result' and block.get('tool_use_id') in offered:
+                            model.results[block['tool_use_id']] = bool(block.get('is_error'))
+                tools = {tool.get('name') for tool in body.get('tools', [])}
+                tool = 'read_text_file' if server == 'filesystem' else 'git_diff' if kind == 'memory' else 'git_status'
+                name = f'mcp__{server}__{tool}'
+                if name not in tools:
+                    return [{'type': 'text', 'text': 'Owned calibration startup.'}]
+                if kind == 'wall':
+                    time.sleep(2)
+                    return [{'type': 'text', 'text': 'Owned wall calibration.'}]
+                if not offered:
+                    count = 8 if kind == 'pids' else 1
+                    arguments = {'path': '/workspace/sou142-pressure.txt' if kind == 'memory' else '/workspace/notes.txt'} \
+                        if server == 'filesystem' else {'repo_path': '/workspace'}
+                    if server == 'git' and kind == 'memory':
+                        arguments['target'] = 'HEAD'
+                    frames = []
+                    for ordinal in range(count):
+                        identifier = f'toolu_pressure_{ordinal}'
+                        offered.add(identifier)
+                        frames.append({'type': 'tool_use', 'id': identifier, 'name': name, 'input': arguments})
+                    return frames
+                return [{'type': 'text', 'text': 'Owned calibration completed.'}]
+            model.next = next_step
+            process = witness = observer = None
+            try:
+                if any(path.is_dir() for path in delegation.iterdir()):
+                    raise ValueError('pressure_root_not_empty')
+                observer = BudgetObserver(delegation, resource, classify_member=classify)
+                command = ['/usr/bin/strace', '-f', '-qq', '-s', '4096', '-e', 'trace=execve',
+                    '-o', str(root / 'trace.private'), sys.executable, '-B', str(context.ROOT / 'scripts/pilot-run.py'),
+                    '--run', '--selection', str(selection), '--expected-commit', commit,
+                    '--state-root', str(state), '--timeout-seconds', '60', '--linux-budget', str(budget)]
+                run_env = dict(env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY='owned-loopback-only',
+                    HTTP_PROXY='http://127.0.0.1:9', HTTPS_PROXY='http://127.0.0.1:9', NO_PROXY='127.0.0.1,localhost,::1')
+                with (root / 'stdout.private').open('wb') as out, (root / 'stderr.private').open('wb') as err:
+                    process = subprocess.Popen(command, cwd=root, env=run_env, stdout=out, stderr=err,
+                                               start_new_session=True)
+                    witness = base.ProcessWitness(process.pid)
+                    process.wait(timeout=100)
+                outcome = json.loads((root / 'stdout.private').read_text().splitlines()[-1])
+                cleanup = witness.finish()
+                observed = observer.finish()
+                budget_result = outcome.get('resource_budget', {})
+                target = [item for item in observed if item.get('servers') == [server]
+                          and item.get('original_runtime_seen') is True]
+                receipts = [item for item in budget_result.get('observations', []) if item.get('server_id') == server]
+                reason = {'memory': 'mcp_budget_memory_exhausted', 'pids': 'mcp_budget_pids_exhausted',
+                          'wall': 'mcp_budget_wall_expired'}[kind]
+                verified = bool(target) and all(item.get('status') == 'removed' for item in target)
+                if kind != 'wall':
+                    key = 'oom_kill' if kind == 'memory' else 'pids_max'
+                    verified = verified and any(item.get('counter_max', {}).get(key, 0) > 0 for item in target)
+                else:
+                    verified = verified and any(item.get('leaf_duration_millis', 0) >= limits['wallMillis'] for item in target)
+                verified = verified and bool(receipts) and any(item.get('reason') == reason and item.get('phase') == 'closed'
+                    for item in receipts) and budget_result.get('budget_sha256') == digest
+                verified = verified and process.returncode != 0 and outcome.get('status') == 'failed' \
+                    and cleanup.get('all_stopped') is True and not any(path.is_dir() for path in delegation.iterdir())
+                row.update(status='passed' if verified else 'incomplete',
+                    reason='original_resource_refusal_verified' if verified else 'original_resource_refusal_unproven',
+                    original_runtime_observed=bool(target), kernel_observations=[{
+                        'counter_max': item.get('counter_max'), 'memory_peak_bytes': item.get('memory_peak_bytes'),
+                        'tasks_peak': item.get('tasks_peak'), 'leaf_duration_millis': item.get('leaf_duration_millis'),
+                        'removed': item.get('removed'), 'errors': item.get('errors'),
+                        'incomplete_reasons': item.get('incomplete_reasons')} for item in target],
+                    observed_children=budget_result.get('observed_children'),
+                    target_receipts=receipts, owned_cleanup_verified=cleanup.get('all_stopped') is True,
+                    trace_sha256=base.sha(root / 'trace.private'))
+            except (OSError, ValueError, subprocess.TimeoutExpired, IndexError):
+                row['reason'] = 'bounded_calibration_attempt_incomplete'
+            finally:
+                if process is not None and process.poll() is None:
+                    for manifest in state.glob('*/run.json'):
+                        record = json.loads(manifest.read_bytes())
+                        pid = record.get('supervisor_pid')
+                        if type(pid) is int and Path(f'/proc/{pid}/cmdline').exists() \
+                                and str(context.ROOT / 'scripts/pilot-run.py').encode() in Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0'):
+                            os.kill(pid, signal.SIGTERM)
+                    try: process.wait(timeout=18)
+                    except subprocess.TimeoutExpired:
+                        row['forced_cleanup'] = True
+                        process.kill(); process.wait(timeout=5)
+                if witness is not None: witness.finish()
+                if observer is not None: observer.finish()
+                model.close()
+                if payload is not None:
+                    if original is None: payload.unlink(missing_ok=True)
+                    else: payload.write_bytes(original)
+                (output / 'attempts.json').write_text(json.dumps(attempts, indent=2) + '\n')
+    unchanged = before == {key: base.snapshot(path) for key, path in workspaces.items()}
+    return {'format': 'sou142-original-pressure/1', 'status': 'passed' if unchanged and
+            all(row['status'] == 'passed' and not row['forced_cleanup'] for row in attempts) else 'incomplete',
+            'workspace_unchanged': unchanged, 'attempts': attempts,
+            'raw_process_metadata_exported': False, 'observer_cleanup_performed': False}

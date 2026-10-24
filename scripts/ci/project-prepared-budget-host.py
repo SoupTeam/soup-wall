@@ -16,7 +16,7 @@ HOST = CASES[4:]
 COUNTERS = frozenset(('memory_current_bytes', 'memory_peak_bytes', 'memory_oom', 'memory_oom_kill',
     'pids_current', 'pids_peak', 'pids_peak_kernel', 'pids_max_events', 'cpu_usage_micros',
     'cpu_periods', 'cpu_throttled_periods'))
-GAPS = ('original-memory-pid-wall-calibration', 'budgeted-emergency-stop',
+GAPS = ('original-memory-pid-wall-calibration',
         'owner-loss-before-descriptor-handback')
 
 
@@ -166,6 +166,34 @@ def project(attempt, raw, expected, exit_code):
                      'preflight_execution_observed')
                 result['selected_execution'] = 0
             output['cases'].append(result)
+        section = raw.get('emergency_stop', {})
+        need(attempt.get('budgeted_emergency_stop_qualified') is True
+             and attempt.get('owned_peer_budget_root_empty') is True
+             and section.get('status') == 'passed' and section.get('source_commit') == expected,
+             'budgeted_stop_incomplete')
+        stops = section.get('cases', [])
+        need([row.get('case') for row in stops] == ['two-prepared-runs', 'interrupted-stop',
+             'daemon-loss-stop', 'unconfirmed-namespace-stop'], 'stop_case_denominator_invalid')
+        output['emergency_stop'] = []
+        for row in stops:
+            name = row['case']
+            need(row.get('status') == 'passed' and row.get('future_dispatches') == 0,
+                 'stop_future_dispatch_or_failure')
+            current = row.get('selected') if name == 'two-prepared-runs' else row
+            result = {'case': name, 'resource_budget': budget(current.get('resource_budget'),
+                expected_budget, name in ('two-prepared-runs', 'interrupted-stop')),
+                'process_cleanup': cleanup(current.get('process_cleanup')), 'future_dispatches': 0}
+            if name == 'two-prepared-runs':
+                peer = row.get('peer', {})
+                need(row.get('peer_useful_after_stop') is True
+                     and row.get('peer_original_dispatches_after_stop') == 2
+                     and row.get('unrelated_process_identity_preserved') is True
+                     and row.get('unrelated_listener_preserved') is True, 'stop_peer_or_inventory_unverified')
+                result['peer_resource_budget'] = budget(peer.get('resource_budget'),
+                    digest(attempt.get('peer_budget_sha256')), True)
+                result['peer_process_cleanup'] = cleanup(peer.get('process_cleanup'))
+                result['peer_useful_after_stop'] = True
+            output['emergency_stop'].append(result)
         output.update(status='partial-slice-passed', owned_budget_root_empty=True)
     except (Invalid, KeyError, TypeError) as error:
         output['reason'] = str(error) if isinstance(error, Invalid) else 'malformed_private_report'

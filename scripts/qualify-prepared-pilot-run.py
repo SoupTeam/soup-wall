@@ -474,6 +474,8 @@ def main():
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
     parser.add_argument("--linux-budget", type=Path)
+    parser.add_argument("--linux-budget-peer", type=Path,
+                        help="Independent explicit budget root for the concurrent stop peer")
     parser.add_argument("--validation-timeout-seconds", type=int, default=30)
     parser.add_argument("--audit-retention-only", action="store_true", help="Focus on SOU-132 rotation/export, failed-sink refusal and fresh useful continuation")
     parser.add_argument("--output", type=Path, required=True)

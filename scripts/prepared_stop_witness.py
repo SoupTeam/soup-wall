@@ -171,6 +171,12 @@ class Prepared:
             str(context.source / "scripts/pilot-run.py"), "--run", "--selection",
             str(context.args.selection), "--expected-commit", context.args.expected_commit,
             "--state-root", str(self.state), "--timeout-seconds", "90"]
+        self.budget_path = getattr(context.args, "linux_budget", None)
+        if self.budget_path is not None:
+            if root.name == "peer":
+                self.budget_path = getattr(context.args, "linux_budget_peer", None)
+                require(self.budget_path is not None, "stop_independent_budget_root_required")
+            command += ["--linux-budget", str(self.budget_path)]
         self.out = (root / "stdout.private").open("wb")
         self.err = (root / "stderr.private").open("wb")
         self.process = subprocess.Popen(command, cwd=root, env=self.env, stdout=self.out,
@@ -350,10 +356,25 @@ class Prepared:
                     len(list(self.state.iterdir())) == 1,
                     "stop_peer_owned_state_survived")
             self.c.run.AUDIT.verify_cleanup(Path(outcome["audit"]["directory"]))
-        return {"entry_status": outcome["status"], "entry_reason": outcome.get("reason"),
+        result = {"entry_status": outcome["status"], "entry_reason": outcome.get("reason"),
                 "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                 "observed_owned_roles": list(self.identities.values()),
                 "trace_sha256": self.c.base.sha(self.trace)}
+        if self.budget_path is not None:
+            selected = json.loads(self.budget_path.read_bytes())
+            expected = hashlib.sha256(json.dumps(selected, sort_keys=True,
+                separators=(",", ":")).encode()).hexdigest()
+            budget = outcome.get("resource_budget", {})
+            require(budget.get("format") == "sw-prepared-pilot-budget/1"
+                    and budget.get("budget_sha256") == expected
+                    and budget.get("observed_children", 0) >= 2,
+                    "stop_bound_budget_observations_missing")
+            if failure is None:
+                require(budget.get("status") == "closed-enforced"
+                        and budget.get("failed_children") == budget.get("unresolved_children") == 0,
+                        "stop_budget_cleanup_unverified")
+            result["resource_budget"] = budget
+        return result
 
     def diagnostic(self):
         value = {"provider_request_count": len(self.model.requests),
