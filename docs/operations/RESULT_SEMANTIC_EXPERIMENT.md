@@ -1,5 +1,12 @@
 # SOU-109 offline semantic-inspection design review
 
+## 24 October 15:19: backend selected
+
+Baubek approved local Qwen3.5-9B Q4_K_M via llama.cpp, shadow only, full inputs
+and no paid API. See [the frozen Qwen protocol](SOU109_QWEN_SHADOW.md).
+The earlier backend-selection question below is resolved. Preparation alone
+still does not establish model quality or correct the ten production refusals.
+
 ## 24 October: complete-context preparation, no backend selected
 
 The previous ProtectAI experiment remains rejected and is not repeated.
