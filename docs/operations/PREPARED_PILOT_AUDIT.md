@@ -83,11 +83,14 @@ unchanged. No exception, receipt, policy floor, timeout or witness is relaxed.
 ## Qualification
 
 The existing native Ubuntu 24.04 preparation lane runs
-`qualify-prepared-pilot-run.py --audit-retention` with genuine selected Claude
+`qualify-prepared-pilot-run.py --audit-retention-only` with genuine selected Claude
 and original filesystem/Git servers. The added scenario rotates the actual
 run store, samples active concurrent exports, verifies pruning and the byte
 cap, checks the same native daemon instance, and requires useful original-server
-continuation and the existing denied-mutation witness. Other lifecycle controls
+continuation and the existing denied-mutation witness. An owned active-segment limit fault must latch audit unavailable, prevent the
+next original Git dispatch, refuse an unsafe export and retain uncertain evidence.
+A subsequent fresh owned run must complete useful work. This is not a claim of
+filling the physical disk or silently recovering the failed store. Other lifecycle controls in the ordinary demo
 verify that only bounded audit evidence survives ordinary cleanup. The existing
 SOU-84 owned acceptance separately qualifies store reopen/restart, native
 fail-safe controls, rotation and export; it does not substitute for the prepared

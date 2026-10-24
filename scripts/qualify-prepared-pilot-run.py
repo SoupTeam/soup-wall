@@ -126,8 +126,9 @@ def qualify(args, private, report):
                     args.selection.write_bytes(original)
                 owner.close()
         cases = ("useful-refusal", "ask", "default", "cancel", "daemon-loss", "host-crash", "timeout")
-        if getattr(args, "audit_retention", False):
-            cases += ("audit-rotation",)
+        audit_only = getattr(args, "audit_retention_only", False)
+        if audit_only:
+            cases = ("audit-rotation", "audit-unavailable", "useful-refusal")
         for case in cases:
             report["active_case"] = case
             root = private / case
@@ -144,6 +145,8 @@ def qualify(args, private, report):
                              ("filesystem", "read_text_file", {"path": "/workspace/followup.txt"})]
             elif case == "default":
                 proposals = [proposals[0], ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"})]
+            elif case == "audit-unavailable":
+                proposals = proposals[:2]
             hold = case in ("cancel", "daemon-loss", "host-crash", "timeout")
             lifecycle_ready = threading.Event()
             audit_ready = threading.Event()
@@ -156,6 +159,21 @@ def qualify(args, private, report):
                     for block in message.get("content", []) if isinstance(message.get("content"), list) else []:
                         if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in offered:
                             model.results[block["tool_use_id"]] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
+                if case == "audit-unavailable" and "toolu_prepared_0" in model.results:
+                    require(audit_ready.wait(15), "prepared_audit_context_missing")
+                    if not audit_observed:
+                        active = Path(record["home"]).parent / "audit"
+                        manifest = RUN.AUDIT.private_json(active / "manifest.json")
+                        segment = active / f"segment-{manifest['segments'][-1]['id']:020}.jsonl"
+                        # Owned fault injection: exhaust the declared active-segment
+                        # bound. This is not a claim of filling the physical disk.
+                        with segment.open("ab") as stream:
+                            stream.write(b"x" * RUN.AUDIT.LIMITS["segment_size_bytes"])
+                        audit_observed["injected_active_segment_limit"] = True
+                    if "toolu_prepared_1" in model.results:
+                        health = STORE.request(record["port"], "/health")
+                        require(health["audit"]["state"] == "unavailable", "prepared_audit_failure_not_latched")
+                        audit_observed["sink_unavailable"] = True
                 if case == "audit-rotation" and "toolu_prepared_0" in model.results and not audit_observed:
                     require(audit_ready.wait(15), "prepared_audit_context_missing")
                     active = Path(record["home"]).parent
@@ -234,7 +252,7 @@ def qualify(args, private, report):
                             raise ValueError("prepared_entry_exited_before_host")
                     record = until(identify, "prepared_run_not_published", seconds=90)
                     home = Path(record["home"])
-                    if case == "audit-rotation":
+                    if case in ("audit-rotation", "audit-unavailable"):
                         audit_token = (home / "native-token").read_text().strip()
                         hook_token = (home / "token").read_text().strip()
                         audit_ready.set()
@@ -307,7 +325,7 @@ def qualify(args, private, report):
                     process.wait(timeout=220 if case == "audit-rotation" else 100)
                 rows = (root / "stdout.private").read_text().splitlines()
                 outcome = json.loads(rows[-1])
-                success = case in ("useful-refusal", "ask", "default", "audit-rotation")
+                success = case in ("useful-refusal", "ask", "default", "audit-rotation", "audit-unavailable")
                 require((process.returncode == 0) == success, "prepared_run_outcome_mismatch")
                 if not success:
                     expected = {"cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
@@ -324,28 +342,42 @@ def qualify(args, private, report):
                         and len(list(state.iterdir())) == 1, "owned_state_survived")
                 retained = Path(outcome["audit"]["directory"])
                 run_id = RUN.AUDIT.verify_cleanup(retained)
-                audit_export = RUN.AUDIT.export_run(retained, root / "audit-summary.json", run_id)
-                audit_summary = json.loads((root / "audit-summary.json").read_bytes())
-                require(audit_summary["source_commit"] == args.expected_commit
-                        and audit_summary["policy_sha256"] == selected_before["policy"]
-                        and audit_summary["allow_proves_execution"] is False
-                        and b"owned-loopback-only" not in (root / "audit-summary.json").read_bytes(),
-                        "prepared_audit_identity_or_privacy_failed")
+                if case == "audit-unavailable":
+                    try:
+                        RUN.AUDIT.export_run(retained, root / "audit-summary.json", run_id)
+                    except RUN.AUDIT.REPORT.ReportError as error:
+                        require(str(error) == "retained segment is unsafe or exceeds limit", "prepared_audit_wrong_export_failure")
+                    else:
+                        raise ValueError("prepared_audit_unsafe_export_succeeded")
+                    require(not (root / "audit-summary.json").exists() and audit_observed.get("sink_unavailable"),
+                            "prepared_audit_failure_overclaimed")
+                    audit_export = {"status": "refused", "reason": "unsafe_or_over_limit_retained_evidence"}
+                else:
+                    audit_export = RUN.AUDIT.export_run(retained, root / "audit-summary.json", run_id)
+                    audit_summary = json.loads((root / "audit-summary.json").read_bytes())
+                    require(audit_summary["source_commit"] == args.expected_commit
+                            and audit_summary["policy_sha256"] == selected_before["policy"]
+                            and audit_summary["allow_proves_execution"] is False
+                            and b"owned-loopback-only" not in (root / "audit-summary.json").read_bytes(),
+                            "prepared_audit_identity_or_privacy_failed")
                 result = {"case": case, "status": "passed", "outcome": outcome["status"],
                           "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
-                          "audit_export": audit_export, "audit_summary_sha256": BASE.sha(root / "audit-summary.json"),
+                          "audit_export": audit_export, "audit_summary_sha256": BASE.sha(root / "audit-summary.json")
+                          if (root / "audit-summary.json").exists() else None,
                           "trace_sha256": BASE.sha(root / "trace.private")}
                 if case == "audit-rotation":
                     require(audit_observed and "intentional_retention" in audit_export["notices"],
                             "prepared_audit_loss_not_exported")
                     result["audit_rotation"] = audit_observed
+                elif case == "audit-unavailable":
+                    result["audit_failure"] = audit_observed
                 if success:
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
                     useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
                     if case == "ask":
                         useful_result(model.results, "toolu_prepared_1", "Owned synthetic sensitive path control.")
                         useful_result(model.results, "toolu_prepared_2", "Owned prepared continuation.")
-                    require(model.results["toolu_prepared_1"]["is_error"] == (case == "default"), "prepared_continuation_outcome_wrong")
+                    require(model.results["toolu_prepared_1"]["is_error"] == (case in ("default", "audit-unavailable")), "prepared_continuation_outcome_wrong")
                     require(len(decisions) == (2 if case == "ask" else 0), "prepared_explicit_decisions_missing")
                     if case == "default":
                         require(selection['expected_refusal']['rule'] in json.dumps(model.results['toolu_prepared_1']),
@@ -364,13 +396,13 @@ def qualify(args, private, report):
                     counts = [sum(call["tool"] == tool and call["args_sha256"] == BASE.hashlib.sha256(
                         json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
                         for call in observation["calls"]) for _, tool, arguments in proposals]
-                    require(counts == ([1, 1, 0] if case in ("useful-refusal", "audit-rotation") else [1, 0] if case == "default" else [1, 1, 1]), "prepared_dispatch_counts_wrong")
+                    require(counts == ([1, 1, 0] if case in ("useful-refusal", "audit-rotation") else [1, 0] if case in ("default", "audit-unavailable") else [1, 1, 1]), "prepared_dispatch_counts_wrong")
                     require(ASK.SELECTED.trace_effects(root / "trace.private", "filesystem",
                         target="/workspace/credentials.txt" if case == "ask" else "/workspace/notes.txt") == 1,
                         "prepared_kernel_read_witness_missing")
                     result.update(dispatch_counts=counts, exact_once_kernel_read=True,
                                   explicit_harness_decisions=len(decisions),
-                                  correlated_useful_continuation=case != "default")
+                                  correlated_useful_continuation=case not in ("default", "audit-unavailable"))
                 else:
                     result["failure_reason"] = outcome["reason"]
                 report["cases"].append(result)
@@ -410,7 +442,8 @@ def qualify(args, private, report):
                     process.kill()
                     process.wait(timeout=10)
                 model.close()
-        STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
+        if not audit_only:
+            STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
         require(workspace_before == {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}, "prepared_workspace_changed")
         require(selected_before == {role: BASE.sha(path) for role, path in paths.items()}, "prepared_selected_assets_changed")
         require(sentinel.read_text() == "must survive" and unrelated.poll() is None, "unrelated_state_changed")
@@ -427,7 +460,7 @@ def main():
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
     parser.add_argument("--validation-timeout-seconds", type=int, default=30)
-    parser.add_argument("--audit-retention", action="store_true", help="Include SOU-132 active rotation/export and useful original continuation")
+    parser.add_argument("--audit-retention-only", action="store_true", help="Focus on SOU-132 rotation/export, failed-sink refusal and fresh useful continuation")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(mode=0o700)

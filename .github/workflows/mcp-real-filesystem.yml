@@ -888,13 +888,18 @@ jobs:
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-prepared-pilot-run.py --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
-            --validation-timeout-seconds 120 --audit-retention \
+            --validation-timeout-seconds 120 --audit-retention-only \
             --output "$RUNNER_TEMP/sou116-qualification"
       - name: Qualify reused bounded audit engine restart and fail-safe retention
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.native_preparation_only == 'true'
         shell: bash
         run: |
           set -euo pipefail
+          "$SOU119_SANDBOX_TESTS" --list > "$RUNNER_TEMP/sou132-retention-tests.txt"
+          rg 'audit::retention::tests::disk_full_failure_poisoned_sink_recovers_after_space_restored' "$RUNNER_TEMP/sou132-retention-tests.txt"
+          rg 'native::tests::retained_sink_failure_withholds_native_admission' "$RUNNER_TEMP/sou132-retention-tests.txt"
+          "$SOU119_SANDBOX_TESTS" 'audit::retention::tests::' --test-threads=1 | tee "$RUNNER_TEMP/sou132-retention-unit.log"
+          "$SOU119_SANDBOX_TESTS" retained_sink_failure_ --test-threads=1 | tee "$RUNNER_TEMP/sou132-native-audit-failure.log"
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           agent="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["agentfw"]["path"])' "$selection")"
           python3 -B scripts/sou84_owned_acceptance.py --agent "$agent" --output-dir "$RUNNER_TEMP/sou132-retention"
@@ -952,6 +957,8 @@ jobs:
             ${{ runner.temp }}/sou111-qualification/**
             ${{ runner.temp }}/sou116-qualification/report.json
             ${{ runner.temp }}/sou132-retention/summary.json
+            ${{ runner.temp }}/sou132-retention-unit.log
+            ${{ runner.temp }}/sou132-native-audit-failure.log
             ${{ runner.temp }}/sou124-ask-comparison/preflight/qualification.json
             ${{ runner.temp }}/sou124-ask-comparison/comparison.json
             ${{ runner.temp }}/sou124-ask-comparison/baseline/qualification.json
