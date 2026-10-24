@@ -104,6 +104,9 @@ def main():
                         tail = log.read_text(errors='replace')[-16384:]
                         print('=== ' + label + ' FAILED (' + str(step['exit_code']) + ') ===\n' + tail, file=sys.stderr)
                         step['failure_tail'] = tail[-2000:]
+                        if label == "offline-preparation":
+                            for ilog in (out / "preparation").glob("generations/*/*-install.log"):
+                                print("=== " + ilog.name + " ===\n" + ilog.read_text(errors="replace")[-4000:], file=sys.stderr)
                 save()
             return step['exit_code'], log
         # The accepted AppArmor install already proves direct and pinned-FD use
