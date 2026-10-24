@@ -88,7 +88,9 @@ def main():
                     # provider process runs here; never export complete logs.
                     tail = log.read_text(errors='replace')[-16384:]
                     hints = [line for line in tail.splitlines() if any(word in line.lower()
-                        for word in ('error:', 'not found', 'could not', 'cannot ', 'not usable'))]
+                        for word in ('error', 'not found', 'could not', 'cannot ', 'not usable'))]
+                    if not hints:
+                        hints = tail.splitlines()[-8:]
                     step['setup_diagnostics'] = [re.sub(r'/[^\s\"\']+', '[path]',
                         ''.join(char if char >= ' ' else ' ' for char in line))[:300]
                         for line in hints[-8:]]
@@ -174,6 +176,9 @@ def main():
         run('build-git', ['make', '-C', assets / 'git', '-j2', 'NO_CURL=YesPlease', 'NO_EXPAT=YesPlease',
                           'NO_TCLTK=YesPlease', 'NO_GETTEXT=YesPlease', 'NO_OPENSSL=YesPlease', 'git'])
         node_env = dict(env, PATH=str(assets / 'node/bin') + ':/usr/bin:/bin')
+        user_npmrc, global_npmrc = out / 'empty-user.npmrc', out / 'empty-global.npmrc'
+        user_npmrc.write_bytes(b'')
+        global_npmrc.write_bytes(b'')
         for name, relative in [('fs-seed', 'profiles/mcp/filesystem-readonly-v1'),
                                ('claude', 'profiles/mcp/filesystem-readonly-v1/claude-host')]:
             directory = assets / name
@@ -181,7 +186,7 @@ def main():
             for filename in ('package.json', 'package-lock.json'):
                 shutil.copyfile(src / relative / filename, directory / filename)
             run('cache-' + name, [assets / 'node/bin/npm', 'ci', '--ignore-scripts', '--no-audit', '--no-fund',
-                '--userconfig=/dev/null', '--globalconfig=/dev/null', '--cache', out / 'npm-cache',
+                '--userconfig=' + str(user_npmrc), '--globalconfig=' + str(global_npmrc), '--cache', out / 'npm-cache',
                 '--prefix', directory], selected_env=node_env)
         python = assets / 'python/bin/python3.11'
         run('cache-git-wheels', [python, '-I', '-m', 'pip', '--isolated', 'download', '--require-hashes',
