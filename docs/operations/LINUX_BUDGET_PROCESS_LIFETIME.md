@@ -98,8 +98,12 @@ cannot replace it.
 
 The manual `budget_membership_only` workflow input selects this focused lane.
 Ordinary workflow defaults retain their full existing checks. It does not run a
-broad qualification matrix or perform final admission. Until its native reports
-are available, local parser/grader checks are development evidence only.
+broad qualification matrix or perform final admission. Run 40098771380 passed the
+corrected segmented contract on `eb4a520`: 159/159, all 70+70 subject cycles,
+per-cycle useful-before/useful-after, 14 normally closed peers, all controls and
+independent cleanup. Its [receipt](evidence/sou-136/native-qualified-receipt.json)
+records exact source and non-document Git blobs. Final source approval, current
+main admission and merge remain with the team lead.
 
 Evidence is retained under [sou-136](evidence/sou-136/README.md). Diagnostics carry
 only fixed phase/error codes and bounded numeric observations; no raw proc status,

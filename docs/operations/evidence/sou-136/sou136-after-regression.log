@@ -1,0 +1,31 @@
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+[1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/agentfw-bf0c634be184933a)
+
+running 24 tests
+test mcp::linux_budget::linux::process_record_tests::live_records_bounds_and_other_read_errors_remain_strict ... ok
+test mcp::linux_budget::linux::process_record_tests::native_sou136_membership_violation_refuses_owned_child ... ignored, requires the explicitly owned delegated native SOU-136 service
+test mcp::linux_budget::linux::process_record_tests::pinned_proc_records_report_a_reaped_task_without_hiding_control_errors ... ok
+test mcp::linux_budget::linux::process_record_tests::sou136_a_live_foreign_member_is_not_an_exit ... ok
+test mcp::linux_budget::linux::process_record_tests::sou136_departure_still_listed_or_unreadable_must_refuse ... ok
+test mcp::linux_budget::linux::process_record_tests::sou136_regression_enumerated_exit_before_member_open ... ok
+test mcp::linux_budget::process::tests::sou136_exited_unreaped_child_requires_readable_pidfd ... ok
+test mcp::linux_budget::process::tests::sou136_fork_exec_preserves_the_pinned_lifetime_until_exit ... ok
+test mcp::linux_budget::process::tests::sou136_live_process_and_changed_inode_cannot_discharge_departure ... ok
+test mcp::linux_budget::process::tests::sou136_lookup_errno_candidates_exclude_permissions_and_other_errors ... ok
+test mcp::linux_budget::process::tests::sou136_malformed_cgroup_records_never_become_departure_candidates ... ok
+test mcp::linux_budget::process::tests::sou136_numeric_absence_is_distinct_from_a_terminal_pinned_task ... ok
+test mcp::linux_budget::process::tests::sou136_pidfd_unexpected_poll_states_never_prove_departure ... ok
+test mcp::linux_budget::process::tests::sou136_pinned_read_only_waives_reviewed_esrch_not_lookup_enoent ... ok
+test mcp::linux_budget::process::tests::sou136_proc_namespace_rejects_missing_or_multiple_namespace_levels ... ok
+test mcp::linux_budget::process::tests::sou136_real_relative_open_observes_esrch_after_reap ... ok
+test mcp::linux_budget::process::tests::sou136_stat_identity_requires_pid_shape_state_and_start ... ok
+test mcp::linux_budget::process::tests::sou136_wrong_proc_device_or_filesystem_is_never_an_exit ... ok
+test mcp::linux_budget::tests::budget_identity_ignores_input_order_and_whitespace ... ok
+test mcp::linux_budget::tests::budget_parser_rejects_ambiguous_or_incomplete_configuration ... ok
+test mcp::linux_budget::tests::budget_ranges_and_units_are_frozen ... ok
+test mcp::linux_budget::tests::budget_root_cannot_select_global_or_ambiguous_locations ... ok
+test mcp::linux_budget::tests::first_membership_diagnostic_survives_concurrent_cleanup_observations ... ok
+test mcp::linux_budget::tests::kernel_keyed_records_reject_duplicates_missing_values_and_nonintegers ... ok
+
+test result: ok. 23 passed; 0 failed; 1 ignored; 0 measured; 663 filtered out; finished in 0.01s
+

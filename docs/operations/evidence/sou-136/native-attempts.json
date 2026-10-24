@@ -155,6 +155,25 @@
         5638305841,
         4367141943
       ]
+    },
+    {
+      "run_id": 40098771380,
+      "source": "eb4a520e9d97a675e83d9f70a358b41687ed4c7b",
+      "status": "focused_segmented_qualification_passed",
+      "passed": 159,
+      "failed": 0,
+      "incomplete": 0,
+      "filesystem_cycles_attempted": 70,
+      "git_cycles_attempted": 70,
+      "peer_segments": 14,
+      "per_cycle_useful_before_after": true,
+      "unexpected_closures": 0,
+      "cleanup_verified": true,
+      "delegation_removed": true,
+      "native_acceptance_passed": true,
+      "final_admission_or_merge": false,
+      "retained_report": "native-qualified-report.json",
+      "receipt": "native-qualified-receipt.json"
     }
   ]
 }
