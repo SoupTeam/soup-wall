@@ -707,10 +707,18 @@ def run(args):
             original_root = stack.root
             stack.root = original_root / "mapped-pack"
             stack.root.mkdir(mode=0o700)
+            packed = next((workspace / ".git/objects/pack").glob("*.pack"))
+            original_pack_mode = packed.stat().st_mode & 0o777
+            pack_controls = report.setdefault("mapped_pack_controls", {})
+            pack_controls["original_mode"] = original_pack_mode
             try:
-                packed = next((workspace / ".git/objects/pack").glob("*.pack"))
-                mapped_source_controls(stack, first, report.setdefault("mapped_pack_controls", {}), source_path=packed)
+                # Git publishes pack files 0444. Calibrate owner-only writable
+                # mappings in this generated fixture before taking any proof.
+                packed.chmod(original_pack_mode | 0o200)
+                mapped_source_controls(stack, first, pack_controls, source_path=packed)
             finally:
+                packed.chmod(original_pack_mode)
+                pack_controls["mode_restored"] = (packed.stat().st_mode & 0o777) == original_pack_mode
                 stack.root = original_root
             inflight_substitution(stack, first, report)
             inflight_substitution(stack, first, report, mapped=True)
