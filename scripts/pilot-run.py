@@ -45,6 +45,9 @@ AUDIT = load("pilot_run_audit", "pilot_audit.py")
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
+    'linux_budget_input_invalid',
+    'linux_budget_preflight_refused',
+    'linux_budget_observation_unverified',
     'native_linux_x86_64_required',
     'non_root_operator_required',
     'native_ubuntu_required_wsl_is_separate',
@@ -174,6 +177,39 @@ def environment(paths, private):
     return env
 
 
+
+def budget_input(path):
+    """Read an explicit bounded owned file; the existing Rust parser owns schema validation."""
+    require(path.is_absolute() and path.resolve(strict=True) == path, "linux_budget_input_invalid")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    with os.fdopen(descriptor, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
+                and not info.st_mode & 0o022 and info.st_size <= 16384, "linux_budget_input_invalid")
+        raw = stream.read(16385)
+    require(len(raw) <= 16384, "linux_budget_input_invalid")
+    return raw
+
+
+def budget_cli(paths, private, env, option, path, probe=False):
+    # A utility never needs provider access, even before the role split in SOU-143.
+    utility = {key: value for key, value in env.items() if key not in (
+        "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE")}
+    command = [str(paths["agentfw"]), "pilot-budget", option, str(path)]
+    if probe:
+        command.append("--probe")
+    result = subprocess.run(command, cwd=private, env=utility, stdin=subprocess.DEVNULL,
+                            capture_output=True, timeout=5)
+    require(result.returncode == 0 and len(result.stdout) <= 65536,
+            "linux_budget_preflight_refused" if probe else "linux_budget_observation_unverified")
+    value = PREP.PILOT.strict_json(result.stdout)
+    require(value.get("format") == "sw-prepared-pilot-budget/1"
+            and re.fullmatch(r"[0-9a-f]{64}", value.get("budget_sha256", ""))
+            and value.get("scope") == "per-original-server-process-tree",
+            "linux_budget_observation_unverified")
+    return value
+
 def json_file(path, value):
     PREP.write_json(path, value)
 
@@ -294,6 +330,18 @@ def run(args, report):
         home = private / ".agentfw"
         home.mkdir(mode=0o700)
         env = environment(paths, private)
+        budget_snapshot = None
+        if getattr(args, "linux_budget", None) is not None:
+            raw = budget_input(args.linux_budget)
+            budget_snapshot = private / "selected-linux-budget.json"
+            with budget_snapshot.open("xb") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(raw)
+            observation = budget_cli(paths, private, env, "--config", budget_snapshot, probe=True)
+            require(observation.get("status") == "available-not-active"
+                    and observation.get("protected_children_started") is False,
+                    "linux_budget_observation_unverified")
+            report["resource_budget"] = observation
         tools = []
         for kind in ("filesystem", "git"):
             tools.extend(PREP.PILOT.strict_json((Path(profiles[kind]["profile"]["path"]).parent /
@@ -348,6 +396,9 @@ def run(args, report):
                 "--git-profile", profiles["git"]["profile"]["path"], "--policy", str(paths["policy"]),
                 "--classifier", str(paths["git_classifier"]), "--timeout-seconds", str(args.timeout_seconds),
                 "--ask-wait-seconds", str(args.ask_wait_seconds), "--prompt", args.prompt, "--json"]
+            if budget_snapshot is not None:
+                command.extend(["--linux-budget", str(budget_snapshot),
+                                "--linux-budget-sha256", report["resource_budget"]["budget_sha256"]])
             log = (private / "host.private.log").open("xb")
             os.fchmod(log.fileno(), 0o600)
             streams.append(log)
@@ -420,6 +471,18 @@ def run(args, report):
             signal.signal(sig, handler)
         # Stop processes before snapshot/export. Retention housekeeping never
         # resets a live session or its sticky risk, receipts or policy state.
+        if private is not None and getattr(args, "linux_budget", None) is not None:
+            try:
+                bindings = list((private / ".agentfw" / "pilot-budgets").glob("*/linux-budget-binding.json"))
+                require(len(bindings) <= 1, "linux_budget_observation_unverified")
+                if bindings:
+                    report["resource_budget"] = budget_cli(paths, private, env, "--binding", bindings[0])
+                    budget_status = report["resource_budget"]["status"]
+                    if budget_status in ("unresolved", "refused", "active-at-attachment"):
+                        report.update(status="failed", reason="linux_budget_observation_unverified")
+            except (OSError, ValueError, Failure, subprocess.TimeoutExpired):
+                report["resource_budget"] = {"status": "unresolved", "requested": True}
+                errors.append("resource_budget")
         if not errors and private is not None:
             try:
                 # An authenticated stop may have completed, or may still need
@@ -462,6 +525,8 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--state-root", type=Path)
+    parser.add_argument("--linux-budget", type=Path,
+                        help="Explicit owned Linux budget JSON; absent means unbudgeted")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--ask-wait-seconds", type=int, default=0)
@@ -469,6 +534,11 @@ def main():
     args = parser.parse_args()
     report = {"format": "sw-prepared-pilot-run/1", "status": "plan", "executed": False}
     try:
+        report["resource_budget"] = {"status": "unbudgeted", "requested": False}
+        if args.linux_budget is not None:
+            raw = budget_input(args.linux_budget)
+            report["resource_budget"] = {"status": "selected-not-validated", "requested": True,
+                                         "input_sha256": hashlib.sha256(raw).hexdigest()}
         selection, _, profiles = selected(args)
         report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
                       workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}),
@@ -478,6 +548,9 @@ def main():
     except Exception as error:
         # Never echo subprocess output, raw paths, arguments, credentials or arbitrary exception strings.
         code = str(error)
+        if args.linux_budget is not None and code in {"native_linux_x86_64_required",
+                "native_ubuntu_required_wsl_is_separate", "ubuntu_24_04_required"}:
+            report["resource_budget"]["status"] = "unsupported"
         report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
                       else "pilot_input_or_runtime_failure")
         failure = storage_failure(error) or report.get("storage_failure") or report.get("cleanup_storage_failure")

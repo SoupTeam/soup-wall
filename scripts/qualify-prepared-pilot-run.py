@@ -232,6 +232,8 @@ def qualify(args, private, report):
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]
             if case == "ask":
                 command += ["--ask-wait-seconds", "25"]
+            if getattr(args, "linux_budget", None) is not None:
+                command += ["--linux-budget", str(args.linux_budget)]
             run_env = dict(env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
                 HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
             process = witness = record = None
@@ -372,6 +374,17 @@ def qualify(args, private, report):
                     result["audit_rotation"] = audit_observed
                 elif case == "audit-unavailable":
                     result["audit_failure"] = audit_observed
+                if getattr(args, "linux_budget", None) is not None:
+                    budget = outcome.get("resource_budget", {})
+                    require(budget.get("format") == "sw-prepared-pilot-budget/1"
+                            and budget.get("observed_children", 0) >= 2,
+                            "prepared_budget_children_not_observed")
+                    if success:
+                        require(budget.get("status") == "closed-enforced"
+                                and budget.get("failed_children") == 0
+                                and budget.get("unresolved_children") == 0,
+                                "prepared_budget_not_verified")
+                    result["resource_budget"] = budget
                 if success or case == "audit-unavailable":
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
                     useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
@@ -460,6 +473,7 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
+    parser.add_argument("--linux-budget", type=Path)
     parser.add_argument("--validation-timeout-seconds", type=int, default=30)
     parser.add_argument("--audit-retention-only", action="store_true", help="Focus on SOU-132 rotation/export, failed-sink refusal and fresh useful continuation")
     parser.add_argument("--output", type=Path, required=True)

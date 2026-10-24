@@ -60,6 +60,11 @@ impl Config {
         let Some(path) = std::env::var_os(ENVIRONMENT) else {
             return Ok(None);
         };
+        Self::load_file(std::path::Path::new(&path)).map(Some)
+    }
+
+    /// The same strict, owned-file parser for explicit prepared-run selection.
+    pub(crate) fn load_file(path: &std::path::Path) -> anyhow::Result<Self> {
         use std::io::Read;
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
@@ -71,13 +76,13 @@ impl Config {
         // Check symlinks on other platforms too. O_NONBLOCK prevents a FIFO
         // from blocking before fstat rejects its type on supported Linux.
         let before =
-            std::fs::symlink_metadata(&path).map_err(|_| refusal("mcp_budget_config_invalid"))?;
+            std::fs::symlink_metadata(path).map_err(|_| refusal("mcp_budget_config_invalid"))?;
         ensure!(
             before.is_file() && !before.file_type().is_symlink(),
             "mcp_budget_config_invalid"
         );
         let mut file = options
-            .open(&path)
+            .open(path)
             .map_err(|_| refusal("mcp_budget_config_invalid"))?;
         let metadata = file
             .metadata()
@@ -102,7 +107,7 @@ impl Config {
             .take(MAX_CONFIG_BYTES as u64 + 1)
             .read_to_end(&mut bytes)
             .map_err(|_| refusal("mcp_budget_config_invalid"))?;
-        Self::read(&bytes).map(Some)
+        Self::read(&bytes)
     }
 
     pub(crate) fn read(bytes: &[u8]) -> anyhow::Result<Self> {
