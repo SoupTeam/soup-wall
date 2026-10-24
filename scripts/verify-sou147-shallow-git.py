@@ -120,7 +120,7 @@ def mapped_source_controls(stack, second, report, source_path=None):
             opened = None
             try:
                 client.initialize()
-                GIT.text(client.exchange(GIT.call(10, "git_show", {"revision": REFS[0]}))[0])
+                GIT.text(client.exchange(GIT.call(10, "git_status", {}))[0])
                 opened = writable_mapping(ref)
                 opened[1][:] = ((second + "\n").encode() if source_path is None else bytes([before[0] ^ 1]) + before[1:])
                 opened[1].flush()
@@ -130,7 +130,7 @@ def mapped_source_controls(stack, second, report, source_path=None):
                     opened[1].flush()
                     require(ref.read_bytes() == before, "owned mmap restore did not calibrate")
                 witness.drain()
-                reply, _ = client.exchange(GIT.call(11, "git_show", {"revision": REFS[0]}))
+                reply, _ = client.exchange(GIT.call(11, "git_status", {}))
                 require(reply.get("error", {}).get("code") == -32602 and witness.drain() == 0,
                     "mapped source change reached original dispatch")
                 opened[1][:] = before
@@ -155,7 +155,7 @@ def mapped_source_controls(stack, second, report, source_path=None):
             client = collector(stack, log)
             try:
                 client.initialize()
-                GIT.text(client.exchange(GIT.call(10, "git_show", {"revision": REFS[0]}))[0])
+                GIT.text(client.exchange(GIT.call(10, "git_status", {}))[0])
             finally:
                 client.close()
         require(client.process.returncode == 0 and client.process_witness.final["all_stopped"], "fresh mapped-source collector failed")
@@ -189,6 +189,7 @@ def collector(stack, log, *, legacy=False, bound=None):
 
 def exact_reads(stack, head, report):
     originals = {}
+    original_errors = {}
     python = stack.install / "package/python/bin/python3.11"
     env = dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git), GIT_OPTIONAL_LOCKS="0")
     with (stack.root / "original.log").open("wb") as log:
@@ -198,7 +199,13 @@ def exact_reads(stack, head, report):
             client.initialize()
             for identifier, (tool, args, ref) in enumerate(reads(head), 10):
                 response, raw = client.exchange(GIT.call(identifier, tool, args, stack.workspace))
-                GIT.text(response)
+                if BASE.refused(response):
+                    require(tool == "git_show" and (stack.workspace / ".git/shallow").exists()
+                        and "fatal: bad object" in json.dumps(response) and stack.missing_ancestor in json.dumps(response),
+                        "unexpected original failure outside calibrated absent-parent show")
+                    original_errors[identifier] = response
+                else:
+                    GIT.text(response)
                 originals[identifier] = raw
             poison, _ = client.exchange(GIT.call(80, "git_show", {"revision": stack.poison}, stack.workspace))
             require(GIT.INJECTION in GIT.text(poison), "direct original result-injection witness did not calibrate")
@@ -216,6 +223,17 @@ def exact_reads(stack, head, report):
             for identifier, (tool, args, ref) in enumerate(reads(head), 10):
                 witness.drain()
                 response, raw = client.exchange(GIT.call(identifier, tool, args))
+                if identifier in original_errors:
+                    require(response.get("id") == identifier and response.get("result", {}).get("isError") is True
+                        and "fatal: bad object" in json.dumps(response) and stack.missing_ancestor in json.dumps(response)
+                        and "Soup Wall withheld" not in json.dumps(response), "original absent-parent error was not preserved")
+                    report.setdefault("original_error_cases", []).append({"id": identifier, "tool": tool,
+                        "reference": ref, "original_error": original_errors[identifier], "protected_error": response,
+                        "original_sha256": hashlib.sha256(originals[identifier]).hexdigest(),
+                        "protected_sha256": hashlib.sha256(raw).hexdigest(), "original_error_preserved": True,
+                        "error_bytes_equal": raw == originals[identifier]})
+                    GIT.text(client.exchange(GIT.call(identifier + 2000, "git_status", {}))[0])
+                    continue
                 GIT.text(response)
                 require(raw == originals[identifier], "original response bytes changed: " + tool + " " + ref)
                 require(any(row.get("host_call_id") == identifier and row.get("state") == "inflight" for row in BASE.events(path)), "original dispatch witness absent")
@@ -225,7 +243,7 @@ def exact_reads(stack, head, report):
             poison, _ = client.exchange(GIT.call(80, "git_show", {"revision": stack.poison}))
             require(BASE.refused(poison) and GIT.INJECTION not in json.dumps(poison) and any(row.get("host_call_id") == 80 and row.get("state") == "inflight" for row in BASE.events(path)),
                     "unsafe executed original output escaped result inspection")
-            GIT.text(client.exchange(GIT.call(81, "git_show", {"revision": REFS[0]}))[0])
+            GIT.text(client.exchange(GIT.call(81, "git_status", {}))[0])
             report["result_injection_withheld"] = True
             denials = [(tool, {key: ref}, "syntax") for ref in INVALID
                        for tool, key in (("git_show", "revision"), ("git_diff", "target"))]
@@ -241,7 +259,7 @@ def exact_reads(stack, head, report):
                                 for r in BASE.events(path)), "refused call dispatched")
                 report["refusals"].append({"id": identifier, "category": category,
                     "response": response, "repository_opens": 0, "execution_dispatched": False})
-                followup, _ = client.exchange(GIT.call(identifier + 1000, "git_show", {"revision": REFS[0]}))
+                followup, _ = client.exchange(GIT.call(identifier + 1000, "git_status", {}))
                 GIT.text(followup)
             require(BASE.snapshot(stack.workspace) == before, "protected reads/refusals changed repository")
             report["repository_unchanged"] = True
@@ -270,23 +288,47 @@ def legacy_refusal(stack, report):
     report["default_shallow_refused_before_start"] = True
 
 
-def ordinary_controls(stack, head, report):
+def ordinary_controls(stack, head, report, workspace=None, label="ordinary"):
     old_workspace = stack.workspace
     old_profile = stack.profile.read_bytes()
-    ordinary = old_workspace.parent / "ordinary-source"
+    ordinary = workspace or old_workspace.parent / "ordinary-source"
     old_root = stack.root
-    stack.root = old_root / "ordinary"
+    stack.root = old_root / label
     stack.root.mkdir(mode=0o700)
     try:
         profile = json.loads(old_profile)
         profile["workspace"] = str(ordinary)
         write(stack.profile, profile)
         stack.workspace = ordinary
-        exact_reads(stack, head, report.setdefault("ordinary", {}))
+        exact_reads(stack, head, report.setdefault(label, {}))
     finally:
         stack.profile.write_bytes(old_profile)
         stack.workspace = old_workspace
         stack.root = old_root
+
+
+def local_parent_controls(stack, report):
+    source = stack.workspace.parent / "ordinary-source"
+    deeper = stack.workspace.parent / "local-parent-shallow"
+    def command(*args, cwd=source):
+        return subprocess.check_output([str(stack.git), "-c", "user.name=SOU147 Synthetic", "-c", "user.email=sou147@example.invalid", *args],
+            cwd=cwd, env=stack.env, stderr=subprocess.PIPE, timeout=20).decode().strip()
+    # The original depth-one failure remains a calibrated error case. This
+    # independent control adds a local parent so original git_show can succeed.
+    (source / "notes.txt").write_text("Synthetic third local version.\n")
+    command("add", "notes.txt"); command("commit", "-m", "Synthetic third local version")
+    head = command("rev-parse", "HEAD")
+    command("clone", "--depth", "2", "--no-local", "--template=", "--upload-pack=" + shlex.quote(str(stack.git)) + " -c pack.window=0 upload-pack", source.as_uri(), str(deeper), cwd=source.parent)
+    import shutil
+    (deeper / ".git/config").write_text("[core]\nrepositoryformatversion = 0\nbare = false\nfilemode = true\nlogallrefupdates = true\n")
+    shutil.rmtree(deeper / ".git/refs/remotes", ignore_errors=True)
+    packed = deeper / ".git/packed-refs"
+    if packed.exists(): packed.write_text("".join(line for line in packed.read_text().splitlines(keepends=True) if " refs/remotes/" not in line))
+    require((deeper / ".git/shallow").is_file(), "local-parent fixture lost shallow metadata")
+    (deeper / "notes.txt").write_text("Synthetic staged local version.\n"); command("add", "notes.txt", cwd=deeper)
+    (deeper / "notes.txt").write_text("Synthetic working local version.\n")
+    subprocess.run([str(stack.git), "hash-object", "-w", "--stdin"], cwd=deeper, env=stack.env, input=GIT.INJECTION.encode(), capture_output=True, check=True, timeout=10)
+    ordinary_controls(stack, head, report, workspace=deeper, label="local-parent-shallow")
 
 
 def absent_ancestry(stack, first, report):
@@ -394,7 +436,7 @@ def policy_controls(stack, config, second, report):
             dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git)), stack.workspace, log, "direct approval calibration")
         try:
             original.initialize()
-            _, expected = original.exchange(GIT.call(50, "git_show", {"revision": REFS[0]}, stack.workspace))
+            _, expected = original.exchange(GIT.call(50, "git_status", {}, stack.workspace))
         finally:
             original.close()
     BASE.DEMO.stop(stack.daemon)
@@ -415,7 +457,7 @@ def policy_controls(stack, config, second, report):
             try:
                 client.initialize()
                 witness.drain()
-                frame = GIT.call(50, "git_show", {"revision": REFS[0]})
+                frame = GIT.call(50, "git_status", {})
                 client.send(frame)
                 # Retain the shared first-pending bound, including cold input
                 # preparation; no separate preparation allowance.
@@ -453,7 +495,7 @@ def policy_controls(stack, config, second, report):
                     require(response["id"] == 50, "approval response correlation changed")
                     if case == "approve":
                         require(raw == expected and any(row.get("host_call_id") == 50 and row.get("state") == "inflight" for row in BASE.events(path)), "approved original bytes/execution changed")
-                        client.send(GIT.call(51, "git_show", {"revision": REFS[0]}))
+                        client.send(GIT.call(51, "git_status", {}))
                         again = APPROVAL.pending(args, stack.env, timeout=5)
                         require(again["pending_id"] != waiting["pending_id"] and witness.drain() == 0, "approval was reused")
                         APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
@@ -483,7 +525,7 @@ def policy_controls(stack, config, second, report):
         try:
             client.initialize()
             witness.drain()
-            response, _ = client.exchange(GIT.call(50, "git_show", {"revision": REFS[0]}))
+            response, _ = client.exchange(GIT.call(50, "git_status", {}))
             require(BASE.refused(response) and witness.drain() == 0, "policy Deny floor bypassed")
             report["policy_deny_refused"] = True
         finally:
@@ -503,7 +545,7 @@ def source_mutations(stack, first, second, report):
             witness = GIT.RepositoryWitness(stack.workspace)
             try:
                 client.initialize()
-                GIT.text(client.exchange(GIT.call(10, "git_show", {"revision": REFS[0]}))[0])
+                GIT.text(client.exchange(GIT.call(10, "git_status", {}))[0])
                 if name == "rewrite":
                     ref.write_text(second + "\n")
                 elif name == "replace":
@@ -514,7 +556,7 @@ def source_mutations(stack, first, second, report):
                     ref.unlink()
                     ref.symlink_to(stack.workspace.parent / "outside-boundary")
                 witness.drain()
-                response, _ = client.exchange(GIT.call(11, "git_show", {"revision": REFS[0]}))
+                response, _ = client.exchange(GIT.call(11, "git_status", {}))
                 require(response.get("error", {}).get("code") == -32602, "source mutation was not refused")
                 require(witness.drain() == 0, "withdrawn source was dispatched")
                 if ref.is_symlink():
@@ -542,7 +584,7 @@ def source_mutations(stack, first, second, report):
             client = collector(stack, log)
             try:
                 client.initialize()
-                GIT.text(client.exchange(GIT.call(10, "git_show", {"revision": REFS[0]}))[0])
+                GIT.text(client.exchange(GIT.call(10, "git_status", {}))[0])
             finally:
                 client.close()
         require(client.process.returncode == 0 and not client.forced_cleanup, "fresh collector failed")
@@ -573,7 +615,7 @@ def inflight_substitution(stack, second, report, *, mapped=False, restore=False)
             require(len(candidates) == 1, "one owned original server required for inflight control")
             target = candidates[0]
             os.kill(target[0], signal.SIGSTOP)
-            client.send(GIT.call(50, "git_show", {"revision": REFS[0]}))
+            client.send(GIT.call(50, "git_status", {}))
             BASE.wait_event(path, lambda rows: any(r.get("host_call_id") == 50 and r.get("state") == "inflight" for r in rows),
                 "owned original request was not dispatched before substitution")
             if mapped:
@@ -643,7 +685,7 @@ def run(args):
             write(home / ".agentfw/config.yaml", config)
             stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace,
                 install=install, profile=install / "profile.json", env=env, daemon=None, port=port,
-                poison=poison, daemon_witnesses=[])
+                poison=poison, missing_ancestor=first, daemon_witnesses=[])
             positive = subprocess.run([str(args.sandbox_test_binary), "selected_git_sandbox_isolates_real_python_and_git", "--ignored", "--nocapture"],
                 env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(stack.profile), SOU86_TEST_AGENTFW=str(args.agentfw.resolve())),
                 capture_output=True, timeout=90)
@@ -654,6 +696,7 @@ def run(args):
             daemon = start_daemon(stack, config, "shallow")
             legacy_refusal(stack, report)
             ordinary_controls(stack, second, report)
+            local_parent_controls(stack, report)
             boundary_refusals(stack, report)
             helper_control(stack, report)
             GIT.startup_refusals(stack, report)
