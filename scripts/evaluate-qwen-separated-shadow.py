@@ -4,6 +4,7 @@
 import argparse
 import importlib.util
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -113,6 +114,16 @@ def stage(base, system, payload, schema, limit, validator):
     return result
 
 
+def persist_stage(output, row, phase, state, result=None):
+    record = {'request_id': row['request_id'], 'input_sha256': row['input_sha256'],
+              'phase': phase, 'state': state}
+    if result is not None: record['result'] = result
+    with (output / 'stages.jsonl').open('a', encoding='utf-8') as stream:
+        stream.write(json.dumps(record, ensure_ascii=False) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--assets', type=Path, required=True)
@@ -160,17 +171,31 @@ def main():
                 time.sleep(1)
             for row in rows:
                 payload = package(row['input'])
-                classification = stage('http://127.0.0.1:18966', CLASSIFY, payload, CLASS_SCHEMA, 96, validate_class)
-                evidence = {'status': 'not_run_classification_error'}
-                if classification['status'] == 'valid':
-                    evidence = stage('http://127.0.0.1:18966', EXTRACT,
-                        dict(payload, candidate_assessment=classification['value']['assessment']),
-                        evidence_schema(row['input']), 384, lambda value: validate_evidence(value, row['input']))
+                phase = 'classification'
+                persist_stage(args.output, row, phase, 'started')
+                try:
+                    classification = stage('http://127.0.0.1:18966', CLASSIFY, payload, CLASS_SCHEMA, 96, validate_class)
+                    persist_stage(args.output, row, phase, 'completed', classification)
+                    evidence = {'status': 'not_run_classification_error'}
+                    phase = 'evidence'
+                    if classification['status'] == 'valid':
+                        persist_stage(args.output, row, phase, 'started')
+                        evidence = stage('http://127.0.0.1:18966', EXTRACT,
+                            dict(payload, candidate_assessment=classification['value']['assessment']),
+                            evidence_schema(row['input']), 384, lambda value: validate_evidence(value, row['input']))
+                        persist_stage(args.output, row, phase, 'completed', evidence)
+                    else:
+                        persist_stage(args.output, row, phase, 'not_run', evidence)
+                except BaseException as error:
+                    persist_stage(args.output, row, phase, 'interrupted', {'exception_type': type(error).__name__})
+                    raise
                 observation = {'request_id': row['request_id'], 'input_sha256': row['input_sha256'],
                                'classification': classification, 'evidence': evidence}
                 results.append(observation)
                 with (args.output / 'observations.jsonl').open('a', encoding='utf-8') as out:
                     out.write(json.dumps(observation, ensure_ascii=False) + '\n')
+                    out.flush()
+                    os.fsync(out.fileno())
                 print(row['request_id'], classification['status'], evidence['status'], flush=True)
                 if classification.get('connection_failed') or evidence.get('connection_failed'): break
         finally:

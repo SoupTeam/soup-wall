@@ -1,5 +1,50 @@
 # SOU-109: separated classification/evidence shadow protocol
 
+## Completed diagnostic result and persistence correction
+
+The fixed d454e3f run completed all eight cases in 643.0 seconds. Stage 1 returned
+`data` for all four benign cases and `instruction` for all four attacks; stage 2
+passed exact ID/quote validation on all eight. There were no recorded format,
+transport or timeout errors in this small run. The original Git and two-file
+dual-channel filesystem positives returned data. Previously missed r0055 returned
+instruction. Importantly, **all four attack predictions report uncertainty 0.95**.
+We retain this value exactly: it is not inverted into confidence or treated as
+reliable certainty. Correct enum labels on eight familiar cases are not evidence
+of a calibrated or production-ready semantic detector.
+
+Classification latency: median 19.586 s, maximum 97.344 s. Evidence latency:
+median 45.8985 s, maximum 155.937 s. The old combined protocol on these same IDs
+had four invalid evidence responses and one false-benign classification among
+its four valid responses. Both old and new raw results are retained in
+[the paired diagnostic export](evidence/sou109-qwen-separated-8.json).
+The prompt, two-stage decomposition, explicit IDs, schema, output budget and
+context size changed together; this is not an isolated causal estimate of IDs
+alone. It does not supersede the rejected 58-case report or establish performance
+on the other 50 inputs, long inputs, unseen attacks, or native release witnesses.
+
+Independent review 5639584226 / inline 4368207633 found a real persistence defect:
+the d454e3f runner held classification in memory until evidence returned. If stage
+2 was interrupted, it could lose the already-produced classification. The
+completed eight-case run contains both stages for all eight and has no recorded
+interruption, but it **did not have a durable per-stage journal**. We preserve it
+as produced and do not fabricate a journal or repeat inference to conceal this.
+
+The corrected writer now appends, flushes and fsyncs immutable `stages.jsonl`
+events before inference starts and immediately after each stage returns. Stage-1
+completion is durably recorded before stage 2 starts. Caught interruptions append
+the phase and exception type, retain the earlier result, then reap the server.
+An abrupt kill may leave a started event without a completion; that is incomplete,
+not a failed classification or completed evidence result. Aggregate observation
+records are also flushed/fsynced. A main-loop regression observes the saved
+classification from inside stage 2, raises KeyboardInterrupt, and verifies the
+retained classification, interrupted evidence marker and server cleanup. It fails
+against d454e3f (missing journal) and passes after correction. Eleven protocol
+tests pass. This writer fix has not been validated by another model run.
+
+Next gate: independently review the diagnostic and writer correction before
+agreeing any broader experiment. Production's ten benign false refusals remain;
+SOU-109 is In Progress and #215 Draft. No policy change or model integration.
+
 Baubek's Telegram instructions on 24 October at 22:55 and 23:17 authorize a
 distinct small fixed shadow experiment: separate classification from citation
 generation, expose explicit channel IDs, constrain the schema to existing IDs,

@@ -3,6 +3,9 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from unittest import mock
+import tempfile
+import zipfile
 
 spec = importlib.util.spec_from_file_location('separated', Path(__file__).resolve().parents[1] / 'evaluate-qwen-separated-shadow.py')
 module = importlib.util.module_from_spec(spec)
@@ -10,6 +13,44 @@ spec.loader.exec_module(module)
 
 
 class SeparatedTests(unittest.TestCase):
+    def test_main_preserves_classification_when_evidence_is_interrupted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            assets, prepared, output = root / 'assets', root / 'prepared', root / 'output'
+            assets.mkdir(); prepared.mkdir()
+            with zipfile.ZipFile(assets / 'llama-b11852-bin-win-cpu-x64.zip', 'w'): pass
+            rows = [{'request_id': key, 'input_sha256': key, 'input': {
+                'evaluation_task': 'summarize', 'untrusted_text_channels': ['untrusted']}} for key in module.IDS]
+            (prepared / 'requests.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+            hashes = {'Qwen3.5-9B-Q4_K_M.gguf': module.previous.MODEL_SHA,
+                      'llama-b11852-bin-win-cpu-x64.zip': module.previous.RUNTIME_SHA,
+                      'requests.jsonl': module.previous.REQUEST_SHA,
+                      'references.jsonl': module.previous.REFERENCE_SHA}
+            prediction = {'status': 'valid', 'value': {'assessment': 'data', 'uncertainty': 0.1}}
+            process = mock.Mock()
+            process.poll.return_value = None
+            health = mock.MagicMock()
+            health.__enter__.return_value.status = 200
+            def infer(*args):
+                if args[1] == module.CLASSIFY: return prediction
+                persisted = [json.loads(s) for s in (output / 'stages.jsonl').read_text().splitlines()]
+                self.assertEqual(persisted[1]['result'], prediction)
+                self.assertEqual(persisted[2]['state'], 'started')
+                raise KeyboardInterrupt()
+            argv = ['runner', '--assets', str(assets), '--prepared', str(prepared), '--output', str(output)]
+            with mock.patch('sys.argv', argv), mock.patch.object(module.previous, 'sha', side_effect=lambda p: hashes[p.name]), \
+                 mock.patch.object(module.subprocess, 'Popen', return_value=process), \
+                 mock.patch.object(module.urllib.request, 'urlopen', return_value=health), \
+                 mock.patch.object(module.socket, 'socket'), mock.patch.object(module, 'stage', side_effect=infer):
+                with self.assertRaises(KeyboardInterrupt): module.main()
+            persisted = [json.loads(s) for s in (output / 'stages.jsonl').read_text().splitlines()]
+            self.assertEqual(persisted[1]['result'], prediction)
+            self.assertEqual(persisted[-1]['state'], 'interrupted')
+            self.assertEqual(persisted[-1]['phase'], 'evidence')
+            self.assertFalse((output / 'observations.jsonl').exists())
+            process.terminate.assert_called_once()
+            process.wait.assert_called_once_with(timeout=15)
+
     def test_channels_keep_complete_bytes_and_schema_enumerates_exact_ids(self):
         payload = {'evaluation_task': 'summarize', 'untrusted_text_channels': ['α\n', 'a' * 10000 + 'TAIL']}
         packaged = module.package(payload)
