@@ -1,12 +1,23 @@
 {
   "format": "sou136-native-attempts/1",
-  "runs": [{
-    "run_id": 40090002007,
-    "source": "40bbf3dc26473c5483f990ca007974762bf9ea19",
-    "status": "build_failed",
-    "original_server_cycles_attempted": 0,
-    "native_acceptance_passed": false,
-    "build_diagnostic_limit": "Existing JSON-only cargo output hid the primary compiler diagnostic. The follow-up exposes rendered compiler diagnostics.",
-    "identified_source_defect": "Linux-only Boundary.membership_observations was private while parent metadata() reads it; expose it only to its parent module."
-  }]
+  "runs": [
+    {
+      "run_id": 40090002007,
+      "source": "40bbf3dc26473c5483f990ca007974762bf9ea19",
+      "status": "build_failed",
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "build_diagnostic_limit": "Existing JSON-only cargo output hid the primary compiler diagnostic. The follow-up exposes rendered compiler diagnostics.",
+      "identified_source_defect": "Linux-only Boundary.membership_observations was private while parent metadata() reads it; expose it only to its parent module."
+    },
+    {
+      "run_id": 40090432914,
+      "source": "181d0ff1da18338983c884dedfc15fa8a6469694",
+      "status": "test_dependency_preparation_failed",
+      "candidate_linux_build_passed": true,
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "cause": "Offline accepted-source test compile could not download the uncached locked assert-json-diff 2.0.2 dev dependency. Fetch locked test dependencies during preparation, then keep regression compilation offline."
+    }
+  ]
 }
