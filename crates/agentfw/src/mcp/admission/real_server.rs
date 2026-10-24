@@ -33,6 +33,16 @@ const OVERSIZED_CONTROL_ERROR: &str = "oversized MCP control response";
 
 mod frames;
 
+// Host-owned diagnostic pipes may close before the namespace owners finish.
+// Reporting must not panic past cleanup or its authenticated acknowledgement;
+// failures of the actual transport, drain and owner boundaries remain errors.
+macro_rules! diagnostic {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr().lock(), $($arg)*);
+    }};
+}
+
 struct Grant {
     call_id: Value,
     binding: Value,
@@ -57,7 +67,7 @@ impl ContinuationTiming {
 
     fn record(&mut self, call: &Call, stage: &'static str, success: bool) {
         let now = Instant::now();
-        eprintln!(
+        diagnostic!(
             "{}",
             json!({
                 "event": "mcp_real_approval_timing", "profile": call.profile,
@@ -168,7 +178,7 @@ fn error(id: &Value, code: i64, message: &'static str) -> Vec<u8> {
 }
 
 fn audit(call: &Call, state: &str, active: usize, queued: usize) {
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_call","profile":call.profile,
         "host_call_id":call.id,"id_type":if call.id.is_string(){"string"}else{"integer"},
@@ -445,7 +455,7 @@ async fn wait_approval(
         .as_str()
         .context("pending id")?
         .to_owned();
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_native_approval_pending","pending_id":id,
         "tool":call.tool,"host_call_id":call.id,"binding_sha256":reply["binding_sha256"],
@@ -511,7 +521,7 @@ async fn inspect(
                 .downcast_ref::<DaemonSizeLimit>()
                 .copied()
                 .ok_or(failure)?;
-            eprintln!(
+            diagnostic!(
                 "{}",
                 json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
                     "limit":limit.code(),"observed_bytes":raw.len(),"released":false})
@@ -820,7 +830,7 @@ where
                             audit(call, "cancelled", active, queued);
                         }
                     } else {
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_cancel","state":if used.contains(&key){"late"}else{"unknown"}})
                         );
@@ -1126,7 +1136,7 @@ where
                             );
                             continue;
                         };
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
                                 "limit":"result_frame_bytes","budget_bytes":server_profile::RESULT_FRAME_BYTES,
@@ -1204,12 +1214,12 @@ where
                         }
                         // Progress/logging text has no independently admitted data
                         // channel. Consume it; never forward even a message field.
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_notification","kind":"progress","released":false})
                         );
                     } else {
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_notification","kind":"unsupported_or_logging","released":false})
                         );
@@ -1371,7 +1381,7 @@ where
                             .downcast_ref::<crate::mcp::input::ResultBudgetExceeded>()
                             .is_some();
                         if budget {
-                            eprintln!(
+                            diagnostic!(
                                 "{}",
                                 json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
                                     "limit":"result_text_bytes","budget_bytes":server_profile::RESULT_TEXT_BYTES,
@@ -1578,7 +1588,7 @@ async fn drain_stderr(mut stream: tokio::process::ChildStderr) -> anyhow::Result
         }
     }
     .await;
-    eprintln!("{}", witness.metadata(result.is_ok()));
+    diagnostic!("{}", witness.metadata(result.is_ok()));
     result
 }
 
@@ -1639,16 +1649,16 @@ pub(super) async fn run(
         "unbudgeted"
     };
     let mut stderr_task = None;
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_owner_start","owner":owner.metadata()})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_budget_start","mode":budget_mode,
         "budget":budget.as_ref().map(super::super::linux_budget::OwnedBudget::metadata)})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_server_start","profile":profile.format,
         "sandbox":server_sandbox::profile_name(&profile.format),"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
@@ -1721,7 +1731,7 @@ pub(super) async fn run(
                 // Record the relay's actual first failure before stdin shutdown
                 // can provoke a secondary wrapper/server exit. The owner select
                 // arm can otherwise win while this shutdown is still pending.
-                eprintln!(
+                diagnostic!(
                     "{}",
                     json!({"event":"mcp_real_transport_failure",
                     "failure_code":relay_failure_code(error),"released":false})
@@ -1815,18 +1825,18 @@ pub(super) async fn run(
     let owner_failed = owner_failed.load(std::sync::atomic::Ordering::Acquire)
         || owner_check.is_err()
         || owner_quiesce.is_err();
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_owner_end","owner":owner.metadata(),
         "cleanup_verified":owner_cleanup.is_ok(),"observed_failure":owner_failed})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_budget_end","mode":budget_mode,
         "budget":budget.as_ref().map(super::super::linux_budget::OwnedBudget::metadata),
         "cleanup_verified":budget_cleanup.is_ok(),"observed_failure":budget_failed})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_server_end","profile":profile.format,
         "budget_requested":budget_requested,"budget_cleanup_verified":budget_cleanup.is_ok(),
@@ -1870,6 +1880,77 @@ pub(super) async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn closed_diagnostic_pipe_cannot_abort_stderr_cleanup() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        const PROBE: &str = "AGENTFW_OWNED_CLOSED_DIAGNOSTIC_PROBE";
+        if std::env::var_os(PROBE).is_some() {
+            // The parent closes the stderr reader before releasing this child.
+            let mut ready = [0u8; 1];
+            std::io::Read::read_exact(&mut std::io::stdin(), &mut ready).unwrap();
+            assert_eq!(ready, [1]);
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async {
+                for (script, expect_quota) in [
+                    ("printf owned-stderr >&2", false),
+                    ("/usr/bin/head -c 1048577 /dev/zero >&2", true),
+                ] {
+                    let mut child = tokio::process::Command::new("/bin/sh")
+                        .args(["-c", script])
+                        .stderr(Stdio::piped())
+                        .kill_on_drop(true)
+                        .spawn()
+                        .unwrap();
+                    let result = drain_stderr(child.stderr.take().unwrap()).await;
+                    child.wait().await.unwrap();
+                    if expect_quota {
+                        assert!(result
+                            .unwrap_err()
+                            .to_string()
+                            .contains("selected MCP server stderr quota exceeded"));
+                    } else {
+                        result.unwrap();
+                    }
+                }
+            });
+            println!("owned-stderr-drain-and-quota-preserved");
+            return;
+        }
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "mcp::admission::real_server::tests::closed_diagnostic_pipe_cannot_abort_stderr_cleanup",
+                "--nocapture",
+            ])
+            .env(PROBE, "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        drop(child.stderr.take());
+        child.stdin.take().unwrap().write_all(&[1]).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while child.try_wait().unwrap().is_none() {
+            if std::time::Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("owned closed-diagnostic subprocess did not finish");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "closed stderr aborted cleanup");
+        assert!(String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("owned-stderr-drain-and-quota-preserved"));
+    }
+
     #[test]
     fn relay_failure_metadata_does_not_echo_untrusted_context_or_suffixes() {
         let error = anyhow::anyhow!("unknown or duplicate MCP response ID")

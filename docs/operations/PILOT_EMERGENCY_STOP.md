@@ -59,6 +59,9 @@ session or its authority. Selected collectors intercept Unix SIGTERM before
 creating a namespace owner, so host shutdown cancels transport through those
 same cleanup boundaries instead of abruptly skipping the acknowledgement.
 Interrupted transport remains failed; interception is not proof of cleanup.
+Collector diagnostic output is best effort: a closed host diagnostic pipe cannot
+panic past owner cleanup or its acknowledgement. Actual stderr-drain/read/quota
+failures still prevent confirmation.
 Obligations are bounded; an unconfirmed one remains a
 failure even after its grant expires. This is a trusted-collector protocol,
 not remote process attestation.

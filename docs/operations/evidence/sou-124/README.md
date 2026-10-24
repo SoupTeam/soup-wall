@@ -73,6 +73,19 @@ attestation; the generated component workflow is checked against its sources.
 Local development uses Homebrew Rust 1.99.0 on macOS, while current CI must attest
 and qualify the accepted lane pins (1.99.1, native Linux 1.94.1).
 
+A second terminal-path control reproduces another independent failure boundary:
+Rust `eprintln!` panics if the host closes a collector diagnostic pipe. Terminal
+records preceded the authenticated cleanup ACK, and the stderr-drain worker also
+logged before returning its actual result. Diagnostic writes now use a local
+non-panicking writer with identical output formatting. This ignores only the
+reporting write error; transport/drain quota errors and every cleanup/ACK result
+remain authoritative. A real Unix subprocess with its diagnostic reader closed
+fails on the original implementation and passes after correction, while the
+original 1 MiB stderr quota still refuses. Its parent bounds execution, kills and
+reaps on timeout. `closed-diagnostic-cleanup-correction.json` records this local
+proof and its limits; it does not attribute EPIPE to the historical CI sample or
+claim a native owner/ACK qualification from that subprocess.
+
 ## Current native comparison
 
 `native-linux-current.json` records the passing comparison in run `40052146937`
