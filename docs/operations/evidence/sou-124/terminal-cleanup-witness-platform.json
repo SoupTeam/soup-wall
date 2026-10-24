@@ -1,0 +1,25 @@
+{
+  "format": "sou124-terminal-cleanup-witness-platform/1",
+  "failed_ci_run": 40073742485,
+  "failed_source": "e3409329a984cb20d0829c9310c21d39a9724493",
+  "job": "agent-windows-security",
+  "failure": "new Unix private-file RunGuard witness timed out waiting for mock-daemon observation on Windows",
+  "cause": "read_file(private=true) explicitly refuses the unsupported run-scoped contract on non-Unix before sending a request; the positive test was incorrectly compiled there",
+  "correction": "cfg(unix) on both new native RunGuard witnesses, consistent with existing sealed owner/receipt controls; bodies and all refusal/cleanup assertions unchanged",
+  "runtime_change_since_e340932": false,
+  "linux_macos_behavior_change_since_e340932": false,
+  "failure_log_sha256": "1b89414568087801be781fd8faaa8909b13798112fb8b876d821086235f3962d",
+  "next": "current Windows CI plus current native qualification required; previous failure is retained",
+  "local_followup": {
+    "unix_witnesses_passed": 2,
+    "failed": 0,
+    "strict_clippy": "passed",
+    "fmt": "passed",
+    "docs": "250 Markdown, 920 local links, 0 errors",
+    "log_sha256": {
+      "ordinary-exit-platform-controls.log": "6820165f0fd50fc2d316b9fb72b4336a72f9311fcce1116de3514e078297ef8c",
+      "clippy-terminal-platform.log": "2b5f433124d43812715a4809ee8688dcccb8c4c3cc8b93c4491766e4f751b472",
+      "docs-terminal-platform.log": "13a134411ba6c2fd5f48cb11b44e9c491191229d9c55a6c4891cc720a4f943cf"
+    }
+  }
+}

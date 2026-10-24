@@ -33,6 +33,16 @@ clippy/formatting and current native qualification are recorded separately in
 below remains attributed to its measured source; it is not a claim that the
 post-integration failure or this new native qualification passed.
 
+The first follow-up CI on `e340932` exposed a platform mistake in the new
+loopback test: Windows explicitly refuses `read_file(private=true)` for the
+unsupported run-scoped contract before reaching a daemon, so the positive witness
+waited for a request that could never happen. Both new RunGuard witnesses now
+use `cfg(unix)`, matching the existing sealed-owner/receipt test boundary. Their
+bodies and all assertions remain unchanged on Linux/macOS; no runtime logic is
+changed by this test-platform correction. The failed Windows job is retained in
+`terminal-cleanup-witness-platform.json`. Current Windows and native CI remain
+required before readiness.
+
 ## Current native comparison
 
 `native-linux-current.json` records the passing comparison in run `40052146937`

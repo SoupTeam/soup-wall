@@ -1439,6 +1439,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn ordinary_exit_cannot_skip_unavailable_owner_confirmation() {
         let root = tempfile::tempdir().unwrap();
@@ -1471,6 +1472,9 @@ mod tests {
         );
     }
 
+    // RunGuard's private-file/owned-process contract is Unix-only. Windows
+    // refuses it before opening a native endpoint and cannot exercise this path.
+    #[cfg(unix)]
     #[tokio::test]
     async fn ordinary_exit_revokes_before_waiting_for_exact_owner_acknowledgement() {
         use std::sync::{
