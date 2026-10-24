@@ -426,6 +426,10 @@ def run(args):
                         evidence.phase("server-session-" + user["username"])
                         page.locator("#identity").wait_for(state="visible")
                         page.locator("#role").wait_for(state="visible")
+                        # Finish Console panel requests before fixture cookie rotation
+                        # and Gateway restart. Late old-session 401s correctly clear
+                        # the UI; identity visibility alone is not settled readiness.
+                        page.wait_for_load_state("networkidle")
                     else:
                         page.get_by_text("SAML login could not be completed", exact=False).wait_for()
                     observation["outcome"] = "completed"
