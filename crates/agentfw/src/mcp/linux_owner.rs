@@ -62,6 +62,7 @@ pub fn early_dispatch() -> Option<i32> {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
 mod linux {
     use std::collections::BTreeSet;
     use std::ffi::CString;
@@ -381,6 +382,7 @@ mod linux {
         Ok(())
     }
 
+    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
     fn receive_budget_fds(socket: &UnixDatagram) -> std::io::Result<(BudgetPrepared, Vec<File>)> {
         let invalid = || {
             std::io::Error::new(
@@ -431,7 +433,7 @@ mod linux {
                 {
                     valid_headers += 1;
                     let length = (*header).cmsg_len - minimum;
-                    headers_valid &= length % std::mem::size_of::<RawFd>() == 0;
+                    headers_valid = headers_valid && length.is_multiple_of(std::mem::size_of::<RawFd>());
                     for index in 0..length / std::mem::size_of::<RawFd>() {
                         let descriptor = std::ptr::read_unaligned(
                             libc::CMSG_DATA(header).cast::<RawFd>().add(index),
@@ -460,12 +462,13 @@ mod linux {
         Ok((prepared, files))
     }
 
+    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
     async fn adopt_budget(
         socket: UnixDatagram,
         requested: &BudgetPrepare,
     ) -> anyhow::Result<(super::super::linux_budget::OwnedBudget, String)> {
         socket.set_nonblocking(true)?;
-        let socket = tokio::io::unix::AsyncFd::new(socket)?;
+        let socket = tokio::io::unix::AsyncFd::register(socket)?;
         let (prepared, files) = loop {
             let mut readable = socket.readable().await?;
             match readable.try_io(|socket| receive_budget_fds(socket.get_ref())) {
@@ -513,6 +516,7 @@ mod linux {
         Ok((budget, prepared.instance))
     }
 
+    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
     fn await_budget_adoption(
         transfer: &UnixDatagram,
         collector: &File,

@@ -70,12 +70,17 @@ def main():
                     message = ''.join(char if char >= ' ' else ' ' for char in message)[:1000]
                     message = re.sub(r'(?:sou143-owned-[A-Za-z0-9_-]+|owned-api-canary)', '[synthetic-redacted]', message)
                     code = (value.get('code') or {}).get('code')
+                    spans = [f"{s.get('file_name')}:{s.get('line_start')}" for s in value.get('spans', []) if s.get('file_name')]
                     diagnostics.append({'phase': label, 'severity': value['level'],
                                         'code': code if code and re.fullmatch(r'[A-Za-z0-9_:]+', code) else None,
+                                        'spans': spans,
                                         'message': message})
                 (out / 'compiler-diagnostics.json').write_text(json.dumps(diagnostics, indent=2) + '\n')
             save()
         if step['status'] != 'passed':
+            if diagnostics:
+                print(f"=== {label} diagnostics ===", file=sys.stderr)
+                print(json.dumps(diagnostics, indent=2), file=sys.stderr)
             raise RuntimeError(label + '_failed')
         return log
     try:

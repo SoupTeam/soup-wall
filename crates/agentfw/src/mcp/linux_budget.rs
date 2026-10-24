@@ -362,6 +362,7 @@ impl OwnedBudget {
     }
 
     #[cfg(target_os = "linux")]
+    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
     pub(crate) fn adopt_prepared(
         selected: &BoundConfig,
         prepared: &PreparedBudget,
@@ -600,6 +601,7 @@ impl OwnedBudget {
 mod process;
 
 #[cfg(target_os = "linux")]
+#[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
 mod linux {
     use super::*;
     use std::collections::{BTreeMap, BTreeSet};
@@ -1020,9 +1022,7 @@ mod linux {
                         .strip_prefix("agentfw-mcp-")
                         .is_some_and(|name| {
                             name.len() == 32
-                                && name.bytes().all(|byte| {
-                                    byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
-                                })
+                                && name.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
                         }),
                 "mcp_budget_prepared_invalid"
             );
