@@ -495,9 +495,13 @@ def policy_controls(stack, config, second, report):
                     require(response["id"] == 50, "approval response correlation changed")
                     if case == "approve":
                         require(raw == expected and any(row.get("host_call_id") == 50 and row.get("state") == "inflight" for row in BASE.events(path)), "approved original bytes/execution changed")
+                        approved_opens = witness.drain()
+                        require(approved_opens > 0, "approved status execution did not calibrate the independent observer")
                         client.send(GIT.call(51, "git_status", {}))
                         again = APPROVAL.pending(args, stack.env, timeout=5)
-                        require(again["pending_id"] != waiting["pending_id"] and witness.drain() == 0, "approval was reused")
+                        require(again["pending_id"] != waiting["pending_id"], "single-use approval ID was reused")
+                        require(witness.drain() == 0 and not any(row.get("host_call_id") == 51 and row.get("state") == "inflight" for row in BASE.events(path)),
+                                "second unapproved status request executed")
                         APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
                         require(BASE.refused(client.receive()[0]), "second Ask was not independently refused")
                     else:
