@@ -6,6 +6,8 @@ import sys
 import tempfile
 import json
 import ast
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 PATH = Path(__file__).resolve().parents[1] / "pilot_operator_results.py"
 SPEC = importlib.util.spec_from_file_location("operator_results", PATH)
@@ -14,6 +16,34 @@ SPEC.loader.exec_module(RESULTS)
 
 
 class ResultContract(unittest.TestCase):
+    def test_reopened_terminal_repeats_inspection_before_rejection(self):
+        path = PATH.parent / "qualify-ask-inbox.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        selected = next(node for node in tree.body
+                        if isinstance(node, ast.ClassDef) and node.name == "InboxPilot")
+        selected.body = [node for node in selected.body
+                         if isinstance(node, ast.FunctionDef) and node.name == "operator"]
+
+        class Base:
+            def operator(self, *args, **kwargs):
+                return [{"pending_id": "selected"}]
+
+        namespace = {"ASK": SimpleNamespace(Pilot=Base)}
+        exec(compile(ast.Module(body=[selected], type_ignores=[]), str(path), "exec"), namespace)
+        for returncode in (None, 1):
+            with self.subTest(previous_exit=returncode):
+                pilot = namespace["InboxPilot"]()
+                pilot.guards_checked, pilot.kind, pilot.observations = True, "git", []
+                pilot.watcher = Mock()
+                pilot.watcher.process.poll.return_value = returncode
+                terminal = Mock()
+                terminal.process.poll.return_value = None
+                terminal.send.side_effect = lambda command: self.assertTrue(terminal.inspect.called)
+                pilot.open = Mock(return_value=terminal)
+                pilot.operator("reject", "selected", "--binding", "b" * 64)
+                terminal.inspect.assert_called_once_with("selected", 1)
+                terminal.send.assert_called_once_with("reject")
+
     def test_terminal_diagnostics_do_not_export_arguments(self):
         path = PATH.parent / "qualify-ask-inbox.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))

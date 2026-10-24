@@ -160,7 +160,7 @@ class InboxPilot(ASK.Pilot):
             return super().operator(*words, success=success, without_home=without_home)
         if not self.guards_checked:
             self.check_exit_controls()
-        if self.watcher is None or self.watcher.process.poll() is not None:
+        if words[0] != "reject" and (self.watcher is None or self.watcher.process.poll() is not None):
             self.watcher = self.open()
         if words[0] == "inspect":
             rows = super().operator("list")
@@ -188,6 +188,12 @@ class InboxPilot(ASK.Pilot):
             self.observations.append({"profile": self.kind, "case": "concurrent_terminal_approval",
                                       "submitted": submitted, "passed": True})
         else:
+            if self.watcher is not None:
+                self.watcher.close()
+            self.watcher = self.open()
+            rows = super().operator("list")
+            number = next(i + 1 for i, row in enumerate(rows) if row["pending_id"] == words[1])
+            self.watcher.inspect(words[1], number)
             self.watcher.send("reject")
             self.watcher.expect('"state":"rejected"')
         self.observations.append({"profile": self.kind, "case": "terminal_" + words[0], "passed": True})
