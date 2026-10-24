@@ -10,14 +10,18 @@ use serde_json::Value;
 use super::ToolProfile;
 
 pub(crate) mod reference_view;
+pub(crate) mod selected_view;
+pub(crate) mod shallow_view;
+pub(crate) use selected_view::SelectedView;
 
 pub const FORMAT: &str = "sw-mcp/git-readonly/1";
 /// Explicitly selected local-reference contract; the original v1 stays narrow.
+pub const SHALLOW_FORMAT: &str = "sw-mcp/git-readonly-shallow/1";
 pub const LOCAL_REFS_FORMAT: &str = "sw-mcp/git-readonly-local-refs/1";
 pub const MAX_LOCAL_REF_BYTES: usize = 255;
 
 pub fn is_profile(format: &str) -> bool {
-    matches!(format, FORMAT | LOCAL_REFS_FORMAT)
+    matches!(format, FORMAT | LOCAL_REFS_FORMAT | SHALLOW_FORMAT)
 }
 
 /// A literal, fully qualified local name, never a Git revision expression.
@@ -198,6 +202,11 @@ pub(super) fn validate_configuration(config: &[u8]) -> anyhow::Result<()> {
 /// All inspection is repeated at protected startup on the fd-pinned directory.
 #[cfg(any(target_os = "linux", test))]
 pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
+    validate_repository_with_shallow(root, false)
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> anyhow::Result<()> {
     use std::io::Read;
     ensure!(
         fs::symlink_metadata(root.join(".git"))?.is_dir(),
@@ -218,12 +227,23 @@ pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
         ".git/objects/info/alternates",
         ".git/objects/info/http-alternates",
         ".git/info/attributes",
-        ".git/shallow",
     ] {
         ensure!(
             fs::symlink_metadata(root.join(path))
                 .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
             "unsupported Git repository indirection or attributes"
+        );
+    }
+    if !shallow {
+        ensure!(
+            fs::symlink_metadata(root.join(".git/shallow"))
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
+            "shallow repositories require explicit opt-in"
+        );
+    } else if let Ok(metadata) = fs::symlink_metadata(root.join(".git/shallow")) {
+        ensure!(
+            metadata.is_file(),
+            "Git shallow boundary must be a regular file"
         );
     }
     let mut config = Vec::new();
