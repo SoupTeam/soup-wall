@@ -1,0 +1,12 @@
+{
+  "format": "sou136-native-attempts/1",
+  "runs": [{
+    "run_id": 40090002007,
+    "source": "40bbf3dc26473c5483f990ca007974762bf9ea19",
+    "status": "build_failed",
+    "original_server_cycles_attempted": 0,
+    "native_acceptance_passed": false,
+    "build_diagnostic_limit": "Existing JSON-only cargo output hid the primary compiler diagnostic. The follow-up exposes rendered compiler diagnostics.",
+    "identified_source_defect": "Linux-only Boundary.membership_observations was private while parent metadata() reads it; expose it only to its parent module."
+  }]
+}

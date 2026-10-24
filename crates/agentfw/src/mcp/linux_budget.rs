@@ -696,7 +696,7 @@ mod linux {
         processes: process::Proc,
         expected_leader: Option<(u32, u64, process::Task)>,
         pub(super) membership_failures: MembershipFailures,
-        membership_observations: MembershipObservations,
+        pub(super) membership_observations: MembershipObservations,
         pub(super) started: std::time::Instant,
         pub(super) removed: bool,
     }

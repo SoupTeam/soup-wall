@@ -5,6 +5,8 @@ qualification completes on the exact candidate source.
 
 - `local-development.json` records the passing macOS development checks and their
   platform limitations, exact subject/log hashes and corrected environment failures.
+- `native-attempts.json` preserves unsuccessful native runs separately from any
+  later candidate qualification; the first run failed before server cycles.
 - `original-failure.json` preserves the original failed run and finite observations.
 - The accepted-source regression overlay is
   `scripts/fixtures/sou136-accepted-open-regression.patch`. It keeps the accepted
