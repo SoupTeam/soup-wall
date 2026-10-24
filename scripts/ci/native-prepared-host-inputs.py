@@ -83,6 +83,15 @@ def main():
         finally:
             if log.exists():
                 step['log_sha256'] = sha(log)
+                if step.get('exit_code', 0):
+                    # Trusted upstream/setup diagnostics only. No candidate or
+                    # provider process runs here; never export complete logs.
+                    tail = log.read_text(errors='replace')[-16384:]
+                    hints = [line for line in tail.splitlines() if any(word in line.lower()
+                        for word in ('error:', 'not found', 'could not', 'cannot ', 'not usable'))]
+                    step['setup_diagnostics'] = [re.sub(r'/[^\s\"\']+', '[path]',
+                        ''.join(char if char >= ' ' else ' ' for char in line))[:300]
+                        for line in hints[-8:]]
             save()
         require(step['status'] == 'passed', label + '_failed')
     try:
