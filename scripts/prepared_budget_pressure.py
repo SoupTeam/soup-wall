@@ -16,6 +16,8 @@ import time
 
 from prepared_budget_observer import BudgetObserver
 
+PRESSURE_BYTES = 40 * 1024 * 1024
+
 
 def qualify(context, selection, paths, profiles, delegation, output, commit):
     base, resource = context.BASE, context.RESOURCE
@@ -73,7 +75,7 @@ def qualify(context, selection, paths, profiles, delegation, output, commit):
                 original = payload.read_bytes() if payload.exists() else None
                 # Fixed owned calibration bytes; original package and executable
                 # remain unchanged. No data or payload bytes are exported.
-                payload.write_bytes(b'owned-resource-calibration\n' * (40 * 1024 * 1024 // 27))
+                payload.write_bytes(b'owned-resource-calibration\n' * (PRESSURE_BYTES // 27))
             model = base.DEMO.ScriptedModel([])
             model.server.handle_error = lambda *_: None
             offered = set()

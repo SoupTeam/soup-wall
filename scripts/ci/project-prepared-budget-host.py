@@ -99,12 +99,16 @@ def project(attempt, raw, expected, exit_code):
               'source_commit': expected, 'full_sou142_qualification': False,
               'acceptance_pass': False, 'remaining_gaps': list(GAPS), 'cases': [],
               'owner_controls': [], 'raw_process_metadata_or_logs_exported': False}
+    if type(attempt) is not dict or type(raw) is not dict:
+        output['reason'] = 'malformed_private_report'
+        return output
     # Failure observations use a separate finite schema, even when no successful
     # terminal receipt exists. Raw private process identities never escape.
     diagnostics = []
     section = raw.get('emergency_stop', {})
     if type(section) is dict:
-        for row in section.get('cases', [])[:4]:
+        cases = section.get('cases', [])
+        for row in cases[:4] if type(cases) is list else []:
             if type(row) is not dict:
                 continue
             observations = row.get('failure_observations', [row.get('failure_observation')])
@@ -112,9 +116,15 @@ def project(attempt, raw, expected, exit_code):
                 if type(observed) is not dict:
                     continue
                 value = {}
-                for key in ('entry_status', 'entry_reason', 'budget_status'):
+                enums = {'entry_status': {'completed', 'failed', 'stopped'},
+                    'entry_reason': {'restricted_launcher_failed', 'pilot_timeout', 'pilot_cancelled',
+                        'owned_daemon_lost', 'resource_budget_unconfirmed', 'resource_budget_refused',
+                        'owned_stop_unconfirmed', 'provider_unavailable'},
+                    'budget_status': {'closed-enforced', 'unresolved', 'refused', 'active-at-attachment',
+                        'configured-not-observed'}}
+                for key, allowed in enums.items():
                     item = observed.get(key)
-                    if type(item) is str and re.fullmatch('[a-z0-9_-]{1,100}', item):
+                    if type(item) is str and item in allowed:
                         value[key] = item
                 for key in ('entry_returncode', 'provider_request_count', 'budget_failed_children',
                             'budget_unresolved_children'):
@@ -234,7 +244,9 @@ def read(path):
             need(key not in result, 'duplicate_private_report_key')
             result[key] = value
         return result
-    return json.loads(path.read_bytes(), object_pairs_hook=pairs)
+    result = json.loads(path.read_bytes(), object_pairs_hook=pairs)
+    need(type(result) is dict, 'private_report_object_required')
+    return result
 
 
 def main():

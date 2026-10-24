@@ -112,6 +112,18 @@ class Projection(unittest.TestCase):
                 self.assertEqual(P.project(x, y, COMMIT, 0)['status'], 'failed')
         self.assertEqual(P.project(a, r, COMMIT, 1)['status'], 'failed')
 
+    def test_failure_diagnostics_are_finite_even_for_malformed_reports(self):
+        a, r = fixture()
+        r['emergency_stop']['cases'][0]['failure_observations'] = [
+            {'entry_status': 'failed', 'entry_reason': 'private_marker_do_not_publish',
+             'budget_status': 'unresolved', 'pid': 910001, 'start_time_ticks': 921002}]
+        result = P.project(a, r, COMMIT, 1)
+        self.assertEqual(result['failure_observations'], [{'entry_status': 'failed', 'budget_status': 'unresolved'}])
+        for malformed in (None, [], True):
+            self.assertEqual(P.project(a, malformed, COMMIT, 1)['status'], 'failed')
+        r['emergency_stop']['cases'] = True
+        self.assertEqual(P.project(a, r, COMMIT, 1)['status'], 'failed')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -318,6 +318,13 @@ def main():
     except BaseException as error:
         record['status'] = 'failed'
         record['reason'] = str(error) if isinstance(error, Refusal) else 'runtime_failure'
+        record['failure_type'] = type(error).__name__ if type(error).__name__ in (
+            'AttributeError', 'KeyError', 'NameError', 'TypeError', 'ValueError', 'ImportError',
+            'ModuleNotFoundError', 'MemoryError', 'OSError', 'Refusal') else 'other'
+        import traceback
+        record['failure_frames'] = [{'source': str(Path(frame.filename).relative_to(src)),
+            'line': frame.lineno} for frame in traceback.extract_tb(error.__traceback__)
+            if Path(frame.filename).is_relative_to(src)][-8:]
         if isinstance(error, OSError):
             record['errno'] = error.errno
     finally:
