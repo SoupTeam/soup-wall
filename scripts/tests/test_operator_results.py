@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import json
+import ast
 
 PATH = Path(__file__).resolve().parents[1] / "pilot_operator_results.py"
 SPEC = importlib.util.spec_from_file_location("operator_results", PATH)
@@ -13,6 +14,26 @@ SPEC.loader.exec_module(RESULTS)
 
 
 class ResultContract(unittest.TestCase):
+    def test_harness_resolves_default_adapter_at_call_time(self):
+        path = PATH.parent / "qualify-pilot-ask.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        function = next(node for node in tree.body
+                        if isinstance(node, ast.FunctionDef) and node.name == "qualify")
+        prefix = []
+        for statement in function.body:
+            if any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                   and node.func.attr == "prepare_original_launch" for node in ast.walk(statement)):
+                break
+            prefix.append(statement)
+        function.body = prefix + [ast.Return(value=ast.Name(id="pilot_class", ctx=ast.Load()))]
+        module = ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[]))
+        original, replacement, explicit = object(), object(), object()
+        namespace = {"Pilot": original}
+        exec(compile(module, str(path), "exec"), namespace)
+        namespace["Pilot"] = replacement
+        self.assertIs(namespace["qualify"](None, None, {}), replacement)
+        self.assertIs(namespace["qualify"](None, None, {}, pilot_class=explicit), explicit)
+
     def test_native_driver_has_a_runnable_cli(self):
         result = subprocess.run([sys.executable, "-B", str(PATH.parent / "qualify-operator-results.py"), "--help"],
                                 capture_output=True, timeout=15)

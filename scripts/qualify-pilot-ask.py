@@ -454,7 +454,8 @@ def finish_qualification(report, cases, samples, active, daemon):
             raise cleanup_error
 
 
-def qualify(args, private, report, pilot_class=Pilot):
+def qualify(args, private, report, pilot_class=None):
+    pilot_class = Pilot if pilot_class is None else pilot_class
     setup = LAUNCH.prepare_original_launch(args, private, report)
     classifier = private / "classifier.py"
     classifier.write_bytes((ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py").read_bytes())
