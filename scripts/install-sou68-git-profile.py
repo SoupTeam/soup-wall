@@ -17,10 +17,13 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pilot_provider import utility_environment
 ASSETS = ROOT / "profiles/mcp/git-readonly-v1"
 FORMAT = "sw-mcp/git-readonly/1"
 LOCAL_REFS_FORMAT = "sw-mcp/git-readonly-local-refs/1"
@@ -55,7 +58,7 @@ def dependencies(executables, package):
     """Pin explicit system ELF files; packaged Python libraries stay in its tree."""
     paths = set()
     for executable in executables:
-        result = subprocess.run(["ldd", str(executable)], capture_output=True, text=True, check=True, timeout=15)
+        result = subprocess.run(["ldd", str(executable)], capture_output=True, text=True, check=True, timeout=15, env=utility_environment())
         if "not found" in result.stdout:
             raise ValueError("unresolved runtime ELF dependency")
         for raw in re.findall(r"(?:=>\s*)?(/[^\s()]+)", result.stdout):
@@ -96,10 +99,10 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     if not re.fullmatch(r"[0-9a-f]{64}", git_sha256) or sha(git) != git_sha256:
         raise ValueError("supplied Git binary digest mismatch")
     identity = json.loads((ASSETS / "upstream-identity.json").read_text())
-    git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10).strip()
+    git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10, env=utility_environment()).strip()
     if git_version != "git version " + identity["git_version"]:
         raise ValueError("Git version differs from selected runtime")
-    bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10)
+    bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10, env=utility_environment())
     if "--ro-bind-fd" not in bwrap_help:
         raise ValueError("bubblewrap --ro-bind-fd is required")
     if local_references and "--ro-bind-data" not in bwrap_help:
@@ -163,7 +166,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
         "format": "sou68-profile-installation/1", "profile": profile, "upstream_identity": identity,
         "git_version": git_version, "profile_sha256": sha(destination / "profile.json"),
         "registry_sha256": sha(destination / "registry.json"), "policy_sha256": sha(destination / "policy.yaml"),
-        "bwrap_version": subprocess.check_output([str(bwrap), "--version"], text=True, timeout=10).strip()})
+        "bwrap_version": subprocess.check_output([str(bwrap), "--version"], text=True, timeout=10, env=utility_environment()).strip()})
     return {"status": "installed", "profile": str(destination / "profile.json")}
 
 

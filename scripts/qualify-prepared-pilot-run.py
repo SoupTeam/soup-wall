@@ -33,6 +33,7 @@ LAUNCH = load("sou116_launch", "qualify-pilot-launcher.py")
 ASK = load("sou116_ask", "qualify-pilot-ask.py")
 STORE = load("sou132_store", "sou84_owned_acceptance.py")
 STOP = load("sou125_prepared_stop", "prepared_stop_witness.py")
+PROVIDER_WITNESS = load("sou143_provider_witness", "pilot_provider_witness.py")
 BASE, require = LAUNCH.BASE, LAUNCH.require
 
 
@@ -129,6 +130,8 @@ def qualify(args, private, report):
         audit_only = getattr(args, "audit_retention_only", False)
         if audit_only:
             cases = ("audit-rotation", "audit-unavailable", "useful-refusal")
+        if getattr(args, "verify_provider_isolation", False):
+            cases = ("provider-reject",) + cases  # The next useful run proves a fresh post-rejection restart.
         for case in cases:
             report["active_case"] = case
             root = private / case
@@ -234,6 +237,12 @@ def qualify(args, private, report):
                 command += ["--ask-wait-seconds", "25"]
             run_env = dict(env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
                 HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
+            provider_values = protocol = None
+            if getattr(args, "verify_provider_isolation", False):
+                provider_values = PROVIDER_WITNESS.inputs(model.url, root)
+                run_env.update(provider_values)
+                command.insert(1, "-v")
+                protocol = PROVIDER_WITNESS.ProtocolEvidence(model, provider_values, reject=case == "provider-reject")
             process = witness = record = None
             decisions = []
             try:
@@ -328,7 +337,7 @@ def qualify(args, private, report):
                 success = case in ("useful-refusal", "ask", "default", "audit-rotation")
                 require((process.returncode == 0) == success, "prepared_run_outcome_mismatch")
                 if not success:
-                    expected = {"cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
+                    expected = {"provider-reject": {"restricted_launcher_failed"}, "cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
                                 "host-crash": {"restricted_launcher_failed"},
                                 "audit-unavailable": {"restricted_launcher_failed"},
                                 "timeout": {"restricted_launcher_failed", "pilot_timeout"}}
@@ -372,6 +381,14 @@ def qualify(args, private, report):
                     result["audit_rotation"] = audit_observed
                 elif case == "audit-unavailable":
                     result["audit_failure"] = audit_observed
+
+                if provider_values is not None:
+                    result["provider_routing"] = PROVIDER_WITNESS.observe(
+                        (root / "trace.private").read_text(), paths, provider_values, LAUNCH.normalized_syscalls)
+                    result["provider_protocol"] = protocol.finish()
+                    retained = (root / "stdout.private").read_bytes() + (root / "stderr.private").read_bytes()
+                    require(not any(value.encode() in retained for value in provider_values.values()),
+                            "provider_canary_in_retained_output")
                 if success or case == "audit-unavailable":
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
                     useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
@@ -445,6 +462,10 @@ def qualify(args, private, report):
                 model.close()
         if not audit_only:
             STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
+        if getattr(args, "verify_provider_isolation", False):
+            require(sum(case.get("provider_routing", {}).get("successful_exec_counts", {}).get("classifier", 0)
+                        for case in report["cases"]) > 0, "provider_classifier_not_observed")
+
         require(workspace_before == {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}, "prepared_workspace_changed")
         require(selected_before == {role: BASE.sha(path) for role, path in paths.items()}, "prepared_selected_assets_changed")
         require(sentinel.read_text() == "must survive" and unrelated.poll() is None, "unrelated_state_changed")
@@ -460,6 +481,7 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
+    parser.add_argument("--verify-provider-isolation", action="store_true")
     parser.add_argument("--validation-timeout-seconds", type=int, default=30)
     parser.add_argument("--audit-retention-only", action="store_true", help="Focus on SOU-132 rotation/export, failed-sink refusal and fresh useful continuation")
     parser.add_argument("--output", type=Path, required=True)

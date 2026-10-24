@@ -171,6 +171,13 @@ class Prepared:
             str(context.source / "scripts/pilot-run.py"), "--run", "--selection",
             str(context.args.selection), "--expected-commit", context.args.expected_commit,
             "--state-root", str(self.state), "--timeout-seconds", "90"]
+        self.provider_values = self.protocol = None
+        if getattr(context.args, "verify_provider_isolation", False):
+            import pilot_provider_witness
+            self.provider_values = pilot_provider_witness.inputs(self.model.url, root)
+            self.env.update(self.provider_values)
+            self.protocol = pilot_provider_witness.ProtocolEvidence(self.model, self.provider_values)
+            command.insert(1, "-v")
         self.out = (root / "stdout.private").open("wb")
         self.err = (root / "stderr.private").open("wb")
         self.process = subprocess.Popen(command, cwd=root, env=self.env, stdout=self.out,
@@ -350,7 +357,13 @@ class Prepared:
                     len(list(self.state.iterdir())) == 1,
                     "stop_peer_owned_state_survived")
             self.c.run.AUDIT.verify_cleanup(Path(outcome["audit"]["directory"]))
-        return {"entry_status": outcome["status"], "entry_reason": outcome.get("reason"),
+        routing = None
+        if self.provider_values is not None:
+            import pilot_provider_witness
+            routing = pilot_provider_witness.observe(self.trace.read_text(), self.c.paths,
+                self.provider_values, self.c.launch.normalized_syscalls)
+        return {"provider_routing": routing,
+                "provider_protocol": self.protocol.finish() if self.protocol is not None else None, "entry_status": outcome["status"], "entry_reason": outcome.get("reason"),
                 "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                 "observed_owned_roles": list(self.identities.values()),
                 "trace_sha256": self.c.base.sha(self.trace)}

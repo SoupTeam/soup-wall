@@ -12,7 +12,7 @@ pub(crate) const CLAUDE_SHA256: &str =
     "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7";
 
 // These are operator-selected provider transport inputs, never project settings.
-const PROVIDER_ENV: &[&str] = &[
+pub(crate) const PROVIDER_ENV: &[&str] = &[
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
     "ANTHROPIC_BASE_URL",
@@ -53,11 +53,74 @@ pub(crate) fn validate(claude: &Path, fixtures: bool) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn isolate(command: &mut Command, private: &Path) -> Result<()> {
-    let provider = PROVIDER_ENV
-        .iter()
-        .filter_map(|key| std::env::var_os(key).map(|value| (OsString::from(key), value)))
-        .collect::<Vec<_>>();
+/// Consume the prepared entry's anonymous sealed carrier, or preserve explicit
+/// operator environment support for existing direct pilot-launch invocations.
+pub(crate) fn provider_inputs(fd: Option<i32>) -> Result<Vec<(OsString, OsString)>> {
+    let Some(fd) = fd else {
+        return Ok(PROVIDER_ENV
+            .iter()
+            .filter_map(|key| std::env::var_os(key).map(|value| (OsString::from(key), value)))
+            .collect());
+    };
+    #[cfg(target_os = "linux")]
+    {
+        use std::io::{Read, Seek};
+        use std::os::fd::{AsRawFd, FromRawFd};
+        use std::os::unix::fs::MetadataExt;
+        ensure!(fd >= 3, "provider_input_invalid");
+        // The descriptor is consumed exactly once; CLOEXEC is also required so
+        // it cannot be inherited by the host, collector or any helper.
+        let mut file = unsafe { fs::File::from_raw_fd(fd) };
+        let descriptor = file.as_raw_fd();
+        ensure!(
+            unsafe { libc::fcntl(descriptor, libc::F_GETFD) } & libc::FD_CLOEXEC != 0
+                || unsafe { libc::fcntl(descriptor, libc::F_SETFD, libc::FD_CLOEXEC) } == 0,
+            "provider_input_invalid"
+        );
+        let seals = unsafe { libc::fcntl(descriptor, libc::F_GET_SEALS) };
+        let required =
+            libc::F_SEAL_SEAL | libc::F_SEAL_WRITE | libc::F_SEAL_GROW | libc::F_SEAL_SHRINK;
+        let meta = file.metadata()?;
+        ensure!(
+            seals >= 0
+                && seals & required == required
+                && meta.is_file()
+                && meta.len() <= 16384
+                && meta.nlink() == 0,
+            "provider_input_invalid"
+        );
+        file.rewind()?;
+        let mut raw = Vec::new();
+        file.take(16385).read_to_end(&mut raw)?;
+        ensure!(raw.len() <= 16384, "provider_input_invalid");
+        let crate::mcp::admission::Strict(value) =
+            serde_json::from_slice(&raw).map_err(|_| anyhow::anyhow!("provider_input_invalid"))?;
+        let values: std::collections::BTreeMap<String, String> =
+            serde_json::from_value(value).map_err(|_| anyhow::anyhow!("provider_input_invalid"))?;
+        ensure!(
+            values
+                .keys()
+                .all(|key| PROVIDER_ENV.contains(&key.as_str()))
+                && values.values().all(|value| !value.contains('\0')),
+            "provider_input_invalid"
+        );
+        Ok(values
+            .into_iter()
+            .map(|(key, value)| (key.into(), value.into()))
+            .collect())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = fd;
+        anyhow::bail!("provider_input_unsupported");
+    }
+}
+
+pub(crate) fn isolate(
+    command: &mut Command,
+    private: &Path,
+    provider: Vec<(OsString, OsString)>,
+) -> Result<()> {
     configure(command, private, provider)
 }
 
@@ -175,5 +238,53 @@ mod tests {
         let file = root.path().join("unverified-host");
         fs::write(&file, b"not pinned").unwrap();
         assert!(validate(&file, false).is_err());
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn sealed_provider_carrier_is_consumed_and_never_accepts_extra_or_duplicate_authority() {
+        use std::io::Write;
+        use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
+        fn carrier(bytes: &[u8], sealed: bool) -> i32 {
+            let name = std::ffi::CString::new("owned-provider-test").unwrap();
+            let fd = unsafe {
+                libc::memfd_create(name.as_ptr(), libc::MFD_CLOEXEC | libc::MFD_ALLOW_SEALING)
+            };
+            assert!(fd >= 3);
+            let mut file = unsafe { fs::File::from_raw_fd(fd) };
+            file.write_all(bytes).unwrap();
+            if sealed {
+                assert_eq!(
+                    unsafe {
+                        libc::fcntl(
+                            file.as_raw_fd(),
+                            libc::F_ADD_SEALS,
+                            libc::F_SEAL_SEAL
+                                | libc::F_SEAL_WRITE
+                                | libc::F_SEAL_GROW
+                                | libc::F_SEAL_SHRINK,
+                        )
+                    },
+                    0
+                );
+            }
+            file.into_raw_fd()
+        }
+        let fd = carrier(br#"{"ANTHROPIC_API_KEY":"owned-api-canary"}"#, true);
+        let values = provider_inputs(Some(fd)).unwrap();
+        assert_eq!(
+            values,
+            vec![("ANTHROPIC_API_KEY".into(), "owned-api-canary".into())]
+        );
+        assert_eq!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+        for bytes in [
+            br#"{"LD_PRELOAD":"owned-loader"}"#.as_slice(),
+            br#"{"ANTHROPIC_API_KEY":"a","ANTHROPIC_API_KEY":"b"}"#.as_slice(),
+            br#"{"ANTHROPIC_API_KEY":"bad\u0000value"}"#.as_slice(),
+            b"not-json",
+        ] {
+            assert!(provider_inputs(Some(carrier(bytes, true))).is_err());
+        }
+        assert!(provider_inputs(Some(carrier(b"{}", false))).is_err());
+        assert!(provider_inputs(Some(carrier(&[b'x'; 16385], true))).is_err());
     }
 }

@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Synthetic provider routing, sealed carrier and stream-boundary controls."""
+import importlib.util
+import os
+from pathlib import Path
+import subprocess
+import sys
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location("provider_boundary", ROOT / "scripts/pilot_provider.py")
+PROVIDER = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(PROVIDER)
+
+
+class ProviderBoundary(unittest.TestCase):
+    def test_finite_selection_and_missing_access_do_not_fall_back(self):
+        self.assertEqual(PROVIDER.selected({"LD_PRELOAD": "owned-loader", "AGENTFW_TOKEN": "native",
+            "ANTHROPIC_API_KEY": "provider-key"}), {"ANTHROPIC_API_KEY": "provider-key"})
+        for values in ({}, {"ANTHROPIC_API_KEY": ""}, {"HTTP_PROXY": "owned-proxy"}):
+            with self.assertRaisesRegex(ValueError, "provider_unavailable"):
+                PROVIDER.require_access(values)
+        PROVIDER.require_access({"ANTHROPIC_AUTH_TOKEN": "owned-token"})
+        for value in ('x\0y', 'x' * 16385):
+            with self.assertRaisesRegex(ValueError, "provider_input_invalid"):
+                PROVIDER.selected({"ANTHROPIC_API_KEY": value})
+
+    def test_logs_redact_every_split_and_truncated_secret_prefix(self):
+        values = {"ANTHROPIC_API_KEY": "owned-key-123456", "ANTHROPIC_AUTH_TOKEN": "owned-token-654321"}
+        raw = b'begin owned-key-123456 / owned-token-654321 end\n'
+        for split in range(len(raw) + 1):
+            redactor = PROVIDER.Redactor(values)
+            output = redactor.feed(raw[:split]) + redactor.feed(raw[split:]) + redactor.feed(b'', final=True)
+            self.assertEqual(output, b'begin [REDACTED] / [REDACTED] end\n')
+        redactor = PROVIDER.Redactor(values)
+        self.assertEqual(redactor.feed(b'error owned-key-12') + redactor.feed(b'', final=True),
+                         b'error [REDACTED]')
+
+    def test_short_values_and_json_escapes_never_expand_the_output_cap(self):
+        import json
+        values = {"ANTHROPIC_API_KEY": 'owned-"key"-with-newline\n', "NO_PROXY": "x"}
+        raw = (json.dumps(values["ANTHROPIC_API_KEY"])[1:-1] + ' xxx').encode()
+        redactor = PROVIDER.Redactor(values)
+        result = redactor.feed(raw) + redactor.feed(b'', final=True)
+        self.assertLessEqual(len(result), len(raw))
+        self.assertNotIn(b'owned-', result)
+        self.assertNotIn(b'x', result)
+
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux anonymous sealed carrier required')
+    def test_carrier_is_sealed_unnamed_and_inherited_only_when_explicit(self):
+        import fcntl
+        with PROVIDER.carrier({"ANTHROPIC_API_KEY": "owned-value"}) as descriptor:
+            self.assertEqual(os.fstat(descriptor).st_nlink, 0)
+            with self.assertRaises(OSError):
+                os.write(descriptor, b'changed')
+            self.assertNotEqual(fcntl.fcntl(descriptor, fcntl.F_GETFD) & fcntl.FD_CLOEXEC, 0)
+            code = 'import os,sys; print(os.read(int(sys.argv[1]),16385).decode())'
+            clean = {"PATH": "/usr/bin:/bin"}
+            result = subprocess.run([sys.executable, '-I', '-c', code, str(descriptor)],
+                env=clean, pass_fds=(descriptor,), capture_output=True, check=True)
+            self.assertIn(b'owned-value', result.stdout)
+            result = subprocess.run([sys.executable, '-I', '-c', code, str(descriptor)],
+                env=clean, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+
+class IndependentExecEvidence(unittest.TestCase):
+    def test_real_owned_protocol_observation_never_exports_credentials(self):
+        import http.server
+        import json
+        import threading
+        import urllib.request
+        from types import SimpleNamespace
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import pilot_provider_witness as witness
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+            def do_POST(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{}')
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
+        evidence = witness.ProtocolEvidence(SimpleNamespace(server=server), values)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            request = urllib.request.Request('http://127.0.0.1:' + str(server.server_port) + '/v1/messages',
+                data=b'{}', headers={'x-api-key': values['ANTHROPIC_API_KEY']})
+            with opener.open(request, timeout=2) as response:
+                self.assertEqual(response.status, 200)
+            result = evidence.finish()
+            self.assertTrue(result['expected_synthetic_authentication_seen'])
+            self.assertFalse(any(value in json.dumps(result) for value in values.values()))
+        finally:
+            server.shutdown(); server.server_close(); thread.join(timeout=2)
+
+    def test_kernel_exec_arrays_require_all_roles_and_reject_leaks_and_partial_evidence(self):
+        import json
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import pilot_provider_witness as witness
+        paths = {'claude': Path('/owned/claude'), 'agentfw': Path('/owned/agentfw')}
+        values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
+        rows = []
+        roles = [('/usr/bin/python3', ['python3', '/owned/scripts/pilot-run.py'], values),
+                 ('/owned/claude', ['claude', '--restricted'], values)]
+        roles += [('/owned/agentfw', ['agentfw', role], {})
+                  for role in ('serve', 'pilot-launch', 'mcp', 'protection-status')]
+        roles += [('/mcp-runtime/node', ['node', 'server.js'], {}),
+                  ('/owned/python', ['python', 'rule_baseline.py'], {})]
+        for index, (path, args, env) in enumerate(roles):
+            rows.append(f'{index+10} execve({json.dumps(path)}, {json.dumps(args)}, '
+                        + json.dumps([key+'='+value for key,value in env.items()]) + ') = 0')
+        normalize = lambda text: (text.splitlines(), {})
+        result = witness.observe('\n'.join(rows), paths, values, normalize)
+        self.assertEqual(result['unrelated_provider_values'], 0)
+        self.assertEqual(result['successful_exec_counts']['classifier'], 1)
+        self.assertFalse(any(value in json.dumps(result) for value in values.values()))
+        leaked = rows[:]
+        leaked[2] = leaked[2].replace('[]) = 0', json.dumps(['ANTHROPIC_API_KEY='+values['ANTHROPIC_API_KEY']])+') = 0')
+        with self.assertRaisesRegex(ValueError, 'provider_value_in_unrelated_process'):
+            witness.observe('\n'.join(leaked), paths, values, normalize)
+        with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
+            witness.observe('\n'.join(rows[:2]), paths, values, normalize)
+        with self.assertRaisesRegex(ValueError, 'provider_incomplete_exec_observation'):
+            witness.observe('', paths, values, lambda text: ([], {'12': 'execve(unfinished'}))
