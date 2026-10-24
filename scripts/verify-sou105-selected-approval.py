@@ -120,6 +120,28 @@ def pending(args, env, timeout=5, empty=False, pending_id=None, binding=None):
     raise ValueError("pending approval state missed declared deadline")
 
 
+def approval_publications(path, call_id):
+    # BASE.events deliberately retains only mcp_real_call diagnostics, so it
+    # cannot observe broker publication. Read the owned collector JSON lines
+    # directly, with a bound and exact event/request correlation.
+    try:
+        with path.open("rb") as stream:
+            raw = stream.read(1024 * 1024 + 1)
+    except FileNotFoundError:
+        return []
+    require(len(raw) <= 1024 * 1024, "approval publication log exceeded bound")
+    selected = []
+    for line in raw.splitlines():
+        try:
+            event = json.loads(line)
+        except (ValueError, UnicodeError):
+            continue
+        if (isinstance(event, dict) and event.get("event") == "mcp_native_approval_pending"
+                and type(event.get("host_call_id")) is int and event["host_call_id"] == call_id):
+            selected.append(event)
+    return selected
+
+
 def published_pending(args, env, stderr, call_id, evidence):
     # Verified runtime/package capture precedes broker publication. Observe
     # that preparation separately, within the unchanged 30-second call limit;
@@ -128,15 +150,15 @@ def published_pending(args, env, stderr, call_id, evidence):
     observation = {"host_call_id": call_id, "publication_budget_ms": 20000,
                    "broker_budget_ms": 5000}
     evidence.setdefault("pending_observations", []).append(observation)
-    def selected(event):
-        return (event.get("event") == "mcp_native_approval_pending"
-                and type(event.get("host_call_id")) is int
-                and event["host_call_id"] == call_id)
     started = time.monotonic()
     try:
-        values = BASE.wait_event(stderr, lambda rows: any(selected(row) for row in rows),
-                                 "selected approval publication missed preparation deadline", timeout=20)
-        matches = [event for event in values if selected(event)]
+        deadline, matches = started + 20, []
+        while time.monotonic() < deadline:
+            matches = approval_publications(stderr, call_id)
+            if matches:
+                break
+            time.sleep(.02)
+        require(matches, "selected approval publication missed preparation deadline")
         require(len(matches) == 1, "ambiguous selected approval publication")
         publication = matches[0]
         require(isinstance(publication.get("pending_id"), str) and publication["pending_id"]
