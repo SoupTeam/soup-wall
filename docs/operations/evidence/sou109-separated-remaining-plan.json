@@ -1,8 +1,8 @@
 {
-  "status": "proposal_not_executed",
+  "status": "approved_2026-10-25_00:56_not_yet_executed",
   "model_executed": false,
   "production_authority": false,
-  "completed_eight_report_sha256": "2086d0e1c0ca86415355896c06d2bdda4106d34d4613cabfebe4700f20b9142d",
+  "completed_eight_report_sha256": "5e23d964fd69c59ac6176266457429f771d1925f3bb4574c2e1facb64038ab4f",
   "excluded_completed_ids": [
     "r0000",
     "r0001",

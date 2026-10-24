@@ -45,7 +45,37 @@ Next gate: independently review the diagnostic and writer correction before
 agreeing any broader experiment. Production's ten benign false refusals remain;
 SOU-109 is In Progress and #215 Draft. No policy change or model integration.
 
-## Concrete proposed next batch (not executed)
+## Remaining batch approved 25 October at 00:56
+
+Baubek explicitly approved the remaining 50, requiring the completed-report hash
+to be fixed first and the runner to exclude the first eight. The previous plan
+hashed Windows CRLF working-tree bytes (`2086d0e1...`), not the committed LF
+report. The manifest now pins the committed SHA-256
+`5e23d964fd69c59ac6176266457429f771d1925f3bb4574c2e1facb64038ab4f`.
+Narrow `.gitattributes` LF rules make the report and manifest consistent on both
+platforms. No committed report content or historical prediction was changed.
+
+Use `--remaining-manifest` together with `--completed-report`. Before starting
+the server, the runner checks the report byte hash, the exact eight excluded IDs,
+50 unique remaining entries in original order, each input hash, annotation/source
+mapping, and every full channel byte length against the original pinned inputs.
+Labels stay outside inference. A regression rejects a changed report and a
+manifest attempting to replay a completed ID. Twelve protocol tests pass.
+
+```text
+python scripts/evaluate-qwen-separated-shadow.py --assets <verified-assets> \
+  --prepared <original-sou109-context-shadow-58> --output <new-remaining-output> \
+  --remaining-manifest docs/operations/evidence/sou109-separated-remaining-plan.json \
+  --completed-report docs/operations/evidence/sou109-qwen-separated-8.json
+```
+
+Only selection and durable recording change from the agreed protocol: model,
+prompts, stage schemas, context, timeouts and production remain unchanged. The
+remaining-run identity records both manifest and completed-report hashes. Combine
+results with the original eight only after validating disjoint IDs and matching
+input hashes; retain both source commits and the historical writer caveat.
+
+### Original scope proposal, now approved
 
 [The remaining-input manifest](evidence/sou109-separated-remaining-plan.json)
 contains exactly 50 original request/input-hash pairs, excluding all eight

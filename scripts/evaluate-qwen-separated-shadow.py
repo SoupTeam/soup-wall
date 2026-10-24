@@ -124,12 +124,39 @@ def persist_stage(output, row, phase, state, result=None):
         os.fsync(stream.fileno())
 
 
+def select_remaining(rows, refs, manifest_path, completed_path):
+    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    if previous.sha(completed_path) != manifest['completed_eight_report_sha256']:
+        raise ValueError('completed report hash mismatch')
+    report = json.loads(completed_path.read_text(encoding='utf-8'))
+    done = [case['reference']['request_id'] for case in report['cases']]
+    if len(done) != 8 or set(done) != set(IDS) or set(manifest['excluded_completed_ids']) != set(done):
+        raise ValueError('completed selection mismatch')
+    selected = [row for row in rows if row['request_id'] not in done]
+    planned = manifest['proposed_cases']
+    if len(selected) != 50 or len(planned) != 50 or len({p['request_id'] for p in planned}) != 50:
+        raise ValueError('remaining batch must contain 50 unique inputs')
+    references = {ref['request_id']: ref for ref in refs}
+    for row, plan in zip(selected, planned):
+        ref = references[row['request_id']]
+        expected = {'request_id': row['request_id'], 'input_sha256': row['input_sha256'],
+                    'expected': ref['expected'], 'origin': ref['origin'],
+                    'full_channel_bytes': [len(text.encode('utf-8')) for text in row['input']['untrusted_text_channels']]}
+        if plan != expected:
+            raise ValueError('remaining manifest/input identity mismatch')
+    return selected
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--assets', type=Path, required=True)
     parser.add_argument('--prepared', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--remaining-manifest', type=Path)
+    parser.add_argument('--completed-report', type=Path)
     args = parser.parse_args()
+    if bool(args.remaining_manifest) != bool(args.completed_report):
+        parser.error('remaining-manifest and completed-report must be supplied together')
     for name, expected in [('Qwen3.5-9B-Q4_K_M.gguf', previous.MODEL_SHA),
                            ('llama-b11852-bin-win-cpu-x64.zip', previous.RUNTIME_SHA)]:
         if previous.sha(args.assets / name) != expected: raise ValueError('asset hash mismatch')
@@ -139,15 +166,21 @@ def main():
                 raise ValueError('runtime mismatch')
     for name, expected in [('requests.jsonl', previous.REQUEST_SHA), ('references.jsonl', previous.REFERENCE_SHA)]:
         if previous.sha(args.prepared / name) != expected: raise ValueError('input hash mismatch')
-    all_rows = {r['request_id']: r for r in (json.loads(line) for line in (args.prepared / 'requests.jsonl').read_text(encoding='utf-8').splitlines())}
-    rows = [all_rows[key] for key in IDS]
+    all_rows = [json.loads(line) for line in (args.prepared / 'requests.jsonl').read_text(encoding='utf-8').splitlines()]
+    if args.remaining_manifest:
+        refs = [json.loads(line) for line in (args.prepared / 'references.jsonl').read_text(encoding='utf-8').splitlines()]
+        rows = select_remaining(all_rows, refs, args.remaining_manifest, args.completed_report)
+    else:
+        lookup = {row['request_id']: row for row in all_rows}
+        rows = [lookup[key] for key in IDS]
     command = [str(args.assets / 'runtime/llama-server.exe'), '-m', str(args.assets / 'Qwen3.5-9B-Q4_K_M.gguf'),
                '--host', '127.0.0.1', '--port', '18966', '-c', str(CONTEXT), '-np', '1',
                '-t', '6', '-ngl', '0', '-b', '256', '-ub', '64', '-ctk', 'q8_0', '-ctv', 'q8_0',
                '-fa', 'on', '--no-context-shift', '--reasoning', 'off', '--no-webui']
     with socket.socket() as reservation: reservation.bind(('127.0.0.1', 18966))
     args.output.mkdir(parents=True, exist_ok=False)
-    identity = {'protocol': 'separated-classification-evidence-v1', 'selected_ids': IDS,
+    selected_ids = [row['request_id'] for row in rows]
+    identity = {'protocol': 'separated-classification-evidence-v1', 'selected_ids': selected_ids,
                 'model_sha256': previous.MODEL_SHA, 'runtime_archive_sha256': previous.RUNTIME_SHA,
                 'request_sha256': previous.REQUEST_SHA, 'reference_sha256': previous.REFERENCE_SHA,
                 'command': command, 'classification_prompt': CLASSIFY, 'evidence_prompt': EXTRACT,
@@ -155,6 +188,9 @@ def main():
                 'classification_output_tokens': 96, 'evidence_output_tokens': 384,
                 'timeout_seconds_per_inference': 300, 'temperature': 0, 'seed': 109,
                 'production_authority': False, 'paid_api_calls': 0}
+    if args.remaining_manifest:
+        identity['remaining_manifest_sha256'] = previous.sha(args.remaining_manifest)
+        identity['completed_eight_report_sha256'] = previous.sha(args.completed_report)
     (args.output / 'identity.json').write_text(json.dumps(identity, indent=2), encoding='utf-8')
     results = []
     begun = time.monotonic()
@@ -203,8 +239,8 @@ def main():
             try: process.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 process.kill(); process.wait(timeout=15)
-    (args.output / 'summary.json').write_text(json.dumps({'complete': len(results) == len(IDS),
-        'observations': len(results), 'expected': len(IDS), 'elapsed_seconds': time.monotonic() - begun,
+    (args.output / 'summary.json').write_text(json.dumps({'complete': len(results) == len(rows),
+        'observations': len(results), 'expected': len(rows), 'elapsed_seconds': time.monotonic() - begun,
         'production_authority': False}, indent=2), encoding='utf-8')
 
 

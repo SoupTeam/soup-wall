@@ -13,6 +13,29 @@ spec.loader.exec_module(module)
 
 
 class SeparatedTests(unittest.TestCase):
+    def test_remaining_selection_rejects_hash_mismatch_and_replayed_input(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            report, manifest = root / 'report.json', root / 'manifest.json'
+            rows = [{'request_id': f'r{i:04d}', 'input_sha256': str(i),
+                     'input': {'untrusted_text_channels': ['α']}} for i in range(58)]
+            refs = [{'request_id': row['request_id'], 'expected': 'benign', 'origin': 'synthetic-test'} for row in rows]
+            report.write_text(json.dumps({'cases': [{'reference': {'request_id': key}} for key in module.IDS]}))
+            selected = [row for row in rows if row['request_id'] not in module.IDS]
+            plan = {'completed_eight_report_sha256': module.previous.sha(report),
+                    'excluded_completed_ids': list(module.IDS), 'proposed_cases': [
+                        {'request_id': row['request_id'], 'input_sha256': row['input_sha256'],
+                         'expected': 'benign', 'origin': 'synthetic-test', 'full_channel_bytes': [2]} for row in selected]}
+            manifest.write_text(json.dumps(plan))
+            self.assertEqual(module.select_remaining(rows, refs, manifest, report), selected)
+            plan['proposed_cases'][0]['request_id'] = module.IDS[0]
+            manifest.write_text(json.dumps(plan))
+            with self.assertRaisesRegex(ValueError, 'identity mismatch'):
+                module.select_remaining(rows, refs, manifest, report)
+            report.write_text(report.read_text() + '\n')
+            with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+                module.select_remaining(rows, refs, manifest, report)
+
     def test_main_preserves_classification_when_evidence_is_interrupted(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
