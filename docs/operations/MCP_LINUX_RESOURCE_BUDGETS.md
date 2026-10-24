@@ -167,3 +167,11 @@ unexposed host mounts do not become part of the sandbox merely by existing.
 
 Primary references: [Linux cgroup-v2 semantics](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
 and [systemd v249 delegation/resource controls](https://github.com/systemd/systemd/blob/v249/man/systemd.resource-control.xml).
+
+## Process lifetime during membership observation
+
+The [SOU-136 kernel-lifetime argument](LINUX_BUDGET_PROCESS_LIFETIME.md) describes
+bounded departure confirmation across enumeration, pinned proc records and pidfd
+observation. Missing records alone never establish membership or successful
+cleanup. Development/native qualification status is recorded separately from the
+unchanged aggregate-enforcement contract above.

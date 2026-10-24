@@ -46,3 +46,11 @@ class PerFileRevisions(unittest.TestCase):
         schema = next(t["inputSchema"] for t in tools if t["name"] == "git_diff")
         for value in ("HEAD:notes.txt", "refs/heads/main", "refs/heads/main:notes.txt"):
             self.assertIs(CLASSIFIER._bounded_git_read("git_diff", {"repo_path": "/workspace", "target": value}, {"tool_schema": schema}), False)
+
+    def test_combined_registry_capabilities_refuse_before_any_installation(self):
+        manifest = json.loads((INSTALL.ASSETS / "upstream-tools-list.json").read_text())
+        with self.assertRaisesRegex(ValueError, "not qualified"):
+            INSTALL.registry(manifest, local_references=True, file_revisions=True)
+        with self.assertRaisesRegex(ValueError, "not qualified"):
+            INSTALL.install(Path("unused"), Path("unused"), Path("unused"), "a" * 64,
+                            Path("unused"), Path("unused"), local_references=True, file_revisions=True)

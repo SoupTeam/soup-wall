@@ -146,8 +146,9 @@ class PreparedRunBoundary(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             args, selection, paths, profiles = self.fixture(root)
-            paths.update(agentfw=Path("/trusted/agentfw"), claude=Path("/trusted/claude"),
-                         node=Path("/trusted/node"), python=Path("/trusted/python"), policy=Path("/trusted/policy"))
+            for role in ("agentfw", "claude", "node", "python", "policy"):
+                paths[role] = root / ("trusted-" + role)
+                paths[role].write_text("owned selected " + role)
             (root / "registry.json").write_text('{"tools": []}')
             read_fd, write_fd = os.pipe()
             os.close(write_fd)
@@ -169,7 +170,10 @@ class PreparedRunBoundary(unittest.TestCase):
                     RUN.run(args, {})
             self.assertEqual(count, 3)
             self.assertEqual(spawn.call_count, 1)  # Only the owned daemon, never a host.
-            self.assertFalse(list(root.glob("soup-wall-run-*")))
+            retained = list(root.glob("soup-wall-run-*"))
+            self.assertEqual(len(retained), 1)
+            self.assertEqual({p.name for p in retained[0].iterdir()},
+                             {"audit", "audit-run.json", "audit-finished.json"})
 
     def test_correlated_dispatch_without_useful_result_cannot_pass_qualification(self):
         spec = importlib.util.spec_from_file_location("sou116_acceptance", ROOT / "scripts/qualify-prepared-pilot-run.py")

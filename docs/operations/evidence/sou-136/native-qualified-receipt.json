@@ -1,0 +1,209 @@
+{
+  "format": "sou136-independent-native-verification/1",
+  "source": "eb4a520e9d97a675e83d9f70a358b41687ed4c7b",
+  "passed": 159,
+  "failed": 0,
+  "incomplete": 0,
+  "unexpected_closures": 0,
+  "cycles": {
+    "filesystem": 70,
+    "git": 70
+  },
+  "before_regression": "expected_kernel_esrch_refusal",
+  "linux_budget_tests": {
+    "passed": 23,
+    "ignored_for_explicit_delegated_control": 1
+  },
+  "cleanup_verified": true,
+  "delegation_removed": true,
+  "peer_segment_cycles": 10,
+  "peer_segments_per_profile": 7,
+  "artifact_sha256": {
+    "sou136-before-regression.log": "a6bf93569c1d18b70a86da2b2f24480a80fb997c2a1c6fb50952399572f686a2",
+    "sou86-candidate-binaries.txt": "19c598319a1b95f3cb93ad5432c9ad05a4a91002711da948358f44968bf5b07e",
+    "sou136-regression-source.txt": "540fb831b624f599439a4b59a14b8791f1e9e1808ac4442950b9c538b95a0394",
+    "sou86-runtime-hashes.txt": "d86b2af22a6e5e5090ed8914254e530d245d4d9f822ba98f4e57b8ba678656b7",
+    "sou136-after-regression.log": "78c406cf12eb299fe26f1acf91c5577301df68312fb64a44eefef5a53f3d2be3",
+    "sou136-before-regression.json": "e6af1456cf22646162461e90fda415727e279e818d140dd1d73eeb28c0a18642",
+    "sou136-membership/report.json": "d2871f3fff1a0d809821ea899ab8a6c74246f3f12499617e14d886c5fa1edac1"
+  },
+  "final_admission_or_merge": false,
+  "run_id": 40098771380,
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/40098771380",
+  "artifact": {
+    "digest": "sha256:35787ed3af2f4823b7744144547377d1c37407e1fcc0b15ef43d37c83a870c67",
+    "expired": false,
+    "id": 12561819426,
+    "name": "sou136-membership-40098771380-1",
+    "size_in_bytes": 140961
+  },
+  "linux_agentfw_clippy": "all-targets -D warnings passed",
+  "python_focused_controls": 24,
+  "qualification_scope": "Focused native development qualification; final reviewer source approval, final CI/admission and main merge remain with team lead.",
+  "qualified_non_document_git_blobs": {
+    ".github/workflows/ci-components.yml": "3f993104e2b4d6a77d7c33d50f7f44726154d233",
+    ".github/workflows/sou86-crash-supervision.yml": "6f0c4372775bed4874b2ea860fbf896f115af045",
+    "crates/agentfw/src/mcp/linux_budget.rs": "5e040b2673271d89483e50a1c158dbd00f64936b",
+    "crates/agentfw/src/mcp/linux_budget/process.rs": "dc3b50565c2d1c480d240743545b6e4a522c8d16",
+    "scripts/fixtures/sou136-accepted-open-regression.patch": "00ac15e215aecd210981edf26a6edac5ed93e9b6",
+    "scripts/tests/test_sou136_membership_lifetime.py": "b5c13a3adbe8aa3428238e69c8a7fa3047c31c84",
+    "scripts/verify-sou136-membership-lifetime.py": "59285452b2bd987daa180fbaebf8cbecbc715d4f"
+  },
+  "peer_segments": [
+    {
+      "profile": "filesystem",
+      "segment": 1,
+      "first_cycle": 1,
+      "last_cycle": 10,
+      "leaf_duration_millis": 63290,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "filesystem",
+      "segment": 2,
+      "first_cycle": 11,
+      "last_cycle": 20,
+      "leaf_duration_millis": 65415,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "filesystem",
+      "segment": 3,
+      "first_cycle": 21,
+      "last_cycle": 30,
+      "leaf_duration_millis": 65841,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "filesystem",
+      "segment": 4,
+      "first_cycle": 31,
+      "last_cycle": 40,
+      "leaf_duration_millis": 63592,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "filesystem",
+      "segment": 5,
+      "first_cycle": 41,
+      "last_cycle": 50,
+      "leaf_duration_millis": 66666,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "filesystem",
+      "segment": 6,
+      "first_cycle": 51,
+      "last_cycle": 60,
+      "leaf_duration_millis": 67131,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "filesystem",
+      "segment": 7,
+      "first_cycle": 61,
+      "last_cycle": 70,
+      "leaf_duration_millis": 87148,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "git",
+      "segment": 1,
+      "first_cycle": 1,
+      "last_cycle": 10,
+      "leaf_duration_millis": 99165,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "git",
+      "segment": 2,
+      "first_cycle": 11,
+      "last_cycle": 20,
+      "leaf_duration_millis": 102339,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "git",
+      "segment": 3,
+      "first_cycle": 21,
+      "last_cycle": 30,
+      "leaf_duration_millis": 102955,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "git",
+      "segment": 4,
+      "first_cycle": 31,
+      "last_cycle": 40,
+      "leaf_duration_millis": 101369,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "git",
+      "segment": 5,
+      "first_cycle": 41,
+      "last_cycle": 50,
+      "leaf_duration_millis": 105887,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "git",
+      "segment": 6,
+      "first_cycle": 51,
+      "last_cycle": 60,
+      "leaf_duration_millis": 106593,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    },
+    {
+      "profile": "git",
+      "segment": 7,
+      "first_cycle": 61,
+      "last_cycle": 70,
+      "leaf_duration_millis": 118234,
+      "wall_limit_millis": 600000,
+      "useful_before_after_per_cycle": true,
+      "terminal_reason": "mcp_budget_enforced",
+      "cleanup_verified": true
+    }
+  ],
+  "local_verifier_sha256": "99ee0b461146a6e9eb5ed69f1d30ae0013362ae2542670ec091751b50ec73eec"
+}

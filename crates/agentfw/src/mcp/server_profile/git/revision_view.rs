@@ -336,9 +336,9 @@ mod tests {
 
     #[test]
     fn selected_file_grammar_preserves_v1_and_rejects_combinations() {
-        let selected = super::super::classify_manifest_with_file_revisions(
+        let selected = super::super::classify_manifest_with_extension(
             &super::super::original_manifest(),
-            true,
+            super::super::ReadExtension::FileRevisions,
         )
         .unwrap();
         let original = super::super::classify_manifest(&super::super::original_manifest()).unwrap();
