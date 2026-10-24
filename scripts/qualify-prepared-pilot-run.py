@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Actual-host SOU-116 qualification of the prepared-selection entry point.
+"""Actual-host qualification of prepared selection, lifecycle and exact stop.
 
 Uses owned data and the accepted scripted provider; raw traces/logs remain private.
 """
@@ -14,6 +14,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 
@@ -30,6 +31,8 @@ def load(name, filename):
 RUN = load("sou116_entry", "pilot-run.py")
 LAUNCH = load("sou116_launch", "qualify-pilot-launcher.py")
 ASK = load("sou116_ask", "qualify-pilot-ask.py")
+STORE = load("sou132_store", "sou84_owned_acceptance.py")
+STOP = load("sou125_prepared_stop", "prepared_stop_witness.py")
 BASE, require = LAUNCH.BASE, LAUNCH.require
 
 
@@ -62,6 +65,7 @@ def qualify(args, private, report):
     config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
         ask_wait_seconds=0, timeout_seconds=60, port=0)
     selection, paths, profiles = RUN.selected(config)
+    require("prepared_workspaces" not in selection, "generated_qualification_refuses_existing_project")
     fs = Path(profiles["filesystem"]["profile"]["path"]).parent.parent / "filesystem-workspace"
     git = Path(profiles["git"]["profile"]["path"]).parent.parent / "git-workspace"
     # Owned preparation directories only, never a user repository.
@@ -75,9 +79,12 @@ def qualify(args, private, report):
     selected_before = {role: BASE.sha(path) for role, path in paths.items()}
     sentinel = private / "unrelated.txt"
     sentinel.write_text("must survive")
-    unrelated = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(600)"],
+    unrelated = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(1800)"],
                                  start_new_session=True, env=env, cwd=private)
-    report.update(source_before=before, selected_sha256=selected_before, cases=[])
+    report.update(source_before=before, selected_sha256=selected_before, cases=[],
+                  trace_requested={"mode": "seccomp-bpf", "fallback_possible": True,
+                                   "run_syscalls": "execve,openat,write,writev",
+                                   "validation_syscalls": "execve"})
     try:
         # These are actual entry-point invocations, with kernel-observed zero
         # selected daemon/host execution. Unit mocks are not their evidence.
@@ -101,7 +108,7 @@ def qualify(args, private, report):
                     changed = json.loads(original)
                     changed["files"]["agentfw"]["sha256"] = "0" * 64
                     args.selection.write_text(json.dumps(changed))
-                result = subprocess.run([str(args.strace), "-f", "-qq", "-s", "4096", "-e", "trace=execve",
+                result = subprocess.run([str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "4096", "-e", "trace=execve",
                     "-o", str(trace), *words], cwd=private, env=env, capture_output=True, timeout=control_seconds)
                 value = json.loads(result.stdout)
                 require((result.returncode == 0) == (control == "plan") and value["executed"] is False,
@@ -118,7 +125,11 @@ def qualify(args, private, report):
                 if args.selection.read_bytes() != original:
                     args.selection.write_bytes(original)
                 owner.close()
-        for case in ("useful-refusal", "ask", "default", "cancel", "daemon-loss", "timeout"):
+        cases = ("useful-refusal", "ask", "default", "cancel", "daemon-loss", "host-crash", "timeout")
+        audit_only = getattr(args, "audit_retention_only", False)
+        if audit_only:
+            cases = ("audit-rotation", "audit-unavailable", "useful-refusal")
+        for case in cases:
             report["active_case"] = case
             root = private / case
             root.mkdir(mode=0o700)
@@ -134,7 +145,12 @@ def qualify(args, private, report):
                              ("filesystem", "read_text_file", {"path": "/workspace/followup.txt"})]
             elif case == "default":
                 proposals = [proposals[0], ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"})]
-            hold = case in ("cancel", "daemon-loss", "timeout")
+            elif case == "audit-unavailable":
+                proposals = proposals[:2]
+            hold = case in ("cancel", "daemon-loss", "host-crash", "timeout")
+            lifecycle_ready = threading.Event()
+            audit_ready = threading.Event()
+            audit_observed = {}
             def next_step(body):
                 names = {tool.get("name") for tool in body.get("tools", [])}
                 if not {"mcp__filesystem__read_text_file", "mcp__git__git_status"}.issubset(names):
@@ -143,8 +159,63 @@ def qualify(args, private, report):
                     for block in message.get("content", []) if isinstance(message.get("content"), list) else []:
                         if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in offered:
                             model.results[block["tool_use_id"]] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
+                if case == "audit-unavailable" and "toolu_prepared_0" in model.results:
+                    require(audit_ready.wait(15), "prepared_audit_context_missing")
+                    if not audit_observed:
+                        active = Path(record["home"]).parent / "audit"
+                        manifest = RUN.AUDIT.private_json(active / "manifest.json")
+                        segment = active / f"segment-{manifest['segments'][-1]['id']:020}.jsonl"
+                        # Owned fault injection: exhaust the declared active-segment
+                        # bound. This is not a claim of filling the physical disk.
+                        with segment.open("ab") as stream:
+                            stream.write(b"x" * RUN.AUDIT.LIMITS["segment_size_bytes"])
+                        audit_observed["injected_active_segment_limit"] = True
+                    if "toolu_prepared_1" in model.results:
+                        health = STORE.request(record["port"], "/health")
+                        require(health["audit"]["state"] == "unavailable", "prepared_audit_failure_not_latched")
+                        audit_observed["sink_unavailable"] = True
+                if case == "audit-rotation" and "toolu_prepared_0" in model.results and not audit_observed:
+                    require(audit_ready.wait(15), "prepared_audit_context_missing")
+                    active = Path(record["home"]).parent
+                    current = RUN.native_instance(record["port"], audit_token)["instance_id"]
+                    reader_results = []
+                    reader_started = threading.Event()
+                    def concurrent_reader():
+                        receipt = RUN.AUDIT.private_json(active / "audit-run.json")
+                        reader_started.set()
+                        for ordinal in range(8):
+                            try:
+                                RUN.AUDIT.export_run(active, root / f"reader-{ordinal}.json", receipt["run_id"])
+                                reader_results.append("snapshot")
+                            except RUN.AUDIT.REPORT.ReportError as error:
+                                reader_results.append("retry" if str(error) in (
+                                    "retention changed during export; retry", "retained segment was replaced during export")
+                                    else "unexpected_failure")
+                            time.sleep(.01)
+                    reader = threading.Thread(target=concurrent_reader, daemon=True)
+                    reader.start()
+                    require(reader_started.wait(5), "prepared_audit_reader_not_started")
+                    for index in range(2000):
+                        STORE.request(record["port"], "/hook", {"session_id": "owned-audit-rotation",
+                            "hook_event_name": "SOU132FutureEvent", "synthetic": "PRIVATE_SOU132_CANARY"}, hook_token)
+                        if index in (200, 1000):
+                            receipt = RUN.AUDIT.private_json(active / "audit-run.json")
+                            result = RUN.AUDIT.export_run(active, root / f"active-export-{index}.json", receipt["run_id"])
+                            require(result["completeness"] == "incomplete", "active_audit_export_overclaimed")
+                    manifest = RUN.AUDIT.private_json(active / "audit" / "manifest.json")
+                    reader.join(timeout=10)
+                    require(not reader.is_alive() and len(reader_results) == 8
+                            and "unexpected_failure" not in reader_results, "prepared_audit_concurrent_reader_failed")
+                    size = STORE.owned_bytes(active / "audit")
+                    require(manifest["pruned_through"] > 0 and size <= RUN.AUDIT.LIMITS["total_disk_bytes"]
+                            and RUN.native_instance(record["port"], audit_token)["instance_id"] == current,
+                            "prepared_audit_rotation_or_instance_failed")
+                    audit_observed.update(pruned_through=manifest["pruned_through"], owned_bytes=size,
+                                          active_exports=2, concurrent_snapshots=reader_results.count("snapshot"),
+                                          concurrent_retries=reader_results.count("retry"), unchanged_native_instance=True)
                 if hold:
                     # Owned provider delay keeps an actual host alive for lifecycle controls.
+                    lifecycle_ready.set()  # Both original servers are in this host's tool catalog.
                     time.sleep(8)
                     return [{"type": "text", "text": "Owned lifecycle control."}]
                 for i, (server, tool, arguments) in enumerate(proposals):
@@ -155,10 +226,10 @@ def qualify(args, private, report):
                         return [{"type": "tool_use", "id": identifier, "name": f"mcp__{server}__{tool}", "input": arguments}]
                 return [{"type": "text", "text": "Owned prepared run completed."}]
             model.next = next_step
-            command = [str(args.strace), "-f", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
+            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
                 "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
-                "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "60"]
+                "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]
             if case == "ask":
                 command += ["--ask-wait-seconds", "25"]
             run_env = dict(env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
@@ -181,6 +252,10 @@ def qualify(args, private, report):
                             raise ValueError("prepared_entry_exited_before_host")
                     record = until(identify, "prepared_run_not_published", seconds=90)
                     home = Path(record["home"])
+                    if case in ("audit-rotation", "audit-unavailable"):
+                        audit_token = (home / "native-token").read_text().strip()
+                        hook_token = (home / "token").read_text().strip()
+                        audit_ready.set()
                     decisions = []
                     if case == "ask":
                         deadline = time.monotonic() + 75
@@ -219,8 +294,8 @@ def qualify(args, private, report):
                                     require(result.returncode == 0, "prepared_operator_decision_failed")
                                     decisions.append(waiting["pending_id"])
                             time.sleep(.1)
-                    elif case in ("cancel", "daemon-loss"):
-                        until(lambda: bool(model.requests), "actual_host_request_missing")
+                    elif case in ("cancel", "daemon-loss", "host-crash"):
+                        until(lambda: lifecycle_ready.is_set(), "actual_host_request_missing", seconds=75)
                         if case == "cancel":
                             # Trace wrapper is not the orchestrator: identify its actual Python exec.
                             supervisor = Path("/proc") / str(record["supervisor_pid"])
@@ -229,38 +304,86 @@ def qualify(args, private, report):
                                 (supervisor / "cmdline").read_bytes().split(b"\0"),
                                 "owned_orchestrator_identity_ambiguous")
                             os.kill(record["supervisor_pid"], signal.SIGTERM)
-                        else:
+                        elif case == "daemon-loss":
                             os.kill(record["daemon_pid"], signal.SIGKILL)
-                    process.wait(timeout=100)
+                        else:
+                            def actual_host():
+                                witness.sample()
+                                matches = []
+                                for (pid, start), _ in list(witness.observed.items()):
+                                    if BASE.ProcessWitness.identity(pid) != start:
+                                        continue
+                                    try:
+                                        if Path(f"/proc/{pid}/exe").samefile(paths["claude"]):
+                                            matches.append((pid, start))
+                                    except OSError:
+                                        continue
+                                return matches[0] if len(matches) == 1 else None
+                            pid, start = until(actual_host, "prepared_owned_host_identity_missing")
+                            require(BASE.ProcessWitness.identity(pid) == start, "prepared_owned_host_identity_changed")
+                            os.kill(pid, signal.SIGKILL)
+                    process.wait(timeout=220 if case == "audit-rotation" else 100)
                 rows = (root / "stdout.private").read_text().splitlines()
                 outcome = json.loads(rows[-1])
-                success = case in ("useful-refusal", "ask", "default")
+                success = case in ("useful-refusal", "ask", "default", "audit-rotation")
                 require((process.returncode == 0) == success, "prepared_run_outcome_mismatch")
                 if not success:
                     expected = {"cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
+                                "host-crash": {"restricted_launcher_failed"},
+                                "audit-unavailable": {"restricted_launcher_failed"},
                                 "timeout": {"restricted_launcher_failed", "pilot_timeout"}}
                     require(outcome.get("reason") in expected[case], "prepared_wrong_failure_reason")
+                    require(outcome["status"] == "failed", "prepared_false_terminal_success")
                 require(any('execve(' + json.dumps(str(paths["claude"])) + ',' in row and row.endswith(" = 0")
                             for row in LAUNCH.normalized_syscalls((root / "trace.private").read_text())[0]),
                         "actual_pinned_host_execution_not_observed")
                 cleanup = witness.finish()
                 require(cleanup["all_stopped"], "prepared_owned_process_survived")
-                require(outcome["cleanup"] == "owned_state_removed" and not list(state.iterdir()), "owned_state_survived")
+                require(outcome["cleanup"] == "owned_processes_stopped_audit_retained"
+                        and len(list(state.iterdir())) == 1, "owned_state_survived")
+                retained = Path(outcome["audit"]["directory"])
+                run_id = RUN.AUDIT.verify_cleanup(retained)
+                if case == "audit-unavailable":
+                    try:
+                        RUN.AUDIT.export_run(retained, root / "audit-summary.json", run_id)
+                    except RUN.AUDIT.REPORT.ReportError as error:
+                        require(str(error) == "retained segment is unsafe or exceeds limit", "prepared_audit_wrong_export_failure")
+                    else:
+                        raise ValueError("prepared_audit_unsafe_export_succeeded")
+                    require(not (root / "audit-summary.json").exists() and audit_observed.get("sink_unavailable"),
+                            "prepared_audit_failure_overclaimed")
+                    audit_export = {"status": "refused", "reason": "unsafe_or_over_limit_retained_evidence"}
+                else:
+                    audit_export = RUN.AUDIT.export_run(retained, root / "audit-summary.json", run_id)
+                    audit_summary = json.loads((root / "audit-summary.json").read_bytes())
+                    require(audit_summary["source_commit"] == args.expected_commit
+                            and audit_summary["policy_sha256"] == selected_before["policy"]
+                            and audit_summary["allow_proves_execution"] is False
+                            and b"owned-loopback-only" not in (root / "audit-summary.json").read_bytes(),
+                            "prepared_audit_identity_or_privacy_failed")
                 result = {"case": case, "status": "passed", "outcome": outcome["status"],
                           "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
+                          "audit_export": audit_export, "audit_summary_sha256": BASE.sha(root / "audit-summary.json")
+                          if (root / "audit-summary.json").exists() else None,
                           "trace_sha256": BASE.sha(root / "trace.private")}
-                if success:
+                if case == "audit-rotation":
+                    require(audit_observed and "intentional_retention" in audit_export["notices"],
+                            "prepared_audit_loss_not_exported")
+                    result["audit_rotation"] = audit_observed
+                elif case == "audit-unavailable":
+                    result["audit_failure"] = audit_observed
+                if success or case == "audit-unavailable":
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
                     useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
                     if case == "ask":
                         useful_result(model.results, "toolu_prepared_1", "Owned synthetic sensitive path control.")
                         useful_result(model.results, "toolu_prepared_2", "Owned prepared continuation.")
-                    require(model.results["toolu_prepared_1"]["is_error"] == (case == "default"), "prepared_continuation_outcome_wrong")
+                    require(model.results["toolu_prepared_1"]["is_error"] == (case in ("default", "audit-unavailable")), "prepared_continuation_outcome_wrong")
                     require(len(decisions) == (2 if case == "ask" else 0), "prepared_explicit_decisions_missing")
                     if case == "default":
                         require(selection['expected_refusal']['rule'] in json.dumps(model.results['toolu_prepared_1']),
                                 'prepared_default_wrong_refusal_rule')
-                    if case == "useful-refusal":
+                    if case in ("useful-refusal", "audit-rotation"):
                         require("tracked.txt" in json.dumps(model.results["toolu_prepared_1"]), "prepared_git_bytes_missing")
                         require(model.results["toolu_prepared_2"]["is_error"] is True, "prepared_mutator_not_refused")
                         git_execs = []
@@ -274,13 +397,13 @@ def qualify(args, private, report):
                     counts = [sum(call["tool"] == tool and call["args_sha256"] == BASE.hashlib.sha256(
                         json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
                         for call in observation["calls"]) for _, tool, arguments in proposals]
-                    require(counts == ([1, 1, 0] if case == "useful-refusal" else [1, 0] if case == "default" else [1, 1, 1]), "prepared_dispatch_counts_wrong")
+                    require(counts == ([1, 1, 0] if case in ("useful-refusal", "audit-rotation") else [1, 0] if case in ("default", "audit-unavailable") else [1, 1, 1]), "prepared_dispatch_counts_wrong")
                     require(ASK.SELECTED.trace_effects(root / "trace.private", "filesystem",
                         target="/workspace/credentials.txt" if case == "ask" else "/workspace/notes.txt") == 1,
                         "prepared_kernel_read_witness_missing")
                     result.update(dispatch_counts=counts, exact_once_kernel_read=True,
                                   explicit_harness_decisions=len(decisions),
-                                  correlated_useful_continuation=case != "default")
+                                  correlated_useful_continuation=case not in ("default", "audit-unavailable"))
                 else:
                     result["failure_reason"] = outcome["reason"]
                 report["cases"].append(result)
@@ -320,6 +443,8 @@ def qualify(args, private, report):
                     process.kill()
                     process.wait(timeout=10)
                 model.close()
+        if not audit_only:
+            STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
         require(workspace_before == {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}, "prepared_workspace_changed")
         require(selected_before == {role: BASE.sha(path) for role, path in paths.items()}, "prepared_selected_assets_changed")
         require(sentinel.read_text() == "must survive" and unrelated.poll() is None, "unrelated_state_changed")
@@ -336,6 +461,7 @@ def main():
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
     parser.add_argument("--validation-timeout-seconds", type=int, default=30)
+    parser.add_argument("--audit-retention-only", action="store_true", help="Focus on SOU-132 rotation/export, failed-sink refusal and fresh useful continuation")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(mode=0o700)
@@ -349,6 +475,13 @@ def main():
         frame = traceback.extract_tb(error.__traceback__)[-1]
         report.update(status="failed", reason=value if RUN.re.fullmatch(r"[a-z0-9_]{1,100}", value) else "qualification_failure",
                       failure_location={"function": frame.name, "line": frame.lineno})
+    if "source_before" in report:
+        try:
+            report["source_after"] = RUN.PREP.PILOT.source()
+            if report["source_after"] != report["source_before"]:
+                report.update(status="failed", reason="source_changed_during_qualification")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            report.update(status="failed", reason="closing_source_identity_unavailable")
     (args.output / "report.json").write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
     print(json.dumps({"status": report["status"], "reason": report.get("reason"), "cases": len(report["cases"])}))
     return 0 if report["status"] == "passed" else 1

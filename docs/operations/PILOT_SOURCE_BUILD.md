@@ -16,8 +16,9 @@ build anything. Arrange for any missing inputs through the host's approved
 process before continuing. The script requires the exact Rust 1.94.1 toolchain
 used by the [native CI workflow](../../.github/workflows/mcp-real-filesystem.yml)
 and the repository's `Cargo.lock`; it does not select an ambient floating
-`stable` toolchain. The root `rust-toolchain.toml` currently names `stable`,
-so that file alone is not an exact build identity. There is no automatic
+`stable` toolchain. The root `rust-toolchain.toml` now names `1.99.1` (SOU-122);
+the native lane deliberately stays on 1.94.1 through an explicit `RUSTUP_TOOLCHAIN`
+override, which `scripts/verify-pilot-toolchain.py --lane native` attests. There is no automatic
 `rustup`, package manager, or system installation step.
 An explicit `--build` fetches dependencies pinned by `Cargo.lock` into a
 generation-private Cargo home; `--locked` rejects lockfile changes. That cache
@@ -38,6 +39,10 @@ The build enforces a 20-minute limit per Cargo phase, monitors the temporary
 generation against an 8 GiB / 200,000-entry limit every two seconds, caps each
 phase log at 1 MiB, and checks the 512 MiB completed-generation limit before
 publishing.
+Cargo may remove temporary files or child directories during a quota scan.
+Entries that disappear after enumeration are treated as removed. A missing
+generation root, unreadable entries or other inventory errors still fail closed;
+the byte, entry and time limits are unchanged.
 
 ```sh
 build_result="$(python3 -B scripts/build-native-pilot-inputs.py --build "${source_args[@]}")"
@@ -56,6 +61,7 @@ non-executable output, a wrong digest, or an interrupted build must fail
 closed. An unsuccessful attempt must leave the last selected generation and
 unrelated files intact. Keep its first bounded failure record and private
 logs for diagnosis; do not publish raw build logs as evidence.
+Unexpected errors include the source function and line, without exporting private paths.
 
 ## Use with the accepted preparation and qualification
 

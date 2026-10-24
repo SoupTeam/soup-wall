@@ -1,0 +1,60 @@
+{
+  "format": "sou124-expired-retirement-cause-correction/1",
+  "failed_ci_run": 40076670007,
+  "failed_source": "77b84177c50977f8bf699c777998570dd88348b6",
+  "failed_job": 120821409218,
+  "failed_report_sha256": "2c3a3e77a37bba12f0770821847efa800c92bcf9a266cbf700911dfe00833b83",
+  "failure": "grandchild_expiry_not_audited",
+  "observed_terminal_audit_order": [
+    {
+      "collector": "cascade-gc",
+      "event": "native_session_retired",
+      "session": "native:QVy3XyLxWDFV4f5ur-ShWblraUa0femA-tV-qrrQG7Y",
+      "released": false,
+      "verdict": "allow"
+    },
+    {
+      "collector": "cascade-c",
+      "event": "native_session_expired",
+      "session": "native:6q_RQuskxnk3JuYNUkiHA37Z039cyD3sge28Ewmc-L0",
+      "released": false,
+      "verdict": "allow"
+    },
+    {
+      "collector": "cascade-p",
+      "event": "native_session_expired",
+      "session": "native:N1jlE8lg1WZSMklpHmSooJzwQDwonyUMCKmO9NknBoE",
+      "released": false,
+      "verdict": "allow"
+    }
+  ],
+  "cause": "After rejected renewal on an expired ancestor, real collector cleanup could submit exact-owner retire before maintenance. Unconditional retired cause removed the grandchild before the sweep, producing native_session_retired rather than required expiry audit. Sessions were actually closed; the audit cause was wrong.",
+  "correction": "Resolve exact-epoch target causes against one sessions-mutex snapshot before any removal. A requested retire of an already-dead session becomes expired. Per-target cause travels through descendants, liveness terminal state, approval closure and audit under the same lock. Target dedup and epoch guards remain. Healthy retirement and legacy end semantics are preserved.",
+  "deterministic_witness": {
+    "before": "new endpoint test fails with native_session_retired instead of native_session_expired",
+    "after": "2s parent / 20s child / 4s grandchild, +2100ms deterministic clock; renewal rejects expired parent; wrong owner and epoch still403; exact-owner grandchild retire before maintenance emits one expired audit with exact epoch/parent; maintenance reclaims remaining2; all3 expiry rows and all3 sessions404",
+    "healthy_control": "existing exact-owner healthy retirement additionally requires native_session_retired audit",
+    "test": "sou124_retirement_cannot_relabel_expired_ancestor_as_healthy_retire"
+  },
+  "local_checks": {
+    "rust_workspace_passed": 1718,
+    "failed": 0,
+    "ignored": 13,
+    "strict_clippy": "passed, -D warnings",
+    "python_unchanged": "1273 run,1194 passed,79 platform/optional skips,0failed on same Python source; no needless repeat",
+    "fmt": "passed",
+    "docs": "Checked 252 Markdown files and 920 local links; 0 errors."
+  },
+  "local_log_sha256": {
+    "expired-retirement-before-correction.log": "e2e581a6a2196a91f5857cf022de7850ec64c1f6f7d0a7aeefe5aadcc4d2fc40",
+    "expired-retirement-after-correction.log": "6124cf9309e487603bba7610ed43359cb495f8080da5496386d0db1ced183819",
+    "workspace-expired-retirement-final.log": "09feeedc7937285d523f9535641449a845fea7eb0eaa313e2366b71ebbcf1af2",
+    "clippy-expired-retirement-final.log": "bf0045e5dac8713ec07bdd86259adad3fdef90bf61dc05777b9c08e639ccf621",
+    "docs-expired-retirement-final.log": "2fb1a2a2835d32fd4a58f1a8d9138493cc2a3f91ab24087891cf4db77a77fbad"
+  },
+  "current_native_readiness": "Fresh qualification required for corrected source. No passing current-source result inferred from previous-source reports.",
+  "source_sha256": {
+    "crates/agentfw/src/native.rs": "1f1c551a579cdcff551b24990faa92fb0fa924b6432dbd9b5fef8156fc880dcf",
+    "crates/agentfw/tests/native_endpoint.rs": "851ee7e84352720f1d49beefa26ec7fce7f79171d9972554e3f4aa48887f96d0"
+  }
+}

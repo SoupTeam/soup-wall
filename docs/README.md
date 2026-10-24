@@ -45,6 +45,9 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Native MCP diagnostic output](operations/NATIVE_MCP_STDERR.md) | Bounded discarded child stderr, safe metadata, owned cleanup and required Linux evidence |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
 | [Installed two-server pilot qualification](operations/INSTALLED_PILOT_QUALIFICATION.md) | Actual Claude Code, installed filesystem/Git MCP, independent refusal witnesses and bounded recovery |
+| [Exact-candidate pilot evidence dossier](operations/PILOT_EVIDENCE_DOSSIER.md) | Selected evidence identities, blocker ledger and historical/current pilot scorecard |
+| [Read-only existing projects](operations/PILOT_EXISTING_PROJECT.md) | Explicit owned roots, pinned directory identities and source-preserving prepared runs |
+| [Long-running pilot exercise](operations/PILOT_LONG_SESSIONS.md) | Opt-in hour-long original filesystem/Git workload, resource observations and owned failure recovery |
 | [Linux MCP resource budgets](operations/MCP_LINUX_RESOURCE_BUDGETS.md) | Opt-in delegated aggregate memory, CPU and task limits, wall expiry and independent Linux witnesses |
 | [Windows MCP resource budgets](operations/MCP_WINDOWS_RESOURCE_BUDGETS.md) | Opt-in aggregate Job memory, process and user-CPU budgets with pre-execution ownership and native standard-user witnesses |
 | [Linux MCP crash supervision](operations/MCP_LINUX_CRASH_SUPERVISION.md) | Owned collector-loss cleanup, private PID 1 supervision, restart isolation and independent native witnesses |

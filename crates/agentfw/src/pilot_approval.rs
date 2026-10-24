@@ -22,6 +22,8 @@ use std::{
 const MAX_RUNS: usize = 16;
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 
+mod watch;
+
 #[derive(Args)]
 pub struct OperatorArgs {
     /// Run identity printed by pilot-launch, not a caller-selected session label.
@@ -35,6 +37,13 @@ pub struct OperatorArgs {
 
 #[derive(Subcommand)]
 pub enum OperatorAction {
+    /// Watch this run and inspect each request before an explicit decision.
+    Watch {
+        #[arg(long, default_value_t = 2, value_parser = clap::value_parser!(u64).range(1..=30))]
+        refresh_seconds: u64,
+    },
+    /// Revoke both collectors, then stop this exact owned launcher and host group.
+    Stop,
     /// Digests and expiry only. Never displays raw arguments.
     List,
     /// Explicitly inspect the exact arguments before deciding.
@@ -77,6 +86,7 @@ struct Run {
     launcher_start: u64,
     manifest_fd: i32,
     expires_at_ms: u64,
+    authority_expires_at_ms: u64,
     authorities: BTreeMap<String, String>,
     files: Vec<FileIdentity>,
 }
@@ -275,6 +285,10 @@ fn create_dir(path: &Path) -> Result<()> {
 }
 
 fn lock_dir(path: &Path) -> Result<fs::File> {
+    lock_dir_for(path, Duration::ZERO)
+}
+
+fn lock_dir_for(path: &Path, wait: Duration) -> Result<fs::File> {
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -286,11 +300,24 @@ fn lock_dir(path: &Path) -> Result<fs::File> {
     #[cfg(unix)]
     {
         use std::os::fd::AsRawFd;
-        ensure!(
-            unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
-            "another pilot metadata operation is active; retry"
-        );
+        let deadline = std::time::Instant::now() + wait;
+        loop {
+            if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+                break;
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() != std::io::ErrorKind::WouldBlock {
+                return Err(error).context("lock pilot metadata");
+            }
+            ensure!(
+                std::time::Instant::now() < deadline,
+                "another pilot metadata operation is active; retry"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
     }
+    #[cfg(not(unix))]
+    let _ = wait;
     Ok(file)
 }
 
@@ -411,6 +438,14 @@ fn snapshot(home: &Path) -> Result<Value> {
             );
             Ok(value)
         })
+}
+
+/// Prepared pilots already opt in to bounded liveness; leave legacy direct
+/// non-Ask launchers without that lifecycle on their existing path.
+pub(crate) fn liveness_configured(home: &Path) -> Result<bool> {
+    Ok(daemon_config(home)?
+        .native
+        .is_some_and(|native| native.liveness.is_some()))
 }
 
 pub fn preflight(config: &ValidatedConfig) -> Result<()> {
@@ -546,6 +581,11 @@ impl RunGuard {
             launcher_start: process_start(std::process::id())?,
             manifest_fd: descriptor(&manifest),
             expires_at_ms: approval::now_ms().saturating_add(config.timeout.as_millis() as u64),
+            authority_expires_at_ms: grants
+                .values()
+                .map(|g| g.expires_at_ms)
+                .max()
+                .context("missing authority expiry")?,
             authorities: grants
                 .iter()
                 .map(|(server, grant)| {
@@ -585,8 +625,42 @@ impl RunGuard {
     pub fn id(&self) -> &str {
         &self.run.run_id
     }
+    /// Allow existing collectors to finish their private namespace cleanup
+    /// before TERM reaches the host group. Never create or signal another owner.
+    pub(crate) fn cleanup_waiter(&self) -> impl FnOnce() -> Result<()> + Send + 'static {
+        let run = self.run.clone();
+        let dir = self.dir.clone();
+        move || {
+            if has_stop(&dir)? {
+                let bytes = read_file(&dir.join("run.json"), true)?;
+                read_stop(&dir, &run, &bytes)?;
+            }
+            // Ordinary host exit is also terminal. Retire only this run's two
+            // exact grants before waiting: no late owner may enroll, and live
+            // owners are woken to discharge their existing cleanup obligation.
+            // No stop marker is created; normal failure/cancellation stays failed.
+            revoke(&run)?;
+            let deadline = std::time::Instant::now() + Duration::from_secs(6);
+            loop {
+                let live = snapshot(&run.home)?;
+                ensure!(
+                    live["instance_id"] == run.instance_id,
+                    "daemon changed during selected-owner cleanup"
+                );
+                if selected_cleanup_complete(&run, &live)? {
+                    return Ok(());
+                }
+                ensure!(
+                    std::time::Instant::now() < deadline,
+                    "pilot stop incomplete: selected namespace cleanup unconfirmed"
+                );
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+
     /// Never broad-cancel a host/session label. Only retire exact observed bindings.
-    pub fn finish(&self) -> Result<()> {
+    pub fn finish(&self, host_stopped: bool) -> Result<bool> {
         let live = snapshot(&self.run.home)?;
         ensure!(
             live["instance_id"] == self.run.instance_id,
@@ -625,9 +699,27 @@ impl RunGuard {
                 .unwrap()
                 .iter()
                 .any(|r| ids.contains(&r["pending_id"]));
-            if !owned && !pending {
-                fs::remove_dir_all(&self.dir).context("owned run metadata cleanup failed")?;
-                return Ok(());
+            if !owned && !pending && selected_cleanup_complete(&self.run, &live)? {
+                let stopped = if has_stop(&self.dir)? {
+                    ensure!(
+                        host_stopped,
+                        "pilot stop incomplete: host cleanup is unconfirmed"
+                    );
+                    let bytes = read_file(&self.dir.join("run.json"), true)?;
+                    let marker = read_stop(&self.dir, &self.run, &bytes)?;
+                    if marker.status == "requested" {
+                        revoke(&self.run)?;
+                        write_stop(&self.dir, &self.run, &bytes, "revoked")?;
+                    }
+                    write_stop(&self.dir, &self.run, &bytes, "stopped")?;
+                    // Return only the authenticated, exact-run terminal receipt,
+                    // never the presence of intent or an operator's exit code.
+                    read_stop(&self.dir, &self.run, &bytes)?.status == "stopped"
+                } else {
+                    fs::remove_dir_all(&self.dir).context("owned run metadata cleanup failed")?;
+                    false
+                };
+                return Ok(stopped);
             }
             ensure!(
                 std::time::Instant::now() < deadline,
@@ -640,8 +732,36 @@ impl RunGuard {
 
 impl Drop for RunGuard {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.dir);
+        // Preserve interrupted stops for truthful retry/recovery. Never erase the
+        // only evidence that revocation or process cleanup remains incomplete.
+        if matches!(has_stop(&self.dir), Ok(false)) {
+            let _ = fs::remove_dir_all(&self.dir);
+        }
     }
+}
+
+fn selected_cleanup_complete(run: &Run, live: &Value) -> Result<bool> {
+    let rows = live["pilot_cleanup"]
+        .as_array()
+        .context("pilot stop incomplete: daemon has no selected-owner cleanup observations")?;
+    for row in rows {
+        if let Some((server, _)) = run
+            .authorities
+            .iter()
+            .find(|(_, digest)| row["authority_sha256"] == **digest)
+        {
+            ensure!(
+                row["host_session"] == run.host_session && row["server_id"] == *server,
+                "pilot stop incomplete: foreign namespace cleanup identity"
+            );
+            if row["verified"] != true {
+                return Ok(false);
+            }
+        }
+    }
+    // Absence means begin was never admitted. Begin and stop use the same
+    // session lock; a spent grant can never register/start a selected owner.
+    Ok(true)
 }
 
 fn string<'a>(v: &'a Value, key: &str) -> Result<&'a str> {
@@ -733,7 +853,299 @@ fn escaped(value: &Value) -> Result<String> {
     Ok(out)
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StopMarker {
+    contract: String,
+    run_sha256: String,
+    status: String,
+    signature: String,
+}
+
+fn has_stop(dir: &Path) -> Result<bool> {
+    match fs::symlink_metadata(dir.join("stop.json")) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn stop_mac(marker: &StopMarker, key: &str) -> Result<Vec<u8>> {
+    use hmac::{Hmac, Mac};
+    let mut mac = Hmac::<Sha256>::new_from_slice(key.as_bytes())?;
+    mac.update(b"agentfw/pilot-stop-receipt/v1\0");
+    mac.update(&serde_json::to_vec(&(
+        &marker.contract,
+        &marker.run_sha256,
+        &marker.status,
+    ))?);
+    Ok(mac.finalize().into_bytes().to_vec())
+}
+
+fn read_stop(dir: &Path, run: &Run, bytes: &[u8]) -> Result<StopMarker> {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    use subtle::ConstantTimeEq;
+    let marker: StopMarker = serde_json::from_slice(&read_file(&dir.join("stop.json"), true)?)?;
+    ensure!(
+        marker.contract == "sw-pilot-stop/1"
+            && marker.run_sha256 == digest(bytes)
+            && matches!(marker.status.as_str(), "requested" | "revoked" | "stopped"),
+        "invalid pilot stop receipt"
+    );
+    let signature = URL_SAFE_NO_PAD.decode(&marker.signature)?;
+    ensure!(
+        bool::from(signature.ct_eq(&stop_mac(&marker, &token(&run.home, "native-token")?)?)),
+        "pilot stop receipt authentication failed"
+    );
+    Ok(marker)
+}
+
+fn write_stop(dir: &Path, run: &Run, bytes: &[u8], status: &str) -> Result<()> {
+    // A simultaneous operator/launcher update must not strand a fully cleaned
+    // run in `revoked`. Only short metadata writes hold this lock; never I/O to
+    // a terminal or the daemon. Keep a bound for a stuck or foreign holder.
+    let _reservation = lock_dir_for(dir, Duration::from_secs(2))?;
+    if has_stop(dir)? {
+        let current = read_stop(dir, run, bytes)?;
+        let rank = |value: &str| match value {
+            "requested" => 0,
+            "revoked" => 1,
+            "stopped" => 2,
+            _ => 3,
+        };
+        if rank(&current.status) >= rank(status) {
+            return Ok(());
+        }
+    }
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    let mut marker = StopMarker {
+        contract: "sw-pilot-stop/1".into(),
+        run_sha256: digest(bytes),
+        status: status.into(),
+        signature: String::new(),
+    };
+    marker.signature =
+        URL_SAFE_NO_PAD.encode(stop_mac(&marker, &token(&run.home, "native-token")?)?);
+    let temporary = dir.join(format!(".stop-{:032x}", rand::random::<u128>()));
+    write_new(&temporary, &marker)?;
+    fs::rename(&temporary, dir.join("stop.json"))?;
+    fs::File::open(dir)?.sync_all()?;
+    Ok(())
+}
+
+fn record_inspection(
+    dir: &Path,
+    receipt: &Path,
+    value: &Value,
+    display: &str,
+    terminal: &mut impl Write,
+) -> Result<()> {
+    // A blocked pipe/terminal must not prevent the independent stop command.
+    // Still persist proof of inspection only after the output was flushed.
+    writeln!(terminal, "{display}")?;
+    terminal.flush()?;
+    let _reservation = lock_dir(dir)?;
+    ensure!(!has_stop(dir)?, "pilot run is stopping or stopped");
+    prune_inspections(dir)?;
+    ensure!(
+        fs::read_dir(dir)?.take(18).count() < 18,
+        "inspection receipt capacity reached"
+    );
+    match write_new(receipt, value) {
+        Ok(()) => (),
+        Err(e) if !receipt.exists() => return Err(e),
+        Err(_) => {
+            ensure!(
+                serde_json::from_slice::<Value>(&read_file(receipt, true)?)? == *value,
+                "inspection receipt changed"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn stop_config(run: &Run) -> Result<Config> {
+    let identity = run
+        .files
+        .first()
+        .context("pilot stop lacks daemon configuration identity")?;
+    ensure!(
+        identity.path == run.home.join("config.yaml"),
+        "pilot stop configuration ownership mismatch"
+    );
+    let bytes = read_file(&identity.path, false)?;
+    ensure!(
+        digest(&bytes) == identity.sha256,
+        "pilot stop incomplete: daemon configuration changed"
+    );
+    // Parse the same verified bytes; never reopen a mutable endpoint selection.
+    Config::from_yaml(std::str::from_utf8(&bytes)?)
+}
+
+fn revoke(run: &Run) -> Result<()> {
+    let cfg = stop_config(run)?;
+    let address: std::net::SocketAddr = cfg.socket_address().parse()?;
+    ensure!(
+        address.ip().is_loopback(),
+        "pilot stop requires a loopback daemon"
+    );
+    let request = crate::native::pilot_stop::Request {
+        contract_version: crate::native::pilot_stop::CONTRACT.into(),
+        instance_id: run.instance_id.clone(),
+        registry_sha256: run.registry_sha256.clone(),
+        host_session: run.host_session.clone(),
+        authorities: run.authorities.clone(),
+        expires_at_ms: run.authority_expires_at_ms,
+    };
+    let key = token(&run.home, "native-token")?;
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?
+        .block_on(async {
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(2))
+                .build()?;
+            let mut response = client
+                .post(cfg.endpoint_url(crate::native::pilot_stop::ENDPOINT))
+                .bearer_auth(key)
+                .json(&request)
+                .send()
+                .await?;
+            ensure!(
+                response.status().is_success(),
+                "pilot stop incomplete: daemon did not confirm revocation"
+            );
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await? {
+                ensure!(
+                    bytes.len().saturating_add(chunk.len()) <= 4096,
+                    "pilot stop response exceeds limit"
+                );
+                bytes.extend_from_slice(&chunk);
+            }
+            let value: Value = serde_json::from_slice(&bytes)?;
+            ensure!(
+                value["contract_version"] == crate::native::pilot_stop::CONTRACT
+                    && value["instance_id"] == run.instance_id
+                    && value["host_session"] == run.host_session
+                    && value["status"] == "revoked",
+                "pilot stop revocation identity mismatch"
+            );
+            Ok(())
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn launcher_handle(run: &Run) -> Result<fs::File> {
+    use std::os::fd::FromRawFd;
+    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, run.launcher_pid, 0) as i32 };
+    ensure!(fd >= 0, "pilot stop cannot pin launcher identity");
+    let file = unsafe { fs::File::from_raw_fd(fd) };
+    ensure!(
+        process_start(run.launcher_pid)? == run.launcher_start,
+        "pilot stop launcher identity changed"
+    );
+    Ok(file)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn launcher_handle(_run: &Run) -> Result<fs::File> {
+    anyhow::bail!("pilot stop requires qualified Linux")
+}
+
+#[cfg(target_os = "linux")]
+fn signal_launcher(handle: &fs::File) -> Result<()> {
+    use std::os::fd::AsRawFd;
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_pidfd_send_signal,
+            handle.as_raw_fd(),
+            libc::SIGTERM,
+            std::ptr::null::<libc::siginfo_t>(),
+            0,
+        )
+    };
+    ensure!(
+        result == 0,
+        "pilot stop incomplete: pinned launcher could not be signalled"
+    );
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn signal_launcher(_handle: &fs::File) -> Result<()> {
+    anyhow::bail!("pilot stop requires qualified Linux")
+}
+
+fn stop(dir: &Path, run: &Run, bytes: &[u8], expected: &str, home: &Path) -> Result<()> {
+    ensure!(
+        run.contract == "sw-pilot-run/1"
+            && run.run_id == expected
+            && run.home == home
+            && run.authorities.len() == 2,
+        "invalid pilot stop ownership"
+    );
+    let existing = if has_stop(dir)? {
+        Some(read_stop(dir, run, bytes)?)
+    } else {
+        None
+    };
+    if existing
+        .as_ref()
+        .is_some_and(|marker| marker.status == "stopped")
+    {
+        println!(
+            "{}",
+            json!({"run":run.run_id,"status":"already_stopped","running_effects_rolled_back":false})
+        );
+        return Ok(());
+    }
+    // A stale/forged durable record is never sufficient to signal a process.
+    // Pin the live owner before revocation; pidfd prevents PID reuse during the request.
+    let handle = launcher_handle(run).with_context(|| {
+        if existing.is_some() {
+            "pilot stop incomplete: recorded request has no confirmed live launcher"
+        } else {
+            "pilot stop unknown ownership: launcher identity is unavailable"
+        }
+    })?;
+    verify_manifest(run, bytes)
+        .context("pilot stop unknown ownership: sealed owner verification failed")?;
+    write_stop(dir, run, bytes, "requested")?;
+    let revoked = revoke(run);
+    if revoked.is_ok() {
+        write_stop(dir, run, bytes, "revoked")?;
+    }
+    // Even on daemon loss, request owned process cleanup; do not claim complete revocation.
+    signal_launcher(&handle)?;
+    revoked?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if read_stop(dir, run, bytes)?.status == "stopped" {
+            println!(
+                "{}",
+                json!({"run":run.run_id,"status":"stopped","running_effects_rolled_back":false})
+            );
+            return Ok(());
+        }
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "pilot stop incomplete: owned cleanup was not confirmed"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
 pub fn operator(args: OperatorArgs) -> Result<()> {
+    if let OperatorAction::Watch { refresh_seconds } = args.action {
+        return watch::run(args.run, args.home, refresh_seconds);
+    }
+    operator_to(args, &mut std::io::stdout().lock(), None)
+}
+
+fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u8]>) -> Result<()> {
     ensure!(
         cfg!(target_os = "linux"),
         "run-scoped pilot approval requires qualified Linux"
@@ -752,7 +1164,14 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
     let dir = root.join(&args.run);
     private_dir(&dir)?;
     let bytes = read_file(&dir.join("run.json"), true)?;
+    if let Some(expected) = expected {
+        ensure!(bytes == expected, "pilot run identity changed");
+    }
     let run: Run = serde_json::from_slice(&bytes)?;
+    if matches!(args.action, OperatorAction::Stop) {
+        return stop(&dir, &run, &bytes, &args.run, &home);
+    }
+    ensure!(!has_stop(&dir)?, "pilot run is stopping or stopped");
     verify_manifest(&run, &bytes)?;
     ensure!(
         run.contract == "sw-pilot-run/1"
@@ -783,14 +1202,16 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                     "binding_sha256":record["binding_sha256"], "expires_at_ms":record["expires_at_ms"], "state":"pending"}));
             }
         }
-        println!("{}", escaped(&json!(summaries))?);
+        writeln!(output, "{}", escaped(&json!(summaries))?)?;
         return Ok(());
     }
     let identifier = match &args.action {
         OperatorAction::Inspect { id }
         | OperatorAction::Approve { id, .. }
         | OperatorAction::Reject { id, .. } => id.clone(),
-        OperatorAction::List => unreachable!(),
+        OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+            unreachable!()
+        }
     };
     id(&identifier)?;
     let (observed, server) = rows
@@ -802,31 +1223,13 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
     let receipt = dir.join(format!("inspected-{identifier}.json"));
     match args.action {
         OperatorAction::Inspect { .. } => {
-            let _reservation = lock_dir(&dir)?;
-            prune_inspections(&dir)?;
-            ensure!(
-                fs::read_dir(&dir)?.take(18).count() < 18,
-                "inspection receipt capacity reached"
-            );
             let value = json!({"binding_sha256": binding, "args_sha256": record["args_sha256"],
                 "expires_at_ms":record["expires_at_ms"]});
             let display = escaped(
                 &json!({"server":server,"pending_id":identifier,"tool":record["tool"],
                 "args":record["args"],"binding_sha256":binding,"expires_at_ms":record["expires_at_ms"],"state":"pending"}),
             )?;
-            let mut terminal = std::io::stdout().lock();
-            writeln!(terminal, "{display}")?;
-            terminal.flush()?;
-            match write_new(&receipt, &value) {
-                Ok(()) => (),
-                Err(e) if !receipt.exists() => return Err(e),
-                Err(_) => {
-                    ensure!(
-                        serde_json::from_slice::<Value>(&read_file(&receipt, true)?)? == value,
-                        "inspection receipt changed"
-                    );
-                }
-            }
+            record_inspection(&dir, &receipt, &value, &display, output)?;
         }
         OperatorAction::Approve {
             binding: requested, ..
@@ -853,10 +1256,11 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                 string(&record, "session_epoch")?,
             )?;
             let _ = fs::remove_file(receipt);
-            println!(
+            writeln!(
+                output,
                 "{}",
                 json!({"pending_id":identifier,"state":"decision_submitted","decision":"approve","dispatched":"not_observed","released":"not_observed"})
-            );
+            )?;
         }
         OperatorAction::Reject {
             binding: requested, ..
@@ -873,12 +1277,15 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                 string(&record, "session_epoch")?,
             )?;
             let _ = fs::remove_file(receipt);
-            println!(
+            writeln!(
+                output,
                 "{}",
                 json!({"pending_id":identifier,"state":"rejected","released":false})
-            );
+            )?;
         }
-        OperatorAction::List => unreachable!(),
+        OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+            unreachable!()
+        }
     }
     Ok(())
 }
@@ -899,9 +1306,359 @@ mod tests {
             launcher_start: 1,
             manifest_fd: 3,
             expires_at_ms: u64::MAX,
+            authority_expires_at_ms: u64::MAX,
             authorities: BTreeMap::from([("filesystem".into(), "c".repeat(64))]),
             files: vec![],
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn stop_receipts_bind_exact_run_bytes_and_authentication_and_never_regress() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        create_dir(&home).unwrap();
+        write_new(&home.join("native-token"), &"owned-test-key").unwrap();
+        let dir = root.path().join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        let bytes = serde_json::to_vec(&run).unwrap();
+        for status in ["requested", "revoked", "stopped"] {
+            write_stop(&dir, &run, &bytes, status).unwrap();
+            assert_eq!(read_stop(&dir, &run, &bytes).unwrap().status, status);
+        }
+        write_stop(&dir, &run, &bytes, "requested").unwrap();
+        assert_eq!(read_stop(&dir, &run, &bytes).unwrap().status, "stopped");
+        assert!(read_stop(&dir, &run, b"foreign run bytes").is_err());
+        let mut altered: Value =
+            serde_json::from_slice(&fs::read(dir.join("stop.json")).unwrap()).unwrap();
+        altered["status"] = json!("revoked");
+        fs::write(dir.join("stop.json"), serde_json::to_vec(&altered).unwrap()).unwrap();
+        assert!(read_stop(&dir, &run, &bytes).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn linked_stop_receipt_is_never_accepted() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        create_dir(&home).unwrap();
+        write_new(&home.join("native-token"), &"owned-test-key").unwrap();
+        let dir = root.path().join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        let bytes = serde_json::to_vec(&run).unwrap();
+        write_stop(&dir, &run, &bytes, "requested").unwrap();
+        fs::rename(dir.join("stop.json"), dir.join("linked.json")).unwrap();
+        symlink(dir.join("linked.json"), dir.join("stop.json")).unwrap();
+        assert!(read_stop(&dir, &run, &bytes).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn stop_completion_waits_for_an_inflight_metadata_update() {
+        use std::sync::mpsc;
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().join("home");
+        create_dir(&home).unwrap();
+        write_new(&home.join("native-token"), &"owned-test-key").unwrap();
+        let dir = root.path().join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        let bytes = serde_json::to_vec(&run).unwrap();
+        write_stop(&dir, &run, &bytes, "revoked").unwrap();
+        let reservation = lock_dir(&dir).unwrap();
+        // A permanently held lock still fails within a declared budget.
+        assert!(lock_dir_for(&dir, Duration::from_millis(20)).is_err());
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker_dir = dir.clone();
+        let worker_run = run.clone();
+        let worker_bytes = bytes.clone();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            done_tx
+                .send(write_stop(
+                    &worker_dir,
+                    &worker_run,
+                    &worker_bytes,
+                    "stopped",
+                ))
+                .unwrap();
+        });
+        started_rx.recv().unwrap();
+        assert!(matches!(
+            done_rx.recv_timeout(Duration::from_millis(100)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        drop(reservation);
+        done_rx
+            .recv_timeout(Duration::from_secs(3))
+            .unwrap()
+            .unwrap();
+        worker.join().unwrap();
+        assert_eq!(read_stop(&dir, &run, &bytes).unwrap().status, "stopped");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn inspection_output_cannot_lock_out_stop_or_record_after_stop() {
+        struct Terminal<'a> {
+            dir: &'a Path,
+            receipt: &'a Path,
+            run: &'a Run,
+            bytes: &'a [u8],
+            stop_on_flush: bool,
+        }
+        impl Write for Terminal<'_> {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                // Includes an arbitrarily blocked stdout: metadata stays available.
+                assert!(lock_dir(self.dir).is_ok());
+                assert!(!self.receipt.exists());
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                assert!(lock_dir(self.dir).is_ok());
+                assert!(!self.receipt.exists());
+                if self.stop_on_flush {
+                    write_stop(self.dir, self.run, self.bytes, "requested").unwrap();
+                }
+                Ok(())
+            }
+        }
+        for stop_on_flush in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let home = root.path().join("home");
+            create_dir(&home).unwrap();
+            write_new(&home.join("native-token"), &"owned-test-key").unwrap();
+            let dir = root.path().join("run");
+            create_dir(&dir).unwrap();
+            let mut run = run();
+            run.home = home;
+            let bytes = serde_json::to_vec(&run).unwrap();
+            let receipt = dir.join("inspected-call.json");
+            let mut terminal = Terminal {
+                dir: &dir,
+                receipt: &receipt,
+                run: &run,
+                bytes: &bytes,
+                stop_on_flush,
+            };
+            let value = json!({"binding_sha256":"owned", "expires_at_ms":u64::MAX});
+            let result = record_inspection(&dir, &receipt, &value, "exact call", &mut terminal);
+            assert_eq!(result.is_err(), stop_on_flush);
+            assert_eq!(receipt.is_file(), !stop_on_flush);
+            if !stop_on_flush {
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&fs::read(&receipt).unwrap()).unwrap(),
+                    value
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ordinary_exit_cannot_skip_unavailable_owner_confirmation() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().canonicalize().unwrap();
+        // A real closed loopback endpoint models loss of the authenticated
+        // cleanup observer. Ordinary completion must not call it confirmed.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let config = home.join("config.yaml");
+        write_new(&config, &json!({"bind":"127.0.0.1","port":port})).unwrap();
+        write_new(&home.join("native-token"), &"owned-witness-key").unwrap();
+        let dir = home.join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        run.files = vec![FileIdentity {
+            path: config.clone(),
+            sha256: digest(&fs::read(config).unwrap()),
+        }];
+        let guard = RunGuard {
+            _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
+            dir,
+            run,
+        };
+        assert!(!has_stop(&guard.dir).unwrap());
+        assert!(
+            guard.cleanup_waiter()().is_err(),
+            "ordinary completion skipped the authenticated owner confirmation"
+        );
+    }
+
+    #[cfg(not(unix))]
+    #[tokio::test]
+    async fn ordinary_exit_refuses_unsupported_owner_contract_before_network() {
+        let server = wiremock::MockServer::start().await;
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().canonicalize().unwrap();
+        let config = home.join("config.yaml");
+        write_new(
+            &config,
+            &json!({"bind":"127.0.0.1", "port":server.address().port()}),
+        )
+        .unwrap();
+        write_new(&home.join("native-token"), &"owned-witness-key").unwrap();
+        let dir = home.join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        run.files = vec![FileIdentity {
+            path: config.clone(),
+            sha256: digest(&fs::read(config).unwrap()),
+        }];
+        let guard = RunGuard {
+            _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
+            dir,
+            run,
+        };
+        let result = tokio::task::spawn_blocking(guard.cleanup_waiter())
+            .await
+            .unwrap();
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("run-scoped approval requires qualified Linux"));
+        assert!(server.received_requests().await.unwrap().is_empty());
+        assert!(!has_stop(&guard.dir).unwrap());
+    }
+
+    // RunGuard's private-file/owned-process contract is Unix-only. Windows
+    // refuses it before opening a native endpoint and cannot exercise this path.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ordinary_exit_revokes_before_waiting_for_exact_owner_acknowledgement() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        use wiremock::{
+            matchers::{body_json, method, path},
+            Mock, MockServer, ResponseTemplate,
+        };
+
+        for foreign_owner in [false, true] {
+            let server = MockServer::start().await;
+            let root = tempfile::tempdir().unwrap();
+            let home = root.path().canonicalize().unwrap();
+            let config = home.join("config.yaml");
+            write_new(
+                &config,
+                &json!({"bind":"127.0.0.1", "port":server.address().port()}),
+            )
+            .unwrap();
+            write_new(&home.join("native-token"), &"owned-witness-key").unwrap();
+            let dir = home.join("run");
+            create_dir(&dir).unwrap();
+            let mut run = run();
+            run.home = home;
+            run.authorities.insert("git".into(), "d".repeat(64));
+            run.files = vec![FileIdentity {
+                path: config.clone(),
+                sha256: digest(&fs::read(config).unwrap()),
+            }];
+            let revoked = Arc::new(AtomicBool::new(false));
+            let ready = Arc::new(AtomicBool::new(false));
+            let observed = Arc::new(tokio::sync::Notify::new());
+            let revoked_reply = revoked.clone();
+            Mock::given(method("POST"))
+                .and(path(crate::native::pilot_stop::ENDPOINT))
+                .and(body_json(
+                    json!({"contract_version":crate::native::pilot_stop::CONTRACT,
+                    "instance_id":run.instance_id,"registry_sha256":run.registry_sha256,
+                    "host_session":run.host_session,"authorities":run.authorities,
+                    "expires_at_ms":run.authority_expires_at_ms}),
+                ))
+                .respond_with(move |_: &wiremock::Request| {
+                    revoked_reply.store(true, Ordering::SeqCst);
+                    ResponseTemplate::new(200).set_body_json(json!({
+                        "contract_version":crate::native::pilot_stop::CONTRACT,
+                        "instance_id":"daemon-one","host_session":"host-one","status":"revoked"}))
+                })
+                .expect(1)
+                .mount(&server)
+                .await;
+            let ready_reply = ready.clone();
+            let observed_reply = observed.clone();
+            Mock::given(method("GET"))
+                .and(path("/native/v1/instance"))
+                .respond_with(move |_: &wiremock::Request| {
+                    assert!(
+                        revoked.load(Ordering::SeqCst),
+                        "owner observation preceded exact revocation"
+                    );
+                    let verified = ready_reply.load(Ordering::SeqCst);
+                    if !verified {
+                        observed_reply.notify_one();
+                    }
+                    ResponseTemplate::new(200).set_body_json(json!({
+                        "instance_id":"daemon-one","pilot_collectors":[],"pilot_pending":[],
+                        "pilot_cleanup":[{"authority_sha256":"c".repeat(64),
+                            "host_session":if foreign_owner {"foreign"} else {"host-one"},
+                            "server_id":"filesystem","verified":verified}]}))
+                })
+                .mount(&server)
+                .await;
+            let guard = RunGuard {
+                _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
+                dir,
+                run,
+            };
+            assert!(!has_stop(&guard.dir).unwrap());
+            let task = tokio::task::spawn_blocking(guard.cleanup_waiter());
+            if foreign_owner {
+                let result = tokio::time::timeout(Duration::from_secs(3), task)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("foreign namespace cleanup identity"));
+            } else {
+                tokio::time::timeout(Duration::from_secs(3), observed.notified())
+                    .await
+                    .unwrap();
+                assert!(
+                    !task.is_finished(),
+                    "unconfirmed namespace was accepted as clean"
+                );
+                ready.store(true, Ordering::SeqCst);
+                tokio::time::timeout(Duration::from_secs(3), task)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap();
+            }
+            // Ordinary completion never forges an authenticated operator Stop.
+            assert!(!has_stop(&guard.dir).unwrap());
+        }
+    }
+
+    #[test]
+    fn stop_never_sends_credentials_to_a_changed_daemon_destination() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().canonicalize().unwrap();
+        let path = home.join("config.yaml");
+        write_new(&path, &json!({"bind":"127.0.0.1","port":12345})).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let mut run = run();
+        run.home = home;
+        run.files = vec![FileIdentity {
+            path: path.clone(),
+            sha256: digest(&bytes),
+        }];
+        assert!(stop_config(&run).is_ok());
+        fs::write(&path, b"bind: 127.0.0.1\nport: 54321\n").unwrap();
+        assert!(stop_config(&run).is_err());
     }
 
     fn live() -> Value {
@@ -910,6 +1667,25 @@ mod tests {
                 "authority_sha256":"c".repeat(64),"session_id":"native-one","session_epoch":"epoch-one"}],
             "pilot_pending":[{"pending_id":"pending-one","tool":"read_text_file","binding_sha256":"d".repeat(64),
                 "session_id":"native-one","session_epoch":"epoch-one"}]})
+    }
+
+    #[test]
+    fn retirement_without_namespace_confirmation_cannot_complete_stop() {
+        let run = run();
+        let retired = json!({"pilot_collectors":[], "pilot_pending":[]});
+        assert!(selected_cleanup_complete(&run, &retired).is_err());
+        let mut pending = json!({"pilot_cleanup":[{"authority_sha256":"c".repeat(64),
+            "host_session":"host-one","server_id":"filesystem","verified":false}]});
+        assert!(!selected_cleanup_complete(&run, &pending).unwrap());
+        pending["pilot_cleanup"][0]["verified"] = json!(true);
+        assert!(selected_cleanup_complete(&run, &pending).unwrap());
+        pending["pilot_cleanup"][0]["host_session"] = json!("foreign");
+        assert!(selected_cleanup_complete(&run, &pending).is_err());
+        // No owner ever registered for this (now spent) authority. Other runs'
+        // obligations may not block or satisfy this run's confirmation.
+        pending["pilot_cleanup"][0]["authority_sha256"] = json!("e".repeat(64));
+        pending["pilot_cleanup"][0]["verified"] = json!(false);
+        assert!(selected_cleanup_complete(&run, &pending).unwrap());
     }
 
     #[test]
@@ -937,7 +1713,9 @@ mod tests {
                     OperatorAction::Inspect { id }
                     | OperatorAction::Approve { id, .. }
                     | OperatorAction::Reject { id, .. } => id,
-                    OperatorAction::List => unreachable!(),
+                    OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+                        unreachable!()
+                    }
                 };
                 assert_eq!(parsed_id, id);
             }

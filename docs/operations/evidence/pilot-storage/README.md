@@ -43,6 +43,9 @@ The [initial report](native-report-initial.json),
 successful run on `2e57584c`, before detailed snapshot retention was added. WSL
 unit/helper evidence is recorded separately there and is not native acceptance.
 
-This evidence is added after the final qualified commit. Only evidence
-documentation changes follow that commit; no runtime or qualification source
-changed after the final native run.
+The original evidence publication followed the qualified commit with only
+evidence documentation changes. The subsequent integration with current main
+changes runtime, prepared-run cleanup and build inputs. The reports above remain
+historical evidence for their recorded source; they do not qualify that combined
+source. Fresh integration results must identify the new commit and selected
+inputs independently.

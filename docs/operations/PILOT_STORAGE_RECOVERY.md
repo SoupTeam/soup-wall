@@ -24,8 +24,13 @@ file without a final newline; this bounded check does not validate historical
 JSON records. Preserve the old file as incident evidence. The prepared launcher
 uses a fresh private home for each invocation. Linux native writes sync before
 release; Windows legacy durability behavior is unchanged.
-If using configured retained audit storage, use its existing documented recovery
-command; this change does not add rotation or silently truncate evidence.
+The prepared launcher now selects bounded retained audit storage and keeps only
+that evidence after ordinary process cleanup. A failure before daemon startup
+can leave an empty selected store; an unavailable manifest is not proof that a
+host ran or that an audit was complete. Use the existing
+[audit inspection and export procedure](PREPARED_PILOT_RUN.md) for that store.
+Authenticated stop receipts remain private for repeated stop confirmation.
+Neither retained storage nor this recovery path silently truncates evidence.
 
 ## Ordinary-user recovery
 
@@ -68,8 +73,9 @@ python3 -B scripts/qualify-pilot-storage.py --run \
 ```
 
 The manual real-filesystem workflow's `storage_recovery_only` option reuses its
-single native preparation job and selected binaries. It skips the two broad
-installed/prepared suites for that development run. Default qualification and
+single native preparation job and selected binaries. It omits adjacent
+installed/prepared, demo and retention exercises for that development run.
+Default qualification and
 admission remain the responsibility of the existing gates and reviewers.
 Missing cases, failed attempts and cleanup errors must remain visible in the
 report. Deterministic syscall injection is scoped to an exact disposable owned

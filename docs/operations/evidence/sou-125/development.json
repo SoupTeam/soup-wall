@@ -1,0 +1,95 @@
+{
+  "format": "sw-sou125-development/1",
+  "status": "incomplete",
+  "base_commit": "cdd9d36c65a592455e4f421268758adb6db744b8",
+  "implementation_commit": "22c3dbe6059afe1e4a7a4669d3816b245459364e",
+  "implementation_git_tree": "288c7893e68e7386b7c2aa0d2126c44a40c78c30",
+  "source_files_sha256": {
+    "crates/agentfw/src/lib.rs": "e4d3301ddf5e6f2cdaf1bd6d92c64254ca527a1e32723ef9fcb78edf6c90140e",
+    "crates/agentfw/src/native.rs": "25c3175068f774881c23989e58c6b4f008ce8e9a641a27b22410f8682d5348a6",
+    "crates/agentfw/src/native/pilot_stop.rs": "25912f68892e11e70096ea7fe612ea8f5089e35c3222da6f5f0792c71ebc8032",
+    "crates/agentfw/src/pilot_approval.rs": "50005b65110526df3337e567abba30789df2aa4bc1a6e86bc93d95d672c766fa",
+    "crates/agentfw/src/pilot_launcher.rs": "6b3697471d01eeae5032202c8c9deb00bbb3a90767023b057ba2b29680c1756b",
+    "crates/agentfw/tests/native_endpoint.rs": "24e8abd1825ad5c96cf9312d95f744212f081ee3223e9dd388a5749a89bd168c",
+    "docs/operations/PILOT_EMERGENCY_STOP.md": "7d107b14ccf14e93d868778e7bc1b554b7b9bdbb7950ee97f6006d2cdb5b3999",
+    "scripts/pilot-run.py": "c20e281c4bba77c336aef0fe8d0afb5d3a1c702cb98bb83ca90f9fe4d3ac78a4",
+    "scripts/tests/test_pilot_run.py": "dfe4d0665fcc12b2d41b0178c816ac20655645bece5c872d606b62a153e8c4cc"
+  },
+  "evidence_scope": "macOS development checks; not native Linux acceptance or performance evidence",
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "native_platform_probe": {
+    "status": "blocked",
+    "error_type": "ValueError",
+    "reason": "native_linux_x86_64_required",
+    "owned_processes_started": 0,
+    "native_linux_qualified": false
+  },
+  "rust_workspace": {
+    "command": "cargo test --offline --workspace --locked -- --test-threads=1",
+    "canonical_tmpdir": true,
+    "separate_branch_build_directory": true,
+    "passed": 1665,
+    "failed": 0,
+    "ignored": 13,
+    "log_sha256": "b99515437caba8438f77b40e485e1fda63067716509dcabcd0b6da78ee738120"
+  },
+  "python_suite": {
+    "python": "3.11",
+    "run": 1095,
+    "passed": 1033,
+    "failed": 0,
+    "skipped": 62,
+    "unsupported_control_names": [
+      "test_cancelled_build_stops_owned_descendant",
+      "test_timeout_stops_resistant_descendant_after_leader_exits",
+      "test_failed_and_timed_out_build_leave_bounded_private_logs"
+    ],
+    "unsupported_reason": "Unchanged Linux /proc process-group controls are unavailable on macOS; initial failures retained separately",
+    "test_source_modified_to_skip": false,
+    "log_sha256": "906a9896d8ca31089a30cfd2b5e6dffda41d68c5919d34eadd73155b6823b59f"
+  },
+  "checks": {
+    "workspace_strict_clippy": "pass",
+    "cargo_fmt": "pass",
+    "diff_whitespace": "pass"
+  },
+  "paid_provider_calls": 0,
+  "live_model_effectiveness_measured": false,
+  "native_original_server_effect_witnesses_collected": false,
+  "raw_logs_exported": false,
+  "attribution": "Evidence-only commits do not transfer these observations to changed implementation or integrated source.",
+  "stop_qualification": {
+    "operator_path_implemented": true,
+    "native_pidfd_path_executed": false,
+    "two_actual_owned_runs_and_unrelated_process_control": "not_run",
+    "native_daemon_loss_host_crash_pid_reuse_interrupted_cleanup": "not_run",
+    "authority_replay_pending_and_approved_cleanup_shared_host_hard_deny": "router_fixture_tests_pass",
+    "target_host_qualification": "blocked_native_linux_unavailable"
+  },
+  "retained_development_attempts": [
+    {
+      "artifact": "sou125-python-tests.log",
+      "status": "failed_unfiltered_host_python",
+      "summary": "1094 run; 1 failure, 4 errors, 59 skips; missing urllib3 and unsupported Linux process controls",
+      "raw_log_sha256": "6d10cdc7ba302ca51caca44eb638006795796d250c4516cecbbd4bd4223ceab8",
+      "source_scope": "pre-final development diagnostic, not attributed to final implementation acceptance"
+    },
+    {
+      "artifact": "sou125-workspace-tests.log",
+      "status": "failed_parallel_development",
+      "summary": "unchanged profile lifecycle assertion; subsequently passes in isolation and final isolated suite",
+      "raw_log_sha256": "700e592cd483617cfbf12247b804198a66d92d029ef9887ea67d662d8ce6343e",
+      "source_scope": "pre-final development diagnostic, not attributed to final implementation acceptance"
+    },
+    {
+      "artifact": "sou125-workspace-serial-tests.log",
+      "status": "invalid_shared_target_diagnostic",
+      "summary": "new native module missing in compile; source and target contamination concern resolved by separate clean branch targets",
+      "raw_log_sha256": "cc21029599fd40180bc6c9cd62cb8790ee805aecd4b4fdb988022bf3c08d3e41",
+      "source_scope": "pre-final development diagnostic, not attributed to final implementation acceptance"
+    }
+  ]
+}

@@ -104,6 +104,7 @@ async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classif
             last_progress: 0.0,
         };
         let profile = server_profile::ProfileConfig {
+            workspace_identity: None,
             format: call.profile.clone(),
             workspace: "/workspace".into(),
             runtime_path: "/never-spawned".into(),
@@ -522,6 +523,7 @@ impl Harness {
             // Protocol-only fixture: this profile is never spawned or used to
             // qualify approval resumption / Linux filesystem confinement.
             let profile = server_profile::ProfileConfig {
+                workspace_identity: None,
                 format: format.into(),
                 workspace: "/workspace".into(),
                 runtime_path: "/never-spawned/runtime".into(),
@@ -1291,4 +1293,64 @@ async fn daemon_size_refusal_spends_the_grant_with_a_correlated_error() {
     assert_eq!(inspected.len(), 3);
     assert_eq!(inspected[1]["result_kind"], "error");
     assert_eq!(inspected[0]["call_id"], inspected[1]["call_id"]);
+}
+
+#[tokio::test]
+async fn path_refusals_name_their_boundary_without_dispatch_or_echo() {
+    let mut fixture = Harness::new("ordinary").await;
+    fixture.ready().await;
+    for (index, (arguments, message)) in [
+        (json!({"path":"/etc/passwd"}), PATH_OUTSIDE_MESSAGE),
+        (
+            json!({"path":"/workspace/../etc/passwd"}),
+            PATH_SPELLING_MESSAGE,
+        ),
+        (json!({"path":"/workspace/a\\b"}), PATH_SPELLING_MESSAGE),
+        (json!({"path":"C:/workspace/file"}), PATH_SPELLING_MESSAGE),
+        (
+            json!({"path":"/workspace/notes.txt","head":-1}),
+            "MCP arguments violate the selected input profile",
+        ),
+        (
+            json!({"path":7}),
+            "MCP arguments violate the selected input profile",
+        ),
+        (
+            json!({"path":"/workspace/notes.txt","command":"rm -rf /workspace"}),
+            "MCP arguments violate the selected input profile",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let id = json!(format!("refused-{index}"));
+        fixture
+            .host(json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+                "params":{"name":"read_text_file","arguments":arguments}}))
+            .await;
+        let refusal = fixture.host_reply().await;
+        assert_eq!(refusal["id"], id);
+        assert_eq!(refusal["error"]["code"], -32602);
+        assert_eq!(refusal["error"]["message"], message);
+        for secret in ["passwd", "rm -rf", "a\\b"] {
+            assert!(!refusal.to_string().contains(secret), "argument echoed");
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), fixture.server_input.fill_buf())
+                .await
+                .is_err(),
+            "a refused path reached the original server"
+        );
+        fixture
+            .useful(json!(format!("after-refused-{index}")))
+            .await;
+    }
+    // A colon is an ordinary Linux name inside /workspace: dispatched exactly.
+    fixture.call(json!("colon"), "/workspace/a:b.txt").await;
+    let dispatched = fixture.dispatched().await;
+    assert_eq!(dispatched["id"], "colon");
+    assert_eq!(
+        dispatched["params"]["arguments"]["path"],
+        "/workspace/a:b.txt"
+    );
 }
