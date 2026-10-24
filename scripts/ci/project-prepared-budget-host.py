@@ -99,6 +99,32 @@ def project(attempt, raw, expected, exit_code):
               'source_commit': expected, 'full_sou142_qualification': False,
               'acceptance_pass': False, 'remaining_gaps': list(GAPS), 'cases': [],
               'owner_controls': [], 'raw_process_metadata_or_logs_exported': False}
+    # Failure observations use a separate finite schema, even when no successful
+    # terminal receipt exists. Raw private process identities never escape.
+    diagnostics = []
+    section = raw.get('emergency_stop', {})
+    if type(section) is dict:
+        for row in section.get('cases', [])[:4]:
+            if type(row) is not dict:
+                continue
+            observations = row.get('failure_observations', [row.get('failure_observation')])
+            for observed in observations[:2] if type(observations) is list else []:
+                if type(observed) is not dict:
+                    continue
+                value = {}
+                for key in ('entry_status', 'entry_reason', 'budget_status'):
+                    item = observed.get(key)
+                    if type(item) is str and re.fullmatch('[a-z0-9_-]{1,100}', item):
+                        value[key] = item
+                for key in ('entry_returncode', 'provider_request_count', 'budget_failed_children',
+                            'budget_unresolved_children'):
+                    item = observed.get(key)
+                    if type(item) is int and -255 <= item <= 65536:
+                        value[key] = item
+                if value:
+                    diagnostics.append(value)
+    if diagnostics:
+        output['failure_observations'] = diagnostics
     try:
         need(type(expected) is str and re.fullmatch('[0-9a-f]{40}', expected), 'source_identity_invalid')
         need(exit_code == 0 and attempt.get('status') == 'partial-runtime-completed-pending-parent-projection'

@@ -300,9 +300,9 @@ def main():
         sys.path.insert(0, str(src / 'scripts'))
         pressure = load(src, 'sou142_original_pressure', 'scripts/prepared_budget_pressure.py')
         from types import SimpleNamespace
-        context = SimpleNamespace(BASE=load(src, 'sou142_actual_host_baseline',
-            'scripts/qualify-prepared-pilot-run.py').BASE,
-            LAUNCH=None, RESOURCE=resource, ROOT=src)
+        qualifier = load(src, 'sou142_actual_host_baseline', 'scripts/qualify-prepared-pilot-run.py')
+        context = SimpleNamespace(BASE=qualifier.BASE, RESOURCE=resource, ROOT=src, QUALIFIER=qualifier,
+            budget=budget, peer_budget=peer_budget)
         record['original_pressure'] = pressure.qualify(context, selection, paths, profiles,
             delegated, out / 'original-pressure', args.expected_commit)
         # Failed/non-exhausting calibration remains a retained environmental

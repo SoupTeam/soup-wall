@@ -18,7 +18,7 @@ from prepared_budget_observer import BudgetObserver
 
 
 def qualify(context, selection, paths, profiles, delegation, output, commit):
-    base, launch, resource = context.BASE, context.LAUNCH, context.RESOURCE
+    base, resource = context.BASE, context.RESOURCE
     output.mkdir(mode=0o700)
     normal = {'format': 'sw-mcp/linux-cgroup-budget/1', 'delegationRoot': str(delegation),
         'memoryMaxBytes': 512 * 1024 * 1024, 'pidsMax': 64, 'cpuQuotaMicros': 100000,
@@ -30,6 +30,12 @@ def qualify(context, selection, paths, profiles, delegation, output, commit):
     before = {key: base.snapshot(path) for key, path in workspaces.items()}
     env = {'PATH': '/usr/bin:/bin', 'HOME': str(output), 'TMPDIR': str(output), 'LANG': 'C.UTF-8'}
     attempts = []
+    from types import SimpleNamespace
+    q = context.QUALIFIER
+    peer_context = SimpleNamespace(args=argparse.Namespace(selection=selection, expected_commit=commit,
+        strace=Path('/usr/bin/strace'), linux_budget=context.budget, linux_budget_peer=context.peer_budget),
+        source=context.ROOT, run=q.RUN, launch=q.LAUNCH, ask=q.ASK, base=base, paths=paths, env=env,
+        notes=(workspaces['filesystem'] / 'notes.txt').read_text(), useful=q.useful_result)
 
     def classify(pid):
         start = base.ProcessWitness.identity(pid)
@@ -98,10 +104,15 @@ def qualify(context, selection, paths, profiles, delegation, output, commit):
                     return frames
                 return [{'type': 'text', 'text': 'Owned calibration completed.'}]
             model.next = next_step
-            process = witness = observer = None
+            process = witness = observer = peer = recovery = None
             try:
                 if any(path.is_dir() for path in delegation.iterdir()):
                     raise ValueError('pressure_root_not_empty')
+                peer = q.STOP.Prepared(peer_context, root / 'peer', hold_after=False)
+                # Peer tools remain behind its owned provider barrier until
+                # the subject has completed its real resource refusal.
+                if peer.observe()['calls']:
+                    raise ValueError('pressure_peer_dispatched_before_barrier')
                 observer = BudgetObserver(delegation, resource, classify_member=classify)
                 command = ['/usr/bin/strace', '-f', '-qq', '-s', '4096', '-e', 'trace=execve',
                     '-o', str(root / 'trace.private'), sys.executable, '-B', str(context.ROOT / 'scripts/pilot-run.py'),
@@ -128,11 +139,26 @@ def qualify(context, selection, paths, profiles, delegation, output, commit):
                     key = 'oom_kill' if kind == 'memory' else 'pids_max'
                     verified = verified and any(item.get('counter_max', {}).get(key, 0) > 0 for item in target)
                 else:
-                    verified = verified and any(item.get('leaf_duration_millis', 0) >= limits['wallMillis'] for item in target)
+                    # The independent observer starts after creation and cannot
+                    # attest the unobserved leading interval. Retain its actual
+                    # lifetime, and require the bound product wall receipt plus
+                    # the separately tested unchanged owner/adoption epoch.
+                    verified = verified and any(item.get('leaf_duration_millis', 0) > 0 for item in target)
                 verified = verified and bool(receipts) and any(item.get('reason') == reason and item.get('phase') == 'closed'
                     for item in receipts) and budget_result.get('budget_sha256') == digest
                 verified = verified and process.returncode != 0 and outcome.get('status') == 'failed' \
                     and cleanup.get('all_stopped') is True and not any(path.is_dir() for path in delegation.iterdir())
+                if peer.process.poll() is not None:
+                    raise ValueError('pressure_changed_independent_peer')
+                peer.useful()
+                peer_result = peer.finish()
+                peer.check_useful()
+                # A new real prepared run on the reclaimed subject substrate
+                # creates fresh host authority/binding; no grant is replayed.
+                recovery = q.STOP.Prepared(peer_context, root / 'recovery', hold_after=False)
+                recovery.useful()
+                recovery_result = recovery.finish()
+                recovery.check_useful()
                 row.update(status='passed' if verified else 'incomplete',
                     reason='original_resource_refusal_verified' if verified else 'original_resource_refusal_unproven',
                     original_runtime_observed=bool(target), kernel_observations=[{
@@ -142,6 +168,8 @@ def qualify(context, selection, paths, profiles, delegation, output, commit):
                         'incomplete_reasons': item.get('incomplete_reasons')} for item in target],
                     observed_children=budget_result.get('observed_children'),
                     target_receipts=receipts, owned_cleanup_verified=cleanup.get('all_stopped') is True,
+                    peer_useful_after_subject=True, peer_budget=peer_result.get('resource_budget'),
+                    fresh_prepared_recovery_useful=True, recovery_budget=recovery_result.get('resource_budget'),
                     trace_sha256=base.sha(root / 'trace.private'))
             except (OSError, ValueError, subprocess.TimeoutExpired, IndexError):
                 row['reason'] = 'bounded_calibration_attempt_incomplete'
@@ -150,15 +178,22 @@ def qualify(context, selection, paths, profiles, delegation, output, commit):
                     for manifest in state.glob('*/run.json'):
                         record = json.loads(manifest.read_bytes())
                         pid = record.get('supervisor_pid')
-                        if type(pid) is int and Path(f'/proc/{pid}/cmdline').exists() \
-                                and str(context.ROOT / 'scripts/pilot-run.py').encode() in Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0'):
-                            os.kill(pid, signal.SIGTERM)
+                        known = [start for (observed_pid, start) in witness.observed if observed_pid == pid]
+                        try:
+                            if type(pid) is int and len(known) == 1 and base.ProcessWitness.identity(pid) == known[0] \
+                                    and Path(f'/proc/{pid}').stat().st_uid == os.geteuid() \
+                                    and str(context.ROOT / 'scripts/pilot-run.py').encode() in Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0'):
+                                os.kill(pid, signal.SIGTERM)
+                        except (OSError, ProcessLookupError):
+                            pass
                     try: process.wait(timeout=18)
                     except subprocess.TimeoutExpired:
                         row['forced_cleanup'] = True
                         process.kill(); process.wait(timeout=5)
                 if witness is not None: witness.finish()
                 if observer is not None: observer.finish()
+                if recovery is not None: recovery.close()
+                if peer is not None: peer.close()
                 model.close()
                 if payload is not None:
                     if original is None: payload.unlink(missing_ok=True)

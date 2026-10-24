@@ -387,6 +387,11 @@ class Prepared:
             outcome = json.loads((self.root / "stdout.private").read_text().splitlines()[-1])
             value["entry_status"] = outcome.get("status")
             value["entry_reason"] = outcome.get("reason")
+            budget = outcome.get('resource_budget')
+            if isinstance(budget, dict):
+                value['budget_status'] = budget.get('status')
+                value['budget_failed_children'] = budget.get('failed_children')
+                value['budget_unresolved_children'] = budget.get('unresolved_children')
         except (OSError, ValueError, IndexError):
             value["entry_report"] = "not_published"
         if self.trace.exists():
