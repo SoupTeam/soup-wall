@@ -262,7 +262,8 @@ def run(args):
                 jdk = vendor.unpack(args.jdk_zip, directory / "jdk", vendor.RUNTIMES["jdk"])
                 check("pinned-runtime-checksums", True)
             ca, (cert, key), _ = vendor.certificate_files(directory)
-            gateway_port, vendor_port = vendor.free_port(), vendor.free_port()
+            gateway_reservation = vendor.reserve_port(resources)
+            gateway_port, vendor_port = gateway_reservation.getsockname()[1], vendor.free_port()
             vendor_base = f"https://127.0.0.1:{vendor_port}"
             realm = "oidc-" + uuid.uuid4().hex
             issuer = vendor_base + "/realms/" + realm
@@ -425,6 +426,7 @@ def run(args):
 
             def start_gateway():
                 evidence.phase("gateway-startup")
+                gateway_reservation.close()
                 process = start_child([str(args.gateway)], directory, gateway_environment, gateway_log, resources)
                 children.append(process)
                 evidence.process("gateway", process)

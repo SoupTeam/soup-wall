@@ -132,7 +132,8 @@ def run(args):
                            check=True, capture_output=True, timeout=240)
             check("pinned-container-image-pulled-by-digest", True)
             ca, (cert, key), (sp_cert, sp_key) = vendor.certificate_files(directory)
-            gateway_port, vendor_port = vendor.free_port(), vendor.free_port()
+            gateway_reservation = vendor.reserve_port(resources)
+            gateway_port, vendor_port = gateway_reservation.getsockname()[1], vendor.free_port()
             # Different sites exercise the real cross-site POST cookie boundary;
             # different ports alone would still be same-site and share cookies.
             vendor_base = f"https://localhost:{vendor_port}"
@@ -298,6 +299,7 @@ def run(args):
 
             def start_gateway():
                 evidence.phase("gateway-startup")
+                gateway_reservation.close()
                 process = start_child([str(args.gateway)], directory, gateway_environment, gateway_log, resources)
                 children.append(process)
                 evidence.process("gateway", process)
