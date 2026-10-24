@@ -95,6 +95,16 @@ PUBLIC_FAILURE_CODES = frozenset({
     'state_inside_checkout',
     'state_inside_workspace',
     'unsafe_state_parent',
+    'canonical_existing_workspace_required',
+    'existing_workspace_missing_or_moved',
+    'owned_workspace_without_shared_write_required',
+    'home_directory_workspace_refused',
+    'workspace_binding_invalid',
+    'selected_workspace_changed',
+    'preparation_overlaps_workspace',
+    'private_assets_inside_workspace',
+    'profile_workspace_identity_mismatch',
+    'unsupported_existing_git_layout_use_supported_standalone_repository',
 })
 
 
@@ -233,6 +243,8 @@ def confirmed_stop(home, launcher_pid, binary, env, cwd):
 def run(args, report):
     PREP.supported_platform()
     selection, paths, profiles = selected(args)
+    if "prepared_workspaces" in selection:
+        PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent))
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()
@@ -304,8 +316,8 @@ def run(args, report):
                                            args.ask_wait_seconds)
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
             require(selected(args)[0] == selection, "selection_changed_before_host")
-            workspace = Path(profiles["filesystem"]["profile"]["path"]).parent.parent / "filesystem-workspace"
-            git_workspace = Path(profiles["git"]["profile"]["path"]).parent.parent / "git-workspace"
+            roots = PREP.workspace_paths(selection, args.selection.parent)
+            workspace, git_workspace = roots["filesystem"], roots["git"]
             command = [str(paths["agentfw"]), "pilot-launch", "--claude", str(paths["claude"]),
                 "--agent-bin", str(paths["agentfw"]), "--home", str(home), "--workspace", str(workspace),
                 "--git-workspace", str(git_workspace), "--fs-profile", profiles["filesystem"]["profile"]["path"],
@@ -404,7 +416,8 @@ def main():
     report = {"format": "sw-prepared-pilot-run/1", "status": "plan", "executed": False}
     try:
         selection, _, profiles = selected(args)
-        report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles)
+        report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
+                      workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
         if args.run:
             run(args, report)
     except Exception as error:

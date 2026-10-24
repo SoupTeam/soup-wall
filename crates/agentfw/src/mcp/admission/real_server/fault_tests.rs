@@ -104,6 +104,7 @@ async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classif
             last_progress: 0.0,
         };
         let profile = server_profile::ProfileConfig {
+            workspace_identity: None,
             format: call.profile.clone(),
             workspace: "/workspace".into(),
             runtime_path: "/never-spawned".into(),
@@ -522,6 +523,7 @@ impl Harness {
             // Protocol-only fixture: this profile is never spawned or used to
             // qualify approval resumption / Linux filesystem confinement.
             let profile = server_profile::ProfileConfig {
+                workspace_identity: None,
                 format: format.into(),
                 workspace: "/workspace".into(),
                 runtime_path: "/never-spawned/runtime".into(),
