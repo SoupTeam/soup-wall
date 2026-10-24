@@ -20,7 +20,7 @@ pub(crate) const HEARTBEAT_MILLIS: u64 = 100;
 pub(crate) const LEASE_MILLIS: u64 = 1_500;
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{spawn, CleanupSpec, LaunchSpec, OwnerGuard};
+pub(crate) use linux::{spawn, BudgetPrepare, CleanupSpec, LaunchSpec, OwnerGuard};
 
 #[cfg(not(target_os = "linux"))]
 pub(crate) struct OwnerGuard;
@@ -62,6 +62,7 @@ pub fn early_dispatch() -> Option<i32> {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
 mod linux {
     use std::collections::BTreeSet;
     use std::ffi::CString;
@@ -69,7 +70,7 @@ mod linux {
     use std::io::{Read, Write};
     use std::os::fd::{AsRawFd, FromRawFd, RawFd};
     use std::os::unix::fs::MetadataExt;
-    use std::os::unix::net::UnixStream;
+    use std::os::unix::net::{UnixDatagram, UnixStream};
     use std::os::unix::process::CommandExt;
     use std::os::unix::process::ExitStatusExt;
     use std::process::{Command, Stdio};
@@ -96,6 +97,22 @@ mod linux {
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
+    pub(crate) struct BudgetPrepare {
+        pub config: super::super::linux_budget::Config,
+        pub root: (u64, u64),
+        pub root_fd: RawFd,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct BudgetPrepared {
+        format: String,
+        instance: String,
+        budget: super::super::linux_budget::PreparedBudget,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
     pub(crate) struct CleanupSpec {
         pub root_fd: RawFd,
         pub leaf_fd: RawFd,
@@ -116,6 +133,7 @@ mod linux {
         pub bwrap_args: Vec<String>,
         pub budget_attach_fd: Option<RawFd>,
         pub budget_cleanup: Option<CleanupSpec>,
+        pub budget_prepare: Option<BudgetPrepare>,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -125,6 +143,7 @@ mod linux {
         collector_pid: u32,
         collector_start_ticks: u64,
         collector_pidfd: RawFd,
+        budget_transfer_fd: Option<RawFd>,
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -225,6 +244,7 @@ mod linux {
         pub child: Child,
         pub sandbox_pid: u32,
         pub guard: OwnerGuard,
+        pub budget: Option<super::super::linux_budget::OwnedBudget>,
     }
 
     pub(crate) struct OwnerGuard {
@@ -305,6 +325,287 @@ mod linux {
             offset += count as usize;
         }
         Ok(())
+    }
+
+    fn send_budget_fds(
+        socket: &UnixDatagram,
+        prepared: &BudgetPrepared,
+        files: &[File],
+    ) -> anyhow::Result<()> {
+        ensure!(
+            files.len() == super::super::linux_budget::PREPARED_FDS,
+            "mcp_owner_budget_packet_invalid"
+        );
+        send_descriptor_packet(socket, serde_json::to_vec(prepared)?, files)
+    }
+
+    fn send_descriptor_packet(
+        socket: &UnixDatagram,
+        mut bytes: Vec<u8>,
+        files: &[File],
+    ) -> anyhow::Result<()> {
+        ensure!(
+            !bytes.is_empty() && bytes.len() <= MAX_PACKET && files.len() <= MAX_FDS,
+            "mcp_owner_budget_packet_invalid"
+        );
+        let descriptors: Vec<_> = files.iter().map(AsRawFd::as_raw_fd).collect();
+        let descriptor_bytes = std::mem::size_of_val(descriptors.as_slice());
+        let control_size = unsafe { libc::CMSG_SPACE(descriptor_bytes as u32) } as usize;
+        // usize storage supplies cmsghdr alignment; byte arrays do not.
+        let mut control = vec![0_usize; control_size.div_ceil(std::mem::size_of::<usize>())];
+        let mut iov = libc::iovec {
+            iov_base: bytes.as_mut_ptr().cast(),
+            iov_len: bytes.len(),
+        };
+        let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
+        message.msg_iov = &mut iov;
+        message.msg_iovlen = 1;
+        message.msg_control = control.as_mut_ptr().cast();
+        message.msg_controllen = control_size;
+        unsafe {
+            let header = libc::CMSG_FIRSTHDR(&message);
+            ensure!(!header.is_null(), "mcp_owner_budget_packet_invalid");
+            (*header).cmsg_level = libc::SOL_SOCKET;
+            (*header).cmsg_type = libc::SCM_RIGHTS;
+            (*header).cmsg_len = libc::CMSG_LEN(descriptor_bytes as u32) as usize;
+            std::ptr::copy_nonoverlapping(
+                descriptors.as_ptr().cast::<u8>(),
+                libc::CMSG_DATA(header),
+                descriptor_bytes,
+            );
+        }
+        let sent = unsafe { libc::sendmsg(socket.as_raw_fd(), &message, libc::MSG_NOSIGNAL) };
+        ensure!(
+            sent == bytes.len() as isize,
+            "mcp_owner_budget_transfer_failed"
+        );
+        Ok(())
+    }
+
+    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
+    fn receive_budget_fds(socket: &UnixDatagram) -> std::io::Result<(BudgetPrepared, Vec<File>)> {
+        let invalid = || {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "mcp_owner_budget_packet_invalid",
+            )
+        };
+        let mut bytes = vec![0_u8; MAX_PACKET];
+        let descriptor_bytes =
+            super::super::linux_budget::PREPARED_FDS * std::mem::size_of::<RawFd>();
+        let control_size = unsafe { libc::CMSG_SPACE(descriptor_bytes as u32) } as usize;
+        let mut control = vec![0_usize; control_size.div_ceil(std::mem::size_of::<usize>())];
+        let mut iov = libc::iovec {
+            iov_base: bytes.as_mut_ptr().cast(),
+            iov_len: bytes.len(),
+        };
+        let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
+        message.msg_iov = &mut iov;
+        message.msg_iovlen = 1;
+        message.msg_control = control.as_mut_ptr().cast();
+        message.msg_controllen = control_size;
+        let count =
+            unsafe { libc::recvmsg(socket.as_raw_fd(), &mut message, libc::MSG_CMSG_CLOEXEC) };
+        if count < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let mut files = Vec::new();
+        let mut valid_headers = 0;
+        let mut headers_valid = true;
+        // Take ownership of every delivered SCM_RIGHTS handle before checking
+        // framing, so rejection/truncation cannot leak received descriptors.
+        unsafe {
+            let mut header = libc::CMSG_FIRSTHDR(&message);
+            while !header.is_null() {
+                let minimum = libc::CMSG_LEN(0) as usize;
+                let offset = header
+                    .cast::<u8>()
+                    .offset_from(message.msg_control.cast::<u8>());
+                if offset < 0
+                    || (*header).cmsg_len < minimum
+                    || (*header).cmsg_len > message.msg_controllen.saturating_sub(offset as usize)
+                {
+                    headers_valid = false;
+                    break;
+                }
+                if (*header).cmsg_level == libc::SOL_SOCKET
+                    && (*header).cmsg_type == libc::SCM_RIGHTS
+                {
+                    valid_headers += 1;
+                    let length = (*header).cmsg_len - minimum;
+                    headers_valid = headers_valid && length.is_multiple_of(std::mem::size_of::<RawFd>());
+                    for index in 0..length / std::mem::size_of::<RawFd>() {
+                        let descriptor = std::ptr::read_unaligned(
+                            libc::CMSG_DATA(header).cast::<RawFd>().add(index),
+                        );
+                        if descriptor < 0 {
+                            headers_valid = false;
+                        } else {
+                            files.push(File::from_raw_fd(descriptor));
+                        }
+                    }
+                } else {
+                    headers_valid = false;
+                }
+                header = libc::CMSG_NXTHDR(&message, header);
+            }
+        }
+        if count == 0
+            || message.msg_flags & (libc::MSG_TRUNC | libc::MSG_CTRUNC) != 0
+            || !headers_valid
+            || valid_headers != 1
+            || files.len() != super::super::linux_budget::PREPARED_FDS
+        {
+            return Err(invalid());
+        }
+        let prepared = serde_json::from_slice(&bytes[..count as usize]).map_err(|_| invalid())?;
+        Ok((prepared, files))
+    }
+
+    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
+    async fn adopt_budget(
+        socket: UnixDatagram,
+        requested: &BudgetPrepare,
+    ) -> anyhow::Result<(super::super::linux_budget::OwnedBudget, String)> {
+        socket.set_nonblocking(true)?;
+        // SAFETY: socket is uniquely owned by adopt_budget and not shared or concurrently closed.
+        let socket = unsafe { tokio::io::unix::AsyncFd::register(socket) }?;
+        let (prepared, files) = loop {
+            let mut readable = socket.readable().await?;
+            match readable.try_io(|socket| receive_budget_fds(socket.get_ref())) {
+                Ok(result) => break result?,
+                Err(_) => continue,
+            }
+        };
+        ensure!(
+            prepared.format == FORMAT
+                && prepared.instance.len() == 32
+                && prepared
+                    .instance
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit()),
+            "mcp_owner_budget_packet_invalid"
+        );
+        #[cfg(test)]
+        budget_adoption_barrier(&prepared.budget)?;
+        let budget = super::super::linux_budget::OwnedBudget::adopt_prepared(
+            &super::super::linux_budget::BoundConfig {
+                config: requested.config.clone(),
+                root: requested.root,
+            },
+            &prepared.budget,
+            files,
+        )?;
+        let acknowledgement = serde_json::to_vec(&Control {
+            format: FORMAT.to_owned(),
+            instance: prepared.instance.clone(),
+            action: "budget-adopted".to_owned(),
+        })?;
+        loop {
+            let mut writable = socket.writable().await?;
+            match writable.try_io(|socket| socket.get_ref().send(&acknowledgement)) {
+                Ok(result) => {
+                    ensure!(
+                        result? == acknowledgement.len(),
+                        "mcp_owner_budget_transfer_failed"
+                    );
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+        Ok((budget, prepared.instance))
+    }
+
+    #[allow(clippy::nonminimal_bool, clippy::manual_is_multiple_of)]
+    fn await_budget_adoption(
+        transfer: &UnixDatagram,
+        collector: &File,
+        instance: &str,
+    ) -> anyhow::Result<()> {
+        let deadline = Instant::now() + Duration::from_millis(STARTUP_MILLIS);
+        loop {
+            ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+            ensure!(
+                Instant::now() < deadline,
+                "mcp_owner_budget_adoption_unverified"
+            );
+            let mut descriptors = [
+                libc::pollfd {
+                    fd: transfer.as_raw_fd(),
+                    events: libc::POLLIN | libc::POLLHUP,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: collector.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            let result = unsafe {
+                libc::poll(
+                    descriptors.as_mut_ptr(),
+                    descriptors.len() as libc::nfds_t,
+                    POLL_MILLIS as i32,
+                )
+            };
+            if result < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            ensure!(result >= 0, "mcp_owner_budget_adoption_unverified");
+            if descriptors[0].revents & libc::POLLIN != 0 {
+                let mut bytes = [0_u8; 1024];
+                let count = unsafe {
+                    libc::recv(
+                        transfer.as_raw_fd(),
+                        bytes.as_mut_ptr().cast(),
+                        bytes.len(),
+                        libc::MSG_TRUNC,
+                    )
+                };
+                ensure!(
+                    count > 0 && count as usize <= bytes.len(),
+                    "mcp_owner_budget_adoption_unverified"
+                );
+                let adopted: Control = decode(&bytes[..count as usize])?;
+                ensure!(
+                    adopted.format == FORMAT
+                        && adopted.instance == instance
+                        && adopted.action == "budget-adopted",
+                    "mcp_owner_budget_adoption_unverified"
+                );
+                ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+                return Ok(());
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn budget_adoption_barrier(
+        prepared: &super::super::linux_budget::PreparedBudget,
+    ) -> anyhow::Result<()> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let Some(path) = std::env::var_os("SOU142_TEST_HANDOFF_BARRIER") else {
+            return Ok(());
+        };
+        let path = std::path::PathBuf::from(path);
+        let staged = path.with_extension("staged");
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&staged)?;
+        file.write_all(&serde_json::to_vec(prepared)?)?;
+        file.sync_all()?;
+        std::fs::rename(staged, &path)?;
+        // This test-only barrier pauses the collector after the real owner has
+        // created its leaf, before adoption ACK can release a sandbox process.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !path.with_extension("cancel").exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        bail!("mcp_owner_test_handoff_cancelled")
     }
 
     fn nonblocking(fd: RawFd) -> anyhow::Result<()> {
@@ -452,6 +753,14 @@ mod linux {
         if let Some(fd) = spec.budget_attach_fd {
             ensure!(fds.contains(&fd), "mcp_owner_launch_invalid");
         }
+        if let Some(requested) = &spec.budget_prepare {
+            ensure!(
+                spec.budget_attach_fd.is_none()
+                    && spec.budget_cleanup.is_none()
+                    && fds.contains(&requested.root_fd),
+                "mcp_owner_budget_request_invalid"
+            );
+        }
         if let Some(cleanup) = &spec.budget_cleanup {
             ensure!(
                 cleanup.name.starts_with("agentfw-mcp-")
@@ -486,12 +795,19 @@ mod linux {
             UnixStream::pair().context("mcp_owner_control_unavailable")?;
         parent.set_nonblocking(true)?;
         let control_fd = child_control.as_raw_fd();
+        let (mut budget_parent, budget_child) = if spec.budget_prepare.is_some() {
+            let (parent, child) = UnixDatagram::pair()?;
+            (Some(parent), Some(child))
+        } else {
+            (None, None)
+        };
         let collector = pidfd(std::process::id())?;
         let startup = sealed_startup(&Startup {
             launch: spec.clone(),
             collector_pid: std::process::id(),
             collector_start_ticks: process_ticks(std::process::id())?,
             collector_pidfd: collector.as_raw_fd(),
+            budget_transfer_fd: budget_child.as_ref().map(AsRawFd::as_raw_fd),
         })?;
         let startup_fd = startup.as_raw_fd();
         let mut command =
@@ -511,6 +827,7 @@ mod linux {
         fds.push(control_fd);
         fds.push(startup_fd);
         fds.push(collector.as_raw_fd());
+        fds.extend(budget_child.as_ref().map(AsRawFd::as_raw_fd));
         unsafe {
             command.pre_exec(move || {
                 if libc::syscall(libc::SYS_close_range, 3_u32, u32::MAX, 4_u32) != 0 {
@@ -526,7 +843,22 @@ mod linux {
         }
         let mut child = command.spawn().context("mcp_owner_spawn_failed")?;
         drop(child_control);
+        drop(budget_child);
+        let mut prepared_budget = None;
         let started = async {
+            let budget_instance = if let Some(requested) = &spec.budget_prepare {
+                let (budget, instance) = adopt_budget(
+                    budget_parent
+                        .take()
+                        .context("mcp_owner_budget_transfer_failed")?,
+                    requested,
+                )
+                .await?;
+                prepared_budget = Some(budget);
+                Some(instance)
+            } else {
+                None
+            };
             let stream = tokio::net::UnixStream::from_std(parent.try_clone()?)?;
             let mut reader = stream;
             use tokio::io::AsyncReadExt;
@@ -540,6 +872,9 @@ mod linux {
             let ready: Ready = decode(&packet)?;
             ensure!(
                 ready.format == FORMAT
+                    && budget_instance
+                        .as_ref()
+                        .is_none_or(|instance| *instance == ready.instance)
                     && Some(ready.owner_pid) == child.id()
                     && process_ticks(ready.owner_pid)? == ready.owner_start_ticks
                     && process_ticks(ready.sandbox_pid)? == ready.sandbox_start_ticks
@@ -589,6 +924,7 @@ mod linux {
         Ok(OwnerProcess {
             sandbox_pid: ready.sandbox_pid,
             child,
+            budget: prepared_budget,
             guard: OwnerGuard {
                 ready,
                 failed,
@@ -974,6 +1310,7 @@ mod linux {
 
     struct LeafFallback {
         spec: Option<CleanupSpec>,
+        _pins: Vec<File>,
         armed: bool,
     }
 
@@ -1027,10 +1364,11 @@ mod linux {
         );
         set_cloexec(startup.collector_pidfd, true)?;
         let collector = unsafe { File::from_raw_fd(startup.collector_pidfd) };
-        let spec = startup.launch;
+        let mut spec = startup.launch;
         validate(&spec)?;
         let mut leaf_fallback = LeafFallback {
             spec: spec.budget_cleanup.clone(),
+            _pins: Vec::new(),
             armed: true,
         };
         if readable(collector.as_raw_fd())? {
@@ -1042,6 +1380,61 @@ mod linux {
             "mcp_owner_parent_identity_invalid"
         );
         let instance = format!("{:032x}", rand::random::<u128>());
+        ensure!(
+            startup.budget_transfer_fd.is_some() == spec.budget_prepare.is_some(),
+            "mcp_owner_budget_request_invalid"
+        );
+        let mut owned_budget = None;
+        let mut budget_root = None;
+        if let Some(requested) = &spec.budget_prepare {
+            let transfer_fd = startup
+                .budget_transfer_fd
+                .context("mcp_owner_budget_request_invalid")?;
+            ensure!(
+                transfer_fd >= 3
+                    && !spec.inherited_fds.contains(&transfer_fd)
+                    && transfer_fd != control.as_raw_fd()
+                    && transfer_fd != collector.as_raw_fd(),
+                "mcp_owner_budget_request_invalid"
+            );
+            set_cloexec(transfer_fd, true)?;
+            let transfer = unsafe { UnixDatagram::from_raw_fd(transfer_fd) };
+            transfer.set_read_timeout(Some(Duration::from_millis(STARTUP_MILLIS)))?;
+            transfer.set_write_timeout(Some(Duration::from_millis(STARTUP_MILLIS)))?;
+            budget_root = Some(unsafe { File::from_raw_fd(requested.root_fd) });
+            ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+            let budget = super::super::linux_budget::OwnedBudget::prepare_pinned(
+                &super::super::linux_budget::BoundConfig {
+                    config: requested.config.clone(),
+                    root: requested.root,
+                },
+                budget_root
+                    .as_ref()
+                    .context("mcp_owner_budget_request_invalid")?,
+            )?;
+            let (cleanup, pins) = budget.crash_cleanup()?;
+            leaf_fallback.spec = Some(cleanup.clone());
+            leaf_fallback._pins = pins;
+            let (prepared, descriptors) = budget.export_prepared()?;
+            owned_budget = Some(budget);
+            ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+            send_budget_fds(
+                &transfer,
+                &BudgetPrepared {
+                    format: FORMAT.to_owned(),
+                    instance: instance.clone(),
+                    budget: prepared,
+                },
+                &descriptors,
+            )?;
+            await_budget_adoption(&transfer, &collector, &instance)?;
+            spec.budget_attach_fd = owned_budget.as_ref().map(|budget| budget.attach_fd());
+            spec.budget_cleanup = Some(cleanup);
+        }
+        // Keep all owner capabilities alive through startup and cleanup. The
+        // wrapper inherits none of the root, cleanup or handback descriptors.
+        let _budget_root = budget_root;
+        let _owned_budget = owned_budget;
         let (mut lease, inner_lease) = UnixStream::pair()?;
         lease.set_read_timeout(Some(Duration::from_millis(STARTUP_MILLIS)))?;
         lease.set_write_timeout(Some(Duration::from_millis(STARTUP_MILLIS)))?;
@@ -1077,6 +1470,10 @@ mod linux {
             .copied()
             .filter(|fd| {
                 *fd != spec.bwrap_fd
+                    && !spec
+                        .budget_prepare
+                        .as_ref()
+                        .is_some_and(|request| request.root_fd == *fd)
                     && Some(*fd) != spec.budget_attach_fd
                     && !spec.budget_cleanup.as_ref().is_some_and(|cleanup| {
                         [
@@ -1699,6 +2096,80 @@ mod linux {
             );
             assert_eq!(decode::<Control>(&encoded[4..]).unwrap().action, "stop");
         }
+
+        fn prepared_packet() -> BudgetPrepared {
+            BudgetPrepared {
+                format: FORMAT.to_owned(),
+                instance: "a".repeat(32),
+                budget: super::super::super::linux_budget::PreparedBudget {
+                    budget_sha256: "b".repeat(64),
+                    leaf: format!("agentfw-mcp-{}", "c".repeat(32)),
+                    device: 1,
+                    inode: 2,
+                    started_monotonic_nanos: 1,
+                },
+            }
+        }
+
+        #[test]
+        fn prepared_descriptor_packet_is_exact_and_cloexec() {
+            let (sender, receiver) = UnixDatagram::pair().unwrap();
+            let files = (0..super::super::super::linux_budget::PREPARED_FDS)
+                .map(|_| File::open("/dev/null").unwrap())
+                .collect::<Vec<_>>();
+            send_budget_fds(&sender, &prepared_packet(), &files).unwrap();
+            let (prepared, received) = receive_budget_fds(&receiver).unwrap();
+            assert_eq!(prepared.budget.budget_sha256, "b".repeat(64));
+            assert_eq!(received.len(), files.len());
+            for file in received {
+                assert_ne!(
+                    unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) } & libc::FD_CLOEXEC,
+                    0
+                );
+            }
+        }
+
+        #[test]
+        fn rejected_descriptor_packets_close_all_delivered_capabilities() {
+            for (count, malformed) in [(7, false), (8, true), (9, false)] {
+                let (sender, receiver) = UnixDatagram::pair().unwrap();
+                let (mut observer, capability) = UnixStream::pair().unwrap();
+                observer
+                    .set_read_timeout(Some(Duration::from_secs(1)))
+                    .unwrap();
+                let capability: std::os::fd::OwnedFd = capability.into();
+                let capability = File::from(capability);
+                let files = (0..count)
+                    .map(|_| capability.try_clone().unwrap())
+                    .collect::<Vec<_>>();
+                let bytes = if malformed {
+                    b"{".to_vec()
+                } else {
+                    serde_json::to_vec(&prepared_packet()).unwrap()
+                };
+                send_descriptor_packet(&sender, bytes, &files).unwrap();
+                drop(files);
+                drop(capability);
+                assert!(receive_budget_fds(&receiver).is_err());
+                let mut byte = [0];
+                assert_eq!(
+                    observer.read(&mut byte).unwrap(),
+                    0,
+                    "rejected SCM_RIGHTS must close every delivered duplicate"
+                );
+            }
+        }
+
+        #[test]
+        fn prepared_descriptor_packet_requires_rights_and_rejects_body_truncation() {
+            let (sender, receiver) = UnixDatagram::pair().unwrap();
+            sender
+                .send(&serde_json::to_vec(&prepared_packet()).unwrap())
+                .unwrap();
+            assert!(receive_budget_fds(&receiver).is_err());
+            sender.send(&vec![b' '; MAX_PACKET + 1]).unwrap();
+            assert!(receive_budget_fds(&receiver).is_err());
+        }
         #[test]
         fn only_owned_leaf_names_and_descriptor_sets_are_accepted() {
             let file = File::open("/dev/null").unwrap();
@@ -1715,6 +2186,7 @@ mod linux {
                 ],
                 budget_attach_fd: None,
                 budget_cleanup: None,
+                budget_prepare: None,
             };
             validate(&spec).unwrap();
             spec.inherited_fds.push(fd);
@@ -1805,10 +2277,12 @@ mod linux {
                     bwrap_args: Vec::new(),
                     budget_attach_fd: None,
                     budget_cleanup: None,
+                    budget_prepare: None,
                 },
                 collector_pid: std::process::id(),
                 collector_start_ticks: process_ticks(std::process::id()).unwrap(),
                 collector_pidfd: collector.as_raw_fd(),
+                budget_transfer_fd: None,
             };
             let mut sealed = sealed_startup(&startup).unwrap();
             assert!(sealed.write_all(b"tamper").is_err());

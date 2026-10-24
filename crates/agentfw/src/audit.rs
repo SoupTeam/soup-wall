@@ -584,9 +584,13 @@ mod tests {
         let sink = AuditSink::open(&path).unwrap();
         {
             let mut storage = sink.inner.lock().unwrap();
-            let AuditStorage::Legacy(legacy) = &mut *storage else {
+            #[cfg(any(target_os = "linux", windows))]
+            let AuditStorage::Legacy(legacy) = &mut *storage
+            else {
                 panic!("expected legacy audit sink")
             };
+            #[cfg(not(any(target_os = "linux", windows)))]
+            let AuditStorage::Legacy(legacy) = &mut *storage;
             legacy.fail_sync = true;
         }
         // Hook evidence retains best-effort append semantics. Linux native
