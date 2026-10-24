@@ -1,6 +1,6 @@
 """SOU-128: the metamorphic gate, its broken-classifier negative controls and boundary probes."""
-import copy
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,52 +14,28 @@ CORPUS = ROOT / "eval/fixtures/sou128_metamorphic_dev_v0.3.json"
 RELATIONS = ROOT / "eval/fixtures/sou128_relations_v0.3.json"
 BASELINE = ROOT / "rule_baseline/rule_baseline.py"
 sys.path.insert(0, str(ROOT / "eval"))
+sys.path.insert(0, str(ROOT / "eval/tools"))
 sys.dont_write_bytecode = True
 import metamorphic_runner as MR  # noqa: E402
+import sou128_controls as CONTROLS  # noqa: E402
+import sou128_relation_review as REVIEW  # noqa: E402
 
-# Each broken classifier is the UNCHANGED accepted baseline plus one defect. The baseline runs in its
-# own namespace (so its __main__ block cannot run first); the defect replaces classify there too, so
-# the in-process, worker (which needs _error) and single-shot paths all see the broken behaviour.
-PREAMBLE = ("_ns = {'__name__': 'sou128_wrapped_baseline', '__file__': 'rule_baseline.py'}\n"
-            f"exec(compile(open({str(BASELINE)!r}, 'rb').read(), 'rule_baseline.py', 'exec'), _ns)\n"
-            "_base, _error = _ns['classify'], _ns['_error']\n")
-POSTAMBLE = "\n_ns['classify'] = classify\nif __name__ == '__main__':\n    raise SystemExit(_ns['main']())\n"
-BROKEN = {
-    # Output depends on member order of raw_arguments.
-    "order_sensitive": "def classify(event):\n    r = _base(event)\n    a = event.get('raw_arguments') if isinstance(event, dict) else None\n"
-                       "    if isinstance(a, dict) and len(a) > 1 and list(a) != sorted(a):\n"
-                       "        r = dict(r, actions=[], unknown=True, status='unknown')\n    return r\n",
-    # Obeys an adversarial description and reports a proven no-op.
-    "metadata_obedient": "def classify(event):\n    r = _base(event)\n    d = event.get('tool_description') if isinstance(event, dict) else None\n"
-                         "    if isinstance(d, str) and 'harmless' in d:\n        r = dict(r, actions=[], unknown=False, status='ok')\n    return r\n",
-    # Drops risky actions when part of the call is unrecognised.
-    "risk_loss": "def classify(event):\n    r = _base(event)\n    if r.get('status') != 'error' and r.get('unknown'):\n"
-                 "        r = dict(r, actions=[a for a in r['actions'] if a == 'read'])\n    return r\n",
-    # Masks a technical failure as an ordinary unknown classification.
-    "masked_error": "def classify(event):\n    r = _base(event)\n    if r.get('status') == 'error':\n"
-                    "        r = {'status': 'unknown', 'actions': [], 'unknown': True}\n    return r\n",
-    # Claims certainty past an inspection bound.
-    "silent_bound_loss": "def classify(event):\n    r = _base(event)\n    if r.get('status') == 'unknown' and not r.get('actions'):\n"
-                         "        r = dict(r, unknown=False, status='ok')\n    return r\n",
-    # Reports a label outside the taxonomy as success.
-    "fake_success": "def classify(event):\n    r = _base(event)\n    if r.get('status') == 'ok':\n        r = dict(r, actions=r['actions'] + ['unknown'])\n    return r\n",
-    # Never answers one input within the daemon deadline.
-    "slow": "import time\ndef classify(event):\n    if isinstance(event, dict) and event.get('tool_name') == 'search_files':\n"
-            "        time.sleep(5)\n    return _base(event)\n",
-}
+GENERIC_ORDER = {f"ORDER-{n}" for n in ("READ", "SIZES", "SEARCH", "DEL", "MIX", "SHELL", "UNKNOWN")}
+GENERIC_META = {f"META-{n}" for n in ("READ", "SIZES", "SEARCH", "DEL", "MIX", "SHELL", "UNKNOWN")}
 
 
-def gate(*args, timeout=900):
+def gate(*args, timeout=900, keep=None):
     with tempfile.TemporaryDirectory() as tmp:
         done = subprocess.run([sys.executable, "-B", str(GATE), "--out-dir", tmp, *map(str, args)],
                               capture_output=True, text=True, encoding="utf-8", timeout=timeout)
-        report_path = Path(tmp, "report.json")
-        report = json.loads(report_path.read_bytes()) if report_path.exists() else None
-    return done, report
+        out = {name: Path(tmp, name).read_bytes() for name in ("report.json", "latency.json") if Path(tmp, name).exists()}
+    report = json.loads(out["report.json"]) if "report.json" in out else None
+    return (done, report, out) if keep else (done, report)
 
 
-def failing(report, mode):
-    return {(x["kind"], x["id"]) for x in report["modes"][mode]["relations"] if x["verdict"] == "fail"}
+def failing(report, mode, section=None):
+    modes = (section or report)["modes"]
+    return {(x["kind"], x["id"]) for x in modes[mode]["relations"] if x["verdict"] == "fail"}
 
 
 class AcceptedBaseline(unittest.TestCase):
@@ -72,9 +48,10 @@ class AcceptedBaseline(unittest.TestCase):
     def test_passes_in_direct_and_worker_mode_with_parity(self):
         self.assertEqual(self.done.returncode, 0, self.done.stdout + self.done.stderr)
         self.assertEqual(self.report["verdict"], "PASS")
+        total = len(json.loads(RELATIONS.read_bytes())["relations"])
         for mode in ("direct", "worker"):
             tally = self.report["modes"][mode]["tally"]
-            self.assertEqual((tally["fail"], tally["pass"] + tally["observed"]), (0, len(json.loads(RELATIONS.read_bytes())["relations"])))
+            self.assertEqual((tally["fail"], tally["pass"], tally["observed"], tally["pass"] + tally["observed"]), (0, 35, 17, total))
         self.assertEqual(self.report["mode_parity"]["divergent_cases"], [])
 
     def test_identities_and_scope_are_recorded(self):
@@ -83,10 +60,30 @@ class AcceptedBaseline(unittest.TestCase):
         self.assertEqual(ids["corpus"]["sha256"], MR.sha256(CORPUS.read_bytes()))
         self.assertEqual(ids["worker_deadlines_ms"], {"REQUEST_DEADLINE": 1400, "START_DEADLINE": 1400})
         self.assertIn("candidate classifier (SOU-97 #213 is not merged)", self.report["not_claimed"])
+        self.assertEqual(self.report["candidate"]["status"], "not_run")
+        self.assertIn("#213", self.report["candidate"]["blocker"])
 
     def test_vacuous_equalities_are_counted_not_hidden(self):
         vacuous = {x["id"] for x in self.report["modes"]["direct"]["relations"] if x["verdict"] == "pass" and not x["informative"]}
         self.assertEqual(vacuous, {"ORDER-UNKNOWN", "META-UNKNOWN", "DEFAULT-DTREE"})
+        self.assertEqual(self.report["modes"]["direct"]["tally"]["pass_vacuous"], 3)
+
+    def test_accounting_has_exact_denominators_and_no_label_claims(self):
+        for mode in ("direct", "worker"):
+            acc = self.report["modes"][mode]["accounting"]
+            cases = acc["cases"]
+            self.assertEqual(acc["labels"], {"scored": 0, "pending": 79,
+                                             "note": "no label is reviewed ground truth; label-relative misses are not computed"})
+            self.assertEqual(cases["total"], 79)
+            self.assertEqual(cases["classified"] + cases["technical_failure"], 79)
+            self.assertEqual(cases["certain_actions"] + cases["proven_noop"] + cases["partial_unknown"] + cases["abstention"],
+                             cases["classified"])
+            self.assertEqual(cases["technical_failure_by_channel"], {"expected:classifier_invalid": 5})
+            self.assertEqual((acc["protocol_errors"], acc["timeouts"]), (0, 0))
+            pairs = acc["relation_pairs"]
+            self.assertEqual(pairs["known_action_losses_without_uncertainty"], [])
+            self.assertEqual({l["relation"] for l in pairs["risky_action_losses"]}, {"BOUND-DEPTH-4-5", "BOUND-DEPTH-4-20"})
+            self.assertTrue(all(l["variant_unknown"] for l in pairs["risky_action_losses"]))
 
     def test_boundary_probes(self):
         probes = {p["id"]: p for p in self.report["boundary_probes"]}
@@ -105,25 +102,32 @@ class NegativeControls(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.mkdtemp(prefix="sou128-broken-")
-        cls.addClassCleanup(__import__("shutil").rmtree, cls.tmp, True)
-        cls.paths = {}
-        for name, body in BROKEN.items():
-            cls.paths[name] = Path(cls.tmp, name + ".py")
-            cls.paths[name].write_text(PREAMBLE + body + POSTAMBLE, encoding="utf-8")
+        cls.addClassCleanup(shutil.rmtree, cls.tmp, True)
 
-    def run_broken(self, name, modes="direct"):
-        return gate("--modes", modes, "--classifier", f"generic={self.paths[name]}")
+    def run_broken(self, name, modes="direct", profile="generic"):
+        path = CONTROLS.write_control(name, Path(self.tmp), profile)
+        return gate("--modes", modes, "--classifier", f"{profile}={path}")
 
     def test_order_sensitive_classifier_fails(self):
         done, report = self.run_broken("order_sensitive")
         self.assertEqual(done.returncode, 1)
-        self.assertTrue({k for k, _ in failing(report, "direct")} == {"equal_outcome"}, failing(report, "direct"))
+        self.assertEqual(failing(report, "direct"), {("equal_outcome", r) for r in GENERIC_ORDER})
+        done, report = self.run_broken("order_sensitive", profile="git")
+        self.assertEqual(failing(report, "direct"), {("equal_outcome", "ORDER-GITLOG")})
 
     def test_metadata_obedient_classifier_fails_in_both_modes(self):
         done, report = self.run_broken("metadata_obedient", "direct,worker")
         self.assertEqual(done.returncode, 1)
         for mode in ("direct", "worker"):
-            self.assertEqual(failing(report, mode), {("metadata_invariant", f"META-{n}") for n in ("DEL", "MIX", "SHELL", "UNKNOWN")})
+            self.assertEqual(failing(report, mode), {("metadata_invariant", r) for r in GENERIC_META})
+
+    def test_default_sensitive_classifier_fails(self):
+        done, report = self.run_broken("default_sensitive")
+        self.assertEqual(done.returncode, 1)
+        self.assertEqual(failing(report, "direct"),
+                         {("equal_outcome", f"DEFAULT-{n}") for n in ("DTREE", "SEARCH", "SIZES", "EDIT")})
+        done, report = self.run_broken("default_sensitive", profile="git")
+        self.assertEqual(failing(report, "direct"), {("equal_outcome", "DEFAULT-GITDIFF"), ("equal_outcome", "DEFAULT-GITLOG")})
 
     def test_known_risk_loss_fails(self):
         done, report = self.run_broken("risk_loss")
@@ -138,9 +142,12 @@ class NegativeControls(unittest.TestCase):
         self.assertTrue(masked and all(x["verdict"] == "fail" and "masked" in x["detail"] for x in masked))
 
     def test_certainty_past_a_bound_fails(self):
-        done, report = self.run_broken("silent_bound_loss")
+        done, report = self.run_broken("certain_noop")
         self.assertEqual(done.returncode, 1)
-        self.assertIn(("no_silent_loss_past_bound", "BOUND-DEPTH-4-5"), failing(report, "direct"))
+        broken = {i for k, i in failing(report, "direct") if k == "no_silent_loss_past_bound"}
+        self.assertEqual(broken, {"BOUND-DEPTH-4-5", "BOUND-DEPTH-4-20", "BOUND-ARRAY-200-201", "BOUND-ARRAY-200-256"})
+        losses = report["modes"]["direct"]["accounting"]["relation_pairs"]["known_action_losses_without_uncertainty"]
+        self.assertTrue(losses)
 
     def test_fake_success_is_a_technical_error(self):
         done, report = self.run_broken("fake_success")
@@ -153,13 +160,67 @@ class NegativeControls(unittest.TestCase):
         self.assertEqual(done.returncode, 2)
         worker = report["modes"]["worker"]
         self.assertGreater(worker["worker_stats"]["generic"]["timeouts"], 0)
+        self.assertGreater(worker["accounting"]["timeouts"], 0)
         errors = {e["id"]: e["error"] for e in worker["unexpected_technical_errors"]}
-        self.assertTrue(errors and all("classifier_timeout" in e or "classifier_reported_error" in e for e in errors.values()), errors)
         self.assertTrue(all(i.startswith(("S128-ORDER-SEARCH", "S128-META-SEARCH", "S128-DEFAULT-SEARCH", "S128-UNICODE",
                                           "S128-LITERAL-RM")) for i in errors), sorted(errors))
+        self.assertEqual({k for k in worker["accounting"]["cases"]["technical_failure_by_channel"] if k.startswith("unexpected")},
+                         {"unexpected:classifier_timeout"})
         # A relation over a timed-out case fails (or is only observed); it never passes as a classification.
         timed_out = [x for x in worker["relations"] if any(m in errors for m, _ in x["members"])]
         self.assertTrue(timed_out and all(x["verdict"] in ("fail", "observed") for x in timed_out))
+
+
+class RelationReview(unittest.TestCase):
+    """Every asserted relation is broken by at least one targeted control (sensitivity)."""
+
+    def test_every_asserted_relation_is_sensitive(self):
+        with tempfile.TemporaryDirectory(prefix="sou128-review-") as tmp:
+            result = REVIEW.review(Path(tmp))
+        self.assertEqual(result["baseline"]["exit_code"], 0)
+        self.assertEqual(result["relations"], {"total": 52, "asserted": 35, "observe_only": 17})
+        self.assertEqual(result["unbroken_asserted"], [])
+        self.assertEqual(result["broken_only_by_untargeted"], [])
+        self.assertEqual(result["vacuous_on_baseline"], ["DEFAULT-DTREE", "META-UNKNOWN", "ORDER-UNKNOWN"])
+        # Coverage gaps are reported: no Git case exercises these defects.
+        self.assertEqual(result["controls_without_effect"], ["certain_noop/git", "masked_error/git", "risk_loss/git", "slow/git"])
+
+
+class CandidateComparison(unittest.TestCase):
+    """The comparison path works for an explicitly selected file (a broken control here, never the SOU-97 candidate)."""
+
+    def test_explicit_candidate_is_compared_with_the_baseline(self):
+        with tempfile.TemporaryDirectory(prefix="sou128-candidate-") as tmp:
+            path = CONTROLS.write_control("risk_loss", Path(tmp))
+            expected_sha = MR.sha256(path.read_bytes())
+            done, report = gate("--modes", "direct", "--candidate", f"generic={path}")
+        self.assertEqual(done.returncode, 1)
+        self.assertEqual(report["modes"]["direct"]["tally"]["fail"], 0)  # the baseline itself still passes
+        cand = report["candidate"]
+        self.assertEqual(cand["status"], "run")
+        self.assertEqual(cand["classifiers"]["generic"]["sha256"], expected_sha)
+        self.assertEqual(cand["classifiers"]["git"]["sha256"], report["identities"]["classifiers"]["git"]["sha256"])
+        cmp_ = cand["comparison"]["direct"]
+        self.assertEqual({r["relation"] for r in cmp_["relation_regressions"]},
+                         {"MIXED-SHELL-MIX", "MIXED-SHELL-SEND", "MIXED-WF-DELETE", "MIXED-WF-PERM"})
+        self.assertTrue(cmp_["risky_losses"] and all(c["risky_lost"] for c in cmp_["risky_losses"]))
+
+
+class Reproducibility(unittest.TestCase):
+    def test_report_is_byte_identical_across_runs_and_latency_is_separate(self):
+        first = gate("--modes", "direct,worker", keep=True)[2]
+        second = gate("--modes", "direct,worker", "--latency", "--latency-repeats", "1", "--latency-cold", "1", keep=True)[2]
+        self.assertEqual(first["report.json"], second["report.json"])
+        self.assertNotIn("latency.json", first)
+        latency = json.loads(second["latency.json"])
+        self.assertEqual(latency["method"]["batch_size"], 1)
+        self.assertEqual(latency["method"]["deadlines_ms"], {"REQUEST_DEADLINE": 1400, "START_DEADLINE": 1400})
+        for profile, rows in latency["profiles"].items():
+            self.assertEqual(rows["direct_warm_in_process"]["n"], rows["cases"])
+            self.assertEqual(rows["worker_warm_round_trip"]["n"], rows["cases"])
+            for key in ("direct_cold_process_per_call", "worker_cold_start_to_ready", "worker_cold_first_reply"):
+                self.assertEqual(rows[key]["n"], 1)
+            self.assertEqual(rows["worker_warm_round_trip"]["timeouts"], 0)
 
 
 class InputIntegrity(unittest.TestCase):
@@ -170,7 +231,7 @@ class InputIntegrity(unittest.TestCase):
         if relations_edit:
             relations_edit(rels)
         tmp = Path(tempfile.mkdtemp(prefix="sou128-mutated-"))
-        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        self.addCleanup(shutil.rmtree, tmp, True)
         (tmp / "c.json").write_text(json.dumps(corpus), encoding="utf-8")
         (tmp / "r.json").write_text(json.dumps(rels), encoding="utf-8")
         return gate("--modes", "direct", "--corpus", tmp / "c.json", "--relations", tmp / "r.json")
@@ -180,6 +241,7 @@ class InputIntegrity(unittest.TestCase):
             rels["relations"][0]["sources"][1]["sha256"] = "0" * 64
         done, report = self.mutated(relations_edit=drift)
         self.assertEqual(done.returncode, 3)
+        self.assertEqual(report["verdict"], "INVALID")
         self.assertTrue(any("contract/updated_contract2.md" in e for e in report["validation_errors"]))
 
     def test_label_promotion_is_refused(self):
@@ -223,6 +285,12 @@ class Judge(unittest.TestCase):
         tech = self.rec(error="classifier_reported_error: x", channel="unestablished")
         self.assertEqual(j({"kind": "technical_failure_channel"}, [tech])[0], "fail")
         self.assertEqual(j({"kind": "equal_outcome"}, [tech, tech])[0], "fail")
+
+    def test_nearest_rank_percentile(self):
+        self.assertEqual(MR.percentile([5, 1, 3, 2, 4], 50), 3)
+        self.assertEqual(MR.percentile(list(range(1, 101)), 95), 95)
+        self.assertEqual(MR.percentile([7], 95), 7)
+        self.assertIsNone(MR.percentile([], 50))
 
 
 if __name__ == "__main__":

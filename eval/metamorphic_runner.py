@@ -97,7 +97,7 @@ class Worker:
         shutil.copyfile(WORKER_PY, self.dir / "worker.py")
         self.classifier_sha = sha256((self.dir / "rule_baseline.py").read_bytes())
         self.worker_sha = sha256((self.dir / "worker.py").read_bytes())
-        self.proc, self.next_id, self.restarts, self.timeouts = None, 0, 0, 0
+        self.proc, self.next_id, self.restarts, self.timeouts, self.protocol_errors = None, 0, 0, 0, 0
 
     def _start(self) -> None:
         self.proc = subprocess.Popen([sys.executable, "-I", "-c", self.code, str(self.dir), self.classifier_sha, self.worker_sha],
@@ -144,7 +144,13 @@ class Worker:
         return json.loads(reply["result_json"])
 
     def classify(self, event: Any) -> Any:
-        return self.classify_bytes(wire(event))
+        try:
+            return self.classify_bytes(wire(event))
+        except (RuntimeError, ValueError, OSError):
+            # Framing or process failure: counted separately, then surfaced as a technical error.
+            self.protocol_errors += 1
+            self.stop()
+            raise
 
     def raw_frame(self, frame: bytes) -> dict:
         """A fresh process receives one raw frame line; report replies and exit status."""
@@ -279,38 +285,20 @@ def source_drift(rels: dict) -> list[str]:
 
 
 # ---------------------------------------------------------------- run
-def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: dict[str, Path]) -> tuple[dict, int]:
-    corpus_raw, rels_raw = corpus_path.read_bytes(), relations_path.read_bytes()
-    corpus, rels = json.loads(corpus_raw), json.loads(rels_raw)
-    errors = validate(corpus, rels) + source_drift(rels)
-    bootstrap, deadlines = bootstrap_source()
-    report: dict[str, Any] = {
-        "format": "sou128-metamorphic-report/1",
-        "identities": {
-            "corpus": {"path": corpus_path.name, "sha256": sha256(corpus_raw), "fixture_version": corpus.get("fixture_version")},
-            "relations": {"path": relations_path.name, "sha256": sha256(rels_raw)},
-            "eval_runner_sha256": sha256(Path(ER.__file__).read_bytes()),
-            "metamorphic_runner_sha256": sha256(Path(__file__).read_bytes()),
-            "classifiers": {k: {"path": p.resolve().relative_to(ROOT).as_posix() if p.resolve().is_relative_to(ROOT) else p.name,
-                                "sha256": sha256(p.read_bytes())} for k, p in sorted(classifiers.items())},
-            "worker_py_sha256": sha256(WORKER_PY.read_bytes()),
-            "worker_rs_sha256": sha256(WORKER_RS.read_bytes()),
-            "worker_bootstrap_sha256": sha256(bootstrap.encode("utf-8")),
-            "worker_deadlines_ms": deadlines,
-        },
-        "environment": {"python": platform.python_version(), "platform": platform.system() + "-" + platform.machine()},
-        "scope": "development gate: classifier outputs only; no native policy, MCP admission or original-server effect is observed",
-        "validation_errors": errors,
-    }
-    if errors:
-        report["verdict"] = "INVALID"
-        return report, 3
-    cases = corpus["cases"]
-    by_id = {c["id"]: c for c in cases}
+CANDIDATE_BLOCKER = ("The SOU-97 candidate (rule_baseline/pilot_readonly_v1/rule_baseline.py, pilot_readonly_v1.1) exists only "
+                     "in unmerged Draft PR #213. It is not imported, and no other classifier is substituted for it. Select an "
+                     "explicit file with --candidate NAME=PATH once a reviewed candidate is available on the base branch.")
+
+
+def identity(classifiers: dict[str, Path]) -> dict:
+    return {k: {"path": p.resolve().relative_to(ROOT).as_posix() if p.resolve().is_relative_to(ROOT) else p.name,
+                "sha256": sha256(p.read_bytes())} for k, p in sorted(classifiers.items())}
+
+
+def evaluate_set(cases: list[dict], rels: dict, modes: list[str], classifiers: dict[str, Path]) -> tuple[dict, dict, int]:
+    """Evaluate one classifier selection in each mode: case records, relations and accounting."""
     failure_members = {m for r in rels["relations"] if r["kind"] == "technical_failure_channel" for m in r["members"]}
-    status = 0
-    report["modes"] = {}
-    per_mode_outcomes = {}
+    status, out, outcomes = 0, {}, {}
     for mode in modes:
         workers = {}
         try:
@@ -321,11 +309,12 @@ def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: 
                 fns = {k: w.classify for k, w in workers.items()}
             recs = [ER.evaluate_case(c, fns[c["evaluator_only"]["classifier"]], mode) for c in cases]
         finally:
-            stats = {k: {"restarts": w.restarts, "timeouts": w.timeouts} for k, w in workers.items()}
+            stats = {k: {"restarts": w.restarts, "timeouts": w.timeouts, "protocol_errors": w.protocol_errors}
+                     for k, w in workers.items()}
             for w in workers.values():
                 w.close()
         rec_by_id = {r["id"]: r for r in recs}
-        per_mode_outcomes[mode] = {r["id"]: outcome(r) for r in recs}
+        outcomes[mode] = {r["id"]: outcome(r) for r in recs}
         results = []
         for rel in rels["relations"]:
             verdict, why = judge(rel, [rec_by_id[m] for m in rel["members"]])
@@ -344,27 +333,132 @@ def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: 
             row = by_kind.setdefault(x["kind"], {"pass": 0, "pass_vacuous": 0, "fail": 0, "observed": 0})
             row[x["verdict"]] += 1
             row["pass_vacuous"] += x["verdict"] == "pass" and not x["informative"]
-        report["modes"][mode] = {"relations": results, "tally": tally, "by_kind": dict(sorted(by_kind.items())),
-                                 "unexpected_technical_errors": unexpected, "worker_stats": stats,
-                                 "evaluator_overall": ER.summarize(recs)["overall"],
-                                 "cases": {r["id"]: list(outcome(r)) for r in recs}}
+        out[mode] = {"relations": results, "tally": tally, "by_kind": dict(sorted(by_kind.items())),
+                     "unexpected_technical_errors": unexpected, "worker_stats": stats,
+                     "accounting": accounting(recs, results, failure_members, stats),
+                     "evaluator_overall": ER.summarize(recs)["overall"],
+                     "cases": {r["id"]: list(outcome(r)) for r in recs}}
         if tally["fail"]:
             status = max(status, 1)
-        if unexpected:
+        if unexpected or any(s["protocol_errors"] for s in stats.values()):
             status = max(status, 2)
-    if len(per_mode_outcomes) > 1:
-        first, *rest = per_mode_outcomes
-        divergent = sorted(cid for cid in by_id for m in rest if per_mode_outcomes[m][cid] != per_mode_outcomes[first][cid])
-        report["mode_parity"] = {"compared": list(per_mode_outcomes), "divergent_cases": divergent}
-        if divergent:
-            status = max(status, 1)
+    return out, outcomes, status
+
+
+def parity(outcomes: dict) -> dict:
+    first, *rest = outcomes
+    ids = outcomes[first]
+    return {"compared": list(outcomes),
+            "divergent_cases": sorted(c for c in ids for m in rest if outcomes[m][c] != outcomes[first][c])}
+
+
+def accounting(recs: list[dict], results: list[dict], failure_members: set, stats: dict) -> dict:
+    """Exact counts with denominators. Losses are relative to the observed source case, never to a label."""
+    classified = [r for r in recs if r["technical_error"] is None]
+    technical = [r for r in recs if r["technical_error"] is not None]
+    channels = {}
+    for r in technical:
+        key = ("expected" if r["id"] in failure_members else "unexpected") + ":" + str(r["failure_channel"])
+        channels[key] = channels.get(key, 0) + 1
+    pairs = [x for x in results if len(x["members"]) == 2]
+    both = [x for x in pairs if all(o[0] == "classification" for _, o in x["members"])]
+    losses = []
+    for x in both:
+        (a_id, a), (b_id, b) = x["members"]
+        lost = sorted(set(a[2]) - set(b[2]))
+        if lost:
+            losses.append({"relation": x["id"], "kind": x["kind"], "source": a_id, "variant": b_id, "lost": lost,
+                           "risky_lost": sorted(set(lost) & RISKY), "variant_unknown": b[3], "verdict": x["verdict"],
+                           "uncertainty_added": b[3] is True and a[3] is not True})
+    return {
+        "labels": {"scored": sum(r["expectation_status"] in ER.SCORED for r in recs),
+                   "pending": sum(r["expectation_status"] == "pending" for r in recs),
+                   "note": "no label is reviewed ground truth; label-relative misses are not computed"},
+        "cases": {"total": len(recs), "classified": len(classified),
+                  "certain_actions": sum(1 for r in classified if not r["predicted_unknown"] and r["predicted_actions"]),
+                  "proven_noop": sum(1 for r in classified if not r["predicted_unknown"] and not r["predicted_actions"]),
+                  "partial_unknown": sum(1 for r in classified if r["predicted_unknown"] and r["predicted_actions"]),
+                  "abstention": sum(1 for r in classified if r["predicted_unknown"] and not r["predicted_actions"]),
+                  "technical_failure": len(technical), "technical_failure_by_channel": dict(sorted(channels.items()))},
+        "protocol_errors": sum(s.get("protocol_errors", 0) for s in stats.values()),
+        "timeouts": sum(s.get("timeouts", 0) for s in stats.values()),
+        "relation_pairs": {"total": len(pairs), "both_classified": len(both), "with_technical_member": len(pairs) - len(both),
+                           "known_action_losses": losses,
+                           "known_action_losses_without_uncertainty": [l for l in losses if not l["variant_unknown"]],
+                           "risky_action_losses": [l for l in losses if l["risky_lost"]]},
+    }
+
+
+def compare(base: dict, cand: dict, base_mode: dict, cand_mode: dict) -> dict:
+    """Baseline vs explicitly selected candidate, case by case and relation by relation (no labels)."""
+    changed = []
+    for cid in base:
+        a, b = base[cid], cand[cid]
+        if a == b:
+            continue
+        row = {"case": cid, "baseline": list(a), "candidate": list(b)}
+        if a[0] == b[0] == "classification":
+            row.update(lost=sorted(set(a[2]) - set(b[2])), gained=sorted(set(b[2]) - set(a[2])),
+                       risky_lost=sorted((set(a[2]) - set(b[2])) & RISKY), unknown=[a[3], b[3]])
+        changed.append(row)
+    verdicts = {x["id"]: x["verdict"] for x in base_mode["relations"]}
+    moved = [{"relation": x["id"], "baseline": verdicts[x["id"]], "candidate": x["verdict"], "detail": x["detail"]}
+             for x in cand_mode["relations"] if x["verdict"] != verdicts[x["id"]]]
+    return {"cases_compared": len(base), "cases_changed": changed, "risky_losses": [c for c in changed if c.get("risky_lost")],
+            "relation_changes": moved, "relation_regressions": [m for m in moved if m["candidate"] == "fail"]}
+
+
+def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: dict[str, Path],
+        candidate: dict[str, Path] | None = None) -> tuple[dict, int]:
+    corpus_raw, rels_raw = corpus_path.read_bytes(), relations_path.read_bytes()
+    corpus, rels = json.loads(corpus_raw), json.loads(rels_raw)
+    errors = validate(corpus, rels) + source_drift(rels)
+    bootstrap, deadlines = bootstrap_source()
+    report: dict[str, Any] = {
+        "format": "sou128-metamorphic-report/1",
+        "identities": {
+            "corpus": {"path": corpus_path.name, "sha256": sha256(corpus_raw), "fixture_version": corpus.get("fixture_version")},
+            "relations": {"path": relations_path.name, "sha256": sha256(rels_raw)},
+            "eval_runner_sha256": sha256(Path(ER.__file__).read_bytes()),
+            "metamorphic_runner_sha256": sha256(Path(__file__).read_bytes()),
+            "classifiers": identity(classifiers),
+            "worker_py_sha256": sha256(WORKER_PY.read_bytes()),
+            "worker_rs_sha256": sha256(WORKER_RS.read_bytes()),
+            "worker_bootstrap_sha256": sha256(bootstrap.encode("utf-8")),
+            "worker_deadlines_ms": deadlines,
+        },
+        "environment": {"python": platform.python_version(), "platform": platform.system() + "-" + platform.machine()},
+        "scope": "development gate: classifier outputs only; no native policy, MCP admission or original-server effect is observed",
+        "validation_errors": errors,
+    }
+    if errors:
+        report["verdict"] = "INVALID"
+        return report, 3
+    cases = corpus["cases"]
+    report["modes"], base_outcomes, status = evaluate_set(cases, rels, modes, classifiers)
+    if len(base_outcomes) > 1:
+        report["mode_parity"] = parity(base_outcomes)
+        status = max(status, 1 if report["mode_parity"]["divergent_cases"] else 0)
+    if candidate:
+        cand = {**classifiers, **candidate}
+        cand_modes, cand_outcomes, cand_status = evaluate_set(cases, rels, modes, cand)
+        report["candidate"] = {"status": "run", "classifiers": identity(cand), "modes": cand_modes,
+                               "comparison": {m: compare(base_outcomes[m], cand_outcomes[m], report["modes"][m], cand_modes[m])
+                                              for m in modes}}
+        if len(cand_outcomes) > 1:
+            report["candidate"]["mode_parity"] = parity(cand_outcomes)
+            cand_status = max(cand_status, 1 if report["candidate"]["mode_parity"]["divergent_cases"] else 0)
+        status = max(status, cand_status)
+    else:
+        report["candidate"] = {"status": "not_run", "blocker": CANDIDATE_BLOCKER}
     report["boundary_probes"] = probe_boundaries(rels, classifiers["generic"], deadlines)
     if any(p["verdict"] == "fail" for p in report["boundary_probes"]):
         status = max(status, 1)
     report["verdict"] = {0: "PASS", 1: "FAIL", 2: "TECHNICAL_ERROR"}[status]
     report["not_claimed"] = ["label correctness (all labels pending)", "native policy or authority decisions",
                              "production MCP admission (Rust) behaviour", "original-server execution",
-                             "candidate classifier (SOU-97 #213 is not merged)", "latency"]
+                             "candidate classifier (SOU-97 #213 is not merged)",
+                             "latency thresholds (none approved; measurements, if requested, are in latency.json)"]
     return report, status
 
 
@@ -405,7 +499,88 @@ def probe_boundaries(rels: dict, classifier: Path, deadlines: dict) -> list[dict
     return out
 
 
-def render_markdown(report: dict) -> str:
+def percentile(values: list[float], q: float) -> float | None:
+    """Nearest-rank percentile (no interpolation)."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, -(-len(ordered) * q // 100) - 1)]
+
+
+def stats_ms(samples: list[float], deadline_ms: int | None) -> dict:
+    return {"n": len(samples), "p50_ms": percentile(samples, 50), "p95_ms": percentile(samples, 95),
+            "max_ms": max(samples) if samples else None,
+            "over_deadline": None if deadline_ms is None else sum(s > deadline_ms for s in samples)}
+
+
+def measure_latency(cases: list[dict], classifiers: dict[str, Path], repeats: int, cold: int) -> dict:
+    """Batch size 1, sequential. Warm: after one unmeasured pass. Cold: a fresh process per sample."""
+    import os
+    import time
+    _, deadlines = bootstrap_source()
+    out = {"method": {"batch_size": 1, "warm_repeats": repeats, "cold_samples": cold, "percentile": "nearest-rank",
+                      "clock": "time.perf_counter_ns", "deadlines_ms": deadlines,
+                      "note": "measured on this host only; no relative latency threshold is applied"},
+           "environment": {"platform": platform.platform(), "python": platform.python_version(),
+                           "implementation": platform.python_implementation(), "machine": platform.machine(),
+                           "processor": platform.processor() or None, "cpu_count": os.cpu_count()},
+           "profiles": {}}
+    for name, path in sorted(classifiers.items()):
+        subset = [c for c in cases if c["evaluator_only"]["classifier"] == name]
+        inputs = [c["input"] for c in subset]
+        fn = direct_classifier(path)
+        for event in inputs:
+            fn(json.loads(json.dumps(event)))
+        warm_direct = []
+        for _ in range(repeats):
+            for event in inputs:
+                copy_ = json.loads(json.dumps(event))
+                t = time.perf_counter_ns()
+                fn(copy_)
+                warm_direct.append((time.perf_counter_ns() - t) / 1e6)
+        cold_direct = []
+        for i in range(cold):
+            payload = wire(inputs[i % len(inputs)]) + b"\n"
+            t = time.perf_counter_ns()
+            subprocess.run([sys.executable, "-I", str(path)], input=payload, capture_output=True, timeout=60)
+            cold_direct.append((time.perf_counter_ns() - t) / 1e6)
+        worker, warm_worker = Worker(path), []
+        try:
+            for event in inputs:
+                worker.classify(event)
+            for _ in range(repeats):
+                for event in inputs:
+                    t = time.perf_counter_ns()
+                    worker.classify(event)
+                    warm_worker.append((time.perf_counter_ns() - t) / 1e6)
+            warm_timeouts = worker.timeouts
+        finally:
+            worker.close()
+        cold_ready, cold_first, cold_timeouts = [], [], 0
+        for i in range(cold):
+            w = Worker(path)
+            try:
+                t = time.perf_counter_ns()
+                w._start()  # the daemon's START_DEADLINE covers spawn until the ready frame
+                cold_ready.append((time.perf_counter_ns() - t) / 1e6)
+                t = time.perf_counter_ns()
+                w.classify(inputs[i % len(inputs)])  # then REQUEST_DEADLINE covers the first call
+                cold_first.append((time.perf_counter_ns() - t) / 1e6)
+                cold_timeouts += w.timeouts
+            finally:
+                w.close()
+        out["profiles"][name] = {
+            "classifier_sha256": sha256(path.read_bytes()), "cases": len(inputs),
+            "direct_warm_in_process": stats_ms(warm_direct, None),
+            "direct_cold_process_per_call": stats_ms(cold_direct, None),
+            "worker_warm_round_trip": {**stats_ms(warm_worker, deadlines["REQUEST_DEADLINE"]), "timeouts": warm_timeouts},
+            "worker_cold_start_to_ready": stats_ms(cold_ready, deadlines["START_DEADLINE"]),
+            "worker_cold_first_reply": {**stats_ms(cold_first, deadlines["REQUEST_DEADLINE"]), "timeouts": cold_timeouts},
+        }
+    return out
+
+
+def render_markdown(report: dict, latency: dict | None = None) -> str:
     ids = report["identities"]
     lines = ["# SOU-128 metamorphic gate (development)", "", f"Verdict: **{report['verdict']}**", "",
              report["scope"], "", "## Identities", ""]
@@ -421,8 +596,33 @@ def render_markdown(report: dict) -> str:
         fails = [x for x in m["relations"] if x["verdict"] == "fail"]
         lines += ["", "Failures:" if fails else "Failures: none"] + [f"- `{x['id']}` ({x['kind']}): {x['detail']}" for x in fails]
         lines += [f"- unexpected technical error `{e['id']}`: {e['error']}" for e in m["unexpected_technical_errors"]]
+        acc = m["accounting"]
+        c, rp = acc["cases"], acc["relation_pairs"]
+        lines += ["", f"Cases {c['total']}: certain {c['certain_actions']}, proven no-op {c['proven_noop']}, partial unknown "
+                      f"{c['partial_unknown']}, abstention {c['abstention']}, technical failure {c['technical_failure']} "
+                      f"{c['technical_failure_by_channel']}; protocol errors {acc['protocol_errors']}; timeouts {acc['timeouts']}.",
+                  f"Labels: {acc['labels']['scored']} scored, {acc['labels']['pending']} pending ({acc['labels']['note']}).",
+                  f"Relation pairs {rp['total']} ({rp['both_classified']} both classified): known-action losses "
+                  f"{len(rp['known_action_losses'])}, of which without added uncertainty "
+                  f"{len(rp['known_action_losses_without_uncertainty'])}; risky-action losses {len(rp['risky_action_losses'])}."]
     if "mode_parity" in report:
         lines += ["", f"Mode parity {report['mode_parity']['compared']}: divergent cases {report['mode_parity']['divergent_cases'] or 'none'}"]
+    cand = report.get("candidate", {})
+    lines += ["", "## Candidate", ""]
+    if cand.get("status") == "run":
+        lines += [f"- {k}: `{v['path']}` `{v['sha256']}`" for k, v in cand["classifiers"].items()]
+        for mode, cmp_ in cand["comparison"].items():
+            lines.append(f"- {mode}: {len(cmp_['cases_changed'])}/{cmp_['cases_compared']} cases changed, risky losses "
+                         f"{len(cmp_['risky_losses'])}, relation regressions {len(cmp_['relation_regressions'])}")
+    else:
+        lines.append(f"Not run: {cand.get('blocker')}")
+    if latency:
+        lines += ["", "## Latency (batch 1, this host only)", "", f"Environment: {latency['environment']}", "",
+                  "| profile | measurement | n | p50 ms | p95 ms | max ms | over deadline |", "|---|---|---|---|---|---|---|"]
+        for prof, rows in latency["profiles"].items():
+            for k, v in rows.items():
+                if isinstance(v, dict):
+                    lines.append(f"| {prof} | {k} | {v['n']} | {v['p50_ms']:.3f} | {v['p95_ms']:.3f} | {v['max_ms']:.3f} | {v['over_deadline']} |")
     lines += ["", "## Boundary probes", "", "| probe | expected | verdict |", "|---|---|---|"]
     lines += [f"| {p['id']} | {p.get('expected')} | {p['verdict']} |" for p in report.get("boundary_probes", [])]
     lines += ["", "Not claimed: " + "; ".join(report.get("not_claimed", [])), ""]
@@ -436,21 +636,39 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--modes", default="direct,worker")
     ap.add_argument("--classifier", action="append", default=[], metavar="NAME=PATH",
                     help="override a classifier (generic, git); the default is the accepted baseline")
+    ap.add_argument("--candidate", action="append", default=[], metavar="NAME=PATH",
+                    help="explicitly selected candidate for one classifier (generic, git), compared with the baseline")
+    ap.add_argument("--latency", action="store_true", help="also measure batch-1 latency into latency.json")
+    ap.add_argument("--latency-repeats", type=int, default=5)
+    ap.add_argument("--latency-cold", type=int, default=20)
     ap.add_argument("--out-dir", type=Path, default=Path("target/sou128"))
     a = ap.parse_args(argv)
     modes = [m for m in a.modes.split(",") if m]
-    classifiers = dict(CLASSIFIERS)
-    for item in a.classifier:
-        name, _, path = item.partition("=")
-        if name not in CLASSIFIERS or not Path(path).is_file():
-            ap.error(f"--classifier {item!r}: expected generic=PATH or git=PATH to an existing file")
-        classifiers[name] = Path(path)
+
+    def selection(items, flag):
+        chosen = {}
+        for item in items:
+            name, _, path = item.partition("=")
+            if name not in CLASSIFIERS or not Path(path).is_file():
+                ap.error(f"{flag} {item!r}: expected generic=PATH or git=PATH to an existing file")
+            chosen[name] = Path(path)
+        return chosen
+    classifiers = {**CLASSIFIERS, **selection(a.classifier, "--classifier")}
+    candidate = selection(a.candidate, "--candidate")
     if not modes or set(modes) - {"direct", "worker"}:
         ap.error("--modes must list direct and/or worker")
-    report, status = run(a.corpus, a.relations, modes, classifiers)
+    if a.latency_repeats < 1 or a.latency_cold < 1:
+        ap.error("--latency-repeats and --latency-cold must be at least 1")
+    report, status = run(a.corpus, a.relations, modes, classifiers, candidate)
     a.out_dir.mkdir(parents=True, exist_ok=True)
+    if a.latency and status != 3:
+        latency = measure_latency(json.loads(a.corpus.read_bytes())["cases"], classifiers, a.latency_repeats, a.latency_cold)
+        (a.out_dir / "latency.json").write_bytes((json.dumps(latency, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+        report_latency = latency
+    else:
+        report_latency = None
     (a.out_dir / "report.json").write_bytes((json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
-    (a.out_dir / "summary.md").write_bytes(render_markdown(report).encode("utf-8"))
+    (a.out_dir / "summary.md").write_bytes(render_markdown(report, report_latency).encode("utf-8"))
     for e in report.get("validation_errors", []):
         print("invalid:", e, file=sys.stderr)
     for mode, m in report.get("modes", {}).items():

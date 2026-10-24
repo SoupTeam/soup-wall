@@ -10,11 +10,17 @@ It does **not** observe native policy, authority decisions, production MCP admis
 
 ```sh
 python3 eval/tools/make_sou128_corpus.py --check    # corpus = deterministic build from pinned sources
-python3 eval/metamorphic_runner.py --out-dir target/sou128
+python3 eval/metamorphic_runner.py --out-dir target/sou128             # report.json + summary.md
+python3 eval/metamorphic_runner.py --latency --out-dir target/sou128   # also latency.json (this host only)
+python3 eval/tools/sou128_relation_review.py --out-dir target/sou128-review
 python3 -m unittest discover -s eval -p 'test_sou128_metamorphic.py' -v
 ```
 
-`--classifier generic=PATH` or `--classifier git=PATH` evaluates another classifier file explicitly. The default is the accepted baselines `rule_baseline/rule_baseline.py` and `rule_baseline/git_readonly_v1/rule_baseline.py`. `--modes direct` skips the worker.
+Options:
+- `--classifier generic=PATH` or `--classifier git=PATH` replaces a classifier for the whole run. The default is the accepted baselines `rule_baseline/rule_baseline.py` and `rule_baseline/git_readonly_v1/rule_baseline.py`.
+- `--candidate NAME=PATH` keeps the baselines and also runs an explicitly selected candidate. The report then includes per-case and per-relation comparisons. No candidate is selected by default; the SOU-97 candidate is blocked on unmerged #213.
+- `--modes direct` skips the worker.
+- `--latency` (with `--latency-repeats N`, `--latency-cold N`) measures batch-1 latency. `report.json` stays byte-identical between runs; timings go to `latency.json` only.
 
 Exit codes:
 
@@ -33,8 +39,11 @@ Exit codes:
 | `eval/fixtures/sou128_metamorphic_dev_v0.3.json` | 79 cases in the accepted `eval_runner` fixture format |
 | `eval/fixtures/sou128_relations_v0.3.json` | 52 relations, 8 raw-byte boundary probes, 2 worker frame probes |
 | `eval/metamorphic_runner.py` | The gate. Each case is scored by `eval_runner.evaluate_case`; this module adds relations, worker mode, probes and provenance |
-| `eval/test_sou128_metamorphic.py` | Positive control, broken-classifier negative controls, input-integrity checks |
+| `eval/sou128_controls.py` | Negative controls: the unchanged generic or Git baseline plus one defect each (test input only) |
+| `eval/tools/sou128_relation_review.py` | Runs every control and reports which asserted relations each breaks, vacuous passes and coverage gaps |
+| `eval/test_sou128_metamorphic.py` | Positive control, negative controls, relation sensitivity, accounting, candidate path, reproducibility, input integrity |
 | `eval/sou128/SOU128_CORPUS_AUDIT.md` | The independent audit of the v0.2 preparation that v0.3 corrects |
+| `eval/sou128/PHASE3_REVIEW.md` | Relation review, accounting, latency, candidate blocker, blocked boundary cases |
 
 ## Assertions
 
