@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mcp-real-git-${{ github.event.pull_request.number || github.ref }}
+  group: mcp-real-git-${{ github.event.pull_request.number || github.ref }}${{ inputs.local_refs_only && '-local-refs' || '' }}
   cancel-in-progress: true
 
 jobs:

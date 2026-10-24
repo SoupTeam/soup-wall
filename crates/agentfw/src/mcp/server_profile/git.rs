@@ -549,3 +549,33 @@ mod tests {
         );
     }
 }
+#[test]
+fn local_reference_contract_matches_the_reviewed_classifier_fixture() {
+    let contract: Value = serde_json::from_str(include_str!(
+        "../../../../../profiles/mcp/git-readonly-local-refs-v1/contract.json"
+    ))
+    .unwrap();
+    for reference in contract["accepted"].as_array().unwrap() {
+        let reference = reference.as_str().unwrap();
+        assert!(is_local_reference(reference), "{reference}");
+        for (tool, key) in [("git_show", "revision"), ("git_diff", "target")] {
+            let args = serde_json::json!({"repo_path": "/workspace", key: reference});
+            assert!(validate_arguments_with_local_refs(tool, &args, true).is_ok());
+            assert!(validate_arguments(tool, &args).is_err());
+        }
+    }
+    for reference in contract["rejected"].as_array().unwrap() {
+        assert!(
+            !is_local_reference(reference.as_str().unwrap()),
+            "{reference}"
+        );
+    }
+    assert!(!is_local_reference(&format!(
+        "refs/heads/{}",
+        "é".repeat(123)
+    )));
+    assert!(!is_local_reference(&format!(
+        "refs/heads/{}",
+        ["a"; 9].join("/")
+    )));
+}

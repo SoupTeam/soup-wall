@@ -933,7 +933,9 @@ mod tests {
         let profile_path = std::env::var("SOU68_SANDBOX_TEST_PROFILE")
             .expect("explicit Git sandbox profile required");
         let profile = ProfileConfig::read(&std::fs::read(profile_path).unwrap()).unwrap();
-        assert_eq!(profile.format, super::super::server_profile::git::FORMAT);
+        assert!(super::super::server_profile::git::is_profile(
+            &profile.format
+        ));
         let owned = tempfile::tempdir().unwrap();
         let outside = owned.path().join("outside-secret");
         std::fs::write(&outside, b"outside unchanged").unwrap();
