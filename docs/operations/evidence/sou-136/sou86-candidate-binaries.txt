@@ -1,0 +1,3 @@
+ff9b885bd3eb231806225e638060bb5ec26d99a786a467eb6a195484367f879e  target/debug/agentfw
+f1cab944e0ce7540d4f68106bf2185a0936e4ef52e226817e38bd349c3129ea7  target/debug/agentfw-git-sandbox
+f432ce3d85063309a87b04fbd90ce062f49b113958dd03de78c0ca1bdb487939  /home/runner/work/_temp/sou86-git-source/git
