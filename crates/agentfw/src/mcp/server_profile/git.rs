@@ -9,7 +9,17 @@ use serde_json::Value;
 
 use super::ToolProfile;
 
+pub(crate) mod revision_view;
+
 pub const FORMAT: &str = "sw-mcp/git-readonly/1";
+/// Explicitly selected file-revision contract; the original v1 stays narrow.
+pub const FILE_READS_FORMAT: &str = "sw-mcp/git-readonly-file-revisions/1";
+pub const MAX_LOCAL_REF_BYTES: usize = 255;
+
+pub fn is_profile(format: &str) -> bool {
+    matches!(format, FORMAT | FILE_READS_FORMAT)
+}
+
 pub const PYTHON: &str = "/mcp-server/python/bin/python3.11";
 const MANIFEST: &str =
     include_str!("../../../../../profiles/mcp/git-readonly-v1/upstream-tools-list.json");
@@ -30,6 +40,13 @@ pub fn validate_initialization(value: &Value) -> anyhow::Result<()> {
 }
 
 pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
+    classify_manifest_with_file_revisions(value, false)
+}
+
+pub fn classify_manifest_with_file_revisions(
+    value: &Value,
+    file_revisions: bool,
+) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     ensure!(
         value == &original_manifest(),
         "Git discovery differs from pin"
@@ -53,6 +70,7 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
                 output: None,
                 unsupported_reason: (!supported).then_some("selected_git_operation_unsupported"),
                 git_tool: Some(name.to_owned()),
+                git_file_revisions: file_revisions,
             },
         );
     }
@@ -60,6 +78,14 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
 }
 
 pub fn validate_arguments(name: &str, value: &Value) -> anyhow::Result<()> {
+    validate_arguments_with_file_revisions(name, value, false)
+}
+
+pub fn validate_arguments_with_file_revisions(
+    name: &str,
+    value: &Value,
+    file_revisions: bool,
+) -> anyhow::Result<()> {
     let allowed: &[&str] = match name {
         "git_status" => &["repo_path"],
         "git_log" => &["repo_path", "max_count"],
@@ -90,8 +116,52 @@ pub fn validate_arguments(name: &str, value: &Value) -> anyhow::Result<()> {
         let reference = reference.as_str().context("Git revision required")?;
         ensure!(
             reference == "HEAD"
-                || (reference.len() == 40 && reference.bytes().all(|c| c.is_ascii_hexdigit())),
-            "only HEAD or a full SHA-1 revision is supported"
+                || (reference.len() == 40 && reference.bytes().all(|c| c.is_ascii_hexdigit()))
+                || (file_revisions
+                    && name == "git_show"
+                    && revision_view::file_revision(reference).is_some()),
+            "{}",
+            if file_revisions {
+                "Git revision violates the selected per-file revision contract"
+            } else {
+                "only HEAD or a full SHA-1 revision is supported"
+            }
+        );
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(super) fn validate_configuration(config: &[u8]) -> anyhow::Result<()> {
+    ensure!(config.len() <= 8192, "Git config exceeds limit");
+    let config = std::str::from_utf8(config)?;
+    let mut core = false;
+    for raw in config.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if line.starts_with('[') {
+            ensure!(
+                line.eq_ignore_ascii_case("[core]"),
+                "only the bounded core Git config is supported"
+            );
+            core = true;
+            continue;
+        }
+        ensure!(core, "Git config section required");
+        let (key, value) = line.split_once('=').context("invalid Git config")?;
+        let key = key.trim().to_ascii_lowercase();
+        let value = value.trim().to_ascii_lowercase();
+        ensure!(
+            match key.as_str() {
+                "repositoryformatversion" => value == "0",
+                "bare" => value == "false",
+                "filemode" | "logallrefupdates" | "ignorecase" | "precomposeunicode" =>
+                    matches!(value.as_str(), "true" | "false"),
+                _ => false,
+            },
+            "unsupported Git configuration"
         );
     }
     Ok(())
@@ -144,36 +214,7 @@ pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
     );
     file.take(8193).read_to_end(&mut config)?;
     ensure!(config.len() <= 8192, "Git config exceeds limit");
-    let config = std::str::from_utf8(&config)?;
-    let mut core = false;
-    for raw in config.lines() {
-        let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
-            continue;
-        }
-        if line.starts_with('[') {
-            ensure!(
-                line.eq_ignore_ascii_case("[core]"),
-                "only the bounded core Git config is supported"
-            );
-            core = true;
-            continue;
-        }
-        ensure!(core, "Git config section required");
-        let (key, value) = line.split_once('=').context("invalid Git config")?;
-        let key = key.trim().to_ascii_lowercase();
-        let value = value.trim().to_ascii_lowercase();
-        ensure!(
-            match key.as_str() {
-                "repositoryformatversion" => value == "0",
-                "bare" => value == "false",
-                "filemode" | "logallrefupdates" | "ignorecase" | "precomposeunicode" =>
-                    matches!(value.as_str(), "true" | "false"),
-                _ => false,
-            },
-            "unsupported Git configuration"
-        );
-    }
+    validate_configuration(&config)?;
     fn walk(path: &Path, depth: usize, count: &mut usize) -> anyhow::Result<()> {
         ensure!(depth <= 32, "Git repository depth limit");
         for entry in fs::read_dir(path)? {

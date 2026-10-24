@@ -2,12 +2,17 @@ name: Real Git MCP profile
 
 on:
   workflow_dispatch:
+    inputs:
+      file_revisions_only:
+        description: Run only opt-in SOU-146 per-file revision acceptance
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: mcp-real-git-${{ github.event.pull_request.number || github.ref }}
+  group: mcp-real-git-${{ github.event.pull_request.number || github.ref }}${{ inputs.file_revisions_only && '-file-revisions' || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -66,11 +71,13 @@ jobs:
               stream.write('SOU68_TEST_BINARY=' + binaries[0] + '\n')
           PY
       - name: Pilot selection and policy controls
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.file_revisions_only) }}
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_policy.py -v
           cargo test --locked -p soup-wall-agent --test pilot_policy
           python3 -B scripts/pilot_decision_matrix.py --output "$RUNNER_TEMP/sou98-development.json"
       - name: Git and existing filesystem regressions
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.file_revisions_only) }}
         run: |
           cargo test --locked -p agentfw server_profile --lib
           cargo test --locked -p agentfw real_server --lib
@@ -82,6 +89,7 @@ jobs:
           python3 eval/eval_runner.py eval/fixtures/soup_task1_mixed_actions_urtisto_v0.1.json eval/fixtures/soup_task1_benign_comparison_urtisto_v0.1.json --classifier-path rule_baseline/git_readonly_v1 --out-dir target/sou68-mixed-evaluation
           cargo run --locked --release -p soup-wall-bench -- --agent crates/bench/corpora/agent_sessions.jsonl --policy profiles/mcp/git-readonly-v1/policy.yaml
       - name: Actual Git server and independent OS isolation
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.file_revisions_only) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -92,6 +100,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou68-acceptance" \
             2>&1 | tee "$RUNNER_TEMP/sou68-acceptance.log"
       - name: SOU-98 same-preset original-server acceptance
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.file_revisions_only) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -102,6 +111,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou98-git" \
             2>&1 | tee "$RUNNER_TEMP/sou98-git.log"
       - name: Required persistent onboarding of the installed Git profile
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.file_revisions_only) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -111,12 +121,27 @@ jobs:
             --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --out "$RUNNER_TEMP/profile-onboarding-git" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou68-profile-onboarding.log"
+      - name: Opt-in per-file Git revision acceptance
+        if: github.event_name == 'workflow_dispatch' && inputs.file_revisions_only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p agentfw server_profile::git --lib
+          python3 -B -m unittest discover -s scripts/tests -p test_sou146_git_file_revisions.py -v
+          python3 -B scripts/verify-sou146-git-file-revisions.py --run --agentfw "$PWD/target/debug/agentfw" \
+            --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
+            --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --sandbox-test-binary "$SOU68_TEST_BINARY" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou146-acceptance" \
+            2>&1 | tee "$RUNNER_TEMP/sou146-acceptance.log"
       - name: Retain exact-source synthetic evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: sou68-real-git-mcp-evidence
           path: |
+            ${{ runner.temp }}/sou146-acceptance/**
+            ${{ runner.temp }}/sou146-acceptance.log
             ${{ runner.temp }}/sou98-git/**
             ${{ runner.temp }}/sou98-git.log
             ${{ runner.temp }}/sou98-development.json
