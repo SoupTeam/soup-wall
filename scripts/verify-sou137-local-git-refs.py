@@ -439,6 +439,45 @@ def inflight_substitution(stack, second, report):
     require(client.process.returncode == 0 and client.process_witness.final["all_stopped"], "inflight cleanup unverified")
 
 
+def packed_reads(stack, config, first, second, report):
+    BASE.DEMO.stop(stack.daemon)
+    subprocess.run([str(stack.git), "pack-refs", "--all"], cwd=stack.workspace, env=stack.env,
+        capture_output=True, check=True, timeout=20)
+    original_root = stack.root
+    stack.root = original_root / "packed"
+    stack.root.mkdir(mode=0o700)
+    record = report["packed"] = {}
+    packed = stack.workspace / ".git/packed-refs"
+    old = packed.read_bytes()
+    try:
+        require(b"^" + first.encode() in old, "packed annotated-tag peel did not calibrate")
+        start_daemon(stack, config, "packed")
+        exact_reads(stack, first, record)
+        # A forged peeled optimization cannot become a second named target.
+        packed.write_bytes(old.replace(b"^" + first.encode(), b"^" + second.encode(), 1))
+        profile = json.loads(stack.profile.read_text())
+        result = subprocess.run([str(stack.binary), "mcp", "--native-admission", "--id", "sou137-packed", "--",
+            profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"],
+            env=dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.profile)), cwd=stack.workspace,
+            input=b"", capture_output=True, timeout=20)
+        (stack.root / "forged-peel.log").write_bytes(result.stderr)
+        require(result.returncode != 0 and b'"event":"mcp_real_server_start"' not in result.stderr,
+                "forged packed peel reached the original server")
+        record["forged_peel_refused_before_start"] = True
+        packed.write_bytes(old)
+        with (stack.root / "restored.log").open("wb") as log:
+            client = collector(stack, log)
+            try:
+                client.initialize()
+                GIT.text(client.exchange(GIT.call(10, "git_show", {"revision": REFS[4]}))[0])
+            finally:
+                client.close()
+        require(client.process.returncode == 0 and client.process_witness.final["all_stopped"], "packed continuation cleanup unverified")
+    finally:
+        packed.write_bytes(old)
+        stack.root = original_root
+
+
 def run(args):
     require(platform.system() == "Linux" and platform.machine() == "x86_64", "Linux x86-64 enforcing isolation required")
     before = BASE.source()
@@ -496,6 +535,7 @@ def run(args):
             source_mutations(stack, first, second, report)
             inflight_substitution(stack, second, report)
             policy_controls(stack, config, second, report)
+            packed_reads(stack, config, first, second, report)
             require(INSTALL.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"],
                     "original package bytes changed")
             BASE.DEMO.stop(stack.daemon)
@@ -523,6 +563,8 @@ def run(args):
         "legacy_refusals": len(report.get("legacy_refusals", [])), "helper_control": report.get("helper_control"),
         "approval_controls": report.get("approval_controls", []),
         "inflight_substitution": report.get("inflight_substitution"),
+        "packed_reads": len(report.get("packed", {}).get("reads", [])),
+        "forged_packed_peel_refused": report.get("packed", {}).get("forged_peel_refused_before_start"),
         "source_mutations": report.get("source_mutations", []), "protected_diagnostics": report["protected_diagnostics"]}))
     return 0 if report["status"] == "pass" else 1
 
