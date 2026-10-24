@@ -32,6 +32,22 @@ measured Ask harness changed; current full CI separately qualifies the workflow
 and demo correction. A passing comparison is not a claim that the failed whole
 workflow passed. Source identities and all report/log digests remain attributable.
 
+The first full CI on `37143e3` passed the first-use demo, but its separate
+Ask lifecycle witness stopped at the first Git expiry case with
+`useful_followup_pending_missing`. It had started the follow-up's 20-second poll
+before the deliberately 20-second primary expiry; the primary refusal and next
+proposal were observed only at the end of that wait. The correction first
+observes the original pending expiry, then starts the separate useful request's
+existing poll. Host/call/broker/poll values remain 90/25/20-or-30/20 seconds.
+Original-expiry attribution, effect/cleanup assertions and the approve/measurement
+branch are unchanged. Regression controls reproduce the former overlapping-clock
+failure without real sleeps and reject unbounded, invalid or unobserved expiry.
+All 36 focused Ask controls and the full local Python suite (1229 run, 1150
+passed, 79 existing platform/optional skips) pass. The failed native row, finite
+diagnostics and raw-report digest remain in
+`expiry-followup-scheduling-correction.json`; current full CI still determines
+readiness.
+
 ## Historical passing comparison on 1137780
 
 `native-linux-1137780.json` records passing run `40038036266` on exact clean

@@ -87,6 +87,17 @@ def until(check, label, seconds=20):
     raise ValueError(label)
 
 
+def await_original_expiry(expires_at_ms):
+    # Expiry is deliberately induced before a separate useful request can be
+    # offered. Do not spend that follow-up's existing wait on the primary TTL.
+    require(type(expires_at_ms) is int and expires_at_ms >= 0, "original_expiry_invalid")
+    remaining = (expires_at_ms - time.time_ns() // 1_000_000) / 1000
+    require(remaining <= 20, "original_expiry_outside_case")
+    if remaining > 0:
+        time.sleep(remaining)
+    require(time.time_ns() // 1_000_000 >= expires_at_ms, "original_expiry_not_reached")
+
+
 def stop(process):
     if process and process.poll() is None:
         process.terminate()
@@ -518,6 +529,10 @@ def qualify(args, private, report):
                 # Git's deliberately broad synthetic Ask policy also asks about
                 # the useful follow-up. That separate request needs its own decision.
                 if kind == "git":
+                    if case == "expire":
+                        row["stage"] = "observe_original_expiry"
+                        await_original_expiry(waiting["expires_at_ms"])
+                        row["stage"] = "wait_useful_followup_after_original_expiry"
                     def followup_ready():
                         if "primary" not in pilot.model.results:
                             return None

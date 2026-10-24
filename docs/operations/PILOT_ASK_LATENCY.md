@@ -43,7 +43,11 @@ profile. It does not resubmit any call. The existing no-dispatch-before-approval
 exact-once redemption, useful original result, independent kernel/wire effects,
 peer progress and unrelated-run controls still run for every sample. The default
 invocation still selects the original fourteen lifecycle cases. Performance
-samples supplement those cases; they do not replace adversarial qualification.
+samples supplement those cases; they do not replace adversarial qualification. The lifecycle
+expiry case deliberately observes the original primary expiry before beginning
+the separate Git follow-up's existing 20-second poll. The host/call/broker
+budgets and the original-expiry refusal/effect assertions remain unchanged;
+the expired primary cannot consume the next request's observation window.
 
 The report retains each case and its original failure. If a run stops early,
 `latency` records the missing planned cases as incomplete. A failure or incomplete

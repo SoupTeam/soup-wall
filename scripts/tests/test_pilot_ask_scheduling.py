@@ -59,6 +59,39 @@ class ProposalScheduling(unittest.TestCase):
                 ASK.release_ready_pilots(pilots, seconds=.1)
             self.assertFalse(any(p.proposals.released.is_set() for p in pilots))
 
+    def test_expiry_does_not_consume_the_separate_followup_wait(self):
+        clock = SimpleNamespace(now=0.0)
+        def sleep(seconds):
+            self.assertGreaterEqual(seconds, 0)
+            clock.now += seconds
+        def followup():
+            return {"pending_id": "separate-useful-call"} if clock.now >= 21 else None
+        with patch.object(ASK.time, "monotonic", side_effect=lambda: clock.now), \
+             patch.object(ASK.time, "time_ns", side_effect=lambda: int((1000 + clock.now) * 1_000_000_000)), \
+             patch.object(ASK.time, "sleep", side_effect=sleep):
+            # The old combined wait ends before the follow-up can be offered.
+            with self.assertRaisesRegex(ValueError, "followup_missing"):
+                ASK.until(followup, "followup_missing")
+            clock.now = 0
+            ASK.await_original_expiry(1_020_000)
+            self.assertEqual(clock.now, 20)
+            result = ASK.until(followup, "followup_missing")
+            self.assertEqual(result["pending_id"], "separate-useful-call")
+            self.assertLess(clock.now, 22)
+
+    def test_expiry_phase_rejects_unknown_or_unbounded_deadlines(self):
+        with patch.object(ASK.time, "time_ns", return_value=1_000_000_000_000), \
+             patch.object(ASK.time, "sleep") as sleep:
+            for value in (True, "1020000", -1, 1_020_001):
+                with self.subTest(expiry=value), self.assertRaises(ValueError):
+                    ASK.await_original_expiry(value)
+            sleep.assert_not_called()
+            ASK.await_original_expiry(999_000)
+            sleep.assert_not_called()
+            with self.assertRaisesRegex(ValueError, "original_expiry_not_reached"):
+                ASK.await_original_expiry(1_020_000)
+            sleep.assert_called_once_with(20)
+
     def test_diagnostic_thread_birth_precedes_parent_clone_return(self):
         event = '{"event":"mcp_verified_inputs_resume","immutable_files":0,"leased_files":1,"rehashed_files":2}\n'
         for result in ('8', '-1 EAGAIN (Resource unavailable)'):
