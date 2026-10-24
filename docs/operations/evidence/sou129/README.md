@@ -1,7 +1,21 @@
-# SOU-129 current evidence reconciliation
+# SOU-129 evidence reconciliation history
+
+## Current-main refresh (2026-10-24)
+
+Selected main: `c1a6918a05ae22cd89be6d98bfb13bbf9456a781`.
+The corrected 15 Ask / 11 prepared inventory is ready for tooling review.
+PR readiness is separate from product readiness: the new record is **NOT_READY**.
+
+- [Current selection and reproduction](main-c1a6918/README.md)
+- [Current scorecard](main-c1a6918/dossier/scorecard.md)
+- [Current machine-readable blockers](main-c1a6918/dossier/dossier.json)
+
+The original record below is retained unchanged and is not evidence for current main.
+
+## Original reconciliation
 
 Selected accepted main: `adefce2a658272e5f23c9c72ef791befe0285648`.
-Final accepted reporter SHA: **not available; Draft review required**.
+Final accepted reporter SHA: **not available; final review/admission pending**.
 
 - [Exact selected inputs](selection.json)
 - [Machine-readable dossier and blocker ledger](current-dossier/dossier.json)
