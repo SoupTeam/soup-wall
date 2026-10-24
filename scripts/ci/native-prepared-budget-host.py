@@ -179,6 +179,10 @@ def main():
             finally:
                 if log.exists():
                     step['log_sha256'] = sha(log)
+                    if step.get('exit_code', 0):
+                        tail = log.read_text(errors='replace')[-16384:]
+                        print('=== ' + label + ' FAILED (' + str(step['exit_code']) + ') ===\n' + tail, file=sys.stderr)
+                        step['failure_tail'] = tail[-2000:]
                 save()
             require(step.get('exit_code') == 0, label.replace('-', '_') + '_failed')
             return log
