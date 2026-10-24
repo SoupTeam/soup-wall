@@ -1,0 +1,25 @@
+{
+  "accepted_main": "adefce2a658272e5f23c9c72ef791befe0285648",
+  "checks": {
+    "generated_workflow_check": "passed",
+    "python": {
+      "failed": 0,
+      "log_sha256": "14d8ee58f78c1148fddda2b2962afe83af5a84c270498aae830df10b6b560376",
+      "passed": 1129,
+      "run": 1208,
+      "skipped": 79
+    }
+  },
+  "files_sha256": {
+    ".github/workflows/ci-components.yml": "13f7d0a123dcbdde2f3bcb9665ff3ddcc6550d9c74f4b4c04b98d4b17bf95038",
+    ".github/workflows/mcp-real-filesystem.yml": "2ca8de3e659be4253a78eb2e79a5fe9a72d09381b871cc4af221fccaf1b6c146",
+    "scripts/build-native-pilot-inputs.py": "7c8db30636192ee126dfde73a3231ebc8b07ea3fd3fc879f3d1ba089b746cb95",
+    "scripts/ci_components.py": "6adadca96ced5f1796792a966dc3d61b2ad27608535542e841ed482ae63e546d",
+    "scripts/prepared_stop_witness.py": "2c1433140419ba1c873b99e831bd86db497e568cce79ac1bdd8e8101310479eb"
+  },
+  "format": "sw-sou125-final-main-integration/1",
+  "main_changes": "Accepted long-session harness, workflow modes, source-build diagnostics and stricter live quota inventory. Adopt the accepted builder implementation.",
+  "native_implementation_source": "07972b44585ad17c42f1d9e4436de65907708ff8",
+  "native_run": 39996709348,
+  "rust_and_stop_witness_diff_since_native": "none"
+}
