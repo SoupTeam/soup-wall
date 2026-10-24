@@ -325,11 +325,12 @@ def qualify(args, private, report):
                     process.wait(timeout=220 if case == "audit-rotation" else 100)
                 rows = (root / "stdout.private").read_text().splitlines()
                 outcome = json.loads(rows[-1])
-                success = case in ("useful-refusal", "ask", "default", "audit-rotation", "audit-unavailable")
+                success = case in ("useful-refusal", "ask", "default", "audit-rotation")
                 require((process.returncode == 0) == success, "prepared_run_outcome_mismatch")
                 if not success:
                     expected = {"cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
                                 "host-crash": {"restricted_launcher_failed"},
+                                "audit-unavailable": {"restricted_launcher_failed"},
                                 "timeout": {"restricted_launcher_failed", "pilot_timeout"}}
                     require(outcome.get("reason") in expected[case], "prepared_wrong_failure_reason")
                     require(outcome["status"] == "failed", "prepared_false_terminal_success")
@@ -371,7 +372,7 @@ def qualify(args, private, report):
                     result["audit_rotation"] = audit_observed
                 elif case == "audit-unavailable":
                     result["audit_failure"] = audit_observed
-                if success:
+                if success or case == "audit-unavailable":
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
                     useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
                     if case == "ask":
