@@ -101,7 +101,9 @@ def provider(value, rejected=False):
     need(all(counts[role] > 0 for role in required), 'provider_required_role_unobserved')
     need(routing.get('observation_stage') == ('first-request-authentication-refusal' if rejected
          else 'original-server-runtime'), 'provider_observation_stage_unproven')
-    need(routing.get('all_seven_inputs_in_intended_host') is True
+    need(routing.get('authenticated_host_ipc_observed') is True
+         and count(routing.get('host_initial_exec_provider_values')) == 0
+         and routing.get('all_seven_inputs_in_intended_host') is True
          and count(routing.get('unrelated_provider_values')) == 0
          and count(routing.get('provider_values_in_argv')) == 0
          and routing.get('raw_environment_exported') is False, 'provider_isolation_unproven')
@@ -119,7 +121,8 @@ def provider(value, rejected=False):
          and retained.get('all_selected_values_and_json_forms_absent') is True
          and retained.get('artifact_contents_exported') is False, 'provider_retained_artifact_check_unproven')
     return {'successful_exec_counts': counts, 'observation_stage': routing['observation_stage'],
-            'all_seven_inputs_in_intended_host': True,
+            'all_seven_inputs_in_intended_host': True, 'authenticated_host_ipc_observed': True,
+            'host_initial_exec_provider_values': 0,
             'unrelated_provider_values': 0, 'provider_values_in_argv': 0,
             'owned_loopback_requests': requests, 'authenticated_owned_request_observed': True,
             'successful_private_log_writes': writes, 'private_log_bytes_checked': logbytes,

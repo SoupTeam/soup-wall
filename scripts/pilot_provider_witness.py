@@ -185,7 +185,7 @@ def failure_stage(text, paths, normalize):
         counts[key] = counts.get(key, 0) + 1
     known = ('mcp_owner_startup_failed', 'mcp_owner_spawn_failed', 'mcp_owner_image_unavailable',
              'mcp_budget_membership_unverified', 'classifier_execution_failed', 'classifier_unavailable',
-             'provider_host_exec_boundary_unavailable', 'Permission denied', 'Operation not permitted')
+             'provider_host_exec_boundary_unavailable', 'provider_bootstrap_unavailable', 'Permission denied', 'Operation not permitted')
     return {'denied_exec_counts': counts, 'known_refusals': [value for value in known if value in text]}
 
 
@@ -197,12 +197,13 @@ def observe(text, paths, values, normalize, rejected=False):
             'provider_incomplete_exec_observation')
     counts = {role: 0 for role in ('entry', 'host', 'daemon', 'launcher', 'collector',
                                   'diagnostic', 'original', 'classifier', 'other')}
+    hosts = {}
     for row in rows:
-        match = re.match(r'^\d+\s+execve\((.*)\)\s+=\s+0\s*$', row)
+        match = re.match(r'^(\d+)\s+execve\((.*)\)\s+=\s+0\s*$', row)
         if not match:
             continue
         try:
-            executable, arguments, environment = ast.literal_eval('(' + match[1] + ')')
+            executable, arguments, environment = ast.literal_eval('(' + match[2] + ')')
         except (ValueError, SyntaxError):
             raise ValueError('provider_exec_environment_unproven') from None
         require(isinstance(executable, str) and isinstance(arguments, list)
@@ -225,10 +226,18 @@ def observe(text, paths, values, normalize, rejected=False):
         # Command lines never need a provider credential, even for the host.
         require(not any(value in word for value in values.values() for word in arguments),
                 'provider_value_in_argv')
-        if role in ('entry', 'host'):
+        if role == 'entry':
             require(all(env.get(key) == value for key, value in values.items()),
                     'provider_intended_host_input_missing')
         else:
+            if role == 'host':
+                channel = env.get('AGENTFW_PROVIDER_CHANNEL', '')
+                code = env.get('AGENTFW_PROVIDER_CODE', '')
+                require(channel.isdecimal() and code.isdecimal() and int(channel) >= 3
+                        and int(code) >= 3 and channel != code
+                        and '--preload=/proc/self/fd/' + code in env.get('BUN_OPTIONS', '')
+                        and int(match[1]) not in hosts, 'provider_host_channel_unproven')
+                hosts[int(match[1])] = int(channel)
             leaked = {word.split('=', 1)[0] for word in environment
                       if any(value in word for value in values.values())}
             if leaked:
@@ -237,6 +246,25 @@ def observe(text, paths, values, normalize, rejected=False):
                     'other_key_count': len(leaked.difference(KEYS))}), file=sys.stderr, flush=True)
             require(not any(value in word for value in values.values() for word in environment),
                     'provider_value_in_unrelated_process')
+    delivered = set()
+    closed = set()
+    for row in rows:
+        receiving = re.match(r'^(\d+)\s+recvfrom\((\d+),\s*("(?:[^"\\]|\\.)*"),\s*\d+,\s*0,\s*NULL,\s*NULL\)\s*=\s*(\d+)\s*$', row)
+        if receiving and hosts.get(int(receiving[1])) == int(receiving[2]):
+            pid = int(receiving[1])
+            require(pid not in delivered, 'provider_duplicate_host_delivery')
+            try:
+                raw = ast.literal_eval('b' + receiving[3])
+                payload = json.loads(raw)
+            except (ValueError, SyntaxError, UnicodeError):
+                raise ValueError('provider_host_delivery_unproven') from None
+            require(len(raw) == int(receiving[4]) and payload == values,
+                    'provider_host_delivery_unproven')
+            delivered.add(pid)
+        closing = re.match(r'^(\d+)\s+close\((\d+)\)\s*=\s*0\s*$', row)
+        if closing and hosts.get(int(closing[1])) == int(closing[2]) and int(closing[1]) in delivered:
+            closed.add(int(closing[1]))
+    require(hosts and set(hosts) == delivered == closed, 'provider_host_delivery_unproven')
     # A first-request 401 can terminate Claude before it starts MCP discovery.
     # Still check every actual unrelated exec, and require the complete original
     # graph in every non-rejection run. No missing role is fabricated as seen.
@@ -245,7 +273,8 @@ def observe(text, paths, values, normalize, rejected=False):
     require(all(counts[role] > 0 for role in required),
             'provider_required_role_not_observed')
     return {'format': 'sw-provider-routing-witness/1', 'successful_exec_counts': counts,
-            'all_seven_inputs_in_intended_host': True, 'unrelated_provider_values': 0,
+            'all_seven_inputs_in_intended_host': True, 'authenticated_host_ipc_observed': True,
+            'host_initial_exec_provider_values': 0, 'unrelated_provider_values': 0,
             'provider_values_in_argv': 0, 'raw_environment_exported': False,
             'observation_stage': 'first-request-authentication-refusal' if rejected else 'original-server-runtime'}
 

@@ -194,7 +194,8 @@ class IndependentExecEvidence(unittest.TestCase):
         values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
         rows = []
         roles = [('/usr/bin/python3', ['python3', '/owned/scripts/pilot-run.py'], values),
-                 ('/owned/claude', ['claude', '--restricted'], values)]
+                 ('/owned/claude', ['claude', '--restricted'], {'AGENTFW_PROVIDER_CHANNEL':'23',
+                     'AGENTFW_PROVIDER_CODE':'24', 'BUN_OPTIONS':'--preload=/proc/self/fd/24'})]
         roles += [('/owned/agentfw', ['agentfw', role], {})
                   for role in ('serve', 'pilot-launch', 'mcp', 'protection-status')]
         roles += [('/mcp-runtime/node', ['node', 'server.js'], {}),
@@ -202,24 +203,30 @@ class IndependentExecEvidence(unittest.TestCase):
         for index, (path, args, env) in enumerate(roles):
             rows.append(f'{index+10} execve({json.dumps(path)}, {json.dumps(args)}, '
                         + json.dumps([key+'='+value for key,value in env.items()]) + ') = 0')
+        delivery = f'11 recvfrom(23, {json.dumps(json.dumps(values))}, 16385, 0, NULL, NULL) = {len(json.dumps(values))}'
+        rows += [delivery, '11 close(23) = 0']
         normalize = lambda text: (text.splitlines(), {})
         result = witness.observe('\n'.join(rows), paths, values, normalize)
         self.assertEqual(result['unrelated_provider_values'], 0)
         self.assertEqual(result['successful_exec_counts']['classifier'], 1)
         self.assertFalse(any(value in json.dumps(result) for value in values.values()))
+        for missing in [rows[:-2], rows[:-2] + [delivery.replace('11 recvfrom', '99 recvfrom'), rows[-1]],
+                        rows[:-2] + [delivery]]:
+            with self.assertRaisesRegex(ValueError, 'provider_host_delivery_unproven'):
+                witness.observe('\n'.join(missing), paths, values, normalize)
         leaked = rows[:]
         leaked[2] = leaked[2].replace('[]) = 0', json.dumps(['ANTHROPIC_API_KEY='+values['ANTHROPIC_API_KEY']])+') = 0')
         with self.assertRaisesRegex(ValueError, 'provider_value_in_unrelated_process'):
             witness.observe('\n'.join(leaked), paths, values, normalize)
-        with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
+        with self.assertRaisesRegex(ValueError, 'provider_host_delivery_unproven'):
             witness.observe('\n'.join(rows[:2]), paths, values, normalize)
-        early = rows[:4] + rows[5:6]
+        early = rows[:4] + rows[5:6] + rows[-2:]
         refusal = witness.observe('\n'.join(early), paths, values, normalize, rejected=True)
         self.assertEqual(refusal['successful_exec_counts']['original'], 0)
         self.assertEqual(refusal['observation_stage'], 'first-request-authentication-refusal')
         with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
             witness.observe('\n'.join(early), paths, values, normalize)
-        with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
+        with self.assertRaisesRegex(ValueError, 'provider_host_delivery_unproven'):
             witness.observe('\n'.join(rows[:2]), paths, values, normalize, rejected=True)
         with self.assertRaisesRegex(ValueError, 'provider_incomplete_exec_observation'):
             witness.observe('', paths, values, lambda text: ([], {'12': 'execve(unfinished'}))

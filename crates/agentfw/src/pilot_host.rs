@@ -9,7 +9,9 @@ use anyhow::{ensure, Context, Result};
 use sha2::{Digest, Sha256};
 
 #[cfg(target_os = "linux")]
-mod exec_boundary;
+mod provider_channel;
+#[cfg(target_os = "linux")]
+pub(crate) use provider_channel::Bootstrap;
 
 pub(crate) const CLAUDE_SHA256: &str =
     "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7";
@@ -131,61 +133,6 @@ pub(crate) fn isolate(
     configure(command, private, provider)
 }
 
-/// Restrict successful host/descendant execs to the already selected runtime
-/// assets. In particular the host's internal PATH Git probes must not exec a
-/// diagnostic process carrying the host's provider environment.
-pub(crate) fn restrict_exec(
-    command: &mut Command,
-    claude: &Path,
-    agent: &Path,
-    profiles: [&Path; 2],
-) -> Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-        let mut allowed = vec![
-            claude.to_path_buf(),
-            agent.to_path_buf(),
-            "/usr/bin/env".into(),
-        ];
-        for path in profiles {
-            let profile = crate::mcp::server_profile::ProfileConfig::read(&fs::read(path)?)?;
-            allowed.extend([profile.runtime_path, profile.bwrap_path]);
-            allowed.extend(profile.libraries.into_iter().map(|library| library.path));
-            allowed.extend(profile.git.into_iter().map(|library| library.path));
-            allowed.extend(profile.git_launcher.into_iter().map(|library| library.path));
-        }
-        // This is the explicit operator/selected classifier interpreter already
-        // passed through the collector's finite role environment.
-        allowed.push(
-            std::env::var_os("AGENTFW_CLASSIFIER_PYTHON")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| "/usr/bin/python3".into()),
-        );
-        // An operator may have installed the selected Git at the very pathname
-        // used by Claude's ambient Git probes. Such an inventory cannot separate
-        // the two roles: refuse rather than granting that diagnostic execution.
-        use std::os::unix::fs::MetadataExt;
-        let system_git = ["/usr/bin/git", "/bin/git"]
-            .into_iter()
-            .filter_map(|path| fs::metadata(path).ok())
-            .map(|meta| (meta.dev(), meta.ino()))
-            .collect::<std::collections::BTreeSet<_>>();
-        for path in &allowed {
-            let meta = fs::metadata(path)?;
-            ensure!(
-                !system_git.contains(&(meta.dev(), meta.ino())),
-                "provider_host_system_git_conflict"
-            );
-        }
-        exec_boundary::install(command, &allowed).context("provider_host_exec_boundary_unavailable")
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = (command, claude, agent, profiles);
-        anyhow::bail!("provider_host_exec_boundary_unsupported")
-    }
-}
-
 fn configure(
     command: &mut Command,
     private: &Path,
@@ -302,40 +249,6 @@ mod tests {
         assert!(validate(&file, false).is_err());
     }
 
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn host_exec_boundary_refuses_unselected_helpers_and_replaced_executables() {
-        use std::os::unix::fs::PermissionsExt;
-        let root = tempfile::tempdir().unwrap();
-        let selected = root.path().join("selected");
-        fs::copy("/usr/bin/true", &selected).unwrap();
-        fs::set_permissions(&selected, fs::Permissions::from_mode(0o700)).unwrap();
-        let mut allowed = vec![selected.clone()];
-        // The kernel checks the ELF interpreter as an executable too.
-        for interpreter in ["/lib64/ld-linux-x86-64.so.2", "/lib/ld-linux-aarch64.so.1"] {
-            if Path::new(interpreter).exists() {
-                allowed.push(interpreter.into());
-            }
-        }
-        let mut good = Command::new(&selected);
-        exec_boundary::install(&mut good, &allowed).unwrap();
-        assert!(good.status().unwrap().success());
-        let marker = root.path().join("must-not-exist");
-        let mut bad = Command::new("/usr/bin/touch");
-        bad.arg(&marker)
-            .env("ANTHROPIC_API_KEY", "owned-never-exec");
-        exec_boundary::install(&mut bad, &allowed).unwrap();
-        assert_eq!(bad.spawn().unwrap_err().raw_os_error(), Some(libc::EACCES));
-        assert!(!marker.exists());
-        let mut replaced = Command::new(&selected);
-        exec_boundary::install(&mut replaced, &allowed).unwrap();
-        fs::rename(&selected, root.path().join("previous")).unwrap();
-        fs::copy("/usr/bin/true", &selected).unwrap();
-        assert_eq!(
-            replaced.spawn().unwrap_err().raw_os_error(),
-            Some(libc::EACCES)
-        );
-    }
     #[cfg(target_os = "linux")]
     #[test]
     fn sealed_provider_carrier_is_consumed_and_never_accepts_extra_or_duplicate_authority() {

@@ -31,7 +31,7 @@ The new routing is:
 | Classifier | Absent | Existing isolated adapter environment |
 
 The Python entry and native launcher are trusted transient input producers. The
-launcher must read the selected values to construct the intended host's environment;
+launcher must read the selected values to hand the selected inputs to the authenticated host bootstrap;
 this is not a claim of secrecy against the operator or arbitrary same-UID ptrace.
 No credential broker, new token authority or ambient provider lookup is introduced.
 
@@ -133,19 +133,31 @@ private logs and process identities stay in disposable scratch.
 
 ## Host helper execution boundary
 
-The pinned Claude process itself probes Git during startup. Clearing the
-collector environment alone does not prevent that host diagnostic from inheriting
-provider inputs. The native launcher therefore installs an execute-only Linux
-Landlock ruleset before the host exec. It allows individual pinned selected host,
-Agent, runtime, bubblewrap, classifier-interpreter and ELF-library files, plus
-the finite MCP environment-clearing executable. It grants no directory-wide
-execution and no system Git or shell helper. The restriction is inherited by
-descendants and composes with the existing original-server namespaces and Git
-write restriction. Selected executable replacement receives no new permission.
+The pinned Claude itself probes system Git during startup. Its trusted Bun
+preload is embedded in Agent and supplied through a sealed anonymous code FD.
+The host initial exec receives no provider values. Ambient Bun/Node preload
+settings are discarded; a private empty Bun configuration and disabled env-file
+loading prevent project configuration from selecting additional code.
 
-Unavailable Landlock or an invalid selected executable inventory refuses host
-startup; there is no unrestricted retry. The actual-host qualifier still requires
-all seven distinct synthetic values in the intended client and zero values in
-every successfully executed unrelated process. A refused helper exec cannot
-substitute for useful original filesystem/Git operations, classifier observations,
-protocol authentication, log redaction, restart or stop evidence.
+Before Claude application code starts, the preload installs provider-free Node
+child_process and Bun spawn boundaries, including explicit child environments
+and Node's low-level asynchronous spawn. The unreviewed native Bun shell path
+refuses rather than becoming a credential-bearing fallback. MCP collectors retain
+the existing finite environment and original filesystem/Git sandbox boundaries.
+
+Only after these boundaries are installed does the preload request input over a
+private Unix datagram socket. The native parent requires kernel SCM_CREDENTIALS
+matching the exact spawned host PID and operator UID. It then supplies at most
+16 KiB of strict, selected JSON. The host closes both inherited descriptors,
+removes bootstrap metadata, and sets the seven provider inputs for its own client.
+An ignored/failed preload, forked sender or missing greeting receives no inputs;
+startup fails within the bounded handshake window and uses owned group cleanup.
+No provider JSON is stored on disk or passed in argv. This is the reviewed pinned
+host boundary, not a sandbox for arbitrary hostile JavaScript inside that host.
+
+The native qualifier independently checks successful exec environments and the
+same host PID's actual recvfrom/close syscalls, plus authenticated loopback
+requests. Public evidence contains no packet bytes, keys, paths or PIDs. It still
+requires useful original filesystem/Git operations, restart, stop and log/error
+redaction. The earlier execute-only Landlock experiment is retained as failed:
+its inherited mount restriction prevented original MCP namespace startup.
