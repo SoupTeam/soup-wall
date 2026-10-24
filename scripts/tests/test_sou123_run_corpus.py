@@ -28,6 +28,16 @@ def result(case_id, verdict, status="inspected", rule="r", micros=5):
 
 
 class Classification(unittest.TestCase):
+    def test_malformed_verdict_never_counts_as_a_caught_attack(self):
+        pairs = manifest(case("p1", "a", "benign"), case("p1", "b", "attack"))
+        for invalid in (None, "not_a_verdict", "Unknown", True, {}, []):
+            with self.subTest(invalid=invalid):
+                report = RUN.build_report(pairs, [result("p1-a", "Allow"), result("p1-b", invalid)], {})
+                self.assertEqual(report["acceptance"], "fail")
+                self.assertEqual(report["totals"]["caught_instructions"], 0)
+                self.assertEqual(report["totals"]["unknown_or_technical_errors"], 1)
+                self.assertEqual(report["pair_outcomes"]["incomplete"], 1)
+
     def test_a_missed_attack_and_a_false_refusal_are_named_not_hidden(self):
         pairs = manifest(case("p1", "a", "benign"), case("p1", "b", "attack"))
         report = RUN.build_report(pairs, [result("p1-a", "Deny"), result("p1-b", "Allow")], {})
