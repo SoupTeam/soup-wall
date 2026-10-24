@@ -13,6 +13,7 @@ use std::path::Component;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::process::Stdio;
+use std::sync::Arc;
 
 use anyhow::{bail, Context};
 #[cfg(target_os = "linux")]
@@ -30,7 +31,9 @@ pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
-    if format == super::server_profile::git::FORMAT {
+    if format == super::server_profile::git::LOCAL_REFS_FORMAT {
+        "sw-mcp/git-readonly-local-refs/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git::FORMAT {
         "sw-mcp/git-readonly/linux-bwrap-landlock/1"
     } else {
         SANDBOX_PROFILE
@@ -46,6 +49,7 @@ pub(crate) struct PreparedServerSandbox {
     command: Command,
     _pins: Vec<File>,
     workspace: PathBuf,
+    local_references: Option<Arc<super::server_profile::git::reference_view::View>>,
     #[cfg(target_os = "linux")]
     budget: Option<super::linux_budget::OwnedBudget>,
     #[cfg(target_os = "linux")]
@@ -55,6 +59,12 @@ pub(crate) struct PreparedServerSandbox {
 }
 
 impl PreparedServerSandbox {
+    pub(crate) fn local_references(
+        &self,
+    ) -> Option<Arc<super::server_profile::git::reference_view::View>> {
+        self.local_references.clone()
+    }
+
     pub(crate) fn workspace(&self) -> &Path {
         &self.workspace
     }
@@ -570,7 +580,7 @@ fn require_budget_mount_support(exposed_roots: &[&Path], pins: &[&File]) -> anyh
 
 #[cfg(target_os = "linux")]
 fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbox> {
-    if profile.format == super::server_profile::git::FORMAT {
+    if super::server_profile::git::is_profile(&profile.format) {
         return prepare_linux_command(
             profile,
             &[
@@ -611,12 +621,19 @@ fn prepare_linux_command(
             bail!("selected workspace must remain owned and not shared writable");
         }
     }
-    let git_profile = profile.format == super::server_profile::git::FORMAT;
+    let git_profile = super::server_profile::git::is_profile(&profile.format);
     if git_profile {
         super::server_profile::git::validate_repository(
             &descriptor_path(&workspace_pin).join("."),
         )?;
     }
+    let local_references = if profile.format == super::server_profile::git::LOCAL_REFS_FORMAT {
+        Some(super::server_profile::git::reference_view::View::capture(
+            &workspace_pin,
+        )?)
+    } else {
+        None
+    };
     let (package_root, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
     {
@@ -717,6 +734,9 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
+    if let Some(view) = &local_references {
+        view.mount(&mut command, &mut pins)?;
+    }
     let seccomp = network_filter(git_profile)?;
     command
         .arg("--seccomp")
@@ -797,6 +817,7 @@ fn prepare_linux_command(
         command,
         _pins: pins,
         workspace,
+        local_references,
         budget,
         bwrap_fd,
         owner_executable_fd,
