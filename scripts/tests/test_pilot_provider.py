@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -67,6 +68,81 @@ class ProviderBoundary(unittest.TestCase):
 
 
 class IndependentExecEvidence(unittest.TestCase):
+    def test_private_log_observation_detects_removed_redaction_and_descriptor_reuse(self):
+        import json
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import pilot_provider_witness as witness
+        values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
+        values['ANTHROPIC_API_KEY'] = 'owned-"key"-with-newline\n'
+        directory = Path('/owned/run')
+        opening = lambda name, fd: ('31 openat(AT_FDCWD, ' + json.dumps(str(directory / name))
+            + ', O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC, 0600) = ' + str(fd))
+        writing = lambda raw: ('31 write(8, ' + json.dumps(raw.decode()) + ', '
+            + str(len(raw)) + ') = ' + str(len(raw)))
+        safe = b'Owned rejection [REDACTED] [REDACTED]\n'
+        rows = [opening('daemon.private.log', 7), opening('host.private.log', 8), writing(safe),
+                '31 close(8) = 0', opening('unrelated.trace', 8), writing(values['ANTHROPIC_API_KEY'].encode())]
+        normalize = lambda text: (text.splitlines(), {})
+        result = witness.private_log_writes('\n'.join(rows), directory, 31, values, normalize, rejection=True)
+        self.assertTrue(result['owned_rejection_redaction_observed'])
+        self.assertEqual(result['private_log_bytes'], len(safe))
+        # Removing runtime redaction changes precisely these kernel-observed bytes.
+        for value in values.values():
+            for raw in (value.encode(), json.dumps(value)[1:-1].encode()):
+                leaked = rows[:]
+                leaked[2] = writing(b'Owned rejection ' + raw + b'\n')
+                with self.assertRaisesRegex(ValueError, 'provider_canary_in_private_log'):
+                    witness.private_log_writes('\n'.join(leaked), directory, 31, values, normalize, rejection=True)
+        absent = rows[:]
+        absent[2] = writing(b'generic failure\n')
+        with self.assertRaisesRegex(ValueError, 'provider_rejection_redaction_not_observed'):
+            witness.private_log_writes('\n'.join(absent), directory, 31, values, normalize, rejection=True)
+        truncated = rows[:]
+        truncated[2] = '31 write(8, "truncated"..., 100) = 100'
+        with self.assertRaisesRegex(ValueError, 'provider_private_log_write_unproven'):
+            witness.private_log_writes('\n'.join(truncated), directory, 31, values, normalize)
+
+    def test_private_log_vectors_and_incomplete_observations_fail_closed(self):
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import pilot_provider_witness as witness
+        values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
+        rows = ['31 openat(AT_FDCWD, "/owned/run/daemon.private.log", O_WRONLY|O_CREAT|O_EXCL, 0600) = 7',
+                '31 openat(AT_FDCWD, "/owned/run/host.private.log", O_WRONLY|O_CREAT|O_EXCL, 0600) = 8',
+                '31 writev(8, [{iov_base="Owned rejection ", iov_len=16}, '
+                '{iov_base="[REDACTED]", iov_len=10}], 2) = 26']
+        normalize = lambda text: (text.splitlines(), {})
+        self.assertTrue(witness.private_log_writes('\n'.join(rows), Path('/owned/run'), 31,
+            values, normalize, rejection=True)['all_selected_values_and_json_forms_absent'])
+        with self.assertRaisesRegex(ValueError, 'provider_private_log_write_unproven'):
+            witness.private_log_writes('\n'.join(rows), Path('/owned/run'), 31, values,
+                lambda text: (text.splitlines(), {'31': 'write(8, unfinished'}))
+
+    def test_retained_scan_checks_nested_stop_audit_and_escaped_values_with_finite_bounds(self):
+        import json
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import pilot_provider_witness as witness
+        values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
+        values['ANTHROPIC_API_KEY'] = 'owned-"key"-with-newline\n'
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'trace.private').write_text(json.dumps(values))
+            (root / 'owned-provider-ca-canary.pem').write_text(json.dumps(values))
+            nested = root / 'state' / '.agentfw' / 'pilot-runs' / 'owned'
+            nested.mkdir(parents=True)
+            retained = nested / 'stop.json'
+            retained.write_text('{"status":"stopped"}')
+            self.assertTrue(witness.retained_artifacts(root, values)['all_selected_values_and_json_forms_absent'])
+            for value in values.values():
+                for raw in (value.encode(), json.dumps(value)[1:-1].encode()):
+                    retained.write_bytes(raw)
+                    with self.assertRaisesRegex(ValueError, 'provider_canary_in_retained_artifact'):
+                        witness.retained_artifacts(root, values)
+            retained.write_bytes(b'clean')
+            with retained.open('r+b') as stream:
+                stream.truncate(4 * 1024 * 1024 + 1)
+            with self.assertRaisesRegex(ValueError, 'provider_retained_artifact_bound'):
+                witness.retained_artifacts(root, values)
+
     def test_real_owned_protocol_observation_never_exports_credentials(self):
         import http.server
         import json

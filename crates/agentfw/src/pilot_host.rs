@@ -70,6 +70,10 @@ pub(crate) fn provider_inputs(fd: Option<i32>) -> Result<Vec<(OsString, OsString
         ensure!(fd >= 3, "provider_input_invalid");
         // The descriptor is consumed exactly once; CLOEXEC is also required so
         // it cannot be inherited by the host, collector or any helper.
+        ensure!(
+            unsafe { libc::fcntl(fd, libc::F_GETFD) } >= 0,
+            "provider_input_invalid"
+        );
         let mut file = unsafe { fs::File::from_raw_fd(fd) };
         let descriptor = file.as_raw_fd();
         ensure!(
@@ -284,6 +288,13 @@ mod tests {
         ] {
             assert!(provider_inputs(Some(carrier(bytes, true))).is_err());
         }
+        assert!(provider_inputs(Some(-1)).is_err());
+        // An unopened high descriptor must be rejected before File takes ownership.
+        let unopened = 1_000_000;
+        assert_eq!(unsafe { libc::fcntl(unopened, libc::F_GETFD) }, -1);
+        assert!(provider_inputs(Some(unopened)).is_err());
+        let (socket, _peer) = std::os::unix::net::UnixStream::pair().unwrap();
+        assert!(provider_inputs(Some(socket.into_raw_fd())).is_err());
         assert!(provider_inputs(Some(carrier(b"{}", false))).is_err());
         assert!(provider_inputs(Some(carrier(&[b'x'; 16385], true))).is_err());
     }

@@ -167,7 +167,7 @@ class Prepared:
             ANTHROPIC_API_KEY="owned-loopback-only", HTTP_PROXY="http://127.0.0.1:9",
             HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
         command = [str(context.args.strace), "-f", "-qq", "-s", "1048576", "-e",
-            "trace=execve,openat,write,writev,kill", "-o", str(self.trace), sys.executable, "-B",
+            "trace=execve,openat,close,write,writev,kill", "-o", str(self.trace), sys.executable, "-B",
             str(context.source / "scripts/pilot-run.py"), "--run", "--selection",
             str(context.args.selection), "--expected-commit", context.args.expected_commit,
             "--state-root", str(self.state), "--timeout-seconds", "90"]
@@ -224,7 +224,7 @@ class Prepared:
                 "--run", self.run["run_id"], "stop"]
 
     def operator(self, success, status="stopped"):
-        result = subprocess.run(self.operator_command(), cwd=self.root, env=self.env,
+        result = subprocess.run(self.operator_command(), cwd=self.root, env=self.c.env,
                                 stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
         require((result.returncode == 0) == success, "stop_operator_outcome_mismatch")
         require(len(result.stdout) <= 4096, "stop_operator_output_bound")
@@ -357,12 +357,17 @@ class Prepared:
                     len(list(self.state.iterdir())) == 1,
                     "stop_peer_owned_state_survived")
             self.c.run.AUDIT.verify_cleanup(Path(outcome["audit"]["directory"]))
-        routing = None
+        routing = logs = artifacts = None
         if self.provider_values is not None:
             import pilot_provider_witness
-            routing = pilot_provider_witness.observe(self.trace.read_text(), self.c.paths,
+            trace_text = self.trace.read_text()
+            routing = pilot_provider_witness.observe(trace_text, self.c.paths,
                 self.provider_values, self.c.launch.normalized_syscalls)
+            logs = pilot_provider_witness.private_log_writes(trace_text, self.home.parent,
+                self.record["supervisor_pid"], self.provider_values, self.c.launch.normalized_syscalls)
+            artifacts = pilot_provider_witness.retained_artifacts(self.root, self.provider_values)
         return {"provider_routing": routing,
+                "provider_private_logs": logs, "provider_retained_artifacts": artifacts,
                 "provider_protocol": self.protocol.finish() if self.protocol is not None else None, "entry_status": outcome["status"], "entry_reason": outcome.get("reason"),
                 "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                 "observed_owned_roles": list(self.identities.values()),
@@ -535,7 +540,7 @@ def lifecycle(context, private, report, case):
             pilot.signal(launcher, signal.SIGSTOP); paused.append(launcher)
             with (private / "operator.stdout.private").open("wb") as out, (
                     private / "operator.stderr.private").open("wb") as err:
-                operator = subprocess.Popen(pilot.operator_command(), cwd=private, env=pilot.env,
+                operator = subprocess.Popen(pilot.operator_command(), cwd=private, env=context.env,
                     stdin=subprocess.DEVNULL, stdout=out, stderr=err, start_new_session=True)
                 until(lambda: pilot.manifest.with_name("stop.json").exists()
                       and pilot.receipt(False)["status"] == "revoked", "stop_revocation_not_durable", seconds=5)

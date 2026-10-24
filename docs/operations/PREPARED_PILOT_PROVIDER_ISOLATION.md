@@ -103,3 +103,18 @@ useful filesystem/Git operations, startup/missing-provider refusal, rejection,
 restart, stop, retained-state/log redaction and owned cleanup. Do not substitute
 mock command inspection or a CLI preview for those results. Preserve every failed
 and incomplete attempt. Final shared CI/admission/main integration is TL-owned.
+
+## Focused native first slice
+
+The existing manual `sou79-resource-budgets.yml` workflow accepts
+`prepared_focus: "143"` on this branch. This selects only native Ubuntu
+24.04 compile/unit/Clippy controls in a transient ordinary-user service. Candidate
+source is read-only, writes stay in isolated scratch (plus the explicitly owned
+delegation for budget controls), and candidate execution has only private
+loopback networking. Dependency fetch is a separate trusted setup step that
+requires manifests and Cargo configuration to match reviewed main
+`04efdf1d959599238a0a9a3eb42cbe26b3531b74`. Raw target logs remain private;
+retained artifacts contain bounded status, hashes and projected compiler messages.
+
+This is a compile/capability slice, not original-host or final admission evidence.
+The default `off` keeps the existing manual budget qualification unchanged.

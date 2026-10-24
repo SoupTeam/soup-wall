@@ -5,7 +5,10 @@ Raw strace stays private and is never a support/export artifact. Public evidence
 contains counts and booleans, never argv, environment arrays or canary values.
 """
 import ast
+import json
+import os
 import re
+import stat
 from pathlib import Path
 
 from pilot_provider import KEYS
@@ -14,6 +17,144 @@ from pilot_provider import KEYS
 def require(value, reason):
     if not value:
         raise ValueError(reason)
+
+
+def private_patterns(values):
+    """Independent forbidden-byte inventory, including both JSON encodings."""
+    require(set(values) == set(KEYS), 'provider_all_inputs_required')
+    return {encoded for value in values.values() if value for encoded in (
+        value.encode(), json.dumps(value, ensure_ascii=True)[1:-1].encode(),
+        json.dumps(value, ensure_ascii=False)[1:-1].encode())}
+
+
+def private_log_writes(text, run_directory, supervisor_pid, values, normalize, rejection=False):
+    """Inspect the entry's actual log writes before ordinary cleanup deletes them.
+
+    Exact successful openat results bind each descriptor to its owned log. Close
+    observations end that binding, so reused descriptor numbers convey no scope.
+    Raw syscall strings and log bytes are never returned as evidence.
+    """
+    rows, pending = normalize(text)
+    names = {str(run_directory / (role + '.private.log')): role for role in ('host', 'daemon')}
+    handles, opened = {}, set()
+    contents = {role: bytearray() for role in ('host', 'daemon')}
+    writes = 0
+    quoted = r'("(?:[^"\\]|\\.)*")'
+    result = r'(-1 [A-Z][A-Z0-9_]*(?: \([^\n)]*\))?|\d+)'
+    for row in rows:
+        prefix = re.match(r'^(\d+)\s+(openat|close|write|writev)\(', row)
+        if not prefix or int(prefix[1]) != supervisor_pid:
+            continue
+        opening = re.match(r'^\d+\s+openat\(AT_FDCWD,\s*' + quoted
+                           + r',\s*([^\n]*)\)\s*=\s*(\d+)\s*$', row)
+        if opening:
+            path = ast.literal_eval(opening[1])
+            descriptor = int(opening[3])
+            handles.pop(descriptor, None)
+            if path in names:
+                role = names[path]
+                require(role not in opened and 'O_WRONLY' in opening[2]
+                        and 'O_EXCL' in opening[2], 'provider_private_log_identity_unproven')
+                opened.add(role)
+                handles[descriptor] = role
+            continue
+        closing = re.match(r'^\d+\s+close\((\d+)\)\s*=\s*0\s*$', row)
+        if closing:
+            handles.pop(int(closing[1]), None)
+            continue
+        writing = re.match(r'^\d+\s+(write|writev)\((\d+),', row)
+        if not writing or int(writing[2]) not in handles:
+            continue
+        role = handles[int(writing[2])]
+        single = re.match(r'^\d+\s+write\(\d+,\s*' + quoted
+                          + r',\s*(\d+)\)\s*=\s*' + result + r'\s*$', row)
+        if single:
+            raw, count = ast.literal_eval('b' + single[1]), int(single[2])
+            written = 0 if single[3].startswith('-1 ') else int(single[3])
+        else:
+            vector = re.match(r'^\d+\s+writev\(\d+,\s*\[(.*)\],\s*\d+\)\s*=\s*'
+                              + result + r'\s*$', row)
+            require(vector is not None, 'provider_private_log_write_unproven')
+            pieces = re.findall(r'iov_base=' + quoted + r', iov_len=(\d+)', vector[1])
+            require(pieces and vector[1].count('iov_base=') == len(pieces),
+                    'provider_private_log_write_unproven')
+            decoded = [(ast.literal_eval('b' + piece), int(size)) for piece, size in pieces]
+            require(all(len(piece) == size for piece, size in decoded),
+                    'provider_private_log_write_unproven')
+            raw = b''.join(piece for piece, _ in decoded)
+            count = len(raw)
+            written = 0 if vector[2].startswith('-1 ') else int(vector[2])
+        require(len(raw) == count and 0 <= written <= count, 'provider_private_log_write_unproven')
+        contents[role].extend(raw[:written])
+        writes += int(written > 0)
+        require(sum(map(len, contents.values())) <= 4 * 1024 * 1024, 'provider_private_log_bound')
+    require(opened == {'host', 'daemon'} and contents['host'], 'provider_private_logs_not_observed')
+    require(not any(int(pid) == supervisor_pid and re.match(r'(?:write|writev|openat|close)\(', call)
+                    for pid, call in pending.items()), 'provider_private_log_write_unproven')
+    patterns = private_patterns(values)
+    require(not any(pattern in content for pattern in patterns for content in contents.values()),
+            'provider_canary_in_private_log')
+    if rejection:
+        # The owned rejection must actually reach the log. This control fails if
+        # runtime redaction is removed; checking the entry's outer JSON cannot.
+        require(b'Owned rejection ' in contents['host'] and b'[REDACTED]' in contents['host'],
+                'provider_rejection_redaction_not_observed')
+    return {'observer': 'owned supervisor openat/close/write/writev syscalls',
+            'successful_private_log_writes': writes,
+            'private_log_bytes': sum(map(len, contents.values())),
+            'all_selected_values_and_json_forms_absent': True,
+            'owned_rejection_redaction_observed': rejection, 'raw_log_exported': False}
+
+
+def retained_artifacts(root, values):
+    """Bounded no-follow scan of all retained case files, including stop state.
+
+    Only the exact owned raw observer trace and the deliberately supplied CA
+    canary are inputs. Every other retained file and symlink payload is checked.
+    """
+    excluded = {root / 'trace.private', root / 'owned-provider-ca-canary.pem'}
+    patterns = private_patterns(values)
+    stack, count, total, special = [root], 0, 0, 0
+    while stack:
+        directory = stack.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                if path in excluded:
+                    continue
+                count += 1
+                require(count <= 4096, 'provider_retained_artifact_bound')
+                info = entry.stat(follow_symlinks=False)
+                if stat.S_ISDIR(info.st_mode):
+                    stack.append(path)
+                    continue
+                if stat.S_ISLNK(info.st_mode):
+                    raw = os.fsencode(os.readlink(path))
+                elif stat.S_ISREG(info.st_mode):
+                    require(info.st_size <= 4 * 1024 * 1024, 'provider_retained_artifact_bound')
+                    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                    try:
+                        before = os.fstat(descriptor)
+                        require((before.st_dev, before.st_ino) == (info.st_dev, info.st_ino),
+                                'provider_retained_artifact_changed')
+                        with os.fdopen(descriptor, 'rb', closefd=False) as stream:
+                            raw = stream.read(4 * 1024 * 1024 + 1)
+                        after = os.fstat(descriptor)
+                        require(len(raw) == before.st_size and (before.st_size, before.st_mtime_ns)
+                                == (after.st_size, after.st_mtime_ns), 'provider_retained_artifact_changed')
+                    finally:
+                        os.close(descriptor)
+                else:
+                    # Dead runtime sockets/FIFOs retain no file bytes. Never open
+                    # them or follow them outside the owned case tree.
+                    special += 1
+                    continue
+                total += len(raw)
+                require(total <= 16 * 1024 * 1024, 'provider_retained_artifact_bound')
+                require(not any(pattern in raw for pattern in patterns), 'provider_canary_in_retained_artifact')
+    return {'retained_entries_checked': count, 'retained_bytes_checked': total,
+            'non_file_entries': special, 'intentional_observer_and_input_exclusions': 2,
+            'all_selected_values_and_json_forms_absent': True, 'artifact_contents_exported': False}
 
 
 def inputs(url, root):

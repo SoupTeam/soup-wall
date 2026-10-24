@@ -1459,12 +1459,29 @@ pub fn write_per_process_mcp_config(
 
 /// Execute the pilot launcher command with strict isolation and bounded supervision.
 pub fn run(args: PilotLaunchArgs) -> Result<()> {
+    // Consume supplied authority before validation/configuration can allocate
+    // another descriptor with the same number as a malformed input.
+    let provider = crate::pilot_host::provider_inputs(args.provider_env_fd)?;
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
 
     let config = args.validate()?;
+    if !config.dry_run {
+        // Only the intended host receives the explicitly selected provider inputs.
+        ensure!(
+            config.allow_command_fixtures
+                || config.mock_daemon_token.is_some()
+                || provider
+                    .iter()
+                    .any(|(key, value)| (key == "ANTHROPIC_API_KEY"
+                        || key == "ANTHROPIC_AUTH_TOKEN")
+                        && !value.is_empty()),
+            "provider_unavailable"
+        );
+    }
+
     if config.ask_wait_seconds > 0 {
         crate::pilot_approval::preflight(&config)?;
     }
@@ -1607,19 +1624,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         }
     }
 
-    // Only the intended host receives the explicitly selected provider inputs.
-    let provider = crate::pilot_host::provider_inputs(args.provider_env_fd)?;
-    ensure!(
-        config.allow_command_fixtures
-            || config.mock_daemon_token.is_some()
-            || provider
-                .iter()
-                .any(
-                    |(key, value)| (key == "ANTHROPIC_API_KEY" || key == "ANTHROPIC_AUTH_TOKEN")
-                        && !value.is_empty()
-                ),
-        "provider_unavailable"
-    );
     crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")

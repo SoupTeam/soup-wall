@@ -84,12 +84,12 @@ def qualify(args, private, report):
                                  start_new_session=True, env=env, cwd=private)
     report.update(source_before=before, selected_sha256=selected_before, cases=[],
                   trace_requested={"mode": "seccomp-bpf", "fallback_possible": True,
-                                   "run_syscalls": "execve,openat,write,writev",
+                                   "run_syscalls": "execve,openat,close,write,writev",
                                    "validation_syscalls": "execve"})
     try:
         # These are actual entry-point invocations, with kernel-observed zero
         # selected daemon/host execution. Unit mocks are not their evidence.
-        for control in ("plan", "occupied-port", "stale-source", "changed-selection"):
+        for control in ("plan", "occupied-port", "stale-source", "changed-selection", "provider-unavailable"):
             report["active_case"] = control
             root = private / control
             root.mkdir(mode=0o700)
@@ -109,8 +109,12 @@ def qualify(args, private, report):
                     changed = json.loads(original)
                     changed["files"]["agentfw"]["sha256"] = "0" * 64
                     args.selection.write_text(json.dumps(changed))
+                control_env = dict(env)
+                if control != "provider-unavailable":
+                    control_env.update(ANTHROPIC_API_KEY="owned-preflight-only",
+                                       ANTHROPIC_BASE_URL="http://127.0.0.1:9")
                 result = subprocess.run([str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "4096", "-e", "trace=execve",
-                    "-o", str(trace), *words], cwd=private, env=env, capture_output=True, timeout=control_seconds)
+                    "-o", str(trace), *words], cwd=private, env=control_env, capture_output=True, timeout=control_seconds)
                 value = json.loads(result.stdout)
                 require((result.returncode == 0) == (control == "plan") and value["executed"] is False,
                         "refusal_or_plan_executed")
@@ -119,7 +123,10 @@ def qualify(args, private, report):
                             for role in ("agentfw", "claude")), "refused_entry_started_selected_runtime")
                 require(not list(root.glob("soup-wall-run-*")), "refusal_created_runtime_state")
                 if control == "occupied-port":
+                    require(value.get("reason") == "occupied_port_refused", "occupied_port_refusal_not_exercised")
                     require(owner.fileno() >= 0, "foreign_listener_changed")
+                elif control == "provider-unavailable":
+                    require(value.get("reason") == "provider_unavailable", "provider_missing_access_not_refused")
                 report["cases"].append({"case": control, "status": "passed", "selected_execution": 0,
                                         "reason": value.get("reason"), "trace_sha256": BASE.sha(trace)})
             finally:
@@ -229,7 +236,7 @@ def qualify(args, private, report):
                         return [{"type": "tool_use", "id": identifier, "name": f"mcp__{server}__{tool}", "input": arguments}]
                 return [{"type": "text", "text": "Owned prepared run completed."}]
             model.next = next_step
-            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
+            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,close,write,writev",
                 "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]
@@ -271,13 +278,13 @@ def qualify(args, private, report):
                         while process.poll() is None and time.monotonic() < deadline:
                             for manifest in (home / "pilot-runs").glob("*/run.json"):
                                 prefix = [str(paths["agentfw"]), "pilot-approval", "--home", str(home), "--run", manifest.parent.name]
-                                listing = subprocess.run([*prefix, "list"], capture_output=True, env=run_env, timeout=10)
+                                listing = subprocess.run([*prefix, "list"], capture_output=True, env=env, timeout=10)
                                 if listing.returncode != 0:
                                     continue  # Launcher may be completing owned retirement.
                                 for waiting in json.loads(listing.stdout):
                                     require(waiting["pending_id"] not in decisions, "pending_reissued_after_approval")
                                     shown = subprocess.run([*prefix, "inspect", waiting["pending_id"]],
-                                        capture_output=True, env=run_env, timeout=10)
+                                        capture_output=True, env=env, timeout=10)
                                     require(shown.returncode == 0, "prepared_exact_inspection_failed")
                                     exact = json.loads(shown.stdout)
                                     require((waiting["server"], waiting["tool"], exact["args"]) in proposals,
@@ -299,7 +306,7 @@ def qualify(args, private, report):
                                         require(ASK.SELECTED.trace_effects(root / "trace.private", "filesystem",
                                             target="/workspace/credentials.txt") == 0, "prepared_ask_effect_before_approval")
                                     result = subprocess.run([*prefix, "approve", waiting["pending_id"],
-                                        "--binding", waiting["binding_sha256"]], capture_output=True, env=run_env, timeout=10)
+                                        "--binding", waiting["binding_sha256"]], capture_output=True, env=env, timeout=10)
                                     require(result.returncode == 0, "prepared_operator_decision_failed")
                                     decisions.append(waiting["pending_id"])
                             time.sleep(.1)
@@ -383,12 +390,14 @@ def qualify(args, private, report):
                     result["audit_failure"] = audit_observed
 
                 if provider_values is not None:
+                    trace_text = (root / "trace.private").read_text()
                     result["provider_routing"] = PROVIDER_WITNESS.observe(
-                        (root / "trace.private").read_text(), paths, provider_values, LAUNCH.normalized_syscalls)
+                        trace_text, paths, provider_values, LAUNCH.normalized_syscalls)
                     result["provider_protocol"] = protocol.finish()
-                    retained = (root / "stdout.private").read_bytes() + (root / "stderr.private").read_bytes()
-                    require(not any(value.encode() in retained for value in provider_values.values()),
-                            "provider_canary_in_retained_output")
+                    result["provider_private_logs"] = PROVIDER_WITNESS.private_log_writes(
+                        trace_text, Path(record["home"]).parent, record["supervisor_pid"], provider_values,
+                        LAUNCH.normalized_syscalls, rejection=case == "provider-reject")
+                    result["provider_retained_artifacts"] = PROVIDER_WITNESS.retained_artifacts(root, provider_values)
                 if success or case == "audit-unavailable":
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
                     useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
