@@ -2112,8 +2112,15 @@ jobs:
         run: |
           set -euo pipefail
           "$SOU119_SANDBOX_TESTS" --list > "$RUNNER_TEMP/sou132-retention-tests.txt"
-          rg 'audit::retention::tests::disk_full_failure_poisoned_sink_recovers_after_space_restored' "$RUNNER_TEMP/sou132-retention-tests.txt"
-          rg 'native::tests::retained_sink_failure_withholds_native_admission' "$RUNNER_TEMP/sou132-retention-tests.txt"
+          python3 - "$RUNNER_TEMP/sou132-retention-tests.txt" <<'PY'
+          import pathlib, sys
+          names = pathlib.Path(sys.argv[1]).read_text()
+          for required in ('audit::retention::tests::disk_full_failure_poisoned_sink_recovers_after_space_restored',
+                           'native::tests::retained_sink_failure_withholds_native_admission',
+                           'native::tests::retained_sink_failure_withholds_native_result'):
+              if required + ': test' not in names:
+                  raise SystemExit('required_audit_fault_control_missing')
+          PY
           "$SOU119_SANDBOX_TESTS" 'audit::retention::tests::' --test-threads=1 | tee "$RUNNER_TEMP/sou132-retention-unit.log"
           "$SOU119_SANDBOX_TESTS" retained_sink_failure_ --test-threads=1 | tee "$RUNNER_TEMP/sou132-native-audit-failure.log"
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
