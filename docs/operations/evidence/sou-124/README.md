@@ -86,6 +86,28 @@ reaps on timeout. `closed-diagnostic-cleanup-correction.json` records this local
 proof and its limits; it does not attribute EPIPE to the historical CI sample or
 claim a native owner/ACK qualification from that subprocess.
 
+The `77b8417` run completed all 15 original-host Ask lifecycle cases, including
+normal/rejected-sibling retirement and the pinned collector TERM probe. Windows
+also passed its explicit unsupported-contract control, and native preparation,
+first-use and prepared-run/Stop qualification passed. The full workflow remains
+failed: the liveness cascade witness exposed a real race where the grandchild's
+exact-owner cleanup wrote `retired` before maintenance could record ancestor
+expiry. Its retained audit establishes that order. Terminal cause now resolves
+against one locked session snapshot before removal, with per-target and
+recursive propagation. A deterministic 2s/20s/4s hierarchy fails before the
+correction and passes after it; wrong owner/epoch still refuse, while healthy
+retirement keeps its audit. See `expiry-retirement-cause-correction.json`.
+
+The same workflow's later single-use approval control failed before publishing
+the first pending item. Retained first-capture timings exceed its existing
+5-second pending-observation bound; no approval or original target effect
+occurred. It remains a failed sample with 25 incomplete cases. No timeout or
+single-use harness assertion was changed, and the terminal fixes do not claim
+to resolve this observation. `current-base-77b-qualification.json` preserves
+both passing and failed portions with exact source attribution. Fresh complete
+qualification is required for the diagnostic and audit corrections; no current
+readiness is inferred from the earlier lifecycle pass.
+
 ## Current native comparison
 
 `native-linux-current.json` records the passing comparison in run `40052146937`
