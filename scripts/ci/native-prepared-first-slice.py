@@ -105,6 +105,8 @@ def main():
             run('native-provider-unit', [exact, 'pilot_host::tests::', '--test-threads=1'])
         else:
             run('native-budget-unit', [exact, 'pilot_budget::tests::', '--test-threads=1'])
+            run('native-owner-unit', [exact, 'mcp::linux_owner::linux::tests::', '--test-threads=1'])
+            run('native-engine-unit', [exact, 'mcp::linux_budget::tests::', '--test-threads=1'])
             run('native-budget-cli', [a.cargo, 'test', '--offline', '--locked', '-p', 'agentfw',
                                      '--test', 'pilot_budget', '--', '--test-threads=1'])
             expected = '/system.slice/' + a.unit
@@ -167,32 +169,15 @@ def main():
                                    for name in ('agentfw', 'agentfw-git-sandbox')}
         record['status'] = 'passed'
         if a.issue == '142':
-            blocker = run('native-preowner-blocker', [exact,
-                'pilot_budget::tests::native_reproduce_preowner_orphan',
-                '--exact', '--ignored', '--nocapture', '--test-threads=1'])
-            observations = []
-            for line in blocker.read_text().splitlines():
-                start = line.find('{')
-                if start < 0:
-                    continue
-                try:
-                    value, _ = json.JSONDecoder().raw_decode(line[start:])
-                except ValueError:
-                    continue
-                if value.get('format') == 'sou142-preowner-parent-loss/1':
-                    observations.append(value)
-            if not observations or observations[-1].get('acceptance_pass') is not False:
-                raise RuntimeError('parent_loss_blocker_observation_missing')
-            last = observations[-1]
-            expected = {'status': 'blocked', 'reason': 'preowner_orphan_reproduced',
-                'orphan_observed': True, 'owned_members': 0,
-                'production_cleanup_verified': False, 'witness_owned_empty_cleanup_verified': True,
-                'inventory_restored': True}
-            if any(last.get(key) != value for key, value in expected.items()):
-                raise RuntimeError('parent_loss_blocker_cleanup_unproven')
-            record['blockers'] = [{**expected, 'acceptance_pass': False,
-                'budget_sha256': last['budget_sha256'], 'binary_sha256': last['binary_sha256']}]
-            record['status'] = 'blocked'
+            adoption = run('native-owner-budget-adoption', [exact,
+                'mcp::linux_budget::tests::native_owner_preparation_adopts_same_leaf_without_restarting_wall_epoch',
+                '--exact', '--ignored', '--test-threads=1'])
+            if '1 passed;' not in adoption.read_text():
+                raise RuntimeError('exact_owner_budget_adoption_test_missing')
+            if any(path.is_dir() for path in delegated.iterdir()) or (delegated / 'cgroup.procs').read_text().strip():
+                raise RuntimeError('native_adoption_changed_owned_inventory')
+            record['kernel_preflight']['same_leaf_adoption_and_wall_epoch'] = True
+            record['original_profile_parent_loss_qualification'] = 'pending'
 
     except BaseException as error:
         record['status'] = 'failed'

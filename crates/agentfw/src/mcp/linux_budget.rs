@@ -53,6 +53,42 @@ pub(crate) struct BoundConfig {
     pub(crate) root: (u64, u64),
 }
 
+/// The fixed order of prepared capability descriptors is root, leaf, procs,
+/// kill, root controllers, root subtree, root type and root procs.
+#[cfg(target_os = "linux")]
+pub(crate) const PREPARED_FDS: usize = 8;
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PreparedBudget {
+    pub(crate) budget_sha256: String,
+    pub(crate) leaf: String,
+    pub(crate) device: u64,
+    pub(crate) inode: u64,
+    pub(crate) started_monotonic_nanos: u64,
+}
+
+/// Pin the immutable delegation without creating a leaf. The external owner
+/// receives this capability before it performs the first resource mutation.
+#[cfg(target_os = "linux")]
+pub(crate) fn pin_bound(
+    config: &Config,
+    expected: Option<(u64, u64)>,
+) -> anyhow::Result<(BoundConfig, std::fs::File)> {
+    config.validate()?;
+    let root = linux::pin_root(config, expected)?;
+    use std::os::unix::fs::MetadataExt;
+    let metadata = root.metadata()?;
+    Ok((
+        BoundConfig {
+            config: config.clone(),
+            root: (metadata.dev(), metadata.ino()),
+        },
+        root,
+    ))
+}
+
 impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LinuxBudgetConfig")
@@ -299,14 +335,77 @@ impl OwnedBudget {
         self.linux.crash_cleanup().map_err(refusal)
     }
 
+    #[cfg(test)]
     pub(crate) fn prepare(config: &Config) -> anyhow::Result<Self> {
         Self::prepare_selection(config, None)
     }
 
+    #[cfg(test)]
     pub(crate) fn prepare_bound(selected: &BoundConfig) -> anyhow::Result<Self> {
         Self::prepare_selection(&selected.config, Some(selected.root))
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) fn prepare_pinned(
+        selected: &BoundConfig,
+        root: &std::fs::File,
+    ) -> anyhow::Result<Self> {
+        selected.config.validate()?;
+        let boundary = linux::Boundary::create_pinned(&selected.config, selected.root, root)?;
+        Self::configure_boundary(&selected.config, boundary)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn export_prepared(&self) -> anyhow::Result<(PreparedBudget, Vec<std::fs::File>)> {
+        self.check()?;
+        self.linux.export_prepared(&self.identity).map_err(refusal)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn adopt_prepared(
+        selected: &BoundConfig,
+        prepared: &PreparedBudget,
+        files: Vec<std::fs::File>,
+    ) -> anyhow::Result<Self> {
+        selected.config.validate()?;
+        ensure!(
+            prepared.budget_sha256 == selected.config.identity(),
+            "pilot_budget_selection_changed"
+        );
+        let boundary = linux::Boundary::adopt(selected, prepared, files)?;
+        let budget = Self {
+            config: selected.config.clone(),
+            identity: prepared.budget_sha256.clone(),
+            leaf: prepared.leaf.clone(),
+            failure: Arc::new(AtomicBool::new(false)),
+            state: Mutex::new(State::default()),
+            linux: boundary,
+        };
+        // Observe exact accepted limits and charge handback time to the same
+        // original monotonic epoch. Adoption never reconfigures or restarts it.
+        budget.check()?;
+        Ok(budget)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn configure_boundary(config: &Config, boundary: linux::Boundary) -> anyhow::Result<Self> {
+        let budget = Self {
+            config: config.clone(),
+            identity: config.identity(),
+            leaf: boundary.name.clone(),
+            failure: Arc::new(AtomicBool::new(false)),
+            state: Mutex::new(State::default()),
+            linux: boundary,
+        };
+        if let Err(code) = budget.linux.configure(config) {
+            budget.fail(code);
+            return Err(refusal(code));
+        }
+        budget.check()?;
+        Ok(budget)
+    }
+
+    #[cfg(test)]
     fn prepare_selection(
         config: &Config,
         expected_root: Option<(u64, u64)>,
@@ -315,20 +414,7 @@ impl OwnedBudget {
         #[cfg(target_os = "linux")]
         {
             let boundary = linux::Boundary::create(config, expected_root)?;
-            let budget = Self {
-                config: config.clone(),
-                identity: config.identity(),
-                leaf: boundary.name.clone(),
-                failure: Arc::new(AtomicBool::new(false)),
-                state: Mutex::new(State::default()),
-                linux: boundary,
-            };
-            if let Err(code) = budget.linux.configure(config) {
-                budget.fail(code);
-                return Err(refusal(code));
-            }
-            budget.check()?;
-            Ok(budget)
+            Self::configure_boundary(config, boundary)
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -726,8 +812,17 @@ mod linux {
         root_procs: File,
     }
 
-    fn delegation(config: &Config) -> anyhow::Result<Delegation> {
-        let (root, parent) = directory(&config.delegation_root).map_err(refusal)?;
+    fn delegation_at(config: &Config, pinned: Option<&File>) -> anyhow::Result<Delegation> {
+        let (current, parent) = directory(&config.delegation_root).map_err(refusal)?;
+        let root = if let Some(pinned) = pinned {
+            ensure!(
+                same(&current, pinned).map_err(refusal)?,
+                "pilot_budget_root_changed"
+            );
+            pinned.try_clone()?
+        } else {
+            current
+        };
         cgroup_fs(&root).map_err(refusal)?;
         cgroup_fs(&parent).map_err(refusal)?;
         let metadata = root
@@ -750,6 +845,47 @@ mod linux {
             root_type,
             root_procs,
         })
+    }
+
+    fn delegation(config: &Config) -> anyhow::Result<Delegation> {
+        delegation_at(config, None)
+    }
+
+    pub(super) fn pin_root(config: &Config, expected: Option<(u64, u64)>) -> anyhow::Result<File> {
+        let selected = delegation(config)?;
+        let metadata = selected.root.metadata()?;
+        ensure!(
+            expected.is_none_or(|identity| identity == (metadata.dev(), metadata.ino())),
+            "pilot_budget_root_changed"
+        );
+        Ok(selected.root)
+    }
+
+    fn monotonic_nanos() -> Checked<u64> {
+        let mut time = std::mem::MaybeUninit::<libc::timespec>::uninit();
+        if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, time.as_mut_ptr()) } != 0 {
+            return Err("mcp_budget_observation_failed");
+        }
+        let time = unsafe { time.assume_init() };
+        let seconds = u64::try_from(time.tv_sec).map_err(|_| "mcp_budget_observation_failed")?;
+        let nanos = u64::try_from(time.tv_nsec).map_err(|_| "mcp_budget_observation_failed")?;
+        if nanos >= 1_000_000_000 {
+            return Err("mcp_budget_observation_failed");
+        }
+        seconds
+            .checked_mul(1_000_000_000)
+            .and_then(|seconds| seconds.checked_add(nanos))
+            .ok_or("mcp_budget_observation_failed")
+    }
+
+    fn adopted_start(epoch: u64) -> Checked<std::time::Instant> {
+        let instant_now = std::time::Instant::now();
+        let elapsed = monotonic_nanos()?
+            .checked_sub(epoch)
+            .ok_or("mcp_budget_prepared_invalid")?;
+        instant_now
+            .checked_sub(std::time::Duration::from_nanos(elapsed))
+            .ok_or("mcp_budget_prepared_invalid")
     }
 
     /// Read-only preflight: never creates an orphanable probe cgroup.
@@ -822,6 +958,7 @@ mod linux {
         pub(super) membership_failures: MembershipFailures,
         pub(super) membership_observations: MembershipObservations,
         pub(super) started: std::time::Instant,
+        started_monotonic_nanos: u64,
         pub(super) removed: bool,
     }
 
@@ -834,6 +971,158 @@ mod linux {
         ) -> &'static str {
             self.membership_failures.record(phase, pid, errno);
             "mcp_budget_membership_unverified"
+        }
+
+        pub(super) fn export_prepared(
+            &self,
+            identity: &str,
+        ) -> Checked<(PreparedBudget, Vec<File>)> {
+            self.identity()?;
+            let metadata = self
+                .leaf
+                .metadata()
+                .map_err(|_| "mcp_budget_observation_failed")?;
+            let files = [
+                &self.root,
+                &self.leaf,
+                &self.procs,
+                &self.kill,
+                &self.root_controllers,
+                &self.root_subtree,
+                &self.root_type,
+                &self.root_procs,
+            ]
+            .into_iter()
+            .map(File::try_clone)
+            .collect::<std::io::Result<Vec<_>>>()
+            .map_err(|_| "mcp_budget_observation_failed")?;
+            Ok((
+                PreparedBudget {
+                    budget_sha256: identity.to_owned(),
+                    leaf: self.name.clone(),
+                    device: metadata.dev(),
+                    inode: metadata.ino(),
+                    started_monotonic_nanos: self.started_monotonic_nanos,
+                },
+                files,
+            ))
+        }
+
+        pub(super) fn adopt(
+            selected: &BoundConfig,
+            prepared: &PreparedBudget,
+            files: Vec<File>,
+        ) -> anyhow::Result<Self> {
+            ensure!(
+                files.len() == PREPARED_FDS
+                    && prepared
+                        .leaf
+                        .strip_prefix("agentfw-mcp-")
+                        .is_some_and(|name| {
+                            name.len() == 32
+                                && name.bytes().all(|byte| {
+                                    byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()
+                                })
+                        }),
+                "mcp_budget_prepared_invalid"
+            );
+            let distinct: BTreeSet<_> = files.iter().map(AsRawFd::as_raw_fd).collect();
+            ensure!(
+                distinct.len() == PREPARED_FDS,
+                "mcp_budget_prepared_invalid"
+            );
+            let [root, leaf, procs, kill, root_controllers, root_subtree, root_type, root_procs]:
+                [File; PREPARED_FDS] = files
+                .try_into()
+                .map_err(|_: Vec<File>| refusal("mcp_budget_prepared_invalid"))?;
+            for (file, access) in [
+                (&root, READ),
+                (&leaf, READ),
+                (&procs, libc::O_RDWR),
+                (&kill, WRITE),
+                (&root_controllers, READ),
+                (&root_subtree, READ),
+                (&root_type, READ),
+                (&root_procs, READ),
+            ] {
+                cgroup_fs(file).map_err(refusal)?;
+                let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
+                let descriptor_flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) };
+                ensure!(
+                    flags >= 0
+                        && flags & libc::O_ACCMODE == access
+                        && descriptor_flags >= 0
+                        && descriptor_flags & libc::FD_CLOEXEC != 0,
+                    "mcp_budget_prepared_invalid"
+                );
+            }
+            let metadata = root.metadata()?;
+            ensure!(
+                metadata.is_dir() && (metadata.dev(), metadata.ino()) == selected.root,
+                "pilot_budget_root_changed"
+            );
+            // Reopening controls here verifies only identity. The received
+            // descriptors remain the observation/cleanup capabilities in use.
+            let delegated = delegation_at(&selected.config, Some(&root))?;
+            for (received, expected) in [
+                (&root_controllers, &delegated.root_controllers),
+                (&root_subtree, &delegated.root_subtree),
+                (&root_type, &delegated.root_type),
+                (&root_procs, &delegated.root_procs),
+            ] {
+                ensure!(
+                    same(received, expected).map_err(refusal)?,
+                    "mcp_budget_prepared_invalid"
+                );
+            }
+            let current_leaf = open_at(
+                &root,
+                &cstring(prepared.leaf.as_bytes()).map_err(refusal)?,
+                READ | libc::O_DIRECTORY,
+            )
+            .map_err(refusal)?;
+            let metadata = leaf.metadata()?;
+            ensure!(
+                metadata.is_dir()
+                    && metadata.dev() == prepared.device
+                    && metadata.ino() == prepared.inode
+                    && metadata.uid() == unsafe { libc::geteuid() }
+                    && metadata.mode() & 0o077 == 0
+                    && same(&leaf, &current_leaf).map_err(refusal)?,
+                "mcp_budget_prepared_invalid"
+            );
+            for (file, name, access) in [
+                (&procs, "cgroup.procs", libc::O_RDWR),
+                (&kill, "cgroup.kill", WRITE),
+            ] {
+                let expected = open_control(&leaf, name, access).map_err(refusal)?;
+                ensure!(
+                    same(file, &expected).map_err(refusal)?,
+                    "mcp_budget_prepared_invalid"
+                );
+            }
+            let started = adopted_start(prepared.started_monotonic_nanos).map_err(refusal)?;
+            let processes =
+                process::Proc::open().map_err(|_| refusal("mcp_budget_membership_unverified"))?;
+            Ok(Self {
+                config_root: selected.config.delegation_root.clone(),
+                root,
+                leaf,
+                name: prepared.leaf.clone(),
+                procs,
+                kill,
+                root_controllers,
+                root_subtree,
+                root_type,
+                root_procs,
+                processes,
+                expected_leader: None,
+                membership_failures: MembershipFailures::default(),
+                membership_observations: MembershipObservations::default(),
+                started,
+                started_monotonic_nanos: prepared.started_monotonic_nanos,
+                removed: false,
+            })
         }
 
         pub(super) fn crash_cleanup(
@@ -872,9 +1161,26 @@ mod linux {
             Ok((cleanup, files))
         }
 
+        #[cfg(test)]
         pub(super) fn create(
             config: &Config,
             expected_root: Option<(u64, u64)>,
+        ) -> anyhow::Result<Self> {
+            Self::create_at(config, expected_root, None)
+        }
+
+        pub(super) fn create_pinned(
+            config: &Config,
+            expected_root: (u64, u64),
+            root: &File,
+        ) -> anyhow::Result<Self> {
+            Self::create_at(config, Some(expected_root), Some(root))
+        }
+
+        fn create_at(
+            config: &Config,
+            expected_root: Option<(u64, u64)>,
+            pinned: Option<&File>,
         ) -> anyhow::Result<Self> {
             // Validate procfs/PID-namespace correspondence before creating a leaf.
             let processes =
@@ -885,7 +1191,7 @@ mod linux {
                 root_subtree,
                 root_type,
                 root_procs,
-            } = delegation(config)?;
+            } = delegation_at(config, pinned)?;
             if let Some((device, inode)) = expected_root {
                 let metadata = root.metadata()?;
                 ensure!(
@@ -893,6 +1199,10 @@ mod linux {
                     "pilot_budget_root_changed"
                 );
             }
+            // Capture the same clock epoch in both processes. Begin charging
+            // before creation/configuration, including startup and handback.
+            let started_monotonic_nanos = monotonic_nanos().map_err(refusal)?;
+            let started = std::time::Instant::now();
             let name = format!("agentfw-mcp-{:032x}", rand::random::<u128>());
             let c_name = cstring(name.as_bytes()).map_err(refusal)?;
             if unsafe { libc::mkdirat(root.as_raw_fd(), c_name.as_ptr(), 0o700) } != 0 {
@@ -931,7 +1241,8 @@ mod linux {
                 expected_leader: None,
                 membership_failures: MembershipFailures::default(),
                 membership_observations: MembershipObservations::default(),
-                started: std::time::Instant::now(),
+                started,
+                started_monotonic_nanos,
                 removed: false,
             })
         }
@@ -1400,6 +1711,7 @@ mod linux {
                 membership_failures: MembershipFailures::default(),
                 membership_observations: MembershipObservations::default(),
                 started: std::time::Instant::now(),
+                started_monotonic_nanos: monotonic_nanos().unwrap(),
                 removed: false,
             };
             boundary.identity().unwrap();
@@ -1602,6 +1914,15 @@ mod linux {
                 Err("mcp_budget_observation_failed")
             );
         }
+
+        #[test]
+        fn descriptor_adoption_preserves_elapsed_monotonic_time_and_rejects_future_epoch() {
+            let epoch = monotonic_nanos().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            let adopted = adopted_start(epoch).unwrap();
+            assert!(adopted.elapsed() >= std::time::Duration::from_millis(5));
+            assert!(adopted_start(u64::MAX).is_err());
+        }
     }
 }
 
@@ -1632,6 +1953,73 @@ mod tests {
         json!({"format":FORMAT,"delegationRoot":"/sys/fs/cgroup/owned/budgets",
             "memoryMaxBytes":268435456,"pidsMax":64,
             "cpuQuotaMicros":50000,"wallMillis":120000})
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn prepared_adoption_rejects_digest_descriptor_count_and_regular_files_without_mutation() {
+        let selected = BoundConfig {
+            config: Config::read(valid().to_string().as_bytes()).unwrap(),
+            root: (0, 0),
+        };
+        let mut prepared = PreparedBudget {
+            budget_sha256: "wrong-selection".into(),
+            leaf: "agentfw-mcp-00000000000000000000000000000000".into(),
+            device: 0,
+            inode: 0,
+            started_monotonic_nanos: 0,
+        };
+        assert_eq!(
+            OwnedBudget::adopt_prepared(&selected, &prepared, Vec::new())
+                .unwrap_err()
+                .to_string(),
+            "pilot_budget_selection_changed"
+        );
+        prepared.budget_sha256 = selected.config.identity();
+        assert_eq!(
+            OwnedBudget::adopt_prepared(&selected, &prepared, Vec::new())
+                .unwrap_err()
+                .to_string(),
+            "mcp_budget_prepared_invalid"
+        );
+        let mut file = tempfile::tempfile().unwrap();
+        std::io::Write::write_all(&mut file, b"operator baseline").unwrap();
+        let descriptors = (0..PREPARED_FDS)
+            .map(|_| file.try_clone().unwrap())
+            .collect();
+        assert!(OwnedBudget::adopt_prepared(&selected, &prepared, descriptors).is_err());
+        assert_eq!(
+            file.metadata().unwrap().len(),
+            b"operator baseline".len() as u64
+        );
+        let mut preserved = [0_u8; b"operator baseline".len()];
+        std::os::unix::fs::FileExt::read_exact_at(&file, &mut preserved, 0).unwrap();
+        assert_eq!(&preserved, b"operator baseline");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires explicit already-delegated owned SOU142_BUDGET_CONFIG"]
+    fn native_owner_preparation_adopts_same_leaf_without_restarting_wall_epoch() {
+        let path = std::env::var_os("SOU142_BUDGET_CONFIG").expect("explicit owned config");
+        let config = Config::load_file(std::path::Path::new(&path)).unwrap();
+        let (selected, root) = pin_bound(&config, None).unwrap();
+        let original = OwnedBudget::prepare_pinned(&selected, &root).unwrap();
+        let (mut wrong, files) = original.export_prepared().unwrap();
+        wrong.started_monotonic_nanos = u64::MAX;
+        assert!(OwnedBudget::adopt_prepared(&selected, &wrong, files).is_err());
+        let before = original.linux.started.elapsed();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let (prepared, files) = original.export_prepared().unwrap();
+        let mut adopted = OwnedBudget::adopt_prepared(&selected, &prepared, files).unwrap();
+        assert_eq!(adopted.leaf, original.leaf);
+        assert!(adopted.linux.started.elapsed() >= before + std::time::Duration::from_millis(10));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(adopted.finish()).unwrap();
+        drop(original);
     }
 
     #[test]

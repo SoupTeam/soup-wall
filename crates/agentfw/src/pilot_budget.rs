@@ -1033,19 +1033,33 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[ignore = "private child helper; requires the explicit native witness controller"]
-    fn native_preowner_orphan_child() -> Result<()> {
+    fn native_owner_first_collector_child() -> Result<()> {
         preowner_witness::child()
     }
 
     #[cfg(target_os = "linux")]
     #[test]
-    #[ignore = "BLOCKER reproduction only; requires explicit empty owned SOU142_BUDGET_CONFIG"]
-    fn native_reproduce_preowner_orphan() -> Result<()> {
-        preowner_witness::reproduce().map_err(|_| {
+    #[ignore = "requires explicit SOU142_BUDGET_CONFIG, SOU142_OWNER_PROFILE and SOU86_TEST_AGENTFW"]
+    fn native_owner_first_preparation_parent_loss() -> Result<()> {
+        preowner_witness::reproduce(false).map_err(|_| {
             println!(
                 "{}",
-                json!({"format":"sou142-preowner-parent-loss/1","status":"incomplete",
+                json!({"format":"sou142-owner-first-parent-loss/1","status":"incomplete",
                     "reason":"preowner_witness_setup_or_cleanup_unverified","acceptance_pass":false})
+            );
+            anyhow::anyhow!("preowner_witness_setup_or_cleanup_unverified")
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires explicit SOU142_BUDGET_CONFIG, SOU142_OWNER_PROFILE and SOU86_TEST_AGENTFW"]
+    fn native_owner_first_handback_parent_loss() -> Result<()> {
+        preowner_witness::reproduce(true).map_err(|_| {
+            println!(
+                "{}",
+                json!({"format":"sou142-owner-first-parent-loss/1","status":"incomplete",
+                "reason":"preowner_witness_setup_or_cleanup_unverified","acceptance_pass":false})
             );
             anyhow::anyhow!("preowner_witness_setup_or_cleanup_unverified")
         })

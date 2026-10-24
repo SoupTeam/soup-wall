@@ -51,7 +51,7 @@ pub(crate) struct PreparedServerSandbox {
     workspace: PathBuf,
     local_references: Option<Arc<super::server_profile::git::reference_view::View>>,
     #[cfg(target_os = "linux")]
-    budget: Option<super::linux_budget::OwnedBudget>,
+    budget: Option<super::linux_owner::BudgetPrepare>,
     #[cfg(target_os = "linux")]
     bwrap_fd: std::os::fd::RawFd,
     #[cfg(target_os = "linux")]
@@ -80,19 +80,7 @@ impl PreparedServerSandbox {
         #[cfg(target_os = "linux")]
         {
             use std::os::fd::AsRawFd;
-            let cleanup = if let Some(budget) = self.budget.as_ref() {
-                let (spec, files) = budget.crash_cleanup()?;
-                self._pins.extend(files);
-                Some(spec)
-            } else {
-                None
-            };
-            let mut inherited_fds: Vec<_> = self._pins.iter().map(AsRawFd::as_raw_fd).collect();
-            let attach = self
-                .budget
-                .as_ref()
-                .map(super::linux_budget::OwnedBudget::attach_fd);
-            inherited_fds.extend(attach);
+            let inherited_fds: Vec<_> = self._pins.iter().map(AsRawFd::as_raw_fd).collect();
             let bwrap_args = self
                 .command
                 .as_std()
@@ -108,16 +96,12 @@ impl PreparedServerSandbox {
                 owner_executable_fd: self.owner_executable_fd,
                 inherited_fds,
                 bwrap_args,
-                budget_attach_fd: attach,
-                budget_cleanup: cleanup,
+                budget_attach_fd: None,
+                budget_cleanup: None,
+                budget_prepare: self.budget.take(),
             })
             .await?;
-            Ok((
-                owner.child,
-                self.budget.take(),
-                owner.guard,
-                owner.sandbox_pid,
-            ))
+            Ok((owner.child, owner.budget, owner.guard, owner.sandbox_pid))
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -822,12 +806,19 @@ fn prepare_linux_command(
         let budget_pins: Vec<_> = pins.iter().chain(std::iter::once(&bwrap_pin)).collect();
         require_budget_mount_support(&[&workspace, &package_root], &budget_pins)?;
     }
-    let budget = match selected {
-        Some(bound) => Some(super::linux_budget::OwnedBudget::prepare_bound(bound)?),
-        None => budget_config
-            .as_ref()
-            .map(super::linux_budget::OwnedBudget::prepare)
-            .transpose()?,
+    let budget = match budget_config.as_ref() {
+        Some(config) => {
+            let (bound, root) =
+                super::linux_budget::pin_bound(config, selected.map(|bound| bound.root))?;
+            let root_fd = root.as_raw_fd();
+            pins.push(root);
+            Some(super::linux_owner::BudgetPrepare {
+                config: bound.config,
+                root: bound.root,
+                root_fd,
+            })
+        }
+        None => None,
     };
     // The synchronous outside owner performs the same trusted fork-stub
     // restrictions before bubblewrap exec, while retaining cleanup authority.

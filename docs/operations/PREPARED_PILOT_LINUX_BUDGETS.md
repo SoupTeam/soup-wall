@@ -50,10 +50,17 @@ environment to choose limits; the existing engine compares the pinned root ident
 before creating a leaf. The read-only preflight cannot orphan a probe cgroup if
 its process is killed.
 
-The unchanged SOU-79 engine enforces each original server's aggregate process
+The SOU-79 engine enforces each original server's aggregate process
 **tree** in its own leaf. Filesystem and Git are independent siblings. This is
 not a claim that the daemon, Claude host, or their combined CPU/memory is inside
 one shared budget. The operator's delegated substrate remains intact.
+
+Leaf creation now occurs in the existing outside crash owner, after its
+authenticated collector connection and pinned parent identity exist. The owner
+retains cleanup authority while the collector adopts the exact pinned leaf and
+control descriptors over a private socket. Sandbox startup waits for that
+adoption acknowledgement. The original monotonic budget epoch includes this
+handoff; no limits or accounting rules are reset or widened.
 
 ## Status and cleanup
 
@@ -126,8 +133,12 @@ retained artifacts contain bounded status, hashes and projected compiler message
 This is a compile/capability slice, not original-host or final admission evidence.
 The default `off` keeps the existing manual budget qualification unchanged.
 
-The accepted engine creates its leaf before the independent original-server owner
-starts. A collector killed in that preparation interval can leave an empty leaf.
-The new high-level binding must not adopt or sweep that unconfirmed inventory.
-An explicit ignored native reproduction records this as a blocker; it must be
-closed before claiming complete parent-loss qualification.
+The earlier first slice reproduced an empty orphan when the collector died
+between leaf creation and owner startup. Retain that failed attempt. New ignored
+native controls kill the collector during nonmutating preparation and during
+descriptor handoff, and require production cleanup of the exact observed inode.
+Those controls require an explicit original-server profile and candidate binary;
+compilation or the separate adoption unit control cannot stand in for them.
+Loss of the outside cleanup owner itself before handoff is a separate unresolved
+failure boundary. An unconfirmed same-name leaf must never be swept or reported
+as successfully cleaned.

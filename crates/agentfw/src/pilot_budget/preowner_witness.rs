@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Explicit native blocker reproduction; never an acceptance pass.
+//! Explicit native owner-first preparation and handback parent-loss controls.
 use super::*;
 use std::ffi::CString;
 use std::os::fd::{AsRawFd, FromRawFd};
@@ -18,6 +18,8 @@ struct Ready {
     device: u64,
     inode: u64,
     budget_sha256: String,
+    #[serde(default)]
+    started_monotonic_nanos: u64,
 }
 
 struct OwnedChild {
@@ -67,7 +69,9 @@ impl OwnedLeaf {
                 flags | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK,
             )
         };
-        ensure!(raw >= 0, "preowner_witness_control_unavailable");
+        if raw < 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
         Ok(unsafe { File::from_raw_fd(raw) })
     }
 
@@ -170,37 +174,61 @@ pub(super) fn child() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("explicit_owned_budget_required"))?;
     let config = Config::load_file(Path::new(&path))?;
     let root = root_identity(&config.delegation_root)?;
-    let budget = crate::mcp::linux_budget::OwnedBudget::prepare_bound(&BoundConfig {
-        config: config.clone(),
-        root: (root.device, root.inode),
-    })?;
-    // Reuse the real engine's exact pinned cleanup capsule. Deliberately
-    // do not create linux_owner: this is the production pre-owner stage.
-    let (capsule, _capsule_files) = budget.crash_cleanup()?;
+    let profile = std::env::var_os("SOU142_OWNER_PROFILE")
+        .ok_or_else(|| anyhow::anyhow!("explicit_owned_profile_required"))?;
+    let mut bytes = Vec::new();
+    File::open(profile)?
+        .take(MAX_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    ensure!(
+        bytes.len() as u64 <= MAX_BYTES,
+        "preowner_witness_profile_overflow"
+    );
+    let profile = crate::mcp::server_profile::ProfileConfig::read(&bytes)?;
+    let prepared = crate::mcp::server_sandbox::prepare_with_budget(
+        &profile,
+        Some(&BoundConfig {
+            config: config.clone(),
+            root: (root.device, root.inode),
+        }),
+    )?;
     let ready = PathBuf::from(ready);
+    if std::env::var("SOU142_TEST_COLLECTOR_STAGE").as_deref() == Ok("handoff") {
+        // The candidate Agent image runs its ordinary owner code; the barrier
+        // exists only in this libtest collector before its adoption ACK.
+        std::env::set_var("SOU142_TEST_HANDOFF_BARRIER", &ready);
+        return tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async {
+                let _unexpected_started_sandbox = prepared.spawn().await?;
+                anyhow::bail!("preowner_witness_sandbox_released_before_barrier")
+            });
+    }
     let staged = ready.with_extension("staged");
     write_json(
         &staged,
         &Ready {
-            leaf: capsule.name,
-            device: capsule.device,
-            inode: capsule.inode,
+            leaf: String::new(),
+            device: 0,
+            inode: 0,
             budget_sha256: config.identity(),
+            started_monotonic_nanos: 0,
         },
     )?;
     fs::rename(staged, &ready)?;
     // A missing controller cannot strand this helper indefinitely.
-    // Normal return drops the real budget; the witness kills it first.
+    // Normal return drops only read-only preparation; the witness kills it first.
     let cancel = ready.with_extension("cancel");
     let deadline = Instant::now() + Duration::from_secs(30);
     while !cancel.exists() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));
     }
-    drop(budget);
+    drop(prepared);
     anyhow::bail!("preowner_witness_controller_did_not_kill_child")
 }
 
-pub(super) fn reproduce() -> Result<()> {
+pub(super) fn reproduce(handoff: bool) -> Result<()> {
     let path = std::env::var_os("SOU142_BUDGET_CONFIG")
         .ok_or_else(|| anyhow::anyhow!("explicit_owned_budget_required"))?;
     let config = Config::load_file(Path::new(&path))?;
@@ -209,15 +237,26 @@ pub(super) fn reproduce() -> Result<()> {
     let ready_path = private.path().join("ready.json");
     let executable = std::env::current_exe()?;
     let binary_sha256 = binary_identity(&executable)?;
+    let owner_image = std::env::var_os("SOU86_TEST_AGENTFW")
+        .ok_or_else(|| anyhow::anyhow!("explicit_candidate_owner_image_required"))?;
+    let owner_binary_sha256 = binary_identity(Path::new(&owner_image))?;
+    let profile = std::env::var_os("SOU142_OWNER_PROFILE")
+        .ok_or_else(|| anyhow::anyhow!("explicit_owned_profile_required"))?;
     let mut child = OwnedChild {
         child: Command::new(&executable)
             .env_clear()
             .env("SOU142_BUDGET_CONFIG", path)
             .env(READY_ENV, &ready_path)
+            .env("SOU142_OWNER_PROFILE", profile)
+            .env("SOU86_TEST_AGENTFW", owner_image)
+            .env(
+                "SOU142_TEST_COLLECTOR_STAGE",
+                if handoff { "handoff" } else { "prepared" },
+            )
             .args([
                 "--ignored",
                 "--exact",
-                "pilot_budget::tests::native_preowner_orphan_child",
+                "pilot_budget::tests::native_owner_first_collector_child",
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -236,6 +275,44 @@ pub(super) fn reproduce() -> Result<()> {
         std::thread::sleep(Duration::from_millis(10));
     }
     let ready: Ready = private_json(&ready_path)?;
+    ensure!(
+        ready.budget_sha256 == config.identity(),
+        "preowner_witness_ready_invalid"
+    );
+    if !handoff {
+        ensure!(
+            ready.leaf.is_empty()
+                && fs::read_dir(&config.delegation_root)?.all(|entry| entry
+                    .is_ok_and(|entry| entry.file_type().is_ok_and(|kind| !kind.is_dir()))),
+            "preowner_witness_prepare_created_leaf"
+        );
+        child.child.kill()?;
+        let status = child.child.wait()?;
+        child.reaped = true;
+        ensure!(
+            status.signal() == Some(libc::SIGKILL),
+            "preowner_witness_not_sigkill"
+        );
+        ensure!(
+            root_identity(&config.delegation_root)? == identity,
+            "preowner_witness_root_replaced"
+        );
+        ensure!(
+            fs::read_dir(&config.delegation_root)?
+                .all(|entry| entry
+                    .is_ok_and(|entry| entry.file_type().is_ok_and(|kind| !kind.is_dir()))),
+            "preowner_witness_inventory_not_restored"
+        );
+        println!(
+            "{}",
+            json!({"format":"sou142-owner-first-parent-loss/1","status":"pass",
+            "stage":"prepared-before-owner","binary_sha256":binary_sha256,
+            "owner_binary_sha256":owner_binary_sha256,"budget_sha256":config.identity(),
+            "leaf_created":false,"original_started":false,"owned_members":0,
+            "production_cleanup_verified":true,"witness_cleanup_attempted":false})
+        );
+        return Ok(());
+    }
     ensure!(
         ready.budget_sha256 == config.identity()
             && ready.leaf.strip_prefix("agentfw-mcp-").is_some_and(|id| {
@@ -264,19 +341,71 @@ pub(super) fn reproduce() -> Result<()> {
         status.signal() == Some(libc::SIGKILL),
         "preowner_witness_not_sigkill"
     );
-    std::thread::sleep(Duration::from_millis(CLEANUP_WINDOW_MILLIS));
-    owned.verify()?;
-    owned.empty()?;
-    let mut evidence = json!({"format":"sou142-preowner-parent-loss/1","status":"blocked",
-            "reason":"preowner_orphan_reproduced","acceptance_pass":false,
-            "phase":"orphan-observed","stage":"bound-budget-prepared-before-owner",
-            "binary_sha256":binary_sha256,"budget_sha256":config.identity(),
-            "observation_millis":CLEANUP_WINDOW_MILLIS,"orphan_observed":true,
-            "owned_members":0,"production_cleanup_verified":false,
-            "witness_owned_empty_cleanup_verified":false,"inventory_restored":false});
-    // Preserve the blocker even if the strictly owned cleanup fails.
-    println!("{evidence}");
-    owned.remove()?;
+    // Include both existing startup and cleanup windows, without changing their
+    // limits. A controller's own fallback never counts as production cleanup.
+    let deadline = Instant::now()
+        + Duration::from_millis(
+            crate::mcp::linux_owner::STARTUP_MILLIS + crate::mcp::linux_owner::CLEANUP_MILLIS,
+        );
+    let name = CString::new(owned.identity.leaf.as_bytes())?;
+    let removed = loop {
+        let raw = unsafe {
+            libc::openat(
+                owned.root.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if raw < 0 {
+            ensure!(
+                std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT),
+                "preowner_witness_cleanup_observation_failed"
+            );
+            let events = CString::new("cgroup.events")?;
+            let control = unsafe {
+                libc::openat(
+                    owned.leaf.as_raw_fd(),
+                    events.as_ptr(),
+                    libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if control < 0 {
+                ensure!(
+                    matches!(
+                        std::io::Error::last_os_error().raw_os_error(),
+                        Some(libc::ENOENT | libc::ENODEV)
+                    ),
+                    "preowner_witness_cleanup_observation_failed"
+                );
+                break true;
+            }
+            drop(unsafe { File::from_raw_fd(control) });
+        } else {
+            let current = unsafe { File::from_raw_fd(raw) }.metadata()?;
+            ensure!(
+                current.dev() == owned.identity.device && current.ino() == owned.identity.inode,
+                "preowner_witness_leaf_replaced"
+            );
+            if let Err(error) = owned.empty() {
+                let teardown = error
+                    .downcast_ref::<std::io::Error>()
+                    .and_then(std::io::Error::raw_os_error)
+                    .is_some_and(|code| matches!(code, libc::ENOENT | libc::ENODEV));
+                if !teardown {
+                    return Err(error);
+                }
+                // The owner may remove the same empty leaf between metadata
+                // and control reads. Only the next pinned-disappearance proof
+                // can resolve these teardown errors; permissions still fail.
+            }
+        }
+        if Instant::now() >= deadline {
+            break false;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    ensure!(removed, "preowner_witness_production_cleanup_failed");
+    owned.removed = true;
     ensure!(
         root_identity(&config.delegation_root)? == owned.root_identity,
         "preowner_witness_root_replaced"
@@ -295,9 +424,14 @@ pub(super) fn reproduce() -> Result<()> {
         root_members.len() as u64 <= MAX_BYTES && root_members.iter().all(u8::is_ascii_whitespace),
         "preowner_witness_root_populated"
     );
-    evidence["phase"] = json!("owned-witness-cleanup");
-    evidence["witness_owned_empty_cleanup_verified"] = json!(true);
-    evidence["inventory_restored"] = json!(true);
-    println!("{evidence}");
+    println!(
+        "{}",
+        json!({"format":"sou142-owner-first-parent-loss/1","status":"pass",
+        "stage":"prepared-handback-before-adoption-ack","binary_sha256":binary_sha256,
+        "owner_binary_sha256":owner_binary_sha256,"budget_sha256":config.identity(),
+        "leaf_created":true,"original_started":false,"owned_members":0,
+        "production_cleanup_verified":true,"witness_cleanup_attempted":false,
+        "inventory_restored":true})
+    );
     Ok(())
 }
