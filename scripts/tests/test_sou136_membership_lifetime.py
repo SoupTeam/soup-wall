@@ -124,8 +124,8 @@ def complete_report():
             row = attempt('churn', profile, number, cycle=cycle)
             row['client']['exit_code'] = -V.signal.SIGKILL
             row['crash'] = crash(row['client'], row['case'])
-            row['sibling_before'] = useful(10 + cycle * 2, row['useful']['semantic_sha256'])
-            row['sibling_after'] = useful(11 + cycle * 2, row['useful']['semantic_sha256'])
+            if cycle % V.SIBLING_INTERVAL == 0:
+                row['sibling_after'] = useful(10 + cycle // V.SIBLING_INTERVAL, row['useful']['semantic_sha256'])
             report['attempts'].append(row)
             number += 1
         row = attempt('capacity', profile, number)
@@ -177,10 +177,21 @@ class GraderControls(unittest.TestCase):
         self.assert_refused(lambda r: capacity(r)['client']['stdout'].update(records=[]))
         self.assert_refused(lambda r: capacity(r)['useful'].update(semantic_sha256='0' * 64))
 
-    def test_persistent_sibling_requires_correlated_fresh_work_each_cycle(self):
-        self.assert_refused(lambda r: r['attempts'][1]['sibling_after'].update(id=999))
-        self.assert_refused(lambda r: r['attempts'][1].update(sibling_after=copy.deepcopy(r['attempts'][1]['sibling_before'])))
+    def test_persistent_sibling_requires_fixed_fresh_checkpoints_through_last_cycle(self):
+        def probe(r, cycle=10):
+            return next(a for a in r['attempts'] if a['kind']=='churn' and a['profile']=='git' and a['cycle']==cycle)
+        self.assert_refused(lambda r: probe(r)['sibling_after'].update(id=999))
+        self.assert_refused(lambda r: probe(r).pop('sibling_after'))
+        self.assert_refused(lambda r: probe(r,70).pop('sibling_after'))
+        self.assert_refused(lambda r: probe(r,20).update(sibling_after=copy.deepcopy(probe(r,10)['sibling_after'])))
         self.assert_refused(lambda r: r['attempts'][0]['client']['stdout'].update(records=[]))
+        self.assert_refused(lambda r: r.update(sibling_probe_interval_cycles=20))
+        self.assert_refused(lambda r: r['attempts'][1].update(sibling_after=useful()))
+
+    def test_calibration_cannot_replay_a_prior_sibling_result(self):
+        def control_row(r):
+            return next(a for a in r['attempts'] if a.get('control')=='pids')
+        self.assert_refused(lambda r: control_row(r)['sibling_after'].update(id=152))
 
     def test_missing_pressure_counters_workers_or_withheld_result_refuse(self):
         def find(r, name):

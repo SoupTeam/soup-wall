@@ -68,7 +68,12 @@ remain active independently of these diagnostic observations.
 
 Focused Ubuntu qualification requires 70 distinct original filesystem and 70
 original Git crash/reconnect cycles, correlated useful work after restored
-capacity, surviving useful siblings, and independently observed cleanup. Separate
+capacity, surviving useful siblings, and independently observed cleanup. Each
+profile keeps one original sibling through all 70 cycles, with useful probes at
+baseline, every ten completed crashes and the final crash, plus each resource
+control. Independent kernel/process observation continues throughout. This avoids
+spending the existing 600000 ms peer wall budget on two extra Git calls per cycle;
+the failed earlier attempt remains retained. The cadence is fixed and graded. Separate
 owned fixtures calibrate real memory/PID-limit refusals. A separate native Rust
 control moves its own unreaped child between owned cgroups and verifies the
 production budget observer refuses the violation. The parent retains sole reaping

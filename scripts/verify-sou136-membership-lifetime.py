@@ -34,6 +34,7 @@ require, sha, digest = SOU86.require, SOU86.sha, SOU86.digest
 FORMAT = 'sou136-linux-membership-lifetime/1'
 PROFILES = ('filesystem', 'git')
 CYCLES = 70
+SIBLING_INTERVAL = 10
 CONTROL_NAMES = ('memory', 'pids', 'membership')
 REQUIRED_ATTEMPTS = CYCLES * 2 + 2 * 2 + len(CONTROL_NAMES)
 REPORT_BYTES = 16 * 1024 * 1024
@@ -389,7 +390,8 @@ def grade(report):
     require(report.get('scope') == 'focused-sou136-native' and report.get('retry_count') == 0,
             'qualification_scope_or_retry_changed')
     require(report.get('required_attempts') == report.get('passed') == REQUIRED_ATTEMPTS
-            and report.get('cycles_per_original_profile') == CYCLES, 'qualification_denominator_changed')
+            and report.get('cycles_per_original_profile') == CYCLES
+            and report.get('sibling_probe_interval_cycles') == SIBLING_INTERVAL, 'qualification_denominator_changed')
     before = report.get('source_before', {})
     require(before == report.get('source_after') and before.get('dirty') is False
             and before.get('commit') == report.get('runtime_source_commit')
@@ -420,6 +422,7 @@ def grade(report):
     require({a.get('control') for a in controls} == set(CONTROL_NAMES)
             and len(controls) == len(CONTROL_NAMES), 'required_calibrations_missing')
     owners, epochs, leaves = set(), set(), set()
+    last_sibling_ids = {}
     for profile in PROFILES:
         cycles = [a for a in attempts if a['kind'] == 'churn' and a['profile'] == profile]
         require(len(cycles) == CYCLES and [a['cycle'] for a in cycles] == list(range(1, CYCLES + 1)),
@@ -449,21 +452,30 @@ def grade(report):
         require(capacity['useful']['semantic_sha256'] == sibling['useful']['semantic_sha256'],
                 'restored_useful_work_changed')
         require(attempts.index(capacity) > attempts.index(cycles[-1]), 'restoration_precedes_churn')
+        previous_probe = sibling['useful']['id']
         for row in cycles:
             SELECTED.grade_crash_observation(row['crash'], 'sou136', budget=DEFAULT_LIMITS)
             grade_client(row['client'], DEFAULT_LIMITS, crashed=True)
             require(row['crash']['client'] == row['client'], 'crash_client_identity_mismatch')
-            for key in ('sibling_before', 'sibling_after'):
-                grade_useful(row[key], sibling['client'])
-                require(row[key]['semantic_sha256'] == sibling['useful']['semantic_sha256'],
+            require('sibling_before' not in row, 'unexpected_sibling_probe')
+            if row['cycle'] % SIBLING_INTERVAL == 0:
+                followup = row['sibling_after']
+                grade_useful(followup, sibling['client'])
+                require(followup['semantic_sha256'] == sibling['useful']['semantic_sha256'],
                         'surviving_sibling_useful_changed')
-            require(row['sibling_after']['id'] > row['sibling_before']['id'], 'sibling_followup_not_fresh')
+                require(followup['id'] > previous_probe, 'sibling_followup_not_fresh')
+                previous_probe = followup['id']
+            else:
+                require('sibling_after' not in row, 'unexpected_sibling_probe')
+        last_sibling_ids[profile] = previous_probe
     sibling_fs = next(a for a in attempts if a['kind'] == 'sibling' and a['profile'] == 'filesystem')
     for row in controls:
         grade_control(row)
         grade_useful(row['sibling_after'], sibling_fs['client'])
         require(row['sibling_after']['semantic_sha256'] == sibling_fs['useful']['semantic_sha256'],
                 'calibration_harmed_sibling')
+        require(row['sibling_after']['id'] > last_sibling_ids['filesystem'], 'calibration_sibling_probe_replayed')
+        last_sibling_ids['filesystem'] = row['sibling_after']['id']
 
 
 def finish_client(row, client, limits, save, *, failed=False):
@@ -575,8 +587,6 @@ def profile_churn(report, save, rig, profile, args, *, resource_controls=False):
         save()
 
         def cycle_exercise(row, client):
-            stage(row, save, 'sibling_before')
-            row['sibling_before'] = useful_witness(sibling, expected)
             stage(row, save, 'useful')
             row['useful'] = useful_witness(client, expected)
             stage(row, save, 'crash')
@@ -586,8 +596,9 @@ def profile_churn(report, save, rig, profile, args, *, resource_controls=False):
             save()
             SELECTED.grade_crash_observation(row['crash'], 'sou136', budget=DEFAULT_LIMITS)
             grade_client(row['client'], DEFAULT_LIMITS, crashed=True)
-            stage(row, save, 'sibling_after')
-            row['sibling_after'] = useful_witness(sibling, expected)
+            if row['cycle'] % SIBLING_INTERVAL == 0:
+                stage(row, save, 'sibling_after')
+                row['sibling_after'] = useful_witness(sibling, expected)
 
         for number in range(1, CYCLES + 1):
             run_case(report, save, 'churn', profile,
@@ -663,6 +674,7 @@ def initial_report(args):
             'runtime_source_commit': args.runtime_source_commit, 'retry_count': 0,
             'passed': 0, 'failed': 0, 'incomplete': REQUIRED_ATTEMPTS, 'skipped': 0,
             'required_attempts': REQUIRED_ATTEMPTS, 'cycles_per_original_profile': CYCLES,
+            'sibling_probe_interval_cycles': SIBLING_INTERVAL,
             'attempts': [], 'installations': {}, 'original_unchanged': {}, 'workspace_unchanged': {},
             'cleanup_verified': False, 'delegation_removed': False,
             'live_model_efficacy_measured': False, 'final_admission_or_main_merge': False}

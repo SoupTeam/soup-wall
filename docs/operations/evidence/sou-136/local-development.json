@@ -6,8 +6,8 @@
   "subject_sha256": {
     "crates/agentfw/src/mcp/linux_budget.rs": "ff7c211bafb877494acbf21295012bcd5166688b29fc0841d0bc0567ea286537",
     "crates/agentfw/src/mcp/linux_budget/process.rs": "b6f1d2c5b21d6b7be445fadc53d3fa445e73b7aa01a6bb6c2ea72645b2c06652",
-    "scripts/verify-sou136-membership-lifetime.py": "ecb36a98c0aa750160211a29cae5a39dada85eb7201fa912537dcdd1ef6d371b",
-    "scripts/tests/test_sou136_membership_lifetime.py": "27ef65132c4130d55b14c17f7971df7e481e142718e0369f99712900f76d08cc"
+    "scripts/verify-sou136-membership-lifetime.py": "267ddafb5f12810dea0df84b957312b0be56324f9cb03b8603c002eb8d967e1f",
+    "scripts/tests/test_sou136_membership_lifetime.py": "8db0e0c154d29c337aff450cb7f208a92763cfe421c7d0a653598125cdb61479"
   },
   "rust_workspace": {
     "passed": 1706,
@@ -16,13 +16,13 @@
     "test_runner": "Only legacy attack_scenarios test binaries change cwd to writable scratch; source stays read-only."
   },
   "python_workspace": {
-    "run": 1262,
+    "run": 1265,
     "skipped": 79,
     "failed": 0,
     "platform_exclusions": "Includes three unchanged Linux /proc prerequisite controls unavailable on macOS."
   },
   "focused_python": {
-    "passed": 19,
+    "passed": 20,
     "failed": 0
   },
   "clippy": "workspace all-targets -D warnings passed",
@@ -41,7 +41,8 @@
     "linux-visibility-local.log": "dfd335cad4f6bce18d5f65479260e8f12d93f2316e19976ecb07179b5560c2c3",
     "cgroup-shape-local.log": "1c6e3f525a11a5dbd122e68b30a681d4435020f58de9195a576c58fb1db793df",
     "fixture-permissions-local.log": "9ede84614722163fba56e00de4e23e520caef72588c72cd64d400e612302c8e6",
-    "libtest-parsing-controls.log": "799687279e54a57b8c8990a5d47156c97e1de59e5d77849495b467bf199d313b"
+    "libtest-parsing-controls.log": "799687279e54a57b8c8990a5d47156c97e1de59e5d77849495b467bf199d313b",
+    "python-fixed-peer-cadence.log": "4e4769927ec47fe7d3b1e668ed2b6fbb253ebad2f5ec172b6ec8179061127a51"
   },
   "retained_environment_setup_failures": [
     "Initial source snapshot lacked full Git metadata, causing CLI/docs controls to fail. Corrected by copying its own Git metadata.",
@@ -49,5 +50,11 @@
     "CLI prerequisite expected target/debug in the snapshot. A symlink to the existing writable scratch target supplied the built binary."
   ],
   "linux_status": "Not yet run; Linux-only process tests, real-kernel before failure and 140 original-server cycles are pending.",
-  "follow_up": "Native runner output parser: 19 focused controls passed, including real libtest prefix and quiet output, with negative panic, duplicate, arbitrary-prefix and size controls."
+  "follow_up": "Full supported macOS Python suite repeated after fixed ten-cycle useful-peer cadence: 1265 tests, 79 optional/platform skips. Rust workspace was checked at its separately recorded development fingerprint; subsequent Linux tests and strict clippy are recorded in native attempts.",
+  "rust_workspace_subject_sha256": {
+    "crates/agentfw/src/mcp/linux_budget.rs": "182b2d649c82c08d9d78529613969783effe46559bf93e858a459f72f509b462",
+    "crates/agentfw/src/mcp/linux_budget/process.rs": "38a622f97c7f18a4090896797cc57591fa16a39af31afecda0047a57c9766c4b",
+    "scripts/verify-sou136-membership-lifetime.py": "b454949ee2bec2ee8a577a1b94c696f543b89543c1cf39e603b4d1efffe1a77d",
+    "scripts/tests/test_sou136_membership_lifetime.py": "88ec04492c11910bf1d7c79a96af28a82ce0efa01aefd4482d787730d1e8c020"
+  }
 }

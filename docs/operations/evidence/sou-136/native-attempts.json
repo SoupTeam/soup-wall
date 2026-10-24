@@ -81,6 +81,34 @@
       "native_acceptance_passed": false,
       "cause": "Passing libtest stdout had the exact fixed test name prefix before its JSON event. The driver missed that event and failed conservatively. The retained SHA256 matches reconstructed passing test output (686 filtered, 0.01s). No failed run is promoted; parser now accepts only the exact known prefix and requires success exit, one complete event and passing libtest count.",
       "retained_report": "attempt-40091738937.json"
+    },
+    {
+      "run_id": 40092648569,
+      "source": "1990edf50087a75a5586fddd2d46e145c43563b0",
+      "status": "peer_wall_budget_expired",
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 23,
+        "failed": 0,
+        "ignored": 1
+      },
+      "strict_agentfw_linux_clippy": "passed",
+      "filesystem_cycles_attempted": 70,
+      "filesystem_cycles_passed": 70,
+      "git_cycles_attempted": 58,
+      "git_cycles_passed": 57,
+      "memory_control_passed": true,
+      "pids_control_passed": true,
+      "membership_control_passed": true,
+      "passed": 132,
+      "failed": 2,
+      "incomplete": 13,
+      "unexpected_closures": 1,
+      "cleanup_verified": true,
+      "delegation_removed": false,
+      "native_acceptance_passed": false,
+      "cause": "Extra sibling Git calls before and after every crash consumed its unchanged 600000ms wall budget; mcp_budget_wall_expired at churn-git-58. The focused driver now keeps the same peer alive with continuous kernel/process observation and baseline/every-10/final useful checkpoints. All 70 original subject cycles remain mandatory; no wall, cleanup or polling bound increases.",
+      "retained_report": "attempt-40092648569.json"
     }
   ]
 }
