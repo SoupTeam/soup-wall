@@ -459,9 +459,13 @@ def packed_reads(stack, config, first, second, report):
         result = subprocess.run([str(stack.binary), "mcp", "--native-admission", "--id", "sou137-packed", "--",
             profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"],
             env=dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.profile)), cwd=stack.workspace,
-            input=b"", capture_output=True, timeout=20)
+            input=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-11-25", "capabilities": {},
+                "clientInfo": {"name": "owned-forged-peel", "version": "1"}}}).encode() + b"\n",
+            capture_output=True, timeout=20)
         (stack.root / "forged-peel.log").write_bytes(result.stderr)
-        require(result.returncode != 0 and b'"event":"mcp_real_server_start"' not in result.stderr,
+        require(result.returncode != 0 and b'"event":"mcp_real_server_start"' not in result.stderr and
+                b"Git packed peeled target differs from its object chain" in result.stderr,
                 "forged packed peel reached the original server")
         record["forged_peel_refused_before_start"] = True
         packed.write_bytes(old)
