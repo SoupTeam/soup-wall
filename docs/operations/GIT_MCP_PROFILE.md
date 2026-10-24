@@ -271,6 +271,16 @@ session. Current policy/classifier admission, exact single-use Ask, result
 inspection, cancellation, isolation and cleanup remain mandatory; the accepted
 five-second first-pending observation and broker/runtime budgets are unchanged.
 
+The pinned upstream GitPython `git_show` implementation compares a commit with
+its parent. In a depth-one clone it can therefore return its own `fatal: bad
+object` error for HEAD, despite status/log/working-tree diff remaining useful.
+The protected server preserves that original error and permits a later safe
+read. It never fetches the parent or substitutes another implementation.
+Qualification retains this depth-one case and separately checks successful
+byte-identical show output from a shallow fixture with a local parent. Original
+error strings can contain different executable paths outside/inside the fixed
+namespace; both raw errors and hashes are retained without rewriting output.
+
 Run **Real Git MCP profile** on the exact source branch and select **Run only
 opt-in SOU-147 shallow Git acceptance**. The retained
 `sou68-real-git-mcp-evidence` artifact includes ordinary/shallow original-server
