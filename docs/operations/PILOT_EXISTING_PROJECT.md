@@ -58,7 +58,8 @@ and diff; show/diff accept only `HEAD` or a full SHA-1 revision. Project content
 and results remain untrusted. Operator edits between separate runs are read as
 current data with fresh authority; unchanged root identity needs no new selection.
 
-The host starts outside the project with the existing restricted MCP configuration.
+The host keeps the project working directory but uses private HOME, temporary
+files and explicit settings with the existing restricted MCP configuration.
 Project-local Claude settings, hooks, plugins, `.mcp.json`, and `CLAUDE.md` cannot
 enable built-in tools or commands. Writes, outside-workspace symlink targets and
 server network effects stay confined/refused. Policy Ask/Deny behavior is unchanged.
