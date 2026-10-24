@@ -1,0 +1,877 @@
+{
+  "format": "sou124-native-observer-failure/1",
+  "run_id": 40047008403,
+  "exact_source": "644abccbc9676f64d012ac2f500fa365f3db90ff",
+  "status": "failed",
+  "error": "qualification_failed",
+  "comparison_sha256": "53cff020e3c6dcea5d50266e147c67dc6d4fa44a77d7961d300715bf017cdf06",
+  "source_before": {
+    "baseline": {
+      "commit": "8c275fcc9abdee99d4997cd4a985e6ce14d751e6",
+      "tree": "0ad938290c9aa62c64d78a2ca8543172ad0ad84a",
+      "dirty": false,
+      "files_sha256": "198d658305439fec6c8727e980ef7b2946a23ee706419cfd35e7735194db53ee"
+    },
+    "candidate": {
+      "commit": "644abccbc9676f64d012ac2f500fa365f3db90ff",
+      "tree": "236302c67bdd64fbfee405605e31e51cd47ca162",
+      "dirty": false,
+      "files_sha256": "15ce2b463901d7ddb8a44544d051472c84c4deb525374ae573b2938e645de3e9"
+    }
+  },
+  "source_after": {
+    "baseline": {
+      "commit": "8c275fcc9abdee99d4997cd4a985e6ce14d751e6",
+      "tree": "0ad938290c9aa62c64d78a2ca8543172ad0ad84a",
+      "dirty": false,
+      "files_sha256": "198d658305439fec6c8727e980ef7b2946a23ee706419cfd35e7735194db53ee"
+    },
+    "candidate": {
+      "commit": "644abccbc9676f64d012ac2f500fa365f3db90ff",
+      "tree": "236302c67bdd64fbfee405605e31e51cd47ca162",
+      "dirty": false,
+      "files_sha256": "15ce2b463901d7ddb8a44544d051472c84c4deb525374ae573b2938e645de3e9"
+    }
+  },
+  "environment": {
+    "system": "Linux",
+    "release": "6.17.0-1022-azure",
+    "machine": "x86_64"
+  },
+  "preflight_status": "pass",
+  "strict_real_lease_process_cap": "passed",
+  "linux_identity_controls": {
+    "passed": 11,
+    "failed": 0,
+    "optional_verity_fixture_ignored": 1
+  },
+  "raw_trace_retained": false,
+  "exact_write_shape_known": false,
+  "diagnosis": "Fourth candidate Git sample completed its correlated result but reuse observation failed on an undecodable write record. Earlier three samples retain success; the failed sample and36missing cases never qualify performance. Failure diagnostics were unavailable because finish had closed stderr before failure_observation attempted flush.",
+  "sides": {
+    "baseline": {
+      "status": "performance_blocker",
+      "metrics": {
+        "filesystem": {
+          "planned": 20,
+          "successful": 20,
+          "failed": 0,
+          "incomplete": 0,
+          "p50_ms": 5549.913962,
+          "p95_ms": 5597.554388,
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "target_ms": 3000,
+          "target_met": false
+        },
+        "git": {
+          "planned": 20,
+          "successful": 20,
+          "failed": 0,
+          "incomplete": 0,
+          "p50_ms": 6451.032375,
+          "p95_ms": 6529.427024,
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "target_ms": 3000,
+          "target_met": false
+        },
+        "status": "performance_blocker"
+      },
+      "runtime_implementation_source": {
+        "commit": "8c275fcc9abdee99d4997cd4a985e6ce14d751e6",
+        "tree": "0ad938290c9aa62c64d78a2ca8543172ad0ad84a",
+        "dirty": false,
+        "files_sha256": "198d658305439fec6c8727e980ef7b2946a23ee706419cfd35e7735194db53ee"
+      },
+      "qualification_sha256": "eaed364a8edf0fd32c510915c2bf6ef7cb5e136d9b4f827dd7eab6d7f469a754",
+      "cases": [
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 0,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6573.763376,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 1,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6518.250742,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 2,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6448.795221,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 3,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6423.218688,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 4,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6429.079632,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 5,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6484.636875,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 6,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6462.076183,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 7,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6475.283943,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 8,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6438.525132,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 9,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6400.089794,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 10,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6453.567881,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 11,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6432.318269,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 12,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6443.075584,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 13,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6529.427024,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 14,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6521.910231,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 15,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6502.196458,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 16,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6446.192904,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 17,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6510.203994,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 18,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6451.032375,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 19,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 6443.033889,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 0,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5552.072141,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 1,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5577.077153,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 2,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5553.740827,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 3,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5541.900994,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 4,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5473.522501,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 5,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5597.554388,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 6,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5588.240105,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 7,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5545.139197,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 8,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5538.038388,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 9,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5546.738197,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 10,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5531.703264,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 11,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5577.468506,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 12,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5547.978077,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 13,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5549.913962,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 14,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5535.515121,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 15,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5589.258614,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 16,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5590.523794,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 17,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5608.989527,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 18,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5564.28273,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "sample_index": 19,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 5509.59133,
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        }
+      ]
+    },
+    "candidate": {
+      "status": "failed",
+      "metrics": {
+        "filesystem": {
+          "planned": 20,
+          "successful": 0,
+          "failed": 0,
+          "incomplete": 20,
+          "p50_ms": null,
+          "p95_ms": null,
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "target_ms": 3000,
+          "target_met": false
+        },
+        "git": {
+          "planned": 20,
+          "successful": 3,
+          "failed": 1,
+          "incomplete": 16,
+          "p50_ms": 2843.482171,
+          "p95_ms": 2849.885002,
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "target_ms": 3000,
+          "target_met": false
+        },
+        "status": "performance_blocker"
+      },
+      "runtime_implementation_source": {
+        "commit": "644abccbc9676f64d012ac2f500fa365f3db90ff",
+        "tree": "236302c67bdd64fbfee405605e31e51cd47ca162",
+        "dirty": false,
+        "files_sha256": "15ce2b463901d7ddb8a44544d051472c84c4deb525374ae573b2938e645de3e9"
+      },
+      "qualification_sha256": "0eddcb89e5ec60fa94ef65101f45100dff8e8c92630b1e44f64f7054e5f3d742",
+      "cases": [
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 0,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 2849.885002,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 144,
+            "rehashed_files": 5673,
+            "observer": "collector mcp_verified_inputs_resume",
+            "diagnostic_timings": [
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "runtime_and_libraries",
+                "elapsed_ms": 1786.098164
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "package_tree",
+                "elapsed_ms": 4436.130908
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "selected_profile",
+                "elapsed_ms": 2.628637
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "runtime_and_libraries",
+                "elapsed_ms": 348.53355400000004
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "package_tree",
+                "elapsed_ms": 2196.192354
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "profile_and_assets",
+                "stage_ms": 2616.910131,
+                "post_observed_ms": 2616.910131
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "policy_boundary",
+                "stage_ms": 4.5081940000000005,
+                "post_observed_ms": 2621.418325
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "classifier",
+                "stage_ms": 70.740967,
+                "post_observed_ms": 2692.159292
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "daemon_redemption",
+                "stage_ms": 10.375676,
+                "post_observed_ms": 2702.534968
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "original_dispatch",
+                "stage_ms": 7.296817,
+                "post_observed_ms": 2709.831785
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "original_response",
+                "stage_ms": 31.049798,
+                "post_observed_ms": 2740.8815830000003
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "result_inspection",
+                "stage_ms": 9.791947,
+                "post_observed_ms": 2750.67353
+              }
+            ]
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 1,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 2825.444917,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 144,
+            "rehashed_files": 5673,
+            "observer": "collector mcp_verified_inputs_resume",
+            "diagnostic_timings": [
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "runtime_and_libraries",
+                "elapsed_ms": 1772.81267
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "package_tree",
+                "elapsed_ms": 4390.901808
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "selected_profile",
+                "elapsed_ms": 2.4709689999999997
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "runtime_and_libraries",
+                "elapsed_ms": 350.209664
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "package_tree",
+                "elapsed_ms": 2180.08218
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "profile_and_assets",
+                "stage_ms": 2581.213018,
+                "post_observed_ms": 2581.213018
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "policy_boundary",
+                "stage_ms": 6.0120119999999995,
+                "post_observed_ms": 2587.22503
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "classifier",
+                "stage_ms": 63.394326,
+                "post_observed_ms": 2650.619356
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "daemon_redemption",
+                "stage_ms": 11.678287000000001,
+                "post_observed_ms": 2662.297643
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "original_dispatch",
+                "stage_ms": 7.190165,
+                "post_observed_ms": 2669.487808
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "original_response",
+                "stage_ms": 28.152665,
+                "post_observed_ms": 2697.640473
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "result_inspection",
+                "stage_ms": 10.216588999999999,
+                "post_observed_ms": 2707.857062
+              }
+            ]
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 2,
+          "passed": true,
+          "approved": true,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 2843.482171,
+          "verified_inputs_resume": {
+            "immutable_files": 0,
+            "leased_files": 144,
+            "rehashed_files": 5673,
+            "observer": "collector mcp_verified_inputs_resume",
+            "diagnostic_timings": [
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "runtime_and_libraries",
+                "elapsed_ms": 1755.460934
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "package_tree",
+                "elapsed_ms": 4405.684673
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "selected_profile",
+                "elapsed_ms": 2.926065
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "runtime_and_libraries",
+                "elapsed_ms": 351.445835
+              },
+              {
+                "event": "mcp_asset_verification_timing",
+                "stage": "package_tree",
+                "elapsed_ms": 2210.8444280000003
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "profile_and_assets",
+                "stage_ms": 2627.048873,
+                "post_observed_ms": 2627.048873
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "policy_boundary",
+                "stage_ms": 6.0781849999999995,
+                "post_observed_ms": 2633.127058
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "classifier",
+                "stage_ms": 70.260209,
+                "post_observed_ms": 2703.387267
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "daemon_redemption",
+                "stage_ms": 7.7252730000000005,
+                "post_observed_ms": 2711.11254
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "original_dispatch",
+                "stage_ms": 7.3768970000000005,
+                "post_observed_ms": 2718.489437
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "original_response",
+                "stage_ms": 31.262697999999997,
+                "post_observed_ms": 2749.752135
+              },
+              {
+                "event": "mcp_real_approval_timing",
+                "stage": "result_inspection",
+                "stage_ms": 11.137210999999999,
+                "post_observed_ms": 2760.889346
+              }
+            ]
+          },
+          "dispatched": 1,
+          "kernel_effects": 1,
+          "released": true
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "sample_index": 3,
+          "passed": false,
+          "approved": false,
+          "stage": "exact_decision",
+          "decision_to_result_ms": 2881.211707
+        }
+      ]
+    }
+  }
+}

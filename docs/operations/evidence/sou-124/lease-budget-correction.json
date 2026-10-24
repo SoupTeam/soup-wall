@@ -1,0 +1,45 @@
+{
+  "format": "sou124-local-correction-checks/1",
+  "parent": "68e50e802db3bec043c167880929983344ce4483",
+  "status": "local_checks_pass_native_pending",
+  "platform": "macOS",
+  "source_files_sha256": {
+    "crates/agentfw/src/mcp/server_profile.rs": "b849a2292293dc55a45f4c8862b07815c1a9dfcdaa62cf87f88651e9740d0784",
+    "crates/agentfw/src/mcp/server_profile/read_lease.rs": "a7df3483a6221c8501f05df4f5ebe94ed9b44db59e4b3c092f9910319146de35",
+    "crates/agentfw/src/mcp/server_profile/read_lease/native_tests.rs": "39f2c1205f47462f4b0f203f72bae8459efe47500f0d4f119a7b38b9b95cd953",
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "da6163ad67fe3a94a184d1f4f00486657da993867a79ca976b469d45742f3c2d",
+    "docs/operations/PILOT_ASK_LATENCY.md": "529e74b449aefb8fe78f93e26a1421053a631e55a340bd1b5b85581f61dec2d7",
+    "docs/operations/evidence/sou-124/README.md": "20cf0e82e969a92bdb6eebb4507c34928e380ff134cd1f9ea929719c4c323e2e",
+    "scripts/pilot_ask_latency.py": "5d785d8ca6f742870b561b3fdb8dc4409477edd026c33088f1cce0f0845845c6",
+    "scripts/tests/test_pilot_ask_latency.py": "e77fb0de1bea5d428fb7498cbc190e3711260b919a54df26b21e01d2eb064f41"
+  },
+  "rust_workspace": {
+    "passed": 1696,
+    "failed": 0,
+    "ignored": 13,
+    "scope": "Includes directory observation deduplication. Subsequent lease process-cap code is Linux-only and requires native qualification."
+  },
+  "python": {
+    "run": 1216,
+    "passed": 1137,
+    "skipped": 79,
+    "failed": 0
+  },
+  "clippy_all_targets_deny_warnings": "pass",
+  "fmt": "pass",
+  "diff_whitespace": "pass",
+  "docs": {
+    "markdown": 247,
+    "local_links": 915,
+    "errors": 0
+  },
+  "logs_sha256": {
+    "workspace-lease-budget-final.log": "5a6b13434916fade2c5ee7c3765b110597b0cf3d918a1bcf4621e7e216def07b",
+    "python-lease-budget.log": "92fd098e06b523a32483f9de7831f38815adcba85a8364ea89476551e4a83404",
+    "clippy-lease-budget.log": "bd2e50bbdd3a122fe96b2abd622489c98bfc7f959f2af90eee7a812d99f14258",
+    "docs-lease-budget.log": "6114d2479fbeb6d3332fdcbfe6a5a1bbc217c0127f422736da849c9df2e68ea8"
+  },
+  "native_linux": "not_run_for_this_correction",
+  "performance": "not_yet_qualified; native attempt6 Git p95 3274.838387ms remains blocker",
+  "new_native_control": "strict aggregate additionally fills the 512 process-wide real-FD budget across owners, rejects overflow, verifies existing proofs and verifies disposal returns slots without recycling an Ask"
+}

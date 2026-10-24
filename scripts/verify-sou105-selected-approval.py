@@ -242,7 +242,7 @@ class Rig:
         trace = self.trace_root / (label + ".syscalls.log")
         stderr = self.root / (label + ".stderr.log")
         with stderr.open("wb") as log:
-            client = BASE.Client([str(self.args.strace), "-f", "-qq", "-s", "4096", "-e", "trace=openat,execve",
+            client = BASE.Client([str(self.args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "4096", "-e", "trace=openat,execve",
                                   "-o", str(trace), "--", *actual], env, self.workspace, log, label)
         self.clients.append(client)
         # Git's protocol pin differs from the older filesystem negotiated pin.
@@ -428,7 +428,9 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     args = parser.parse_args()
-    report = {"format": FORMAT, "status": "failed", "families": {}, "physical_human_presence_proved": False}
+    report = {"format": FORMAT, "status": "failed", "families": {}, "physical_human_presence_proved": False,
+              "trace_requested": {"mode": "seccomp-bpf", "fallback_possible": True,
+                                  "syscalls": "openat,execve"}}
     output = args.output.resolve(); output.mkdir(mode=0o700, parents=True, exist_ok=False)
     try:
         require(platform.system() == "Linux" and platform.machine() == "x86_64", "required native Linux x86-64 unavailable; no fallback")
