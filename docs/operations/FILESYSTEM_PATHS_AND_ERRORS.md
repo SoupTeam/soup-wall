@@ -121,3 +121,5 @@ python3 -B scripts/verify-filesystem-paths.py --run \
 On WSL2 (Ubuntu 24.04), use a Linux-filesystem checkout (not `/mnt/c`), the
 same pins as the filesystem CI job and a non-root user. The report's
 `platform.kind` is `wsl2` only on a `microsoft-standard-WSL2` kernel.
+
+Evidence: [Linux run, 2026-10-24](evidence/FILESYSTEM_PATHS_2026-10-24.md).
