@@ -1,6 +1,28 @@
-# SOU-124 development evidence
+# SOU-124 qualification evidence
 
 ## Current native result
+
+`native-linux-current.json` records passing run `40038036266` on exact clean
+runtime/harness source `11377802ba4fa9868bf7502fc798fd0f3f06e7a4`. Both sides
+completed twenty filesystem and twenty Git approvals on one native Linux runner,
+with zero failed/incomplete samples. Candidate filesystem p50/p95 was
+1870.729004/1938.429574 ms; Git was 2862.994321/2914.567600 ms. Both p95 values
+meet the 3000 ms target. Baseline p50/p95 was 5566.666193/5597.575073 ms and
+6471.589357/6553.200421 ms respectively. Percentiles and full denominators were
+independently recomputed from all eighty durations.
+
+Every candidate used real retained leases (52 filesystem, 144 Git), and every
+original call, useful follow-up and owned cleanup passed. Cross-run isolation
+controls passed for all filesystem samples. The strict kernel witness also
+filled and released the 512-descriptor process budget across independent owners.
+Ten Linux identity controls passed; the optional already-verity-enabled fixture
+was ignored. No fs-verity reuse, physical human presence or live-model
+effectiveness is claimed. Full raw report hashes and per-sample proof/effect
+receipts remain attributable to the workflow artifact. Historical failures below
+remain failures. Final main integration and current required CI are separate
+checks; they do not relabel the measured source.
+
+## Historical native attempt 6
 
 `native-attempt6.json` retains the same-runner comparison from run `40010363488`
 on exact candidate `d95e000a445708aaa4446d910576cf929baaf740`. All forty baseline
@@ -25,7 +47,7 @@ Files without a retained proof are still fully rehashed;
 existing verity proofs are still remeasured, and lost leases still refuse.
 The follow-up requires fresh native measurements before Ready for review.
 
-## Historical native attempts
+## Earlier native attempts
 
 The second native attempt (`39989703005`, exact source `d37383e`) passed the
 strict real-kernel lease witness. Its baseline completed all 20 filesystem and

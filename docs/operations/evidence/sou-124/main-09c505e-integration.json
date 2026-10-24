@@ -1,0 +1,27 @@
+{
+  "format": "sou124-main-integration/1",
+  "main": "09c505eacaffcd20804472cdd3c0095dd91a70ee",
+  "qualified_native_source": "11377802ba4fa9868bf7502fc798fd0f3f06e7a4",
+  "native_runtime_and_relevant_witness_diff": [],
+  "native_reuse_scope": "No Rust or relevant measured/emergency-stop witness code changed; main adds first-use demo/docs and CI integration.",
+  "python": {
+    "run": 1220,
+    "passed": 1141,
+    "skipped": 79,
+    "failed": 0
+  },
+  "generated_workflow_check": "pass",
+  "docs": {
+    "markdown": 248,
+    "local_links": 920,
+    "errors": 0
+  },
+  "fmt": "pass",
+  "diff_whitespace": "pass",
+  "log_sha256": {
+    "python-main09c.log": "a4c0826208d9ca5b74f26161c81ffa66f6b89c023f3842bfee3299db93d4f9f7",
+    "docs-main09c.log": "6f2add01558be8a75061504ff814f61bf38d471e2c154439ce33d1c5aa237588"
+  },
+  "current_head_ci": "Separate GitHub checks for the final commit; not claimed by this local integration record.",
+  "no_performance_or_native_controls_rerun_without_runtime_changes": true
+}

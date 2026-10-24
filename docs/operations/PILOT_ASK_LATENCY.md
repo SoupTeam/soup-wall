@@ -1,10 +1,13 @@
-# Original-server Ask latency (SOU-124, development)
+# Original-server Ask latency (SOU-124)
 
-This implementation uses accepted `main` `adefce2`. It profiles the approved
+This implementation profiles the approved
 path and retains per-Ask verified inputs with kernel fs-verity or a bounded local
-read lease. macOS development checks pass; native before/after qualification is
-required before claiming the p95 target. A missing or missed target stays an
-explicit performance blocker.
+read lease. Native run `40038036266` on exact source `1137780` completed all
+eighty same-runner before/after approvals with zero failed/incomplete samples.
+Candidate p95 was 1938.429574 ms for filesystem and 2914.567600 ms for Git, both
+within 3000 ms. Full denominators, source identities and historical failures are
+retained in `evidence/sou-124/`. A missing or missed target remains an explicit
+performance blocker.
 
 ## What the measurements mean
 
@@ -132,8 +135,8 @@ A slow but complete baseline is retained. A candidate missing p95 <= 3000 ms for
 either profile exits nonzero. Only bounded JSON reports and the kernel control
 summary are exported; raw provider/authority traces remain private.
 
-Local macOS checks include 1694 Rust tests passed, 13 ignored; strict workspace
-all-target clippy and formatting; 1173 Python tests run, 64 platform/optional
+Local macOS checks include 1696 Rust tests passed, 13 ignored; strict workspace
+all-target clippy and formatting; 1220 Python tests run, 79 platform/optional
 skips and no failures. These checks are not native performance evidence. Current
 native measurements and any failed attempts are retained separately in
 `evidence/sou-124/`. No paid provider, real secret, private dataset, release or
@@ -152,8 +155,9 @@ same exact candidate and all existing approval/effect/peer controls. Its report
 is explicitly outside performance acceptance and cannot replace the required
 20 filesystem plus 20 Git samples per side. Failure captures finite codes and
 bounded stage timings, never raw tool arguments, credentials or host output.
-The failed native attempt and its full baseline measurements are retained;
-current candidate performance remains unqualified until a complete run passes.
+All failed native attempts and their baseline measurements remain retained
+alongside the passing current comparison; failed rows are never omitted or
+reclassified as successful samples.
 
 Only the explicitly requested manual paired benchmark has a 140-minute outer
 runner budget: two existing 3600-second measurement-side budgets plus bounded
