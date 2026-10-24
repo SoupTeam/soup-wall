@@ -122,7 +122,6 @@ jobs:
             --out "$RUNNER_TEMP/profile-onboarding-git" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou68-profile-onboarding.log"
       - name: Opt-in local branch and tag acceptance
-        if: github.event_name == 'workflow_dispatch' && inputs.local_refs_only
         shell: bash
         run: |
           set -euo pipefail
