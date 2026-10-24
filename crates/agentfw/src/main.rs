@@ -751,6 +751,9 @@ fn main() -> anyhow::Result<()> {
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
         Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
         Cmd::PilotWorkspaces(args) => agentfw::pilot_launcher::inspect_workspaces(args),
+        Cmd::PilotApproval(args) if args.output.is_some() => {
+            std::process::exit(agentfw::pilot_approval::operator_json(args));
+        }
         Cmd::PilotApproval(args) => agentfw::pilot_approval::operator(args),
         Cmd::McpProfile { home, command } => {
             let home = match home {

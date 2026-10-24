@@ -1,0 +1,72 @@
+import importlib.util
+from pathlib import Path
+import unittest
+import subprocess
+import sys
+import tempfile
+
+PATH = Path(__file__).resolve().parents[1] / "pilot_operator_results.py"
+SPEC = importlib.util.spec_from_file_location("operator_results", PATH)
+RESULTS = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(RESULTS)
+
+
+class ResultContract(unittest.TestCase):
+    def test_native_driver_has_a_runnable_cli(self):
+        result = subprocess.run([sys.executable, "-B", str(PATH.parent / "qualify-operator-results.py"), "--help"],
+                                capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_native_driver_does_not_overwrite_an_earlier_attempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / "operator-results.json"
+            evidence.write_text("retained attempt", encoding="utf-8")
+            command = [sys.executable, "-B", str(PATH.parent / "qualify-operator-results.py")]
+            for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace"):
+                command.extend(["--" + name, "missing-owned-test-tool"])
+            result = subprocess.run([*command, "--output", directory], capture_output=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(evidence.read_text(encoding="utf-8"), "retained attempt")
+
+    def record(self, operation="approve", outcome="decision_submitted", reason="approval_submitted"):
+        return {"format": "sw-pilot-operator-result/1", "operation": operation,
+                "outcome": outcome, "reason": reason,
+                "identity": {"run_id": "a" * 32, "run_sha256": "b" * 64,
+                             "instance_id": "daemon", "registry_sha256": "c" * 64,
+                             "pending_id": "pending", "binding_sha256": "d" * 64},
+                "data": {"pending_id": "pending", "state": "decision_submitted", "decision": "approve",
+                         "dispatched": "not_observed", "released": "not_observed"}}
+
+    def test_submission_is_not_an_execution_claim(self):
+        record = self.record()
+        self.assertEqual(RESULTS.validate(record, "approve", 0), record)
+        record["data"]["dispatched"] = True
+        with self.assertRaises(ValueError):
+            RESULTS.validate(record, "approve", 0)
+
+    def test_failure_cannot_be_accepted_as_success(self):
+        for record, code in [(self.record(), 4), (self.record(outcome="unknown", reason="unknown"), 0)]:
+            with self.assertRaises(ValueError):
+                RESULTS.validate(record, "approve", code)
+
+    def test_wrong_operation_unknown_format_and_extra_fields_are_rejected(self):
+        for field, value in [("operation", "stop"), ("format", "unknown"), ("private", "token")]:
+            record = self.record()
+            record[field] = value
+            with self.assertRaises(ValueError):
+                RESULTS.validate(record, "approve", 0)
+
+    def test_unavailable_has_no_data_or_invented_identity(self):
+        record = {"format": "sw-pilot-operator-result/1", "operation": "list",
+                  "outcome": "unavailable", "reason": "run_unavailable", "identity": None, "data": None}
+        self.assertEqual(RESULTS.validate(record, "list", 4), record)
+
+    def test_reason_exit_and_outcome_must_agree(self):
+        record = {"format": "sw-pilot-operator-result/1", "operation": "list",
+                  "outcome": "refused", "reason": "daemon_unavailable", "identity": None, "data": None}
+        with self.assertRaises(ValueError):
+            RESULTS.validate(record, "list", 3)
+
+
+if __name__ == "__main__":
+    unittest.main()
