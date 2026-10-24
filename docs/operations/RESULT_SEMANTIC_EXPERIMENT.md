@@ -1,5 +1,63 @@
 # SOU-109 offline semantic-inspection design review
 
+## 24 October: complete-context preparation, no backend selected
+
+The previous ProtectAI experiment remains rejected and is not repeated.
+The scoped directive increment catches all 24 public development attacks, but
+ten benign refusals and the original Git/four-file failures remain. Six public
+false refusals currently have structural evidence only, three also have lexical
+signatures, and g11-a also has addressed-request evidence. This attribution does
+not authorize removing any finding.
+
+A concrete approved-backend request and shadow plan are recorded in PR #215
+comment 6382175711. Signature-context permission is already resolved; the
+outstanding question is which independently assessable semantic backend, if any,
+is available with agreed identity, access/resources and full-input limits.
+No replacement model is installed or called by this preparation.
+
+`scripts/prepare-result-context-evaluation.py` prepares 58 complete inputs:
+48 semantic SOU-123 payloads, three original SOU-113 results with **both**
+channels, the original Git result, and six unaddressed/quoted/comment/
+secondary-channel/split-channel attack controls. Three SOU-123 technical cases
+are verified and listed separately, never relabeled as semantic negatives.
+
+The input file has opaque orchestration IDs and a nested `input` with only
+evaluation-task context and untrusted text channels. Expected labels, source
+case IDs and forbidden-effect annotations are not model inputs: labels and
+source mapping live in a separate `references.jsonl`. A future backend must
+receive only `input`, not the references or orchestration metadata. Evaluation
+task context is from the public corpus author or the retained read/summarize
+fixture purpose; it is **not** a claim that native runtime already supplies an
+authenticated user-task context.
+
+Preparation checks the pinned full-corpus manifest and every payload hash/size,
+the existing original-capture verifier, and the original Git fixture hash.
+It refuses source/input limits without taking a prefix. The preparation limits
+are 1 MiB per source and 512 KiB total decoded text per input. These are offline
+packaging bounds, not changed runtime limits or an assertion that a backend can
+inspect them. Unsupported backend context sizes must remain unknown.
+Output directories must be new; prior evidence cannot be overwritten.
+
+```text
+python scripts/prepare-result-context-evaluation.py \
+  --corpus <pinned-PR240-checkout>/eval/sou123 \
+  --output <new-local-output-directory>
+python -B -m unittest discover -s scripts/tests -p test_result_context_preparation.py -v
+```
+
+Four preparation tests pass: full secondary-channel tail retention, refusal at
+limits, modified-manifest rejection and no oversize-prefix acceptance. The
+actual complete batch generated 58 inputs, with request-file SHA-256
+`80827223a50d1e605de60536b0713c134671f9e4ea92fc55d1360c3717babc56`
+and reference-file SHA-256
+`7ed6c65b99f440d2597dd53aa70b1d5f6788b4d89ad88dc7c85e10c66a03e2a1`.
+The manifest explicitly records `model_executed=false` and
+`production_authority=false`. Preparation is not a model experiment, model
+quality result, production correction or task completion. The older proposal
+and rejected experiment history below remain retained.
+
+## Earlier proposal and experiment history
+
 Status: proposed experiment, not production integration or SOU-109 acceptance.
 Responds to review 5609740780 on PR #215. No paid service/model, network inference,
 model download or execution authorization is introduced. The existing unresolved
