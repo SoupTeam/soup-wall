@@ -72,9 +72,20 @@ objects, 128 metadata directories and 256 watches; index and packed-ref input
 limits are 8 MiB and 64 KiB respectively. Unsupported or changing capture refuses
 startup. The ordinary sandbox resource budgets are retained.
 
-Kernel watches withdraw the session on writes, replacement or rename in the
-captured reference/config/index metadata directories and target-object prefixes,
-and on watch loss or overflow. The collector checks withdrawal before admission,
+Every captured metadata/target-object file additionally requires a retained
+kernel read lease on the same opened inode, using the accepted local-file proof
+primitive. A pre-existing writable FD or shared writable mapping makes that
+source unsupported before startup; missing lease support/capacity fails closed.
+A later write-open breaks the proof permanently before its writer is promptly
+released. The view never reacquires a broken lease. This covers mapped writes
+that inotify does not report, including write/restore between validation calls.
+Lease descriptors remain private to the collector and are never mounted or
+inherited by the server. Existing per-owner/process proof budgets are unchanged.
+
+Kernel directory watches also withdraw the session on writes, replacement or
+rename in captured reference/config/index metadata directories and target-object
+prefixes, and on watch loss or overflow. An empty inotify queue alone is never
+content authority. The collector checks both proofs before admission,
 immediately before dispatch and before releasing an inspected result. Restoring
 the old bytes does not revive that session: close it and start a new protected
 collector. This is a bounded metadata image with sticky withdrawal, not live
@@ -130,6 +141,11 @@ acceptance client, enforcing daemon and independent Linux process/open witnesses
 It calibrates an external-helper effect against the direct original server,
 checks a live receiver and FIFO through the existing OS-isolation probe, reproduces
 default-v1 refusals, and tests both pre-dispatch and inflight reference substitution.
+Native unit controls on the ordinary local filesystem and tmpfs reproduce the
+inotify-only mapped-write gap and exercise mappings before/after capture,
+unchanged useful calls and write/restore. Actual original-server controls keep
+the writable mapping/FD open while testing pre-dispatch, pending-Ask and result
+release, including restoration before the next boundary check.
 An owned Ask policy exercises exact original CLI approval, single use and source
 withdrawal while approval is pending; a Deny policy and an uncertain classifier
 must independently refuse. These synthetic decisions do not establish physical

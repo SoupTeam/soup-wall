@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Immutable namespace data plus sticky source withdrawal. Inotify is a
-//! revocation witness, not an authority or a permission cache. Each call still
-//! traverses the enforcing native admission and result-inspection paths.
+//! directory revocation witness, never content authority. Retained same-FD
+//! local read leases independently cover mapped writers. Each call still
+//! traverses enforcing native admission and result inspection; these source
+//! data proofs are never permission or a cached approval.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
@@ -16,6 +18,7 @@ use anyhow::{ensure, Context};
 use serde_json::Value;
 use tokio::process::Command;
 
+use super::super::super::read_lease;
 use super::{
     decode_object, oid, packed_references, Object, MAX_OBJECT_BYTES, MAX_REFS, MAX_TAG_DEPTH,
 };
@@ -26,11 +29,22 @@ const MAX_WATCHES: usize = 256;
 const MAX_DIRECTORIES: usize = 128;
 const ROOT: &str = "/workspace/.git";
 
-#[derive(Debug)]
 struct Withdrawal {
     file: File,
     broken: bool,
     watches: BTreeSet<i32>,
+    leases: Vec<Arc<read_lease::Guard>>,
+    lease_owner: Option<Arc<read_lease::Owner>>,
+}
+
+impl std::fmt::Debug for Withdrawal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Withdrawal")
+            .field("broken", &self.broken)
+            .field("watches", &self.watches.len())
+            .field("leases", &self.leases.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Withdrawal {
@@ -41,7 +55,36 @@ impl Withdrawal {
             file: unsafe { File::from_raw_fd(fd) },
             broken: false,
             watches: BTreeSet::new(),
+            leases: Vec::new(),
+            lease_owner: None,
         })
+    }
+
+    fn protect(&mut self, file: &File) -> anyhow::Result<()> {
+        if self.lease_owner.is_none() {
+            self.lease_owner = read_lease::Owner::new(file);
+        }
+        let owner = self
+            .lease_owner
+            .as_ref()
+            .context("Git local-reference read proofs unavailable")?;
+        let lease = owner
+            .acquire(file)?
+            .context("Git local-reference source has a writer or cannot be protected")?;
+        ensure!(
+            lease.valid(),
+            "Git local-reference source changed during capture"
+        );
+        self.leases.push(lease);
+        Ok(())
+    }
+
+    fn leases_valid(&mut self) -> bool {
+        if self.broken || !self.leases.iter().all(|lease| lease.valid()) {
+            self.broken = true;
+            return false;
+        }
+        true
     }
 
     fn watch(&mut self, directory: &File) -> anyhow::Result<()> {
@@ -68,7 +111,7 @@ impl Withdrawal {
     }
 
     fn valid(&mut self) -> bool {
-        if self.broken {
+        if !self.leases_valid() {
             return false;
         }
         let mut buffer = [0_u8; 8192];
@@ -92,7 +135,7 @@ impl Withdrawal {
             }
             match std::io::Error::last_os_error().raw_os_error() {
                 Some(libc::EINTR) => continue,
-                Some(libc::EAGAIN) => return true,
+                Some(libc::EAGAIN) => return self.leases_valid(),
                 _ => {
                     self.broken = true;
                     return false;
@@ -201,20 +244,6 @@ fn read_file(mut file: File, limit: usize) -> anyhow::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn optional(parent: &File, name: &str, limit: usize) -> anyhow::Result<Option<Vec<u8>>> {
-    match child(parent, name, false) {
-        Ok(file) => Ok(Some(read_file(file, limit)?)),
-        Err(error)
-            if error
-                .downcast_ref::<std::io::Error>()
-                .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound) =>
-        {
-            Ok(None)
-        }
-        Err(error) => Err(error),
-    }
-}
-
 fn optional_directory(parent: &File, name: &str) -> anyhow::Result<Option<File>> {
     match child(parent, name, true) {
         Ok(file) => Ok(Some(file)),
@@ -256,6 +285,39 @@ struct Capture {
 }
 
 impl Capture {
+    fn read(&mut self, file: File, limit: usize) -> anyhow::Result<Vec<u8>> {
+        // Inotify alone misses MAP_SHARED writes. The accepted local-file
+        // lease primitive rejects existing writers/mappings and permanently
+        // withdraws on a later write-open before releasing that writer.
+        // It retains this same opened inode; no lease is reacquired.
+        self.source.protect(&file)?;
+        let bytes = read_file(file, limit)?;
+        ensure!(
+            self.source.valid(),
+            "Git local-reference source changed during capture"
+        );
+        Ok(bytes)
+    }
+
+    fn optional(
+        &mut self,
+        parent: &File,
+        name: &str,
+        limit: usize,
+    ) -> anyhow::Result<Option<Vec<u8>>> {
+        match child(parent, name, false) {
+            Ok(file) => Ok(Some(self.read(file, limit)?)),
+            Err(error)
+                if error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     fn image(&mut self, path: impl Into<PathBuf>, bytes: &[u8]) -> anyhow::Result<()> {
         self.bytes = self
             .bytes
@@ -292,7 +354,7 @@ impl Capture {
                 super::super::is_local_reference(&relative),
                 "Git local-reference namespace unsupported"
             );
-            let bytes = read_file(child(&directory, &name, false)?, 256)?;
+            let bytes = self.read(child(&directory, &name, false)?, 256)?;
             let target = std::str::from_utf8(&bytes)
                 .ok()
                 .and_then(|s| oid(s.strip_suffix('\n').unwrap_or(s)).ok());
@@ -317,7 +379,7 @@ impl Capture {
         );
         let prefix = child(&self.objects, &id[..2], true)?;
         self.source.watch(&prefix)?;
-        let bytes = read_file(child(&prefix, &id[2..], false)?, MAX_OBJECT_BYTES)?;
+        let bytes = self.read(child(&prefix, &id[2..], false)?, MAX_OBJECT_BYTES)?;
         let object = decode_object(id, &bytes)?;
         self.image(
             Path::new(ROOT)
@@ -398,15 +460,15 @@ impl View {
         };
         capture.directory(format!("{ROOT}/objects"))?;
         capture.directory(format!("{ROOT}/info"))?;
-        let config = read_file(child(&git, "config", false)?, 8192)?;
+        let config = capture.read(child(&git, "config", false)?, 8192)?;
         super::super::validate_configuration(&config)?;
         capture.image(format!("{ROOT}/config"), &config)?;
-        let head = read_file(child(&git, "HEAD", false)?, 256)?;
+        let head = capture.read(child(&git, "HEAD", false)?, 256)?;
         capture.image(format!("{ROOT}/HEAD"), &head)?;
-        if let Some(index) = optional(&git, "index", 8 * 1024 * 1024)? {
+        if let Some(index) = capture.optional(&git, "index", 8 * 1024 * 1024)? {
             capture.image(format!("{ROOT}/index"), &index)?;
         }
-        if let Some(packed) = optional(&git, "packed-refs", 65_536)? {
+        if let Some(packed) = capture.optional(&git, "packed-refs", 65_536)? {
             let parsed = packed_references(&packed)?;
             // Git may consult the packed peeled optimization. It must match
             // the exact bounded object chain, never become a second target.
@@ -437,7 +499,7 @@ impl View {
                 entries(&info)?.iter().all(|name| name == "exclude"),
                 "Git repository info machinery unsupported"
             );
-            if let Some(exclude) = optional(&info, "exclude", 65_536)? {
+            if let Some(exclude) = capture.optional(&info, "exclude", 65_536)? {
                 capture.image(format!("{ROOT}/info/exclude"), &exclude)?;
             }
         }
@@ -539,12 +601,20 @@ impl View {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_arch = "x86_64"))]
 mod tests {
     use super::*;
+    use std::os::unix::fs::OpenOptionsExt;
 
     fn fixture() -> (tempfile::TempDir, String) {
-        let root = tempfile::tempdir().unwrap();
+        fixture_in(None)
+    }
+
+    fn fixture_in(parent: Option<&Path>) -> (tempfile::TempDir, String) {
+        let root = match parent {
+            Some(parent) => tempfile::tempdir_in(parent).unwrap(),
+            None => tempfile::tempdir().unwrap(),
+        };
         let git = root.path().join(".git");
         for directory in [
             "refs/heads",
@@ -576,6 +646,142 @@ mod tests {
         std::fs::write(git.join("refs/heads/main"), format!("{id}\n")).unwrap();
         std::fs::write(git.join("refs/tags/lightweight"), format!("{id}\n")).unwrap();
         (root, id)
+    }
+
+    struct Mapping {
+        _file: File,
+        address: *mut u8,
+        length: usize,
+    }
+
+    impl Mapping {
+        fn new(path: &Path) -> Self {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            let file = loop {
+                match std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .custom_flags(libc::O_NONBLOCK)
+                    .open(path)
+                {
+                    Ok(file) => break file,
+                    Err(error)
+                        if error.raw_os_error() == Some(libc::EAGAIN)
+                            && std::time::Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("owned writable mapping did not open promptly: {error}"),
+                }
+            };
+            let length = file.metadata().unwrap().len() as usize;
+            let address = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    length,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_SHARED,
+                    file.as_raw_fd(),
+                    0,
+                )
+            };
+            assert_ne!(address, libc::MAP_FAILED);
+            Self {
+                _file: file,
+                address: address.cast(),
+                length,
+            }
+        }
+
+        fn first(&self) -> u8 {
+            unsafe { self.address.read_volatile() }
+        }
+
+        fn set_first(&self, value: u8) {
+            unsafe {
+                self.address.write_volatile(value);
+                assert_eq!(
+                    libc::msync(self.address.cast(), self.length, libc::MS_SYNC),
+                    0
+                );
+            }
+        }
+    }
+
+    impl Drop for Mapping {
+        fn drop(&mut self) {
+            assert_eq!(unsafe { libc::munmap(self.address.cast(), self.length) }, 0);
+        }
+    }
+
+    #[test]
+    fn mapped_writes_demonstrate_why_inotify_is_not_content_authority() {
+        for parent in [None, Some(Path::new("/dev/shm"))] {
+            let (root, _) = fixture_in(parent);
+            let path = root.path().join(".git/refs/heads/main");
+            let before = std::fs::read(&path).unwrap();
+            let mut observer = Withdrawal::new().unwrap();
+            observer
+                .watch(&File::open(path.parent().unwrap()).unwrap())
+                .unwrap();
+            let mapping = Mapping::new(&path);
+            mapping.set_first(if mapping.first() == b'a' { b'b' } else { b'a' });
+            assert_ne!(std::fs::read(&path).unwrap(), before);
+            assert!(observer.valid(), "this reproducer expects the inotify blind interval while the writable FD remains open");
+            mapping.set_first(before[0]);
+        }
+    }
+
+    #[test]
+    fn mappings_existing_before_capture_refuse_even_after_byte_restoration() {
+        for parent in [None, Some(Path::new("/dev/shm"))] {
+            let (root, _) = fixture_in(parent);
+            let path = root.path().join(".git/refs/heads/main");
+            let before = std::fs::read(&path).unwrap();
+            let mapping = Mapping::new(&path);
+            let workspace = File::open(root.path()).unwrap();
+            assert!(View::capture(&workspace).is_err());
+            mapping.set_first(if before[0] == b'a' { b'b' } else { b'a' });
+            assert_ne!(std::fs::read(&path).unwrap(), before);
+            assert!(View::capture(&workspace).is_err());
+            mapping.set_first(before[0]);
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            assert!(View::capture(&workspace).is_err());
+            drop(mapping);
+            let view = View::capture(&workspace).unwrap();
+            for _ in 0..8 {
+                view.validate_call(
+                    "git_show",
+                    &serde_json::json!({"revision":"refs/heads/main"}),
+                )
+                .unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn mapping_created_after_capture_cannot_hide_write_restore_between_boundaries() {
+        for parent in [None, Some(Path::new("/dev/shm"))] {
+            let (root, _) = fixture_in(parent);
+            let path = root.path().join(".git/refs/heads/main");
+            let before = std::fs::read(&path).unwrap();
+            let workspace = File::open(root.path()).unwrap();
+            let view = View::capture(&workspace).unwrap();
+            let args = serde_json::json!({"revision":"refs/heads/main"});
+            view.validate_call("git_show", &args).unwrap();
+            let mapping = Mapping::new(&path);
+            mapping.set_first(if before[0] == b'a' { b'b' } else { b'a' });
+            assert_ne!(std::fs::read(&path).unwrap(), before);
+            mapping.set_first(before[0]);
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            // No validation occurred between write and restore. The retained
+            // kernel proof still records the write-open break permanently.
+            assert!(view.validate_call("git_show", &args).is_err());
+            drop(mapping);
+            assert!(view.validate_call("git_show", &args).is_err());
+            let fresh = View::capture(&workspace).unwrap();
+            fresh.validate_call("git_show", &args).unwrap();
+        }
     }
 
     #[test]

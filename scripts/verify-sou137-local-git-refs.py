@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import mmap
 import os
 from pathlib import Path
 import platform
@@ -72,6 +73,93 @@ def prepare_repo(workspace, git, env):
 def reads(first):
     return [(name, {key: ref}, ref) for ref in ("HEAD", first, *REFS)
             for name, key in (("git_show", "revision"), ("git_diff", "target"))]
+
+
+def writable_mapping(path):
+    source = path.open("r+b", buffering=0)
+    try:
+        return source, mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_WRITE)
+    except Exception:
+        source.close()
+        raise
+
+
+def close_mapping(value):
+    if value is not None:
+        value[1].close()
+        value[0].close()
+
+
+def mapped_source_controls(stack, second, report):
+    ref = stack.workspace / ".git" / REFS[0]
+    before = ref.read_bytes()
+    snapshot = BASE.snapshot(stack.workspace)
+    report["mapped_source_controls"] = []
+    opened = writable_mapping(ref)
+    try:
+        profile = json.loads(stack.profile.read_text())
+        result = subprocess.run([str(stack.binary), "mcp", "--native-admission", "--id", "sou137-preexisting-map", "--",
+            profile["runtimePath"], "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"],
+            env=dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.profile)), cwd=stack.workspace,
+            input=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-11-25", "capabilities": {},
+                "clientInfo": {"name": "owned-map-before-capture", "version": "1"}}}).encode() + b"\n",
+            capture_output=True, timeout=20)
+        (stack.root / "preexisting-mapping.log").write_bytes(result.stderr)
+        require(result.returncode != 0 and b'"event":"mcp_real_server_start"' not in result.stderr and
+            b"Git local-reference source has a writer or cannot be protected" in result.stderr,
+            "preexisting writable mapping was not refused before original startup")
+        report["mapped_source_controls"].append({"case": "before-capture", "server_started": False, "passed": True})
+    finally:
+        close_mapping(opened)
+    for restore_before_call in (False, True):
+        label = "mapped-restored" if restore_before_call else "mapped-changed"
+        with (stack.root / (label + ".log")).open("wb") as log:
+            client = collector(stack, log)
+            witness = GIT.RepositoryWitness(stack.workspace)
+            opened = None
+            try:
+                client.initialize()
+                GIT.text(client.exchange(GIT.call(10, "git_show", {"revision": REFS[0]}))[0])
+                opened = writable_mapping(ref)
+                opened[1][:] = (second + "\n").encode()
+                opened[1].flush()
+                require(ref.read_bytes() != before, "owned mmap write did not change source bytes")
+                if restore_before_call:
+                    opened[1][:] = before
+                    opened[1].flush()
+                    require(ref.read_bytes() == before, "owned mmap restore did not calibrate")
+                witness.drain()
+                reply, _ = client.exchange(GIT.call(11, "git_show", {"revision": REFS[0]}))
+                require(reply.get("error", {}).get("code") == -32602 and witness.drain() == 0,
+                    "mapped source change reached original dispatch")
+                opened[1][:] = before
+                opened[1].flush()
+                close_mapping(opened)
+                opened = None
+                witness.drain()
+                restored, _ = client.exchange(GIT.call(12))
+                require(restored.get("error", {}).get("code") == -32602 and witness.drain() == 0,
+                    "closing/restoring mapped source revived the view")
+                report["mapped_source_controls"].append({"case": label, "write_fd_held_during_call": True,
+                    "restored_before_first_call": restore_before_call, "execution_dispatched": False,
+                    "restoration_still_refused": True, "passed": True})
+            finally:
+                close_mapping(opened)
+                client.close()
+                witness.close()
+                if ref.read_bytes() != before:
+                    ref.write_bytes(before)
+        require(client.process.returncode == 0 and client.process_witness.final["all_stopped"], "mapped collector cleanup unverified")
+        with (stack.root / (label + "-fresh.log")).open("wb") as log:
+            client = collector(stack, log)
+            try:
+                client.initialize()
+                GIT.text(client.exchange(GIT.call(10, "git_show", {"revision": REFS[0]}))[0])
+            finally:
+                client.close()
+        require(client.process.returncode == 0 and client.process_witness.final["all_stopped"], "fresh mapped-source collector failed")
+    require(BASE.snapshot(stack.workspace) == snapshot, "mapped-source controls changed owned repository state")
 
 
 def collector(stack, log, *, legacy=False, bound=None):
@@ -254,11 +342,12 @@ def policy_controls(stack, config, second, report):
     report["approval_controls"] = []
     ref = stack.workspace / ".git" / REFS[0]
     old = ref.read_bytes()
-    for case in ("approve", "substitution"):
+    for case in ("approve", "substitution", "mapped-substitution", "mapped-restore"):
         path = stack.root / (case + "-collector.log")
         with path.open("wb") as log:
             client = collector(stack, log, bound=case)
             witness = GIT.RepositoryWitness(stack.workspace)
+            opened = None
             try:
                 client.initialize()
                 witness.drain()
@@ -279,6 +368,16 @@ def policy_controls(stack, config, second, report):
                 if case == "substitution":
                     ref.write_text(second + "\n")
                     witness.drain()
+                elif case.startswith("mapped-"):
+                    opened = writable_mapping(ref)
+                    opened[1][:] = (second + "\n").encode()
+                    opened[1].flush()
+                    require(ref.read_bytes() != old, "pending-Ask mapped write did not calibrate")
+                    if case == "mapped-restore":
+                        opened[1][:] = old
+                        opened[1].flush()
+                        require(ref.read_bytes() == old, "pending-Ask mapped restore did not calibrate")
+                    witness.drain()
                 APPROVAL.command(args, stack.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"])
                 response, raw = client.receive()
                 require(response["id"] == 50, "approval response correlation changed")
@@ -298,6 +397,7 @@ def policy_controls(stack, config, second, report):
                 report["approval_controls"].append({"case": case, "preapproval_effects": 0, "passed": True,
                     "binding_sha256": waiting["binding_sha256"], "execution_dispatched": case == "approve"})
             finally:
+                close_mapping(opened)
                 client.close()
                 witness.close()
                 if ref.read_bytes() != old:
@@ -393,13 +493,15 @@ def source_mutations(stack, first, second, report):
         require(client.process.returncode == 0 and not client.forced_cleanup, "fresh collector failed")
 
 
-def inflight_substitution(stack, second, report):
+def inflight_substitution(stack, second, report, *, mapped=False, restore=False):
     """Change only an owned ref after native dispatch while the real server is stopped."""
-    path = stack.root / "inflight-substitution.log"
+    label = "inflight-mapped-restored" if restore else "inflight-mapped" if mapped else "inflight-substitution"
+    path = stack.root / (label + ".log")
     ref = stack.workspace / ".git" / REFS[0]
     original = ref.read_bytes()
     before = BASE.snapshot(stack.workspace)
     target = None
+    opened = None
     with path.open("wb") as log:
         client = collector(stack, log)
         try:
@@ -419,7 +521,17 @@ def inflight_substitution(stack, second, report):
             client.send(GIT.call(50, "git_show", {"revision": REFS[0]}))
             BASE.wait_event(path, lambda rows: any(r.get("host_call_id") == 50 and r.get("state") == "inflight" for r in rows),
                 "owned original request was not dispatched before substitution")
-            ref.write_text(second + "\n")
+            if mapped:
+                opened = writable_mapping(ref)
+                opened[1][:] = (second + "\n").encode()
+                opened[1].flush()
+                require(ref.read_bytes() != original, "inflight mapped write did not calibrate")
+                if restore:
+                    opened[1][:] = original
+                    opened[1].flush()
+                    require(ref.read_bytes() == original, "inflight mapped restore did not calibrate")
+            else:
+                ref.write_text(second + "\n")
             os.kill(target[0], signal.SIGCONT)
             target = None
             response, _ = client.receive()
@@ -428,11 +540,17 @@ def inflight_substitution(stack, second, report):
             ref.write_bytes(original)
             restored, _ = client.exchange(GIT.call(51))
             require(restored.get("error", {}).get("code") == -32602, "inflight withdrawal was revived")
-            report["inflight_substitution"] = {"execution_dispatched_before_mutation": True,
+            row = {"execution_dispatched_before_mutation": True,
                 "result_released": False, "restoration_still_refused": True, "passed": True}
+            if mapped:
+                row.update(mapped=True, restored_before_result=restore)
+                report.setdefault("mapped_inflight_substitutions", []).append(row)
+            else:
+                report["inflight_substitution"] = row
         finally:
             if target is not None and BASE.ProcessWitness.identity(target[0]) == target[1]:
                 os.kill(target[0], signal.SIGCONT)
+            close_mapping(opened)
             client.close()
             ref.write_bytes(original)
     require(before == BASE.snapshot(stack.workspace), "inflight fixture state was not restored")
@@ -537,7 +655,10 @@ def run(args):
             GIT.startup_refusals(stack, report)
             exact_reads(stack, first, report)
             source_mutations(stack, first, second, report)
+            mapped_source_controls(stack, second, report)
             inflight_substitution(stack, second, report)
+            inflight_substitution(stack, second, report, mapped=True)
+            inflight_substitution(stack, second, report, mapped=True, restore=True)
             policy_controls(stack, config, second, report)
             packed_reads(stack, config, first, second, report)
             require(INSTALL.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"],
@@ -567,6 +688,8 @@ def run(args):
         "legacy_refusals": len(report.get("legacy_refusals", [])), "helper_control": report.get("helper_control"),
         "approval_controls": report.get("approval_controls", []),
         "inflight_substitution": report.get("inflight_substitution"),
+        "mapped_source_controls": report.get("mapped_source_controls", []),
+        "mapped_inflight_substitutions": report.get("mapped_inflight_substitutions", []),
         "packed_reads": len(report.get("packed", {}).get("reads", [])),
         "forged_packed_peel_refused": report.get("packed", {}).get("forged_peel_refused_before_start"),
         "source_mutations": report.get("source_mutations", []), "protected_diagnostics": report["protected_diagnostics"]}))
