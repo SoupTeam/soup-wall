@@ -353,11 +353,9 @@ def policy_controls(stack, config, second, report):
                 witness.drain()
                 frame = GIT.call(50, "git_show", {"revision": REFS[0]})
                 client.send(frame)
-                # Accepted verified-input capture precedes broker publication.
-                # Its recorded cost exceeded the old driver's 5-second poll
-                # window. Observe within the existing 30-second call bound;
-                # keep production deadlines, broker TTL and approval wait intact.
-                waiting = APPROVAL.pending(args, stack.env, timeout=20)
+                # Retain the shared first-pending bound, including cold input
+                # preparation; no separate preparation allowance.
+                waiting = APPROVAL.pending(args, stack.env, timeout=5)
                 inspected = APPROVAL.inspected_output(APPROVAL.command(args, stack.env, "native-approval", "inspect", waiting["pending_id"]),
                     waiting["pending_id"], waiting["binding_sha256"])
                 require(inspected["args"] == frame["params"]["arguments"] and
@@ -384,7 +382,7 @@ def policy_controls(stack, config, second, report):
                 if case == "approve":
                     require(raw == expected and witness.drain() > 0, "approved original bytes/execution changed")
                     client.send(GIT.call(51, "git_show", {"revision": REFS[0]}))
-                    again = APPROVAL.pending(args, stack.env, timeout=20)
+                    again = APPROVAL.pending(args, stack.env, timeout=5)
                     require(again["pending_id"] != waiting["pending_id"] and witness.drain() == 0, "approval was reused")
                     APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
                     require(BASE.refused(client.receive()[0]), "second Ask was not independently refused")
@@ -395,6 +393,7 @@ def policy_controls(stack, config, second, report):
                 APPROVAL.command(args, stack.env, "native-approval", "approve", waiting["pending_id"],
                     "--binding", waiting["binding_sha256"], success=False)
                 report["approval_controls"].append({"case": case, "preapproval_effects": 0, "passed": True,
+                    "first_pending_budget_ms": 5000,
                     "binding_sha256": waiting["binding_sha256"], "execution_dispatched": case == "approve"})
             finally:
                 close_mapping(opened)

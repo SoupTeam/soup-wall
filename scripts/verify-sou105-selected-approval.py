@@ -101,78 +101,16 @@ def command(args, env, *words, success=True):
     return result.stdout.strip()
 
 
-def pending(args, env, timeout=5, empty=False, pending_id=None, binding=None):
+def pending(args, env, timeout=5, empty=False):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         rows = json.loads(command(args, env, "native-approval", "list"))
         if empty and not rows:
             return []
-        if pending_id is not None:
-            matches = [row for row in rows if row.get("pending_id") == pending_id]
-            require(len(matches) <= 1, "duplicate published pending approval")
-            if matches:
-                require(matches[0].get("binding_sha256") == binding,
-                        "published pending approval binding changed")
-                return matches[0]
-        if not empty and pending_id is None and len(rows) == 1:
+        if not empty and len(rows) == 1:
             return rows[0]
         time.sleep(.025)
     raise ValueError("pending approval state missed declared deadline")
-
-
-def approval_publications(path, call_id):
-    # BASE.events deliberately retains only mcp_real_call diagnostics, so it
-    # cannot observe broker publication. Read the owned collector JSON lines
-    # directly, with a bound and exact event/request correlation.
-    try:
-        with path.open("rb") as stream:
-            raw = stream.read(1024 * 1024 + 1)
-    except FileNotFoundError:
-        return []
-    require(len(raw) <= 1024 * 1024, "approval publication log exceeded bound")
-    selected = []
-    for line in raw.splitlines():
-        try:
-            event = json.loads(line)
-        except (ValueError, UnicodeError):
-            continue
-        if (isinstance(event, dict) and event.get("event") == "mcp_native_approval_pending"
-                and type(event.get("host_call_id")) is int and event["host_call_id"] == call_id):
-            selected.append(event)
-    return selected
-
-
-def published_pending(args, env, stderr, call_id, evidence):
-    # Verified runtime/package capture precedes broker publication. Observe
-    # that preparation separately, within the unchanged 30-second call limit;
-    # the five-second broker observation starts only after publication. This
-    # does not extend the operator wait, broker TTL or any cleanup bound.
-    observation = {"host_call_id": call_id, "publication_budget_ms": 20000,
-                   "broker_budget_ms": 5000}
-    evidence.setdefault("pending_observations", []).append(observation)
-    started = time.monotonic()
-    try:
-        deadline, matches = started + 20, []
-        while time.monotonic() < deadline:
-            matches = approval_publications(stderr, call_id)
-            if matches:
-                break
-            time.sleep(.02)
-        require(matches, "selected approval publication missed preparation deadline")
-        require(len(matches) == 1, "ambiguous selected approval publication")
-        publication = matches[0]
-        require(isinstance(publication.get("pending_id"), str) and publication["pending_id"]
-                and isinstance(publication.get("binding_sha256"), str)
-                and re.fullmatch(r"[0-9a-f]{64}", publication["binding_sha256"]),
-                "invalid selected approval publication identity")
-    finally:
-        observation["publication_elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
-    started = time.monotonic()
-    try:
-        return pending(args, env, pending_id=publication["pending_id"],
-                       binding=publication["binding_sha256"])
-    finally:
-        observation["broker_elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
 
 
 def refused_response(client, timeout=8):
@@ -376,7 +314,7 @@ def qualify(rig, report):
             require(BASE.refused(response) and response["id"] == 50, "default/Deny did not refuse original ID")
             pending(args, rig.env, empty=True)
         else:
-            waiting = published_pending(args, rig.env, stderr, 50, row)
+            waiting = pending(args, rig.env)
             output = command(args, rig.env, "native-approval", "inspect", waiting["pending_id"])
             (rig.root / (case + ".operator-inspect.log")).write_text(output + "\n")
             inspected = inspected_output(output, waiting["pending_id"], waiting["binding_sha256"])
@@ -400,9 +338,9 @@ def qualify(rig, report):
                 # Initialize the independently pinned/sandboxed peer before
                 # starting the timed follow-up. strace startup is substantial;
                 # it is not part of an outstanding operator decision.
-                peer, peer_trace, peer_stderr = rig.client("useful-peer")
+                peer, peer_trace, _ = rig.client("useful-peer")
                 client.send(rig.frame(51))
-                first = published_pending(args, rig.env, stderr, 51, row)
+                first = pending(args, rig.env)
                 if rig.kind == "filesystem":
                     neutral = rig.frame(52)
                     neutral["params"]["arguments"]["path"] = "/workspace/notes.txt"
@@ -413,8 +351,13 @@ def qualify(rig, report):
                     require(rig.effects(trace) == 1, "pending sensitive follow-up executed before approval")
                     row["same_relay_allow_peer"] = True
                 peer.send(rig.frame(70))
-                other = published_pending(args, rig.env, peer_stderr, 70, row)
-                require(other["pending_id"] != first["pending_id"], "useful peer reused pending relay identity")
+                deadline = time.monotonic() + 5
+                while True:
+                    rows = json.loads(command(args, rig.env, "native-approval", "list"))
+                    other = next((item for item in rows if item["pending_id"] != first["pending_id"]), None)
+                    if other: break
+                    require(time.monotonic() < deadline, "useful peer was blocked by pending relay")
+                    time.sleep(.025)
                 command(args, rig.env, "native-approval", "approve", other["pending_id"], "--binding", other["binding_sha256"])
                 require(not BASE.refused(peer.receive()[0]) and rig.effects(peer_trace) == 1, "independent useful peer failed")
                 require(rig.effects(trace) == 1, "pending follow-up dispatched without its approval")

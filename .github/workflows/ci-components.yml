@@ -1360,17 +1360,6 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/filesystem-paths" \
             2>&1 | tee "$RUNNER_TEMP/filesystem-paths.log"
-      - name: Required exact single-use Ask through original filesystem and Git servers
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -B -m unittest discover -s scripts/tests -p test_sou105_selected_approval.py -v
-          python3 -B scripts/verify-sou105-selected-approval.py --run \
-            --agentfw "$PWD/target/debug/agentfw" --node "$RUNNER_TEMP/sou62-runtime/bin/node" \
-            --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" --git "$RUNNER_TEMP/sou100-git-source/git" \
-            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
-            --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
-            --output "$RUNNER_TEMP/sou105-approval" 2>&1 | tee "$RUNNER_TEMP/sou105-approval.log"
       - name: SOU-114 read-only installed pilot diagnosis and private incident export
         shell: bash
         run: |
@@ -1500,6 +1489,17 @@ jobs:
           python3 -B scripts/qualify-installed-pilot.py --run \
             --selection "$RUNNER_TEMP/sou100-selection.json" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou100-pilot" 2>&1 | tee "$RUNNER_TEMP/sou100-pilot.log"
+      - name: Required exact single-use Ask through original filesystem and Git servers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s scripts/tests -p test_sou105_selected_approval.py -v
+          python3 -B scripts/verify-sou105-selected-approval.py --run \
+            --agentfw "$PWD/target/debug/agentfw" --node "$RUNNER_TEMP/sou62-runtime/bin/node" \
+            --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" --git "$RUNNER_TEMP/sou100-git-source/git" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou105-approval" 2>&1 | tee "$RUNNER_TEMP/sou105-approval.log"
       - name: Publish bounded installed-pilot outcome
         if: always()
         shell: bash
