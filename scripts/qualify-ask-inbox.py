@@ -189,6 +189,20 @@ class InboxPilot(ASK.Pilot):
         super().close()
 
 
+def verify_original_cases(report):
+    common = ("expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default")
+    expected = {(profile, case) for profile in ("git", "filesystem") for case in common}
+    expected.add(("git", "collector_term"))
+    rows = report.get("cases", [])
+    require(isinstance(rows, list) and len(rows) == len(expected), "incomplete_original_cases")
+    require(all(isinstance(row, dict) and row.get("passed") is True for row in rows),
+            "incomplete_original_cases")
+    observed = [(row.get("profile"), row.get("case")) for row in rows]
+    require(all(isinstance(profile, str) and isinstance(case, str) for profile, case in observed),
+            "incomplete_original_cases")
+    require(set(observed) == expected, "incomplete_original_cases")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace", "output"):
@@ -222,7 +236,7 @@ def main():
                 report["raw_transcripts_exported"] = False
         require(any(r["case"] == "terminal_approve" for r in report["terminal_controls"]), "approval_not_exercised")
         require(any(r["case"] == "terminal_reject" for r in report["terminal_controls"]), "rejection_not_exercised")
-        require(len(report["cases"]) == 14 and all(r["passed"] for r in report["cases"]), "incomplete_original_cases")
+        verify_original_cases(report)
     except Exception as error:
         report.update(status="failed", error_type=type(error).__name__,
             error_location=[{"function": frame.name, "line": frame.lineno}
