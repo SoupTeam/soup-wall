@@ -317,7 +317,8 @@ class Pilot:
         if primary is not None:
             result["primary_is_error"] = primary.get("is_error")
             result["primary_diagnostic"] = diagnostic(json.dumps(primary))
-        self.err.flush()
+        if not getattr(self.err, "closed", False):
+            self.err.flush()
         result["stderr_diagnostic"] = diagnostic((self.root / "host.stderr.private").read_bytes()[-16000:].decode('utf-8', errors='replace'))
         if self.trace.exists() and self.trace.stat().st_size <= 32 * 1024 * 1024:
             try:
@@ -342,6 +343,9 @@ class Pilot:
                 result["asset_timings"] = timings[:32]
                 result["collector_failures"] = failures[:16]
                 result["trace_sha256"] = LAUNCH.sha(self.trace)
+            except LATENCY.ObservationError as error:
+                result["trace_diagnostic"] = {"reason": "write_unobserved", "kind": error.kind,
+                                              "record_sha256": error.record_sha256}
             except (OSError, ValueError, UnicodeError):
                 result["trace_diagnostic"] = "incomplete_or_invalid_observation"
         return result
@@ -545,7 +549,7 @@ def qualify(args, private, report):
                         collectors = LAUNCH.collector_processes(lines, setup.binary)
                         selected = [pid for pid, server in collectors.items() if server == kind]
                         require(len(selected) == 1, "one_primary_collector_required")
-                        proof = LATENCY.reuse_observation(lines, selected[0])
+                        proof = LATENCY.reuse_observation(lines, selected[0], require_completed_call=True)
                         row["verified_inputs_resume"] = proof
                         require(proof["immutable_files"] + proof["leased_files"] > 0, "actual_reuse_missing")
                 primary_text = json.dumps(primary)

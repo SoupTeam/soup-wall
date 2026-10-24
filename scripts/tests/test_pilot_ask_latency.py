@@ -42,6 +42,93 @@ class ReuseObservation(unittest.TestCase):
             with self.subTest(rows=rows), self.assertRaises(ValueError):
                 LATENCY.reuse_observation(rows, 7)
 
+    def test_zero_transfer_and_signal_restart_require_a_later_completed_proof(self):
+        attempts = [
+            '7 write(2, NULL, 0) = 0',
+            '7 writev(2, [], 0) = 0',
+            '7 write(2, 0x1234, 100) = -1 EAGAIN (Resource temporarily unavailable)',
+            '7 writev(2, 0x1234, 2) = -1 EINTR (Interrupted system call)',
+            '7 write(2, "not written", 11) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)',
+            '7 writev(2, [], 0) = ? ERESTART_RESTARTBLOCK (Interrupted by signal)',
+        ]
+        for attempt in attempts:
+            with self.subTest(attempt=attempt):
+                proof = LATENCY.reuse_observation([attempt, self.event()], 7)
+                self.assertEqual(proof['leased_files'], 2)
+                with self.assertRaisesRegex(ValueError, 'one_selected_reuse_observation_required'):
+                    LATENCY.reuse_observation([attempt], 7)
+        for attempt in [
+            '7 write(2, 0x1234, 100) = 100',
+            '7 writev(2, 0x1234, 2) = 100',
+            '7 write(2, 0x1234, 100) = -1 EIO (Input/output error)',
+            '7 write(2, "unknown", 7) = ? UNKNOWN',
+        ]:
+            with self.subTest(attempt=attempt), self.assertRaises(LATENCY.ObservationError):
+                LATENCY.reuse_observation([self.event(), attempt], 7)
+
+    def test_zero_sized_vector_addresses_contribute_no_bytes(self):
+        payload = json.dumps(dict(event='mcp_verified_inputs_resume', immutable_files=0,
+                                  leased_files=1, rehashed_files=2)) + '\n'
+        line = (f'7 writev(2, [{{iov_base=NULL, iov_len=0}}, '
+                f'{{iov_base={json.dumps(payload)}, iov_len={len(payload)}}}, '
+                f'{{iov_base=0x1234, iov_len=0}}], 3) = {len(payload)}')
+        self.assertEqual(LATENCY.reuse_observation([line], 7)['leased_files'], 1)
+        for invalid in (line.replace('iov_base=NULL, iov_len=0', 'iov_base=NULL, iov_len=1'),
+                        line.replace('], 3)', ', ...], 4)')):
+            with self.assertRaises(LATENCY.ObservationError):
+                LATENCY.reuse_observation([invalid], 7)
+
+    def test_malformed_literal_exposes_only_a_finite_diagnosis_and_digest(self):
+        line = r'7 write(2, "\xZZ", 1) = 1'
+        with self.assertRaises(LATENCY.ObservationError) as raised:
+            LATENCY.reuse_observation([line], 7)
+        self.assertEqual(raised.exception.kind, 'literal_payload')
+        self.assertEqual(str(raised.exception), 'reuse_diagnostic_write_unobserved')
+        self.assertEqual(len(raised.exception.record_sha256), 64)
+
+    def completed_scope(self):
+        profile = 'sw-mcp/git-readonly/1'
+        records = [self.event(profile=profile)]
+        for stage in ('profile_and_assets', 'original_dispatch', 'original_response', 'result_inspection'):
+            records.append(self.event(event='mcp_real_approval_timing', profile=profile,
+                host_call_id='original', clock='collector_monotonic', authority=False,
+                success=True, stage=stage))
+        return records
+
+    def test_reuse_scope_closes_only_after_the_same_calls_observed_release(self):
+        rows = self.completed_scope()
+        shutdown = '7 write(2, "shutdown", 8) = ?'
+        proof = LATENCY.reuse_observation(rows + [shutdown], 7, require_completed_call=True)
+        self.assertEqual(proof['scope'], 'completed_original_approval')
+        self.assertEqual(proof['leased_files'], 2)
+        # Unobserved bytes before the completed window remain fatal.
+        with self.assertRaises(LATENCY.ObservationError):
+            LATENCY.reuse_observation(rows[:-1] + [shutdown, rows[-1]], 7,
+                                      require_completed_call=True)
+        with self.assertRaisesRegex(ValueError, 'one_selected_reuse_observation_required'):
+            LATENCY.reuse_observation([rows[0], *rows], 7, require_completed_call=True)
+
+    def test_missing_foreign_failed_or_mismatched_scope_cannot_qualify_reuse(self):
+        rows = self.completed_scope()
+        for missing in range(len(rows)):
+            with self.subTest(missing=missing), self.assertRaisesRegex(
+                    ValueError, 'approved_reuse_scope_incomplete'):
+                LATENCY.reuse_observation(rows[:missing] + rows[missing+1:], 7,
+                                          require_completed_call=True)
+        changes = [('host_call_id', 'other'), ('clock', 'other'), ('authority', True),
+                   ('success', False), ('profile', 'sw-mcp/filesystem-readonly/1')]
+        for key, value in changes:
+            fields = dict(event='mcp_real_approval_timing', profile='sw-mcp/git-readonly/1',
+                          host_call_id='original', clock='collector_monotonic', authority=False,
+                          success=True, stage='result_inspection')
+            fields[key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'approved_reuse_scope_incomplete'):
+                LATENCY.reuse_observation(rows[:-1] + [self.event(**fields)], 7,
+                                          require_completed_call=True)
+        with self.assertRaisesRegex(ValueError, 'approved_reuse_scope_incomplete'):
+            LATENCY.reuse_observation([rows[0]] + [r.replace('7 ', '8 ', 1) for r in rows[1:]],
+                                      7, require_completed_call=True)
+
     def test_worker_diagnostic_requires_kernel_observed_thread_lineage(self):
         event = self.event(8)
         for clone in [

@@ -104,6 +104,7 @@ def validate_report(report, expected_source, selected, samples, candidate):
         if candidate:
             proof = row.get('verified_inputs_resume', {})
             require(proof.get('observer') == 'collector mcp_verified_inputs_resume', 'reuse_observer_missing')
+            require(proof.get('scope') == 'completed_original_approval', 'reuse_scope_incomplete')
             require(all(type(proof.get(k)) is int and proof[k] >= 0
                         for k in ('immutable_files', 'leased_files', 'rehashed_files')), 'reuse_counts_invalid')
             require(proof['immutable_files'] + proof['leased_files'] > 0, 'actual_reuse_missing')
@@ -135,6 +136,7 @@ def validate_preflight(report, expected_source, selected):
                 'preflight_effect_missing')
         proof = row.get('verified_inputs_resume', {})
         require(proof.get('observer') == 'collector mcp_verified_inputs_resume'
+                and proof.get('scope') == 'completed_original_approval'
                 and all(type(proof.get(k)) is int and proof[k] >= 0
                         for k in ('immutable_files', 'leased_files', 'rehashed_files'))
                 and proof['immutable_files'] + proof['leased_files'] > 0, 'preflight_reuse_missing')

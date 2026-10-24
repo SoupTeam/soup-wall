@@ -7,7 +7,7 @@ eighty same-runner before/after approvals with zero failed/incomplete samples.
 Candidate p95 was 1938.429574 ms for filesystem and 2914.567600 ms for Git, both
 within 3000 ms. Full denominators, source identities and historical failures are
 retained in `evidence/sou-124/`. A missing or missed target remains an explicit
-performance blocker. The later tree-completeness/portable-atomic correction
+performance blocker. The later tree-completeness/portable-atomic/observer correction
 requires fresh current-source qualification; the prior source is not relabelled.
 
 ## What the measurements mean
@@ -104,6 +104,12 @@ when metadata matches. Neither mtime, notifications nor a read-only bind mount i
 accepted as a byte-immutability proof. `mcp_verified_inputs_resume` reports the
 numbers of fs-verity files, retained lease files and files rehashed, without paths or
 content. An all-fallback run is **not** evidence of an optimized accepted path.
+The measurement observer requires a single collector reuse event and the same
+call's successful verification/dispatch/response/inspection sequence. That
+completed diagnostic window is separate from whole-trace wire, kernel-effect and
+cleanup controls. Zero-transfer/restarted writes add no observed bytes; unknown
+positive writes before completion still refuse. Post-completion shutdown logs
+do not redefine the completed call's proof.
 
 Unit controls were added for same-length writes, matching-metadata writes,
 replacement, permission/symlink changes, package structure changes and lost
@@ -137,7 +143,7 @@ either profile exits nonzero. Only bounded JSON reports and the kernel control
 summary are exported; raw provider/authority traces remain private.
 
 Local macOS checks include 1697 Rust tests passed, 13 ignored; strict workspace
-all-target clippy and formatting; 1220 Python tests run, 79 platform/optional
+all-target clippy and formatting; 1227 Python tests run, 79 platform/optional
 skips and no failures. These checks are not native performance evidence. Current
 native measurements and any failed attempts are retained separately in
 `evidence/sou-124/`. No paid provider, real secret, private dataset, release or

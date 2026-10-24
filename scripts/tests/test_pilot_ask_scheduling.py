@@ -101,6 +101,26 @@ class ProposalScheduling(unittest.TestCase):
         normal = ASK.ProposalGate()
         self.assertTrue(normal.wait(timeout=.1))
 
+    def test_finished_pilot_keeps_only_finite_observer_failure_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private = 'private-trace-contents-must-not-be-exported'
+            trace = SimpleNamespace(exists=lambda: True, stat=lambda: SimpleNamespace(st_size=1),
+                                    read_text=lambda: private)
+            pilot = SimpleNamespace(kind='git', process=SimpleNamespace(poll=lambda: 0),
+                offered=set(), model=SimpleNamespace(requests=[], results={}), root=root,
+                trace=trace, setup=SimpleNamespace(binary=root / 'agentfw'),
+                err=SimpleNamespace(closed=True, flush=lambda: self.fail('closed stream was flushed')))
+            error = ASK.LATENCY.ObservationError('write_syntax', private)
+            with patch.object(Path, 'read_bytes', return_value=b''), \
+                 patch.object(ASK.LAUNCH, 'normalized_syscalls', return_value=([], {})), \
+                 patch.object(ASK.LAUNCH, 'collector_processes', return_value={7: 'git'}), \
+                 patch.object(ASK.LATENCY, 'collector_stderr_rows', side_effect=error):
+                result = ASK.Pilot.failure_observation(pilot)
+            self.assertNotIn(private, json.dumps(result))
+            self.assertEqual(result['trace_diagnostic'], dict(
+                reason='write_unobserved', kind='write_syntax', record_sha256=error.record_sha256))
+
 
 if __name__ == '__main__':
     unittest.main()

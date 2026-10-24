@@ -35,6 +35,23 @@ Lease slot reservation now uses portable compare-exchange instead of a
 deprecated API, without warning suppression. The follow-up requires fresh native
 qualification and current CI; the `1137780` timings are not relabelled.
 
+`native-644abcc-observer-failure.json` retains the subsequent run `40047008403`.
+Strict real leases, all eleven Linux identity controls, installed-profile resume
+and two-profile preflight passed. Baseline completed all forty samples; the
+candidate had three successful Git samples, one observer failure and thirty-six
+incomplete cases. It is not a passing current performance result. The raw write
+record was private and not retained, so its exact syntax is unknown.
+
+The observer follow-up handles zero-transfer/restarted writes and zero-length
+iovecs without crediting any bytes. It requires one real reuse event followed by
+the same original call's observed verification, dispatch, response and successful
+inspection. Only that completed diagnostic window closes; independent wire,
+kernel-effect and cleanup witnesses still consume the entire trace. Unknown
+positive writes inside the window, missing/mismatched/foreign completion, duplicate
+reuse and missing proof still refuse. Ambiguous shutdown diagnostics cannot
+invalidate a previously completed invocation's history. Closed stderr no longer
+hides a failure diagnosis; only a finite kind and record digest are exported.
+
 ## Historical native attempt 6
 
 `native-attempt6.json` retains the same-runner comparison from run `40010363488`

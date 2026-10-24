@@ -20,7 +20,8 @@ class ComparisonProof(unittest.TestCase):
                      decision_to_result_ms=100, allow_peer_while_pending=True,
                      cross_run_isolation_and_cleanup=True,
                      verified_inputs_resume=dict(immutable_files=0, leased_files=1,
-                         rehashed_files=2, observer='collector mcp_verified_inputs_resume'))
+                         rehashed_files=2, observer='collector mcp_verified_inputs_resume',
+                         scope='completed_original_approval'))
                 for p in C.PROFILES for i in range(20)]
         self.report = dict(status='pass', real_host_executed=True, scripted_owned_provider=True,
                            trace_requested=C.METRICS.trace_request(),
@@ -73,6 +74,11 @@ class ComparisonProof(unittest.TestCase):
             with self.subTest(proof=proof), self.assertRaises(ValueError): self.validate(row)
         self.report['latency']['filesystem']['p95_ms'] = 1
         with self.assertRaisesRegex(ValueError, 'reported_metrics_disagree'): self.validate()
+
+    def test_counts_without_a_completed_original_call_scope_cannot_qualify(self):
+        self.report['cases'][0]['verified_inputs_resume'].pop('scope')
+        with self.assertRaisesRegex(ValueError, 'reuse_scope_incomplete'):
+            self.validate()
 
     def test_different_trace_method_cannot_be_spliced_into_comparison(self):
         self.report.pop('trace_requested')
