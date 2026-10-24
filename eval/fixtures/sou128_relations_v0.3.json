@@ -19,7 +19,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
@@ -36,7 +36,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
@@ -58,7 +58,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
@@ -75,7 +75,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
@@ -97,7 +97,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
@@ -114,7 +114,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
@@ -136,7 +136,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
@@ -153,7 +153,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
@@ -175,7 +175,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
@@ -192,7 +192,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
@@ -214,7 +214,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
@@ -231,7 +231,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
@@ -253,7 +253,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
@@ -270,7 +270,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
@@ -292,7 +292,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
@@ -309,7 +309,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
@@ -445,7 +445,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Adding an unrecognised component keeps every risky action of the source and sets unknown = true.",
@@ -462,7 +462,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Adding an unrecognised component keeps every risky action of the source and sets unknown = true.",
@@ -479,7 +479,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Adding an unrecognised component keeps every risky action of the source and sets unknown = true.",
@@ -496,7 +496,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Adding an unrecognised component keeps every risky action of the source and sets unknown = true.",
@@ -513,12 +513,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "contract/updated_contract2.md",
           "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
@@ -535,12 +535,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "contract/updated_contract2.md",
           "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
@@ -557,12 +557,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "contract/updated_contract2.md",
           "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
@@ -579,12 +579,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "contract/updated_contract2.md",
           "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
@@ -600,12 +600,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "eval/eval_runner.py",
           "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
-          "sha256": "dba2f22b72f052731f4f14963d21e8c788a2f3624351d0816662cf866256b053"
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
         }
       ],
       "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
@@ -621,12 +621,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "eval/eval_runner.py",
           "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
-          "sha256": "dba2f22b72f052731f4f14963d21e8c788a2f3624351d0816662cf866256b053"
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
         }
       ],
       "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
@@ -642,12 +642,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "eval/eval_runner.py",
           "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
-          "sha256": "dba2f22b72f052731f4f14963d21e8c788a2f3624351d0816662cf866256b053"
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
         }
       ],
       "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
@@ -663,12 +663,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "eval/eval_runner.py",
           "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
-          "sha256": "dba2f22b72f052731f4f14963d21e8c788a2f3624351d0816662cf866256b053"
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
         }
       ],
       "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
@@ -684,12 +684,12 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         },
         {
           "path": "eval/eval_runner.py",
           "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
-          "sha256": "dba2f22b72f052731f4f14963d21e8c788a2f3624351d0816662cf866256b053"
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
         }
       ],
       "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
@@ -706,7 +706,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D05: literal data is not an executed command",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
@@ -723,7 +723,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D05: literal data is not an executed command",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
@@ -740,7 +740,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D05: literal data is not an executed command",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
@@ -757,7 +757,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D05: literal data is not an executed command",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
@@ -774,7 +774,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D05: literal data is not an executed command",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
@@ -790,7 +790,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Name-driven classification is recorded, not scored.",
@@ -806,7 +806,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Name-driven classification is recorded, not scored.",
@@ -822,7 +822,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Name-driven classification is recorded, not scored.",
@@ -838,7 +838,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Name-driven classification is recorded, not scored.",
@@ -854,7 +854,7 @@
         {
           "path": "contract/updated_contract2.md",
           "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
-          "sha256": "7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31"
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
         }
       ],
       "basis": "Name-driven classification is recorded, not scored.",
@@ -1057,7 +1057,7 @@
         {
           "path": "crates/agentfw/src/mcp/admission.rs",
           "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
-          "sha256": "3d9b6501cc1ccebd4536f73a657b0d5eb61526a95c81f339d79f41f5b833a3a8"
+          "sha256": "633b8ad3e78d491d4a5607ba488b2bb944b9bb8032cccc89a36857283f1e1d4d"
         }
       ]
     },
@@ -1073,7 +1073,7 @@
         {
           "path": "crates/agentfw/src/mcp/admission.rs",
           "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
-          "sha256": "3d9b6501cc1ccebd4536f73a657b0d5eb61526a95c81f339d79f41f5b833a3a8"
+          "sha256": "633b8ad3e78d491d4a5607ba488b2bb944b9bb8032cccc89a36857283f1e1d4d"
         }
       ]
     },
@@ -1089,7 +1089,7 @@
         {
           "path": "crates/agentfw/src/mcp/admission.rs",
           "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
-          "sha256": "3d9b6501cc1ccebd4536f73a657b0d5eb61526a95c81f339d79f41f5b833a3a8"
+          "sha256": "633b8ad3e78d491d4a5607ba488b2bb944b9bb8032cccc89a36857283f1e1d4d"
         }
       ]
     },
@@ -1105,7 +1105,7 @@
         {
           "path": "crates/agentfw/src/mcp/admission.rs",
           "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
-          "sha256": "3d9b6501cc1ccebd4536f73a657b0d5eb61526a95c81f339d79f41f5b833a3a8"
+          "sha256": "633b8ad3e78d491d4a5607ba488b2bb944b9bb8032cccc89a36857283f1e1d4d"
         }
       ]
     }

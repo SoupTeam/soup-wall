@@ -24,6 +24,7 @@ usage:
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import platform
@@ -56,6 +57,29 @@ KINDS = {"equal_outcome": 2, "metadata_invariant": 2, "preserve_risk_mark_unknow
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+@functools.lru_cache(maxsize=None)  # a few files are cited many times per run
+def source_sha256(rel: str) -> str | None:
+    """Identity of a repository source: sha256 of its committed blob, on every platform.
+
+    A Windows core.autocrlf working copy holds different bytes from the LF blob a Linux checkout holds,
+    so raw disk bytes are not a portable identity. The blob is used only when the working copy has no
+    content change (git diff accounts for line-ending conversion); otherwise, or outside a git checkout,
+    the bytes on disk are hashed, which then differ from any committed citation and are reported as drift.
+    """
+    path = ROOT / rel
+    if not path.is_file():
+        return None
+    try:
+        clean = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", "HEAD", "--", rel], capture_output=True, timeout=60)
+        if clean.returncode == 0:
+            blob = subprocess.run(["git", "-C", str(ROOT), "cat-file", "blob", f"HEAD:{rel}"], capture_output=True, timeout=60)
+            if blob.returncode == 0:
+                return sha256(blob.stdout)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return sha256(path.read_bytes())
 
 
 def expand(payload: dict) -> bytes:
@@ -278,7 +302,7 @@ def source_drift(rels: dict) -> list[str]:
         if s.get("sha256") is None:
             continue  # an external standard (e.g. RFC 8259), cited by name only
         path = ROOT / s["path"]
-        actual = sha256(path.read_bytes()) if path.is_file() else None
+        actual = source_sha256(s["path"])
         if actual != s["sha256"]:
             drift.append(f"{s['path']}: cited {s['sha256']}, now {actual}")
     return sorted(set(drift))
@@ -291,8 +315,12 @@ CANDIDATE_BLOCKER = ("The SOU-97 candidate (rule_baseline/pilot_readonly_v1/rule
 
 
 def identity(classifiers: dict[str, Path]) -> dict:
-    return {k: {"path": p.resolve().relative_to(ROOT).as_posix() if p.resolve().is_relative_to(ROOT) else p.name,
-                "sha256": sha256(p.read_bytes())} for k, p in sorted(classifiers.items())}
+    out = {}
+    for k, p in sorted(classifiers.items()):
+        inside = p.resolve().is_relative_to(ROOT)
+        rel = p.resolve().relative_to(ROOT).as_posix() if inside else p.name
+        out[k] = {"path": rel, "sha256": source_sha256(rel) if inside else sha256(p.read_bytes())}
+    return out
 
 
 def evaluate_set(cases: list[dict], rels: dict, modes: list[str], classifiers: dict[str, Path]) -> tuple[dict, dict, int]:
@@ -419,11 +447,11 @@ def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: 
         "identities": {
             "corpus": {"path": corpus_path.name, "sha256": sha256(corpus_raw), "fixture_version": corpus.get("fixture_version")},
             "relations": {"path": relations_path.name, "sha256": sha256(rels_raw)},
-            "eval_runner_sha256": sha256(Path(ER.__file__).read_bytes()),
-            "metamorphic_runner_sha256": sha256(Path(__file__).read_bytes()),
+            "eval_runner_sha256": source_sha256("eval/eval_runner.py"),
+            "metamorphic_runner_sha256": source_sha256("eval/metamorphic_runner.py"),
             "classifiers": identity(classifiers),
-            "worker_py_sha256": sha256(WORKER_PY.read_bytes()),
-            "worker_rs_sha256": sha256(WORKER_RS.read_bytes()),
+            "worker_py_sha256": source_sha256(WORKER_PY.relative_to(ROOT).as_posix()),
+            "worker_rs_sha256": source_sha256(WORKER_RS.relative_to(ROOT).as_posix()),
             "worker_bootstrap_sha256": sha256(bootstrap.encode("utf-8")),
             "worker_deadlines_ms": deadlines,
         },

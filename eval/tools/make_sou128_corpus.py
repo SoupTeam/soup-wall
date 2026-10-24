@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "eval"))
 sys.dont_write_bytecode = True
-from metamorphic_runner import expand  # noqa: E402  (one payload encoding for builder and runner)
+from metamorphic_runner import expand, source_sha256  # noqa: E402  (shared with the runner)
 
 FIXTURE =ROOT / "eval/fixtures/sou128_metamorphic_dev_v0.3.json"
 RELATIONS = ROOT / "eval/fixtures/sou128_relations_v0.3.json"
@@ -38,7 +38,8 @@ ORIGIN_V03 = "sou128_v0.3_audit_correction"
 
 
 def sha(rel: str) -> str:
-    return hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
+    """Committed-blob identity, identical on Windows (autocrlf) and Linux checkouts."""
+    return source_sha256(rel)
 
 
 def source(rel: str, rule: str) -> dict:

@@ -15,7 +15,9 @@ implementation exists yet. The v0.2 preparation files are untrusted development 
 | Worker framing `rule_baseline/runtime/worker.py` | sha256 `ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c` |
 | Original filesystem tools `profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json` | sha256 `d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954` |
 | Original Git tools `profiles/mcp/git-readonly-v1/upstream-tools-list.json` | sha256 `8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b` |
-| Classifier contract `contract/updated_contract2.md` (SOU-10 v0.4) | sha256 `7ebf692455f94040c80869ae76a8f2e7f06202f8eea86cc8c7431204fd070b31` |
+| Classifier contract `contract/updated_contract2.md` (SOU-10 v0.4) | committed blob sha256 `a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0` |
+
+All identities are sha256 of the committed blob, the bytes a Linux checkout holds. An earlier draft of this table recorded the contract's Windows `core.autocrlf` working-copy hash (`7ebf6924…`); that is not a portable identity. The other files above are stored with `eol=lf` or `-text`, so their working-copy and blob hashes are equal.
 
 No SOU-13/SOU-35 sealed or private material and no SOU-97 (#213) or SOU-109 (#215) unmerged
 file was read or used. Observations below were made with the accepted baselines only.
