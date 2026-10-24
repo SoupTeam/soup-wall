@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import errno
 import hashlib
 import importlib.util
 import json
@@ -111,6 +112,16 @@ PUBLIC_FAILURE_CODES = frozenset({
 
 class Failure(Exception):
     pass
+
+
+def storage_failure(error):
+    """Finite diagnostics only; never expose paths or exception messages."""
+    codes = {errno.ENOSPC: "storage_full", errno.EROFS: "storage_read_only",
+             errno.EACCES: "storage_permission_denied", errno.EPERM: "storage_permission_denied",
+             errno.EIO: "storage_io_failed", getattr(errno, "EDQUOT", -1): "storage_quota_exceeded"}
+    if isinstance(error, OSError):
+        return codes.get(error.errno)
+    return None
 
 
 def require(ok, code):
@@ -268,6 +279,7 @@ def run(args, report):
     daemon = launcher = None
     streams = []
     cancelled = False
+    report.update(stage="private_setup", host_started=False)
     def cancel(_signum, _frame):
         nonlocal cancelled
         cancelled = True
@@ -309,12 +321,15 @@ def run(args, report):
             with (home / filename).open("x") as stream:
                 os.fchmod(stream.fileno(), 0o600)
                 stream.write(value)
+                stream.flush()
+                os.fsync(stream.fileno())
         # Last pre-effect verification, including source, selected bytes and package trees.
         require(selected(args)[0] == selection, "selection_changed_before_launch")
         require(not cancelled, "pilot_cancelled")
         daemon_log = (private / "daemon.private.log").open("xb")
         os.fchmod(daemon_log.fileno(), 0o600)
         streams.append(daemon_log)
+        report["stage"] = "daemon_start"
         daemon = subprocess.Popen([str(paths["agentfw"]), "serve"], cwd=private, env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             start_new_session=True, preexec_fn=parent_death)
@@ -337,15 +352,19 @@ def run(args, report):
             os.fchmod(log.fileno(), 0o600)
             streams.append(log)
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
+            report["stage"] = "host_start"
             launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=parent_death)
+            report["host_started"] = True
             selector.register(launcher.stdout, selectors.EVENT_READ, (log, True))
             report["launcher_pid"] = launcher.pid
+            report["stage"] = "run_publication"
             # Non-secret rendezvous for the existing second-terminal operator CLI.
             json_file(private / "run.json", {"format": "sw-prepared-pilot-run/1", "home": str(home),
                       "supervisor_pid": os.getpid(), "launcher_pid": launcher.pid, "daemon_pid": daemon.pid, "port": port})
             print(json.dumps({"status": "running", "run_directory": str(private), "home": str(home)},
                              ensure_ascii=True), file=sys.stderr, flush=True)
+            report["stage"] = "active_run"
             deadline, count = time.monotonic() + args.timeout_seconds + 15, 0
             while not GROUPS.leader_finished(launcher):
                 require(not cancelled, "pilot_cancelled")
@@ -369,6 +388,11 @@ def run(args, report):
             report.update(status="stopped", launcher_exit=0, running_effects_rolled_back=False)
         else:
             report.update(status="completed", launcher_exit=0)
+    except OSError as error:
+        code = storage_failure(error)
+        if code:
+            report["storage_failure"] = code
+        raise
     finally:
         errors = []
         for name, process in (("launcher", launcher), ("daemon", daemon)):
@@ -388,8 +412,10 @@ def run(args, report):
         for stream in streams:
             try:
                 stream.close()
-            except OSError:
+            except OSError as error:
                 errors.append("private_log")
+                if storage_failure(error):
+                    report["cleanup_storage_failure"] = storage_failure(error)
         for sig, handler in previous.items():
             signal.signal(sig, handler)
         # Stop processes before snapshot/export. Retention housekeeping never
@@ -418,11 +444,15 @@ def run(args, report):
                     json_file(private / "audit-finished.json", {"format": AUDIT.FORMAT,
                         "run_id": report["audit"]["run_id"], "owned_processes_stopped": True})
                     report["audit"].update(directory=str(private), snapshot=AUDIT.state(private))
-            except OSError:
+            except OSError as error:
                 errors.append("private_state")
+                if storage_failure(error):
+                    report["cleanup_storage_failure"] = storage_failure(error)
         report["cleanup"] = ("failed" if errors else "owned_processes_stopped_state_retained"
                              if report.get("retained_stop_state") else "owned_processes_stopped_audit_retained"
                              if audit_selected else "owned_state_removed")
+        if errors:
+            report["cleanup_failures"] = errors
         require(not errors, "owned_process_cleanup_failed")
 
 
@@ -450,6 +480,12 @@ def main():
         code = str(error)
         report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
                       else "pilot_input_or_runtime_failure")
+        failure = storage_failure(error) or report.get("storage_failure") or report.get("cleanup_storage_failure")
+        if failure:
+            report.update(storage_failure=failure,
+                          recovery="Restore space and access to the owned state directory, then rerun with fresh authority.",
+                          effects="Host effects may have occurred; cleanup does not roll them back."
+                          if report.get("host_started") else "Protected host was not started.")
     print(json.dumps(report, sort_keys=True, ensure_ascii=True))
     return 1 if report["status"] == "failed" else 0
 

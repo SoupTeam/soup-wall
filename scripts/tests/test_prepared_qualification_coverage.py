@@ -21,6 +21,7 @@ def enabled(body, **overrides):
         "github.event.inputs.ask_latency_baseline_sha": "",
         "github.event.inputs.existing_project_only": "",
         "github.event.inputs.audit_retention_only": "",
+        "github.event.inputs.storage_recovery_only": "",
     }
     values.update(overrides)
     condition = next(line.strip()[4:] for line in body.splitlines() if line.strip().startswith("if: "))
@@ -85,10 +86,24 @@ class PreparedQualificationCoverage(unittest.TestCase):
                     "github.event_name": "workflow_dispatch",
                     "github.event.inputs.audit_retention_only": "true",
                 }))
-                for selected in ("github.event.inputs.existing_project_only", "github.event.inputs.ask_latency_baseline_sha"):
+                for selected in ("github.event.inputs.existing_project_only", "github.event.inputs.ask_latency_baseline_sha",
+                                 "github.event.inputs.storage_recovery_only"):
                     context = {"github.event_name": "workflow_dispatch", selected: "true"}
                     self.assertFalse(enabled(full, **context))
                     self.assertFalse(enabled(audit, **context))
+
+    def test_storage_faults_are_explicit_manual_evidence_with_separate_output(self):
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                body = step(text, "Qualify bounded storage faults and fresh-authority recovery")
+                self.assertFalse(enabled(body))
+                self.assertTrue(enabled(body, **{
+                    "github.event_name": "workflow_dispatch",
+                    "github.event.inputs.storage_recovery_only": "true",
+                }))
+                self.assertIn("scripts/qualify-pilot-storage.py --run", body)
+                self.assertIn('$RUNNER_TEMP/pilot-storage-qualification', body)
+                self.assertIn('${{ runner.temp }}/pilot-storage-qualification/**', text)
 
 
 if __name__ == "__main__":

@@ -155,9 +155,68 @@ pub struct AuditSink {
 }
 
 enum AuditStorage {
-    Legacy(File),
+    Legacy(LegacySink),
     #[cfg(any(target_os = "linux", windows))]
     Retained(Box<RetainedSink>),
+}
+
+struct LegacySink {
+    file: File,
+    failed: bool,
+    #[cfg(test)]
+    fail_after_bytes: Option<usize>,
+    #[cfg(all(test, target_os = "linux"))]
+    fail_sync: bool,
+}
+
+impl LegacySink {
+    fn new(file: File) -> Self {
+        Self {
+            file,
+            failed: false,
+            #[cfg(test)]
+            fail_after_bytes: None,
+            #[cfg(all(test, target_os = "linux"))]
+            fail_sync: false,
+        }
+    }
+
+    fn write_serialized(&mut self, line: &impl Serialize, durable: bool) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.failed,
+            "legacy audit sink requires operator repair and reopen"
+        );
+        let mut json = serde_json::to_vec(line)?;
+        json.push(b'\n');
+        let result = self.append(&json, durable);
+        // write_all can fail after appending a prefix. Neither a later append nor
+        // a later sync repairs that record, so never release native results from
+        // this sink again after an I/O failure.
+        if result.is_err() {
+            self.failed = true;
+        }
+        result
+    }
+
+    fn append(&mut self, bytes: &[u8], durable: bool) -> anyhow::Result<()> {
+        #[cfg(test)]
+        if let Some(count) = self.fail_after_bytes.take() {
+            self.file.write_all(&bytes[..count.min(bytes.len())])?;
+            anyhow::bail!("injected partial legacy audit write");
+        }
+        self.file.write_all(bytes)?;
+        // Linux native results require durable evidence. Windows legacy handles
+        // are append-only and cannot FlushFileBuffers; preserve their existing
+        // compatibility behavior rather than broadening handle access here.
+        if durable && cfg!(target_os = "linux") {
+            #[cfg(all(test, target_os = "linux"))]
+            if std::mem::take(&mut self.fail_sync) {
+                anyhow::bail!("injected legacy audit sync failure");
+            }
+            self.file.sync_data()?;
+        }
+        Ok(())
+    }
 }
 
 impl AuditSink {
@@ -177,8 +236,10 @@ impl AuditSink {
         // Reopening by path here would introduce a path-replacement race.
         #[cfg(not(windows))]
         crate::token::restrict(path)?;
+        #[cfg(target_os = "linux")]
+        check_legacy_tail(&file)?;
         Ok(Self {
-            inner: Mutex::new(AuditStorage::Legacy(file)),
+            inner: Mutex::new(AuditStorage::Legacy(LegacySink::new(file))),
         })
     }
 
@@ -202,6 +263,9 @@ impl AuditSink {
     pub fn health(&self) -> serde_json::Value {
         match self.inner.lock() {
             Ok(storage) => match &*storage {
+                AuditStorage::Legacy(sink) if sink.failed => {
+                    serde_json::json!({"mode":"legacy","state":"unavailable","reason":"audit_unavailable"})
+                }
                 AuditStorage::Legacy(_) => {
                     serde_json::json!({"mode":"legacy","state":"unverified"})
                 }
@@ -217,17 +281,18 @@ impl AuditSink {
     /// Write one line. Failures are returned, never panicked — a broken audit log
     /// must not take down the hook path.
     pub fn write(&self, line: &AuditLine) -> anyhow::Result<()> {
-        self.write_serialized(line)
+        self.write_serialized(line, false)
     }
 
     /// Native admission requires successful aggregate evidence before release.
     pub(crate) fn write_native(&self, line: &serde_json::Value) -> anyhow::Result<()> {
-        self.write_serialized(line)
+        self.write_serialized(line, true)
     }
 
     #[cfg(test)]
     pub(crate) fn fail_writes_for_test(&self, path: &Path) {
-        *self.inner.lock().unwrap() = AuditStorage::Legacy(File::open(path).unwrap());
+        *self.inner.lock().unwrap() =
+            AuditStorage::Legacy(LegacySink::new(File::open(path).unwrap()));
     }
 
     #[cfg(all(test, any(target_os = "linux", windows)))]
@@ -239,22 +304,37 @@ impl AuditSink {
         sink.inject_write_error(errno);
     }
 
-    fn write_serialized(&self, line: &impl Serialize) -> anyhow::Result<()> {
+    fn write_serialized(&self, line: &impl Serialize, durable: bool) -> anyhow::Result<()> {
         let mut storage = self
             .inner
             .lock()
             .map_err(|_| anyhow::anyhow!("audit mutex poisoned"))?;
         match &mut *storage {
             AuditStorage::Legacy(f) => {
-                let mut json = serde_json::to_string(line)?;
-                json.push('\n');
-                f.write_all(json.as_bytes())?;
+                f.write_serialized(line, durable)?;
             }
             #[cfg(any(target_os = "linux", windows))]
             AuditStorage::Retained(f) => f.write_serialized(line)?,
         }
         Ok(())
     }
+}
+
+/// Check only the final record boundary through the opened append handle. This
+/// does not validate earlier JSONL history or repair interrupted records.
+#[cfg(target_os = "linux")]
+fn check_legacy_tail(file: &File) -> anyhow::Result<()> {
+    use std::os::unix::fs::FileExt;
+
+    let len = file.metadata()?.len();
+    if len > 0 {
+        let mut tail = [0u8; 1];
+        anyhow::ensure!(
+            file.read_at(&mut tail, len - 1)? == 1 && tail[0] == b'\n',
+            "legacy audit log has an incomplete tail; stop the daemon, preserve the log as evidence, and repair or replace it before restarting"
+        );
+    }
+    Ok(())
 }
 
 /// Open for append, creating the file with owner-only permissions from the outset
@@ -268,6 +348,7 @@ fn open_private_append(path: &Path) -> anyhow::Result<File> {
     let f = OpenOptions::new()
         .create(true)
         .append(true)
+        .read(cfg!(target_os = "linux"))
         .mode(0o600)
         .open(path)?;
     Ok(f)
@@ -382,6 +463,142 @@ mod tests {
         AuditSink::open(&p).unwrap().write(&line()).unwrap();
         AuditSink::open(&p).unwrap().write(&line()).unwrap();
         assert_eq!(std::fs::read_to_string(&p).unwrap().lines().count(), 2);
+    }
+
+    #[test]
+    fn legacy_partial_append_failure_requires_operator_repair_and_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let sink = AuditSink::open(&path).unwrap();
+        sink.write_native(&serde_json::json!({"event":"before"}))
+            .unwrap();
+        let committed = std::fs::read(&path).unwrap();
+        {
+            let mut storage = sink.inner.lock().unwrap();
+            let AuditStorage::Legacy(legacy) = &mut *storage else {
+                panic!("expected legacy audit sink")
+            };
+            legacy.fail_after_bytes = Some(8);
+        }
+        assert!(sink
+            .write_native(&serde_json::json!({"event":"interrupted"}))
+            .is_err());
+        let partial = std::fs::read(&path).unwrap();
+        assert_eq!(partial.len(), committed.len() + 8);
+        assert!(partial.starts_with(&committed));
+        assert_ne!(partial.last(), Some(&b'\n'));
+        assert_eq!(sink.health()["state"], "unavailable");
+        assert!(sink
+            .write_native(&serde_json::json!({"event":"later"}))
+            .is_err());
+        assert!(sink.write(&line()).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), partial);
+        drop(sink);
+
+        // Linux refuses an interrupted final record without altering evidence.
+        // Other legacy platforms retain their existing unverified reopen.
+        #[cfg(target_os = "linux")]
+        {
+            let error = AuditSink::open(&path).err().unwrap();
+            assert!(error.to_string().contains("incomplete tail"));
+            assert!(error.to_string().contains("preserve the log as evidence"));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let reopened = AuditSink::open(&path).unwrap();
+            assert_eq!(reopened.health()["state"], "unverified");
+        }
+        assert_eq!(std::fs::read(&path).unwrap(), partial);
+
+        // Model an explicit operator repair: preserve the interrupted log,
+        // then open a fresh legacy log. No automatic truncation loses evidence.
+        let evidence = dir.path().join("interrupted.jsonl");
+        std::fs::rename(&path, &evidence).unwrap();
+        let repaired = AuditSink::open(&path).unwrap();
+        repaired
+            .write_native(&serde_json::json!({"event":"after_repair"}))
+            .unwrap();
+        assert_eq!(std::fs::read(&evidence).unwrap(), partial);
+        let body = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(body.lines().count(), 1);
+        let record: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
+        assert_eq!(record["event"], "after_repair");
+        assert_eq!(repaired.health()["state"], "unverified");
+    }
+
+    #[test]
+    fn legacy_append_error_stays_unavailable_after_storage_is_writable_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let sink = AuditSink::open(&path).unwrap();
+        sink.fail_writes_for_test(&path);
+        assert!(sink
+            .write_native(&serde_json::json!({"event":"append_failed"}))
+            .is_err());
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(bytes.is_empty());
+        assert_eq!(sink.health()["state"], "unavailable");
+        {
+            let mut storage = sink.inner.lock().unwrap();
+            let AuditStorage::Legacy(legacy) = &mut *storage else {
+                panic!("expected legacy audit sink")
+            };
+            // Restoring a writable handle cannot clear the failure latch.
+            legacy.file = open_private_append(&path).unwrap();
+        }
+        assert!(sink
+            .write_native(&serde_json::json!({"event":"later"}))
+            .is_err());
+        assert!(sink.write(&line()).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_tail_check_does_not_claim_historical_json_validation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        std::fs::write(&path, b"historical non-json bytes\n").unwrap();
+        let sink = AuditSink::open(&path).unwrap();
+        assert_eq!(sink.health()["state"], "unverified");
+        sink.write_native(&serde_json::json!({"event":"new_record"}))
+            .unwrap();
+        assert!(std::fs::read(&path)
+            .unwrap()
+            .starts_with(b"historical non-json bytes\n"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_native_sync_failure_stays_unavailable() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let sink = AuditSink::open(&path).unwrap();
+        {
+            let mut storage = sink.inner.lock().unwrap();
+            let AuditStorage::Legacy(legacy) = &mut *storage else {
+                panic!("expected legacy audit sink")
+            };
+            legacy.fail_sync = true;
+        }
+        // Hook evidence retains best-effort append semantics. Linux native
+        // evidence requires sync before releasing a result.
+        sink.write(&line()).unwrap();
+        assert!(sink
+            .write_native(&serde_json::json!({"event":"sync_failed"}))
+            .is_err());
+        let bytes = std::fs::read(&path).unwrap();
+        assert_eq!(sink.health()["state"], "unavailable");
+        assert!(sink
+            .write_native(&serde_json::json!({"event":"later"}))
+            .is_err());
+        assert!(sink.write(&line()).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        let body = std::str::from_utf8(&bytes).unwrap();
+        assert_eq!(body.lines().count(), 2);
+        for record in body.lines() {
+            serde_json::from_str::<serde_json::Value>(record).unwrap();
+        }
     }
 
     #[test]
