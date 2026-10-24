@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import sys
@@ -170,3 +171,50 @@ class PreparedTransition(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+@unittest.skipUnless(os.name == "posix", "FIFO controls require POSIX")
+class SpecialRecordReads(unittest.TestCase):
+    def test_record_entrypoints_refuse_fifo_without_waiting_for_a_writer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            for operation in ["marker", "journal", "generation", "recover"]:
+                with self.subTest(operation=operation):
+                    output = base / operation
+                    output.mkdir(mode=0o700)
+                    (output / "generations").mkdir(mode=0o700)
+                    if operation == "journal":
+                        record = output / SW.JOURNAL
+                    elif operation == "generation":
+                        directory = output / "generations" / ("a" * 32)
+                        directory.mkdir(mode=0o700)
+                        record = directory / "selection.json"
+                    else:
+                        record = output / "current.json"
+                    os.mkfifo(record, 0o600)
+                    program = """
+import importlib.util,json,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location("owned_transition",sys.argv[1])
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+output=Path(sys.argv[2]);operation=sys.argv[3]
+try:
+    if operation=="generation":
+        module.generation(output,"a"*32,output)
+    else:
+        result=getattr(module,operation)(output)
+        if operation=="recover":
+            assert result["status"]=="conflicting_operator_edit"
+            print("refused-unknown-pointer")
+            raise SystemExit(0)
+except ValueError as error:
+    assert str(error)=="owned_bounded_record_required",str(error)
+    print("refused-special-record")
+    raise SystemExit(0)
+raise SystemExit("special record accepted")
+"""
+                    result = subprocess.run(
+                        [sys.executable, "-I", "-B", "-c", program,
+                         str(ROOT / "scripts/switch-prepared-pilot.py"), str(output), operation],
+                        capture_output=True, text=True, timeout=3, check=False)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("refused-", result.stdout)
