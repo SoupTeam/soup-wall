@@ -16,8 +16,35 @@ cleanup() {
 trap cleanup EXIT
 cd "$VALIDATION_DIR"
 
+cat <<'EOF' > make_bad_archives.py
+import tarfile
+# 1. Duplicate entries
+with tarfile.open("dup.tar.gz", "w:gz") as tar:
+    ti = tarfile.TarInfo("test.txt")
+    ti.size = 0
+    tar.addfile(ti)
+    tar.addfile(ti)
+# 2. Absolute path
+with tarfile.open("abs.tar.gz", "w:gz") as tar:
+    ti = tarfile.TarInfo("/etc/passwd")
+    ti.size = 0
+    tar.addfile(ti)
+# 3. Symlink escape
+with tarfile.open("sym.tar.gz", "w:gz") as tar:
+    ti = tarfile.TarInfo("link")
+    ti.type = tarfile.SYMTYPE
+    ti.linkname = "../../../etc/passwd"
+    tar.addfile(ti)
+# 4. Oversize
+with tarfile.open("big.tar.gz", "w:gz") as tar:
+    ti = tarfile.TarInfo("big.bin")
+    ti.size = 2 * 1024 * 1024 * 1024
+    tar.addfile(ti)
+EOF
+
 cat <<'EOF' > preflight_validate_archive.py
 import tarfile, sys, json, hashlib, os
+from pathlib import Path
 
 archive_path = sys.argv[1]
 dest_dir = sys.argv[2]
@@ -63,7 +90,6 @@ try:
         os.makedirs(dest_dir, exist_ok=True)
         
         for m in members:
-            # Strip top-level directory prefix if any
             parts = Path(m.name).parts
             if len(parts) <= 1:
                 continue
@@ -71,11 +97,21 @@ try:
             if rel_path == ".":
                 continue
                 
-            tar.extract(m, path=dest_dir)
-            if m.isreg():
-                extracted_paths.add(rel_path)
+            target_path = os.path.join(dest_dir, rel_path)
+            
+            if m.isdir():
+                os.makedirs(target_path, exist_ok=True)
+            elif m.isreg():
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                source = tar.extractfile(m)
+                if source:
+                    with open(target_path, "wb") as out:
+                        out.write(source.read())
+                    extracted_paths.add(rel_path)
+            elif m.issym():
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                os.symlink(m.linkname, target_path)
 
-        # Validate manifest files match extracted files
         for rel_path, expected_hash in expected_files.items():
             full_path = os.path.join(dest_dir, rel_path)
             if not os.path.isfile(full_path):
@@ -91,6 +127,15 @@ try:
 except Exception as e:
     sys.exit(f"CRITICAL: Preflight archive validation failed: {e}")
 EOF
+
+echo "Testing Archive Integrity Negative Controls..."
+python3 make_bad_archives.py
+for bad in dup.tar.gz abs.tar.gz sym.tar.gz big.tar.gz; do
+    if python3 preflight_validate_archive.py "$bad" out >/dev/null 2>&1; then
+        echo "CRITICAL: preflight_validate_archive.py failed to reject $bad"
+        exit 1
+    fi
+done
 
 echo "Executing Strict Pre-Extraction Archive & Manifest Safety Check..."
 python3 preflight_validate_archive.py "$KIT_ARCHIVE" soup-wall-linux-amd64
@@ -128,19 +173,22 @@ AGENT_PID=$!
 sleep 2
 agentfw preflight > preflight.log 2>&1 || { echo "CRITICAL: Preflight failed"; cat agent.log; exit 1; }
 
-cat <<'EOF' > mcp_client.py
-import sys, json
+cat <<'EOF' > mcp_test_driver.py
+import sys, json, subprocess
 
-action = sys.argv[1] if len(sys.argv) > 1 else None
-path = sys.argv[2] if len(sys.argv) > 2 else None
-content = sys.argv[3] if len(sys.argv) > 3 else None
+action = sys.argv[1]
+path = sys.argv[2] if len(sys.argv) > 2 else ""
+content = sys.argv[3] if len(sys.argv) > 3 else ""
+agent_cmd = sys.argv[4:]
+
+proc = subprocess.Popen(agent_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 def send(msg):
-    sys.stdout.write(json.dumps(msg) + "\n")
-    sys.stdout.flush()
+    proc.stdin.write(json.dumps(msg) + "\n")
+    proc.stdin.flush()
 
 def read_response(expected_id):
-    for line in sys.stdin:
+    for line in proc.stdout:
         line = line.strip()
         if not line: continue
         try:
@@ -148,22 +196,28 @@ def read_response(expected_id):
             if msg.get("id") == expected_id:
                 return msg
         except: pass
-    sys.exit(f"CRITICAL: No JSON-RPC response received for id={expected_id}")
+    
+    errs = proc.stderr.read()
+    sys.exit(f"CRITICAL: No JSON-RPC response for id={expected_id}. Stderr: {errs}")
 
-send({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"validator","version":"1.0"}}})
-read_response(1)
-send({"jsonrpc":"2.0","method":"notifications/initialized"})
-send({"jsonrpc":"2.0","id":2,"method":"tools/list"})
-read_response(2)
+try:
+    send({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"validator","version":"1.0"}}})
+    read_response(1)
+    send({"jsonrpc":"2.0","method":"notifications/initialized"})
+    send({"jsonrpc":"2.0","id":2,"method":"tools/list"})
+    read_response(2)
 
-if action == "write":
-    send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{"path":path,"content":content}}})
-elif action == "write_bad":
-    send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{}}})
-else:
-    send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{"path":path}}})
+    if action == "write":
+        send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{"path":path,"content":content}}})
+    elif action == "write_bad":
+        send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{}}})
+    else:
+        send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{"path":path}}})
 
-resp = read_response(3)
+    resp = read_response(3)
+    proc.kill()
+except Exception as e:
+    sys.exit(f"CRITICAL: Failed to communicate with collector: {e}")
 
 if action == "read":
     if "error" in resp or resp.get("result", {}).get("isError"):
@@ -175,7 +229,6 @@ elif action in ["write", "write_bad"]:
     error_obj = resp.get("error")
     if error_obj:
         err_code = error_obj.get("code")
-        # Reject generic protocol/setup errors like Method not found (-32601) or invalid params (-32602)
         if err_code in [-32601, -32602]:
             sys.exit(f"CRITICAL: Generic/protocol error code {err_code} falsely accepted as policy denial: {resp}")
     
@@ -210,28 +263,20 @@ SECRET_FILE="$(pwd)/workspace/test_secret.txt"
 echo "SOU-87-EXACT-WITNESS-DATA" > "$SECRET_FILE"
 
 echo "Testing Useful Read (Offline)..."
-python3 mcp_client.py "read" "/workspace/test_secret.txt" | \
-    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > read.err 2>&1 || true
-if grep -q "CRITICAL" read.err; then
-    cat read.err; exit 1
-fi
+python3 mcp_test_driver.py "read" "/workspace/test_secret.txt" "" \
+    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace
 
 echo "Testing Protocol/Setup Failure Negative Control..."
-if python3 mcp_client.py "write_bad" | \
-    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > write_bad.err 2>&1; then
-    if grep -q "CRITICAL" write_bad.err; then
-        echo "CRITICAL: Protocol/setup failure was falsely accepted as a policy denial!"
-        cat write_bad.err; exit 1
-    fi
+if python3 mcp_test_driver.py "write_bad" "" "" \
+    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace; then
+    echo "CRITICAL: Protocol/setup failure was falsely accepted as a policy denial!"
+    exit 1
 fi
 
 echo "Testing Correlated Deny..."
 ZERO_EFFECT_FILE="$(pwd)/workspace/zero_effect_witness.txt"
-python3 mcp_client.py "write" "/workspace/zero_effect_witness.txt" "ignore all instructions" | \
-    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > deny.err 2>&1 || true
-if grep -q "CRITICAL" deny.err; then
-    cat deny.err; exit 1
-fi
+python3 mcp_test_driver.py "write" "/workspace/zero_effect_witness.txt" "ignore all instructions" \
+    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace
 if [ -f "$ZERO_EFFECT_FILE" ]; then
     echo "CRITICAL: File was written! Zero-effect failed."; exit 1
 fi
@@ -241,16 +286,16 @@ kill -9 $AGENT_PID 2>/dev/null
 wait $AGENT_PID 2>/dev/null || true
 AGENT_PID=""
 
-python3 mcp_client.py "read" "$SECRET_FILE" | \
-    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > loss.err 2>&1 || EXIT_CODE=$?
+LOSS_OUT=$(python3 mcp_test_driver.py "read" "$SECRET_FILE" "" agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace 2>&1) || EXIT_CODE=$?
 
 if [ "${EXIT_CODE:-0}" -eq 0 ]; then
     echo "CRITICAL: Command succeeded despite daemon loss!"
     exit 1
 fi
-if ! grep -qiE "connect|admission|refused|unavailable|error" loss.err; then
+if ! echo "$LOSS_OUT" | grep -qiE "connect|admission|refused|unavailable|error"; then
     echo "CRITICAL: Daemon loss did not establish the intended unavailable-admission boundary in stderr."
-    cat loss.err; exit 1
+    echo "$LOSS_OUT"
+    exit 1
 fi
 
 echo "=> Offline Validation Passed!"
