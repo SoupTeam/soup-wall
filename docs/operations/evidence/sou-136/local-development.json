@@ -1,0 +1,48 @@
+{
+  "format": "sou136-local-development/1",
+  "base": "8485a5195d916aa6e7c1f04b6b3a94130937a2d2",
+  "platform": "macOS arm64",
+  "native_linux_success_claimed": false,
+  "subject_sha256": {
+    "crates/agentfw/src/mcp/linux_budget.rs": "182b2d649c82c08d9d78529613969783effe46559bf93e858a459f72f509b462",
+    "crates/agentfw/src/mcp/linux_budget/process.rs": "38a622f97c7f18a4090896797cc57591fa16a39af31afecda0047a57c9766c4b",
+    "scripts/verify-sou136-membership-lifetime.py": "b454949ee2bec2ee8a577a1b94c696f543b89543c1cf39e603b4d1efffe1a77d",
+    "scripts/tests/test_sou136_membership_lifetime.py": "88ec04492c11910bf1d7c79a96af28a82ce0efa01aefd4482d787730d1e8c020"
+  },
+  "rust_workspace": {
+    "passed": 1706,
+    "ignored": 13,
+    "failed": 0,
+    "test_runner": "Only legacy attack_scenarios test binaries change cwd to writable scratch; source stays read-only."
+  },
+  "python_workspace": {
+    "run": 1262,
+    "skipped": 79,
+    "failed": 0,
+    "platform_exclusions": "Includes three unchanged Linux /proc prerequisite controls unavailable on macOS."
+  },
+  "focused_python": {
+    "passed": 17,
+    "failed": 0
+  },
+  "clippy": "workspace all-targets -D warnings passed",
+  "fmt": "all --check passed",
+  "docs": {
+    "files": 253,
+    "links": 925,
+    "errors": 0
+  },
+  "ci_components": "generated mirror check passed",
+  "logs_sha256": {
+    "workspace-development-final.log": "7975bab322063bf1d7e0d4d8007e80244e1349d3d06712db92d2a28fc6346ac7",
+    "python-current-driver.log": "400c92141780aa2614b2e859818eeb11830929393665aeb461a28afce723e85b",
+    "clippy-development-final.log": "ff91f2c6c0b13f4c520a70a228255eb4b1fdf77284cce372fb1ade924adb8a1f",
+    "final-static-focused.log": "2c3d601a5b9234f674bed9a7fe68cc3baf6cc16d3bec7619c8d6537a8084f818"
+  },
+  "retained_environment_setup_failures": [
+    "Initial source snapshot lacked full Git metadata, causing CLI/docs controls to fail. Corrected by copying its own Git metadata.",
+    "Legacy attack_scenarios wrote a report to its source cwd, rejected by the read-only sandbox. Corrected with the scratch-only runner above.",
+    "CLI prerequisite expected target/debug in the snapshot. A symlink to the existing writable scratch target supplied the built binary."
+  ],
+  "linux_status": "Not yet run; Linux-only process tests, real-kernel before failure and 140 original-server cycles are pending."
+}

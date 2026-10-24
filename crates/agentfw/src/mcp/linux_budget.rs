@@ -199,6 +199,25 @@ struct MembershipFailure {
     errno: Option<i32>,
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Default)]
+struct MembershipObservations {
+    sampled: std::sync::atomic::AtomicU64,
+    departure_candidates: std::sync::atomic::AtomicU64,
+    confirmed_departures: std::sync::atomic::AtomicU64,
+}
+
+#[cfg(target_os = "linux")]
+impl MembershipObservations {
+    fn snapshot(&self) -> Value {
+        // Counts observations, not unique process identities. Telemetry never
+        // feeds authority, membership, limit or cleanup decisions.
+        json!({"sampled":self.sampled.load(Ordering::Relaxed),
+            "departure_candidates":self.departure_candidates.load(Ordering::Relaxed),
+            "confirmed_departures":self.confirmed_departures.load(Ordering::Relaxed)})
+    }
+}
+
 #[derive(Default)]
 struct MembershipFailures(Mutex<Option<MembershipFailure>>);
 
@@ -440,15 +459,23 @@ impl OwnedBudget {
         let state = self.state();
         #[cfg(target_os = "linux")]
         let membership_failure = self.linux.membership_failures.snapshot();
+        #[cfg(target_os = "linux")]
+        let membership_observations = Some(self.linux.membership_observations.snapshot());
+        #[cfg(not(target_os = "linux"))]
+        let membership_observations: Option<Value> = None;
         #[cfg(not(target_os = "linux"))]
         let membership_failure: Option<MembershipFailure> = None;
         json!({"format":FORMAT,"budget_sha256":self.identity,"leaf":self.leaf,
             "limits":self.config.limits(),"reason":state.reason,
             "membership_failure":membership_failure,
+            "membership_observations":membership_observations,
             "failed":self.failure.load(Ordering::Acquire),"stats":state.stats,
             "cleanup_verified":state.cleanup_verified})
     }
 }
+
+#[cfg(target_os = "linux")]
+mod process;
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -541,7 +568,7 @@ mod linux {
         Ok(left.dev() == right.dev() && left.ino() == right.ino())
     }
 
-    fn read_record(file: &File, maximum: usize) -> std::io::Result<Vec<u8>> {
+    pub(super) fn read_record(file: &File, maximum: usize) -> std::io::Result<Vec<u8>> {
         // pread keeps observations independent of earlier reads and never
         // accepts a truncated kernel control record as a complete observation.
         let mut bytes = vec![0_u8; maximum + 1];
@@ -578,18 +605,6 @@ mod linux {
 
     fn read(file: &File, maximum: usize) -> Checked<Vec<u8>> {
         read_record(file, maximum).map_err(|_| "mcp_budget_observation_failed")
-    }
-
-    fn process_record(file: &File) -> Checked<Option<Vec<u8>>> {
-        match read_record(file, MAX_CONTROL_BYTES) {
-            Ok(bytes) => Ok(Some(bytes)),
-            // This descriptor pins the original procfs PID inode. If its task
-            // exits after open(), Linux returns ESRCH from proc_single_show;
-            // a later reuse of the numeric PID cannot retarget this descriptor.
-            // Only process records use this rule. Controller reads stay strict.
-            Err(error) if error.raw_os_error() == Some(libc::ESRCH) => Ok(None),
-            Err(_) => Err("mcp_budget_observation_failed"),
-        }
     }
 
     fn text(file: &File) -> Checked<String> {
@@ -678,8 +693,10 @@ mod linux {
         root_subtree: File,
         root_type: File,
         root_procs: File,
-        expected_leader: Option<(u32, u64)>,
+        processes: process::Proc,
+        expected_leader: Option<(u32, u64, process::Task)>,
         pub(super) membership_failures: MembershipFailures,
+        membership_observations: MembershipObservations,
         pub(super) started: std::time::Instant,
         pub(super) removed: bool,
     }
@@ -732,6 +749,9 @@ mod linux {
         }
 
         pub(super) fn create(config: &Config) -> anyhow::Result<Self> {
+            // Validate procfs/PID-namespace correspondence before creating a leaf.
+            let processes =
+                process::Proc::open().map_err(|_| refusal("mcp_budget_membership_unverified"))?;
             let (root, parent) = directory(&config.delegation_root).map_err(refusal)?;
             cgroup_fs(&root).map_err(refusal)?;
             cgroup_fs(&parent).map_err(refusal)?;
@@ -784,8 +804,10 @@ mod linux {
                 root_subtree,
                 root_type,
                 root_procs,
+                processes,
                 expected_leader: None,
                 membership_failures: MembershipFailures::default(),
+                membership_observations: MembershipObservations::default(),
                 started: std::time::Instant::now(),
                 removed: false,
             })
@@ -901,28 +923,15 @@ mod linux {
             for pid in &members {
                 self.member(*pid)?;
             }
-            if let Some((pid, ticks)) = self.expected_leader {
-                // Zombies have no live membership; their PID remains reserved
-                // by the existing process owner until it performs the final reap.
-                let identity = process_identity(pid).inspect_err(|_| {
-                    self.membership_failures
-                        .record("leader_identity_read", Some(pid), None);
-                })?;
-                if let Some((current_ticks, zombie)) = identity {
-                    if current_ticks != ticks {
-                        return Err(self.membership_error(
-                            "leader_identity_changed",
-                            Some(pid),
-                            None,
-                        ));
-                    }
-                    if !zombie && !members.contains(&pid) {
-                        return Err(self.membership_error(
-                            "leader_absent_from_snapshot",
-                            Some(pid),
-                            None,
-                        ));
-                    }
+            if let Some((pid, _, _)) = &self.expected_leader {
+                // Keep the attachment-time lifetime pin; a new process with the
+                // same numeric PID (even equal start ticks) is never adopted.
+                if !members.contains(pid) && self.member(*pid)? {
+                    return Err(self.membership_error(
+                        "leader_absent_from_snapshot",
+                        Some(*pid),
+                        None,
+                    ));
                 }
             }
             Ok(stats)
@@ -955,50 +964,120 @@ mod linux {
             Ok(members)
         }
 
-        fn member(&self, pid: u32) -> Checked<()> {
-            let path = format!("/proc/{pid}/cgroup");
-            let file = match File::open(path) {
-                Ok(file) => file,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-                Err(error) => {
-                    return Err(self.membership_error(
-                        "member_open",
-                        Some(pid),
-                        error.raw_os_error(),
-                    ))
-                }
-            };
-            let Some(bytes) = process_record(&file)? else {
-                return Ok(());
-            };
-            let value = String::from_utf8(bytes)
-                .map_err(|_| self.membership_error("member_utf8", Some(pid), None))?;
+        fn process_error(&self, pid: u32, error: process::Error) -> &'static str {
+            self.membership_error(error.phase, Some(pid), error.errno)
+        }
+
+        fn expected_group(&self, pid: u32) -> Checked<String> {
             let relative = self
                 .config_root
                 .strip_prefix(CGROUP_ROOT)
                 .map_err(|_| self.membership_error("member_root", Some(pid), None))?
                 .join(&self.name);
-            let expected = format!("0::/{}", relative.to_string_lossy());
-            if value.trim() != expected {
-                let identity = process_identity(pid).inspect_err(|_| {
-                    self.membership_failures
-                        .record("member_exit_identity_read", Some(pid), None);
-                })?;
-                if identity.is_none_or(|(_, zombie)| zombie) {
-                    return Ok(());
+            Ok(format!("0::/{}", relative.to_string_lossy()))
+        }
+
+        fn departed(&self, pid: u32, known: Option<&process::Task>) -> Checked<bool> {
+            self.membership_observations
+                .departure_candidates
+                .fetch_add(1, Ordering::Relaxed);
+            self.identity()?;
+            // Only this same pinned leaf's fresh bounded membership may
+            // discharge an exit candidate. No whole-call retry is performed.
+            if self.members()?.contains(&pid) {
+                return Err(self.membership_error(
+                    "member_departure_still_listed",
+                    Some(pid),
+                    None,
+                ));
+            }
+            self.processes
+                .departed(pid, known)
+                .map_err(|e| self.process_error(pid, e))?;
+            self.membership_observations
+                .confirmed_departures
+                .fetch_add(1, Ordering::Relaxed);
+            Ok(false)
+        }
+
+        /// true: a currently verified member; false: confirmed departure.
+        fn member(&self, pid: u32) -> Checked<bool> {
+            let task = self
+                .processes
+                .task(pid)
+                .map_err(|e| self.process_error(pid, e))?;
+            self.member_task(pid, task)
+        }
+
+        fn member_task(&self, pid: u32, task: Option<process::Task>) -> Checked<bool> {
+            self.membership_observations
+                .sampled
+                .fetch_add(1, Ordering::Relaxed);
+            let known = self
+                .expected_leader
+                .as_ref()
+                .filter(|(leader, _, _)| *leader == pid);
+            let Some(task) = task else {
+                return self.departed(pid, known.map(|(_, _, task)| task));
+            };
+            if let Some((_, _, expected)) = known {
+                if !task
+                    .same(expected)
+                    .map_err(|e| self.process_error(pid, e))?
+                {
+                    return Err(self.membership_error("leader_identity_changed", Some(pid), None));
                 }
+            }
+            let Some((ticks, terminal)) =
+                task.identity().map_err(|e| self.process_error(pid, e))?
+            else {
+                return self.departed(pid, Some(&task));
+            };
+            if known.is_some_and(|(_, expected_ticks, _)| ticks != *expected_ticks) {
+                return Err(self.membership_error("leader_identity_changed", Some(pid), None));
+            }
+            if terminal {
+                return self.departed(pid, Some(&task));
+            }
+            let Some(group) = task.cgroup().map_err(|e| self.process_error(pid, e))? else {
+                return self.departed(pid, Some(&task));
+            };
+            if group.trim() == self.expected_group(pid)? {
+                return Ok(true);
+            }
+            // A mismatching record can race task exit. Its identity still
+            // comes from this same pinned directory, never a reused PID path.
+            if task
+                .identity()
+                .map_err(|e| self.process_error(pid, e))?
+                .is_some_and(|(_, terminal)| !terminal)
+            {
                 return Err(self.membership_error("member_outside_leaf", Some(pid), None));
             }
-            Ok(())
+            self.departed(pid, Some(&task))
         }
 
         pub(super) fn verify_attached(&mut self, pid: u32) -> Checked<()> {
-            let (ticks, zombie) = process_identity(pid)?.ok_or("mcp_budget_attach_unverified")?;
-            if !zombie && !self.members()?.contains(&pid) {
+            let task = self
+                .processes
+                .task(pid)
+                .map_err(|e| self.process_error(pid, e))?
+                .ok_or("mcp_budget_attach_unverified")?;
+            let (ticks, terminal) = task
+                .identity()
+                .map_err(|e| self.process_error(pid, e))?
+                .ok_or("mcp_budget_attach_unverified")?;
+            let expected = self.expected_group(pid)?;
+            if terminal
+                || !self.members()?.contains(&pid)
+                || task
+                    .cgroup()
+                    .map_err(|e| self.process_error(pid, e))?
+                    .is_none_or(|group| group.trim() != expected)
+            {
                 return Err("mcp_budget_attach_unverified");
             }
-            self.member(pid)?;
-            self.expected_leader = Some((pid, ticks));
+            self.expected_leader = Some((pid, ticks, task));
             Ok(())
         }
 
@@ -1114,27 +1193,6 @@ mod linux {
         })
     }
 
-    fn process_identity(pid: u32) -> Checked<Option<(u64, bool)>> {
-        let file = match File::open(format!("/proc/{pid}/stat")) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(_) => return Err("mcp_budget_membership_unverified"),
-        };
-        let Some(bytes) = process_record(&file)? else {
-            return Ok(None);
-        };
-        let value = std::str::from_utf8(&bytes).map_err(|_| "mcp_budget_membership_unverified")?;
-        let close = value.rfind(')').ok_or("mcp_budget_membership_unverified")?;
-        let fields: Vec<_> = value[close + 1..].split_ascii_whitespace().collect();
-        let state = fields.first().ok_or("mcp_budget_membership_unverified")?;
-        let ticks = fields
-            .get(19)
-            .ok_or("mcp_budget_membership_unverified")?
-            .parse::<u64>()
-            .map_err(|_| "mcp_budget_membership_unverified")?;
-        Ok(Some((ticks, matches!(*state, "Z" | "X" | "x"))))
-    }
-
     #[cfg(test)]
     mod process_record_tests {
         use super::*;
@@ -1160,9 +1218,14 @@ mod linux {
                 File::open(format!("/proc/{pid}/cgroup")).unwrap(),
                 File::open(format!("/proc/{pid}/stat")).unwrap(),
             ];
-            assert!(process_identity(pid).unwrap().is_some());
+            let processes = process::Proc::open().unwrap();
+            let task = processes.task(pid).unwrap().unwrap();
+            assert!(task.identity().unwrap().is_some());
             child.0.kill().unwrap();
             child.0.wait().unwrap();
+            assert!(task.cgroup().unwrap().is_none());
+            assert!(task.identity().unwrap().is_none());
+            processes.departed(pid, Some(&task)).unwrap();
             for file in records {
                 assert_eq!(
                     read_record(&file, MAX_CONTROL_BYTES)
@@ -1171,7 +1234,7 @@ mod linux {
                     Some(libc::ESRCH),
                     "the real pinned procfs record must identify its departed task"
                 );
-                assert!(process_record(&file).unwrap().is_none());
+
                 assert_eq!(
                     read(&file, MAX_CONTROL_BYTES),
                     Err("mcp_budget_observation_failed"),
@@ -1180,13 +1243,210 @@ mod linux {
             }
         }
 
+        fn observation_fixture() -> (tempfile::TempDir, Boundary) {
+            // Only the member observation is exercised here. Controller setup
+            // is deliberately not represented as a real cgroup containment test.
+            let root = tempfile::tempdir().unwrap();
+            let leaf_path = root.path().join("owned-observation");
+            std::fs::create_dir(&leaf_path).unwrap();
+            let procs = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(leaf_path.join("cgroup.procs"))
+                .unwrap();
+            let stub = tempfile::tempfile().unwrap();
+            let boundary = Boundary {
+                config_root: root.path().canonicalize().unwrap(),
+                root: File::open(root.path()).unwrap(),
+                leaf: File::open(&leaf_path).unwrap(),
+                name: "owned-observation".into(),
+                procs,
+                kill: stub.try_clone().unwrap(),
+                root_controllers: stub.try_clone().unwrap(),
+                root_subtree: stub.try_clone().unwrap(),
+                root_type: stub.try_clone().unwrap(),
+                root_procs: stub,
+                processes: process::Proc::open().unwrap(),
+                expected_leader: None,
+                membership_failures: MembershipFailures::default(),
+                membership_observations: MembershipObservations::default(),
+                started: std::time::Instant::now(),
+                removed: false,
+            };
+            (root, boundary)
+        }
+
+        #[test]
+        fn sou136_regression_enumerated_exit_before_member_open() {
+            let (_root, boundary) = observation_fixture();
+            let mut child = TestChild(
+                std::process::Command::new("/bin/sleep")
+                    .arg("30")
+                    .spawn()
+                    .unwrap(),
+            );
+            let pid = child.0.id();
+            write_control(&boundary.procs, &format!("{pid}\n")).unwrap();
+            let members = boundary.members().unwrap();
+            assert!(members.contains(&pid));
+            let pinned = boundary.processes.task(pid).unwrap().unwrap();
+            child.0.kill().unwrap();
+            child.0.wait().unwrap();
+            boundary.procs.set_len(0).unwrap();
+            // Real procfs directory is held across exit/reap; opening its child
+            // record now observes the same kernel boundary as the retained ESRCH.
+            assert!(!boundary.member_task(pid, Some(pinned)).unwrap());
+            assert!(!boundary.member(pid).unwrap());
+            assert!(boundary.membership_failures.snapshot().is_none());
+            assert_eq!(
+                boundary.membership_observations.snapshot()["confirmed_departures"],
+                2
+            );
+        }
+
+        #[test]
+        fn sou136_departure_still_listed_or_unreadable_must_refuse() {
+            for malformed in [false, true] {
+                let (_root, boundary) = observation_fixture();
+                let mut child = TestChild(
+                    std::process::Command::new("/bin/sleep")
+                        .arg("30")
+                        .spawn()
+                        .unwrap(),
+                );
+                let pid = child.0.id();
+                let pinned = boundary.processes.task(pid).unwrap().unwrap();
+                child.0.kill().unwrap();
+                child.0.wait().unwrap();
+                let record = if malformed {
+                    "unreadable\n".into()
+                } else {
+                    format!("{pid}\n")
+                };
+                std::os::unix::fs::FileExt::write_all_at(&boundary.procs, record.as_bytes(), 0)
+                    .unwrap();
+                assert!(boundary.member_task(pid, Some(pinned)).is_err());
+                assert_eq!(
+                    boundary.membership_observations.snapshot()["confirmed_departures"],
+                    0
+                );
+            }
+        }
+
+        #[tokio::test]
+        #[ignore = "requires the explicitly owned delegated native SOU-136 service"]
+        async fn native_sou136_membership_violation_refuses_owned_child() {
+            use std::os::unix::process::CommandExt;
+            let root = PathBuf::from(
+                std::env::var_os("SOU136_DELEGATION_ROOT")
+                    .expect("explicit owned delegation required"),
+            );
+            let config = Config {
+                format: FORMAT.into(),
+                delegation_root: root.clone(),
+                memory_max_bytes: 512 * 1024 * 1024,
+                pids_max: 64,
+                cpu_quota_micros: 100_000,
+                wall_millis: 120_000,
+            };
+            config.validate().unwrap();
+            let mut budget = OwnedBudget::prepare(&config).unwrap();
+            let leaf_name = budget.leaf.clone();
+            let quarantine_name = format!("sou136-quarantine-{:032x}", rand::random::<u128>());
+            let quarantine = root.join(&quarantine_name);
+            std::fs::create_dir(&quarantine).unwrap();
+            let quarantine_directory = File::open(&quarantine).unwrap();
+            cgroup_fs(&quarantine_directory).unwrap();
+            let destination = open_control(&quarantine_directory, "cgroup.procs", WRITE).unwrap();
+            let attach = budget.attach_fd();
+            let mut command = std::process::Command::new("/bin/sleep");
+            command.arg("30");
+            // This fixed owned calibration child attaches itself before exec.
+            // Parent is the sole reaper and retains Child until after migration;
+            // a pidfd alone would not reserve a numeric PID for cgroup.procs.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::write(attach, b"0".as_ptr().cast(), 1) != 1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+            let mut child = TestChild(command.spawn().unwrap());
+            let pid = child.0.id();
+            budget.verify_attached(pid).unwrap();
+            let task = budget.linux.processes.task(pid).unwrap().unwrap();
+            let before = task.identity().unwrap().unwrap();
+            assert!(!before.1);
+            assert!(child.0.try_wait().unwrap().is_none());
+            write_control(&destination, &pid.to_string()).unwrap();
+            let after = task.identity().unwrap().unwrap();
+            assert_eq!(before, after);
+            assert!(child.0.try_wait().unwrap().is_none());
+            assert_eq!(
+                task.cgroup().unwrap().unwrap().trim(),
+                format!(
+                    "0::/{}",
+                    quarantine
+                        .strip_prefix(CGROUP_ROOT)
+                        .unwrap()
+                        .to_string_lossy()
+                )
+            );
+            let refused = budget.check().unwrap_err();
+            assert_eq!(refused.to_string(), "mcp_budget_membership_unverified");
+            assert!(budget.failed().load(Ordering::Acquire));
+            let diagnostic = budget.linux.membership_failures.snapshot().unwrap();
+            assert_eq!(diagnostic.phase, "member_outside_leaf");
+            // This is owned fixture cleanup, not a claim that production
+            // namespace cleanup can kill an escaped unrelated process.
+            child.0.kill().unwrap();
+            child.0.wait().unwrap();
+            budget.finish().await.unwrap();
+            assert!(
+                text(&open_control(&quarantine_directory, "cgroup.procs", READ).unwrap())
+                    .unwrap()
+                    .is_empty()
+            );
+            drop(destination);
+            drop(quarantine_directory);
+            std::fs::remove_dir(&quarantine).unwrap();
+            assert!(!root.join(leaf_name).exists() && !quarantine.exists());
+            println!(
+                "{}",
+                json!({"event":"sou136_membership_calibration","passed":true,
+                "phase":"member_outside_leaf","leader_same_lifetime":true,
+                "limits_unchanged":true,"owned_child_reaped":true,"leaf_removed":true,
+                "quarantine_removed":true,"production_transport_claimed":false})
+            );
+        }
+
+        #[test]
+        fn sou136_a_live_foreign_member_is_not_an_exit() {
+            let (_root, mut boundary) = observation_fixture();
+            // Isolate the live-foreign branch; no real leaf or controllers are
+            // claimed by this fixture. Full native calibration is separate.
+            boundary.config_root = PathBuf::from("/sys/fs/cgroup/observation-only");
+            assert_eq!(
+                boundary.member(std::process::id()),
+                Err("mcp_budget_membership_unverified")
+            );
+            assert_eq!(
+                boundary.membership_failures.snapshot().unwrap().phase,
+                "member_outside_leaf"
+            );
+        }
+
         #[test]
         fn live_records_bounds_and_other_read_errors_remain_strict() {
-            let live = File::open("/proc/self/cgroup").unwrap();
-            assert!(!process_record(&live).unwrap().unwrap().is_empty());
+            let processes = process::Proc::open().unwrap();
+            let live = processes.task(std::process::id()).unwrap().unwrap();
+            assert!(!live.cgroup().unwrap().unwrap().is_empty());
+            assert!(processes.departed(std::process::id(), Some(&live)).is_err());
             let directory = tempfile::tempdir().unwrap();
             assert_eq!(
-                process_record(&File::open(directory.path()).unwrap()),
+                read(&File::open(directory.path()).unwrap(), MAX_CONTROL_BYTES),
                 Err("mcp_budget_observation_failed")
             );
             let oversized = tempfile::tempfile().unwrap();
@@ -1198,7 +1458,7 @@ mod linux {
                 std::io::ErrorKind::InvalidData
             );
             assert_eq!(
-                process_record(&oversized),
+                read(&oversized, MAX_CONTROL_BYTES),
                 Err("mcp_budget_observation_failed")
             );
         }

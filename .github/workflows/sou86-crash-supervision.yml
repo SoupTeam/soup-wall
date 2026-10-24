@@ -2,6 +2,11 @@ name: Linux MCP collector crash supervision
 
 on:
   workflow_dispatch:
+    inputs:
+      budget_membership_only:
+        description: Targeted SOU-136 member-lifetime regression and original-server qualification
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,7 +22,7 @@ jobs:
       workflow: sou86-crash-supervision.yml
   required-disposable-linux-crash-supervision:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-disposable-linux-crash-supervision')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-disposable-linux-crash-supervision') || (github.event_name == 'workflow_dispatch' && github.event.inputs.budget_membership_only == 'true')
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     env:
@@ -50,6 +55,7 @@ jobs:
           meson compile -C "$RUNNER_TEMP/sou86-bwrap-build"
           sha256sum "$RUNNER_TEMP/sou86-node.tar.xz" "$RUNNER_TEMP/sou86-node/bin/node" "$RUNNER_TEMP/sou86-bwrap.tar.xz" "$RUNNER_TEMP/sou86-bwrap-build/bwrap" > "$RUNNER_TEMP/sou86-runtime-hashes.txt"
       - name: Build accepted runtime separately before implementing the new boundary
+        if: github.event.inputs.budget_membership_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -72,6 +78,7 @@ jobs:
           raise SystemExit(0 if result.wasSuccessful() else 1)
           PY
       - name: Inventory actual accepted crash behavior before any harness recovery
+        if: github.event.inputs.budget_membership_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -110,6 +117,7 @@ jobs:
           set -euo pipefail
           python3 -B scripts/test-sou89-selected-contracts.py
       - name: Require original filesystem Git and independently observed crash recovery
+        if: github.event.inputs.budget_membership_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -134,6 +142,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --runtime-source-commit "$(git rev-parse HEAD)" \
             --disposable-systemd-unit="$unit.service" --output "$RUNNER_TEMP/sou86-acceptance"
       - name: Require SOU-89 selected filesystem and Git native liveness and autonomous reclamation
+        if: github.event.inputs.budget_membership_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -159,8 +168,107 @@ jobs:
             --git-launcher "$GITHUB_WORKSPACE/target/debug/agentfw-git-sandbox" \
             --expected-commit "$(git rev-parse HEAD)" --runtime-source-commit "$(git rev-parse HEAD)" \
             --disposable-systemd-unit="$unit.service" --output "$RUNNER_TEMP/sou89-selected-acceptance"
+      - name: Reproduce the accepted member-open decision on a real departed proc inode
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.budget_membership_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline=8485a5195d916aa6e7c1f04b6b3a94130937a2d2
+          source="$RUNNER_TEMP/sou136-accepted-observer"
+          mkdir -m 700 "$source"
+          git archive "$baseline" | tar --extract --directory "$source"
+          git -C "$source" apply --unidiff-zero "$GITHUB_WORKSPACE/scripts/fixtures/sou136-accepted-open-regression.patch"
+          sha256sum "$source/crates/agentfw/src/mcp/linux_budget.rs" scripts/fixtures/sou136-accepted-open-regression.patch > "$RUNNER_TEMP/sou136-regression-source.txt"
+          cargo test --offline --locked --manifest-path "$source/Cargo.toml" \
+            --target-dir "$RUNNER_TEMP/sou136-before-target" -p agentfw --lib --no-run \
+            --message-format=json > "$RUNNER_TEMP/sou136-before-build.jsonl"
+          python3 -B - <<'PY'
+          import hashlib,json,os,pathlib,subprocess
+          temp=pathlib.Path(os.environ['RUNNER_TEMP'])
+          artifacts=[json.loads(line) for line in (temp/'sou136-before-build.jsonl').read_text().splitlines()]
+          binaries=[pathlib.Path(row['executable']) for row in artifacts if row.get('reason')=='compiler-artifact'
+                    and row.get('target',{}).get('name')=='agentfw' and row.get('profile',{}).get('test') and row.get('executable')]
+          assert len(binaries)==1
+          name='mcp::linux_budget::linux::process_record_tests::sou136_regression_enumerated_exit_before_member_open'
+          listed=subprocess.run([str(binaries[0]),'--exact',name,'--list'],capture_output=True,check=True,text=True,timeout=10)
+          assert name+': test' in listed.stdout
+          completed=subprocess.run([str(binaries[0]),'--exact',name,'--nocapture'],capture_output=True,timeout=15)
+          log=completed.stdout+completed.stderr
+          (temp/'sou136-before-regression.log').write_bytes(log)
+          report={'format':'sou136-accepted-open-regression/1','base':'8485a5195d916aa6e7c1f04b6b3a94130937a2d2',
+                  'scope':'accepted decision body with deterministic real-kernel open boundary injection',
+                  'status':'incomplete','exit_code':completed.returncode,
+                  'log_sha256':hashlib.sha256(log).hexdigest(),
+                  'test_binary_sha256':hashlib.sha256(binaries[0].read_bytes()).hexdigest()}
+          passed=(completed.returncode==101 and b'sou136_real_kernel_member_open_errno=3' in log
+                  and b'mcp_budget_membership_unverified' in log and b'0 passed; 1 failed' in log)
+          report['status']='expected_regression_reproduced' if passed else 'failed'
+          (temp/'sou136-before-regression.json').write_text(json.dumps(report,sort_keys=True)+'\n')
+          assert passed, 'accepted regression was not reproduced; compilation/timeout is not proof'
+          PY
+      - name: Require candidate member-lifetime and focused grader controls
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.budget_membership_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p agentfw --lib 'mcp::linux_budget::' -- --list \
+            > "$RUNNER_TEMP/sou136-test-list.txt"
+          python3 -c 'import pathlib,sys; text=pathlib.Path(sys.argv[1]).read_text(); assert "sou136_regression_enumerated_exit_before_member_open: test" in text and "sou136_real_relative_open_observes_esrch_after_reap: test" in text' "$RUNNER_TEMP/sou136-test-list.txt"
+          cargo test --locked -p agentfw --lib 'mcp::linux_budget::' -- --test-threads=1 \
+            > "$RUNNER_TEMP/sou136-after-regression.log" 2>&1
+          cargo clippy --locked -p agentfw --all-targets -- -D warnings
+          python3 -B -m unittest discover -s scripts/tests -p test_sou136_membership_lifetime.py -v
+          cargo test --locked -p agentfw --lib --no-run --message-format=json > "$RUNNER_TEMP/sou136-candidate-tests.jsonl"
+          python3 -B - <<'PY'
+          import json,os,pathlib
+          rows=[json.loads(line) for line in (pathlib.Path(os.environ['RUNNER_TEMP'])/'sou136-candidate-tests.jsonl').read_text().splitlines()]
+          executables=[r['executable'] for r in rows if r.get('reason')=='compiler-artifact' and r.get('target',{}).get('name')=='agentfw' and r.get('profile',{}).get('test') and r.get('executable')]
+          assert len(executables)==1
+          with open(os.environ['GITHUB_ENV'],'a') as out:out.write('SOU136_TEST_BINARY='+executables[0]+'\n')
+          PY
+      - name: Qualify original selected membership lifetime and real budget refusals
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.budget_membership_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou86-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # Same existing outer containment and finite runtime; no controller,
+          # polling, per-case lease, cleanup or authority deadline is widened.
+          sudo systemd-run --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property='Delegate=cpu memory pids' \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 \
+            --property=TasksMax=256 --property=CPUQuota=200% \
+            --property=RuntimeMaxSec=25min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env "PATH=$PATH" "TMPDIR=$RUNNER_TEMP" \
+            "GITHUB_RUN_ID=$GITHUB_RUN_ID" "GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT" \
+            python3 -B scripts/verify-sou136-membership-lifetime.py --run \
+            --sandbox-test-binary "$SOU136_TEST_BINARY" \
+            --agentfw "$GITHUB_WORKSPACE/target/debug/agentfw" \
+            --node "$RUNNER_TEMP/sou86-node/bin/node" --npm "$RUNNER_TEMP/sou86-node/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou86-bwrap-build/bwrap" \
+            --git "$RUNNER_TEMP/sou86-git-source/git" \
+            --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou86-git-source/git" | cut -d' ' -f1)" \
+            --git-launcher "$GITHUB_WORKSPACE/target/debug/agentfw-git-sandbox" \
+            --expected-commit "$(git rev-parse HEAD)" --runtime-source-commit "$(git rev-parse HEAD)" \
+            --disposable-systemd-unit="$unit.service" --output "$RUNNER_TEMP/sou136-membership"
+      - name: Retain focused membership evidence and every attempted cycle
+        if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.budget_membership_only == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou136-membership-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou136-before-regression.json
+            ${{ runner.temp }}/sou136-before-regression.log
+            ${{ runner.temp }}/sou136-regression-source.txt
+            ${{ runner.temp }}/sou136-after-regression.log
+            ${{ runner.temp }}/sou136-membership/report.json
+            ${{ runner.temp }}/sou86-runtime-hashes.txt
+            ${{ runner.temp }}/sou86-candidate-binaries.txt
+          if-no-files-found: error
       - name: Publish separate bounded sanitized inventory and protection evidence
-        if: always()
+        if: always() && github.event.inputs.budget_membership_only != 'true'
         run: |
           python3 -B - <<'PY'
           import importlib.util,json,os
@@ -181,7 +289,7 @@ jobs:
               with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream: stream.write('```json\n'+rendered+'\n```\n')
           PY
       - name: Retain exact identities and sanitized owned observations
-        if: always()
+        if: always() && github.event.inputs.budget_membership_only != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: sou86-linux-crash-supervision-evidence
