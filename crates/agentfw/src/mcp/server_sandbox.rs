@@ -601,6 +601,16 @@ fn prepare_linux_command(
     use std::os::fd::AsRawFd;
 
     let (workspace, workspace_pin) = open_directory(&profile.workspace)?;
+    if let Some(expected) = &profile.workspace_identity {
+        let metadata = workspace_pin.metadata()?;
+        if super::server_profile::WorkspaceIdentity::from_metadata(&metadata) != *expected {
+            bail!("selected workspace identity changed");
+        }
+        use std::os::unix::fs::MetadataExt;
+        if metadata.uid() != unsafe { libc::geteuid() } || metadata.mode() & 0o022 != 0 {
+            bail!("selected workspace must remain owned and not shared writable");
+        }
+    }
     let git_profile = profile.format == super::server_profile::git::FORMAT;
     if git_profile {
         super::server_profile::git::validate_repository(
@@ -796,6 +806,29 @@ fn prepare_linux_command(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn pinned_existing_workspace_refuses_replacement() {
+        use super::super::server_profile::{WorkspaceIdentity, FORMAT};
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("project");
+        std::fs::create_dir(&root).unwrap();
+        let identity = WorkspaceIdentity::from_metadata(&root.metadata().unwrap());
+        let profile = ProfileConfig::read(serde_json::json!({
+            "format": FORMAT, "workspace": root, "workspaceIdentity": identity,
+            "runtimePath": temporary.path().join("node"), "runtimeSha256": "a".repeat(64),
+            "packageRoot": temporary.path().join("package"), "packageTreeSha256": "b".repeat(64),
+            "bwrapPath": temporary.path().join("bwrap"), "bwrapSha256": "c".repeat(64), "libraries": []
+        }).to_string().as_bytes()).unwrap();
+        std::fs::rename(&root, temporary.path().join("original")).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        // Fails on the opened workspace fd, before any other assets or process.
+        let error = prepare_linux_command(&profile, &[]).err().unwrap();
+        assert!(error
+            .to_string()
+            .contains("selected workspace identity changed"));
+    }
 
     #[test]
     fn budget_mountinfo_accepts_regular_and_unexposed_hugetlb_filesystems() {

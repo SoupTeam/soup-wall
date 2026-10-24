@@ -64,6 +64,7 @@ def qualify(args, private, report):
     config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
         ask_wait_seconds=0, timeout_seconds=60, port=0)
     selection, paths, profiles = RUN.selected(config)
+    require("prepared_workspaces" not in selection, "generated_qualification_refuses_existing_project")
     fs = Path(profiles["filesystem"]["profile"]["path"]).parent.parent / "filesystem-workspace"
     git = Path(profiles["git"]["profile"]["path"]).parent.parent / "git-workspace"
     # Owned preparation directories only, never a user repository.
@@ -79,7 +80,10 @@ def qualify(args, private, report):
     sentinel.write_text("must survive")
     unrelated = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(1800)"],
                                  start_new_session=True, env=env, cwd=private)
-    report.update(source_before=before, selected_sha256=selected_before, cases=[])
+    report.update(source_before=before, selected_sha256=selected_before, cases=[],
+                  trace_requested={"mode": "seccomp-bpf", "fallback_possible": True,
+                                   "run_syscalls": "execve,openat,write,writev",
+                                   "validation_syscalls": "execve"})
     try:
         # These are actual entry-point invocations, with kernel-observed zero
         # selected daemon/host execution. Unit mocks are not their evidence.
@@ -103,7 +107,7 @@ def qualify(args, private, report):
                     changed = json.loads(original)
                     changed["files"]["agentfw"]["sha256"] = "0" * 64
                     args.selection.write_text(json.dumps(changed))
-                result = subprocess.run([str(args.strace), "-f", "-qq", "-s", "4096", "-e", "trace=execve",
+                result = subprocess.run([str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "4096", "-e", "trace=execve",
                     "-o", str(trace), *words], cwd=private, env=env, capture_output=True, timeout=control_seconds)
                 value = json.loads(result.stdout)
                 require((result.returncode == 0) == (control == "plan") and value["executed"] is False,
@@ -159,7 +163,7 @@ def qualify(args, private, report):
                         return [{"type": "tool_use", "id": identifier, "name": f"mcp__{server}__{tool}", "input": arguments}]
                 return [{"type": "text", "text": "Owned prepared run completed."}]
             model.next = next_step
-            command = [str(args.strace), "-f", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
+            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
                 "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "60"]

@@ -45,6 +45,46 @@ pub const GIT_ALLOWED_TOOLS: &[&str] = &[
     "git_show",
 ];
 
+/// Inspect selected roots using the same validators as the original profiles.
+/// No Git process, daemon, authority, workspace writes or configuration loading.
+#[derive(Args, Debug)]
+pub struct PilotWorkspacesArgs {
+    #[arg(long)]
+    pub workspace: PathBuf,
+    #[arg(long)]
+    pub git_workspace: PathBuf,
+}
+
+pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::MetadataExt;
+        for root in [&args.workspace, &args.git_workspace] {
+            ensure!(
+                crate::sandbox::validate_workspace_path(root)? == *root,
+                "canonical workspace required"
+            );
+            let metadata = fs::metadata(root)?;
+            ensure!(
+                metadata.uid() == unsafe { libc::geteuid() } && metadata.mode() & 0o022 == 0,
+                "owned workspace without shared write access required"
+            );
+        }
+        crate::mcp::server_profile::git::validate_repository(&args.git_workspace)
+            .context("unsupported Git layout; use a supported standalone repository; do not repair the project")?;
+        println!(
+            "{}",
+            serde_json::json!({"status":"supported-read-only", "executed":false})
+        );
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = args;
+        bail!("native Linux required for original pilot workspace validation")
+    }
+}
+
 /// Helper to generate random hex identifier without external uuid crate.
 fn random_hex_128() -> String {
     format!("{:032x}", rand::random::<u128>())
@@ -1603,16 +1643,24 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             // Check if child has exited
             match owned_host_exited(&mut child) {
                 Ok(true) => {
-                    // Revocation may make a host exit before its launcher's
-                    // queued TERM is handled. Preserve the same owner-ack
-                    // ordering on this branch, while the leader stays unreaped.
-                    if let Some(waiter) = cleanup_waiter.take() {
-                        let _ = tokio::task::spawn_blocking(waiter).await;
-                    }
+                    // Every host exit must let enrolled owners acknowledge
+                    // namespace cleanup before group TERM/KILL. Keep the leader
+                    // unreaped so its process-group identity cannot be reused.
+                    let owner_confirmation = if let Some(waiter) = cleanup_waiter.take() {
+                        tokio::task::spawn_blocking(waiter)
+                            .await
+                            .context("selected-owner cleanup worker failed")
+                            .and_then(|result| result)
+                    } else {
+                        Ok(())
+                    };
+                    // A missing/failed acknowledgement never skips physical
+                    // cleanup, but cannot turn the terminal result into success.
                     let group = terminate_process_group(child_pid, Duration::from_millis(50)).await;
                     let result = reap_owned_host(&mut child).await;
                     host_stopped = result.is_ok() && group.is_ok();
                     group?;
+                    owner_confirmation?;
                     return result;
                 }
                 Ok(false) => {}

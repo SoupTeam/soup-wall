@@ -149,8 +149,11 @@ def validate_receipt(target, marker):
         path = Path(value["path"])
         require(path.is_absolute() and path.is_file() and sha(path) == value["sha256"], "selected_asset_changed")
         paths[role] = path
+    # Cleanup owns only the generation. External roots are data in its receipt,
+    # never traversal/deletion targets, and may already have been moved away.
+    roots = PREP.workspace_paths(selection, target, revalidate=False)
     profiles = {kind: PREP.verify_profile(kind, target / (kind + "-profile"), paths,
-                target / (kind + "-workspace")) for kind in ("filesystem", "git")}
+                roots[kind]) for kind in ("filesystem", "git")}
     require(selection.get("prepared_profiles") == profiles, "preparation_profile_identity_changed")
     return {"format": selection["format"], "sha256": sha(selection_path), "source": selection["source"]["commit"]}
 

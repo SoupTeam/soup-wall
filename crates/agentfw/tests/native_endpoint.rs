@@ -7233,6 +7233,14 @@ async fn sou89_liveness_explicit_retire_cascades_children_and_preserves_host_ris
     assert_eq!(s, StatusCode::OK);
     assert_eq!(r["status"], "retired");
 
+    assert!(
+        f.audit()
+            .iter()
+            .any(|row| row["session_id"] == "parent-retire"
+                && row["event"] == "native_session_retired"),
+        "healthy explicit retirement must keep its original terminal cause"
+    );
+
     // Child session was cascade-retired
     let (_, r) = f
         .post(&f.call("child-retire", "read_document", &json!({})))
@@ -7244,6 +7252,95 @@ async fn sou89_liveness_explicit_retire_cascades_children_and_preserves_host_ris
         f.state.firewall.lock().unwrap().taint_len("review-host") > 0,
         "host taint must not be erased upon collector retirement"
     );
+}
+
+#[tokio::test]
+async fn sou124_retirement_cannot_relabel_expired_ancestor_as_healthy_retire() {
+    let f = Fixture::new(ALLOW);
+    let mut grandchild = None;
+    for (sid, agent, parent, seconds) in [
+        ("cause-parent", "cause-p", None, 2),
+        ("cause-child", "cause-c", Some("cause-p"), 20),
+        ("cause-grandchild", "cause-gc", Some("cause-c"), 4),
+    ] {
+        let (status, started, _) = scoped_start_with_ttl(
+            &f,
+            sid,
+            agent,
+            parent,
+            &["read_document"],
+            Some(vec![]),
+            300_000,
+        )
+        .await;
+        assert_allow(status, &started);
+        let mut enroll = reviewer_sou89_liveness(&f, sid, "enroll");
+        enroll["owner_token"] = started["owner_token"].clone();
+        enroll["lease_seconds"] = json!(seconds);
+        let (status, enrolled) = post_liveness(&f, &enroll).await;
+        assert_eq!(status, StatusCode::OK, "{enrolled}");
+        if parent == Some("cause-c") {
+            grandchild = Some((started["owner_token"].clone(), enrolled["epoch"].clone()));
+        }
+    }
+    let (owner, epoch) = grandchild.unwrap();
+    f.state.native.as_ref().unwrap().advance_test_time_ms(2100);
+    let mut renew = reviewer_sou89_liveness(&f, "cause-grandchild", "renew");
+    renew["owner_token"] = owner.clone();
+    renew["epoch"] = epoch.clone();
+    renew["lease_seq"] = json!(2);
+    let (status, reply) = post_liveness(&f, &renew).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(reply["error_code"], "native_child_parent_unavailable");
+
+    // Reproduce collector shutdown winning the race with maintenance. Neither
+    // a forged owner nor an old epoch may remove or relabel the terminal cause.
+    let mut retire = reviewer_sou89_liveness(&f, "cause-grandchild", "retire");
+    retire["owner_token"] = owner;
+    retire["epoch"] = epoch.clone();
+    for field in ["owner_token", "epoch"] {
+        let mut forged = retire.clone();
+        forged[field] = json!("not-the-owner-or-epoch");
+        assert_eq!(post_liveness(&f, &forged).await.0, StatusCode::FORBIDDEN);
+    }
+    assert_eq!(post_liveness(&f, &retire).await.0, StatusCode::OK);
+    let records = f.audit();
+    let terminal: Vec<_> = records
+        .iter()
+        .filter(|row| {
+            row["session_id"] == "cause-grandchild"
+                && row["event"].as_str().is_some_and(|event| {
+                    event == "native_session_expired" || event == "native_session_retired"
+                })
+        })
+        .collect();
+    assert_eq!(terminal.len(), 1);
+    assert_eq!(terminal[0]["event"], "native_session_expired");
+    assert_eq!(terminal[0]["session"], epoch);
+    assert_eq!(terminal[0]["parent_id"], "cause-c");
+
+    // The existing sweep still reclaims the parent and child; no test request
+    // or retry substitutes for this autonomous expiry path.
+    assert_eq!(
+        agentfw::native::liveness::perform_maintenance(&f.state).await,
+        2
+    );
+    let records = f.audit();
+    for sid in ["cause-parent", "cause-child", "cause-grandchild"] {
+        assert_eq!(
+            records
+                .iter()
+                .filter(|row| row["session_id"] == sid && row["event"] == "native_session_expired")
+                .count(),
+            1
+        );
+        assert_eq!(
+            post_liveness(&f, &reviewer_sou89_liveness(&f, sid, "status"))
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+    }
 }
 
 fn reviewer_sou89_liveness(f: &Fixture, sid: &str, action: &str) -> Value {

@@ -55,13 +55,23 @@ namespace owner, resource budget, child reap and stderr boundaries confirm
 cleanup. Registration and confirmation require the exact enrolled session epoch
 and private owner capability as well as native authentication. The one-purpose
 confirmation remains possible after session retirement, without reviving the
-session or its authority. Obligations are bounded; an unconfirmed one remains a
+session or its authority. Selected collectors intercept Unix SIGTERM before
+creating a namespace owner, so host shutdown cancels transport through those
+same cleanup boundaries instead of abruptly skipping the acknowledgement.
+Interrupted transport remains failed; interception is not proof of cleanup.
+Collector diagnostic output is best effort: a closed host diagnostic pipe cannot
+panic past owner cleanup or its acknowledgement. Actual stderr-drain/read/quota
+failures still prevent confirmation.
+Obligations are bounded; an unconfirmed one remains a
 failure even after its grant expires. This is a trusted-collector protocol,
 not remote process attestation.
 
 The launcher allows these existing owners a bounded cleanup opportunity before
-host-group termination, including when the host exits before its queued TERM is
-handled. It keeps the group leader unreaped, checks TERM/KILL errors and bounds
+host-group termination on both ordinary host exit and an operator Stop. It
+revokes only the run's exact two grants first, including unenrolled grants, and
+waits for the registered owners' acknowledgements. Ordinary completion creates
+no Stop marker; unavailable or foreign confirmation remains an error after best
+effort physical cleanup. It keeps the group leader unreaped, checks TERM/KILL errors and bounds
 Linux reap/group-empty observation. It then independently verifies that all
 selected cleanup obligations, collector sessions and pending approvals have
 closed. A signed, exact-run `stopped` receipt is written only after those checks
