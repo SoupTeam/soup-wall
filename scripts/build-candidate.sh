@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-EXPECTED_RUSTC="1.89.0"
+EXPECTED_RUSTC="1.94.1"
 NODE_VERSION="v22.22.0"
 NODE_TAR="node-${NODE_VERSION}-linux-x64.tar.xz"
 NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_TAR}"

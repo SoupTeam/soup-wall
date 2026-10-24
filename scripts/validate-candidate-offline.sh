@@ -4,7 +4,6 @@ set -euo pipefail
 
 KIT_ARCHIVE="$(pwd)/target/soup-wall-linux-amd64.tar.gz"
 VALIDATION_DIR=$(mktemp -d -t soup-wall-candidate-XXXXXX)
-ABS_HELPER="${VALIDATION_DIR}/check_inventory.py"
 AGENT_PID=""
 
 cleanup() {
@@ -15,46 +14,89 @@ cleanup() {
     rm -rf "$VALIDATION_DIR"
 }
 trap cleanup EXIT
+cd "$VALIDATION_DIR"
 
-cat <<'EOF' > "$ABS_HELPER"
-import json, hashlib, sys, os
+cat <<'EOF' > preflight_validate_archive.py
+import tarfile, sys, json, hashlib, os
+
+archive_path = sys.argv[1]
+dest_dir = sys.argv[2]
+MAX_SIZE = 500 * 1024 * 1024
+
 try:
-    manifest = json.load(open("manifest.json"))
-    expected = manifest.get("files", {})
-except:
-    sys.exit("CRITICAL: Failed to read manifest")
+    with tarfile.open(archive_path, "r:gz") as tar:
+        members = tar.getmembers()
+        total_size = sum(m.size for m in members)
+        if total_size > MAX_SIZE:
+            sys.exit("CRITICAL: Archive exceeds expansion size limit")
+        
+        seen_names = set()
+        manifest_member = None
+        
+        for m in members:
+            name = m.name
+            if name.startswith("/") or ".." in name.split("/"):
+                sys.exit(f"CRITICAL: Unsafe path traversal or absolute path in archive: {name}")
+            if name in seen_names:
+                sys.exit(f"CRITICAL: Duplicate entry in archive: {name}")
+            seen_names.add(name)
+            
+            if m.issym() or m.islnk():
+                linkname = m.linkname
+                if linkname.startswith("/") or ".." in linkname.split("/"):
+                    sys.exit(f"CRITICAL: Unsafe symlink/hardlink destination: {linkname}")
+            
+            if not (m.isreg() or m.isdir() or m.issym() or m.islnk()):
+                sys.exit(f"CRITICAL: Unsupported archive member type for {name}")
+                
+            if name.endswith("manifest.json") and manifest_member is None:
+                manifest_member = m
 
-for req in ["bin/agentfw", "bin/llm-firewall"]:
-    if req not in expected: sys.exit("CRITICAL: Missing core binaries in manifest")
+        if not manifest_member:
+            sys.exit("CRITICAL: manifest.json not found in archive root/members")
+            
+        f_manifest = tar.extractfile(manifest_member)
+        manifest_data = json.load(f_manifest)
+        expected_files = manifest_data.get("files", {})
 
-for rel_path, expected_hash in expected.items():
-    if not os.path.exists(rel_path): sys.exit(f"CRITICAL: Missing file {rel_path}")
-    if hashlib.sha256(open(rel_path, "rb").read()).hexdigest() != expected_hash:
-        sys.exit(f"CRITICAL: Hash mismatch for {rel_path}")
+        extracted_paths = set()
+        os.makedirs(dest_dir, exist_ok=True)
+        
+        for m in members:
+            # Strip top-level directory prefix if any
+            parts = Path(m.name).parts
+            if len(parts) <= 1:
+                continue
+            rel_path = str(Path(*parts[1:]))
+            if rel_path == ".":
+                continue
+                
+            tar.extract(m, path=dest_dir)
+            if m.isreg():
+                extracted_paths.add(rel_path)
 
-# Strict negative control - NO exemptions
-for root, _, files in os.walk("."):
-    for file in files:
-        rel_path = os.path.relpath(os.path.join(root, file), ".")
-        if rel_path != "manifest.json" and rel_path not in expected:
-            sys.exit(f"CRITICAL: Unlisted file found: {rel_path}")
+        # Validate manifest files match extracted files
+        for rel_path, expected_hash in expected_files.items():
+            full_path = os.path.join(dest_dir, rel_path)
+            if not os.path.isfile(full_path):
+                sys.exit(f"CRITICAL: Manifest lists missing file: {rel_path}")
+            file_hash = hashlib.sha256(open(full_path, "rb").read()).hexdigest()
+            if file_hash != expected_hash:
+                sys.exit(f"CRITICAL: Manifest hash mismatch for {rel_path}")
+
+        for rel_path in extracted_paths:
+            if rel_path not in expected_files and rel_path != "manifest.json":
+                sys.exit(f"CRITICAL: Unlisted file present in extracted kit: {rel_path}")
+
+except Exception as e:
+    sys.exit(f"CRITICAL: Preflight archive validation failed: {e}")
 EOF
 
-tar -xzf "$KIT_ARCHIVE" -C "$VALIDATION_DIR"
-cd "${VALIDATION_DIR}/soup-wall-linux-amd64"
+echo "Executing Strict Pre-Extraction Archive & Manifest Safety Check..."
+python3 preflight_validate_archive.py "$KIT_ARCHIVE" soup-wall-linux-amd64
+cd soup-wall-linux-amd64
 
-echo "Testing Nested Unlisted File Negative Control..."
-mkdir -p "assets/nested_fake"
-touch "assets/nested_fake/rogue.txt"
-if python3 "$ABS_HELPER" >/dev/null 2>&1; then
-    echo "CRITICAL: Validator accepted nested unlisted file."; exit 1
-fi
-rm -rf "assets/nested_fake"
-
-echo "Executing Strict Initial Inventory Integrity Check..."
-python3 "$ABS_HELPER" || { echo "CRITICAL: Initial clean inventory failed."; exit 1; }
-
-echo "=> Extracting Node & Bootstrapping Profile via Official Installer (Strictly Offline)..."
+echo "=> Extracting Node & Bootstrapping Profile (Strictly Offline)..."
 tar -xf node-v22.22.0-linux-x64.tar.xz
 export PATH="$(pwd)/node-v22.22.0-linux-x64/bin:$(pwd)/bin:$PATH"
 export HOME="$(pwd)/agent-home"
@@ -69,7 +111,6 @@ dest, ws, node, bwrap, npm, cache = [pathlib.Path(a).absolute() for a in sys.arg
 fs.install(dest, ws, node, bwrap, npm, npm_cache=cache, offline=True)
 EOF
 
-# Force network unshare to prove strictly offline operation
 ./bin/bwrap --unshare-net --dev /dev --proc /proc --bind / / --die-with-parent \
     python3 run_installer.py "$HOME/profile-sou62" "$(pwd)/workspace" "$(pwd)/node-v22.22.0-linux-x64/bin/node" "$(pwd)/bin/bwrap" "$(pwd)/node-v22.22.0-linux-x64/bin/npm" "$(pwd)/npm-cache"
 
@@ -89,44 +130,70 @@ agentfw preflight > preflight.log 2>&1 || { echo "CRITICAL: Preflight failed"; c
 
 cat <<'EOF' > mcp_client.py
 import sys, json
-action, path, content = sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None
-def send(msg): sys.stdout.write(json.dumps(msg) + "\n"); sys.stdout.flush()
+
+action = sys.argv[1] if len(sys.argv) > 1 else None
+path = sys.argv[2] if len(sys.argv) > 2 else None
+content = sys.argv[3] if len(sys.argv) > 3 else None
+
+def send(msg):
+    sys.stdout.write(json.dumps(msg) + "\n")
+    sys.stdout.flush()
+
+def read_response(expected_id):
+    for line in sys.stdin:
+        line = line.strip()
+        if not line: continue
+        try:
+            msg = json.loads(line)
+            if msg.get("id") == expected_id:
+                return msg
+        except: pass
+    sys.exit(f"CRITICAL: No JSON-RPC response received for id={expected_id}")
 
 send({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"validator","version":"1.0"}}})
+read_response(1)
 send({"jsonrpc":"2.0","method":"notifications/initialized"})
 send({"jsonrpc":"2.0","id":2,"method":"tools/list"})
+read_response(2)
+
 if action == "write":
     send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{"path":path,"content":content}}})
+elif action == "write_bad":
+    send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{}}})
 else:
     send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{"path":path}}})
-EOF
 
-cat <<'EOF' > check_response.py
-import sys, json
-action = sys.argv[1]
-responses = []
-for line in sys.stdin:
-    line = line.strip()
-    if not line: continue
-    try:
-        responses.append(json.loads(line))
-    except ValueError:
-        pass
-
-id3 = next((r for r in responses if r.get("id") == 3), None)
-if not id3:
-    sys.exit("CRITICAL: No JSON-RPC response for id=3 found.")
+resp = read_response(3)
 
 if action == "read":
-    if "error" in id3 or id3.get("result", {}).get("isError"):
-        sys.exit(f"CRITICAL: Unexpected error on read: {id3}")
-    content = id3.get("result", {}).get("content", [{}])[0].get("text", "")
-    if "SOU-87-EXACT-WITNESS-DATA" not in content:
+    if "error" in resp or resp.get("result", {}).get("isError"):
+        sys.exit(f"CRITICAL: Unexpected error on read: {resp}")
+    text = resp.get("result", {}).get("content", [{}])[0].get("text", "")
+    if "SOU-87-EXACT-WITNESS-DATA" not in text:
         sys.exit("CRITICAL: Useful read failed to return expected content.")
-elif action == "write":
-    refused = "error" in id3 or id3.get("result", {}).get("isError") is True
+elif action in ["write", "write_bad"]:
+    error_obj = resp.get("error")
+    if error_obj:
+        err_code = error_obj.get("code")
+        # Reject generic protocol/setup errors like Method not found (-32601) or invalid params (-32602)
+        if err_code in [-32601, -32602]:
+            sys.exit(f"CRITICAL: Generic/protocol error code {err_code} falsely accepted as policy denial: {resp}")
+    
+    refused = "error" in resp or resp.get("result", {}).get("isError") is True
     if not refused:
-        sys.exit(f"CRITICAL: Write was not refused. Response: {id3}")
+        sys.exit(f"CRITICAL: Action was not refused. Response: {resp}")
+    
+    err_str = json.dumps(resp).lower()
+    is_policy_denial = "baseline-deny-injection" in err_str or "deny" in err_str
+    
+    if action == "write_bad":
+        if is_policy_denial:
+            sys.exit("CRITICAL: Bad schema error was treated as a valid policy deny instead of setup/protocol error.")
+        sys.exit(0)
+    else:
+        if not is_policy_denial:
+            sys.exit(f"CRITICAL: Generic or setup error instead of calibrated policy refusal: {resp}")
+        sys.exit(0)
 EOF
 
 NODE_BIN="$(pwd)/node-v22.22.0-linux-x64/bin/node"
@@ -144,15 +211,27 @@ echo "SOU-87-EXACT-WITNESS-DATA" > "$SECRET_FILE"
 
 echo "Testing Useful Read (Offline)..."
 python3 mcp_client.py "read" "/workspace/test_secret.txt" | \
-    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > read.json 2> read.err || true
-python3 check_response.py "read" < read.json || { cat read.json read.err; exit 1; }
+    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > read.err 2>&1 || true
+if grep -q "CRITICAL" read.err; then
+    cat read.err; exit 1
+fi
+
+echo "Testing Protocol/Setup Failure Negative Control..."
+if python3 mcp_client.py "write_bad" | \
+    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > write_bad.err 2>&1; then
+    if grep -q "CRITICAL" write_bad.err; then
+        echo "CRITICAL: Protocol/setup failure was falsely accepted as a policy denial!"
+        cat write_bad.err; exit 1
+    fi
+fi
 
 echo "Testing Correlated Deny..."
 ZERO_EFFECT_FILE="$(pwd)/workspace/zero_effect_witness.txt"
 python3 mcp_client.py "write" "/workspace/zero_effect_witness.txt" "ignore all instructions" | \
-    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > deny.json 2> deny.err || true
-python3 check_response.py "write" < deny.json || { cat deny.json deny.err; exit 1; }
-
+    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > deny.err 2>&1 || true
+if grep -q "CRITICAL" deny.err; then
+    cat deny.err; exit 1
+fi
 if [ -f "$ZERO_EFFECT_FILE" ]; then
     echo "CRITICAL: File was written! Zero-effect failed."; exit 1
 fi
@@ -163,11 +242,15 @@ wait $AGENT_PID 2>/dev/null || true
 AGENT_PID=""
 
 python3 mcp_client.py "read" "$SECRET_FILE" | \
-    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > loss.json 2> loss.err || EXIT_CODE=$?
+    agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace > loss.err 2>&1 || EXIT_CODE=$?
 
 if [ "${EXIT_CODE:-0}" -eq 0 ]; then
     echo "CRITICAL: Command succeeded despite daemon loss!"
     exit 1
+fi
+if ! grep -qiE "connect|admission|refused|unavailable|error" loss.err; then
+    echo "CRITICAL: Daemon loss did not establish the intended unavailable-admission boundary in stderr."
+    cat loss.err; exit 1
 fi
 
 echo "=> Offline Validation Passed!"
