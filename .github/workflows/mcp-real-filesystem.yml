@@ -16,6 +16,14 @@ on:
         description: Run only native Ubuntu 24.04 preparation qualification
         type: boolean
         default: false
+      storage_recovery_only:
+        description: Run targeted native storage recovery on the prepared pilot
+        type: boolean
+        default: false
+      audit_retention_only:
+        description: Focus SOU-132 prepared audit rotation, refusal, export and retention restart evidence
+        type: boolean
+        default: false
       ask_latency_baseline_sha:
         description: Optional full pre-optimization SHA for native-only SOU-124 before/after qualification
         type: string
@@ -44,7 +52,7 @@ jobs:
       workflow: mcp-real-filesystem.yml
   required-linux-sandbox-and-real-host:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true'))
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true'))
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -405,7 +413,7 @@ jobs:
   native-ubuntu-2404:
     name: native-ubuntu-2404
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true'))
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true'))
     runs-on: ubuntu-24.04
     # The optional paired measurement owns two <=3600s side budgets plus setup.
     # Ordinary PR/default native qualification retains its existing 65 minutes.
@@ -428,10 +436,12 @@ jobs:
           PREPARATION_ONLY: ${{ github.event.inputs.native_preparation_only }}
           MATCHED_ONLY: ${{ github.event.inputs.matched_development_only }}
           PROJECT_ONLY: ${{ github.event.inputs.existing_project_only }}
+          AUDIT_ONLY: ${{ github.event.inputs.audit_retention_only }}
+          STORAGE_ONLY: ${{ github.event.inputs.storage_recovery_only }}
           BASELINE: ${{ github.event.inputs.ask_latency_baseline_sha }}
         run: |
           set -euo pipefail
-          [[ "$PREPARATION_ONLY" != true && "$MATCHED_ONLY" != true && "$PROJECT_ONLY" != true && -z "$BASELINE" ]]
+          [[ "$PREPARATION_ONLY" != true && "$MATCHED_ONLY" != true && "$PROJECT_ONLY" != true && "$AUDIT_ONLY" != true && "$STORAGE_ONLY" != true && -z "$BASELINE" ]]
           python3 -B -m unittest discover -s scripts/tests -p test_operator_results.py -v
       - name: Validate optional native Ask comparison
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
@@ -867,7 +877,7 @@ jobs:
           raise SystemExit(subprocess.call(command))
           PY
       - name: Qualify exact prepared selection through enforcing daemon and original servers
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -887,7 +897,7 @@ jobs:
           path.write_text(json.dumps(values, sort_keys=True) + '\n')
           PY
       - name: Run the first-use demo through the prepared original host
-        if: github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true'
+        if: github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -896,8 +906,22 @@ jobs:
           python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" \
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou120-demo"
+      - name: Qualify terminal Ask inbox through the original Claude host
+        if: github.event.inputs.operator_results_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p agentfw --lib pilot_approval
+          python3 -B scripts/qualify-ask-inbox.py \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --node "$RUNNER_TEMP/sou111-assets/node/bin/node" \
+            --npm "$RUNNER_TEMP/sou111-assets/node/bin/npm" \
+            --bwrap "$SOU111_BWRAP" --git "$SOU115_GIT" \
+            --claude "$RUNNER_TEMP/sou111-assets/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou135-inbox"
       - name: Qualify owned prepared-selection launch and failures with the original host
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true'
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -907,6 +931,49 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --validation-timeout-seconds 120 \
             --output "$RUNNER_TEMP/sou116-qualification"
+      - name: Qualify bounded storage faults and fresh-authority recovery
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.storage_recovery_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p agentfw --bin agentfw serve_config
+          cargo test --locked -p agentfw --lib audit::tests
+          cargo test --locked -p agentfw --lib audit_write_failure_withholds_result
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          python3 -B scripts/qualify-pilot-storage.py --run --selection "$selection" \
+            --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
+            --output "$RUNNER_TEMP/pilot-storage-qualification"
+      - name: Qualify prepared-run audit rotation and failed-store continuation
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v strace
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          python3 -B scripts/qualify-prepared-pilot-run.py --selection "$selection" \
+            --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
+            --validation-timeout-seconds 120 --audit-retention-only \
+            --output "$RUNNER_TEMP/sou132-qualification"
+      - name: Qualify reused bounded audit engine restart and fail-safe retention
+        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$SOU119_SANDBOX_TESTS" --list > "$RUNNER_TEMP/sou132-retention-tests.txt"
+          python3 - "$RUNNER_TEMP/sou132-retention-tests.txt" <<'PY'
+          import pathlib, sys
+          names = pathlib.Path(sys.argv[1]).read_text()
+          for required in ('audit::retention::tests::disk_full_failure_poisoned_sink_recovers_after_space_restored',
+                           'native::tests::retained_sink_failure_withholds_native_admission',
+                           'native::tests::retained_sink_failure_withholds_native_result'):
+              if required + ': test' not in names:
+                  raise SystemExit('required_audit_fault_control_missing')
+          PY
+          "$SOU119_SANDBOX_TESTS" 'audit::retention::tests::' --test-threads=1 | tee "$RUNNER_TEMP/sou132-retention-unit.log"
+          "$SOU119_SANDBOX_TESTS" retained_sink_failure_ --test-threads=1 | tee "$RUNNER_TEMP/sou132-native-audit-failure.log"
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          agent="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"]["agentfw"]["path"])' "$selection")"
+          python3 -B scripts/sou84_owned_acceptance.py --agent "$agent" --output-dir "$RUNNER_TEMP/sou132-retention"
       - name: Targeted existing-project read-only pilot with actual host and independent effects
         if: github.event_name == 'workflow_dispatch' && (github.event.inputs.existing_project_only == 'true' || github.event.inputs.native_preparation_only == 'true')
         shell: bash
@@ -922,8 +989,14 @@ jobs:
       - name: Qualify structured operator outcomes through both original servers
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.operator_results_only == 'true'
         shell: bash
+        env:
+          CARGO_BUILD_JOBS: '2'
         run: |
           set -euo pipefail
+          rustup component add rustfmt clippy
+          cargo fmt --all -- --check
+          cargo test --locked -p agentfw -- --test-threads=2 2>&1 | tee "$RUNNER_TEMP/sou140-rust-tests.log"
+          cargo clippy --locked -p agentfw --all-targets -- -D warnings
           asset="$RUNNER_TEMP/sou111-assets"
           python3 -B scripts/qualify-operator-results.py \
             --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
@@ -948,6 +1021,7 @@ jobs:
           path: |
             ${{ runner.temp }}/sou111-assets/selected-hashes.txt
             ${{ runner.temp }}/sou140-operator-results/operator-results.json
+            ${{ runner.temp }}/sou140-rust-tests.log
             ${{ runner.temp }}/sou122-toolchain/native-attestation.json
             ${{ runner.temp }}/sou111-assets/native-summary.json
             ${{ runner.temp }}/sou111-assets/native-timing.json
@@ -973,6 +1047,11 @@ jobs:
             ${{ runner.temp }}/sou111-assets/recovered.json
             ${{ runner.temp }}/sou111-qualification/**
             ${{ runner.temp }}/sou116-qualification/report.json
+            ${{ runner.temp }}/pilot-storage-qualification/**
+            ${{ runner.temp }}/sou132-qualification/report.json
+            ${{ runner.temp }}/sou132-retention/summary.json
+            ${{ runner.temp }}/sou132-retention-unit.log
+            ${{ runner.temp }}/sou132-native-audit-failure.log
             ${{ runner.temp }}/sou124-ask-comparison/preflight/qualification.json
             ${{ runner.temp }}/sou124-ask-comparison/comparison.json
             ${{ runner.temp }}/sou124-ask-comparison/baseline/qualification.json
@@ -981,6 +1060,7 @@ jobs:
             ${{ runner.temp }}/sou111-assets/baseline-build.json
             ${{ runner.temp }}/sou134-qualification/report.json
             ${{ runner.temp }}/sou120-demo/report.json
+            ${{ runner.temp }}/sou135-inbox/qualification.json
             ${{ runner.temp }}/sou121-cleanup/report.json
             ${{ runner.temp }}/sou121-cleanup/dry-run.json
             ${{ runner.temp }}/sou111-qualification/filesystem-sandbox.log

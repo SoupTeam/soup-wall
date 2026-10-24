@@ -33,6 +33,8 @@ macro_rules! require {
 const MAX_RUNS: usize = 16;
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 
+mod watch;
+
 #[derive(Args)]
 pub struct OperatorArgs {
     /// Run identity printed by pilot-launch, not a caller-selected session label.
@@ -53,6 +55,11 @@ pub enum OutputFormat {
 
 #[derive(Subcommand)]
 pub enum OperatorAction {
+    /// Watch this run and inspect each request before an explicit decision.
+    Watch {
+        #[arg(long, default_value_t = 2, value_parser = clap::value_parser!(u64).range(1..=30))]
+        refresh_seconds: u64,
+    },
     /// Revoke both collectors, then stop this exact owned launcher and host group.
     Stop,
     /// Digests and expiry only. Never displays raw arguments.
@@ -1191,14 +1198,21 @@ fn stop(
 }
 
 pub fn operator(args: OperatorArgs) -> Result<()> {
+    if let OperatorAction::Watch { refresh_seconds } = args.action {
+        return watch::run(args.run, args.home, refresh_seconds);
+    }
+    operator_to(args, &mut std::io::stdout().lock(), None)
+}
+
+fn operator_to(args: OperatorArgs, writer: &mut impl Write, expected: Option<&[u8]>) -> Result<()> {
     let mut output = Output::new(false, operation(&args.action));
-    operate(args, &mut output, &mut std::io::stdout().lock())
+    operate(args, &mut output, writer, expected)
 }
 
 pub fn operator_json(args: OperatorArgs) -> i32 {
     let mut output = Output::new(true, operation(&args.action));
     let mut writer = std::io::stdout().lock();
-    match operate(args, &mut output, &mut writer) {
+    match operate(args, &mut output, &mut writer, None) {
         Ok(()) => 0,
         Err(error) => output.failure(&error, &mut writer),
     }
@@ -1211,6 +1225,7 @@ fn operation(action: &OperatorAction) -> &'static str {
         OperatorAction::Approve { .. } => "approve",
         OperatorAction::Reject { .. } => "reject",
         OperatorAction::Stop => "stop",
+        OperatorAction::Watch { .. } => "watch",
     }
 }
 
@@ -1233,7 +1248,17 @@ fn directory_error(error: anyhow::Error) -> anyhow::Error {
     )
 }
 
-fn operate(args: OperatorArgs, output: &mut Output, writer: &mut impl Write) -> Result<()> {
+fn operate(
+    args: OperatorArgs,
+    output: &mut Output,
+    writer: &mut impl Write,
+    expected: Option<&[u8]>,
+) -> Result<()> {
+    require!(
+        !matches!(args.action, OperatorAction::Watch { .. }),
+        InvalidInput,
+        "watch is not a structured result stream"
+    );
     require!(
         cfg!(target_os = "linux"),
         UnsupportedPlatform,
@@ -1256,6 +1281,13 @@ fn operate(args: OperatorArgs, output: &mut Output, writer: &mut impl Write) -> 
     private_dir(&dir).map_err(directory_error)?;
     let bytes = read_file(&dir.join("run.json"), true)
         .map_err(|error| tag(error, Reason::UnsafeRunRecord))?;
+    if let Some(expected) = expected {
+        require!(
+            bytes == expected,
+            SelectionChanged,
+            "pilot run identity changed"
+        );
+    }
     let run: Run = serde_json::from_slice(&bytes)
         .map_err(|error| tag(error.into(), Reason::UnsafeRunRecord))?;
     if matches!(args.action, OperatorAction::Stop) {
@@ -1314,7 +1346,9 @@ fn operate(args: OperatorArgs, output: &mut Output, writer: &mut impl Write) -> 
         OperatorAction::Inspect { id }
         | OperatorAction::Approve { id, .. }
         | OperatorAction::Reject { id, .. } => id.clone(),
-        OperatorAction::List | OperatorAction::Stop => unreachable!(),
+        OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+            unreachable!()
+        }
     };
     id(&identifier).map_err(|error| tag(error, Reason::InvalidInput))?;
     let (observed, server) = rows
@@ -1399,7 +1433,9 @@ fn operate(args: OperatorArgs, output: &mut Output, writer: &mut impl Write) -> 
                 writer,
             )?;
         }
-        OperatorAction::List | OperatorAction::Stop => unreachable!(),
+        OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+            unreachable!()
+        }
     }
     Ok(())
 }
@@ -1861,7 +1897,9 @@ mod tests {
                     OperatorAction::Inspect { id }
                     | OperatorAction::Approve { id, .. }
                     | OperatorAction::Reject { id, .. } => id,
-                    OperatorAction::List | OperatorAction::Stop => unreachable!(),
+                    OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+                        unreachable!()
+                    }
                 };
                 assert_eq!(parsed_id, id);
             }

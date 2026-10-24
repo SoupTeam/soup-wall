@@ -1082,15 +1082,17 @@ mod tests {
         let invalid = read_pending(home.path(), "../foreign").unwrap_err();
         assert!(matches!(reason(&invalid), Reason::InvalidInput));
         std::fs::create_dir(pending_dir(home.path())).unwrap();
-        let path = pending_dir(home.path()).join("expired.json");
+        let pending_id = format!("{:032x}", rand::random::<u128>());
+        let path = pending_dir(home.path()).join(format!("{pending_id}.json"));
         std::fs::write(
             &path,
-            json!({"pending_id":"expired", "scope":"native-mcp/approval/v1",
+            json!({"pending_id":pending_id, "scope":"native-mcp/approval/v1",
             "expires_at_ms":0})
             .to_string(),
         )
         .unwrap();
-        let expired = operator_approve(home.path(), HOOK, "expired", &"a".repeat(64)).unwrap_err();
+        let expired =
+            operator_approve(home.path(), HOOK, &pending_id, &"a".repeat(64)).unwrap_err();
         assert!(matches!(reason(&expired), Reason::PendingExpired));
         let missing_claim = claim(home.path(), "missing").unwrap_err();
         assert!(matches!(reason(&missing_claim), Reason::DecisionConflict));
@@ -1103,11 +1105,12 @@ mod tests {
             let home = tempfile::tempdir().unwrap();
             let directory = pending_dir(home.path());
             std::fs::create_dir(&directory).unwrap();
-            std::fs::create_dir(directory.join("one.approved")).unwrap();
+            let pending_id = format!("{:032x}", rand::random::<u128>());
+            std::fs::create_dir(directory.join(format!("{pending_id}.approved"))).unwrap();
             let binding = "a".repeat(64);
             std::fs::write(
-                directory.join("one.json"),
-                json!({"pending_id":"one",
+                directory.join(format!("{pending_id}.json")),
+                json!({"pending_id":pending_id,
                 "scope":"native-mcp/approval/v1", "session_id":"owned", "session_epoch":"epoch",
                 "tool":"read_text_file", "binding_sha256":binding,
                 "expires_at_ms":now_ms() + 30_000})
@@ -1115,9 +1118,23 @@ mod tests {
             )
             .unwrap();
             let result = if structured {
-                operator_submit_for_session(home.path(), HOOK, "one", &binding, "owned", "epoch")
+                operator_submit_for_session(
+                    home.path(),
+                    HOOK,
+                    &pending_id,
+                    &binding,
+                    "owned",
+                    "epoch",
+                )
             } else {
-                operator_approve_for_session(home.path(), HOOK, "one", &binding, "owned", "epoch")
+                operator_approve_for_session(
+                    home.path(),
+                    HOOK,
+                    &pending_id,
+                    &binding,
+                    "owned",
+                    "epoch",
+                )
             };
             if structured {
                 assert!(matches!(reason(&result.unwrap_err()), Reason::Unknown));
@@ -1138,25 +1155,29 @@ mod tests {
         std::fs::create_dir(&directory).unwrap();
         let lock = std::fs::File::create(home.path().join("approval-policy-epoch.lock")).unwrap();
         lock.lock().unwrap();
+        let pending_id = format!("{:032x}", rand::random::<u128>());
         let expiry = now_ms() + 500;
         let binding = "a".repeat(64);
         std::fs::write(
-            directory.join("one.json"),
-            json!({"pending_id":"one",
+            directory.join(format!("{pending_id}.json")),
+            json!({"pending_id":pending_id,
             "scope":"native-mcp/approval/v1", "session_id":"owned", "session_epoch":"epoch",
             "tool":"read_text_file", "binding_sha256":binding, "expires_at_ms":expiry})
             .to_string(),
         )
         .unwrap();
         let selected = home.path().to_path_buf();
+        let worker_id = pending_id.clone();
         let worker = std::thread::spawn(move || {
-            operator_submit_for_session(&selected, HOOK, "one", &binding, "owned", "epoch")
+            operator_submit_for_session(&selected, HOOK, &worker_id, &binding, "owned", "epoch")
         });
         let deadline = Instant::now() + Duration::from_secs(2);
-        while !directory.join("one.deciding").exists() && Instant::now() < deadline {
+        while !directory.join(format!("{pending_id}.deciding")).exists()
+            && Instant::now() < deadline
+        {
             std::thread::sleep(Duration::from_millis(5));
         }
-        let claimed = directory.join("one.deciding").exists();
+        let claimed = directory.join(format!("{pending_id}.deciding")).exists();
         while now_ms() <= expiry {
             std::thread::sleep(Duration::from_millis(5));
         }

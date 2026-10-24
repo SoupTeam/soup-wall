@@ -543,6 +543,7 @@ impl Harness {
                 &mut BufReader::new(relay_server),
                 &mut relay_child,
                 &profile,
+                None,
             )
             .await
         });

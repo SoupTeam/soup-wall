@@ -346,8 +346,10 @@ class Prepared:
             self.receipt(True)
             self.operator(True, "already_stopped")
         elif failure is None:
-            require(outcome["cleanup"] == "owned_state_removed" and not list(self.state.iterdir()),
+            require(outcome["cleanup"] == "owned_processes_stopped_audit_retained" and
+                    len(list(self.state.iterdir())) == 1,
                     "stop_peer_owned_state_survived")
+            self.c.run.AUDIT.verify_cleanup(Path(outcome["audit"]["directory"]))
         return {"entry_status": outcome["status"], "entry_reason": outcome.get("reason"),
                 "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                 "observed_owned_roles": list(self.identities.values()),

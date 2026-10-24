@@ -53,6 +53,13 @@ fn missing_run_is_a_single_safe_result_for_every_command() {
 }
 
 #[test]
+fn watch_is_not_a_structured_result_stream() {
+    let home = tempfile::tempdir().unwrap();
+    let value = refused(home.path(), &["watch"]);
+    assert_eq!(value["reason"], "invalid_input");
+}
+
+#[test]
 fn legacy_failure_keeps_empty_stdout_and_nonzero_exit() {
     let home = tempfile::tempdir().unwrap();
     let output = invoke(home.path(), false, &["list"]);

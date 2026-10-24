@@ -236,14 +236,61 @@ def verify_profile(kind, directory, paths, workspace):
             "registry_sha256": receipt["registry_sha256"], "package_tree_sha256": profile["packageTreeSha256"]}
 
 
+def discard_unpublished(path, error):
+    """Remove only the file this attempt created, preserving the original failure."""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError as cleanup_error:
+        raise ValueError(f"unpublished_file_cleanup_failed: {path}; original_failure={error}; "
+                         f"cleanup_failure={cleanup_error}") from error
+
+
 def write_json(path, value):
     raw = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
     require(len(raw) <= MAX_JSON, "manifest_size_limit")
-    with Path(path).open("xb") as output:
-        os.fchmod(output.fileno(), 0o600)
-        output.write(raw)
-        output.flush()
-        os.fsync(output.fileno())
+    created = False
+    try:
+        with Path(path).open("xb") as output:
+            created = True
+            os.fchmod(output.fileno(), 0o600)
+            output.write(raw)
+            output.flush()
+            os.fsync(output.fileno())
+    except BaseException as error:
+        if created:
+            discard_unpublished(path, error)
+        raise
+
+
+def sync_directory(path):
+    directory_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+
+
+def publish_marker(output, record):
+    temporary = output / (".current-" + uuid.uuid4().hex)
+    write_json(temporary, record)
+    try:
+        os.replace(temporary, output / "current.json")
+    except BaseException as error:
+        if not temporary.exists():
+            # An interruption can arrive after rename completed but before its
+            # caller resumes. Absence of our temporary means publication may
+            # have happened; never restore the previous marker in that case.
+            raise ValueError("completion_marker_publication_uncertain; "
+                             "verify_current_generation_before_reuse") from error
+        discard_unpublished(temporary, error)
+        raise
+    # Rename already selected the new generation. A failed directory sync cannot
+    # safely be rolled back: report the uncertainty and retain both generations.
+    try:
+        sync_directory(output)
+    except (OSError, KeyboardInterrupt) as error:
+        raise ValueError("completion_marker_published_durability_uncertain; "
+                         "verify_current_generation_before_reuse") from error
 
 
 def selected_paths(args, generation):
@@ -407,14 +454,7 @@ def prepare(args):
     verify_generation(generation, args.expected_commit)
     record = {"format": "sw-pilot-preparation/1", "generation": generation.name,
               "selection_sha256": FS.sha(selection_path), "status": "prepared-not-active"}
-    temporary = output / (".current-" + uuid.uuid4().hex)
-    write_json(temporary, record)
-    os.replace(temporary, marker)
-    directory_fd = os.open(output, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fsync(directory_fd)
-    finally:
-        os.close(directory_fd)
+    publish_marker(output, record)
     return {"status": "prepared-not-active", "selection": str(selection_path), "generation": generation.name}
 
 

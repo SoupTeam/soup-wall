@@ -1,0 +1,18 @@
+{
+  "format": "pilot-storage-attempt/1",
+  "source_commit": "56c5d9c793deaf05947d677be8204f5c039c658a",
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/39996589864",
+  "job_id": 120561645647,
+  "platform": "GitHub-hosted Ubuntu 24.04 x86_64",
+  "status": "failed-before-build",
+  "reason": "Rustfmt requested two line-wrap corrections in new Rust test code",
+  "affected_step": "Focused preparation boundaries",
+  "rust_tests_executed": false,
+  "protected_host_executed": false,
+  "storage_qualification_executed": false,
+  "native_acceptance": false,
+  "cleanup_step": "success",
+  "artifact_id": 12520481253,
+  "artifact_sha256_from_upload_log": "4ff2f28d8c302cf85d293300da9e7ba7e55611a70310febc7839f0dc222de494",
+  "correction": "Apply the exact rustfmt line wraps without changing runtime behavior or checks."
+}
