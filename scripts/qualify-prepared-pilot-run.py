@@ -31,6 +31,7 @@ def load(name, filename):
 RUN = load("sou116_entry", "pilot-run.py")
 LAUNCH = load("sou116_launch", "qualify-pilot-launcher.py")
 ASK = load("sou116_ask", "qualify-pilot-ask.py")
+STORE = load("sou132_store", "sou84_owned_acceptance.py")
 STOP = load("sou125_prepared_stop", "prepared_stop_witness.py")
 BASE, require = LAUNCH.BASE, LAUNCH.require
 
@@ -124,7 +125,10 @@ def qualify(args, private, report):
                 if args.selection.read_bytes() != original:
                     args.selection.write_bytes(original)
                 owner.close()
-        for case in ("useful-refusal", "ask", "default", "cancel", "daemon-loss", "host-crash", "timeout"):
+        cases = ("useful-refusal", "ask", "default", "cancel", "daemon-loss", "host-crash", "timeout")
+        if getattr(args, "audit_retention", False):
+            cases += ("audit-rotation",)
+        for case in cases:
             report["active_case"] = case
             root = private / case
             root.mkdir(mode=0o700)
@@ -142,6 +146,8 @@ def qualify(args, private, report):
                 proposals = [proposals[0], ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"})]
             hold = case in ("cancel", "daemon-loss", "host-crash", "timeout")
             lifecycle_ready = threading.Event()
+            audit_ready = threading.Event()
+            audit_observed = {}
             def next_step(body):
                 names = {tool.get("name") for tool in body.get("tools", [])}
                 if not {"mcp__filesystem__read_text_file", "mcp__git__git_status"}.issubset(names):
@@ -150,6 +156,45 @@ def qualify(args, private, report):
                     for block in message.get("content", []) if isinstance(message.get("content"), list) else []:
                         if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in offered:
                             model.results[block["tool_use_id"]] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
+                if case == "audit-rotation" and "toolu_prepared_0" in model.results and not audit_observed:
+                    require(audit_ready.wait(15), "prepared_audit_context_missing")
+                    active = Path(record["home"]).parent
+                    current = RUN.native_instance(record["port"], audit_token)["instance_id"]
+                    reader_results = []
+                    reader_started = threading.Event()
+                    def concurrent_reader():
+                        receipt = RUN.AUDIT.private_json(active / "audit-run.json")
+                        reader_started.set()
+                        for ordinal in range(8):
+                            try:
+                                RUN.AUDIT.export_run(active, root / f"reader-{ordinal}.json", receipt["run_id"])
+                                reader_results.append("snapshot")
+                            except RUN.AUDIT.REPORT.ReportError as error:
+                                reader_results.append("retry" if str(error) in (
+                                    "retention changed during export; retry", "retained segment was replaced during export")
+                                    else "unexpected_failure")
+                            time.sleep(.01)
+                    reader = threading.Thread(target=concurrent_reader, daemon=True)
+                    reader.start()
+                    require(reader_started.wait(5), "prepared_audit_reader_not_started")
+                    for index in range(2000):
+                        STORE.request(record["port"], "/hook", {"session_id": "owned-audit-rotation",
+                            "hook_event_name": "SOU132FutureEvent", "synthetic": "PRIVATE_SOU132_CANARY"}, hook_token)
+                        if index in (200, 1000):
+                            receipt = RUN.AUDIT.private_json(active / "audit-run.json")
+                            result = RUN.AUDIT.export_run(active, root / f"active-export-{index}.json", receipt["run_id"])
+                            require(result["completeness"] == "incomplete", "active_audit_export_overclaimed")
+                    manifest = RUN.AUDIT.private_json(active / "audit" / "manifest.json")
+                    reader.join(timeout=10)
+                    require(not reader.is_alive() and len(reader_results) == 8
+                            and "unexpected_failure" not in reader_results, "prepared_audit_concurrent_reader_failed")
+                    size = STORE.owned_bytes(active / "audit")
+                    require(manifest["pruned_through"] > 0 and size <= RUN.AUDIT.LIMITS["total_disk_bytes"]
+                            and RUN.native_instance(record["port"], audit_token)["instance_id"] == current,
+                            "prepared_audit_rotation_or_instance_failed")
+                    audit_observed.update(pruned_through=manifest["pruned_through"], owned_bytes=size,
+                                          active_exports=2, concurrent_snapshots=reader_results.count("snapshot"),
+                                          concurrent_retries=reader_results.count("retry"), unchanged_native_instance=True)
                 if hold:
                     # Owned provider delay keeps an actual host alive for lifecycle controls.
                     lifecycle_ready.set()  # Both original servers are in this host's tool catalog.
@@ -166,7 +211,7 @@ def qualify(args, private, report):
             command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
                 "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
-                "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "60"]
+                "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]
             if case == "ask":
                 command += ["--ask-wait-seconds", "25"]
             run_env = dict(env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
@@ -189,6 +234,10 @@ def qualify(args, private, report):
                             raise ValueError("prepared_entry_exited_before_host")
                     record = until(identify, "prepared_run_not_published", seconds=90)
                     home = Path(record["home"])
+                    if case == "audit-rotation":
+                        audit_token = (home / "native-token").read_text().strip()
+                        hook_token = (home / "token").read_text().strip()
+                        audit_ready.set()
                     decisions = []
                     if case == "ask":
                         deadline = time.monotonic() + 75
@@ -255,10 +304,10 @@ def qualify(args, private, report):
                             pid, start = until(actual_host, "prepared_owned_host_identity_missing")
                             require(BASE.ProcessWitness.identity(pid) == start, "prepared_owned_host_identity_changed")
                             os.kill(pid, signal.SIGKILL)
-                    process.wait(timeout=100)
+                    process.wait(timeout=220 if case == "audit-rotation" else 100)
                 rows = (root / "stdout.private").read_text().splitlines()
                 outcome = json.loads(rows[-1])
-                success = case in ("useful-refusal", "ask", "default")
+                success = case in ("useful-refusal", "ask", "default", "audit-rotation")
                 require((process.returncode == 0) == success, "prepared_run_outcome_mismatch")
                 if not success:
                     expected = {"cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
@@ -271,10 +320,25 @@ def qualify(args, private, report):
                         "actual_pinned_host_execution_not_observed")
                 cleanup = witness.finish()
                 require(cleanup["all_stopped"], "prepared_owned_process_survived")
-                require(outcome["cleanup"] == "owned_state_removed" and not list(state.iterdir()), "owned_state_survived")
+                require(outcome["cleanup"] == "owned_processes_stopped_audit_retained"
+                        and len(list(state.iterdir())) == 1, "owned_state_survived")
+                retained = Path(outcome["audit"]["directory"])
+                run_id = RUN.AUDIT.verify_cleanup(retained)
+                audit_export = RUN.AUDIT.export_run(retained, root / "audit-summary.json", run_id)
+                audit_summary = json.loads((root / "audit-summary.json").read_bytes())
+                require(audit_summary["source_commit"] == args.expected_commit
+                        and audit_summary["policy_sha256"] == selected_before["policy"]
+                        and audit_summary["allow_proves_execution"] is False
+                        and b"owned-loopback-only" not in (root / "audit-summary.json").read_bytes(),
+                        "prepared_audit_identity_or_privacy_failed")
                 result = {"case": case, "status": "passed", "outcome": outcome["status"],
                           "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
+                          "audit_export": audit_export, "audit_summary_sha256": BASE.sha(root / "audit-summary.json"),
                           "trace_sha256": BASE.sha(root / "trace.private")}
+                if case == "audit-rotation":
+                    require(audit_observed and "intentional_retention" in audit_export["notices"],
+                            "prepared_audit_loss_not_exported")
+                    result["audit_rotation"] = audit_observed
                 if success:
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
                     useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
@@ -286,7 +350,7 @@ def qualify(args, private, report):
                     if case == "default":
                         require(selection['expected_refusal']['rule'] in json.dumps(model.results['toolu_prepared_1']),
                                 'prepared_default_wrong_refusal_rule')
-                    if case == "useful-refusal":
+                    if case in ("useful-refusal", "audit-rotation"):
                         require("tracked.txt" in json.dumps(model.results["toolu_prepared_1"]), "prepared_git_bytes_missing")
                         require(model.results["toolu_prepared_2"]["is_error"] is True, "prepared_mutator_not_refused")
                         git_execs = []
@@ -300,7 +364,7 @@ def qualify(args, private, report):
                     counts = [sum(call["tool"] == tool and call["args_sha256"] == BASE.hashlib.sha256(
                         json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
                         for call in observation["calls"]) for _, tool, arguments in proposals]
-                    require(counts == ([1, 1, 0] if case == "useful-refusal" else [1, 0] if case == "default" else [1, 1, 1]), "prepared_dispatch_counts_wrong")
+                    require(counts == ([1, 1, 0] if case in ("useful-refusal", "audit-rotation") else [1, 0] if case == "default" else [1, 1, 1]), "prepared_dispatch_counts_wrong")
                     require(ASK.SELECTED.trace_effects(root / "trace.private", "filesystem",
                         target="/workspace/credentials.txt" if case == "ask" else "/workspace/notes.txt") == 1,
                         "prepared_kernel_read_witness_missing")
@@ -363,6 +427,7 @@ def main():
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
     parser.add_argument("--validation-timeout-seconds", type=int, default=30)
+    parser.add_argument("--audit-retention", action="store_true", help="Include SOU-132 active rotation/export and useful original continuation")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(mode=0o700)

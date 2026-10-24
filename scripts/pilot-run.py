@@ -40,6 +40,7 @@ def load(name, filename):
 
 PREP = load("pilot_run_preparation", "prepare-installed-pilot.py")
 GROUPS = load("pilot_run_groups", "prepare-native-pilot-prerequisites.py")
+AUDIT = load("pilot_run_audit", "pilot_audit.py")
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
@@ -263,6 +264,7 @@ def run(args, report):
             raise Failure("occupied_port_refused") from None
         port = reservation.getsockname()[1]
     private = None
+    audit_selected = False
     daemon = launcher = None
     streams = []
     cancelled = False
@@ -293,8 +295,15 @@ def run(args, report):
                                "maintenance_interval_ms": 250}}
         if args.ask_wait_seconds:
             native["approval"] = {"ttl_seconds": 120}
+        retention, audit_receipt = AUDIT.selection(private, args.expected_commit,
+            PREP.FS.sha(args.selection), PREP.FS.sha(paths["policy"]), registry_sha,
+            PREP.FS.sha(paths["agentfw"]))
+        json_file(private / "audit-run.json", audit_receipt)
+        audit_selected = True
+        report["audit"] = {"run_id": audit_receipt["run_id"], "retention": AUDIT.LIMITS,
+                           "retention_sha256": audit_receipt["retention_sha256"]}
         json_file(home / "config.yaml", {"bind": "127.0.0.1", "port": port, "enforce": True,
-                  "policy": str(paths["policy"]), "native": native})
+                  "policy": str(paths["policy"]), "native": native, "audit_retention": retention})
         token = secrets.token_urlsafe(32)
         for filename, value in (("native-token", token), ("token", secrets.token_urlsafe(32))):
             with (home / filename).open("x") as stream:
@@ -383,7 +392,8 @@ def run(args, report):
                 errors.append("private_log")
         for sig, handler in previous.items():
             signal.signal(sig, handler)
-        # Remove ordinary private state; retain explicit stop/recovery receipts below.
+        # Stop processes before snapshot/export. Retention housekeeping never
+        # resets a live session or its sticky risk, receipts or policy state.
         if not errors and private is not None:
             try:
                 # An authenticated stop may have completed, or may still need
@@ -393,12 +403,26 @@ def run(args, report):
                 stops = list((private / ".agentfw" / "pilot-runs").glob("*/stop.json"))
                 if stops:
                     report["retained_stop_state"] = str(private)
+                elif audit_selected:
+                    # Keep only selected bounded evidence. Tokens, raw host and
+                    # daemon logs, provider state and runtime settings are removed.
+                    for child in private.iterdir():
+                        if child.name not in ("audit", "audit-run.json"):
+                            if child.is_dir() and not child.is_symlink():
+                                shutil.rmtree(child)
+                            else:
+                                child.unlink()
                 else:
                     shutil.rmtree(private)
+                if audit_selected:
+                    json_file(private / "audit-finished.json", {"format": AUDIT.FORMAT,
+                        "run_id": report["audit"]["run_id"], "owned_processes_stopped": True})
+                    report["audit"].update(directory=str(private), snapshot=AUDIT.state(private))
             except OSError:
                 errors.append("private_state")
         report["cleanup"] = ("failed" if errors else "owned_processes_stopped_state_retained"
-                             if report.get("retained_stop_state") else "owned_state_removed")
+                             if report.get("retained_stop_state") else "owned_processes_stopped_audit_retained"
+                             if audit_selected else "owned_state_removed")
         require(not errors, "owned_process_cleanup_failed")
 
 
@@ -417,7 +441,8 @@ def main():
     try:
         selection, _, profiles = selected(args)
         report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
-                      workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
+                      workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}),
+                      audit_retention=AUDIT.LIMITS)
         if args.run:
             run(args, report)
     except Exception as error:
