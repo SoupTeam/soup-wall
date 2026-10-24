@@ -1610,12 +1610,14 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     // Only the intended host receives the explicitly selected provider inputs.
     let provider = crate::pilot_host::provider_inputs(args.provider_env_fd)?;
     ensure!(
-        provider
-            .iter()
-            .any(
-                |(key, value)| (key == "ANTHROPIC_API_KEY" || key == "ANTHROPIC_AUTH_TOKEN")
-                    && !value.is_empty()
-            ),
+        config.allow_command_fixtures
+            || config.mock_daemon_token.is_some()
+            || provider
+                .iter()
+                .any(
+                    |(key, value)| (key == "ANTHROPIC_API_KEY" || key == "ANTHROPIC_AUTH_TOKEN")
+                        && !value.is_empty()
+                ),
         "provider_unavailable"
     );
     crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
