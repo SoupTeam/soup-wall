@@ -17,6 +17,7 @@ COMMIT = 'a' * 40
 def observation(rejected=False, stopped=False):
     processes = [{'pid': 910000 + i, 'start_time_ticks': 900001 + i, 'parent_process': i == 0} for i in range(8)]
     value = {'provider_routing': {'successful_exec_counts': {key: 1 for key in P.ROLES},
+        'observation_stage': 'first-request-authentication-refusal' if rejected else 'original-server-runtime',
         'all_seven_inputs_in_intended_host': True, 'unrelated_provider_values': 0,
         'provider_values_in_argv': 0, 'raw_environment_exported': False},
         'provider_protocol': {'owned_loopback_requests': 2, 'expected_synthetic_authentication_seen': True,
@@ -101,3 +102,11 @@ class FiniteEvidence(unittest.TestCase):
             with self.subTest(index=index):
                 self.assertNotEqual(P.project(raw, COMMIT, 0)['status'], 'passed')
         self.assertNotEqual(P.project(fixture(), COMMIT, 1)['status'], 'passed')
+
+    def test_first_authentication_refusal_cannot_stand_in_for_original_runtime(self):
+        raw = fixture()
+        for role in ('original', 'collector', 'classifier'):
+            raw['cases'][5]['provider_routing']['successful_exec_counts'][role] = 0
+        self.assertEqual(P.project(raw, COMMIT, 0)['status'], 'passed')
+        raw['cases'][6]['provider_routing']['successful_exec_counts']['original'] = 0
+        self.assertNotEqual(P.project(raw, COMMIT, 0)['status'], 'passed')

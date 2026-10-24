@@ -97,7 +97,10 @@ def provider(value, rejected=False):
     counts = routing.get('successful_exec_counts')
     need(type(counts) is dict and set(counts) == set(ROLES), 'provider_role_counts_missing')
     counts = {role: count(counts[role]) for role in ROLES}
-    need(all(counts[role] > 0 for role in REQUIRED), 'provider_required_role_unobserved')
+    required = ('entry', 'host', 'daemon', 'launcher', 'diagnostic') if rejected else REQUIRED
+    need(all(counts[role] > 0 for role in required), 'provider_required_role_unobserved')
+    need(routing.get('observation_stage') == ('first-request-authentication-refusal' if rejected
+         else 'original-server-runtime'), 'provider_observation_stage_unproven')
     need(routing.get('all_seven_inputs_in_intended_host') is True
          and count(routing.get('unrelated_provider_values')) == 0
          and count(routing.get('provider_values_in_argv')) == 0
@@ -115,7 +118,8 @@ def provider(value, rejected=False):
     need(entries > 0 and retained.get('intentional_observer_and_input_exclusions') == 2
          and retained.get('all_selected_values_and_json_forms_absent') is True
          and retained.get('artifact_contents_exported') is False, 'provider_retained_artifact_check_unproven')
-    return {'successful_exec_counts': counts, 'all_seven_inputs_in_intended_host': True,
+    return {'successful_exec_counts': counts, 'observation_stage': routing['observation_stage'],
+            'all_seven_inputs_in_intended_host': True,
             'unrelated_provider_values': 0, 'provider_values_in_argv': 0,
             'owned_loopback_requests': requests, 'authenticated_owned_request_observed': True,
             'successful_private_log_writes': writes, 'private_log_bytes_checked': logbytes,

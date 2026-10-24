@@ -167,7 +167,7 @@ def inputs(url, root):
         '127.0.0.1,localhost,::1,sou143-owned-no-proxy.invalid', str(certificate))))
 
 
-def observe(text, paths, values, normalize):
+def observe(text, paths, values, normalize, rejected=False):
     require(set(values) == set(KEYS) and len(set(values.values())) == len(KEYS),
             'provider_distinct_canaries_required')
     rows, pending = normalize(text)
@@ -215,11 +215,17 @@ def observe(text, paths, values, normalize):
                     'other_key_count': len(leaked.difference(KEYS))}), file=sys.stderr, flush=True)
             require(not any(value in word for value in values.values() for word in environment),
                     'provider_value_in_unrelated_process')
-    require(all(counts[role] > 0 for role in ('entry', 'host', 'daemon', 'launcher', 'collector', 'diagnostic', 'original')),
+    # A first-request 401 can terminate Claude before it starts MCP discovery.
+    # Still check every actual unrelated exec, and require the complete original
+    # graph in every non-rejection run. No missing role is fabricated as seen.
+    required = ('entry', 'host', 'daemon', 'launcher', 'diagnostic') if rejected else \
+        ('entry', 'host', 'daemon', 'launcher', 'collector', 'diagnostic', 'original')
+    require(all(counts[role] > 0 for role in required),
             'provider_required_role_not_observed')
     return {'format': 'sw-provider-routing-witness/1', 'successful_exec_counts': counts,
             'all_seven_inputs_in_intended_host': True, 'unrelated_provider_values': 0,
-            'provider_values_in_argv': 0, 'raw_environment_exported': False}
+            'provider_values_in_argv': 0, 'raw_environment_exported': False,
+            'observation_stage': 'first-request-authentication-refusal' if rejected else 'original-server-runtime'}
 
 
 class ProtocolEvidence:

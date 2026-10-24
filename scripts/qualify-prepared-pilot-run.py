@@ -392,7 +392,8 @@ def qualify(args, private, report):
                 if provider_values is not None:
                     trace_text = (root / "trace.private").read_text()
                     result["provider_routing"] = PROVIDER_WITNESS.observe(
-                        trace_text, paths, provider_values, LAUNCH.normalized_syscalls)
+                        trace_text, paths, provider_values, LAUNCH.normalized_syscalls,
+                        rejected=case == "provider-reject")
                     result["provider_protocol"] = protocol.finish()
                     result["provider_private_logs"] = PROVIDER_WITNESS.private_log_writes(
                         trace_text, Path(record["home"]).parent, record["supervisor_pid"], provider_values,

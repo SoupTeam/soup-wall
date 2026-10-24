@@ -161,6 +161,22 @@ pub(crate) fn restrict_exec(
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| "/usr/bin/python3".into()),
         );
+        // An operator may have installed the selected Git at the very pathname
+        // used by Claude's ambient Git probes. Such an inventory cannot separate
+        // the two roles: refuse rather than granting that diagnostic execution.
+        use std::os::unix::fs::MetadataExt;
+        let system_git = ["/usr/bin/git", "/bin/git"]
+            .into_iter()
+            .filter_map(|path| fs::metadata(path).ok())
+            .map(|meta| (meta.dev(), meta.ino()))
+            .collect::<std::collections::BTreeSet<_>>();
+        for path in &allowed {
+            let meta = fs::metadata(path)?;
+            ensure!(
+                !system_git.contains(&(meta.dev(), meta.ino())),
+                "provider_host_system_git_conflict"
+            );
+        }
         exec_boundary::install(command, &allowed).context("provider_host_exec_boundary_unavailable")
     }
     #[cfg(not(target_os = "linux"))]

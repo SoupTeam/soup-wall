@@ -202,5 +202,13 @@ class IndependentExecEvidence(unittest.TestCase):
             witness.observe('\n'.join(leaked), paths, values, normalize)
         with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
             witness.observe('\n'.join(rows[:2]), paths, values, normalize)
+        early = rows[:4] + rows[5:6]
+        refusal = witness.observe('\n'.join(early), paths, values, normalize, rejected=True)
+        self.assertEqual(refusal['successful_exec_counts']['original'], 0)
+        self.assertEqual(refusal['observation_stage'], 'first-request-authentication-refusal')
+        with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
+            witness.observe('\n'.join(early), paths, values, normalize)
+        with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
+            witness.observe('\n'.join(rows[:2]), paths, values, normalize, rejected=True)
         with self.assertRaisesRegex(ValueError, 'provider_incomplete_exec_observation'):
             witness.observe('', paths, values, lambda text: ([], {'12': 'execve(unfinished'}))

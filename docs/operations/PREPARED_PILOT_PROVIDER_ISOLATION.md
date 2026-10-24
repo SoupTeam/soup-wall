@@ -130,3 +130,22 @@ projection requires all thirteen normal/preflight cases and four stop cases,
 independent process/protocol/log/artifact observations, and zero remaining owned
 processes. Its negative controls reject missing/contradictory evidence. Raw traces,
 private logs and process identities stay in disposable scratch.
+
+## Host helper execution boundary
+
+The pinned Claude process itself probes Git during startup. Clearing the
+collector environment alone does not prevent that host diagnostic from inheriting
+provider inputs. The native launcher therefore installs an execute-only Linux
+Landlock ruleset before the host exec. It allows individual pinned selected host,
+Agent, runtime, bubblewrap, classifier-interpreter and ELF-library files, plus
+the finite MCP environment-clearing executable. It grants no directory-wide
+execution and no system Git or shell helper. The restriction is inherited by
+descendants and composes with the existing original-server namespaces and Git
+write restriction. Selected executable replacement receives no new permission.
+
+Unavailable Landlock or an invalid selected executable inventory refuses host
+startup; there is no unrestricted retry. The actual-host qualifier still requires
+all seven distinct synthetic values in the intended client and zero values in
+every successfully executed unrelated process. A refused helper exec cannot
+substitute for useful original filesystem/Git operations, classifier observations,
+protocol authentication, log redaction, restart or stop evidence.
