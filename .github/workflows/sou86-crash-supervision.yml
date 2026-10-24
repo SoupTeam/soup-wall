@@ -37,6 +37,8 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Build pinned Node and unprivileged bubblewrap prerequisites
         shell: bash

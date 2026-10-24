@@ -41,6 +41,20 @@
         "ignored": 1
       },
       "cause": "Observation-only temp root inherited a nonprivate mode and was correctly rejected as limit drift. Set fixture root to 0700 and require its identity before exercising membership. Negative fixtures now assert exact refusal phases."
+    },
+    {
+      "run_id": 40091330498,
+      "source": "3b620e31c6ee2898b12a559103669ba18ce8ddd9",
+      "status": "clippy_prerequisite_missing",
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 23,
+        "failed": 0,
+        "ignored": 1
+      },
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "cause": "Pinned toolchain was installed without clippy. Declare the matching clippy component during toolchain preparation."
     }
   ]
 }
