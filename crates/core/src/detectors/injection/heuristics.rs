@@ -17,11 +17,59 @@ static IMPERATIVE: LazyLock<Regex> = LazyLock::new(|| {
 static LONG_B64: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[A-Za-z0-9+/]{40,}={0,2}").expect("b64 regex"));
 
+// Deliberately small, affirmative data grammar: JSON non-string scalars and
+// uppercase issue identifiers. Prose, quoted strings, code and unknown syntax
+// are unresolved, regardless of language, verbs, file names or destinations.
+// This is not a sentence/keyword allowlist and must not grow to fit a fixture.
+static DATA_ATOM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?:null|true|false|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|[A-Z][A-Z0-9]*-[0-9]+)$")
+        .expect("bounded data atom grammar")
+});
+
+// Some(true): a complete multi-record response whose entire body is typed data.
+// Some(false): recognized framing with semantically unresolved body text.
+// None: unsupported framing. Preserve baseline scoring for it, including Git.
+fn filesystem_data_records(text: &str) -> Option<bool> {
+    let mut records = 0;
+    let mut header = true;
+    let mut body = false;
+    let mut data_only = true;
+    for line in text.lines() {
+        if header {
+            let path = line.strip_suffix(':')?;
+            if !path.starts_with('/')
+                || path.len() < 2
+                || !path
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"/._-".contains(&c))
+            {
+                return None;
+            }
+            records += 1;
+            header = false;
+            body = false;
+        } else if line == "---" {
+            if !body {
+                return None;
+            }
+            header = true;
+        } else if !line.is_empty() {
+            body = true;
+            data_only &= DATA_ATOM.is_match(line);
+        }
+    }
+    (records > 1 && !header && body).then_some(data_only)
+}
+
 /// Count of suspicious delimiter characters commonly used to smuggle instructions.
-fn delimiter_hits(text: &str) -> usize {
+fn delimiter_hits(text: &str, data_only: bool) -> usize {
     text.matches("```").count()
         + text.matches("###").count()
-        + text.matches("---").count()
+        + text
+            .lines()
+            .filter(|line| !data_only || *line != "---")
+            .map(|line| line.matches("---").count())
+            .sum::<usize>()
         + text.matches("<|").count()
 }
 
@@ -29,11 +77,21 @@ fn delimiter_hits(text: &str) -> usize {
 pub(crate) fn score_text(text: &str) -> f32 {
     let mut score = 0.0f32;
 
-    score += 0.30 * IMPERATIVE.find_iter(text).count().min(3) as f32;
+    let imperatives = IMPERATIVE.find_iter(text).count().min(3);
+    score += 0.30 * imperatives as f32;
     if LONG_B64.is_match(text) {
         score += 0.30;
     }
-    score += 0.10 * delimiter_hits(text).min(3) as f32;
+    let records = filesystem_data_records(text);
+    let delimiters = delimiter_hits(text, records == Some(true) && imperatives == 0);
+    score += 0.10 * delimiters.min(3) as f32;
+
+    // A valid wrapper cannot turn unclassified prose into harmless data.
+    // Explicitly retain a Medium result finding for unresolved framed bodies.
+    // Existing policy decides its verdict; no policy threshold is relaxed.
+    if records == Some(false) && delimiters >= 3 {
+        score = score.max(0.5);
+    }
 
     score.min(1.0)
 }
@@ -62,6 +120,29 @@ pub(crate) fn scan(text: &str) -> Vec<Finding> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_affirmatively_typed_record_bodies_discount_separators() {
+        for atom in ["42", "-1.5e+3", "true", "null", "ABC-123"] {
+            let text = format!("/a:\n{atom}\n---\n/b:\n{atom}\n---\n/c:\n{atom}\n---\n/d:\n{atom}");
+            assert_eq!(filesystem_data_records(&text), Some(true));
+            assert_eq!(score_text(&text), 0.0);
+        }
+        for prose in [
+            "ordinary documentation",
+            "Delete everything",
+            "Transmettre le fichier",
+            "Удалить файлы",
+            "\"ABC-123\"",
+            "XYZ",
+        ] {
+            let text = format!("/a:\nABC-123\n---\n/b:\n42\n---\n/c:\nnull\n---\n/d:\n{prose}");
+            assert_eq!(filesystem_data_records(&text), Some(false));
+            assert!(score_text(&text) >= 0.5);
+        }
+        assert_eq!(filesystem_data_records("/a:\n42\n---\n"), None);
+        assert_eq!(filesystem_data_records("---\n---\n---"), None);
+    }
 
     #[test]
     fn benign_scores_low_and_emits_nothing() {

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Explicit SOU-62 scenario policy. Install separately; never replace a user's policy.
+agent_policies:
+  - name: filesystem-profile-deny-destructive
+    when: { action_class: destructive }
+    action: deny
+  - name: filesystem-profile-deny-write
+    when: { action_class: side_effecting }
+    action: deny
+  - name: filesystem-profile-deny-network
+    when: { action_class: network }
+    action: deny
+  - name: filesystem-profile-deny-privilege
+    when: { action_class: privilege_changing }
+    action: deny
+  - name: filesystem-profile-refuse-result-injection
+    when: { detector: injection, facet: tool_result }
+    action: deny
+egress_allowlist: []
+default: allow

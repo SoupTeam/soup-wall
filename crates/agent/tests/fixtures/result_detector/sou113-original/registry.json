@@ -1,0 +1,113 @@
+{
+  "contract_version": "sw-native/1",
+  "registry_id": "filesystem-readonly-v1",
+  "tools": [
+    {
+      "name": "read_file",
+      "schema_sha256": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    },
+    {
+      "name": "read_text_file",
+      "schema_sha256": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    },
+    {
+      "name": "read_media_file",
+      "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "read_multiple_files",
+      "schema_sha256": "725ce07791beba80842b7322c0bfece72ba66b4ff3c3dfecf74f3401ce9d125e",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    },
+    {
+      "name": "write_file",
+      "schema_sha256": "ce17c85e8a5883552a11555f9b893de497fadab965a5c7935c0cb8f3c55b91d6",
+      "action_class": "side_effecting",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "edit_file",
+      "schema_sha256": "88459ef670b139a12a3e0335ae0a4584dd892f60f45f565b545e1004d7565dd5",
+      "action_class": "side_effecting",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "create_directory",
+      "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+      "action_class": "side_effecting",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "list_directory",
+      "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    },
+    {
+      "name": "list_directory_with_sizes",
+      "schema_sha256": "8d6f5d6dcaa186f44c30e5d278419c2559f6032a3455fc3fdbe4865910b35941",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    },
+    {
+      "name": "directory_tree",
+      "schema_sha256": "99ea8d9c9e9241d82937687caaa04b622eff094f2ba194cd7c8ee3e43dc6ed9c",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    },
+    {
+      "name": "move_file",
+      "schema_sha256": "621218ed9bc38b6cde9c6dc003583fb5778e5076bb28e25634b9070b33264682",
+      "action_class": "destructive",
+      "result_provenance": "untrusted",
+      "egress": []
+    },
+    {
+      "name": "search_files",
+      "schema_sha256": "5b5a1eaeb940a6cfdd01f018784754be5204da54959a26b19ee5d00231636cc1",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    },
+    {
+      "name": "get_file_info",
+      "schema_sha256": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    },
+    {
+      "name": "list_allowed_directories",
+      "schema_sha256": "7a014b717a77aac971ea0ab5c0ff47bb13e6cae7ef9442d9dedb15ce36381b15",
+      "action_class": "read_only",
+      "result_provenance": "untrusted",
+      "egress": [],
+      "mcp_result_profile": "sw-mcp/filesystem-readonly/1"
+    }
+  ]
+}
