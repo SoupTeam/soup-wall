@@ -6,8 +6,8 @@
   "subject_sha256": {
     "crates/agentfw/src/mcp/linux_budget.rs": "ff7c211bafb877494acbf21295012bcd5166688b29fc0841d0bc0567ea286537",
     "crates/agentfw/src/mcp/linux_budget/process.rs": "b6f1d2c5b21d6b7be445fadc53d3fa445e73b7aa01a6bb6c2ea72645b2c06652",
-    "scripts/verify-sou136-membership-lifetime.py": "bb6c907c7eecf618d18cb8b3f036d589498dc733a5b830fb2fcc591db164e43c",
-    "scripts/tests/test_sou136_membership_lifetime.py": "b448a34c480f03aeb2b49b4e8df9c122e0deba20f1b787a18b008baa5a81f7da"
+    "scripts/verify-sou136-membership-lifetime.py": "adcdedf124ccb13597118786897db01edfaa3156edc5d1f887bad5e7b5edc75b",
+    "scripts/tests/test_sou136_membership_lifetime.py": "8b7a5eb22b5554b3dd9238798d12d23cda8b18f388b23fdc6beea403eb2a4863"
   },
   "rust_workspace": {
     "passed": 1706,
@@ -16,13 +16,13 @@
     "test_runner": "Only legacy attack_scenarios test binaries change cwd to writable scratch; source stays read-only."
   },
   "python_workspace": {
-    "run": 1266,
+    "run": 1269,
     "skipped": 79,
     "failed": 0,
     "platform_exclusions": "Includes three unchanged Linux /proc prerequisite controls unavailable on macOS."
   },
   "focused_python": {
-    "passed": 21,
+    "passed": 24,
     "failed": 0
   },
   "clippy": "workspace all-targets -D warnings passed",
@@ -43,15 +43,17 @@
     "fixture-permissions-local.log": "9ede84614722163fba56e00de4e23e520caef72588c72cd64d400e612302c8e6",
     "libtest-parsing-controls.log": "799687279e54a57b8c8990a5d47156c97e1de59e5d77849495b467bf199d313b",
     "python-fixed-peer-cadence.log": "4e4769927ec47fe7d3b1e668ed2b6fbb253ebad2f5ec172b6ec8179061127a51",
-    "python-pressure-journal.log": "70fcdb0361f4e583e5d10e2adf7029ddb3d3d07b75320f206b173e32c299e606"
+    "python-pressure-journal.log": "70fcdb0361f4e583e5d10e2adf7029ddb3d3d07b75320f206b173e32c299e606",
+    "python-segmented-final.log": "aacafda299f344ccd445006072837a590f53a29449fdc8e1976c64f7d4466231",
+    "segmented-peer-final-controls.log": "fabc4000717fd87f54e9feba3ba993541d2c3f96e9f25dbf76aa061a9abef6e5"
   },
   "retained_environment_setup_failures": [
     "Initial source snapshot lacked full Git metadata, causing CLI/docs controls to fail. Corrected by copying its own Git metadata.",
     "Legacy attack_scenarios wrote a report to its source cwd, rejected by the read-only sandbox. Corrected with the scratch-only runner above.",
     "CLI prerequisite expected target/debug in the snapshot. A symlink to the existing writable scratch target supplied the built binary."
   ],
-  "linux_status": "Not yet run; Linux-only process tests, real-kernel before failure and 140 original-server cycles are pending.",
-  "follow_up": "Full supported macOS Python suite repeated after moving full-ledger serialization out of live pressure phases: 1266 tests, 79 optional/platform skips. Live stages remain in memory and are flushed on every error/close/final path; active case is durable before construction and intentional crash. Native independent counters remain mandatory.",
+  "linux_status": "See native-attempts.json: the successful sparse 147-case run is historical and does not satisfy the revised per-cycle segmented contract.",
+  "follow_up": "Reviewer contract restored with seven ten-cycle peer segments per profile, per-cycle before/after useful responses, fresh peer identities, unchanged wall bounds and retained terminal budget reason. Full supported Python suite1269 with79 skips; final24 focused controls passed. Exact-source segmented native qualification is pending.",
   "rust_workspace_subject_sha256": {
     "crates/agentfw/src/mcp/linux_budget.rs": "182b2d649c82c08d9d78529613969783effe46559bf93e858a459f72f509b462",
     "crates/agentfw/src/mcp/linux_budget/process.rs": "38a622f97c7f18a4090896797cc57591fa16a39af31afecda0047a57c9766c4b",

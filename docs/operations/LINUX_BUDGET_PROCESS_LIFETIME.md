@@ -69,18 +69,27 @@ remain active independently of these diagnostic observations.
 Focused Ubuntu qualification requires 70 distinct original filesystem and 70
 original Git crash/reconnect cycles, correlated useful work after restored
 capacity, surviving useful siblings, and independently observed cleanup. Each
-profile keeps one original sibling through all 70 cycles, with useful probes at
-baseline, every ten completed crashes and the final crash, plus each resource
-control. Independent kernel/process observation continues throughout. This avoids
-spending the existing 600000 ms peer wall budget on two extra Git calls per cycle;
-the failed earlier attempt remains retained. The cadence is fixed and graded. Separate
+profile uses seven separate peer segments of ten consecutive subject cycles.
+Each peer keeps the same 600000 ms wall budget and must answer correlated useful
+calls before and after **every** subject crash. Every peer has a fresh epoch,
+namespace owner and cgroup; its exact ten-cycle range, normal terminal budget
+reason, bounded lifetime and independent cleanup are graded. The last peer also
+survives restored-capacity and resource controls. All 70 subject cycles per
+profile remain mandatory. The denominator is 159: 140 churn subjects, 14 peers,
+two restored-capacity clients and three separate calibrations.
+
+The earlier one-peer attempt expired legitimately. Sparse useful checkpoints
+were then rejected in review; even its successful 147-case native run remains
+historical evidence and is not accepted for this corrected contract. Separate
 owned fixtures calibrate real memory/PID-limit refusals. A separate native Rust
 control moves its own unreaped child between owned cgroups and verifies the
 production budget observer refuses the violation. The parent retains sole reaping
 ownership during migration, so a reused numeric PID cannot redirect its write.
 That control establishes the budget predicate and cleanup, not an MCP transport
 result. These calibrations never stand in for an original server. Every attempt is checkpointed before
-construction and before intentional crash injection. Live stage transitions stay
+construction and before intentional crash injection. The bounded event projection
+reserves space for terminal budget/server metadata after its busy-event prefix
+fills, retaining the fixed refusal reason; duplicate terminal events fail grading. Live stage transitions stay
 in memory; close, error and final grading flush their complete observations. Full
 ledger serialization during pressure can otherwise block the shared-GIL kernel
 sampler through the short event-to-cleanup window. The independently observed

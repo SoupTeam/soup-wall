@@ -133,6 +133,28 @@
       "native_acceptance_passed": false,
       "cause": "Production PID guard refused and cleaned up (pids peak32, max events13); independent Python observer captured peak22 and counter0, so grading correctly refused. Full ledger serialization immediately after dispatch can starve its shared-GIL sampler. Keep live stages in memory and flush before construction/crash, after close, on failure and final grading; all observations and statuses are still durably recorded. Counter guards and observer checks are unchanged.",
       "retained_report": "attempt-40094725140.json"
+    },
+    {
+      "run_id": 40096452531,
+      "source": "dfb6194a3cf927dd39a8cab5a5f8fb9df07892cd",
+      "workflow_status": "success",
+      "status": "superseded_sparse_peer_contract_not_accepted",
+      "passed": 147,
+      "failed": 0,
+      "incomplete": 0,
+      "filesystem_cycles_attempted": 70,
+      "git_cycles_attempted": 70,
+      "unexpected_closures": 0,
+      "cleanup_verified": true,
+      "delegation_removed": true,
+      "native_acceptance_passed": false,
+      "reason": "Reviewer requires per-cycle useful-before/useful-after. The sparse-checkpoint positive remains historical evidence only and cannot satisfy the corrected segmented contract.",
+      "retained_report": "attempt-40096452531.json",
+      "review_ids": [
+        5638266584,
+        5638305841,
+        4367141943
+      ]
     }
   ]
 }

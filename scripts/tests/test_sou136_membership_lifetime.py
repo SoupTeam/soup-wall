@@ -48,7 +48,7 @@ def client(number, limits=None, profile='filesystem', exit_code=0):
                        'memory_peak_bytes': 1000000, 'tasks_peak': 3,
                        'counter_max': {'oom': 0, 'oom_kill': 0, 'pids_max': 0, 'throttled': 0},
                        'members': members, 'remaining': [], 'leaf_removed': True, 'error': None,
-                       'thread_stopped': True, 'shutdown_read': None}}
+                       'thread_stopped': True, 'shutdown_read': None, 'leaf_duration_millis':100000}}
 
 
 def crash(cp, label):
@@ -69,6 +69,7 @@ def crash(cp, label):
 def attempt(kind, profile, number, *, cycle=None, limits=None, failed=False):
     label = f'{kind}-{profile}' + (f'-{cycle}' if cycle is not None else '')
     return {'case': label, 'kind': kind, 'profile': profile, 'cycle': cycle,
+            'segment': (cycle-1)//V.SEGMENT_CYCLES+1 if kind=='churn' else V.SEGMENTS,
             'stage': 'complete', 'stages': ['planned', 'create', 'initialize', 'useful', 'complete'],
             'status': 'pass', 'failure_code': None, 'unexpected_closure': False,
             'server_origin': 'owned-calibration-fixture' if kind == 'control' else 'original-selected',
@@ -118,16 +119,20 @@ def complete_report():
             'policy_sha256', 'package_tree_sha256', 'config_sha256')}
         report['installations'][profile]['profile_sha256'] = ('f' if profile == 'filesystem' else 'e') * 64
         report['original_unchanged'][profile] = report['workspace_unchanged'][profile] = True
-        report['attempts'].append(attempt('sibling', profile, number, limits=V.PEER_LIMITS))
-        number += 1
-        for cycle in range(1, V.CYCLES + 1):
-            row = attempt('churn', profile, number, cycle=cycle)
-            row['client']['exit_code'] = -V.signal.SIGKILL
-            row['crash'] = crash(row['client'], row['case'])
-            if cycle % V.SIBLING_INTERVAL == 0:
-                row['sibling_after'] = useful(10 + cycle // V.SIBLING_INTERVAL, row['useful']['semantic_sha256'])
-            report['attempts'].append(row)
-            number += 1
+        for segment in range(1,V.SEGMENTS+1):
+            first,last=(segment-1)*V.SEGMENT_CYCLES+1,segment*V.SEGMENT_CYCLES
+            peer=attempt('sibling',profile,number,limits=V.PEER_LIMITS)
+            peer.update(segment=segment,case=f'sibling-{profile}-segment-{segment}',first_cycle=first,last_cycle=last)
+            peer['client']['stderr']['events']=[{'event':'mcp_real_budget_end','observed_failure':False,
+                'cleanup_verified':True,'budget':{'reason':'mcp_budget_enforced'}}]
+            report['attempts'].append(peer);number+=1
+            for cycle in range(first,last+1):
+                row=attempt('churn',profile,number,cycle=cycle)
+                row['client']['exit_code']=-V.signal.SIGKILL
+                row['crash']=crash(row['client'],row['case'])
+                row['sibling_before']=useful(11+(cycle-first)*2,row['useful']['semantic_sha256'])
+                row['sibling_after']=useful(12+(cycle-first)*2,row['useful']['semantic_sha256'])
+                report['attempts'].append(row);number+=1
         row = attempt('capacity', profile, number)
         row.update(after_cycle=V.CYCLES, reclamation_wait_millis=2500)
         report['attempts'].append(row)
@@ -177,16 +182,28 @@ class GraderControls(unittest.TestCase):
         self.assert_refused(lambda r: capacity(r)['client']['stdout'].update(records=[]))
         self.assert_refused(lambda r: capacity(r)['useful'].update(semantic_sha256='0' * 64))
 
-    def test_persistent_sibling_requires_fixed_fresh_checkpoints_through_last_cycle(self):
-        def probe(r, cycle=10):
+    def test_peer_segments_require_both_fresh_per_cycle_useful_witnesses(self):
+        def probe(r,cycle=10):
             return next(a for a in r['attempts'] if a['kind']=='churn' and a['profile']=='git' and a['cycle']==cycle)
-        self.assert_refused(lambda r: probe(r)['sibling_after'].update(id=999))
-        self.assert_refused(lambda r: probe(r).pop('sibling_after'))
-        self.assert_refused(lambda r: probe(r,70).pop('sibling_after'))
-        self.assert_refused(lambda r: probe(r,20).update(sibling_after=copy.deepcopy(probe(r,10)['sibling_after'])))
-        self.assert_refused(lambda r: r['attempts'][0]['client']['stdout'].update(records=[]))
-        self.assert_refused(lambda r: r.update(sibling_probe_interval_cycles=20))
-        self.assert_refused(lambda r: r['attempts'][1].update(sibling_after=useful()))
+        for cycle in (1,10,11,70):
+            for key in ('sibling_before','sibling_after'):
+                self.assert_refused(lambda r,n=cycle,k=key:probe(r,n).pop(k))
+        self.assert_refused(lambda r:probe(r)['sibling_after'].update(id=999))
+        self.assert_refused(lambda r:probe(r).update(sibling_after=copy.deepcopy(probe(r)['sibling_before'])))
+        self.assert_refused(lambda r:probe(r,11).update(segment=1))
+        self.assert_refused(lambda r:r.update(peer_segment_cycles=20))
+        self.assert_refused(lambda r:r.update(peer_segments_per_profile=1))
+
+    def test_segments_require_complete_order_bounds_fresh_owner_and_no_expired_peer(self):
+        def peers(r):return [a for a in r['attempts'] if a['kind']=='sibling' and a['profile']=='git']
+        self.assert_refused(lambda r:r['attempts'].remove(peers(r)[1]))
+        self.assert_refused(lambda r:peers(r)[1].update(segment=1))
+        self.assert_refused(lambda r:peers(r)[0].update(last_cycle=11))
+        self.assert_refused(lambda r:peers(r)[0]['client']['kernel'].update(leaf_duration_millis=600000))
+        self.assert_refused(lambda r:peers(r)[0]['client']['budget'].update(wallMillis=600001))
+        self.assert_refused(lambda r:peers(r)[0]['client']['stderr'].update(events=[]))
+        self.assert_refused(lambda r:peers(r)[0]['client']['stderr']['events'][0]['budget'].update(reason='mcp_budget_wall_expired'))
+        self.assert_refused(lambda r:peers(r)[1]['client']['owner'].update(instance=peers(r)[0]['client']['owner']['instance']))
 
     def test_calibration_cannot_replay_a_prior_sibling_result(self):
         def control_row(r):
@@ -347,6 +364,30 @@ class OrchestrationControls(unittest.TestCase):
         self.assertEqual(save.call_count, 2)
         self.assertEqual(row['stage'], 'crash')
         self.assertIn('dispatch', row['stages'])
+
+    def test_terminal_reason_survives_saturated_event_prefix(self):
+        import os
+        reader,writer=os.pipe()
+        capture=V.RESOURCE.Capture(os.fdopen(reader,'rb'))
+        payload=(json.dumps({'event':'mcp_real_call','host_call_id':1,'state':'finished'})+'\n')*180
+        terminal={'event':'mcp_real_budget_end','observed_failure':True,'cleanup_verified':True,
+            'budget':{'format':V.RESOURCE.BUDGET_FORMAT,'reason':'mcp_budget_wall_expired','failed':True}}
+        with os.fdopen(writer,'wb') as out:
+            out.write(payload.encode()+json.dumps(terminal).encode()+b'\n')
+        projected=V.stream_projection(capture.finish())
+        self.assertLessEqual(len(projected['events']),128)
+        ends=[e for e in projected['events'] if e['event']=='mcp_real_budget_end']
+        self.assertEqual(len(ends),1)
+        self.assertEqual(ends[0]['budget']['reason'],'mcp_budget_wall_expired')
+        self.assertIsNone(projected['error'])
+
+    def test_duplicate_terminal_events_are_an_observation_failure(self):
+        import os
+        reader,writer=os.pipe()
+        capture=V.RESOURCE.Capture(os.fdopen(reader,'rb'))
+        with os.fdopen(writer,'wb') as out:
+            out.write(b'{"event":"mcp_real_budget_end"}\n'*2)
+        self.assertEqual(capture.finish()['error'],'protocol_observation_failed')
 
     def test_partial_constructor_is_registered_before_effects(self):
         rig=SimpleNamespace(_owned_clients=[])

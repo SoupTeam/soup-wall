@@ -21,6 +21,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 sys.dont_write_bytecode = True
@@ -34,9 +35,10 @@ require, sha, digest = SOU86.require, SOU86.sha, SOU86.digest
 FORMAT = 'sou136-linux-membership-lifetime/1'
 PROFILES = ('filesystem', 'git')
 CYCLES = 70
-SIBLING_INTERVAL = 10
+SEGMENT_CYCLES = 10
+SEGMENTS = CYCLES // SEGMENT_CYCLES
 CONTROL_NAMES = ('memory', 'pids', 'membership')
-REQUIRED_ATTEMPTS = CYCLES * 2 + 2 * 2 + len(CONTROL_NAMES)
+REQUIRED_ATTEMPTS = CYCLES * 2 + SEGMENTS * 2 + 2 + len(CONTROL_NAMES)
 REPORT_BYTES = 16 * 1024 * 1024
 HASH = re.compile(r'[0-9a-f]{64}')
 STAGES = frozenset({'planned', 'create', 'initialize', 'useful', 'sibling_before', 'crash',
@@ -87,8 +89,47 @@ def tracked_observer(base):
     return Owned
 
 
+# Terminal reasons must survive the prefix event cap even for a busy peer.
+# All interception is confined to this private imported observer graph.
+CAPTURE_CONTEXT = threading.local()
+PROJECT_EVENT = RESOURCE.safe_event
+TERMINALS = frozenset({'mcp_real_budget_end', 'mcp_real_server_end'})
+
+
+def project_event(value):
+    event = PROJECT_EVENT(value)
+    observer = getattr(CAPTURE_CONTEXT, 'observer', None)
+    if observer is not None and event is not None and event['event'] in TERMINALS:
+        name = event['event']
+        if name in observer.terminal_events:
+            observer.terminal_duplicate = True
+        else:
+            observer.terminal_events[name] = event
+    return event
+
+
+class TerminalCapture(RESOURCE.Capture):
+    def drain(self):
+        self.terminal_events, self.terminal_duplicate = {}, False
+        CAPTURE_CONTEXT.observer = self
+        try:
+            super().drain()
+        finally:
+            del CAPTURE_CONTEXT.observer
+
+    def finish(self):
+        value = super().finish()
+        terminals = getattr(self, 'terminal_events', {})
+        prefix = [e for e in value['events'] if e['event'] not in TERMINALS]
+        value['events'] = prefix[:128-len(terminals)] + list(terminals.values())
+        if getattr(self, 'terminal_duplicate', False):
+            value['error'] = 'protocol_observation_failed'
+        return value
+
+
+RESOURCE.safe_event = project_event
 RESOURCE.KernelObserver = tracked_observer(RESOURCE.KernelObserver)
-RESOURCE.Capture = tracked_observer(RESOURCE.Capture)
+RESOURCE.Capture = tracked_observer(TerminalCapture)
 BASE.ProcessWitness = tracked_observer(BASE.ProcessWitness)
 
 
@@ -274,16 +315,25 @@ def checkpoint(path, report):
         temporary.unlink(missing_ok=True)
 
 
-def begin_attempt(report, save, kind, profile, cycle=None):
+def begin_attempt(report, save, kind, profile, cycle=None, *, segment=None):
     require(kind in {'churn', 'sibling', 'capacity', 'control'}, 'invalid_attempt_kind')
     require(profile in PROFILES and len(report['attempts']) < REQUIRED_ATTEMPTS, 'invalid_attempt_profile')
     require((kind == 'churn' and type(cycle) is int and 1 <= cycle <= CYCLES)
             or (kind == 'control' and profile == 'filesystem' and cycle in CONTROL_NAMES)
             or (kind in {'sibling', 'capacity'} and cycle is None), 'invalid_attempt_cycle')
+    if segment is None and kind != 'sibling':
+        segment = ((cycle - 1) // SEGMENT_CYCLES + 1) if kind == 'churn' else SEGMENTS
+    require(type(segment) is int and 1 <= segment <= SEGMENTS, 'invalid_peer_segment')
+    if kind == 'churn':
+        require(segment == (cycle - 1) // SEGMENT_CYCLES + 1, 'cycle_segment_mismatch')
+    elif kind != 'sibling':
+        require(segment == SEGMENTS, 'terminal_segment_mismatch')
     case = f'{kind}-{profile}' + (f'-{cycle}' if cycle is not None else '')
+    if kind == 'sibling':
+        case += f'-segment-{segment}'
     require(not any(row['case'] == case for row in report['attempts']), 'duplicate_attempt')
     row = {'case': case, 'kind': kind, 'profile': profile, 'cycle': cycle,
-           'stage': 'planned', 'stages': ['planned'], 'status': 'incomplete',
+           'segment': segment, 'stage': 'planned', 'stages': ['planned'], 'status': 'incomplete',
            'unexpected_closure': False, 'failure_code': None, 'client': None}
     row['server_origin'] = 'owned-calibration-fixture' if kind == 'control' else 'original-selected'
     if kind == 'control':
@@ -397,7 +447,8 @@ def grade(report):
             'qualification_scope_or_retry_changed')
     require(report.get('required_attempts') == report.get('passed') == REQUIRED_ATTEMPTS
             and report.get('cycles_per_original_profile') == CYCLES
-            and report.get('sibling_probe_interval_cycles') == SIBLING_INTERVAL, 'qualification_denominator_changed')
+            and report.get('peer_segment_cycles') == SEGMENT_CYCLES
+            and report.get('peer_segments_per_profile') == SEGMENTS, 'qualification_denominator_changed')
     before = report.get('source_before', {})
     require(before == report.get('source_after') and before.get('dirty') is False
             and before.get('commit') == report.get('runtime_source_commit')
@@ -435,9 +486,11 @@ def grade(report):
                 'required_original_cycles_missing_or_duplicated')
         siblings = [a for a in attempts if a['kind'] == 'sibling' and a['profile'] == profile]
         restored = [a for a in attempts if a['kind'] == 'capacity' and a['profile'] == profile]
-        require(len(siblings) == len(restored) == 1, 'sibling_or_restoration_missing')
-        sibling, capacity = siblings[0], restored[0]
-        for row in (sibling, capacity, *cycles):
+        require(len(siblings) == SEGMENTS and len(restored) == 1, 'sibling_or_restoration_missing')
+        require([row['segment'] for row in siblings] == list(range(1, SEGMENTS+1)), 'peer_segments_missing_or_unordered')
+        capacity = restored[0]
+        sibling = siblings[-1]
+        for row in (*siblings, capacity, *cycles):
             require(row.get('server_origin') == 'original-selected', 'original_replaced_with_fixture')
             grade_useful(row['useful'], row['client'])
             require(row['client'].get('profile_sha256') == report['installations'][profile]['profile_sha256'],
@@ -451,35 +504,53 @@ def grade(report):
             epochs.add(epoch)
             owners.add(owner)
             leaves.add(leaf)
-        grade_client(sibling['client'], PEER_LIMITS)
         grade_client(capacity['client'], DEFAULT_LIMITS)
         require(capacity.get('after_cycle') == CYCLES and capacity.get('reclamation_wait_millis') == 2500,
                 'restored_capacity_not_fresh')
         require(capacity['useful']['semantic_sha256'] == sibling['useful']['semantic_sha256'],
                 'restored_useful_work_changed')
         require(attempts.index(capacity) > attempts.index(cycles[-1]), 'restoration_precedes_churn')
-        previous_probe = sibling['useful']['id']
-        for row in cycles:
-            SELECTED.grade_crash_observation(row['crash'], 'sou136', budget=DEFAULT_LIMITS)
-            grade_client(row['client'], DEFAULT_LIMITS, crashed=True)
-            require(row['crash']['client'] == row['client'], 'crash_client_identity_mismatch')
-            require('sibling_before' not in row, 'unexpected_sibling_probe')
-            if row['cycle'] % SIBLING_INTERVAL == 0:
-                followup = row['sibling_after']
-                grade_useful(followup, sibling['client'])
-                require(followup['semantic_sha256'] == sibling['useful']['semantic_sha256'],
-                        'surviving_sibling_useful_changed')
-                require(followup['id'] > previous_probe, 'sibling_followup_not_fresh')
-                previous_probe = followup['id']
-            else:
-                require('sibling_after' not in row, 'unexpected_sibling_probe')
-        last_sibling_ids[profile] = previous_probe
-    sibling_fs = next(a for a in attempts if a['kind'] == 'sibling' and a['profile'] == 'filesystem')
+        for sibling in siblings:
+            segment = sibling['segment']
+            first, last = (segment-1)*SEGMENT_CYCLES+1, segment*SEGMENT_CYCLES
+            require(sibling.get('first_cycle') == first and sibling.get('last_cycle') == last,
+                    'peer_segment_bounds_changed')
+            grade_client(sibling['client'], PEER_LIMITS)
+            require(sibling['useful']['semantic_sha256'] == capacity['useful']['semantic_sha256'],
+                    'peer_segment_semantic_changed')
+            require(0 < sibling['client']['kernel'].get('leaf_duration_millis', 0) < PEER_LIMITS['wallMillis'],
+                    'peer_segment_wall_bound_failed')
+            ends = [e for e in sibling['client']['stderr']['events'] if e['event']=='mcp_real_budget_end']
+            require(len(ends)==1 and ends[0].get('observed_failure') is False
+                    and ends[0].get('cleanup_verified') is True
+                    and ends[0].get('budget',{}).get('reason')=='mcp_budget_enforced',
+                    'peer_terminal_budget_reason_missing')
+            require(not sibling['client']['stderr']['refusals'], 'peer_terminal_refusal')
+            segment_rows = [row for row in cycles if row['segment'] == segment]
+            require([row['cycle'] for row in segment_rows] == list(range(first,last+1)), 'cycle_segment_mismatch')
+            require(attempts.index(sibling) < attempts.index(segment_rows[0]), 'peer_created_after_subject')
+            if segment < SEGMENTS:
+                next_peer = siblings[segment]
+                require(attempts.index(next_peer) > attempts.index(segment_rows[-1]), 'peer_segments_overlap')
+            previous_probe = sibling['useful']['id']
+            for row in segment_rows:
+                SELECTED.grade_crash_observation(row['crash'], 'sou136', budget=DEFAULT_LIMITS)
+                grade_client(row['client'], DEFAULT_LIMITS, crashed=True)
+                require(row['crash']['client'] == row['client'], 'crash_client_identity_mismatch')
+                for key in ('sibling_before','sibling_after'):
+                    probe = row[key]
+                    grade_useful(probe, sibling['client'])
+                    require(probe['semantic_sha256'] == sibling['useful']['semantic_sha256'], 'surviving_sibling_useful_changed')
+                    require(probe['id'] > previous_probe, 'sibling_followup_not_fresh')
+                    previous_probe = probe['id']
+            last_sibling_ids[profile] = previous_probe
+        require(capacity['segment']==SEGMENTS, 'capacity_segment_mismatch')
+    sibling_fs = next(a for a in attempts if a['kind']=='sibling' and a['profile']=='filesystem' and a['segment']==SEGMENTS)
     for row in controls:
         grade_control(row)
+        require(row['segment']==SEGMENTS, 'calibration_segment_mismatch')
         grade_useful(row['sibling_after'], sibling_fs['client'])
-        require(row['sibling_after']['semantic_sha256'] == sibling_fs['useful']['semantic_sha256'],
-                'calibration_harmed_sibling')
+        require(row['sibling_after']['semantic_sha256'] == sibling_fs['useful']['semantic_sha256'], 'calibration_harmed_sibling')
         require(row['sibling_after']['id'] > last_sibling_ids['filesystem'], 'calibration_sibling_probe_replayed')
         last_sibling_ids['filesystem'] = row['sibling_after']['id']
 
@@ -577,68 +648,72 @@ def membership_control(report, save, rig, sibling, expected, args):
 
 
 def profile_churn(report, save, rig, profile, args, *, resource_controls=False):
-    sibling_row = begin_attempt(report, save, 'sibling', profile)
-    sibling = None
-    try:
-        stage(sibling_row, save, 'create')
-        # The accepted peer-isolation label selects its existing 600000 ms wall
-        # budget; ordinary churn subjects keep their 120000 ms wall budget.
-        sibling = owned_client(SELECTED.SelectedLivenessClient, rig, 'peer-isolation', lease_secs=10)
-        sibling_row['server_origin'] = 'original-selected'
-        stage(sibling_row, save, 'initialize')
-        sibling.initialize()
-        stage(sibling_row, save, 'useful')
-        sibling_row['useful'] = useful_witness(sibling)
-        expected = sibling_row['useful']['semantic_sha256']
-        save()
-
-        def cycle_exercise(row, client):
-            stage(row, save, 'useful')
-            row['useful'] = useful_witness(client, expected)
-            stage(row, save, 'crash')
-            observed = SOU86.observe_crash(client, 'collector', args.bwrap.resolve())
-            row['crash'] = crash_projection(observed, DEFAULT_LIMITS)
-            row['client'] = row['crash']['client']
+    expected = None
+    for segment in range(1, SEGMENTS+1):
+        first, last = (segment-1)*SEGMENT_CYCLES+1, segment*SEGMENT_CYCLES
+        sibling_row = begin_attempt(report, save, 'sibling', profile, segment=segment)
+        sibling_row.update(first_cycle=first, last_cycle=last)
+        sibling = None
+        try:
+            stage(sibling_row, save, 'create')
+            # Same accepted peer budget; each peer covers exactly ten subjects.
+            sibling = owned_client(SELECTED.SelectedLivenessClient, rig, 'peer-isolation', lease_secs=10)
+            stage(sibling_row, save, 'initialize')
+            sibling.initialize()
+            stage(sibling_row, save, 'useful')
+            sibling_row['useful'] = useful_witness(sibling, expected)
+            expected = sibling_row['useful']['semantic_sha256']
             save()
-            SELECTED.grade_crash_observation(row['crash'], 'sou136', budget=DEFAULT_LIMITS)
-            grade_client(row['client'], DEFAULT_LIMITS, crashed=True)
-            if row['cycle'] % SIBLING_INTERVAL == 0:
+
+            def cycle_exercise(row, client):
+                stage(row, save, 'sibling_before')
+                row['sibling_before'] = useful_witness(sibling, expected)
+                stage(row, save, 'useful')
+                row['useful'] = useful_witness(client, expected)
+                stage(row, save, 'crash')
+                observed = SOU86.observe_crash(client, 'collector', args.bwrap.resolve())
+                row['crash'] = crash_projection(observed, DEFAULT_LIMITS)
+                row['client'] = row['crash']['client']
+                save()
+                SELECTED.grade_crash_observation(row['crash'], 'sou136', budget=DEFAULT_LIMITS)
+                grade_client(row['client'], DEFAULT_LIMITS, crashed=True)
                 stage(row, save, 'sibling_after')
                 row['sibling_after'] = useful_witness(sibling, expected)
 
-        for number in range(1, CYCLES + 1):
-            run_case(report, save, 'churn', profile,
-                     lambda n=number: owned_client(SELECTED.SelectedLivenessClient, rig, f'churn-{profile}-{n}', lease_secs=2),
-                     cycle_exercise, cycle=number)
-            if number % 14 == 0:
+            for number in range(first, last+1):
+                run_case(report, save, 'churn', profile,
+                         lambda n=number: owned_client(SELECTED.SelectedLivenessClient, rig, f'churn-{profile}-{n}', lease_secs=2),
+                         cycle_exercise, cycle=number)
+                if number % 14 == 0:
+                    time.sleep(2.5)
+            if segment == SEGMENTS:
                 time.sleep(2.5)
-        time.sleep(2.5)
 
-        def restored_exercise(row, client):
-            row.update(after_cycle=CYCLES, reclamation_wait_millis=2500)
-            stage(row, save, 'useful')
-            row['useful'] = useful_witness(client, expected)
+                def restored_exercise(row, client):
+                    row.update(after_cycle=CYCLES, reclamation_wait_millis=2500)
+                    stage(row, save, 'useful')
+                    row['useful'] = useful_witness(client, expected)
 
-        restored = run_case(report, save, 'capacity', profile,
-                            lambda: owned_client(SELECTED.SelectedLivenessClient, rig, f'restored-{profile}', lease_secs=4),
-                            restored_exercise)
-        grade_client(restored['client'], DEFAULT_LIMITS)
-        if resource_controls:
-            for name in ('memory', 'pids'):
-                run_control(report, save, rig, name, sibling, expected)
-            membership_control(report, save, rig, sibling, expected, args)
-        stage(sibling_row, save, 'cleanup')
-        finish_client(sibling_row, sibling, PEER_LIMITS, save)
-        require(sibling_row['status'] != 'fail', 'sibling_cleanup_failed')
-        grade_client(sibling_row['client'], PEER_LIMITS)
-        stage(sibling_row, save, 'complete')
-        sibling_row['status'] = 'pass'
-        save()
-    except (Exception, KeyboardInterrupt) as error:
-        fail_attempt(sibling_row, error, sibling)
-        finish_client(sibling_row, sibling, PEER_LIMITS, save)
-        save()
-        raise
+                restored = run_case(report, save, 'capacity', profile,
+                                    lambda: owned_client(SELECTED.SelectedLivenessClient, rig, f'restored-{profile}', lease_secs=4),
+                                    restored_exercise)
+                grade_client(restored['client'], DEFAULT_LIMITS)
+                if resource_controls:
+                    for name in ('memory', 'pids'):
+                        run_control(report, save, rig, name, sibling, expected)
+                    membership_control(report, save, rig, sibling, expected, args)
+            stage(sibling_row, save, 'cleanup')
+            finish_client(sibling_row, sibling, PEER_LIMITS, save)
+            require(sibling_row['status'] != 'fail', 'sibling_cleanup_failed')
+            grade_client(sibling_row['client'], PEER_LIMITS)
+            stage(sibling_row, save, 'complete')
+            sibling_row['status'] = 'pass'
+            save()
+        except (Exception, KeyboardInterrupt) as error:
+            fail_attempt(sibling_row, error, sibling)
+            finish_client(sibling_row, sibling, PEER_LIMITS, save)
+            save()
+            raise
 
 
 def run_control(report, save, rig, name, sibling, expected):
@@ -680,7 +755,7 @@ def initial_report(args):
             'runtime_source_commit': args.runtime_source_commit, 'retry_count': 0,
             'passed': 0, 'failed': 0, 'incomplete': REQUIRED_ATTEMPTS, 'skipped': 0,
             'required_attempts': REQUIRED_ATTEMPTS, 'cycles_per_original_profile': CYCLES,
-            'sibling_probe_interval_cycles': SIBLING_INTERVAL,
+            'peer_segment_cycles': SEGMENT_CYCLES, 'peer_segments_per_profile': SEGMENTS,
             'attempts': [], 'installations': {}, 'original_unchanged': {}, 'workspace_unchanged': {},
             'cleanup_verified': False, 'delegation_removed': False,
             'live_model_efficacy_measured': False, 'final_admission_or_main_merge': False}
