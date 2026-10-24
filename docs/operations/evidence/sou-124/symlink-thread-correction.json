@@ -1,0 +1,43 @@
+{
+  "accepted_main": "adefce2a658272e5f23c9c72ef791befe0285648",
+  "changes": [
+    "Follow final runtime target for O_PATH canonical identity just as canonicalize does; symlink entries remain separately bound and retarget/replacement refuses.",
+    "Prove blocking-worker stderr belongs to the selected collector using successful kernel CLONE_THREAD lineage; fork/foreign/failed/exited threads cannot satisfy reuse.",
+    "Preserve thread creation entry order when child writes before parent clone return, solely for diagnostic lineage. Original dispatch observation order is unchanged.",
+    "Exercise actual installed profile capture/resume with kernel reuse before baseline build/long paired host measurement. Capture failures emit fixed codes only."
+  ],
+  "checks": {
+    "cargo_fmt": "passed",
+    "diff_check": "passed",
+    "python": {
+      "failed": 0,
+      "passed": 1134,
+      "run": 1213,
+      "skipped": 79
+    },
+    "rust_workspace_macos": {
+      "failed": 0,
+      "ignored": 13,
+      "passed": 1696
+    },
+    "strict_clippy": "passed"
+  },
+  "files_sha256": {
+    ".github/workflows/ci-components.yml": "76e8038caa03ecc717bedbcdc6b1b0ec7e246336a472718b2a23e2801ab6ded7",
+    ".github/workflows/mcp-real-filesystem.yml": "fe4fbceaa0a3c4cb9cb271c06bc1b7d54f9fdb140ad25e25d43d011acb5768cf",
+    "crates/agentfw/src/mcp/server_profile.rs": "3bd3b4c0679e9c3453a14d8328b92a199a3ef600773740e5136493a88ed4e0b7",
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "c1abcb8e78621b5dec6b0e0e2c0f9a68c71a0f699f7434d35086a0558ed35cf7",
+    "scripts/pilot_ask_latency.py": "68ae6d6f90266718d56e0977b0d1bc8548d74532c013aa27fd97a902914d3d5d",
+    "scripts/qualify-pilot-ask.py": "8fe85992cb91996a9334b3abc65df9d0a1aabaeb325dcb8f10e02d37e92801de",
+    "scripts/qualify-pilot-launcher.py": "0dfadc7c9708af9f7be212497fec8ed8a1e72346c6d2df7b627079e516e6e85b"
+  },
+  "format": "sw-sou124-symlink-thread-correction/1",
+  "logs_sha256": {
+    "clippy-symlink.log": "7c5004f6be61a23120fa8b8d55e89152c69b2c8becb1a68ceec5e39626e1d57b",
+    "python-thread-birth-final.log": "7f87d92e30382bf6890c233b9d056601b4d076d7951ecaaf53d5284da06a223c",
+    "thread-observer-controls.log": "e825638ee784dc6bdba68f4db348a8d76127f832b31d45099ed85679776e1f33",
+    "workspace-symlink.log": "2a28af87fe2030823ce3c816a033c1df9c880adbd5b35182309dca538f8f341d"
+  },
+  "native_status": "Fresh qualification required. Prior preflight failure retained in native-attempt3-preflight.json; no candidate performance success is claimed.",
+  "parent_commit": "1d12e72"
+}

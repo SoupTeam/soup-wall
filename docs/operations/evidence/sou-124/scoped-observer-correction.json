@@ -1,0 +1,25 @@
+{
+  "format": "sou124-scoped-observer-correction/1",
+  "parent": "644abccbc9676f64d012ac2f500fa365f3db90ff",
+  "runtime_diff_from_parent": [],
+  "scope": "Python witness/diagnostic parser only; all Rust runtime unchanged.",
+  "cause_attribution": "Actual undecodable record was private and not retained. Specific syntax is unknown, not asserted to be a restart or shutdown write.",
+  "controls": "Zero-byte/restart attempts credit no bytes. Completed-call scope requires reuse plus same-call successful verification, dispatch, response and inspection; unknown positive writes inside remain fatal. Full trace still required for original wire/kernel effects and owned cleanup. Missing/wrong/foreign scope or duplicate reuse refuses.",
+  "failure_diagnostics": "Closed streams are not flushed; finite parser kind and record SHA only; no raw trace or tokens exported.",
+  "python": {
+    "run": 1227,
+    "passed": 1148,
+    "skipped": 79,
+    "failed": 0
+  },
+  "focused_observer": {
+    "run": 16,
+    "failed": 0
+  },
+  "rust_workspace_reference": "1697pass0fail13ignored on unchanged644 runtime; Linux11controls+strictlease passed in40047008403, performancefailedonobserver",
+  "logs_sha256": {
+    "python-scoped-observer-final.log": "1d0c17d5a2dc4aa0d5f523230dee65af238931aa02aaf063beb6edd36aca089b",
+    "scoped-observer-final-controls.log": "d4588013601938fe1583914416dfd0a716637d39500ece795aea11013213af2f"
+  },
+  "native_current_harness": "pending; previous partial644 result remains failed"
+}

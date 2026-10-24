@@ -10,6 +10,7 @@ independent of approval files and CLI success messages.
 from __future__ import annotations
 import argparse
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -41,11 +42,22 @@ BASE, require = LAUNCH.BASE, LAUNCH.require
 def diagnostic(text):
     # Export a finite code, never arbitrary host/argument/token output.
     for marker, code in [
+        ("owned collector retirement not confirmed within cleanup budget", "collector_retirement_unconfirmed"),
+        ("selected namespace cleanup unconfirmed", "owner_cleanup_unconfirmed"),
+        ("foreign namespace cleanup identity", "foreign_cleanup_identity"),
+        ("daemon did not confirm revocation", "run_revocation_unconfirmed"),
+        ("owned host process group termination unconfirmed", "host_group_unconfirmed"),
+        ("selected-owner cleanup worker failed", "owner_cleanup_worker_failed"),
         ("collector authority failed", "authority_verification"),
         ("same agentfw executable", "collector_image"),
         ("accepted two-server", "classifier_identity"),
         ("failed pinned", "asset_identity"),
         ("selected executable or library changed", "asset_identity"),
+        ("read lease lost", "read_lease_lost"),
+        ("changed during hashing", "capture_bytes_changed"),
+        ("immutable proof", "immutable_proof"),
+        ("changed during verification", "capture_identity_changed"),
+        ("identity or metadata changed", "resume_identity_changed"),
         ("policy mismatch", "policy_identity"),
         ("approval/liveness/registry", "daemon_prerequisites"),
         ("native.approval and native.liveness", "daemon_prerequisites"),
@@ -79,6 +91,17 @@ def until(check, label, seconds=20):
             return result
         time.sleep(.05)
     raise ValueError(label)
+
+
+def await_original_expiry(expires_at_ms):
+    # Expiry is deliberately induced before a separate useful request can be
+    # offered. Do not spend that follow-up's existing wait on the primary TTL.
+    require(type(expires_at_ms) is int and expires_at_ms >= 0, "original_expiry_invalid")
+    remaining = (expires_at_ms - time.time_ns() // 1_000_000) / 1000
+    require(remaining <= 20, "original_expiry_outside_case")
+    if remaining > 0:
+        time.sleep(remaining)
+    require(time.time_ns() // 1_000_000 >= expires_at_ms, "original_expiry_not_reached")
 
 
 def stop(process):
@@ -135,7 +158,8 @@ class Pilot:
         self.session, self.run_id = str(uuid.uuid4()), None
         self.trace = root / "syscalls.private"
         self.model = BASE.DEMO.ScriptedModel([])
-        self.offered, self.result_times = set(), {}
+        self.offered, self.result_times, self.result_monotonic = set(), {}, {}
+        self.close_after_primary = False
         self.proposals = ProposalGate(deferred)
         target = ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}) if kind == "filesystem" else (
             "git", "git_show", {"repo_path": "/workspace", "revision": setup.head_before})
@@ -155,11 +179,14 @@ class Pilot:
                     if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id") in self.offered:
                         logical = block["tool_use_id"].removeprefix("toolu_pilot_ask_")
                         self.result_times.setdefault(logical, time.time_ns() // 1_000_000)
+                        self.result_monotonic.setdefault(logical, time.monotonic_ns())
                         self.model.results[logical] = {"is_error": bool(block.get("is_error")), "content": block.get("content")}
             if "primary" not in self.model.results:
                 proposals = [("primary", self.primary)]
                 if kind == "filesystem":
                     proposals.append(("allow-peer", self.peer))
+            elif self.close_after_primary:
+                return [{"type": "text", "text": "Owned terminal signal probe completed."}]
             elif "followup" not in self.model.results:
                 proposals = [("followup", self.peer)]
             else:
@@ -175,7 +202,11 @@ class Pilot:
         self.model.next = next_step
         env = dict(setup.env, ANTHROPIC_BASE_URL=self.model.url, ANTHROPIC_API_KEY="owned-loopback-only",
             HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
-        command = [str(setup.selected["strace"]), "-f", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
+        # Keep the identical syscall/effect witness set, but avoid ptrace stops
+        # for unrelated stat/readlink calls during large verified-input walks.
+        # Both paired sides use this exact harness and request this mode.
+        # https://github.com/strace/strace/blob/master/doc/INTERNALS.md
+        command = [str(setup.selected["strace"]), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=" + LATENCY.TRACE_SYSCALLS,
             "-o", str(self.trace), str(setup.binary), "pilot-launch", "--claude", str(setup.selected["claude"]),
             "--workspace", str(setup.workspace), "--fs-profile", str(setup.profiles["filesystem"]),
             "--git-profile", str(setup.profiles["git"]), "--home", str(setup.home), "--policy", str(setup.policy),
@@ -221,6 +252,9 @@ class Pilot:
     def waiting(self):
         def check():
             rows = self.operator("list")
+            if not rows and "primary" in self.model.results:
+                raise ValueError("primary_result_before_pending_" + diagnostic(json.dumps(self.model.results["primary"])))
+            require(self.process.poll() is None, "host_exited_before_pending")
             return rows[0] if len(rows) == 1 else None
         return until(check, "selected_pending_missing")
 
@@ -275,6 +309,26 @@ class Pilot:
         until(lambda: Path(f"/proc/{pid}/stat").read_text().rsplit(")",1)[1].split()[0] in ("T","t"), "collector_not_stopped",seconds=2)
         require(BASE.ProcessWitness.identity(pid) == identity, "collector_identity_changed")
 
+    def terminate_collector(self):
+        observed = self.wire_observation()
+        matches = [pid for pid, server in observed["collector_servers"].items() if server == self.kind]
+        require(len(matches) == 1, "one_kernel_observed_selected_collector_required")
+        pid = matches[0]
+        # The trace retains historical PIDs. Bind the pidfd to an identity
+        # already sampled while this process was an owned descendant; reading
+        # a new identity here could adopt an unrelated reused PID.
+        starts = [start for candidate, start in self.witness.observed.copy() if candidate == pid]
+        require(len(starts) == 1, "recorded_selected_collector_identity_required")
+        identity = starts[0]
+        require(BASE.ProcessWitness.identity(pid) == identity, "selected_collector_not_live")
+        descriptor = os.pidfd_open(pid)
+        try:
+            require(BASE.ProcessWitness.identity(pid) == identity, "collector_identity_changed")
+            signal.pidfd_send_signal(descriptor, signal.SIGTERM)
+        finally:
+            os.close(descriptor)
+        return pid
+
     def decide(self, pending, decision):
         self.inspect(pending)
         self.operator(decision, pending["pending_id"], "--binding", pending["binding_sha256"])
@@ -293,6 +347,67 @@ class Pilot:
         cleanup = self.witness.finish()
         require(cleanup["all_stopped"], "owned_descendant_survived")
         return cleanup
+
+    def failure_observation(self):
+        # Finite diagnostics only. Never retain raw errors, arguments or tokens.
+        result = {"profile": self.kind, "entry_returncode": self.process.poll(),
+                  "offered_count": len(self.offered), "provider_requests": len(self.model.requests),
+                  "primary_present": "primary" in self.model.results}
+        primary = self.model.results.get("primary")
+        if primary is not None:
+            result["primary_is_error"] = primary.get("is_error")
+            result["primary_diagnostic"] = diagnostic(json.dumps(primary))
+        if not getattr(self.err, "closed", False):
+            self.err.flush()
+        result["stderr_diagnostic"] = diagnostic((self.root / "host.stderr.private").read_bytes()[-16000:].decode('utf-8', errors='replace'))
+        if self.trace.exists() and self.trace.stat().st_size <= 32 * 1024 * 1024:
+            try:
+                lines, _ = LAUNCH.normalized_syscalls(self.trace.read_text(), thread_birth_order=True)
+                collectors = LAUNCH.collector_processes(lines, self.setup.binary)
+                timings = []
+                failures = []
+                cleanup = []
+                terminal = []
+                for pid, server in collectors.items():
+                    for line in lines:
+                        match = re.fullmatch(rf"{pid}\s+(?:exit_group\((\d+)\).*|\+\+\+ killed by (SIGTERM|SIGKILL|SIGINT|SIGPIPE|SIGSEGV|SIGABRT).*\+\+\+)", line)
+                        if match:
+                            if match[1] is not None and 0 <= int(match[1]) <= 255:
+                                terminal.append(dict(server=server, exit_code=int(match[1])))
+                            elif match[2] is not None:
+                                terminal.append(dict(server=server, signal=match[2]))
+                    for row in LATENCY.collector_stderr_rows(lines, pid):
+                        if row.get("event") in ("mcp_real_owner_end", "mcp_real_budget_end", "mcp_real_server_end"):
+                            # Finite, selected-collector booleans only. Owner
+                            # metadata, credentials and raw trace stay private.
+                            fields = {k: row[k] for k in ("cleanup_verified", "observed_failure",
+                                "budget_cleanup_verified", "budget_failure_observed",
+                                "owner_cleanup_verified", "owner_failure_observed", "transport_complete")
+                                if type(row.get(k)) is bool}
+                            cleanup.append(dict(server=server, event=row["event"], **fields))
+                        code = row.get("failure_code")
+                        if (row.get("event") in ("mcp_verified_inputs_capture_failure", "mcp_real_transport_failure")
+                                and code in ("identity_lookup_changed", "identity_changed", "size_changed", "bytes_changed",
+                                             "lease_lost", "verity_unavailable", "verity_unsupported", "runtime_digest_mismatch",
+                                             "package_digest_mismatch", "profile_changed", "input_missing", "input_permission",
+                                             "input_io", "capture_failure", "unknown_transport_failure")):
+                            failures.append({"server": server, "event": row["event"], "failure_code": code})
+                        elapsed, stage = row.get("elapsed_ms"), row.get("stage")
+                        if (row.get("event") == "mcp_asset_verification_timing"
+                                and stage in ("selected_profile", "runtime_and_libraries", "package_tree")
+                                and type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0):
+                            timings.append({"server": server, "stage": stage, "elapsed_ms": elapsed})
+                result["asset_timings"] = timings[:32]
+                result["collector_failures"] = failures[:16]
+                result["collector_cleanup"] = cleanup[:16]
+                result["collector_terminal"] = terminal[:16]
+                result["trace_sha256"] = LAUNCH.sha(self.trace)
+            except LATENCY.ObservationError as error:
+                result["trace_diagnostic"] = {"reason": "write_unobserved", "kind": error.kind,
+                                              "record_sha256": error.record_sha256}
+            except (OSError, ValueError, UnicodeError):
+                result["trace_diagnostic"] = "incomplete_or_invalid_observation"
+        return result
 
     def close(self):
         self.proposals.cancel()
@@ -313,6 +428,30 @@ class Pilot:
                     os.kill(item["pid"], signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+
+
+def finish_qualification(report, cases, samples, active, daemon):
+    report["cases"] = cases
+    try:
+        if samples:
+            report["latency"] = LATENCY.summarize(cases, samples)
+    finally:
+        # Metrics never own cleanup. Attempt every owned host and the daemon,
+        # even when bookkeeping or an earlier host's cleanup raises.
+        cleanup_error = None
+        for pilot in active:
+            try:
+                pilot.close()
+            except Exception as error:
+                if cleanup_error is None:
+                    cleanup_error = error
+        try:
+            stop(daemon)
+        except Exception as error:
+            if cleanup_error is None:
+                cleanup_error = error
+        if cleanup_error is not None:
+            raise cleanup_error
 
 
 def qualify(args, private, report):
@@ -341,14 +480,19 @@ def qualify(args, private, report):
         require(BASE.DEMO.wait_healthy(setup.port, daemon), "daemon_not_ready")
 
     try:
+        samples = getattr(args, "approval_samples", 0)
         for kind in ("git", "filesystem"):
-            for case in ("expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"):
+            selected_cases = (["approve"] * (samples or 1) if samples or getattr(args, "approval_smoke", False) else
+                ["expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"]
+                + (["collector_term"] if kind == "git" else []))
+            for sample_index, case in enumerate(selected_cases):
                 start_daemon(kind, 20 if case == "expire" else 30)
                 paired = kind == "filesystem" and case == "approve"
-                pilot = Pilot(setup, private / (kind + "-" + case), classifier, kind,
+                pilot = Pilot(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
                               enabled=case != "default", deferred=paired)
                 active.append(pilot)
-                row = {"profile": kind, "case": case, "configured": case != "default", "pending":False,
+                pilot.close_after_primary = case == "collector_term"
+                row = {"profile": kind, "case": case, "sample_index": sample_index, "configured": case != "default", "pending":False,
                     "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
                     "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
                 cases.append(row)
@@ -357,7 +501,7 @@ def qualify(args, private, report):
                     # Start both actual hosts before either pending lease is
                     # consumed by the other host's startup. Deadlines stay fixed.
                     row["stage"] = "start_independent_run"
-                    sibling = Pilot(setup, private / "independent-run", classifier, kind, deferred=True)
+                    sibling = Pilot(setup, private / ("independent-run-" + str(sample_index)), classifier, kind, deferred=True)
                     active.append(sibling)
                     row["proposals_released_at_ms"] = release_ready_pilots([pilot, sibling])
                     row["both_hosts_ready_before_proposals"] = True
@@ -399,6 +543,7 @@ def qualify(args, private, report):
                         require(pilot.undispatched(), "target_dispatched_before_exact_decision")
                         row["stage"] = "exact_decision"
                         row["decision_attempt_at_ms"] = time.time_ns() // 1_000_000
+                        decision_monotonic = time.monotonic_ns()
                         pilot.operator(case, waiting["pending_id"], "--binding", waiting["binding_sha256"])
                         row["decision_submitted"] = case
                         pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
@@ -413,6 +558,21 @@ def qualify(args, private, report):
                         else:
                             pilot.inspect(waiting)
                         os.kill(pilot.launcher_pid, signal.SIGTERM)
+                    elif case == "collector_term":
+                        row["stage"] = "terminate_exact_pending_collector"
+                        terminated_collector = pilot.terminate_collector()
+                        row["cleanup"] = pilot.finish()
+                        primary = pilot.model.results.get("primary")
+                        require(primary is not None and primary["is_error"] is True,
+                                "terminated_primary_not_refused")
+                        require(pilot.undispatched(), "terminated_collector_dispatched")
+                        lines, _ = LAUNCH.normalized_syscalls(pilot.trace.read_text())
+                        require(any(re.match(rf"^{terminated_collector}\s+exit_group\(1\)", line)
+                                    for line in lines), "collector_term_abrupt_exit_or_missing_ack")
+                        row.update(passed=True, dispatched=0, kernel_effects=0, released=False,
+                                   collector_sigterm="pidfd_pinned_graceful_cleanup_confirmed")
+                        pilot.close(); active.remove(pilot)
+                        continue
                     elif case == "restart":
                         pilot.inspect(waiting)
                         start_daemon(kind, 30)
@@ -434,6 +594,10 @@ def qualify(args, private, report):
                 # Git's deliberately broad synthetic Ask policy also asks about
                 # the useful follow-up. That separate request needs its own decision.
                 if kind == "git":
+                    if case == "expire":
+                        row["stage"] = "observe_original_expiry"
+                        await_original_expiry(waiting["expires_at_ms"])
+                        row["stage"] = "wait_useful_followup_after_original_expiry"
                     def followup_ready():
                         if "primary" not in pilot.model.results:
                             return None
@@ -455,6 +619,19 @@ def qualify(args, private, report):
                 if case == "approve":
                     marker = "7 red widgets" if kind == "filesystem" else "committed baseline"
                     require(marker in json.dumps(primary),"original_approved_result_not_useful")
+                    # Conservative operator-attempt-to-correlated-result duration,
+                    # including operator verification and decision submission.
+                    row["decision_to_result_ms"] = (pilot.result_monotonic["primary"] - decision_monotonic) / 1_000_000
+                    # The exact primary collector is selected by successful
+                    # execve and server ID; a peer's proof cannot satisfy this.
+                    if getattr(args, "require_verified_reuse", False):
+                        lines, pending = LAUNCH.normalized_syscalls(pilot.trace.read_text(), thread_birth_order=True)
+                        collectors = LAUNCH.collector_processes(lines, setup.binary)
+                        selected = [pid for pid, server in collectors.items() if server == kind]
+                        require(len(selected) == 1, "one_primary_collector_required")
+                        proof = LATENCY.reuse_observation(lines, selected[0], require_completed_call=True)
+                        row["verified_inputs_resume"] = proof
+                        require(proof["immutable_files"] + proof["leased_files"] > 0, "actual_reuse_missing")
                 primary_text = json.dumps(primary)
                 row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
                 if case == "expire":
@@ -499,23 +676,53 @@ def qualify(args, private, report):
         require(all(LAUNCH.sha(path) == report["selected_sha256"][name] for name,path in setup.selected.items()), "selected_asset_changed")
         require(all(LAUNCH.sha(path / "profile.json") == report["profiles"][kind]["profile_sha256"] for kind,path in setup.profiles.items()), "profile_changed")
         require(not list((setup.home / "pilot-runs").iterdir()), "run_metadata_remains")
-    finally:
-        report["cases"] = cases
+    except Exception:
+        observations = []
         for pilot in active:
-            pilot.close()
-        stop(daemon)
+            try:
+                observations.append(pilot.failure_observation())
+            except (OSError, ValueError):
+                observations.append({"profile": pilot.kind, "diagnostic": "unavailable"})
+        report["failure_observations"] = observations
+        raise
+    finally:
+        finish_qualification(report, cases, getattr(args, "approval_samples", 0), active, daemon)
+
+
+LATENCY = load("pilot_ask_latency", "pilot_ask_latency.py")
+
+
+def approval_samples(value):
+    number = int(value)
+    if number != 0 and not 20 <= number <= 100:
+        raise argparse.ArgumentTypeError("approval samples must be 0 or 20..100 per profile")
+    return number
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--offline-inputs", type=Path,
+                        help="Prepared npm cache, pinned Python archive and hash-locked wheelhouse")
+    parser.add_argument("--require-verified-reuse", action="store_true",
+                        help="Require an actual selected-collector kernel reuse event for each approval")
+    samples_group = parser.add_mutually_exclusive_group()
+    samples_group.add_argument("--approval-smoke", action="store_true",
+                              help="One correctness probe per profile; never performance acceptance")
+    samples_group.add_argument("--approval-samples", type=approval_samples, default=0,
+                        help="Separate performance run: 20..100 fresh approvals per profile; no call resubmission")
     args = parser.parse_args(); args.output.mkdir(parents=True,exist_ok=True)
     report = {"contract_version":"sw-pilot-ask-acceptance/1", "status":"incomplete", "real_host_executed":False,
-        "scripted_owned_provider":True, "paid_api_calls":0, "physical_human_presence_proven":False}
+        "scripted_owned_provider":True, "paid_api_calls":0, "physical_human_presence_proven":False,
+        "trace_requested":LATENCY.trace_request()}
+    if args.approval_smoke:
+        report["qualification_scope"] = "two_profile_correctness_probe_not_performance"
     try:
         with tempfile.TemporaryDirectory(prefix="sou112-private-") as directory:
             qualify(args,Path(directory),report)
+        if args.approval_samples and report.get("latency", {}).get("status") != "target_met":
+            report["status"] = "performance_blocker"
     except Exception as error:
         report.update(status="failed", error_type=type(error).__name__,
             error_location=[{"function": frame.name, "line": frame.lineno}

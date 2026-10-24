@@ -33,10 +33,52 @@ const OVERSIZED_CONTROL_ERROR: &str = "oversized MCP control response";
 
 mod frames;
 
+// Host-owned diagnostic pipes may close before the namespace owners finish.
+// Reporting must not panic past cleanup or its authenticated acknowledgement;
+// failures of the actual transport, drain and owner boundaries remain errors.
+macro_rules! diagnostic {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr().lock(), $($arg)*);
+    }};
+}
+
 struct Grant {
     call_id: Value,
     binding: Value,
     boundary: Option<crate::policy_transition::Boundary>,
+    continuation: Option<ContinuationTiming>,
+}
+
+/// Observations only: never used for authority, deadlines, retries or admission.
+struct ContinuationTiming {
+    observed: Instant,
+    previous: Instant,
+}
+
+impl ContinuationTiming {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            observed: now,
+            previous: now,
+        }
+    }
+
+    fn record(&mut self, call: &Call, stage: &'static str, success: bool) {
+        let now = Instant::now();
+        diagnostic!(
+            "{}",
+            json!({
+                "event": "mcp_real_approval_timing", "profile": call.profile,
+                "host_call_id": call.id, "stage": stage, "success": success,
+                "stage_ms": now.duration_since(self.previous).as_secs_f64() * 1000.0,
+                "post_observed_ms": now.duration_since(self.observed).as_secs_f64() * 1000.0,
+                "clock": "collector_monotonic", "authority": false
+            })
+        );
+        self.previous = now;
+    }
 }
 
 struct Release {
@@ -136,7 +178,7 @@ fn error(id: &Value, code: i64, message: &'static str) -> Vec<u8> {
 }
 
 fn audit(call: &Call, state: &str, active: usize, queued: usize) {
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_call","profile":call.profile,
         "host_call_id":call.id,"id_type":if call.id.is_string(){"string"}else{"integer"},
@@ -240,6 +282,7 @@ async fn admit(
     } else {
         None
     };
+    let mut continuation = None;
     if let Some(source) = source {
         // No transition gate is held across a human wait. Acquire a fresh
         // boundary, rerun classification and redeem under the current policy.
@@ -290,16 +333,28 @@ async fn admit(
                 classifier.revision(),
             ),
         };
+        // Bind same-FD verified input observations before publishing a pending
+        // request. Only kernel-enforced immutable bytes may be reused later.
+        // This state belongs to this exact Ask, never a global authority cache.
+        let frozen = profile.clone();
+        let verified_assets =
+            tokio::task::spawn_blocking(move || frozen.capture_verified_assets()).await??;
         let approval_id =
             match wait_approval(collector, call, source, &installed.schema_sha256, &context).await?
             {
                 Ok(id) => id,
                 Err(code) => return Ok(refusal(&code)),
             };
+        let mut timing = ContinuationTiming::new();
         let resumed = async {
             let frozen = profile.clone();
-            tokio::task::spawn_blocking(move || frozen.revalidate_assets()).await??;
+            let verified =
+                tokio::task::spawn_blocking(move || frozen.revalidate_assets(&verified_assets))
+                    .await;
+            timing.record(call, "profile_and_assets", matches!(&verified, Ok(Ok(()))));
+            verified??;
             boundary = collector.policy_boundary().await?;
+            timing.record(call, "policy_boundary", true);
             let reassessed = collector
                 .classify(
                     &snapshot,
@@ -313,7 +368,9 @@ async fn admit(
                         https_get: false,
                     },
                 )
-                .await?;
+                .await;
+            timing.record(call, "classifier", matches!(&reassessed, Ok(Ok(_))));
+            let reassessed = reassessed?;
             ensure!(
                 reassessed.is_ok_and(
                     |value| value.known_read_only && value.verdict != ProductionVerdict::Deny
@@ -334,11 +391,17 @@ async fn admit(
         fields["approval_id"] = json!(approval_id);
         fields["selected_invocation"] = json!(context);
         let admitted = collector.event("call", fields).await;
+        timing.record(
+            call,
+            "daemon_redemption",
+            admitted.as_ref().is_ok_and(|r| r["release"] == true),
+        );
         // Idempotent cancellation removes approved but unused state. A lost or
         // malformed native receipt is session-fatal, as on the ordinary path:
         // retire the session rather than orphaning an unseen reserved call.
         collector.cancel_approval(&approval_id).await?;
         receipt = Some(admitted?);
+        continuation = Some(timing);
     }
     let receipt = receipt.context("selected admission receipt absent")?;
     if receipt["release"] != true {
@@ -352,6 +415,7 @@ async fn admit(
         call_id: receipt["call_id"].clone(),
         binding: receipt["binding_sha256"].clone(),
         boundary,
+        continuation,
     }))
 }
 
@@ -391,7 +455,7 @@ async fn wait_approval(
         .as_str()
         .context("pending id")?
         .to_owned();
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_native_approval_pending","pending_id":id,
         "tool":call.tool,"host_call_id":call.id,"binding_sha256":reply["binding_sha256"],
@@ -437,7 +501,7 @@ async fn wait_approval(
 async fn inspect(
     collector: &Collector<'_>,
     call: &Call,
-    grant: Grant,
+    mut grant: Grant,
     raw: Vec<u8>,
     kind: &str,
 ) -> anyhow::Result<Option<Release>> {
@@ -457,7 +521,7 @@ async fn inspect(
                 .downcast_ref::<DaemonSizeLimit>()
                 .copied()
                 .ok_or(failure)?;
-            eprintln!(
+            diagnostic!(
                 "{}",
                 json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
                     "limit":limit.code(),"observed_bytes":raw.len(),"released":false})
@@ -468,6 +532,9 @@ async fn inspect(
             (replacement, receipt)
         }
     };
+    if let Some(timing) = &mut grant.continuation {
+        timing.record(call, "result_inspection", receipt["release"] == true);
+    }
     let raw = if receipt["release"] == true {
         raw
     } else {
@@ -763,7 +830,7 @@ where
                             audit(call, "cancelled", active, queued);
                         }
                     } else {
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_cancel","state":if used.contains(&key){"late"}else{"unknown"}})
                         );
@@ -1007,6 +1074,9 @@ where
                                 } else {
                                     write(child, &call.raw).await?;
                                     call.dispatched = true;
+                                    if let Some(timing) = &mut grant.continuation {
+                                        timing.record(call, "original_dispatch", true);
+                                    }
                                     drop(grant.boundary.take());
                                     call.phase = Phase::Running(grant);
                                     wire.insert(key.clone(), (call.deadline, false));
@@ -1066,7 +1136,7 @@ where
                             );
                             continue;
                         };
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
                                 "limit":"result_frame_bytes","budget_bytes":server_profile::RESULT_FRAME_BYTES,
@@ -1144,12 +1214,12 @@ where
                         }
                         // Progress/logging text has no independently admitted data
                         // channel. Consume it; never forward even a message field.
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_notification","kind":"progress","released":false})
                         );
                     } else {
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_notification","kind":"unsupported_or_logging","released":false})
                         );
@@ -1282,13 +1352,16 @@ where
                     continue;
                 };
                 let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
-                let Phase::Running(grant) = phase else {
+                let Phase::Running(mut grant) = phase else {
                     ensure!(
                         call.cancelled,
                         "MCP response arrived in an invalid call phase"
                     );
                     continue;
                 };
+                if let Some(timing) = &mut grant.continuation {
+                    timing.record(call, "original_response", value.get("result").is_some());
+                }
                 let input = detached(call);
                 let worker_key = key.clone();
                 let validated = profiles[&call.tool]
@@ -1308,7 +1381,7 @@ where
                             .downcast_ref::<crate::mcp::input::ResultBudgetExceeded>()
                             .is_some();
                         if budget {
-                            eprintln!(
+                            diagnostic!(
                                 "{}",
                                 json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
                                     "limit":"result_text_bytes","budget_bytes":server_profile::RESULT_TEXT_BYTES,
@@ -1515,7 +1588,7 @@ async fn drain_stderr(mut stream: tokio::process::ChildStderr) -> anyhow::Result
         }
     }
     .await;
-    eprintln!("{}", witness.metadata(result.is_ok()));
+    diagnostic!("{}", witness.metadata(result.is_ok()));
     result
 }
 
@@ -1524,6 +1597,13 @@ pub(super) async fn run(
     profile: &server_profile::ProfileConfig,
     workspace: &std::path::Path,
 ) -> anyhow::Result<()> {
+    // The host may TERM its MCP children during normal shutdown, including
+    // after their namespace owners have finished but before the authenticated
+    // cleanup acknowledgement. Install interception before creating an owner;
+    // later TERM must not abruptly kill the completion path.
+    #[cfg(unix)]
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .context("install selected collector termination handler")?;
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
     // Register before even preparing/starting the selected owner's namespace.
     // Stop spends grants under the same native lock, so a late registration
@@ -1569,16 +1649,16 @@ pub(super) async fn run(
         "unbudgeted"
     };
     let mut stderr_task = None;
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_owner_start","owner":owner.metadata()})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_budget_start","mode":budget_mode,
         "budget":budget.as_ref().map(super::super::linux_budget::OwnedBudget::metadata)})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_server_start","profile":profile.format,
         "sandbox":server_sandbox::profile_name(&profile.format),"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
@@ -1651,7 +1731,7 @@ pub(super) async fn run(
                 // Record the relay's actual first failure before stdin shutdown
                 // can provoke a secondary wrapper/server exit. The owner select
                 // arm can otherwise win while this shutdown is still pending.
-                eprintln!(
+                diagnostic!(
                     "{}",
                     json!({"event":"mcp_real_transport_failure",
                     "failure_code":relay_failure_code(error),"released":false})
@@ -1694,6 +1774,12 @@ pub(super) async fn run(
                 Ok(()) => Err(anyhow::anyhow!("mcp_budget_monitor_stopped")),
             },
             _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("native_mcp_interrupted")),
+            _ = async {
+                #[cfg(unix)]
+                sigterm.recv().await;
+                #[cfg(not(unix))]
+                std::future::pending::<()>().await;
+            } => Err(anyhow::anyhow!("native_mcp_terminated")),
             result = &mut transport => result,
         }
     };
@@ -1739,18 +1825,18 @@ pub(super) async fn run(
     let owner_failed = owner_failed.load(std::sync::atomic::Ordering::Acquire)
         || owner_check.is_err()
         || owner_quiesce.is_err();
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_owner_end","owner":owner.metadata(),
         "cleanup_verified":owner_cleanup.is_ok(),"observed_failure":owner_failed})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_budget_end","mode":budget_mode,
         "budget":budget.as_ref().map(super::super::linux_budget::OwnedBudget::metadata),
         "cleanup_verified":budget_cleanup.is_ok(),"observed_failure":budget_failed})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_server_end","profile":profile.format,
         "budget_requested":budget_requested,"budget_cleanup_verified":budget_cleanup.is_ok(),
@@ -1794,6 +1880,77 @@ pub(super) async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn closed_diagnostic_pipe_cannot_abort_stderr_cleanup() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        const PROBE: &str = "AGENTFW_OWNED_CLOSED_DIAGNOSTIC_PROBE";
+        if std::env::var_os(PROBE).is_some() {
+            // The parent closes the stderr reader before releasing this child.
+            let mut ready = [0u8; 1];
+            std::io::Read::read_exact(&mut std::io::stdin(), &mut ready).unwrap();
+            assert_eq!(ready, [1]);
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async {
+                for (script, expect_quota) in [
+                    ("printf owned-stderr >&2", false),
+                    ("/usr/bin/head -c 1048577 /dev/zero >&2", true),
+                ] {
+                    let mut child = tokio::process::Command::new("/bin/sh")
+                        .args(["-c", script])
+                        .stderr(Stdio::piped())
+                        .kill_on_drop(true)
+                        .spawn()
+                        .unwrap();
+                    let result = drain_stderr(child.stderr.take().unwrap()).await;
+                    child.wait().await.unwrap();
+                    if expect_quota {
+                        assert!(result
+                            .unwrap_err()
+                            .to_string()
+                            .contains("selected MCP server stderr quota exceeded"));
+                    } else {
+                        result.unwrap();
+                    }
+                }
+            });
+            println!("owned-stderr-drain-and-quota-preserved");
+            return;
+        }
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "mcp::admission::real_server::tests::closed_diagnostic_pipe_cannot_abort_stderr_cleanup",
+                "--nocapture",
+            ])
+            .env(PROBE, "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        drop(child.stderr.take());
+        child.stdin.take().unwrap().write_all(&[1]).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while child.try_wait().unwrap().is_none() {
+            if std::time::Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("owned closed-diagnostic subprocess did not finish");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "closed stderr aborted cleanup");
+        assert!(String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("owned-stderr-drain-and-quota-preserved"));
+    }
+
     #[test]
     fn relay_failure_metadata_does_not_echo_untrusted_context_or_suffixes() {
         let error = anyhow::anyhow!("unknown or duplicate MCP response ID")
