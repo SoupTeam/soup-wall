@@ -215,6 +215,20 @@ fn optional(parent: &File, name: &str, limit: usize) -> anyhow::Result<Option<Ve
     }
 }
 
+fn optional_directory(parent: &File, name: &str) -> anyhow::Result<Option<File>> {
+    match child(parent, name, true) {
+        Ok(file) => Ok(Some(file)),
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 fn sealed(bytes: &[u8]) -> anyhow::Result<File> {
     let name = c"git-local-reference-image";
     let fd =
@@ -407,14 +421,15 @@ impl View {
             "Git reference namespace unsupported"
         );
         capture.loose_refs(refs, "refs", 0)?;
-        let info = child(&git, "info", true)?;
-        capture.source.watch(&info)?;
-        ensure!(
-            entries(&info)?.iter().all(|name| name == "exclude"),
-            "Git repository info machinery unsupported"
-        );
-        if let Some(exclude) = optional(&info, "exclude", 65_536)? {
-            capture.image(format!("{ROOT}/info/exclude"), &exclude)?;
+        if let Some(info) = optional_directory(&git, "info")? {
+            capture.source.watch(&info)?;
+            ensure!(
+                entries(&info)?.iter().all(|name| name == "exclude"),
+                "Git repository info machinery unsupported"
+            );
+            if let Some(exclude) = optional(&info, "exclude", 65_536)? {
+                capture.image(format!("{ROOT}/info/exclude"), &exclude)?;
+            }
         }
         let mut supported = BTreeMap::new();
         for (name, id) in capture.refs.clone() {
@@ -590,5 +605,17 @@ mod tests {
                 &serde_json::json!({"revision":"refs/heads/main"})
             )
             .is_err());
+    }
+
+    #[test]
+    fn template_free_repository_does_not_require_an_info_directory() {
+        let (root, _) = fixture();
+        std::fs::remove_dir(root.path().join(".git/info")).unwrap();
+        let view = View::capture(&File::open(root.path()).unwrap()).unwrap();
+        view.validate_call(
+            "git_show",
+            &serde_json::json!({"revision":"refs/heads/main"}),
+        )
+        .unwrap();
     }
 }
