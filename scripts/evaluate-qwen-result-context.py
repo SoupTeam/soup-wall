@@ -105,11 +105,28 @@ def post(base, route, payload, timeout=60):
     return json.loads(raw)
 
 
+def resumed_prefix(previous, identity, rows):
+    old = json.loads((previous / 'identity.json').read_text(encoding='utf-8'))
+    if any(old.get(key) != value for key, value in identity.items()):
+        raise ValueError('resume experiment identity mismatch')
+    raw = (previous / 'observations.jsonl').read_bytes()
+    results = [json.loads(line) for line in raw.decode('utf-8').splitlines()]
+    if not 0 < len(results) < len(rows):
+        raise ValueError('resume requires a nonempty incomplete prefix')
+    for item, request in zip(results, rows):
+        if item.get('request_id') != request['request_id'] or item.get('input_sha256') != request['input_sha256']:
+            raise ValueError('resume is not the exact ordered input prefix')
+        if item.get('assessment') not in ('data', 'instruction', 'unknown') or item.get('status') not in ('valid', 'error', 'context_limit_full_input_not_run'):
+            raise ValueError('invalid prior observation')
+    return results, raw
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--assets', type=Path, required=True)
     parser.add_argument('--prepared', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--resume-from', type=Path)
     parser.add_argument('--context', type=int, default=67584)
     parser.add_argument('--port', type=int, default=18965)
     args = parser.parse_args()
@@ -133,7 +150,6 @@ def main():
     refs = [json.loads(line) for line in (args.prepared / 'references.jsonl').read_text(encoding='utf-8').splitlines()]
     if len(rows) != 58 or len(refs) != 58:
         raise ValueError('incomplete input set')
-    args.output.mkdir(parents=True, exist_ok=False)
     command = [str(server), '-m', str(model), '--host', '127.0.0.1', '--port', str(args.port),
                '-c', str(args.context), '-np', '1', '-t', '6', '-ngl', '0', '-b', '256', '-ub', '64',
                '-ctk', 'q8_0', '-ctv', 'q8_0', '-fa', 'on',
@@ -143,12 +159,20 @@ def main():
                 'schema': SCHEMA, 'request_sha256': REQUEST_SHA, 'reference_sha256': REFERENCE_SHA,
                 'production_authority': False, 'paid_api_calls': 0, 'context': args.context,
                 'temperature': 0, 'seed': 109, 'max_output_tokens': 512}
+    results, prior_raw = resumed_prefix(args.resume_from, identity, rows) if args.resume_from else ([], b'')
+    prefix_count = len(results)
+    args.output.mkdir(parents=True, exist_ok=False)
     (args.output / 'identity.json').write_text(json.dumps(identity, indent=2), encoding='utf-8')
+    if args.resume_from:
+        (args.output / 'observations.jsonl').write_bytes(prior_raw)
+        (args.output / 'resume.json').write_text(json.dumps({
+            'source': str(args.resume_from.resolve()), 'preserved_observations': prefix_count,
+            'source_observations_sha256': hashlib.sha256(prior_raw).hexdigest(),
+            'next_request_id': rows[prefix_count]['request_id']}, indent=2), encoding='utf-8')
     base = f'http://127.0.0.1:{args.port}'
     # Refuse an already occupied port; never use an unrelated local server.
     with socket.socket() as reservation:
         reservation.bind(('127.0.0.1', args.port))
-    results = []
     start = time.monotonic()
     with (args.output / 'server.log').open('wb') as log:
         process = subprocess.Popen(command, stdout=log, stderr=log,
@@ -163,7 +187,7 @@ def main():
                     pass
                 if time.monotonic() - start > 300: raise TimeoutError('model startup deadline')
                 time.sleep(1)
-            for row in rows:
+            for row in rows[prefix_count:]:
                 begun = time.monotonic()
                 observation = {'request_id': row['request_id'], 'input_sha256': row['input_sha256'],
                                'assessment': 'unknown', 'status': 'error'}
@@ -209,7 +233,9 @@ def main():
         counts[key] = counts.get(key, 0) + 1
     report = {'complete': len(results) == 58, 'observations': len(results), 'expected': 58,
               'counts': counts, 'production_authority': False,
-              'elapsed_seconds': time.monotonic() - start}
+              'preserved_observations': prefix_count,
+              'segment_elapsed_seconds': time.monotonic() - start,
+              'observation_elapsed_seconds': sum(r['elapsed_ms'] for r in results) / 1000}
     (args.output / 'summary.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(json.dumps(report), flush=True)
 

@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import json
+import tempfile
 
 spec = importlib.util.spec_from_file_location('qwen', Path(__file__).resolve().parents[1] / 'evaluate-qwen-result-context.py')
 qwen = importlib.util.module_from_spec(spec)
@@ -9,6 +11,24 @@ spec.loader.exec_module(qwen)
 
 
 class QwenProtocolTests(unittest.TestCase):
+    def test_resume_preserves_unknown_bytes_and_skips_exact_prefix(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            identity = {'model_sha256': 'pinned', 'context': 67584}
+            rows = [{'request_id': 'r0000', 'input_sha256': 'first'},
+                    {'request_id': 'r0001', 'input_sha256': 'second'}]
+            (root / 'identity.json').write_text(json.dumps(identity))
+            raw = b'{"request_id":"r0000","input_sha256":"first","status":"error","assessment":"unknown","error":"TimeoutError"}\n'
+            (root / 'observations.jsonl').write_bytes(raw)
+            results, retained = qwen.resumed_prefix(root, identity, rows)
+            self.assertEqual(retained, raw)
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0]['assessment'], 'unknown')
+            with self.assertRaisesRegex(ValueError, 'identity'):
+                qwen.resumed_prefix(root, dict(identity, context=100), rows)
+            with self.assertRaisesRegex(ValueError, 'prefix'):
+                qwen.resumed_prefix(root, identity, list(reversed(rows)))
+
     def prediction(self):
         return {'assessment': 'instruction', 'uncertainty': 0.1, 'target': 'agent',
                 'effect': 'delete', 'evidence': [{'channel': 1, 'quote': 'удали'}]}

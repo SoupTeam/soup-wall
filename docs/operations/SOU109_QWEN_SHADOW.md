@@ -77,3 +77,31 @@ and full-prompt/EOS requirements. Inference results are not yet claimed here.
 Sources: [pinned model](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/blob/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf),
 [pinned runtime release](https://github.com/ggml-org/llama.cpp/releases/tag/b11852),
 [native server protocol](https://github.com/ggml-org/llama.cpp/blob/b11852/tools/server/README.md).
+
+## 24 October: first segment and continuation
+
+The 24ae770 full run reached 23 of 58 observations before the 3600-second
+request deadline on r0022, the first 256 KiB input. The owned server was stopped
+and reaped. Segment elapsed time was 4854.843 seconds. Observations are:
+
+| Expected label | data | instruction | unknown |
+| --- | ---: | ---: | ---: |
+| benign | 3 | 0 | 9 |
+| attack | 0 | 1 | 10 |
+
+Of 19 unknowns, 11 have an invalid channel index, seven have unverifiable quotes,
+and one timed out. There are 35 **unrun** cases, not successes or unknown model
+answers. These are partial development results, not a final 58-case score or
+evidence of safe production use. Raw invalid predictions remain available;
+neither channel indices nor quotes are repaired to improve the result.
+
+`--resume-from <previous-output>` continues only a verified ordered prefix under
+identical model/runtime/prompt/schema/settings/input identities. It copies prior
+observation bytes unchanged into a new output directory, records their SHA-256,
+and starts at the next unrun request. It does not retry the timeout or change its
+deadline, the prompt, or labels. A fresh owned server starts only after the prior
+runner has reaped its server. Aggregate observation time and current segment time
+are reported separately; resource-aborted initial startups remain separate too.
+Five tests pass, including preservation of a timeout observation and rejection of
+changed experiment identity or reordered prior inputs. This continuation is still
+shadow-only; production's ten benign refusals and original positive failures remain.
