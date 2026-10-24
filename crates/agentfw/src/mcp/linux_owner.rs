@@ -468,7 +468,8 @@ mod linux {
         requested: &BudgetPrepare,
     ) -> anyhow::Result<(super::super::linux_budget::OwnedBudget, String)> {
         socket.set_nonblocking(true)?;
-        let socket = tokio::io::unix::AsyncFd::register(socket)?;
+        // SAFETY: socket is uniquely owned by adopt_budget and not shared or concurrently closed.
+        let socket = unsafe { tokio::io::unix::AsyncFd::register(socket) }?;
         let (prepared, files) = loop {
             let mut readable = socket.readable().await?;
             match readable.try_io(|socket| receive_budget_fds(socket.get_ref())) {
