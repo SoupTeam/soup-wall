@@ -349,6 +349,17 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({"leader": os.getpid(), "child":
                     except ProcessLookupError:
                         pass
 
+    def test_live_target_sampler_tolerates_removed_intermediate_only(self):
+        build = builder()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vanished = root / "renamed-intermediate"
+            with patch.object(build.os, "walk", return_value=[(root, [], [vanished.name])]):
+                self.assertTrue(build.target_within_limit(root))
+                with patch.object(build.Path, "lstat", side_effect=PermissionError("denied")):
+                    with self.assertRaises(PermissionError):
+                        build.target_within_limit(root)
+
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux process groups required")
     def test_bounded_build_refuses_target_quota_overrun(self):
         build = builder()
