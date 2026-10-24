@@ -68,7 +68,17 @@ What follows from source but is not tested:
 
 Production admission behaviour still needs Rust execution: the existing `test` job on a Ready PR, or new request-path tests for `arguments`-level duplicates, `NaN` and lone surrogates. Those tests would be a separate, Rust-owned change.
 
-## 6. Coverage gaps (unchanged by this phase)
+## 6. Portability defect found and fixed
+
+**Defect.** The corpus builder recorded, and the gate verified, sha256 of the bytes on disk. On a Windows `core.autocrlf` checkout, LF-stored sources have CRLF working copies. The contract, `eval/eval_runner.py` and `admission.rs` were therefore cited by hashes that a Linux checkout cannot reproduce.
+
+**Reproduced.** In a fresh clone with `core.autocrlf=false` (the bytes a Linux checkout holds), the pre-fix commit `285a244` is refused with exit 3: source drift on exactly those three files.
+
+**Fix.** A cited source is identified by its committed blob when the working copy has no content change (`git diff` accounts for line-ending conversion), and by its disk bytes otherwise.
+
+**Verified.** After the fix, the corpus check, the gate (PASS) and all SOU-128 tests pass in that LF clone. The `report.json` produced on Windows and on the LF clone is byte-identical.
+
+## 7. Coverage gaps (unchanged by this phase)
 
 - No Git cases for invalid names, mixed known/unknown, bounds, Unicode or literals.
 - No reviewed labels.
