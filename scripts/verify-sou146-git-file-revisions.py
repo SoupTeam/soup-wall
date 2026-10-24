@@ -283,7 +283,7 @@ def legacy_refusal(stack, report):
                     "observed": "withheld", "passed": False, "related_issue": "SOU-109", "response": baseline})
             else:
                 GIT.text(baseline)
-            GIT.text(client.exchange(GIT.call(201, "git_status"))[0])
+            GIT.text(client.exchange(GIT.call(201, "git_status", {}))[0])
         finally:
             client.close()
             report["legacy_client"] = client.transcript()
@@ -433,7 +433,7 @@ def policy_controls(stack, config, second, report):
             witness.drain()
             response, _ = client.exchange(GIT.call(50, "git_show", {"revision": REFS[0]}))
             require(BASE.refused(response) and witness.drain() == 0, "classifier uncertainty floor bypassed")
-            GIT.text(client.exchange(GIT.call(51, "git_status"))[0])
+            GIT.text(client.exchange(GIT.call(51, "git_status", {}))[0])
             report["classifier_uncertainty_refused"] = True
         finally:
             client.close()
