@@ -17,6 +17,20 @@ SPEC.loader.exec_module(P)
 
 
 class Pressure(unittest.TestCase):
+    def test_finite_peer_finishes_after_release_without_waiting_for_stop_only_barrier(self):
+        import threading
+        calls=[]
+        class Peer:
+            provider=SimpleNamespace(release=threading.Event())
+            def useful(self): raise AssertionError('finite providers have no post-tool hold barrier')
+            def finish(self):
+                self_outer.assertTrue(self.provider.release.is_set())
+                calls.append('finished');return {'owned_cleanup_verified':True}
+            def check_useful(self): calls.append('kernel read and Git status checked')
+        self_outer=self
+        self.assertEqual(P.finish_useful(Peer()), {'owned_cleanup_verified':True})
+        self.assertEqual(calls,['finished','kernel read and Git status checked'])
+
     def test_refused_peer_setup_preserves_owned_bytes_and_never_claims_pressure_pass(self):
         class Model:
             def __init__(self, _steps): self.server = SimpleNamespace()

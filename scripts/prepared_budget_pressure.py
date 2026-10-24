@@ -19,7 +19,16 @@ from prepared_budget_observer import BudgetObserver
 PRESSURE_BYTES = 40 * 1024 * 1024
 
 
-def qualify(context, selection, paths, profiles, delegation, output, commit):
+def finish_useful(pilot):
+    # Finite peer/recovery providers deliberately have no post-tool hold barrier.
+    # Prepared.useful() is for stop witnesses whose host must remain alive.
+    pilot.provider.release.set()
+    result = pilot.finish()
+    pilot.check_useful()
+    return result
+
+
+def qualify(context, selection, paths, profiles, delegation, output, commit, on_progress=None):
     base, resource = context.BASE, context.RESOURCE
     paths = {key: Path(value) for key, value in paths.items()}
     output.mkdir(mode=0o700)
@@ -153,15 +162,11 @@ def qualify(context, selection, paths, profiles, delegation, output, commit):
                     and cleanup.get('all_stopped') is True and not any(path.is_dir() for path in delegation.iterdir())
                 if peer.process.poll() is not None:
                     raise ValueError('pressure_changed_independent_peer')
-                peer.useful()
-                peer_result = peer.finish()
-                peer.check_useful()
+                peer_result = finish_useful(peer)
                 # A new real prepared run on the reclaimed subject substrate
                 # creates fresh host authority/binding; no grant is replayed.
                 recovery = q.STOP.Prepared(peer_context, root / 'recovery', hold_after=False)
-                recovery.useful()
-                recovery_result = recovery.finish()
-                recovery.check_useful()
+                recovery_result = finish_useful(recovery)
                 row.update(status='passed' if verified else 'incomplete',
                     reason='original_resource_refusal_verified' if verified else 'original_resource_refusal_unproven',
                     original_runtime_observed=bool(target), kernel_observations=[{
@@ -202,6 +207,11 @@ def qualify(context, selection, paths, profiles, delegation, output, commit):
                     if original is None: payload.unlink(missing_ok=True)
                     else: payload.write_bytes(original)
                 (output / 'attempts.json').write_text(json.dumps(attempts, indent=2) + '\n')
+                if on_progress is not None:
+                    on_progress({'format':'sou142-original-pressure/1', 'status':'incomplete',
+                        'workspace_unchanged': before == {key:base.snapshot(path) for key,path in workspaces.items()},
+                        'attempts':attempts, 'raw_process_metadata_exported':False,
+                        'observer_cleanup_performed':False})
     unchanged = before == {key: base.snapshot(path) for key, path in workspaces.items()}
     return {'format': 'sou142-original-pressure/1', 'status': 'passed' if unchanged and
             all(row['status'] == 'passed' and not row['forced_cleanup'] for row in attempts) else 'incomplete',

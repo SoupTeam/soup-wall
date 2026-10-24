@@ -94,6 +94,77 @@ def budget(value, expected, success):
             'failed_children': failed, 'unresolved_children': unresolved, 'observations': observations}
 
 
+def pressure(value, attempt):
+    """Finite original-runtime pressure observations; absence never proves refusal."""
+    if value is None:
+        return {'status': 'unavailable', 'reason': 'original_pressure_not_observed', 'attempts': []}
+    need(type(value) is dict and value.get('format') == 'sou142-original-pressure/1'
+         and value.get('status') in ('passed', 'incomplete')
+         and value.get('workspace_unchanged') is True
+         and value.get('raw_process_metadata_exported') is False
+         and value.get('observer_cleanup_performed') is False, 'pressure_inventory_unverified')
+    rows = value.get('attempts')
+    identities = [(server, kind) for server in ('filesystem', 'git') for kind in ('memory', 'pids', 'wall')]
+    need(type(rows) is list and len(rows) == 6 and
+         [(row.get('server'), row.get('resource')) for row in rows] == identities, 'pressure_denominator_invalid')
+    projected = []
+    for row, (server, kind) in zip(rows, identities):
+        limits = {'memoryMaxBytes': 64 * 1024 * 1024 if kind == 'memory' else 512 * 1024 * 1024,
+                  'pidsMax': 16 if kind == 'pids' else 64, 'cpuQuotaMicros': 100000,
+                  'wallMillis': 1000 if kind == 'wall' else 120000}
+        need(row.get('limits') == limits and row.get('server_origin') == 'pinned-original'
+             and row.get('status') in ('passed', 'incomplete') and row.get('forced_cleanup') is False,
+             'pressure_limits_or_cleanup_unverified')
+        item = {'server': server, 'resource': kind, 'status': row['status'],
+                'limits': limits, 'budget_sha256': digest(row.get('budget_sha256'))}
+        reasons = ('original_resource_refusal_verified', 'original_resource_refusal_unproven',
+                   'bounded_calibration_attempt_incomplete')
+        need(row.get('reason') in reasons, 'pressure_reason_invalid')
+        item['reason'] = row['reason']
+        observations = row.get('kernel_observations', [])
+        need(type(observations) is list and len(observations) <= 64, 'pressure_kernel_inventory_invalid')
+        item['kernel_observations'] = []
+        for observed in observations:
+            need(type(observed) is dict and type(observed.get('counter_max')) is dict
+                 and set(observed['counter_max']) == {'oom', 'oom_kill', 'pids_max', 'throttled'},
+                 'pressure_counter_inventory_invalid')
+            counters = {key: number(count) for key, count in observed['counter_max'].items()}
+            item['kernel_observations'].append({'counter_max': counters,
+                **{key: number(observed.get(key)) for key in
+                   ('memory_peak_bytes', 'tasks_peak', 'leaf_duration_millis')},
+                'removed': observed.get('removed') is True})
+            if row['status'] == 'passed':
+                need(observed.get('removed') is True and observed.get('errors') == []
+                     and observed.get('incomplete_reasons') == [], 'pressure_leaf_cleanup_unverified')
+        if row['status'] == 'passed':
+            need(row.get('reason') == 'original_resource_refusal_verified'
+                 and row.get('original_runtime_observed') is True and observations
+                 and row.get('owned_cleanup_verified') is True
+                 and row.get('peer_useful_after_subject') is True
+                 and row.get('fresh_prepared_recovery_useful') is True
+                 and number(row.get('observed_children')) >= 2, 'pressure_runtime_or_recovery_unverified')
+            counter = 'oom_kill' if kind == 'memory' else 'pids_max'
+            need(any(number(item.get('leaf_duration_millis')) > 0 if kind == 'wall'
+                     else number(item['counter_max'].get(counter)) > 0 for item in observations),
+                 'pressure_exhaustion_unverified')
+            receipts = row.get('target_receipts')
+            expected_reason = {'memory': 'mcp_budget_memory_exhausted',
+                'pids': 'mcp_budget_pids_exhausted', 'wall': 'mcp_budget_wall_expired'}[kind]
+            need(type(receipts) is list and 1 <= len(receipts) <= 64 and any(
+                 receipt.get('server_id') == server and receipt.get('phase') == 'closed'
+                 and receipt.get('reason') == expected_reason for receipt in receipts), 'pressure_refusal_receipt_unverified')
+            item.update(trace_sha256=digest(row.get('trace_sha256')), original_runtime_observed=True,
+                owned_cleanup_verified=True, peer_useful_after_subject=True, fresh_prepared_recovery_useful=True,
+                peer_budget=budget(row.get('peer_budget'), digest(attempt.get('peer_budget_sha256')), True),
+                recovery_budget=budget(row.get('recovery_budget'), digest(attempt.get('budget_sha256')), True),
+                refusal_reason=expected_reason)
+        projected.append(item)
+    passed = all(row['status'] == 'passed' for row in projected)
+    need((value['status'] == 'passed') == passed, 'pressure_status_inconsistent')
+    return {'status': 'passed' if passed else 'incomplete', 'workspace_unchanged': True,
+            'observer_cleanup_performed': False, 'attempts': projected}
+
+
 def project(attempt, raw, expected, exit_code):
     output = {'format': 'sou142-prepared-budget-host-evidence/1', 'status': 'failed',
               'source_commit': expected, 'full_sou142_qualification': False,
@@ -230,6 +301,7 @@ def project(attempt, raw, expected, exit_code):
                 result['peer_process_cleanup'] = cleanup(peer.get('process_cleanup'))
                 result['peer_useful_after_stop'] = True
             output['emergency_stop'].append(result)
+        output['original_pressure'] = pressure(attempt.get('original_pressure'), attempt)
         output.update(status='partial-slice-passed', owned_budget_root_empty=True)
     except (Invalid, KeyError, TypeError) as error:
         output['reason'] = str(error) if isinstance(error, Invalid) else 'malformed_private_report'

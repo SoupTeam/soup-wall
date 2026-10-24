@@ -303,8 +303,11 @@ def main():
         qualifier = load(src, 'sou142_actual_host_baseline', 'scripts/qualify-prepared-pilot-run.py')
         context = SimpleNamespace(BASE=qualifier.BASE, RESOURCE=resource, ROOT=src, QUALIFIER=qualifier,
             budget=budget, peer_budget=peer_budget)
+        def checkpoint(value):
+            record['original_pressure'] = value
+            save()
         record['original_pressure'] = pressure.qualify(context, selection, paths, profiles,
-            delegated, out / 'original-pressure', args.expected_commit)
+            delegated, out / 'original-pressure', args.expected_commit, on_progress=checkpoint)
         # Failed/non-exhausting calibration remains a retained environmental
         # outcome. This partial slice never asserts final acceptance.
         if record['original_pressure']['status'] == 'passed':

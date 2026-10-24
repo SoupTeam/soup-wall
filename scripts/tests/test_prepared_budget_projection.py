@@ -85,6 +85,46 @@ class Projection(unittest.TestCase):
         for private in ('910001', '921002', 'private-owned-do-not-export', 'start_time_ticks'):
             self.assertNotIn(private, rendered)
 
+    def test_pressure_requires_original_kernel_refusal_and_fresh_peer_recovery(self):
+        a, raw = fixture()
+        rows = []
+        normal_budget = raw['cases'][4]['resource_budget']
+        for server in ('filesystem', 'git'):
+            for kind in ('memory', 'pids', 'wall'):
+                rows.append({'server':server, 'resource':kind, 'status':'passed',
+                    'budget_sha256':SHA, 'forced_cleanup':False, 'server_origin':'pinned-original',
+                    'limits':{'memoryMaxBytes':64*1024*1024 if kind=='memory' else 512*1024*1024,
+                        'pidsMax':16 if kind=='pids' else 64, 'cpuQuotaMicros':100000,
+                        'wallMillis':1000 if kind=='wall' else 120000},
+                    'reason':'original_resource_refusal_verified', 'original_runtime_observed':True,
+                    'owned_cleanup_verified':True, 'peer_useful_after_subject':True,
+                    'fresh_prepared_recovery_useful':True, 'observed_children':2,
+                    'kernel_observations':[{'counter_max':{'oom':1,'oom_kill':1,'pids_max':1,'throttled':0},
+                        'memory_peak_bytes':1000,'tasks_peak':16,'leaf_duration_millis':5,'removed':True,
+                        'errors':[],'incomplete_reasons':[]}],
+                    'target_receipts':[{'server_id':server,'phase':'closed','reason':{
+                        'memory':'mcp_budget_memory_exhausted','pids':'mcp_budget_pids_exhausted',
+                        'wall':'mcp_budget_wall_expired'}[kind]}],
+                    'trace_sha256':SHA,'peer_budget':copy.deepcopy(normal_budget),
+                    'recovery_budget':copy.deepcopy(normal_budget), 'private-marker':'never-publish'})
+        value={'format':'sou142-original-pressure/1','status':'passed','workspace_unchanged':True,
+            'raw_process_metadata_exported':False,'observer_cleanup_performed':False,'attempts':rows}
+        self.assertEqual(P.pressure(value,a)['status'],'passed')
+        self.assertNotIn('never-publish',json.dumps(P.pressure(value,a)))
+        for mutate in [lambda v:v['attempts'].pop(),
+            lambda v:v['attempts'][0].update(original_runtime_observed=False),
+            lambda v:v['attempts'][0].update(fresh_prepared_recovery_useful=False),
+            lambda v:v['attempts'][0]['kernel_observations'][0]['counter_max'].update(oom_kill=0),
+            lambda v:v['attempts'][1]['kernel_observations'][0]['counter_max'].update(pids_max=0),
+            lambda v:v['attempts'][0]['target_receipts'][0].update(phase='active-at-attachment'),
+            lambda v:v['attempts'][0].update(forced_cleanup=True)]:
+            changed=copy.deepcopy(value); mutate(changed)
+            with self.assertRaises(P.Invalid):P.pressure(changed,a)
+        self.assertEqual(P.pressure(None,a)['status'],'unavailable')
+        value['status']='incomplete'; value['attempts'][0]['status']='incomplete'
+        value['attempts'][0]['reason']='original_resource_refusal_unproven'
+        self.assertEqual(P.pressure(value,a)['status'],'incomplete')
+
     def test_missing_controls_cleanup_identity_effects_or_receipts_cannot_pass(self):
         a, r = fixture()
         mutations = [

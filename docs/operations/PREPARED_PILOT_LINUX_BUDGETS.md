@@ -105,12 +105,16 @@ empty owned root, the existing original-host driver accepts:
 ```sh
 python3 -B scripts/qualify-prepared-pilot-run.py --selection ABSOLUTE_SELECTION \
   --expected-commit FULL_COMMIT --strace /usr/bin/strace --linux-budget ABSOLUTE_BUDGET \
+  --linux-budget-peer ABSOLUTE_INDEPENDENT_PEER_BUDGET \
   --output ABSOLUTE_NEW_OUTPUT
 ```
 
 It checks both original-server records in useful/Ask/default and ordinary
-failure/cancellation cases. Its separate emergency-stop section still exercises
-the original unbudgeted contract; it is not evidence of budgeted stop coverage.
+failure/cancellation cases. For budgeted qualification, its emergency-stop section requires a second explicit
+normal budget on an independent owned delegated root. Both runs must finish with
+bound receipts, the peer must remain useful after the selected run stops, and
+all owned leaves and members must be gone. Omitting this peer input refuses
+qualification rather than silently running the stop control without budgets.
 Native memory/PID/wall calibration, independent sibling survival, restart/capacity
 recovery, budgeted emergency-stop and abrupt parent-loss observations are required
 before final qualification. macOS parser/CLI results do not replace those Linux
