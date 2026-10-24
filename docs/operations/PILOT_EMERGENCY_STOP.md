@@ -60,8 +60,11 @@ failure even after its grant expires. This is a trusted-collector protocol,
 not remote process attestation.
 
 The launcher allows these existing owners a bounded cleanup opportunity before
-host-group termination, including when the host exits before its queued TERM is
-handled. It keeps the group leader unreaped, checks TERM/KILL errors and bounds
+host-group termination on both ordinary host exit and an operator Stop. It
+revokes only the run's exact two grants first, including unenrolled grants, and
+waits for the registered owners' acknowledgements. Ordinary completion creates
+no Stop marker; unavailable or foreign confirmation remains an error after best
+effort physical cleanup. It keeps the group leader unreaped, checks TERM/KILL errors and bounds
 Linux reap/group-empty observation. It then independently verifies that all
 selected cleanup obligations, collector sessions and pending approvals have
 closed. A signed, exact-run `stopped` receipt is written only after those checks

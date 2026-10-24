@@ -127,6 +127,31 @@ class ProposalScheduling(unittest.TestCase):
             self.assertEqual(result['stderr_diagnostic'], 'read_lease_lost')
             self.assertTrue(result['primary_is_error'])
 
+    def test_cleanup_failure_diagnostics_keep_only_selected_finite_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private = "private-owner-token-and-arguments"
+            trace = SimpleNamespace(exists=lambda: True, stat=lambda: SimpleNamespace(st_size=1),
+                                    read_text=lambda: private)
+            pilot = SimpleNamespace(kind='filesystem', process=SimpleNamespace(poll=lambda: 1),
+                offered=set(), model=SimpleNamespace(requests=[], results={}), root=root,
+                trace=trace, setup=SimpleNamespace(binary=root / 'agentfw'),
+                err=SimpleNamespace(closed=True))
+            rows = [{"event":"mcp_real_server_end", "owner":private,
+                "owner_cleanup_verified":False, "cleanup_verified":False,
+                "transport_complete":True, "budget_cleanup_verified":private}]
+            with patch.object(Path, 'read_bytes', return_value=b'owned collector retirement not confirmed within cleanup budget'), \
+                 patch.object(ASK.LAUNCH, 'normalized_syscalls', return_value=([], {})), \
+                 patch.object(ASK.LAUNCH, 'collector_processes', return_value={7: 'filesystem'}), \
+                 patch.object(ASK.LATENCY, 'collector_stderr_rows', return_value=rows), \
+                 patch.object(ASK.LAUNCH, 'sha', return_value='a' * 64):
+                result = ASK.Pilot.failure_observation(pilot)
+            self.assertEqual(result['stderr_diagnostic'], 'collector_retirement_unconfirmed')
+            self.assertEqual(result['collector_cleanup'], [{"server":"filesystem",
+                "event":"mcp_real_server_end", "owner_cleanup_verified":False,
+                "cleanup_verified":False, "transport_complete":True}])
+            self.assertNotIn(private, json.dumps(result))
+
     def test_cancellation_wakes_provider_without_authorizing_proposals(self):
         gate = ASK.ProposalGate(deferred=True)
         gate.cancel()

@@ -42,6 +42,12 @@ BASE, require = LAUNCH.BASE, LAUNCH.require
 def diagnostic(text):
     # Export a finite code, never arbitrary host/argument/token output.
     for marker, code in [
+        ("owned collector retirement not confirmed within cleanup budget", "collector_retirement_unconfirmed"),
+        ("selected namespace cleanup unconfirmed", "owner_cleanup_unconfirmed"),
+        ("foreign namespace cleanup identity", "foreign_cleanup_identity"),
+        ("daemon did not confirm revocation", "run_revocation_unconfirmed"),
+        ("owned host process group termination unconfirmed", "host_group_unconfirmed"),
+        ("selected-owner cleanup worker failed", "owner_cleanup_worker_failed"),
         ("collector authority failed", "authority_verification"),
         ("same agentfw executable", "collector_image"),
         ("accepted two-server", "classifier_identity"),
@@ -337,8 +343,17 @@ class Pilot:
                 collectors = LAUNCH.collector_processes(lines, self.setup.binary)
                 timings = []
                 failures = []
+                cleanup = []
                 for pid, server in collectors.items():
                     for row in LATENCY.collector_stderr_rows(lines, pid):
+                        if row.get("event") in ("mcp_real_owner_end", "mcp_real_budget_end", "mcp_real_server_end"):
+                            # Finite, selected-collector booleans only. Owner
+                            # metadata, credentials and raw trace stay private.
+                            fields = {k: row[k] for k in ("cleanup_verified", "observed_failure",
+                                "budget_cleanup_verified", "budget_failure_observed",
+                                "owner_cleanup_verified", "owner_failure_observed", "transport_complete")
+                                if type(row.get(k)) is bool}
+                            cleanup.append(dict(server=server, event=row["event"], **fields))
                         code = row.get("failure_code")
                         if (row.get("event") in ("mcp_verified_inputs_capture_failure", "mcp_real_transport_failure")
                                 and code in ("identity_lookup_changed", "identity_changed", "size_changed", "bytes_changed",
@@ -353,6 +368,7 @@ class Pilot:
                             timings.append({"server": server, "stage": stage, "elapsed_ms": elapsed})
                 result["asset_timings"] = timings[:32]
                 result["collector_failures"] = failures[:16]
+                result["collector_cleanup"] = cleanup[:16]
                 result["trace_sha256"] = LAUNCH.sha(self.trace)
             except LATENCY.ObservationError as error:
                 result["trace_diagnostic"] = {"reason": "write_unobserved", "kind": error.kind,

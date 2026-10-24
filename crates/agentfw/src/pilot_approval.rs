@@ -624,11 +624,15 @@ impl RunGuard {
         let run = self.run.clone();
         let dir = self.dir.clone();
         move || {
-            if !has_stop(&dir)? {
-                return Ok(());
+            if has_stop(&dir)? {
+                let bytes = read_file(&dir.join("run.json"), true)?;
+                read_stop(&dir, &run, &bytes)?;
             }
-            let bytes = read_file(&dir.join("run.json"), true)?;
-            read_stop(&dir, &run, &bytes)?;
+            // Ordinary host exit is also terminal. Retire only this run's two
+            // exact grants before waiting: no late owner may enroll, and live
+            // owners are woken to discharge their existing cleanup obligation.
+            // No stop marker is created; normal failure/cancellation stays failed.
+            revoke(&run)?;
             let deadline = std::time::Instant::now() + Duration::from_secs(6);
             loop {
                 let live = snapshot(&run.home)?;
@@ -1432,6 +1436,147 @@ mod tests {
                     value
                 );
             }
+        }
+    }
+
+    #[test]
+    fn ordinary_exit_cannot_skip_unavailable_owner_confirmation() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().canonicalize().unwrap();
+        // A real closed loopback endpoint models loss of the authenticated
+        // cleanup observer. Ordinary completion must not call it confirmed.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let config = home.join("config.yaml");
+        write_new(&config, &json!({"bind":"127.0.0.1","port":port})).unwrap();
+        write_new(&home.join("native-token"), &"owned-witness-key").unwrap();
+        let dir = home.join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        run.files = vec![FileIdentity {
+            path: config.clone(),
+            sha256: digest(&fs::read(config).unwrap()),
+        }];
+        let guard = RunGuard {
+            _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
+            dir,
+            run,
+        };
+        assert!(!has_stop(&guard.dir).unwrap());
+        assert!(
+            guard.cleanup_waiter()().is_err(),
+            "ordinary completion skipped the authenticated owner confirmation"
+        );
+    }
+
+    #[tokio::test]
+    async fn ordinary_exit_revokes_before_waiting_for_exact_owner_acknowledgement() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        use wiremock::{
+            matchers::{body_json, method, path},
+            Mock, MockServer, ResponseTemplate,
+        };
+
+        for foreign_owner in [false, true] {
+            let server = MockServer::start().await;
+            let root = tempfile::tempdir().unwrap();
+            let home = root.path().canonicalize().unwrap();
+            let config = home.join("config.yaml");
+            write_new(
+                &config,
+                &json!({"bind":"127.0.0.1", "port":server.address().port()}),
+            )
+            .unwrap();
+            write_new(&home.join("native-token"), &"owned-witness-key").unwrap();
+            let dir = home.join("run");
+            create_dir(&dir).unwrap();
+            let mut run = run();
+            run.home = home;
+            run.authorities.insert("git".into(), "d".repeat(64));
+            run.files = vec![FileIdentity {
+                path: config.clone(),
+                sha256: digest(&fs::read(config).unwrap()),
+            }];
+            let revoked = Arc::new(AtomicBool::new(false));
+            let ready = Arc::new(AtomicBool::new(false));
+            let observed = Arc::new(tokio::sync::Notify::new());
+            let revoked_reply = revoked.clone();
+            Mock::given(method("POST"))
+                .and(path(crate::native::pilot_stop::ENDPOINT))
+                .and(body_json(
+                    json!({"contract_version":crate::native::pilot_stop::CONTRACT,
+                    "instance_id":run.instance_id,"registry_sha256":run.registry_sha256,
+                    "host_session":run.host_session,"authorities":run.authorities,
+                    "expires_at_ms":run.authority_expires_at_ms}),
+                ))
+                .respond_with(move |_: &wiremock::Request| {
+                    revoked_reply.store(true, Ordering::SeqCst);
+                    ResponseTemplate::new(200).set_body_json(json!({
+                        "contract_version":crate::native::pilot_stop::CONTRACT,
+                        "instance_id":"daemon-one","host_session":"host-one","status":"revoked"}))
+                })
+                .expect(1)
+                .mount(&server)
+                .await;
+            let ready_reply = ready.clone();
+            let observed_reply = observed.clone();
+            Mock::given(method("GET"))
+                .and(path("/native/v1/instance"))
+                .respond_with(move |_: &wiremock::Request| {
+                    assert!(
+                        revoked.load(Ordering::SeqCst),
+                        "owner observation preceded exact revocation"
+                    );
+                    let verified = ready_reply.load(Ordering::SeqCst);
+                    if !verified {
+                        observed_reply.notify_one();
+                    }
+                    ResponseTemplate::new(200).set_body_json(json!({
+                        "instance_id":"daemon-one","pilot_collectors":[],"pilot_pending":[],
+                        "pilot_cleanup":[{"authority_sha256":"c".repeat(64),
+                            "host_session":if foreign_owner {"foreign"} else {"host-one"},
+                            "server_id":"filesystem","verified":verified}]}))
+                })
+                .mount(&server)
+                .await;
+            let guard = RunGuard {
+                _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
+                dir,
+                run,
+            };
+            assert!(!has_stop(&guard.dir).unwrap());
+            let task = tokio::task::spawn_blocking(guard.cleanup_waiter());
+            if foreign_owner {
+                let result = tokio::time::timeout(Duration::from_secs(3), task)
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("foreign namespace cleanup identity"));
+            } else {
+                tokio::time::timeout(Duration::from_secs(3), observed.notified())
+                    .await
+                    .unwrap();
+                assert!(
+                    !task.is_finished(),
+                    "unconfirmed namespace was accepted as clean"
+                );
+                ready.store(true, Ordering::SeqCst);
+                tokio::time::timeout(Duration::from_secs(3), task)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap();
+            }
+            // Ordinary completion never forges an authenticated operator Stop.
+            assert!(!has_stop(&guard.dir).unwrap());
         }
     }
 

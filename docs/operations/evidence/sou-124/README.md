@@ -1,5 +1,38 @@
 # SOU-124 qualification evidence
 
+## Current-base terminal-cleanup follow-up
+
+The accepted SOU-125 integration `e17d73a` was source-approved, but its current-base
+CI `40070620829` failed in the Ask lifecycle witness with
+`unexpected_launcher_exit_cleanup`. Nine cases passed; the filesystem approve
+case remained failed with four later cases incomplete. Its primary launcher and
+owned cleanup had succeeded. The failing operation was `sibling.finish()` after
+explicitly rejecting the independent run. The retained diagnostics did not
+identify which namespace acknowledgement was missing; the failed sample is not
+dismissed or relabelled.
+
+A regression reproduces a concrete terminal-order defect: without an operator
+Stop marker, `cleanup_waiter` returned success without consulting the daemon or
+existing owners. Normal host-group TERM/KILL could therefore destroy collectors
+before they acknowledged namespace cleanup. Terminal cleanup now revokes only
+this run's two exact grants, closing admission and waking enrolled owners, then
+uses the existing bounded acknowledgement wait before signalling the pinned,
+unreaped host group. An acknowledgement failure still performs physical cleanup
+and reaping, then propagates the failure. Normal completion creates no Stop
+marker and cannot become a fake `stopped` outcome. Foreign, unavailable or
+unconfirmed ownership still refuses; all existing effect assertions and budgets
+remain.
+
+The new unavailable-observer regression failed on the original implementation.
+After the correction it and a real loopback HTTP ordering/acknowledgement control
+pass, including a foreign-owner refusal and no fake Stop marker. Local workspace
+qualification passes 1716 Rust tests (13 existing ignores) and 1245 Python tests
+(1166 passed, 79 existing platform/optional skips), with zero failures. Strict
+clippy/formatting and current native qualification are recorded separately in
+`terminal-cleanup-order-correction.json`. The earlier performance comparison
+below remains attributed to its measured source; it is not a claim that the
+post-integration failure or this new native qualification passed.
+
 ## Current native comparison
 
 `native-linux-current.json` records the passing comparison in run `40052146937`
