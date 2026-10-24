@@ -1247,6 +1247,11 @@ mod linux {
             // Only the member observation is exercised here. Controller setup
             // is deliberately not represented as a real cgroup containment test.
             let root = tempfile::tempdir().unwrap();
+            std::fs::set_permissions(
+                root.path(),
+                std::os::unix::fs::PermissionsExt::from_mode(0o700),
+            )
+            .unwrap();
             let leaf_path = root.path().join("owned-observation");
             std::fs::create_dir(&leaf_path).unwrap();
             let procs = std::fs::OpenOptions::new()
@@ -1274,6 +1279,7 @@ mod linux {
                 started: std::time::Instant::now(),
                 removed: false,
             };
+            boundary.identity().unwrap();
             (root, boundary)
         }
 
@@ -1326,7 +1332,18 @@ mod linux {
                 };
                 std::os::unix::fs::FileExt::write_all_at(&boundary.procs, record.as_bytes(), 0)
                     .unwrap();
-                assert!(boundary.member_task(pid, Some(pinned)).is_err());
+                assert_eq!(
+                    boundary.member_task(pid, Some(pinned)),
+                    Err("mcp_budget_membership_unverified")
+                );
+                assert_eq!(
+                    boundary.membership_failures.snapshot().unwrap().phase,
+                    if malformed {
+                        "member_pid_parse"
+                    } else {
+                        "member_departure_still_listed"
+                    }
+                );
                 assert_eq!(
                     boundary.membership_observations.snapshot()["confirmed_departures"],
                     0

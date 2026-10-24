@@ -18,6 +18,29 @@
       "original_server_cycles_attempted": 0,
       "native_acceptance_passed": false,
       "cause": "Offline accepted-source test compile could not download the uncached locked assert-json-diff 2.0.2 dev dependency. Fetch locked test dependencies during preparation, then keep regression compilation offline."
+    },
+    {
+      "run_id": 40090656000,
+      "source": "efd1397992f3910a128421691e48a4225122a7df",
+      "status": "test_dependency_preparation_failed",
+      "candidate_linux_build_passed": true,
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "cause": "Same uncached locked dev dependency as prior run; run completed before cancellation request."
+    },
+    {
+      "run_id": 40090846936,
+      "source": "2e0b0a59661be697ea077374068cf838e00c5eac",
+      "status": "candidate_control_failed",
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 22,
+        "failed": 1,
+        "ignored": 1
+      },
+      "cause": "Observation-only temp root inherited a nonprivate mode and was correctly rejected as limit drift. Set fixture root to 0700 and require its identity before exercising membership. Negative fixtures now assert exact refusal phases."
     }
   ]
 }

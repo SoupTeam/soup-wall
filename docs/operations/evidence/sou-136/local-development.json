@@ -4,7 +4,7 @@
   "platform": "macOS arm64",
   "native_linux_success_claimed": false,
   "subject_sha256": {
-    "crates/agentfw/src/mcp/linux_budget.rs": "dfade177b092d5fe8e138db85874f987125efb2fb428973c8427fdb2269c066c",
+    "crates/agentfw/src/mcp/linux_budget.rs": "ff7c211bafb877494acbf21295012bcd5166688b29fc0841d0bc0567ea286537",
     "crates/agentfw/src/mcp/linux_budget/process.rs": "b6f1d2c5b21d6b7be445fadc53d3fa445e73b7aa01a6bb6c2ea72645b2c06652",
     "scripts/verify-sou136-membership-lifetime.py": "9528032cdd9575e7f5b34ae247cf275dfaf292ad10f0058082d1519ca54245bd",
     "scripts/tests/test_sou136_membership_lifetime.py": "88ec04492c11910bf1d7c79a96af28a82ce0efa01aefd4482d787730d1e8c020"
@@ -39,7 +39,8 @@
     "clippy-development-final.log": "ff91f2c6c0b13f4c520a70a228255eb4b1fdf77284cce372fb1ade924adb8a1f",
     "final-static-focused.log": "2c3d601a5b9234f674bed9a7fe68cc3baf6cc16d3bec7619c8d6537a8084f818",
     "linux-visibility-local.log": "dfd335cad4f6bce18d5f65479260e8f12d93f2316e19976ecb07179b5560c2c3",
-    "cgroup-shape-local.log": "1c6e3f525a11a5dbd122e68b30a681d4435020f58de9195a576c58fb1db793df"
+    "cgroup-shape-local.log": "1c6e3f525a11a5dbd122e68b30a681d4435020f58de9195a576c58fb1db793df",
+    "fixture-permissions-local.log": "9ede84614722163fba56e00de4e23e520caef72588c72cd64d400e612302c8e6"
   },
   "retained_environment_setup_failures": [
     "Initial source snapshot lacked full Git metadata, causing CLI/docs controls to fail. Corrected by copying its own Git metadata.",
@@ -47,5 +48,5 @@
     "CLI prerequisite expected target/debug in the snapshot. A symlink to the existing writable scratch target supplied the built binary."
   ],
   "linux_status": "Not yet run; Linux-only process tests, real-kernel before failure and 140 original-server cycles are pending.",
-  "follow_up": "Linux visibility and cgroup record-shape corrections: repeated strict workspace clippy, fmt and 17 focused Python controls passed; Linux-only code still requires native qualification."
+  "follow_up": "The final Linux-only fixture permission correction passed local strict workspace clippy, fmt and six budget configuration controls. Native Linux execution remains required."
 }
