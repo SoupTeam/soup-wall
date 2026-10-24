@@ -166,8 +166,8 @@ class Prepared:
         self.env = dict(context.env, ANTHROPIC_BASE_URL=self.model.url,
             ANTHROPIC_API_KEY="owned-loopback-only", HTTP_PROXY="http://127.0.0.1:9",
             HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
-        command = [str(context.args.strace), "-f", "-qq", "-s", "1048576", "-e",
-            "trace=execve,openat,close,write,writev,recvfrom,kill", "-o", str(self.trace), sys.executable, "-B",
+        command = [str(context.args.strace), "-f", "-qq", "-s", "1048576", "-e", "raw=read", "-e",
+            "trace=execve,openat,close,write,writev,socketpair,sendto,read,kill", "-o", str(self.trace), sys.executable, "-B",
             str(context.source / "scripts/pilot-run.py"), "--run", "--selection",
             str(context.args.selection), "--expected-commit", context.args.expected_commit,
             "--state-root", str(self.state), "--timeout-seconds", "90"]

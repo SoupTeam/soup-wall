@@ -194,7 +194,7 @@ class IndependentExecEvidence(unittest.TestCase):
         values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
         rows = []
         roles = [('/usr/bin/python3', ['python3', '/owned/scripts/pilot-run.py'], values),
-                 ('/owned/claude', ['claude', '--restricted'], {'AGENTFW_PROVIDER_CHANNEL':'23',
+                 ('/owned/claude', ['claude', '--restricted', '-p', 'owned prompt'], {'AGENTFW_PROVIDER_CHANNEL':'23',
                      'AGENTFW_PROVIDER_CODE':'24', 'BUN_OPTIONS':'--preload=/proc/self/fd/24'})]
         roles += [('/owned/agentfw', ['agentfw', role], {})
                   for role in ('serve', 'pilot-launch', 'mcp', 'protection-status')]
@@ -203,24 +203,29 @@ class IndependentExecEvidence(unittest.TestCase):
         for index, (path, args, env) in enumerate(roles):
             rows.append(f'{index+10} execve({json.dumps(path)}, {json.dumps(args)}, '
                         + json.dumps([key+'='+value for key,value in env.items()]) + ') = 0')
-        delivery = f'11 recvfrom(23, {json.dumps(json.dumps(values))}, 16385, 0, NULL, NULL) = {len(json.dumps(values))}'
-        rows += [delivery, '11 close(23) = 0']
+        delivery = f'13 sendto(22, {json.dumps(json.dumps(values))}, {len(json.dumps(values))}, MSG_NOSIGNAL, NULL, 0) = {len(json.dumps(values))}'
+        rows += ['13 socketpair(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC, 0, [22, 23]) = 0', delivery,
+                 f'11 read(0x17, 0x123abc, 0x4001) = {hex(len(json.dumps(values)))}', '11 close(23) = 0']
         normalize = lambda text: (text.splitlines(), {})
         result = witness.observe('\n'.join(rows), paths, values, normalize)
         self.assertEqual(result['unrelated_provider_values'], 0)
         self.assertEqual(result['successful_exec_counts']['classifier'], 1)
         self.assertFalse(any(value in json.dumps(result) for value in values.values()))
-        for missing in [rows[:-2], rows[:-2] + [delivery.replace('11 recvfrom', '99 recvfrom'), rows[-1]],
-                        rows[:-2] + [delivery]]:
+        for missing in [rows[:-4], rows[:-2] + [rows[-2].replace('11 read', '99 read'), rows[-1]],
+                        rows[:-1]]:
             with self.assertRaisesRegex(ValueError, 'provider_host_delivery_unproven'):
                 witness.observe('\n'.join(missing), paths, values, normalize)
+        helper = f'25 execve("/owned/claude", ["claude", "--helper"], []) = 0'
+        self.assertEqual(witness.observe('\n'.join(rows + [helper]), paths, values, normalize)['successful_exec_counts']['other'], 1)
+        with self.assertRaisesRegex(ValueError, 'provider_value_in_unrelated_process'):
+            witness.observe('\n'.join(rows + [helper.replace('[],', '[],').replace('[]) = 0', json.dumps(['ANTHROPIC_API_KEY='+values['ANTHROPIC_API_KEY']])+') = 0')]), paths, values, normalize)
         leaked = rows[:]
         leaked[2] = leaked[2].replace('[]) = 0', json.dumps(['ANTHROPIC_API_KEY='+values['ANTHROPIC_API_KEY']])+') = 0')
         with self.assertRaisesRegex(ValueError, 'provider_value_in_unrelated_process'):
             witness.observe('\n'.join(leaked), paths, values, normalize)
         with self.assertRaisesRegex(ValueError, 'provider_host_delivery_unproven'):
             witness.observe('\n'.join(rows[:2]), paths, values, normalize)
-        early = rows[:4] + rows[5:6] + rows[-2:]
+        early = rows[:4] + rows[5:6] + rows[-4:]
         refusal = witness.observe('\n'.join(early), paths, values, normalize, rejected=True)
         self.assertEqual(refusal['successful_exec_counts']['original'], 0)
         self.assertEqual(refusal['observation_stage'], 'first-request-authentication-refusal')

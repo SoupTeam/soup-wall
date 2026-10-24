@@ -156,7 +156,7 @@ No provider JSON is stored on disk or passed in argv. This is the reviewed pinne
 host boundary, not a sandbox for arbitrary hostile JavaScript inside that host.
 
 The native qualifier independently checks successful exec environments and the
-same host PID's actual recvfrom/close syscalls, plus authenticated loopback
+kernel socketpair identity, parent send and same host PID's raw read/close counts, plus authenticated loopback
 requests. Public evidence contains no packet bytes, keys, paths or PIDs. It still
 requires useful original filesystem/Git operations, restart, stop and log/error
 redaction. The earlier execute-only Landlock experiment is retained as failed:

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Trusted, source-embedded bootstrap for the pinned compiled Bun host only.
 'use strict';
-(() => {
+let stage = 'hooks';
+try { (() => {
   const fs = require('node:fs');
   const keys = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
     'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'SSL_CERT_FILE'];
@@ -47,34 +48,34 @@
   Object.defineProperty(Bun, '$', { value() { throw Error('provider_shell_unsupported'); },
     writable: false, configurable: false });
 
+  stage = 'descriptors';
   const channel = Number(process.env.AGENTFW_PROVIDER_CHANNEL);
   const code = Number(process.env.AGENTFW_PROVIDER_CODE);
   if (!Number.isSafeInteger(channel) || channel < 3 || !Number.isSafeInteger(code) || code < 3
       || channel === code) throw Error('provider_bootstrap_unavailable');
   fs.closeSync(code);
-  const { dlopen, FFIType, ptr } = require('bun:ffi');
-  const libc = dlopen('libc.so.6', {
-    send: { args: [FFIType.i32, FFIType.ptr, FFIType.u64, FFIType.i32], returns: FFIType.i64 },
-    recv: { args: [FFIType.i32, FFIType.ptr, FFIType.u64, FFIType.i32], returns: FFIType.i64 }
-  });
   const hello = Buffer.from('sw-provider-ready/1');
   let raw;
   try {
-    if (Number(libc.symbols.send(channel, ptr(hello), hello.length, 0)) !== hello.length)
-      throw Error('provider_bootstrap_unavailable');
+    stage = 'ready';
+    if (fs.writeSync(channel, hello) !== hello.length) throw Error('provider_bootstrap_unavailable');
     const data = Buffer.alloc(16385);
-    const length = Number(libc.symbols.recv(channel, ptr(data), data.length, 0));
+    stage = 'delivery';
+    const length = fs.readSync(channel, data, 0, data.length, null);
     if (length < 2 || length > 16384) throw Error('provider_bootstrap_unavailable');
     raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data.subarray(0, length)));
     data.fill(0);
   } finally {
     fs.closeSync(channel);
-    libc.close();
     for (const key of internal) delete process.env[key];
   }
+  stage = 'values';
   if (raw === null || Array.isArray(raw) || typeof raw !== 'object'
       || Object.entries(raw).some(([k, v]) => !keys.includes(k) || typeof v !== 'string' || v.includes('\0')))
     throw Error('provider_bootstrap_unavailable');
   for (const key of keys) delete process.env[key];
   for (const [key, value] of Object.entries(raw)) process.env[key] = value;
-})();
+})(); } catch {
+  process.stderr.write('sw-provider-bootstrap-failed/' + stage + '\n');
+  process.exit(78);
+}
