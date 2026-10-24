@@ -55,7 +55,11 @@ namespace owner, resource budget, child reap and stderr boundaries confirm
 cleanup. Registration and confirmation require the exact enrolled session epoch
 and private owner capability as well as native authentication. The one-purpose
 confirmation remains possible after session retirement, without reviving the
-session or its authority. Obligations are bounded; an unconfirmed one remains a
+session or its authority. Selected collectors intercept Unix SIGTERM before
+creating a namespace owner, so host shutdown cancels transport through those
+same cleanup boundaries instead of abruptly skipping the acknowledgement.
+Interrupted transport remains failed; interception is not proof of cleanup.
+Obligations are bounded; an unconfirmed one remains a
 failure even after its grant expires. This is a trusted-collector protocol,
 not remote process attestation.
 

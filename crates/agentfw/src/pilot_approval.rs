@@ -1472,6 +1472,43 @@ mod tests {
         );
     }
 
+    #[cfg(not(unix))]
+    #[tokio::test]
+    async fn ordinary_exit_refuses_unsupported_owner_contract_before_network() {
+        let server = wiremock::MockServer::start().await;
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().canonicalize().unwrap();
+        let config = home.join("config.yaml");
+        write_new(
+            &config,
+            &json!({"bind":"127.0.0.1", "port":server.address().port()}),
+        )
+        .unwrap();
+        write_new(&home.join("native-token"), &"owned-witness-key").unwrap();
+        let dir = home.join("run");
+        create_dir(&dir).unwrap();
+        let mut run = run();
+        run.home = home;
+        run.files = vec![FileIdentity {
+            path: config.clone(),
+            sha256: digest(&fs::read(config).unwrap()),
+        }];
+        let guard = RunGuard {
+            _manifest: fs::File::create(dir.join("fixture-manifest")).unwrap(),
+            dir,
+            run,
+        };
+        let result = tokio::task::spawn_blocking(guard.cleanup_waiter())
+            .await
+            .unwrap();
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("run-scoped approval requires qualified Linux"));
+        assert!(server.received_requests().await.unwrap().is_empty());
+        assert!(!has_stop(&guard.dir).unwrap());
+    }
+
     // RunGuard's private-file/owned-process contract is Unix-only. Windows
     // refuses it before opening a native endpoint and cannot exercise this path.
     #[cfg(unix)]

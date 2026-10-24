@@ -159,6 +159,7 @@ class Pilot:
         self.trace = root / "syscalls.private"
         self.model = BASE.DEMO.ScriptedModel([])
         self.offered, self.result_times, self.result_monotonic = set(), {}, {}
+        self.close_after_primary = False
         self.proposals = ProposalGate(deferred)
         target = ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}) if kind == "filesystem" else (
             "git", "git_show", {"repo_path": "/workspace", "revision": setup.head_before})
@@ -184,6 +185,8 @@ class Pilot:
                 proposals = [("primary", self.primary)]
                 if kind == "filesystem":
                     proposals.append(("allow-peer", self.peer))
+            elif self.close_after_primary:
+                return [{"type": "text", "text": "Owned terminal signal probe completed."}]
             elif "followup" not in self.model.results:
                 proposals = [("followup", self.peer)]
             else:
@@ -306,6 +309,26 @@ class Pilot:
         until(lambda: Path(f"/proc/{pid}/stat").read_text().rsplit(")",1)[1].split()[0] in ("T","t"), "collector_not_stopped",seconds=2)
         require(BASE.ProcessWitness.identity(pid) == identity, "collector_identity_changed")
 
+    def terminate_collector(self):
+        observed = self.wire_observation()
+        matches = [pid for pid, server in observed["collector_servers"].items() if server == self.kind]
+        require(len(matches) == 1, "one_kernel_observed_selected_collector_required")
+        pid = matches[0]
+        # The trace retains historical PIDs. Bind the pidfd to an identity
+        # already sampled while this process was an owned descendant; reading
+        # a new identity here could adopt an unrelated reused PID.
+        starts = [start for candidate, start in self.witness.observed.copy() if candidate == pid]
+        require(len(starts) == 1, "recorded_selected_collector_identity_required")
+        identity = starts[0]
+        require(BASE.ProcessWitness.identity(pid) == identity, "selected_collector_not_live")
+        descriptor = os.pidfd_open(pid)
+        try:
+            require(BASE.ProcessWitness.identity(pid) == identity, "collector_identity_changed")
+            signal.pidfd_send_signal(descriptor, signal.SIGTERM)
+        finally:
+            os.close(descriptor)
+        return pid
+
     def decide(self, pending, decision):
         self.inspect(pending)
         self.operator(decision, pending["pending_id"], "--binding", pending["binding_sha256"])
@@ -344,7 +367,15 @@ class Pilot:
                 timings = []
                 failures = []
                 cleanup = []
+                terminal = []
                 for pid, server in collectors.items():
+                    for line in lines:
+                        match = re.fullmatch(rf"{pid}\s+(?:exit_group\((\d+)\).*|\+\+\+ killed by (SIGTERM|SIGKILL|SIGINT|SIGPIPE|SIGSEGV|SIGABRT).*\+\+\+)", line)
+                        if match:
+                            if match[1] is not None and 0 <= int(match[1]) <= 255:
+                                terminal.append(dict(server=server, exit_code=int(match[1])))
+                            elif match[2] is not None:
+                                terminal.append(dict(server=server, signal=match[2]))
                     for row in LATENCY.collector_stderr_rows(lines, pid):
                         if row.get("event") in ("mcp_real_owner_end", "mcp_real_budget_end", "mcp_real_server_end"):
                             # Finite, selected-collector booleans only. Owner
@@ -369,6 +400,7 @@ class Pilot:
                 result["asset_timings"] = timings[:32]
                 result["collector_failures"] = failures[:16]
                 result["collector_cleanup"] = cleanup[:16]
+                result["collector_terminal"] = terminal[:16]
                 result["trace_sha256"] = LAUNCH.sha(self.trace)
             except LATENCY.ObservationError as error:
                 result["trace_diagnostic"] = {"reason": "write_unobserved", "kind": error.kind,
@@ -451,13 +483,15 @@ def qualify(args, private, report):
         samples = getattr(args, "approval_samples", 0)
         for kind in ("git", "filesystem"):
             selected_cases = (["approve"] * (samples or 1) if samples or getattr(args, "approval_smoke", False) else
-                ["expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"])
+                ["expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"]
+                + (["collector_term"] if kind == "git" else []))
             for sample_index, case in enumerate(selected_cases):
                 start_daemon(kind, 20 if case == "expire" else 30)
                 paired = kind == "filesystem" and case == "approve"
                 pilot = Pilot(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
                               enabled=case != "default", deferred=paired)
                 active.append(pilot)
+                pilot.close_after_primary = case == "collector_term"
                 row = {"profile": kind, "case": case, "sample_index": sample_index, "configured": case != "default", "pending":False,
                     "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
                     "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
@@ -524,6 +558,21 @@ def qualify(args, private, report):
                         else:
                             pilot.inspect(waiting)
                         os.kill(pilot.launcher_pid, signal.SIGTERM)
+                    elif case == "collector_term":
+                        row["stage"] = "terminate_exact_pending_collector"
+                        terminated_collector = pilot.terminate_collector()
+                        row["cleanup"] = pilot.finish()
+                        primary = pilot.model.results.get("primary")
+                        require(primary is not None and primary["is_error"] is True,
+                                "terminated_primary_not_refused")
+                        require(pilot.undispatched(), "terminated_collector_dispatched")
+                        lines, _ = LAUNCH.normalized_syscalls(pilot.trace.read_text())
+                        require(any(re.match(rf"^{terminated_collector}\s+exit_group\(1\)", line)
+                                    for line in lines), "collector_term_abrupt_exit_or_missing_ack")
+                        row.update(passed=True, dispatched=0, kernel_effects=0, released=False,
+                                   collector_sigterm="pidfd_pinned_graceful_cleanup_confirmed")
+                        pilot.close(); active.remove(pilot)
+                        continue
                     elif case == "restart":
                         pilot.inspect(waiting)
                         start_daemon(kind, 30)

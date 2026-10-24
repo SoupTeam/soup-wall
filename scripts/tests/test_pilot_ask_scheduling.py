@@ -141,7 +141,8 @@ class ProposalScheduling(unittest.TestCase):
                 "owner_cleanup_verified":False, "cleanup_verified":False,
                 "transport_complete":True, "budget_cleanup_verified":private}]
             with patch.object(Path, 'read_bytes', return_value=b'owned collector retirement not confirmed within cleanup budget'), \
-                 patch.object(ASK.LAUNCH, 'normalized_syscalls', return_value=([], {})), \
+                 patch.object(ASK.LAUNCH, 'normalized_syscalls', return_value=([
+                     '7 +++ killed by SIGTERM +++', '8 +++ killed by SIGKILL +++'], {})), \
                  patch.object(ASK.LAUNCH, 'collector_processes', return_value={7: 'filesystem'}), \
                  patch.object(ASK.LATENCY, 'collector_stderr_rows', return_value=rows), \
                  patch.object(ASK.LAUNCH, 'sha', return_value='a' * 64):
@@ -150,7 +151,42 @@ class ProposalScheduling(unittest.TestCase):
             self.assertEqual(result['collector_cleanup'], [{"server":"filesystem",
                 "event":"mcp_real_server_end", "owner_cleanup_verified":False,
                 "cleanup_verified":False, "transport_complete":True}])
+            self.assertEqual(result['collector_terminal'], [{"server":"filesystem", "signal":"SIGTERM"}])
             self.assertNotIn(private, json.dumps(result))
+
+    def test_collector_term_pins_kernel_observed_identity_before_signal(self):
+        pilot = SimpleNamespace(kind='git', witness=SimpleNamespace(observed={(7, 42): {}}),
+            wire_observation=lambda: {'collector_servers': {7: 'git', 8: 'filesystem'}})
+        for changed in (False, True):
+            with patch.object(ASK.BASE.ProcessWitness, 'identity', side_effect=[42, 43 if changed else 42]), \
+                 patch.object(ASK.os, 'pidfd_open', return_value=99, create=True) as opened, \
+                 patch.object(ASK.os, 'close') as closed, \
+                 patch.object(ASK.signal, 'pidfd_send_signal', create=True) as sent:
+                if changed:
+                    with self.assertRaisesRegex(ValueError, 'collector_identity_changed'):
+                        ASK.Pilot.terminate_collector(pilot)
+                    sent.assert_not_called()
+                else:
+                    self.assertEqual(ASK.Pilot.terminate_collector(pilot), 7)
+                    sent.assert_called_once_with(99, ASK.signal.SIGTERM)
+                opened.assert_called_once_with(7)
+                closed.assert_called_once_with(99)
+
+    def test_collector_term_refuses_ambiguous_or_dead_ownership(self):
+        for owners, identity, recorded in [
+                ({7: 'filesystem'}, 42, {(7, 42): {}}),
+                ({7: 'git', 8: 'git'}, 42, {(7, 42): {}}),
+                ({7: 'git'}, None, {(7, 42): {}}),
+                ({7: 'git'}, 43, {(7, 42): {}}),
+                ({7: 'git'}, 42, {}),
+                ({7: 'git'}, 43, {(7, 42): {}, (7, 43): {}})]:
+            pilot = SimpleNamespace(kind='git', witness=SimpleNamespace(observed=recorded),
+                wire_observation=lambda: {'collector_servers': owners})
+            with patch.object(ASK.BASE.ProcessWitness, 'identity', return_value=identity), \
+                 patch.object(ASK.os, 'pidfd_open', create=True) as opened:
+                with self.assertRaises(ValueError):
+                    ASK.Pilot.terminate_collector(pilot)
+                opened.assert_not_called()
 
     def test_cancellation_wakes_provider_without_authorizing_proposals(self):
         gate = ASK.ProposalGate(deferred=True)

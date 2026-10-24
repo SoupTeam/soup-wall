@@ -41,7 +41,37 @@ use `cfg(unix)`, matching the existing sealed-owner/receipt test boundary. Their
 bodies and all assertions remain unchanged on Linux/macOS; no runtime logic is
 changed by this test-platform correction. The failed Windows job is retained in
 `terminal-cleanup-witness-platform.json`. Current Windows and native CI remain
-required before readiness.
+required before readiness. An explicit non-Unix negative witness now asserts the
+unsupported-contract error and zero native HTTP requests against a live endpoint;
+Windows coverage is not silently skipped or misreported as successful cleanup.
+
+The same run failed the original Git Reject case with
+`collector_retirement_unconfirmed` (three passed, one failed, ten incomplete).
+Both Git owner and budget cleanup were verified, but the final Git collector
+completion/acknowledgement was absent. The real collector handled Ctrl-C but had
+no SIGTERM handler, allowing host shutdown to abruptly terminate that completion
+path. SIGTERM is now intercepted before owner creation and cancels transport
+through the existing full cleanup path. Missing or foreign acknowledgements
+remain failures. This source defect is consistent with the missing completion;
+the historical trace did not retain a terminal signal and does not prove which
+signal caused that sample. `collector-terminal-signal-correction.json` preserves
+the failure and finite observations.
+
+Full native lifecycle qualification retains all 14 existing cases and adds one
+Git-only `collector_term` probe. It signals the kernel-observed owned collector
+through a start-time-checked pidfd while the original Ask is pending, and requires
+a correlated refused result, zero original dispatch/effects, normal collector
+exit, authenticated cleanup and complete owned-process retirement. There is no
+useful-followup claim for this terminal cancellation probe; all existing useful
+continuation assertions and deadlines remain. Approval-only timing samples and
+the 80-row comparison denominator are unchanged. Current native proof remains
+required; local tests cannot supply that result.
+
+The current-base integration includes main `2b07991` (SOU-122). Both workflow
+conflicts preserve optional comparison validation and compiler/interpreter
+attestation; the generated component workflow is checked against its sources.
+Local development uses Homebrew Rust 1.99.0 on macOS, while current CI must attest
+and qualify the accepted lane pins (1.99.1, native Linux 1.94.1).
 
 ## Current native comparison
 

@@ -1587,6 +1587,13 @@ pub(super) async fn run(
     profile: &server_profile::ProfileConfig,
     workspace: &std::path::Path,
 ) -> anyhow::Result<()> {
+    // The host may TERM its MCP children during normal shutdown, including
+    // after their namespace owners have finished but before the authenticated
+    // cleanup acknowledgement. Install interception before creating an owner;
+    // later TERM must not abruptly kill the completion path.
+    #[cfg(unix)]
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .context("install selected collector termination handler")?;
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
     // Register before even preparing/starting the selected owner's namespace.
     // Stop spends grants under the same native lock, so a late registration
@@ -1757,6 +1764,12 @@ pub(super) async fn run(
                 Ok(()) => Err(anyhow::anyhow!("mcp_budget_monitor_stopped")),
             },
             _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("native_mcp_interrupted")),
+            _ = async {
+                #[cfg(unix)]
+                sigterm.recv().await;
+                #[cfg(not(unix))]
+                std::future::pending::<()>().await;
+            } => Err(anyhow::anyhow!("native_mcp_terminated")),
             result = &mut transport => result,
         }
     };

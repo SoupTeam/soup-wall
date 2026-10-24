@@ -408,6 +408,17 @@ jobs:
           [[ "$NATIVE_ONLY" == true ]]
           [[ "$ASK_BASELINE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ASK_BASELINE_SHA" == 8c275fcc9abdee99d4997cd4a985e6ce14d751e6 ]]
+      - name: Attest compiler and interpreter inputs for the native lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/sou122-toolchain"
+          status=0
+          python3 -B scripts/verify-pilot-toolchain.py --lane native \
+            --python "$(command -v python3)" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou122-toolchain/native-attestation.json" || status=$?
+          cat "$RUNNER_TEMP/sou122-toolchain/native-attestation.json"
+          exit "$status"
       - name: Focused preparation boundaries
         env:
           PILOT_CLEANUP_PRIVILEGED_FIXTURE: '1'
@@ -873,6 +884,7 @@ jobs:
           name: sou111-native-preparation-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/sou111-assets/selected-hashes.txt
+            ${{ runner.temp }}/sou122-toolchain/native-attestation.json
             ${{ runner.temp }}/sou111-assets/native-summary.json
             ${{ runner.temp }}/sou111-assets/native-timing.json
             ${{ runner.temp }}/sou111-assets/native-rejected.json

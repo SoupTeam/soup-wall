@@ -9,7 +9,7 @@
   "runtime_change_since_e340932": false,
   "linux_macos_behavior_change_since_e340932": false,
   "failure_log_sha256": "1b89414568087801be781fd8faaa8909b13798112fb8b876d821086235f3962d",
-  "next": "current Windows CI plus current native qualification required; previous failure is retained",
+  "next": "Current Windows negative-contract test and Unix handshake CI required; no Windows positive cleanup claim.",
   "local_followup": {
     "unix_witnesses_passed": 2,
     "failed": 0,
@@ -21,5 +21,6 @@
       "clippy-terminal-platform.log": "2b5f433124d43812715a4809ee8688dcccb8c4c3cc8b93c4491766e4f751b472",
       "docs-terminal-platform.log": "13a134411ba6c2fd5f48cb11b44e9c491191229d9c55a6c4891cc720a4f943cf"
     }
-  }
+  },
+  "followup_coverage": "Unix keeps the positive exact revocation/owner handshake unchanged. An explicit non-Unix async test requires the supported-contract error and zero requests received by a live mock endpoint; normal completion cannot claim cleanup there."
 }
