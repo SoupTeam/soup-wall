@@ -4,6 +4,7 @@
 //! Stage C (candle ML) is added in Plan 3 behind this same `Detector` impl.
 
 mod heuristics;
+mod result_directives;
 mod signatures;
 
 #[cfg(feature = "ml")]
@@ -35,6 +36,12 @@ impl Default for InjectionDetector {
 }
 
 impl InjectionDetector {
+    /// Positive request evidence only; no finding is ever removed or downgraded.
+    /// The caller must restrict this to the untrusted MCP-result preview path.
+    pub fn mcp_result_directives(text: &str) -> Vec<Finding> {
+        result_directives::scan(text)
+    }
+
     /// Additional lexical evidence across ordered, already bounded MCP result
     /// blocks. No aggregate heuristic score or benign inference is produced.
     /// Callers must still inspect every original block and apply their policy.
@@ -56,7 +63,10 @@ impl InjectionDetector {
                 joined.push_str(text);
                 ranges.push(start..joined.len());
             }
-            for mut finding in signatures::scan(&joined) {
+            for mut finding in signatures::scan(&joined)
+                .into_iter()
+                .chain(result_directives::scan(&joined))
+            {
                 let span = finding.span.as_ref().expect("signature span");
                 let first = ranges.partition_point(|range| range.end <= span.start);
                 let sources: Vec<_> = ranges
