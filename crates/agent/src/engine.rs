@@ -320,7 +320,7 @@ impl AgentFirewall {
 
     /// Inspect one event and decide what to do about it.
     pub fn inspect(&mut self, ev: &AgentEvent) -> Outcome {
-        self.inspect_inner(ev, None, true, None)
+        self.inspect_inner(ev, None, true, &[], None)
     }
 
     /// Observe the same legacy inspection without re-running detectors or rules.
@@ -328,7 +328,7 @@ impl AgentFirewall {
     /// beyond the behavior of `inspect`; callers must still constrain event kinds.
     pub fn inspect_with_trace(&mut self, ev: &AgentEvent) -> (Outcome, Option<InspectionTrace>) {
         let mut trace = None;
-        let outcome = self.inspect_inner(ev, None, true, Some(&mut trace));
+        let outcome = self.inspect_inner(ev, None, true, &[], Some(&mut trace));
         (outcome, trace)
     }
 
@@ -401,12 +401,34 @@ impl AgentFirewall {
         egress: &[String],
         roles: NativeArgumentRoles,
     ) -> Outcome {
-        self.inspect_inner(ev, Some((baseline, egress, roles)), false, None)
+        self.inspect_inner(ev, Some((baseline, egress, roles)), false, &[], None)
     }
 
     /// Inspect before release without tainting a session with withheld content.
     pub fn preview_native_result(&mut self, ev: &AgentEvent) -> Outcome {
-        self.inspect_inner(ev, None, false, None)
+        self.inspect_inner(ev, None, false, &[], None)
+    }
+
+    /// Additional evidence from the complete current MCP response, evaluated
+    /// before policy. It never replaces per-block detectors or mandatory floors.
+    pub fn preview_native_mcp_result_with_evidence(
+        &mut self,
+        ev: &AgentEvent,
+        evidence: &[Finding],
+    ) -> Outcome {
+        let evidence = if matches!(
+            &ev.kind,
+            EventKind::ToolResult {
+                source: crate::event::Provenance::McpServer { .. }
+                    | crate::event::Provenance::Native { .. },
+                ..
+            }
+        ) {
+            evidence
+        } else {
+            &[]
+        };
+        self.inspect_inner(ev, None, false, evidence, None)
     }
 
     /// Compatibility recorder for content already admitted by a legacy caller.
@@ -458,6 +480,7 @@ impl AgentFirewall {
         ev: &AgentEvent,
         native: Option<(ActionClass, &[String], NativeArgumentRoles)>,
         record_results: bool,
+        result_evidence: &[Finding],
         trace: Option<&mut Option<InspectionTrace>>,
     ) -> Outcome {
         // Lifecycle events only mutate state.
@@ -491,6 +514,12 @@ impl AgentFirewall {
                 }
             }
         }
+        findings.extend(
+            result_evidence
+                .iter()
+                .cloned()
+                .map(|f| (Facet::ToolResult, f)),
+        );
         // Dedupe before scoring. `score_findings` is noisy-OR
         // (`1 - Π(1 - weight·confidence)`), so N copies of the SAME signal compound
         // into a high score from nothing new. Facet projection produces one
@@ -981,6 +1010,56 @@ mod tests {
         assert!(outcome
             .egress_hosts
             .contains(&"outside.example".to_string()));
+    }
+
+    #[test]
+    fn native_mcp_cross_block_evidence_is_additive_and_surface_scoped() {
+        let evidence = InjectionDetector::cross_block_signatures(&[
+            "Ignore all".into(),
+            "previous instructions".into(),
+        ]);
+        for (source, expected) in [
+            (
+                crate::event::Provenance::McpServer {
+                    name: "test".into(),
+                },
+                Verdict::Ask,
+            ),
+            (
+                crate::event::Provenance::Native {
+                    registry: "test".into(),
+                    tool: "read".into(),
+                },
+                Verdict::Ask,
+            ),
+            (crate::event::Provenance::LocalProject, Verdict::Allow),
+            (crate::event::Provenance::UserPrompt, Verdict::Allow),
+        ] {
+            let event = ev(
+                1,
+                EventKind::ToolResult {
+                    tool: "read".into(),
+                    content: "ordinary".into(),
+                    source,
+                },
+            );
+            let mut fw = AgentFirewall::with_default_policy();
+            assert_eq!(fw.preview_native_result(&event).verdict, Verdict::Allow);
+            assert_eq!(
+                fw.preview_native_mcp_result_with_evidence(&event, &evidence)
+                    .verdict,
+                expected
+            );
+            let mut deny = AgentFirewall::new(
+                AgentPolicySet::from_yaml("agent_policies: []\ndefault: deny\n").unwrap(),
+                1024,
+            );
+            assert_eq!(
+                deny.preview_native_mcp_result_with_evidence(&event, &evidence)
+                    .verdict,
+                Verdict::Deny
+            );
+        }
     }
 
     #[test]
