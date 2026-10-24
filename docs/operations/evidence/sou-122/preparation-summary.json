@@ -1,0 +1,53 @@
+{
+ "native-rejected": {
+  "active_protection": false,
+  "exit_code": null,
+  "reason": "git_archive_digest_mismatch",
+  "stage": "inputs",
+  "status": "failed"
+ },
+ "native-summary": {
+  "archive_sha256": {
+   "bwrap": "0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d",
+   "git": "233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3"
+  },
+  "bad_digest_refused": true,
+  "binary_sha256": {
+   "bwrap": "48785c2018cf6f3b6ec45c5ae2fff9df9784316e86211201bb8dbb8af1d414a8",
+   "git": "2176191737ea70888df8ba9ce47353ae45611c7197f832c9a235c00926663d35"
+  },
+  "old_generation_preserved": true,
+  "reused": true,
+  "source_commit": "b8d369b1adce52edf5328214d4d7c40cd73ec4ff",
+  "status": "prepared-not-qualified"
+ },
+ "native-timing": {
+  "native_build_seconds": 45
+ },
+ "runtime-timing": {
+  "preparation_seconds": 15.541,
+  "qualification_seconds": 80.458
+ },
+ "source-build-timing": {
+  "clean_build_seconds": 102.751,
+  "verified_reuse_seconds": 0.655
+ },
+ "source-rejected": {
+  "active_protection": false,
+  "reason": "candidate_source_mismatch",
+  "stage": "source",
+  "status": "failed"
+ },
+ "source-summary": {
+  "binary_sha256": {
+   "agentfw": "d9d2c000b4f279d0e3be05cb33e1550f69efa413ac6ce48d2656cf3b6bdaa11b",
+   "git_launcher": "ff5a971ec12db6a234da1d2f9ba6b1679ffaf5be918a165376728cdba49e19d7",
+   "sandbox_tests": "c577fb0da6839ef3e7716e687a7ae6611d922b6fdfb22421cf72c8cb249d2099"
+  },
+  "changed_source_refused": true,
+  "previous_generation_preserved": true,
+  "source_commit": "b8d369b1adce52edf5328214d4d7c40cd73ec4ff",
+  "status": "built-not-qualified",
+  "verified_reuse": true
+ }
+}
