@@ -1625,6 +1625,14 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     }
 
     crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
+    if args.mock_daemon_token.is_none() && !args.allow_command_fixtures {
+        crate::pilot_host::restrict_exec(
+            &mut cmd,
+            &config.claude_path,
+            &config.agent_bin_path,
+            [&config.fs_profile_path, &config.git_profile_path],
+        )?;
+    }
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL", "1")

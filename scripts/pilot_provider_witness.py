@@ -203,15 +203,16 @@ def observe(text, paths, values, normalize):
         # Command lines never need a provider credential, even for the host.
         require(not any(value in word for value in values.values() for word in arguments),
                 'provider_value_in_argv')
-        print(f"DEBUG_EXEC: role={role} exe={executable} argv={arguments[:3]}", file=sys.stderr, flush=True)
         if role in ('entry', 'host'):
             require(all(env.get(key) == value for key, value in values.items()),
                     'provider_intended_host_input_missing')
         else:
-            for value in values.values():
-                for word in environment:
-                    if value in word:
-                        print(f"DEBUG_LEAK: role={role} exe={executable} argv={arguments[:3]} leaked_var={word.split('=')[0]}", file=sys.stderr, flush=True)
+            leaked = {word.split('=', 1)[0] for word in environment
+                      if any(value in word for value in values.values())}
+            if leaked:
+                print(json.dumps({'event': 'provider_routing_refusal', 'role': role,
+                    'selected_keys': sorted(leaked.intersection(KEYS)),
+                    'other_key_count': len(leaked.difference(KEYS))}), file=sys.stderr, flush=True)
             require(not any(value in word for value in values.values() for word in environment),
                     'provider_value_in_unrelated_process')
     require(all(counts[role] > 0 for role in ('entry', 'host', 'daemon', 'launcher', 'collector', 'diagnostic', 'original')),
