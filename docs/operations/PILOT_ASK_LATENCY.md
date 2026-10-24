@@ -195,7 +195,11 @@ ordinary tracer if kernel filtering is unavailable; the report records the
 requested mode, not an unproven successful filter installation. All existing
 deadlines and positive/negative effect assertions still apply. Both paired sides
 must use this same current harness; earlier ordinary-ptrace runs stay separately
-attributed and cannot be spliced into the new comparison.
+attributed and cannot be spliced into the new comparison. The selected-server
+approval and prepared-run/demo witnesses also request seccomp-assisted tracing,
+keeping their own original syscall sets and deadlines. Unselected metadata
+interception must not consume the existing pending or overall host budgets.
+Their reports likewise retain possible fallback rather than claiming activation.
 
 Fs-verity reuse is restricted to kernel implementations on ext4/f2fs/btrfs.
 FUSE forwards this ioctl to its userspace server, so an apparently successful

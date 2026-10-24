@@ -48,6 +48,22 @@ diagnostics and raw-report digest remain in
 `expiry-followup-scheduling-correction.json`; current full CI still determines
 readiness.
 
+The subsequent `f6963c6` full CI (`40058255940`) stopped before the corrected
+expiry case. The selected-server approval witness missed its unchanged five-second
+pending observation: its traced capture alone took 4733.702660 ms for runtime/
+libraries and 4299.371333 ms for the package. Separately, the prepared demo's Ask
+case observed all three useful correlated results and two operator decisions,
+but the owned entry hit its unchanged 60-second overall timeout. Both observers
+still used ordinary ptrace interception, including stops for unselected metadata
+syscalls. They now request the same seccomp-assisted tracing mode used by the
+passing paired measurement, retaining their exact original syscall sets, all
+positive/negative effect assertions and every original deadline. Reports explicitly
+record a request with possible fallback, not an unproved installed filter.
+`witness-observer-consistency-correction.json` preserves both failures and local
+Python results (1229 run, 1150 passed, 79 existing skips). A fresh current native
+CI must validate the correction; no passing lifecycle result is inferred from
+the local run or the previous 80-sample comparison.
+
 ## Historical passing comparison on 1137780
 
 `native-linux-1137780.json` records passing run `40038036266` on exact clean
