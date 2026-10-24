@@ -180,6 +180,14 @@ struct CaptureCost {
     hash_time: std::time::Duration,
 }
 
+// Bound the underlying read before buffering: prefetch must never read past
+// the size+1 sentinel. The larger block reduces traced read syscalls while
+// retaining the same descriptor, full byte hash and caller identity checks.
+fn hash_bounded(reader: impl Read, size: u64, hash: &mut Sha256) -> std::io::Result<u64> {
+    let mut reader = std::io::BufReader::with_capacity(64 * 1024, reader.take(size + 1));
+    std::io::copy(&mut reader, hash)
+}
+
 #[derive(Clone, Default)]
 pub(super) struct Inputs {
     files: BTreeMap<PathBuf, FileProof>,
@@ -327,7 +335,7 @@ impl Verification<'_> {
         if matches!(self, Self::Full) {
             let file = super::open_regular(path)?;
             let mut hash = Sha256::new();
-            let count = std::io::copy(&mut file.take(size + 1), &mut hash)?;
+            let count = hash_bounded(file, size, &mut hash)?;
             ensure!(count == size, "selected asset changed during hashing");
             return Ok(format!("{:x}", hash.finalize()));
         }
@@ -426,7 +434,7 @@ impl Verification<'_> {
         proof_time += elapsed(lease_started);
         let hash_started = start_timing();
         let mut hash = Sha256::new();
-        let count = std::io::copy(&mut file.by_ref().take(size + 1), &mut hash)?;
+        let count = hash_bounded(file.by_ref(), size, &mut hash)?;
         ensure!(count == size, "selected asset changed during hashing");
         let mut hash_time = elapsed(hash_started);
         self.close_identity(path, &file, &before, tree)?;
@@ -854,5 +862,54 @@ mod tests {
             .as_mut()
             .unwrap()[2] ^= 1;
         assert!(Verification::Resume(&inputs).digest(&path, size).is_err());
+    }
+
+    #[test]
+    fn buffered_hash_never_prefetches_beyond_the_size_sentinel() {
+        let bytes = vec![b'x'; 2 * 65_536];
+        let mut source = std::io::Cursor::new(&bytes);
+        let mut hash = Sha256::new();
+        assert_eq!(hash_bounded(&mut source, 17, &mut hash).unwrap(), 18);
+        assert_eq!(source.position(), 18);
+        assert_eq!(
+            format!("{:x}", hash.finalize()),
+            format!("{:x}", Sha256::digest(&bytes[..18]))
+        );
+    }
+
+    #[test]
+    fn buffered_verification_matches_full_bytes_at_read_boundaries() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("asset");
+        for size in [
+            0_usize, 63, 64, 8191, 8192, 8193, 65_535, 65_536, 65_537, 131_071,
+        ] {
+            let bytes: Vec<_> = (0..size).map(|i| (i % 251) as u8).collect();
+            fs::write(&path, &bytes).unwrap();
+            let expected = format!("{:x}", Sha256::digest(&bytes));
+            assert_eq!(
+                Verification::Full.digest(&path, size as u64).unwrap(),
+                expected
+            );
+            let mut inputs = Inputs::default();
+            assert_eq!(
+                Verification::Capture(&mut inputs)
+                    .digest(&path, size as u64)
+                    .unwrap(),
+                expected
+            );
+            assert_eq!(
+                Verification::Resume(&inputs)
+                    .digest(&path, size as u64)
+                    .unwrap(),
+                expected
+            );
+            assert_eq!(inputs.capture_cost.hashed_bytes, size as u64);
+            drop(inputs);
+            assert!(Verification::Full.digest(&path, size as u64 + 1).is_err());
+            if size > 0 {
+                assert!(Verification::Full.digest(&path, size as u64 - 1).is_err());
+            }
+        }
     }
 }
