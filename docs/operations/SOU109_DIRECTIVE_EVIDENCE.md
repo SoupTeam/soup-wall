@@ -1,5 +1,28 @@
 # MCP result directive evidence: 0698af7
 
+## Follow-up: native call-site scope regression
+
+Independent review 5637580329 / inline 4366577653 found that the native call
+site invoked the MCP-specific preview unconditionally. Although cross-block
+collection was guarded, that preview also adds per-block request findings for
+Native provenance. Generic parent/model deliveries were therefore changed
+unintentionally. The earlier scope statement below describes the intended
+boundary, not a property that held before this follow-up.
+
+The call site now guards the **whole preview selection** with result event,
+mcp_host delivery and registry-declared untrusted provenance. Other results
+and context transitions use the preceding preview. No policy or detector
+threshold is changed, and the MCP path still uses the new evidence.
+
+A native regression with the unchanged pilot policy first failed on the
+reviewer's parent-delivery sentence. It now passes parent and model deliveries
+and the subsequent model context transition, verifies absence of MCP-only
+audit evidence there, and retains refusal of an existing dangerous signature.
+The nine selected native MCP tests and agentfw library Clippy with warnings
+denied also pass. The public single-payload corpus was not rerun for this
+call-site-only correction: its adapter does not exercise that dispatch branch.
+The ten benign corpus refusals and original positive failures remain unresolved.
+
 ## Outcome, not a completion claim
 
 The unchanged full SOU-123 public development corpus now gives **24/24 attacks
