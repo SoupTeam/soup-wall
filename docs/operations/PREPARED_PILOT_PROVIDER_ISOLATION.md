@@ -118,3 +118,15 @@ retained artifacts contain bounded status, hashes and projected compiler message
 
 This is a compile/capability slice, not original-host or final admission evidence.
 The default `off` keeps the existing manual budget qualification unchanged.
+
+For the complete actual-host route set both `prepared_focus: "143"` and
+`prepared_host: true` in that manual workflow. The successful same-source native
+binaries are reused read-only. Trusted setup verifies the accepted profile locks,
+fetches pinned upstream inputs into private scratch and seeds offline npm/wheel
+caches. Only the existing exact job-scoped bubblewrap permission is provisioned;
+no host-wide namespace setting is relaxed. Candidate preparation and all provider
+traffic then run offline in a private network namespace. A separate parent-side
+projection requires all thirteen normal/preflight cases and four stop cases,
+independent process/protocol/log/artifact observations, and zero remaining owned
+processes. Its negative controls reject missing/contradictory evidence. Raw traces,
+private logs and process identities stay in disposable scratch.
