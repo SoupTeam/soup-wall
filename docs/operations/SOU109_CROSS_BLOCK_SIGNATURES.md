@@ -66,8 +66,13 @@ at the first overlapping block rather than scanning every block per hit.
   original Git positive, original four-file dual-channel positive, and first
   six public pairs. Expected labels are unchanged.
 
-The full public single-payload corpus must not be presented as improved by a
-cross-block-only correction. The remaining implementation is still a reviewed
+The full 51-case public corpus was rerun on f3338ba using the unchanged PR #240
+adapter and shipped pilot policy:
+[retained raw results](evidence/sou109-full-corpus-f3338ba.json).
+All per-case verdicts match the preceding 320cf9a run: 14/24 attacks missed,
+10/24 benign refused, 0/24 pairs both correct. This single-payload preview does
+not exercise native cross-block assembly and must not be presented as improved
+by a cross-block-only correction. The remaining implementation is still a reviewed
 complete-content distinction that releases benign results reliably. Native
 original-server delivery/forbidden-effect witnesses and independent acceptance
 remain required; keep PR #215 Draft and SOU-109 In Progress.
