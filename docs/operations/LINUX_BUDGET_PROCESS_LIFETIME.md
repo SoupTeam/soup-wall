@@ -51,7 +51,8 @@ provide the independent current-lifetime check; without `PIDFD_THREAD`, readines
 requires the whole thread group to exit.
 
 Observed live or replaced tasks, a still-listed PID, permissions failures,
-malformed/oversized data, unexpected proc device/type, unreviewed read errors and
+malformed/oversized data (including the unified cgroup record shape), unexpected
+proc device/type, unreviewed read errors and
 unexpected poll events refuse. There is no whole-call retry, sleep, broader
 budget or authority fallback. A mismatching cgroup with a still-nonterminal stat
 also refuses, even if the task subsequently exits.

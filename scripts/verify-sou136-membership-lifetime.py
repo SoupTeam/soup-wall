@@ -49,7 +49,7 @@ RESOURCE.MEMBERSHIP_PHASES |= frozenset({
     'member_proc_open', 'member_proc_fs', 'member_proc_type', 'member_identity_read',
     'member_identity_parse', 'member_identity_changed', 'member_cgroup_open', 'member_cgroup_read',
     'member_departure_still_listed', 'member_departure_live', 'member_departure_reused',
-    'member_departure_unverified',
+    'member_departure_unverified', 'member_cgroup_parse',
 })
 DEPENDENCIES = (
     'scripts/verify-sou89-selected-liveness.py', 'scripts/verify-sou86-crash-supervision.py',

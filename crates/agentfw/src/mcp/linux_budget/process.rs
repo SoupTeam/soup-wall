@@ -221,7 +221,7 @@ impl Task {
 
     pub(super) fn cgroup(&self) -> Result<Option<String>> {
         self.record("cgroup", "member_cgroup_read")?
-            .map(|bytes| String::from_utf8(bytes).map_err(|_| Error::invalid("member_utf8")))
+            .map(parse_cgroup)
             .transpose()
     }
 
@@ -241,6 +241,19 @@ fn record_bytes(bytes: std::io::Result<Vec<u8>>, phase: &'static str) -> Result<
         Err(error) if error.raw_os_error() == Some(libc::ESRCH) => Ok(None),
         Err(error) => Err(Error::io(phase, error)),
     }
+}
+
+fn parse_cgroup(bytes: Vec<u8>) -> Result<String> {
+    let value = String::from_utf8(bytes).map_err(|_| Error::invalid("member_utf8"))?;
+    let invalid = || Error::invalid("member_cgroup_parse");
+    let record = value.strip_suffix('\n').ok_or_else(invalid)?;
+    let path = record.strip_prefix("0::/").ok_or_else(invalid)?;
+    if record.chars().any(char::is_control)
+        || (!path.is_empty() && path.split('/').any(|part| matches!(part, "" | "." | "..")))
+    {
+        return Err(invalid());
+    }
+    Ok(value)
 }
 
 fn namespace_status(pid: u32, bytes: &[u8]) -> Result<()> {
@@ -579,6 +592,27 @@ mod tests {
                 poll_state(count, events).unwrap_err().phase,
                 "member_pidfd_poll"
             );
+        }
+    }
+
+    #[test]
+    fn sou136_malformed_cgroup_records_never_become_departure_candidates() {
+        for bytes in [b"0::/\n".as_slice(), b"0::/owned/child\n"] {
+            assert_eq!(parse_cgroup(bytes.to_vec()).unwrap().as_bytes(), bytes);
+        }
+        for bytes in [
+            b"".as_slice(),
+            b"unrelated\n",
+            b"0::relative\n",
+            b"0::/owned",
+            b"0::/owned\n0::/other\n",
+            b"0::/owned\r\n",
+            b"0::/owned\0\n",
+            b"0::/owned/../other\n",
+            b"0::/owned//child\n",
+            b"0::/\xff\n",
+        ] {
+            assert!(parse_cgroup(bytes.to_vec()).is_err());
         }
     }
 
