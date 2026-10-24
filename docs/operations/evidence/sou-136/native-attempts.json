@@ -109,6 +109,30 @@
       "native_acceptance_passed": false,
       "cause": "Extra sibling Git calls before and after every crash consumed its unchanged 600000ms wall budget; mcp_budget_wall_expired at churn-git-58. The focused driver now keeps the same peer alive with continuous kernel/process observation and baseline/every-10/final useful checkpoints. All 70 original subject cycles remain mandatory; no wall, cleanup or polling bound increases.",
       "retained_report": "attempt-40092648569.json"
+    },
+    {
+      "run_id": 40094725140,
+      "source": "ff65d63",
+      "status": "independent_pressure_counter_missed",
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 23,
+        "failed": 0,
+        "ignored": 1
+      },
+      "strict_agentfw_linux_clippy": "passed",
+      "filesystem_cycles_attempted": 70,
+      "filesystem_cycles_passed": 70,
+      "git_cycles_attempted": 0,
+      "passed": 72,
+      "failed": 2,
+      "incomplete": 73,
+      "unexpected_closures": 0,
+      "cleanup_verified": true,
+      "delegation_removed": false,
+      "native_acceptance_passed": false,
+      "cause": "Production PID guard refused and cleaned up (pids peak32, max events13); independent Python observer captured peak22 and counter0, so grading correctly refused. Full ledger serialization immediately after dispatch can starve its shared-GIL sampler. Keep live stages in memory and flush before construction/crash, after close, on failure and final grading; all observations and statuses are still durably recorded. Counter guards and observer checks are unchanged.",
+      "retained_report": "attempt-40094725140.json"
     }
   ]
 }

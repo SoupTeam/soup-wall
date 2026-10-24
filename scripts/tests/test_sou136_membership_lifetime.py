@@ -335,6 +335,19 @@ class OrchestrationControls(unittest.TestCase):
             with self.assertRaises(ValueError):
                 V.native_membership_witness(SimpleNamespace(returncode=code, stdout=output, stderr=b''))
 
+    def test_live_phase_updates_do_not_block_pressure_observers_on_full_ledger(self):
+        report = V.initial_report(SimpleNamespace(runtime_source_commit='a' * 40))
+        save = Mock()
+        row = V.begin_attempt(report, save, 'churn', 'git', 1)
+        self.assertEqual(save.call_count, 1)
+        for name in ('create','initialize','useful','dispatch','cleanup','sibling_after'):
+            V.stage(row, save, name)
+        self.assertEqual(save.call_count, 1)
+        V.stage(row, save, 'crash')
+        self.assertEqual(save.call_count, 2)
+        self.assertEqual(row['stage'], 'crash')
+        self.assertIn('dispatch', row['stages'])
+
     def test_partial_constructor_is_registered_before_effects(self):
         rig=SimpleNamespace(_owned_clients=[])
         class Failed:

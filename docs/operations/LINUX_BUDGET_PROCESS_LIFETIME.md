@@ -80,7 +80,11 @@ production budget observer refuses the violation. The parent retains sole reapin
 ownership during migration, so a reused numeric PID cannot redirect its write.
 That control establishes the budget predicate and cleanup, not an MCP transport
 result. These calibrations never stand in for an original server. Every attempt is checkpointed before
-construction. Failed and unattempted work stays failed/incomplete; passing retries
+construction and before intentional crash injection. Live stage transitions stay
+in memory; close, error and final grading flush their complete observations. Full
+ledger serialization during pressure can otherwise block the shared-GIL kernel
+sampler through the short event-to-cleanup window. The independently observed
+pressure counters remain mandatory. Failed and unattempted work stays failed/incomplete; passing retries
 cannot replace it.
 
 The manual `budget_membership_only` workflow input selects this focused lane.

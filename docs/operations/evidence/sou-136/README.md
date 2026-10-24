@@ -7,7 +7,7 @@ qualification completes on the exact candidate source.
   platform limitations, exact subject/log hashes and corrected environment failures.
 - `native-attempts.json` preserves unsuccessful native runs separately from any
   later candidate qualification. Full failed original-server ledgers are retained
-  in `attempt-40091738937.json` and `attempt-40092648569.json`.
+  in the `attempt-*.json` files.
 - `original-failure.json` preserves the original failed run and finite observations.
 - The accepted-source regression overlay is
   `scripts/fixtures/sou136-accepted-open-regression.patch`. It keeps the accepted

@@ -298,7 +298,13 @@ def stage(row, save, name):
     row['stage'] = name
     if row['stages'][-1] != name:
         row['stages'].append(name)
-    save()
+    # A full ledger deepcopy/JSON/fsync while pressure is being injected can
+    # hold Python's GIL longer than a real limit event survives cleanup. Keep
+    # live phases in memory; construction was already durably registered, and
+    # close/failure/terminal paths flush every observation. Intentional SIGKILL
+    # must still have its phase on disk before injection.
+    if name == 'crash':
+        save()
 
 
 def fail_attempt(row, error, client=None):
