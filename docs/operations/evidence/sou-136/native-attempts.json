@@ -55,6 +55,32 @@
       "original_server_cycles_attempted": 0,
       "native_acceptance_passed": false,
       "cause": "Pinned toolchain was installed without clippy. Declare the matching clippy component during toolchain preparation."
+    },
+    {
+      "run_id": 40091738937,
+      "source": "7cf7db91efd013884b57599f322de745d995b4a6",
+      "status": "membership_control_output_parse_failed",
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 23,
+        "failed": 0,
+        "ignored": 1
+      },
+      "strict_agentfw_linux_clippy": "passed",
+      "filesystem_cycles_attempted": 70,
+      "filesystem_cycles_passed": 70,
+      "git_cycles_attempted": 0,
+      "memory_control_passed": true,
+      "pids_control_passed": true,
+      "passed": 73,
+      "failed": 2,
+      "incomplete": 72,
+      "unexpected_closures": 0,
+      "cleanup_verified": true,
+      "delegation_removed": false,
+      "native_acceptance_passed": false,
+      "cause": "Passing libtest stdout had the exact fixed test name prefix before its JSON event. The driver missed that event and failed conservatively. The retained SHA256 matches reconstructed passing test output (686 filtered, 0.01s). No failed run is promoted; parser now accepts only the exact known prefix and requires success exit, one complete event and passing libtest count.",
+      "retained_report": "attempt-40091738937.json"
     }
   ]
 }

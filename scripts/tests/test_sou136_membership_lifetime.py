@@ -302,6 +302,28 @@ class OrchestrationControls(unittest.TestCase):
         temporary.unlink.assert_called_once_with(missing_ok=True)
         self.assertNotIn(b'private error', output.getvalue())
 
+    def test_native_control_accepts_real_libtest_prefix_and_quiet_output(self):
+        witness = control('membership', 9)['violation']
+        encoded = json.dumps(witness, sort_keys=True, separators=(',', ':')).encode()
+        for prefix in (b'', ('test ' + V.MEMBERSHIP_TEST + ' ... ').encode()):
+            output = b'\nrunning 1 test\n' + prefix + encoded + b'\nok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 686 filtered out; finished in 0.01s\n\n'
+            completed = SimpleNamespace(returncode=0, stdout=output, stderr=b'')
+            event, hashed = V.native_membership_witness(completed)
+            self.assertEqual(event, witness)
+            self.assertEqual(hashed, V.digest(output))
+
+    def test_native_control_cannot_cherry_pick_panic_or_ambiguous_json(self):
+        witness = control('membership', 9)['violation']
+        encoded = json.dumps(witness).encode()
+        marker = b'1 passed; 0 failed'
+        for code, output in ((101, encoded + b'\n' + marker),
+                             (0, b'arbitrary prefix ' + encoded + b'\n' + marker),
+                             (0, encoded + b'\n' + encoded + b'\n' + marker),
+                             (0, encoded + b'\n0 passed; 1 failed'),
+                             (0, b' ' * 65536 + encoded + marker)):
+            with self.assertRaises(ValueError):
+                V.native_membership_witness(SimpleNamespace(returncode=code, stdout=output, stderr=b''))
+
     def test_partial_constructor_is_registered_before_effects(self):
         rig=SimpleNamespace(_owned_clients=[])
         class Failed:

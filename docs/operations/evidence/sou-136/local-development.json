@@ -6,8 +6,8 @@
   "subject_sha256": {
     "crates/agentfw/src/mcp/linux_budget.rs": "ff7c211bafb877494acbf21295012bcd5166688b29fc0841d0bc0567ea286537",
     "crates/agentfw/src/mcp/linux_budget/process.rs": "b6f1d2c5b21d6b7be445fadc53d3fa445e73b7aa01a6bb6c2ea72645b2c06652",
-    "scripts/verify-sou136-membership-lifetime.py": "9528032cdd9575e7f5b34ae247cf275dfaf292ad10f0058082d1519ca54245bd",
-    "scripts/tests/test_sou136_membership_lifetime.py": "88ec04492c11910bf1d7c79a96af28a82ce0efa01aefd4482d787730d1e8c020"
+    "scripts/verify-sou136-membership-lifetime.py": "ecb36a98c0aa750160211a29cae5a39dada85eb7201fa912537dcdd1ef6d371b",
+    "scripts/tests/test_sou136_membership_lifetime.py": "27ef65132c4130d55b14c17f7971df7e481e142718e0369f99712900f76d08cc"
   },
   "rust_workspace": {
     "passed": 1706,
@@ -22,7 +22,7 @@
     "platform_exclusions": "Includes three unchanged Linux /proc prerequisite controls unavailable on macOS."
   },
   "focused_python": {
-    "passed": 17,
+    "passed": 19,
     "failed": 0
   },
   "clippy": "workspace all-targets -D warnings passed",
@@ -40,7 +40,8 @@
     "final-static-focused.log": "2c3d601a5b9234f674bed9a7fe68cc3baf6cc16d3bec7619c8d6537a8084f818",
     "linux-visibility-local.log": "dfd335cad4f6bce18d5f65479260e8f12d93f2316e19976ecb07179b5560c2c3",
     "cgroup-shape-local.log": "1c6e3f525a11a5dbd122e68b30a681d4435020f58de9195a576c58fb1db793df",
-    "fixture-permissions-local.log": "9ede84614722163fba56e00de4e23e520caef72588c72cd64d400e612302c8e6"
+    "fixture-permissions-local.log": "9ede84614722163fba56e00de4e23e520caef72588c72cd64d400e612302c8e6",
+    "libtest-parsing-controls.log": "799687279e54a57b8c8990a5d47156c97e1de59e5d77849495b467bf199d313b"
   },
   "retained_environment_setup_failures": [
     "Initial source snapshot lacked full Git metadata, causing CLI/docs controls to fail. Corrected by copying its own Git metadata.",
@@ -48,5 +49,5 @@
     "CLI prerequisite expected target/debug in the snapshot. A symlink to the existing writable scratch target supplied the built binary."
   ],
   "linux_status": "Not yet run; Linux-only process tests, real-kernel before failure and 140 original-server cycles are pending.",
-  "follow_up": "The final Linux-only fixture permission correction passed local strict workspace clippy, fmt and six budget configuration controls. Native Linux execution remains required."
+  "follow_up": "Native runner output parser: 19 focused controls passed, including real libtest prefix and quiet output, with negative panic, duplicate, arbitrary-prefix and size controls."
 }

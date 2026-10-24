@@ -507,33 +507,45 @@ MEMBERSHIP_TEST = ('mcp::linux_budget::linux::process_record_tests::'
                    'native_sou136_membership_violation_refuses_owned_child')
 
 
+def native_membership_witness(completed):
+    raw = completed.stdout + completed.stderr
+    require(completed.returncode == 0 and len(raw) <= 65536,
+            'native_membership_control_failed')
+    # libtest's single-threaded pretty formatter can put the fixed test name
+    # before its first stdout line. Accept only that exact known prefix, not
+    # arbitrary JSON substrings or panic text. Quiet output has no such prefix.
+    prefix = ('test ' + MEMBERSHIP_TEST + ' ... ').encode()
+    events = []
+    for line in completed.stdout.splitlines():
+        if line.startswith(prefix):
+            line = line[len(prefix):]
+        try: event = json.loads(line)
+        except (ValueError, UnicodeError): continue
+        if isinstance(event, dict) and event.get('event') == 'sou136_membership_calibration':
+            events.append(event)
+    require(len(events) == 1 and b'1 passed; 0 failed' in raw,
+            'native_membership_control_missing')
+    allowed = {'event', 'passed', 'phase', 'leader_same_lifetime', 'limits_unchanged',
+               'owned_child_reaped', 'leaf_removed', 'quarantine_removed',
+               'production_transport_claimed'}
+    require(set(events[0]) == allowed, 'native_membership_control_shape')
+    return events[0], digest(raw)
+
+
 def membership_control(report, save, rig, sibling, expected, args):
     row = begin_attempt(report, save, 'control', 'filesystem', 'membership')
     try:
         stage(row, save, 'inject')
         command = [str(args.sandbox_test_binary), '--exact', MEMBERSHIP_TEST,
-                   '--ignored', '--nocapture', '--test-threads=1']
+                   '--ignored', '--nocapture', '--test-threads=1', '--quiet']
         # The Rust control owns and retains its direct Child until reaping;
         # no foreign numeric PID is ever migrated by the Python observer.
         completed = subprocess.run(command, capture_output=True, timeout=15,
             env=dict(os.environ, SOU136_DELEGATION_ROOT=str(rig.delegation)))
-        raw = completed.stdout + completed.stderr
-        row['native_control_log_sha256'] = digest(raw)
-        require(completed.returncode == 0 and len(raw) <= 65536,
-                'native_membership_control_failed')
-        events = []
-        for line in completed.stdout.splitlines():
-            try: event = json.loads(line)
-            except (ValueError, UnicodeError): continue
-            if isinstance(event, dict) and event.get('event') == 'sou136_membership_calibration':
-                events.append(event)
-        require(len(events) == 1 and b'1 passed; 0 failed' in raw,
-                'native_membership_control_missing')
-        allowed = {'event', 'passed', 'phase', 'leader_same_lifetime', 'limits_unchanged',
-                   'owned_child_reaped', 'leaf_removed', 'quarantine_removed',
-                   'production_transport_claimed'}
-        require(set(events[0]) == allowed, 'native_membership_control_shape')
-        row['violation'] = events[0]
+        row['native_control_exit_code'] = completed.returncode
+        row['native_control_log_bytes'] = len(completed.stdout) + len(completed.stderr)
+        row['native_control_log_sha256'] = digest(completed.stdout + completed.stderr)
+        row['violation'], row['native_control_log_sha256'] = native_membership_witness(completed)
         grade_control(row)
         stage(row, save, 'sibling_after')
         row['sibling_after'] = useful_witness(sibling, expected)
