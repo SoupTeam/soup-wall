@@ -2354,7 +2354,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou137-acceptance" \
             2>&1 | tee "$RUNNER_TEMP/sou137-acceptance.log"
       - name: Opt-in per-file Git revision acceptance
-        if: github.event_name == 'workflow_dispatch' && inputs.file_revisions_only
+        if: ${{ !inputs.local_refs_only }}
         shell: bash
         run: |
           set -euo pipefail
