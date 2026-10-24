@@ -68,6 +68,17 @@ class ProviderBoundary(unittest.TestCase):
 
 
 class IndependentExecEvidence(unittest.TestCase):
+    def test_failure_stage_never_exports_executables_arguments_or_environments(self):
+        import json
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import pilot_provider_witness as witness
+        paths = {'claude': Path('/private/client'), 'agentfw': Path('/private/agent'), 'python': Path('/private/python')}
+        text = '42 execve("/proc/self/fd/22", ["private-marker"], ["SECRET=private-marker"]) = -1 EACCES (Permission denied)'
+        value = witness.failure_stage(text, paths, lambda text: (text.splitlines(), {}))
+        self.assertEqual(value['denied_exec_counts'], {'selected-fd:EACCES': 1})
+        for private in ('42', '22', '/proc/', 'private-marker', 'SECRET'):
+            self.assertNotIn(private, json.dumps(value))
+
     def test_private_log_observation_detects_removed_redaction_and_descriptor_reuse(self):
         import json
         sys.path.insert(0, str(ROOT / 'scripts'))

@@ -444,6 +444,9 @@ def qualify(args, private, report):
                 except (OSError, ValueError, IndexError):
                     observation["entry_report"] = "not_published"
                 report["failure_observation"] = observation
+                if provider_values is not None and (root / 'trace.private').exists():
+                    observation['provider_failure_stage'] = PROVIDER_WITNESS.failure_stage(
+                        (root / 'trace.private').read_text(), paths, LAUNCH.normalized_syscalls)
                 raise
             finally:
                 # strace is only an observer: terminating it does not cancel the

@@ -250,6 +250,31 @@ def project(raw, expected, exit_code):
         errors.append('provider_classifier_unobserved')
     if raw.get('status') != 'passed' or exit_code != 0:
         errors.append('qualifier_not_completed_successfully')
+    failure = raw.get('failure_observation')
+    if type(failure) is dict:
+        observed = {}
+        for key in ('entry_status', 'entry_reason'):
+            value = failure.get(key)
+            if value in ('failed', 'completed', 'stopped', 'restricted_launcher_failed', 'pilot_timeout',
+                         'pilot_cancelled', 'owned_daemon_lost', 'provider_unavailable'):
+                observed[key] = value
+        if type(failure.get('provider_request_count')) is int and 0 <= failure['provider_request_count'] <= 65536:
+            observed['provider_request_count'] = failure['provider_request_count']
+        stage = failure.get('provider_failure_stage', {})
+        if type(stage) is dict:
+            counts = stage.get('denied_exec_counts', {})
+            allowed = {role + ':' + error for role in ('host', 'agent', 'classifier-interpreter',
+                'original-runtime', 'selected-fd', 'system-git', 'other-helper') for error in ('EACCES', 'EPERM', 'ENOENT')}
+            if type(counts) is dict:
+                observed['denied_exec_counts'] = {key: value for key, value in counts.items()
+                    if key in allowed and type(value) is int and 0 <= value <= 65536}
+            known = stage.get('known_refusals', [])
+            if type(known) is list:
+                observed['known_refusals'] = [value for value in (
+                    'mcp_owner_startup_failed', 'mcp_owner_spawn_failed', 'mcp_owner_image_unavailable',
+                    'mcp_budget_membership_unverified', 'classifier_execution_failed', 'classifier_unavailable',
+                    'provider_host_exec_boundary_unavailable', 'Permission denied', 'Operation not permitted') if value in known]
+        public['failure_observation'] = observed
     public['verification_errors'] = sorted(set(errors))
     if not errors:
         public['status'] = 'passed'

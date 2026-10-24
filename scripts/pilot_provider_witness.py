@@ -167,6 +167,28 @@ def inputs(url, root):
         '127.0.0.1,localhost,::1,sou143-owned-no-proxy.invalid', str(certificate))))
 
 
+def failure_stage(text, paths, normalize):
+    """Finite denied-exec categories and known refusal codes, never argv/env."""
+    require(len(text) <= 64 * 1024 * 1024, 'provider_failure_trace_bound')
+    counts = {}
+    for row in normalize(text)[0]:
+        match = re.match(r'^\d+\s+execve\("([^"\n]+)".*\)\s*=\s*-1\s+(EACCES|EPERM|ENOENT)', row)
+        if not match:
+            continue
+        path, error = match.groups()
+        role = 'host' if path == str(paths['claude']) else 'agent' if path == str(paths['agentfw']) else \
+            'classifier-interpreter' if path == str(paths['python']) else \
+            'original-runtime' if path.startswith('/mcp-runtime/') or path.startswith('/mcp-server/') else \
+            'selected-fd' if path.startswith('/proc/self/fd/') else 'system-git' if path in ('/usr/bin/git', '/bin/git') \
+            else 'other-helper'
+        key = role + ':' + error
+        counts[key] = counts.get(key, 0) + 1
+    known = ('mcp_owner_startup_failed', 'mcp_owner_spawn_failed', 'mcp_owner_image_unavailable',
+             'mcp_budget_membership_unverified', 'classifier_execution_failed', 'classifier_unavailable',
+             'provider_host_exec_boundary_unavailable', 'Permission denied', 'Operation not permitted')
+    return {'denied_exec_counts': counts, 'known_refusals': [value for value in known if value in text]}
+
+
 def observe(text, paths, values, normalize, rejected=False):
     require(set(values) == set(KEYS) and len(set(values.values())) == len(KEYS),
             'provider_distinct_canaries_required')
