@@ -210,7 +210,7 @@ def project(report, workload):
         before = report_source(report['source_before'])
         rows = report['cases']
         expected = ('plan', 'occupied-port', 'stale-source', 'changed-selection', 'useful-refusal',
-                    'ask', 'default', 'cancel', 'daemon-loss', 'timeout')
+                    'ask', 'default', 'cancel', 'daemon-loss', 'host-crash', 'timeout')
         require([r['case'] for r in rows] == list(expected), 'prepared_case_denominator_changed')
         require(all(r['status'] in ('passed', 'failed', 'incomplete', 'unsupported') for r in rows),
                 'invalid_prepared_status')
@@ -222,14 +222,14 @@ def project(report, workload):
         for row in rows:
             if row['status'] == 'passed':
                 digest(row.get('trace_sha256'), 'prepared_trace')
-                if row['case'] in ('useful-refusal', 'ask', 'default', 'cancel', 'daemon-loss', 'timeout'):
+                if row['case'] in ('useful-refusal', 'ask', 'default', 'cancel', 'daemon-loss', 'host-crash', 'timeout'):
                     require(row.get('cleanup') == 'owned_state_removed' and
                             row.get('process_cleanup', {}).get('all_stopped') is True and
                             row.get('process_cleanup', {}).get('remaining') == [], 'prepared_cleanup_missing')
         by = {r['case']: r for r in rows}
         for area, names in [('install-start', ('plan', 'useful-refusal', 'default')),
                             ('daemon-loss', ('daemon-loss',)),
-                            ('cancellation-cleanup', ('cancel', 'timeout'))]:
+                            ('cancellation-cleanup', ('cancel', 'host-crash', 'timeout'))]:
             observations.append(observation(area, sum(by[n]['status'] == 'passed' for n in names),
                                             len(names), {'cases': list(names)}))
     elif version == 'sw-pilot-ask-acceptance/1':
@@ -242,7 +242,8 @@ def project(report, workload):
         require(type(rows) is list and 1 <= len(rows) <= 64, 'ask_case_bound')
         keys = [(r['profile'], r['case']) for r in rows]
         expected = [(profile, case) for profile in ('git', 'filesystem') for case in
-                    ('expire', 'restart', 'approve', 'reject', 'cancel', 'approved_cancel', 'default')]
+                    (('expire', 'restart', 'approve', 'reject', 'cancel', 'approved_cancel', 'default')
+                     + (('collector_term',) if profile == 'git' else ()))]
         require(keys == expected, 'ask_case_denominator_changed')
         require(len(set(keys)) == len(keys) and all(type(r['passed']) is bool for r in rows),
                 'invalid_ask_cases')
@@ -250,8 +251,11 @@ def project(report, workload):
         for row in rows:
             if row['passed']:
                 digest(row.get('policy_sha256'), 'ask_policy')
-                if row['case'] not in ('restart', 'cancel', 'approved_cancel'):
+                if row['case'] not in ('restart', 'cancel', 'approved_cancel', 'collector_term'):
                     digest(row.get('trace_sha256'), 'ask_trace')
+                if row['case'] == 'collector_term':
+                    require(row.get('collector_sigterm') == 'pidfd_pinned_graceful_cleanup_confirmed'
+                            and row.get('released') is False, 'ask_collector_cleanup_missing')
                 expected_effects = 1 if row['case'] == 'approve' else 0
                 require(type(row.get('dispatched')) is int and type(row.get('kernel_effects')) is int
                         and row['dispatched'] == row['kernel_effects'] == expected_effects,

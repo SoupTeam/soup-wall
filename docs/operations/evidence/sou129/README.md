@@ -56,3 +56,12 @@ Compare `selection_sha256`, `reporter_sha256`, `reporter_dependencies`, candidat
 evidence content hashes and ledger to this record. If integration changes the
 candidate, retain this record and generate another; never replace the original
 runtime evidence or copy its passing rows onto another commit.
+
+## Subsequent scenario inventory correction
+
+The reporter now requires 15 Ask and 11 prepared cases, matching the current
+producers (`git/collector_term` and `host-crash`). The record above remains the
+original `a54d1de0` reconciliation, not a current-schema runtime observation.
+The updated focused suite passes 36/36, including missing/duplicate new cases
+and absent cleanup witnesses. The old selected 14/10 reports correctly remain
+non-qualifying under the new inventory; no historical JSON was edited.

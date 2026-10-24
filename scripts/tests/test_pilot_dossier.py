@@ -82,12 +82,18 @@ class DossierTests(unittest.TestCase):
         r['selected_sha256'] = {k: 'a'*64 for k in d.IDENTITIES}
         r['profiles'] = {name: {k: 'a'*64 for k in ('profile_sha256','registry_sha256','classifier_sha256')}
                          for name in ('filesystem','git')}
+        crash = copy.deepcopy(next(c for c in r['cases'] if c['case'] == 'daemon-loss'))
+        crash['case'] = 'host-crash'  # Synthetic current-schema control, not a runtime observation.
+        r['cases'].insert(-1, crash)
         self.add('prepared', r)
         a = json.loads((ROOT / 'docs/operations/evidence/sou-112/linux-qualification.json').read_text(encoding='utf-8'))
         a['source'] = dict(self.m['candidate'], dirty=False); a['source_after'] = a['source'].copy()
         a['environment'] = self.m['environment'].copy(); a['selected_sha256'] = r['selected_sha256']
         a['profiles'] = r['profiles']
         for row in a['cases']: row['policy_sha256'] = 'a'*64
+        terminated = copy.deepcopy(next(c for c in a['cases'] if c['profile']=='git' and c['case']=='restart'))
+        terminated.update(case='collector_term', collector_sigterm='pidfd_pinned_graceful_cleanup_confirmed', released=False)
+        a['cases'].insert(7, terminated)
         self.add('ask', a)
 
     def test_complete_synthetic_fixture_can_be_ready(self):
@@ -280,6 +286,41 @@ class DossierTests(unittest.TestCase):
         self.full_fixture();self.m['environment']['kernel_release']=None
         self.assertEqual(self.result()['status'],'NOT_READY')
         self.assertIn('expected_environment_unbound',self.result()['evidence'][0]['blockers'])
+
+    def test_current_scenario_denominators(self):
+        self.full_fixture()
+        out=self.result()
+        self.assertEqual(out['status'],'READY')
+        ask=next(r for r in out['ledger'] if r['item']=='ask')
+        cleanup=next(r for r in out['ledger'] if r['item']=='cancellation-cleanup')
+        self.assertEqual(ask['counts'],{'passed':15,'required':15})
+        self.assertEqual(cleanup['counts'],{'passed':3,'required':3})
+        self.assertEqual(len(json.loads((self.root/'prepared.json').read_text(encoding='utf-8'))['cases']),11)
+
+    def test_new_required_cases_cannot_be_omitted_or_duplicated(self):
+        for name, key, case in [('ask','ask','collector_term'),('prepared','prepared','host-crash')]:
+            for duplicate in (False,True):
+                with self.subTest(name=name,duplicate=duplicate):
+                    self.m['evidence']=[];self.full_fixture()
+                    r=json.loads((self.root/(name+'.json')).read_text(encoding='utf-8'))
+                    row=next(x for x in r['cases'] if x['case']==case)
+                    if duplicate:r['cases'].append(copy.deepcopy(row))
+                    else:r['cases'].remove(row)
+                    entry=next(e for e in self.m['evidence'] if e['id']==name)
+                    entry['file']=self.put(name+'.json',r)
+                    record=next(e for e in self.result()['evidence'] if e['id']==name)
+                    self.assertIn(key+'_case_denominator_changed',record['blockers'][0])
+
+    def test_new_cleanup_witnesses_are_required(self):
+        for name in ('ask','prepared'):
+            self.m['evidence']=[];self.full_fixture()
+            r=json.loads((self.root/(name+'.json')).read_text(encoding='utf-8'))
+            if name=='ask':
+                next(c for c in r['cases'] if c['case']=='collector_term')['collector_sigterm']='unconfirmed'
+            else:
+                next(c for c in r['cases'] if c['case']=='host-crash')['process_cleanup']['all_stopped']=False
+            next(e for e in self.m['evidence'] if e['id']==name)['file']=self.put(name+'.json',r)
+            self.assertEqual(self.result()['status'],'NOT_READY')
 
 
 class GitIdentityTests(unittest.TestCase):
