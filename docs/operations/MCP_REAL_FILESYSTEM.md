@@ -192,6 +192,7 @@ entire unchanged original JSON-RPC result envelope.
 | Time | 30-second per-call/control bound; a cancellation withdraws delivery and does not attest kernel I/O stopped |
 | Frames / discovery | 262144 bytes per client frame and aggregate tools/list; at most 4 distinct pages and 64 tools |
 | Results | 262144 decoded UTF-8 bytes per result text; 1048576 bytes per server response frame; see [large results](LARGE_MCP_RESULTS.md) |
+| Paths and errors | Exact names, no normalization; refusals name the boundary; see [paths and errors](FILESYSTEM_PATHS_AND_ERRORS.md) |
 | Parsing | JSON depth 20 / 16384 nodes; schema depth 8 / 1024 nodes; arguments depth 8 / 4096 nodes |
 | Values | At most 256 object properties/array elements; default per decoded argument string 16384 UTF-8 bytes |
 | Progress | Correlated bounded token, nonnegative finite monotonic counters, at most 128 per call; content is withheld |

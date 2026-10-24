@@ -30,6 +30,9 @@ const MAX_JSON_NODES: usize = 16_384;
 const TEXT_BUDGET_MESSAGE: &str = "MCP result withheld: a result text exceeds the 262144-byte per-result budget; the original call may have executed";
 const FRAME_BUDGET_MESSAGE: &str = "MCP result withheld: the response frame exceeds the 1048576-byte envelope budget; the original call may have executed";
 const OVERSIZED_CONTROL_ERROR: &str = "oversized MCP control response";
+const PATH_OUTSIDE_MESSAGE: &str =
+    "MCP path refused before execution: it is outside the selected workspace /workspace";
+const PATH_SPELLING_MESSAGE: &str = "MCP path refused before execution: unsupported spelling (empty, '.', '..' or '//' segment, backslash, '~', control character, relative ':' or over 4096 bytes)";
 
 mod frames;
 
@@ -913,16 +916,15 @@ where
                             Ok(progress)
                         }) {
                             Ok(progress) => progress,
-                            Err(_) => {
-                                write(
-                                    host,
-                                    &error(
-                                        request_id,
-                                        -32602,
-                                        "MCP arguments violate the selected input profile",
-                                    ),
-                                )
-                                .await?;
+                            Err(failure) => {
+                                // Not dispatched. Fixed text names the boundary
+                                // and never echoes the refused argument.
+                                let message = match failure.downcast_ref::<server_profile::PathRefusal>() {
+                                    Some(server_profile::PathRefusal::Outside) => PATH_OUTSIDE_MESSAGE,
+                                    Some(server_profile::PathRefusal::Spelling) => PATH_SPELLING_MESSAGE,
+                                    None => "MCP arguments violate the selected input profile",
+                                };
+                                write(host, &error(request_id, -32602, message)).await?;
                                 continue;
                             }
                         };
