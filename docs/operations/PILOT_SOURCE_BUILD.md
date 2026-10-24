@@ -16,8 +16,9 @@ build anything. Arrange for any missing inputs through the host's approved
 process before continuing. The script requires the exact Rust 1.94.1 toolchain
 used by the [native CI workflow](../../.github/workflows/mcp-real-filesystem.yml)
 and the repository's `Cargo.lock`; it does not select an ambient floating
-`stable` toolchain. The root `rust-toolchain.toml` currently names `stable`,
-so that file alone is not an exact build identity. There is no automatic
+`stable` toolchain. The root `rust-toolchain.toml` now names `1.99.1` (SOU-122);
+the native lane deliberately stays on 1.94.1 through an explicit `RUSTUP_TOOLCHAIN`
+override, which `scripts/verify-pilot-toolchain.py --lane native` attests. There is no automatic
 `rustup`, package manager, or system installation step.
 An explicit `--build` fetches dependencies pinned by `Cargo.lock` into a
 generation-private Cargo home; `--locked` rejects lockfile changes. That cache
