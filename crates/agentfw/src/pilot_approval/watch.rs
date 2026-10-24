@@ -1,7 +1,9 @@
 use super::{
     approval, escaped, operator_to, read_file, string, Config, OperatorAction, OperatorArgs, Run,
 };
-use anyhow::{ensure, Context, Result};
+#[cfg(target_os = "linux")]
+use anyhow::Context;
+use anyhow::{ensure, Result};
 use serde_json::{json, Value};
 use std::{
     io::{self, IsTerminal, Write},
@@ -11,6 +13,7 @@ use std::{
 
 const MAX_DISPLAY: usize = 16 * 1024;
 const MAX_OUTPUT: usize = 1024 * 1024;
+#[cfg(target_os = "linux")]
 const MAX_INPUT: usize = 128;
 
 #[cfg(target_os = "linux")]
