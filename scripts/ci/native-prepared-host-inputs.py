@@ -155,7 +155,17 @@ def main():
         (caproot / 'usr/lib64').symlink_to(caplib)
         run('install-meson', [sys.executable, '-m', 'pip', '--isolated', 'install', '--disable-pip-version-check',
                               '--target', assets / 'build-tools', 'meson==1.9.1'])
+        # The minimal runner has no Ninja. Extract the same distro prerequisite
+        # as the accepted lane into private setup scratch; do not install or
+        # repair packages globally.
+        run('download-ninja', ['apt-get', 'download', 'ninja-build'], cwd=assets)
+        ninja_packages = list(assets.glob('ninja-build_*.deb'))
+        require(len(ninja_packages) == 1, 'one_ninja_package_required')
+        ninja_root = assets / 'ninja'
+        ninja_root.mkdir(mode=0o700)
+        run('extract-ninja', ['dpkg-deb', '-x', ninja_packages[0], ninja_root])
         build_env = dict(env, PYTHONPATH=str(assets / 'build-tools'),
+                         PATH=str(ninja_root / 'usr/bin') + ':/usr/bin:/bin',
                          PKG_CONFIG_LIBDIR=str(caplib / 'pkgconfig'), PKG_CONFIG_SYSROOT_DIR=str(caproot))
         run('configure-bwrap', [sys.executable, '-m', 'mesonbuild.mesonmain', 'setup', assets / 'bwrap-build',
                                assets / 'bwrap', '-Dtests=false', '-Dman=disabled', '-Dselinux=disabled',
@@ -191,6 +201,7 @@ def main():
         identity = {'source': a.expected_commit, 'binaries': {role: sha(selected[role]) for role in
                     ('agentfw', 'git_launcher', 'sandbox_tests', 'python', 'node', 'bwrap_source', 'git', 'claude')},
                     'archives': {name: digest for name, (_, digest, _) in DOWNLOADS.items()},
+                    'setup_packages': {'libcap_dev': sha(debs[0]), 'ninja_build': sha(ninja_packages[0])},
                     'input_files': {name: sha(src / name) for name in guarded},
                     'wheel_count': len(wheels),
                     'wheelhouse_sha256': hashlib.sha256(json.dumps({path.name: sha(path) for path in sorted(wheels)},
