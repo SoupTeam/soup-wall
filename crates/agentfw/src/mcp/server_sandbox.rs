@@ -129,15 +129,23 @@ impl PreparedServerSandbox {
 
 /// Pin and verify the exact operator-installed runtime before any child runs.
 /// There is no shell, PATH search, package download, or unsandboxed fallback.
+#[cfg(any(target_os = "linux", test))]
 pub(crate) fn prepare(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbox> {
+    prepare_with_budget(profile, None)
+}
+
+pub(crate) fn prepare_with_budget(
+    profile: &ProfileConfig,
+    selected: Option<&super::linux_budget::BoundConfig>,
+) -> anyhow::Result<PreparedServerSandbox> {
     #[cfg(target_os = "linux")]
     {
-        prepare_linux(profile)
+        prepare_linux(profile, selected)
     }
     #[cfg(not(target_os = "linux"))]
     {
         let _ = profile;
-        if super::linux_budget::Config::load_from_env()?.is_some() {
+        if selected.is_some() || super::linux_budget::Config::load_from_env()?.is_some() {
             bail!("mcp_budget_platform_unsupported");
         }
         bail!("the selected MCP server profile requires Linux bubblewrap");
@@ -579,7 +587,10 @@ fn require_budget_mount_support(exposed_roots: &[&Path], pins: &[&File]) -> anyh
 }
 
 #[cfg(target_os = "linux")]
-fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbox> {
+fn prepare_linux(
+    profile: &ProfileConfig,
+    selected: Option<&super::linux_budget::BoundConfig>,
+) -> anyhow::Result<PreparedServerSandbox> {
     if super::server_profile::git::is_profile(&profile.format) {
         return prepare_linux_command(
             profile,
@@ -592,6 +603,7 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
                 SANDBOX_WORKSPACE,
             ]
             .map(str::to_owned),
+            selected,
         );
     }
     prepare_linux_command(
@@ -600,6 +612,7 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
             format!("/mcp-server/{SERVER_ENTRYPOINT}"),
             SANDBOX_WORKSPACE.to_owned(),
         ],
+        selected,
     )
 }
 
@@ -607,6 +620,7 @@ fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbo
 fn prepare_linux_command(
     profile: &ProfileConfig,
     node_args: &[String],
+    selected: Option<&super::linux_budget::BoundConfig>,
 ) -> anyhow::Result<PreparedServerSandbox> {
     use std::os::fd::AsRawFd;
 
@@ -800,15 +814,21 @@ fn prepare_linux_command(
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .process_group(0);
-    let budget_config = super::linux_budget::Config::load_from_env()?;
+    let budget_config = match selected {
+        Some(bound) => Some(bound.config.clone()),
+        None => super::linux_budget::Config::load_from_env()?,
+    };
     if budget_config.is_some() {
         let budget_pins: Vec<_> = pins.iter().chain(std::iter::once(&bwrap_pin)).collect();
         require_budget_mount_support(&[&workspace, &package_root], &budget_pins)?;
     }
-    let budget = budget_config
-        .as_ref()
-        .map(super::linux_budget::OwnedBudget::prepare)
-        .transpose()?;
+    let budget = match selected {
+        Some(bound) => Some(super::linux_budget::OwnedBudget::prepare_bound(bound)?),
+        None => budget_config
+            .as_ref()
+            .map(super::linux_budget::OwnedBudget::prepare)
+            .transpose()?,
+    };
     // The synchronous outside owner performs the same trusted fork-stub
     // restrictions before bubblewrap exec, while retaining cleanup authority.
     let bwrap_fd = bwrap_pin.as_raw_fd();
@@ -845,7 +865,7 @@ mod tests {
         std::fs::rename(&root, temporary.path().join("original")).unwrap();
         std::fs::create_dir(&root).unwrap();
         // Fails on the opened workspace fd, before any other assets or process.
-        let error = prepare_linux_command(&profile, &[]).err().unwrap();
+        let error = prepare_linux_command(&profile, &[], None).err().unwrap();
         assert!(error
             .to_string()
             .contains("selected workspace identity changed"));
@@ -1038,7 +1058,7 @@ print(json.dumps(result))
             normal_scheduler = libc::SCHED_OTHER,
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
-        let mut prepared = prepare_linux_command(&profile, &args).unwrap();
+        let mut prepared = prepare_linux_command(&profile, &args, None).unwrap();
         // Add an owned FIFO after repository validation to prove that read-only
         // mounts alone are insufficient, and that Landlock still blocks IPC.
         let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
@@ -1433,7 +1453,8 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
 "#,
             port = address.port()
         );
-        let mut prepared = prepare_linux_command(&profile, &["-e".to_owned(), script]).unwrap();
+        let mut prepared =
+            prepare_linux_command(&profile, &["-e".to_owned(), script], None).unwrap();
         prepared
             .command
             .env("SOU62_INHERITED_SECRET", "must-not-reach-server");

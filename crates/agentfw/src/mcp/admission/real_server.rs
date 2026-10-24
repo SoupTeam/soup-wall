@@ -1631,10 +1631,14 @@ pub(super) async fn run(
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("install selected collector termination handler")?;
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
-    let mut budget_record = crate::pilot_budget::verify_child(
-        collector.host_session.as_deref(),
-        &collector.config.server_id,
-    )?;
+    let selected_budget = collector.prepared_budget.as_ref();
+    ensure!(
+        selected_budget.is_some() || std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
+        "pilot_budget_binding_required"
+    );
+    let mut budget_record = selected_budget
+        .map(|selection| selection.reserve(&collector.config.server_id))
+        .transpose()?;
     // Register before even preparing/starting the selected owner's namespace.
     // Stop spends grants under the same native lock, so a late registration
     // cannot start a server after an unenrolled grant was revoked.
@@ -1648,7 +1652,10 @@ pub(super) async fn run(
     if let Some(owner) = cleanup_owner {
         owner.pilot_cleanup("begin").await?;
     }
-    let prepared = match server_sandbox::prepare(profile) {
+    let prepared = match server_sandbox::prepare_with_budget(
+        profile,
+        selected_budget.map(crate::pilot_budget::VerifiedSelection::bound),
+    ) {
         Ok(prepared) => prepared,
         Err(error) => {
             if let Some(owner) = cleanup_owner {

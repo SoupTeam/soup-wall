@@ -341,6 +341,7 @@ def run(args, report):
             require(observation.get("status") == "available-not-active"
                     and observation.get("protected_children_started") is False,
                     "linux_budget_observation_unverified")
+            budget_expected_sha = observation["budget_sha256"]
             report["resource_budget"] = observation
         tools = []
         for kind in ("filesystem", "git"):
@@ -476,7 +477,10 @@ def run(args, report):
                 bindings = list((private / ".agentfw" / "pilot-budgets").glob("*/linux-budget-binding.json"))
                 require(len(bindings) <= 1, "linux_budget_observation_unverified")
                 if bindings:
-                    report["resource_budget"] = budget_cli(paths, private, env, "--binding", bindings[0])
+                    observed = budget_cli(paths, private, env, "--binding", bindings[0])
+                    require(observed["budget_sha256"] == budget_expected_sha,
+                            "linux_budget_observation_unverified")
+                    report["resource_budget"] = observed
                     budget_status = report["resource_budget"]["status"]
                     if budget_status in ("unresolved", "refused", "active-at-attachment"):
                         report.update(status="failed", reason="linux_budget_observation_unverified")

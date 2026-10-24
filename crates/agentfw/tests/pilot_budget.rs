@@ -21,6 +21,7 @@ fn prepared_command_losing_environment_refuses_before_original_execution() {
             "--pilot-budget-binding",
         ])
         .arg(private.path().join("missing-binding.json"))
+        .args(["--pilot-budget-sha256", &"a".repeat(64)])
         .args(["--", "/usr/bin/touch"])
         .arg(&marker)
         .output()

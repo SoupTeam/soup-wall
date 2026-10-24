@@ -1298,6 +1298,9 @@ pub fn write_per_process_mcp_config(
                     .to_string(),
             ]);
         }
+        if let Some(identity) = &config.linux_budget_sha256 {
+            collector_args.extend(["--pilot-budget-sha256".into(), identity.clone()]);
+        }
         collector_args.push("--".into());
         collector_args.extend(runtime_cmd.clone());
 
@@ -1842,7 +1845,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let authenticated_stop = cleanup? == Some(true);
     let resource_budget = if let Some(budget) = &budget {
         budget.verify_root()?;
-        crate::pilot_budget::summarize(&budget.binding_path)?
+        budget.summary()?
     } else {
         serde_json::json!({"status":"unbudgeted","requested":false})
     };

@@ -46,6 +46,13 @@ pub(crate) struct Config {
     pub(crate) wall_millis: u64,
 }
 
+/// Immutable verified selection; wire format remains the existing Config schema.
+#[derive(Clone)]
+pub(crate) struct BoundConfig {
+    pub(crate) config: Config,
+    pub(crate) root: (u64, u64),
+}
+
 impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LinuxBudgetConfig")
@@ -56,6 +63,18 @@ impl std::fmt::Debug for Config {
 }
 
 impl Config {
+    pub(crate) fn probe_delegation(&self) -> anyhow::Result<()> {
+        self.validate()?;
+        #[cfg(target_os = "linux")]
+        {
+            linux::probe_delegation(self)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(refusal("mcp_budget_unsupported"))
+        }
+    }
+
     pub(crate) fn load_from_env() -> anyhow::Result<Option<Self>> {
         let Some(path) = std::env::var_os(ENVIRONMENT) else {
             return Ok(None);
@@ -281,10 +300,21 @@ impl OwnedBudget {
     }
 
     pub(crate) fn prepare(config: &Config) -> anyhow::Result<Self> {
+        Self::prepare_selection(config, None)
+    }
+
+    pub(crate) fn prepare_bound(selected: &BoundConfig) -> anyhow::Result<Self> {
+        Self::prepare_selection(&selected.config, Some(selected.root))
+    }
+
+    fn prepare_selection(
+        config: &Config,
+        expected_root: Option<(u64, u64)>,
+    ) -> anyhow::Result<Self> {
         config.validate()?;
         #[cfg(target_os = "linux")]
         {
-            let boundary = linux::Boundary::create(config)?;
+            let boundary = linux::Boundary::create(config, expected_root)?;
             let budget = Self {
                 config: config.clone(),
                 identity: config.identity(),
@@ -302,6 +332,7 @@ impl OwnedBudget {
         }
         #[cfg(not(target_os = "linux"))]
         {
+            let _ = expected_root;
             Err(refusal("mcp_budget_unsupported"))
         }
     }
@@ -687,6 +718,94 @@ mod linux {
         subtree: File,
     }
 
+    struct Delegation {
+        root: File,
+        root_controllers: File,
+        root_subtree: File,
+        root_type: File,
+        root_procs: File,
+    }
+
+    fn delegation(config: &Config) -> anyhow::Result<Delegation> {
+        let (root, parent) = directory(&config.delegation_root).map_err(refusal)?;
+        cgroup_fs(&root).map_err(refusal)?;
+        cgroup_fs(&parent).map_err(refusal)?;
+        let metadata = root
+            .metadata()
+            .map_err(|_| refusal("mcp_budget_delegation_invalid"))?;
+        ensure!(
+            metadata.uid() == unsafe { libc::geteuid() } && metadata.mode() & 0o077 == 0,
+            "mcp_budget_delegation_invalid"
+        );
+        let root_controllers = open_control(&root, "cgroup.controllers", READ).map_err(refusal)?;
+        let root_subtree = open_control(&root, "cgroup.subtree_control", READ).map_err(refusal)?;
+        let root_type = open_control(&root, "cgroup.type", READ).map_err(refusal)?;
+        let root_procs = open_control(&root, "cgroup.procs", READ).map_err(refusal)?;
+        validate_root(&root_controllers, &root_subtree, &root_type, &root_procs)
+            .map_err(refusal)?;
+        Ok(Delegation {
+            root,
+            root_controllers,
+            root_subtree,
+            root_type,
+            root_procs,
+        })
+    }
+
+    /// Read-only preflight: never creates an orphanable probe cgroup.
+    pub(super) fn probe_delegation(config: &Config) -> anyhow::Result<()> {
+        process::Proc::open().map_err(|_| refusal("mcp_budget_membership_unverified"))?;
+        let selected = delegation(config)?;
+        let meta = selected.root.metadata()?;
+        ensure!(
+            meta.mode() & 0o777 == 0o700,
+            "mcp_budget_delegation_invalid"
+        );
+        let mut flags = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+        ensure!(
+            unsafe { libc::fstatvfs(selected.root.as_raw_fd(), flags.as_mut_ptr()) } == 0,
+            "mcp_budget_delegation_invalid"
+        );
+        ensure!(
+            unsafe { flags.assume_init() }.f_flag & libc::ST_RDONLY == 0,
+            "mcp_budget_delegation_invalid"
+        );
+        for name in [
+            "memory.max",
+            "memory.swap.max",
+            "memory.oom.group",
+            "memory.peak",
+            "pids.max",
+            "pids.events",
+            "cpu.max",
+            "cpu.stat",
+            "cgroup.events",
+        ] {
+            open_control(&selected.root, name, READ).map_err(refusal)?;
+        }
+        // Delegation may leave the parent's kill file root-owned. The engine
+        // needs write authority only on its newly owned child leaf. Check the
+        // kernel capability without demanding authority to kill the parent.
+        let name = cstring(b"cgroup.kill").map_err(refusal)?;
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        ensure!(
+            unsafe {
+                libc::fstatat(
+                    selected.root.as_raw_fd(),
+                    name.as_ptr(),
+                    stat.as_mut_ptr(),
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            } == 0,
+            "mcp_budget_controller_unavailable"
+        );
+        ensure!(
+            unsafe { stat.assume_init() }.st_mode & libc::S_IFMT == libc::S_IFREG,
+            "mcp_budget_controller_unavailable"
+        );
+        Ok(())
+    }
+
     pub(super) struct Boundary {
         config_root: PathBuf,
         root: File,
@@ -753,28 +872,27 @@ mod linux {
             Ok((cleanup, files))
         }
 
-        pub(super) fn create(config: &Config) -> anyhow::Result<Self> {
+        pub(super) fn create(
+            config: &Config,
+            expected_root: Option<(u64, u64)>,
+        ) -> anyhow::Result<Self> {
             // Validate procfs/PID-namespace correspondence before creating a leaf.
             let processes =
                 process::Proc::open().map_err(|_| refusal("mcp_budget_membership_unverified"))?;
-            let (root, parent) = directory(&config.delegation_root).map_err(refusal)?;
-            cgroup_fs(&root).map_err(refusal)?;
-            cgroup_fs(&parent).map_err(refusal)?;
-            let metadata = root
-                .metadata()
-                .map_err(|_| refusal("mcp_budget_delegation_invalid"))?;
-            ensure!(
-                metadata.uid() == unsafe { libc::geteuid() } && metadata.mode() & 0o077 == 0,
-                "mcp_budget_delegation_invalid"
-            );
-            let root_controllers =
-                open_control(&root, "cgroup.controllers", READ).map_err(refusal)?;
-            let root_subtree =
-                open_control(&root, "cgroup.subtree_control", READ).map_err(refusal)?;
-            let root_type = open_control(&root, "cgroup.type", READ).map_err(refusal)?;
-            let root_procs = open_control(&root, "cgroup.procs", READ).map_err(refusal)?;
-            validate_root(&root_controllers, &root_subtree, &root_type, &root_procs)
-                .map_err(refusal)?;
+            let Delegation {
+                root,
+                root_controllers,
+                root_subtree,
+                root_type,
+                root_procs,
+            } = delegation(config)?;
+            if let Some((device, inode)) = expected_root {
+                let metadata = root.metadata()?;
+                ensure!(
+                    metadata.dev() == device && metadata.ino() == inode,
+                    "pilot_budget_root_changed"
+                );
+            }
             let name = format!("agentfw-mcp-{:032x}", rand::random::<u128>());
             let c_name = cstring(name.as_bytes()).map_err(refusal)?;
             if unsafe { libc::mkdirat(root.as_raw_fd(), c_name.as_ptr(), 0o700) } != 0 {

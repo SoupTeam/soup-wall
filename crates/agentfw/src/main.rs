@@ -213,6 +213,9 @@ enum Cmd {
         /// Exact private prepared-run budget binding; environment must agree.
         #[arg(long)]
         pilot_budget_binding: Option<PathBuf>,
+        /// Frozen canonical identity of the prepared budget selection.
+        #[arg(long, requires = "pilot_budget_binding")]
+        pilot_budget_sha256: Option<String>,
         /// Authenticated child authority grant token minted for this session and server.
         #[arg(long)]
         child_authority: Option<String>,
@@ -855,6 +858,7 @@ fn main() -> anyhow::Result<()> {
             id,
             host_session,
             pilot_budget_binding,
+            pilot_budget_sha256,
             child_authority,
             native_admission,
             native_approval_wait_seconds,
@@ -872,8 +876,9 @@ fn main() -> anyhow::Result<()> {
                     "both --host-session and --child-authority must be provided together for authenticated binding"
                 );
             }
-            agentfw::pilot_budget::verify_launch(
+            let prepared_budget = agentfw::pilot_budget::verify_launch(
                 pilot_budget_binding.as_deref(),
+                pilot_budget_sha256.as_deref(),
                 host_session.as_deref(),
                 id.as_deref().unwrap_or(""),
             )?;
@@ -951,7 +956,10 @@ fn main() -> anyhow::Result<()> {
                 let runtime = tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .build()?;
-                let result = runtime.block_on(agentfw::mcp::admission::run(admission));
+                let result = runtime.block_on(agentfw::mcp::admission::run_with_budget(
+                    admission,
+                    prepared_budget,
+                ));
                 // Tokio's stdin uses a blocking thread. A closed admission path must
                 // exit even when the MCP host keeps its stdin handle open.
                 runtime.shutdown_timeout(Duration::from_millis(100));

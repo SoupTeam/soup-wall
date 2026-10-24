@@ -5,13 +5,14 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{ensure, Result};
 use clap::Args;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::mcp::linux_budget::{Config, OwnedBudget};
+use crate::mcp::linux_budget::{BoundConfig, Config};
 
 pub(crate) const BINDING_ENV: &str = "AGENTFW_PILOT_BUDGET_BINDING";
 const FORMAT: &str = "sw-prepared-pilot-budget/1";
@@ -25,7 +26,7 @@ pub struct BudgetArgs {
     /// Inspect one private run binding without starting a process.
     #[arg(long, conflicts_with = "config", required_unless_present = "config")]
     pub binding: Option<PathBuf>,
-    /// Probe an already delegated subtree using an empty, owned engine leaf.
+    /// Check delegated-root capabilities without creating a cgroup or process.
     #[arg(long, requires = "config")]
     pub probe: bool,
 }
@@ -54,11 +55,7 @@ pub fn inspect(args: BudgetArgs) -> Result<()> {
 }
 
 fn probe(config: &Config) -> Result<()> {
-    let mut budget = OwnedBudget::prepare(config)?;
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?
-        .block_on(budget.finish())
+    config.probe_delegation()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -322,6 +319,15 @@ impl RunBudget {
             "scope":"per-original-server-process-tree"})
     }
 
+    pub(crate) fn summary(&self) -> Result<Value> {
+        let value = summarize(&self.binding_path)?;
+        ensure!(
+            value["budget_sha256"] == self.binding.budget_sha256,
+            "pilot_budget_selection_changed"
+        );
+        Ok(value)
+    }
+
     pub(crate) fn verify_root(&self) -> Result<()> {
         ensure!(
             root_identity(&self.config.delegation_root)? == self.binding.root,
@@ -345,41 +351,53 @@ impl RunBudget {
     }
 }
 
-/// Resolve only an explicit prepared-run binding, before protected child spawn.
-pub(crate) fn verify_child(
-    host_session: Option<&str>,
-    server_id: &str,
-) -> Result<Option<ChildRecord>> {
-    let Some(path) = std::env::var_os(BINDING_ENV) else {
-        return Ok(None);
-    };
-    ChildRecord::reserve(
-        read_binding(Path::new(&path), host_session, server_id)?,
-        server_id,
-    )
-    .map(Some)
+/// One immutable selection verified before admission. No later environment or
+/// pathname read can replace its accepted limits or delegated-root identity.
+#[derive(Clone)]
+pub struct VerifiedSelection {
+    binding: Binding,
+    bound: BoundConfig,
+    records: Arc<File>,
 }
 
-/// CLI and environment must agree: losing a host-supplied environment cannot
-/// silently turn an explicitly budgeted prepared command into a legacy launch.
+impl VerifiedSelection {
+    pub(crate) fn bound(&self) -> &BoundConfig {
+        &self.bound
+    }
+    pub(crate) fn reserve(&self, server_id: &str) -> Result<ChildRecord> {
+        ChildRecord::reserve(self.binding.clone(), Arc::clone(&self.records), server_id)
+    }
+}
+
+/// CLI/environment/digest must agree. The returned immutable selection is moved
+/// into admission, rather than re-reading mutable environment/files at spawn.
 pub fn verify_launch(
     path: Option<&Path>,
+    expected: Option<&str>,
     host_session: Option<&str>,
     server_id: &str,
-) -> Result<()> {
+) -> Result<Option<VerifiedSelection>> {
     let environmental = std::env::var_os(BINDING_ENV);
-    if path.is_none() && environmental.is_none() {
-        return Ok(());
+    if path.is_none() && environmental.is_none() && expected.is_none() {
+        return Ok(None);
     }
     ensure!(
-        path.is_some() && environmental.as_deref().map(Path::new) == path,
+        path.is_some() && expected.is_some() && environmental.as_deref().map(Path::new) == path,
         "pilot_budget_binding_required"
     );
-    read_binding(path.expect("checked binding"), host_session, server_id)?;
-    Ok(())
+    let selected = read_binding(path.expect("checked binding"), host_session, server_id)?;
+    ensure!(
+        expected == Some(selected.binding.budget_sha256.as_str()),
+        "pilot_budget_selection_changed"
+    );
+    Ok(Some(selected))
 }
 
-fn read_binding(path: &Path, host_session: Option<&str>, server_id: &str) -> Result<Binding> {
+fn read_binding(
+    path: &Path,
+    host_session: Option<&str>,
+    server_id: &str,
+) -> Result<VerifiedSelection> {
     let binding: Binding = private_json(path)?;
     ensure!(
         binding.format == FORMAT
@@ -408,8 +426,51 @@ fn read_binding(path: &Path, host_session: Option<&str>, server_id: &str) -> Res
         "pilot_budget_binding_invalid"
     );
     private_directory(directory)?;
-    private_directory(&binding.records)?;
-    Ok(binding)
+    let records = pin_records_directory(&binding.records)?;
+    Ok(VerifiedSelection {
+        bound: BoundConfig {
+            config,
+            root: (binding.root.device, binding.root.inode),
+        },
+        binding,
+        records,
+    })
+}
+
+fn pin_records_directory(path: &Path) -> Result<Arc<File>> {
+    private_directory(path)?;
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_DIRECTORY);
+    }
+    let directory = options.open(path)?;
+    verify_records_directory(path, &directory)?;
+    Ok(Arc::new(directory))
+}
+
+fn verify_records_directory(path: &Path, directory: &File) -> Result<()> {
+    private_directory(path).map_err(|_| anyhow::anyhow!("pilot_budget_records_replaced"))?;
+    let current = fs::symlink_metadata(path)?;
+    let held = directory.metadata()?;
+    ensure!(
+        current.is_dir() && held.is_dir() && !current.file_type().is_symlink(),
+        "pilot_budget_records_replaced"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        ensure!(
+            current.dev() == held.dev()
+                && current.ino() == held.ino()
+                && held.uid() == unsafe { libc::geteuid() }
+                && held.mode() & 0o077 == 0,
+            "pilot_budget_records_replaced"
+        );
+    }
+    Ok(())
 }
 
 fn private_directory(path: &Path) -> Result<()> {
@@ -443,11 +504,12 @@ struct Record {
 
 pub(crate) struct ChildRecord {
     path: PathBuf,
+    directory: Arc<File>,
     value: Record,
     file: File,
 }
 impl ChildRecord {
-    fn reserve(binding: Binding, server_id: &str) -> Result<Self> {
+    fn reserve(binding: Binding, directory: Arc<File>, server_id: &str) -> Result<Self> {
         let value = Record {
             format: FORMAT.into(),
             host_session: binding.host_session,
@@ -459,21 +521,47 @@ impl ChildRecord {
         // Atomic bounded reservation; concurrent children cannot overwrite or
         // exceed the fixed number of retained attempts for this run.
         for index in 0..64 {
-            let path = binding.records.join(format!("{index:02}.json"));
-            let mut options = OpenOptions::new();
-            options.read(true).write(true).create_new(true);
+            verify_records_directory(&binding.records, &directory)?;
+            let name = format!("{index:02}.json");
+            let path = binding.records.join(&name);
             #[cfg(unix)]
-            {
-                use std::os::unix::fs::OpenOptionsExt;
-                options
-                    .mode(0o600)
-                    .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-            }
-            match options.open(&path) {
+            let opened = {
+                use std::os::fd::{AsRawFd, FromRawFd};
+                let name = std::ffi::CString::new(name)?;
+                let raw = unsafe {
+                    libc::openat(
+                        directory.as_raw_fd(),
+                        name.as_ptr(),
+                        libc::O_RDWR
+                            | libc::O_CREAT
+                            | libc::O_EXCL
+                            | libc::O_NOFOLLOW
+                            | libc::O_CLOEXEC,
+                        0o600 as libc::c_uint,
+                    )
+                };
+                if raw < 0 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(unsafe { File::from_raw_fd(raw) })
+                }
+            };
+            #[cfg(not(unix))]
+            let opened: std::io::Result<File> = {
+                let _ = name;
+                Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+            };
+            match opened {
                 Ok(mut file) => {
+                    verify_records_directory(&binding.records, &directory)?;
                     file.write_all(&serde_json::to_vec(&value)?)?;
                     file.sync_all()?;
-                    return Ok(Self { path, value, file });
+                    return Ok(Self {
+                        path,
+                        directory,
+                        value,
+                        file,
+                    });
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
                 Err(error) => return Err(error.into()),
@@ -502,6 +590,12 @@ impl ChildRecord {
 }
 impl ChildRecord {
     fn write(&mut self, value: &Record) -> Result<()> {
+        verify_records_directory(
+            self.path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("pilot_budget_records_replaced"))?,
+            &self.directory,
+        )?;
         #[cfg(unix)]
         {
             use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
@@ -723,6 +817,9 @@ pub(crate) fn summarize(path: &Path) -> Result<Value> {
     )
 }
 
+#[cfg(all(test, target_os = "linux"))]
+mod preowner_witness;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -761,12 +858,25 @@ mod tests {
         (temp, binding, path)
     }
 
+    #[cfg(unix)]
     fn metadata(binding: &Binding, failed: bool, cleanup: bool) -> Value {
         json!({"format":crate::mcp::linux_budget::FORMAT,"budget_sha256":binding.budget_sha256,
             "failed":failed,"cleanup_verified":cleanup,"reason":if failed {"mcp_budget_wall_expired"}
             else {"mcp_budget_enforced"},"stats":{"pids_current":0,"pids_peak_kernel":false},
             "leaf":"agentfw-mcp-00000000000000000000000000000000",
             "membership_failure":{"private_pid":12345}})
+    }
+
+    #[cfg(unix)]
+    fn selection(binding: &Binding) -> VerifiedSelection {
+        VerifiedSelection {
+            binding: binding.clone(),
+            bound: BoundConfig {
+                config: Config::load_file(&binding.config).unwrap(),
+                root: (binding.root.device, binding.root.inode),
+            },
+            records: pin_records_directory(&binding.records).unwrap(),
+        }
     }
 
     #[test]
@@ -787,9 +897,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn dead_child_without_terminal_receipt_stays_unresolved() {
         let (_temp, binding, path) = fixture();
-        let mut record = ChildRecord::reserve(binding.clone(), "filesystem").unwrap();
+        let mut record = selection(&binding).reserve("filesystem").unwrap();
         record
             .record(metadata(&binding, false, false), false)
             .unwrap();
@@ -797,22 +908,168 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
+    fn verified_selection_never_reloads_replaced_config_bytes() {
+        let (_temp, binding, _path) = fixture();
+        let selected = selection(&binding);
+        let accepted = selected.bound().config.identity();
+        fs::write(&binding.config, b"operator replacement").unwrap();
+        assert_eq!(selected.bound().config.identity(), accepted);
+        let record = selected.reserve("filesystem").unwrap();
+        assert_eq!(record.value.budget_sha256, accepted);
+        assert_eq!(fs::read(&binding.config).unwrap(), b"operator replacement");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn replaced_records_directory_cannot_redirect_reservation_into_workspace() {
+        let (temp, binding, _path) = fixture();
+        let selected = selection(&binding);
+        let original = temp.path().join("original-records");
+        let workspace = temp.path().join("workspace");
+        fs::create_dir(&workspace).unwrap();
+        let marker = workspace.join("notes.txt");
+        fs::write(&marker, b"operator workspace").unwrap();
+        fs::rename(&binding.records, &original).unwrap();
+        std::os::unix::fs::symlink(&workspace, &binding.records).unwrap();
+
+        assert!(selected
+            .reserve("filesystem")
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("pilot_budget_records_replaced"));
+        assert_eq!(fs::read(&marker).unwrap(), b"operator workspace");
+        assert_eq!(fs::read_dir(&workspace).unwrap().count(), 1);
+        assert_eq!(fs::read_dir(&original).unwrap().count(), 0);
+        assert!(fs::symlink_metadata(&binding.records)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn replaced_records_directory_preserves_both_inventories() {
+        use std::os::unix::fs::PermissionsExt;
+        let (temp, binding, _path) = fixture();
+        let selected = selection(&binding);
+        let original = temp.path().join("original-records");
+        fs::rename(&binding.records, &original).unwrap();
+        fs::create_dir(&binding.records).unwrap();
+        fs::set_permissions(&binding.records, fs::Permissions::from_mode(0o700)).unwrap();
+        let replacement = binding.records.join("00.json");
+        fs::write(&replacement, b"operator replacement").unwrap();
+
+        assert!(selected
+            .reserve("git")
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("pilot_budget_records_replaced"));
+        assert_eq!(fs::read(&replacement).unwrap(), b"operator replacement");
+        assert_eq!(fs::read_dir(&binding.records).unwrap().count(), 1);
+        assert_eq!(fs::read_dir(&original).unwrap().count(), 0);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn directory_replacement_after_reservation_refuses_record_updates() {
+        use std::os::unix::fs::PermissionsExt;
+        let (temp, binding, _path) = fixture();
+        let mut record = selection(&binding).reserve("filesystem").unwrap();
+        let before = fs::read(&record.path).unwrap();
+        let original = temp.path().join("original-records");
+        fs::rename(&binding.records, &original).unwrap();
+        fs::create_dir(&binding.records).unwrap();
+        fs::set_permissions(&binding.records, fs::Permissions::from_mode(0o700)).unwrap();
+        let replacement = binding.records.join("00.json");
+        fs::write(&replacement, b"operator replacement").unwrap();
+
+        assert!(record
+            .record(metadata(&binding, false, true), true)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("pilot_budget_records_replaced"));
+        drop(record);
+        assert_eq!(fs::read(&replacement).unwrap(), b"operator replacement");
+        assert_eq!(fs::read(original.join("00.json")).unwrap(), before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires an explicit empty already-delegated owned SOU142_BUDGET_CONFIG"]
+    fn native_readonly_preflight_and_bound_root_identity() {
+        use std::os::unix::fs::MetadataExt;
+        let path = std::env::var_os("SOU142_BUDGET_CONFIG").expect("explicit owned config");
+        let config = Config::load_file(Path::new(&path)).unwrap();
+        let names = || {
+            fs::read_dir(&config.delegation_root)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+        let before = names();
+        config.probe_delegation().unwrap();
+        assert_eq!(names(), before, "preflight must not create a cgroup");
+        let meta = fs::metadata(&config.delegation_root).unwrap();
+        let wrong = BoundConfig {
+            config: config.clone(),
+            root: (meta.dev(), meta.ino() ^ 1),
+        };
+        assert!(crate::mcp::linux_budget::OwnedBudget::prepare_bound(&wrong)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("pilot_budget_root_changed"));
+        assert_eq!(
+            names(),
+            before,
+            "root drift must refuse before leaf creation"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "private child helper; requires the explicit native witness controller"]
+    fn native_preowner_orphan_child() -> Result<()> {
+        preowner_witness::child()
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "BLOCKER reproduction only; requires explicit empty owned SOU142_BUDGET_CONFIG"]
+    fn native_reproduce_preowner_orphan() -> Result<()> {
+        preowner_witness::reproduce().map_err(|_| {
+            println!(
+                "{}",
+                json!({"format":"sou142-preowner-parent-loss/1","status":"incomplete",
+                    "reason":"preowner_witness_setup_or_cleanup_unverified","acceptance_pass":false})
+            );
+            anyhow::anyhow!("preowner_witness_setup_or_cleanup_unverified")
+        })
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn selected_is_not_active_and_unfinished_children_never_claim_success() {
         let (_temp, binding, path) = fixture();
         assert_eq!(
             summarize(&path).unwrap()["status"],
             "configured-not-observed"
         );
-        let record = ChildRecord::reserve(binding.clone(), "filesystem").unwrap();
+        let record = selection(&binding).reserve("filesystem").unwrap();
         assert_eq!(summarize(&path).unwrap()["status"], "unresolved");
         drop(record);
         assert_eq!(summarize(&path).unwrap()["unresolved_children"], 1);
     }
 
     #[test]
+    #[cfg(unix)]
     fn terminal_refusals_and_missing_cleanup_are_honest_and_public_fields_are_finite() {
         let (_temp, binding, path) = fixture();
-        let mut record = ChildRecord::reserve(binding.clone(), "git").unwrap();
+        let mut record = selection(&binding).reserve("git").unwrap();
         record
             .record(metadata(&binding, false, true), true)
             .unwrap();
@@ -831,9 +1088,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn changed_selection_or_record_identity_is_rejected() {
         let (_temp, binding, path) = fixture();
-        let mut record = ChildRecord::reserve(binding.clone(), "git").unwrap();
+        let mut record = selection(&binding).reserve("git").unwrap();
         let mut wrong = metadata(&binding, false, true);
         wrong["budget_sha256"] = json!("other-run");
         assert!(record.record(wrong, true).is_err());
@@ -844,9 +1102,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn record_replacement_is_preserved_and_cannot_be_reported_successful() {
         let (_temp, binding, path) = fixture();
-        let mut record = ChildRecord::reserve(binding.clone(), "filesystem").unwrap();
+        let mut record = selection(&binding).reserve("filesystem").unwrap();
         fs::remove_file(&record.path).unwrap();
         fs::write(&record.path, b"operator replacement").unwrap();
         assert!(record
@@ -859,13 +1118,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn retained_attempts_are_bounded_and_cannot_overwrite_each_other() {
         let (_temp, binding, path) = fixture();
+        let selected = selection(&binding);
         let mut records = Vec::new();
         for _ in 0..64 {
-            records.push(ChildRecord::reserve(binding.clone(), "git").unwrap());
+            records.push(selected.reserve("git").unwrap());
         }
-        assert!(ChildRecord::reserve(binding, "git").is_err());
+        assert!(selected.reserve("git").is_err());
         assert_eq!(summarize(&path).unwrap()["observed_children"], 64);
     }
 

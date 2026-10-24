@@ -32,7 +32,7 @@ The example describes a selection, not a portable delegation setup command.
 
 Before daemon startup the prepared entry freezes input bytes in its private run
 and calls `agentfw pilot-budget --config FILE --probe`. This uses the existing
-strict parser and an empty owned engine leaf; an availability probe never proves
+strict parser and the engine's read-only delegation/capability checks; an availability probe never proves
 that a protected process ran. The native launcher verifies the preflight's
 canonical SHA-256, freezes another private run snapshot, pins the root identity,
 and holds an exclusive cooperating-run lease until terminal cleanup. An occupied
@@ -41,10 +41,14 @@ root or changed configuration refuses before the host/original servers execute.
 The native `pilot-launch --linux-budget FILE` contract is reusable independently.
 An optional `--linux-budget-sha256 DIGEST` binds a previously inspected identity.
 Both original-server commands receive the frozen `AGENTFW_MCP_LINUX_BUDGET`, a
-private host-session binding, and `--pilot-budget-binding`. CLI and environment
+private host-session binding, `--pilot-budget-binding` and its frozen digest. CLI and environment
 must agree: losing environment variables cannot silently downgrade that command
 to an unbudgeted collector. Session, server, paths, root and config identity are
-checked before preparing a protected child.
+checked before preparing a protected child. The verified configuration is moved into
+admission once. Runtime preparation never rereads the mutable selection file or
+environment to choose limits; the existing engine compares the pinned root identity
+before creating a leaf. The read-only preflight cannot orphan a probe cgroup if
+its process is killed.
 
 The unchanged SOU-79 engine enforces each original server's aggregate process
 **tree** in its own leaf. Filesystem and Git are independent siblings. This is
@@ -106,3 +110,24 @@ before final qualification. macOS parser/CLI results do not replace those Linux
 witnesses. Preserve every failed/incomplete native attempt. Do not change limits,
 timeouts, policy floors or expected labels to make one pass. Final shared
 CI/admission/main integration remains TL-owned.
+
+## Focused native first slice
+
+The existing manual `sou79-resource-budgets.yml` workflow accepts
+`prepared_focus: "142"` on this branch. This selects only native Ubuntu
+24.04 compile/unit/Clippy controls in a transient ordinary-user service. Candidate
+source is read-only, writes stay in isolated scratch (plus the explicitly owned
+delegation for budget controls), and candidate execution has only private
+loopback networking. Dependency fetch is a separate trusted setup step that
+requires manifests and Cargo configuration to match reviewed main
+`04efdf1d959599238a0a9a3eb42cbe26b3531b74`. Raw target logs remain private;
+retained artifacts contain bounded status, hashes and projected compiler messages.
+
+This is a compile/capability slice, not original-host or final admission evidence.
+The default `off` keeps the existing manual budget qualification unchanged.
+
+The accepted engine creates its leaf before the independent original-server owner
+starts. A collector killed in that preparation interval can leave an empty leaf.
+The new high-level binding must not adopt or sweep that unconfirmed inventory.
+An explicit ignored native reproduction records this as a blocker; it must be
+closed before claiming complete parent-loss qualification.
