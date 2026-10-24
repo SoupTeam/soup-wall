@@ -10,14 +10,26 @@ use serde_json::Value;
 use super::ToolProfile;
 
 pub(crate) mod reference_view;
+pub(crate) mod revision_view;
+pub(crate) mod selected_view;
+pub(crate) use selected_view::SelectedView;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ReadExtension {
+    #[default]
+    None,
+    LocalReferences,
+    FileRevisions,
+}
 
 pub const FORMAT: &str = "sw-mcp/git-readonly/1";
 /// Explicitly selected local-reference contract; the original v1 stays narrow.
+pub const FILE_READS_FORMAT: &str = "sw-mcp/git-readonly-file-revisions/1";
 pub const LOCAL_REFS_FORMAT: &str = "sw-mcp/git-readonly-local-refs/1";
 pub const MAX_LOCAL_REF_BYTES: usize = 255;
 
 pub fn is_profile(format: &str) -> bool {
-    matches!(format, FORMAT | LOCAL_REFS_FORMAT)
+    matches!(format, FORMAT | LOCAL_REFS_FORMAT | FILE_READS_FORMAT)
 }
 
 /// A literal, fully qualified local name, never a Git revision expression.
@@ -76,6 +88,20 @@ pub fn classify_manifest_with_local_refs(
     value: &Value,
     local_references: bool,
 ) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
+    classify_manifest_with_extension(
+        value,
+        if local_references {
+            ReadExtension::LocalReferences
+        } else {
+            ReadExtension::None
+        },
+    )
+}
+
+pub fn classify_manifest_with_extension(
+    value: &Value,
+    extension: ReadExtension,
+) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     ensure!(
         value == &original_manifest(),
         "Git discovery differs from pin"
@@ -99,7 +125,7 @@ pub fn classify_manifest_with_local_refs(
                 output: None,
                 unsupported_reason: (!supported).then_some("selected_git_operation_unsupported"),
                 git_tool: Some(name.to_owned()),
-                git_local_references: local_references,
+                git_extension: extension,
             },
         );
     }
@@ -114,6 +140,22 @@ pub fn validate_arguments_with_local_refs(
     name: &str,
     value: &Value,
     local_references: bool,
+) -> anyhow::Result<()> {
+    validate_arguments_with_extension(
+        name,
+        value,
+        if local_references {
+            ReadExtension::LocalReferences
+        } else {
+            ReadExtension::None
+        },
+    )
+}
+
+pub fn validate_arguments_with_extension(
+    name: &str,
+    value: &Value,
+    extension: ReadExtension,
 ) -> anyhow::Result<()> {
     let allowed: &[&str] = match name {
         "git_status" => &["repo_path"],
@@ -146,9 +188,12 @@ pub fn validate_arguments_with_local_refs(
         ensure!(
             reference == "HEAD"
                 || (reference.len() == 40 && reference.bytes().all(|c| c.is_ascii_hexdigit()))
-                || (local_references && is_local_reference(reference)),
+                || (extension == ReadExtension::LocalReferences && is_local_reference(reference))
+                || (extension == ReadExtension::FileRevisions
+                    && name == "git_show"
+                    && revision_view::file_revision(reference).is_some()),
             "{}",
-            if local_references {
+            if extension != ReadExtension::None {
                 "Git revision violates the selected local-reference contract"
             } else {
                 "only HEAD or a full SHA-1 revision is supported"

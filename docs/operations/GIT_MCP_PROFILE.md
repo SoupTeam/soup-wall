@@ -210,3 +210,67 @@ physical request retains its slot and original deadline until it completes. A
 nonresponding withdrawn request still terminates the transport at that deadline.
 Filesystem's existing finite best-effort wire cancellation remains unchanged.
 See the [upstream cancellation report](https://github.com/modelcontextprotocol/python-sdk/issues/2610).
+
+
+## Opt-in per-file revision reads (SOU-146)
+
+The default `sw-mcp/git-readonly/1` contract remains unchanged. An operator may
+prepare a **separate installation** with `--file-revisions` to select
+`sw-mcp/git-readonly-file-revisions/1`. Use the same pinned Linux x86-64 Git,
+Python, bubblewrap and Agent launcher as above; `--ro-bind-data` support is
+required. Preparation never changes the source repository.
+
+```sh
+python3 scripts/install-sou68-git-profile.py --run --file-revisions \
+  --destination /absolute/private/git-file-revisions \
+  --workspace /absolute/owned/project --git /absolute/pinned/git \
+  --git-sha256 REVIEWED_GIT_SHA256 --bwrap /absolute/pinned/bwrap \
+  --git-launcher /absolute/pinned/agentfw-git-sandbox
+```
+
+Install that directory's `registry.json` and its digest in the enforcing daemon,
+and select its `profile.json` with `AGENTFW_MCP_SERVER_PROFILE`. Explicitly select
+`rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py` with
+`AGENTFW_RULE_BASELINE` and `AGENTFW_CLASSIFIER=rule-baseline`. Do not reuse another
+profile's registry or classifier as an implicit fallback. This development
+extension is not a combined local-reference, shallow or installed-pilot preset.
+Unknown combined profile identities refuse at startup; named refs and shallow
+repositories remain unsupported by this selection.
+
+The original upstream `git_show` name, schema and arguments are preserved. Its
+`revision` accepts `HEAD:notes.txt` or `FULL_40_HEX_COMMIT_SHA:docs/機能 notes.txt`.
+The path is a literal UTF-8 relative path: at most 1024 bytes, 16 components and
+255 bytes per component. ASCII letters, digits, dot, underscore, dash and spaces
+plus bounded Unicode are supported. Empty components, dot/dot-dot, absolute
+paths, option-like components, NUL/control/format characters, revision magic,
+backslashes, colons, wildcards and Git metadata/attribute components refuse.
+`git_diff` retains its original HEAD/full-SHA grammar. A per-file target must
+resolve through a commit and trees to a regular blob; trees, tags, symlinks,
+gitlinks, missing objects and missing paths receive a correlated refusal.
+
+This profile captures at most 128 loose objects, each at most 262144 compressed
+and inflated bytes, within a 16 MiB total image. Packed object stores refuse;
+packed reference metadata may resolve HEAD but grants no named-reference
+capability. Existing ownership, configuration, hook, alternate, submodule,
+standalone-repository and resource constraints still apply. No helper, Git
+revision expansion, fetch, repair or network operation is used to validate a
+path. The original server executes the original request on sealed metadata and
+object images and its result passes the existing inspection gate unchanged.
+
+Retained same-FD read leases reject pre-existing writers/mappings and permanently
+withdraw on a later writer. Directory watches cover replacement, creation and
+removal. Source validity is checked before admission, after approval before
+dispatch, and before result release. A write/restore does not revive a session;
+start a new protected session after restoring the owned source. Each call still
+requires current classifier/policy admission and a separate single-use Ask when
+configured. The first-pending observation remains five seconds including cold
+preparation; broker TTLs and resource budgets are unchanged.
+
+Run the **Real Git MCP profile** workflow on the exact branch and select
+**Run only opt-in SOU-146 per-file revision acceptance**. Its retained
+`sou68-real-git-mcp-evidence` artifact includes `sou146-acceptance/report.json`,
+source identity, original/protected response hashes, grammar/type refusals,
+source replacement and mapped write/restore, Ask/replay/cancel/Deny, actual
+in-flight source withdrawal, calibrated helper/outside/receiver controls and
+independent process cleanup. A missing Linux prerequisite is a failure, never a
+passing skip. Preserve incomplete and failed reports alongside a later pass.
