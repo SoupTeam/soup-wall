@@ -330,14 +330,14 @@ impl Capture {
         Ok(object)
     }
 
-    fn target(&mut self, id: &str, tag: bool) -> anyhow::Result<bool> {
+    fn target(&mut self, id: &str, tag: bool) -> anyhow::Result<Option<String>> {
         let mut id = id.to_owned();
         let mut expected_tag = None;
         let mut seen = BTreeSet::new();
         for depth in 0..=MAX_TAG_DEPTH {
             ensure!(seen.insert(id.clone()), "Git local-reference tag cycle");
             match self.object(&id)? {
-                Object::Commit => return Ok(expected_tag != Some(true)),
+                Object::Commit => return Ok((expected_tag != Some(true)).then_some(id)),
                 Object::Tag {
                     target,
                     target_is_tag,
@@ -345,10 +345,10 @@ impl Capture {
                     id = target;
                     expected_tag = Some(target_is_tag);
                 }
-                _ => return Ok(false),
+                _ => return Ok(None),
             }
         }
-        Ok(false)
+        Ok(None)
     }
 }
 
@@ -407,7 +407,17 @@ impl View {
             capture.image(format!("{ROOT}/index"), &index)?;
         }
         if let Some(packed) = optional(&git, "packed-refs", 65_536)? {
-            capture.refs = packed_references(&packed)?
+            let parsed = packed_references(&packed)?;
+            // Git may consult the packed peeled optimization. It must match
+            // the exact bounded object chain, never become a second target.
+            for (name, peeled) in &parsed.peels {
+                ensure!(
+                    capture.target(&parsed.refs[name], true)?.as_ref() == Some(peeled),
+                    "Git packed peeled target differs from its object chain"
+                );
+            }
+            capture.refs = parsed
+                .refs
                 .into_iter()
                 .map(|(name, id)| (name, Some(id)))
                 .collect();
@@ -436,7 +446,9 @@ impl View {
             let valid = id.is_some_and(|id| {
                 capture
                     .target(&id, name.starts_with("refs/tags/"))
-                    .unwrap_or(false)
+                    .ok()
+                    .flatten()
+                    .is_some()
             });
             supported.insert(name, valid);
         }
@@ -449,7 +461,7 @@ impl View {
             );
         } else {
             ensure!(
-                capture.target(&oid(head_text)?, false)?,
+                capture.target(&oid(head_text)?, false)?.is_some(),
                 "Git detached HEAD target unsupported"
             );
         }

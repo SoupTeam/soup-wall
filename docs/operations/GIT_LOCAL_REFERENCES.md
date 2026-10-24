@@ -72,12 +72,14 @@ objects, 128 metadata directories and 256 watches; index and packed-ref input
 limits are 8 MiB and 64 KiB respectively. Unsupported or changing capture refuses
 startup. The ordinary sandbox resource budgets are retained.
 
-Kernel watches withdraw the session on metadata writes, replacement, rename,
-watch loss or overflow. The collector checks withdrawal before admission,
+Kernel watches withdraw the session on writes, replacement or rename in the
+captured reference/config/index metadata directories and target-object prefixes,
+and on watch loss or overflow. The collector checks withdrawal before admission,
 immediately before dispatch and before releasing an inspected result. Restoring
 the old bytes does not revive that session: close it and start a new protected
 collector. This is a bounded metadata image with sticky withdrawal, not live
-branch following or an authorization cache. Every invocation still needs native
+branch following or a complete immutable copy of the worktree/object graph.
+The data image is not an authorization cache. Every invocation still needs native
 admission and result inspection; classifier uncertainty, policy Deny/Ask and
 single-use approvals continue to apply. A changed ref cannot use an approval
 obtained for the earlier image.
@@ -125,6 +127,13 @@ python3 -B scripts/verify-sou137-local-git-refs.py --run \
 
 The driver uses synthetic owned fixtures and the existing original-server
 acceptance client, enforcing daemon and independent Linux process/open witnesses.
+It calibrates an external-helper effect against the direct original server,
+checks a live receiver and FIFO through the existing OS-isolation probe, reproduces
+default-v1 refusals, and tests both pre-dispatch and inflight reference substitution.
+An owned Ask policy exercises exact original CLI approval, single use and source
+withdrawal while approval is pending; a Deny policy and an uncertain classifier
+must independently refuse. These synthetic decisions do not establish physical
+human presence or relax an installed operator's policy.
 Evidence records exact source/tree, binaries, installed profile/registry/policy,
 classifier and raw request/response transcript hashes. Missing enforcement or a
 blocked original response fails acceptance; parser tests alone cannot pass it.

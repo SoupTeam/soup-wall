@@ -124,10 +124,17 @@ pub(super) fn decode_object(expected: &str, compressed: &[u8]) -> anyhow::Result
 }
 
 #[cfg(any(target_os = "linux", test))]
-pub(super) fn packed_references(bytes: &[u8]) -> anyhow::Result<BTreeMap<String, String>> {
+#[derive(Debug, Default)]
+pub(super) struct PackedReferences {
+    pub refs: BTreeMap<String, String>,
+    pub peels: BTreeMap<String, String>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(super) fn packed_references(bytes: &[u8]) -> anyhow::Result<PackedReferences> {
     ensure!(bytes.len() <= 65_536, "Git packed references exceed limit");
-    let mut refs = BTreeMap::new();
-    let mut can_peel = false;
+    let mut packed = PackedReferences::default();
+    let mut can_peel: Option<String> = None;
     for line in std::str::from_utf8(bytes)?.lines() {
         if line.starts_with('#') {
             ensure!(
@@ -137,9 +144,14 @@ pub(super) fn packed_references(bytes: &[u8]) -> anyhow::Result<BTreeMap<String,
             continue;
         }
         if let Some(peeled) = line.strip_prefix('^') {
-            ensure!(can_peel, "Git packed reference peel is unbound");
-            oid(peeled)?;
-            can_peel = false;
+            let name = can_peel
+                .take()
+                .context("Git packed reference peel is unbound")?;
+            ensure!(
+                name.starts_with("refs/tags/"),
+                "Git branch peel unsupported"
+            );
+            packed.peels.insert(name, oid(peeled)?);
             continue;
         }
         let (target, name) = line
@@ -150,16 +162,16 @@ pub(super) fn packed_references(bytes: &[u8]) -> anyhow::Result<BTreeMap<String,
             "Git packed namespace unsupported"
         );
         ensure!(
-            refs.insert(name.to_owned(), oid(target)?).is_none(),
+            packed.refs.insert(name.to_owned(), oid(target)?).is_none(),
             "duplicate Git packed reference"
         );
         ensure!(
-            refs.len() <= MAX_REFS,
+            packed.refs.len() <= MAX_REFS,
             "Git local reference count exceeds limit"
         );
-        can_peel = true;
+        can_peel = Some(name.to_owned());
     }
-    Ok(refs)
+    Ok(packed)
 }
 
 #[cfg(test)]
@@ -215,11 +227,14 @@ mod tests {
                 format!("# pack-refs with: peeled sorted\n{id} refs/tags/owned\n^{id}\n")
                     .as_bytes()
             )
-            .unwrap()["refs/tags/owned"],
+            .unwrap()
+            .refs["refs/tags/owned"],
             id
         );
         for invalid in [
             format!("^{id}\n"),
+            format!("{id} refs/heads/main\n^{id}\n"),
+            format!("{id} refs/tags/owned\n^{id}\n^{id}\n"),
             format!("{id} refs/remotes/origin/main\n"),
             format!("{id} refs/heads/a~1\n"),
             format!("{id} refs/heads/a\n{id} refs/heads/a\n"),

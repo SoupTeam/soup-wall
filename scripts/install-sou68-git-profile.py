@@ -99,8 +99,11 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10).strip()
     if git_version != "git version " + identity["git_version"]:
         raise ValueError("Git version differs from selected runtime")
-    if "--ro-bind-fd" not in subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10):
+    bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10)
+    if "--ro-bind-fd" not in bwrap_help:
         raise ValueError("bubblewrap --ro-bind-fd is required")
+    if local_references and "--ro-bind-data" not in bwrap_help:
+        raise ValueError("local references require bubblewrap --ro-bind-data")
     for name, expected in identity["files"].items():
         if Path(name).name != name or sha(ASSETS / name) != expected:
             raise ValueError("committed upstream asset digest mismatch")

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import signal
 import subprocess
 import sys
 import tempfile
@@ -64,7 +65,8 @@ def prepare_repo(workspace, git, env):
     (workspace / "notes.txt").write_text("Synthetic reference staged version.\n")
     command("add", "notes.txt")
     (workspace / "notes.txt").write_text("Synthetic reference working version.\n")
-    return first, second
+    poison = command("hash-object", "-w", "--stdin", data=GIT.INJECTION.encode())
+    return first, second, poison
 
 
 def reads(first):
@@ -110,6 +112,8 @@ def exact_reads(stack, first, report):
                 response, raw = client.exchange(GIT.call(identifier, tool, args, stack.workspace))
                 GIT.text(response)
                 originals[identifier] = raw
+            poison, _ = client.exchange(GIT.call(80, "git_show", {"revision": stack.poison}, stack.workspace))
+            require(GIT.INJECTION in GIT.text(poison), "direct original result-injection witness did not calibrate")
         finally:
             client.close()
             report["direct_client"] = client.transcript()
@@ -129,6 +133,12 @@ def exact_reads(stack, first, report):
                 require(witness.drain() > 0, "independent execution witness did not observe read")
                 report["reads"].append({"id": identifier, "tool": tool, "reference": ref,
                     "response_sha256": hashlib.sha256(raw).hexdigest(), "original_bytes_equal": True})
+            witness.drain()
+            poison, _ = client.exchange(GIT.call(80, "git_show", {"revision": stack.poison}))
+            require(BASE.refused(poison) and GIT.INJECTION not in json.dumps(poison) and witness.drain() > 0,
+                    "unsafe executed original output escaped result inspection")
+            GIT.text(client.exchange(GIT.call(81))[0])
+            report["result_injection_withheld"] = True
             denials = [(tool, {key: ref}, "syntax") for ref in INVALID
                        for tool, key in (("git_show", "revision"), ("git_diff", "target"))]
             denials += [(tool, {key: ref}, "target") for ref in
@@ -254,7 +264,11 @@ def policy_controls(stack, config, second, report):
                 witness.drain()
                 frame = GIT.call(50, "git_show", {"revision": REFS[0]})
                 client.send(frame)
-                waiting = APPROVAL.pending(args, stack.env)
+                # Accepted verified-input capture precedes broker publication.
+                # Its recorded cost exceeded the old driver's 5-second poll
+                # window. Observe within the existing 30-second call bound;
+                # keep production deadlines, broker TTL and approval wait intact.
+                waiting = APPROVAL.pending(args, stack.env, timeout=20)
                 inspected = APPROVAL.inspected_output(APPROVAL.command(args, stack.env, "native-approval", "inspect", waiting["pending_id"]),
                     waiting["pending_id"], waiting["binding_sha256"])
                 require(inspected["args"] == frame["params"]["arguments"] and
@@ -271,7 +285,7 @@ def policy_controls(stack, config, second, report):
                 if case == "approve":
                     require(raw == expected and witness.drain() > 0, "approved original bytes/execution changed")
                     client.send(GIT.call(51, "git_show", {"revision": REFS[0]}))
-                    again = APPROVAL.pending(args, stack.env)
+                    again = APPROVAL.pending(args, stack.env, timeout=20)
                     require(again["pending_id"] != waiting["pending_id"] and witness.drain() == 0, "approval was reused")
                     APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
                     require(BASE.refused(client.receive()[0]), "second Ask was not independently refused")
@@ -379,6 +393,52 @@ def source_mutations(stack, first, second, report):
         require(client.process.returncode == 0 and not client.forced_cleanup, "fresh collector failed")
 
 
+def inflight_substitution(stack, second, report):
+    """Change only an owned ref after native dispatch while the real server is stopped."""
+    path = stack.root / "inflight-substitution.log"
+    ref = stack.workspace / ".git" / REFS[0]
+    original = ref.read_bytes()
+    before = BASE.snapshot(stack.workspace)
+    target = None
+    with path.open("wb") as log:
+        client = collector(stack, log)
+        try:
+            client.initialize()
+            client.process_witness.sample()
+            candidates = []
+            for pid, start in client.process_witness.observed:
+                try:
+                    argv = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+                    if BASE.ProcessWitness.identity(pid) == start and argv[0] == b"/mcp-server/python/bin/python3.11" and b"mcp_server_git" in argv:
+                        candidates.append((pid, start))
+                except OSError:
+                    pass
+            require(len(candidates) == 1, "one owned original server required for inflight control")
+            target = candidates[0]
+            os.kill(target[0], signal.SIGSTOP)
+            client.send(GIT.call(50, "git_show", {"revision": REFS[0]}))
+            BASE.wait_event(path, lambda rows: any(r.get("host_call_id") == 50 and r.get("state") == "inflight" for r in rows),
+                "owned original request was not dispatched before substitution")
+            ref.write_text(second + "\n")
+            os.kill(target[0], signal.SIGCONT)
+            target = None
+            response, _ = client.receive()
+            require(response["id"] == 50 and response.get("error", {}).get("code") == -32602,
+                    "changed source released an inflight result")
+            ref.write_bytes(original)
+            restored, _ = client.exchange(GIT.call(51))
+            require(restored.get("error", {}).get("code") == -32602, "inflight withdrawal was revived")
+            report["inflight_substitution"] = {"execution_dispatched_before_mutation": True,
+                "result_released": False, "restoration_still_refused": True, "passed": True}
+        finally:
+            if target is not None and BASE.ProcessWitness.identity(target[0]) == target[1]:
+                os.kill(target[0], signal.SIGCONT)
+            client.close()
+            ref.write_bytes(original)
+    require(before == BASE.snapshot(stack.workspace), "inflight fixture state was not restored")
+    require(client.process.returncode == 0 and client.process_witness.final["all_stopped"], "inflight cleanup unverified")
+
+
 def run(args):
     require(platform.system() == "Linux" and platform.machine() == "x86_64", "Linux x86-64 enforcing isolation required")
     before = BASE.source()
@@ -398,7 +458,7 @@ def run(args):
             env = BASE.environment(home)
             env.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1", GIT_TERMINAL_PROMPT="0", GIT_OPTIONAL_LOCKS="0")
             workspace, install = private / "workspace", private / "installed"
-            first, second = prepare_repo(workspace, args.git, env)
+            first, second, poison = prepare_repo(workspace, args.git, env)
             INSTALL.install(install, workspace, args.git, args.git_sha256, args.bwrap, args.git_launcher, local_references=True)
             report["installation"] = json.loads((install / "installation.json").read_text())
             subprocess.run([str(args.agentfw), "install"], env=env, capture_output=True, check=True, timeout=30)
@@ -408,7 +468,8 @@ def run(args):
                 "registry_sha256": sha(install / "registry.json")}}
             write(home / ".agentfw/config.yaml", config)
             stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace,
-                install=install, profile=install / "profile.json", env=env, daemon=None, port=port, daemon_witnesses=[])
+                install=install, profile=install / "profile.json", env=env, daemon=None, port=port,
+                poison=poison, daemon_witnesses=[])
             positive = subprocess.run([str(args.sandbox_test_binary), "selected_git_sandbox_isolates_real_python_and_git", "--ignored", "--nocapture"],
                 env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(stack.profile), SOU86_TEST_AGENTFW=str(args.agentfw.resolve())),
                 capture_output=True, timeout=90)
@@ -433,6 +494,7 @@ def run(args):
             GIT.startup_refusals(stack, report)
             exact_reads(stack, first, report)
             source_mutations(stack, first, second, report)
+            inflight_substitution(stack, second, report)
             policy_controls(stack, config, second, report)
             require(INSTALL.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"],
                     "original package bytes changed")
@@ -460,6 +522,7 @@ def run(args):
         "reads": len(report.get("reads", [])), "refusals": len(report.get("refusals", [])),
         "legacy_refusals": len(report.get("legacy_refusals", [])), "helper_control": report.get("helper_control"),
         "approval_controls": report.get("approval_controls", []),
+        "inflight_substitution": report.get("inflight_substitution"),
         "source_mutations": report.get("source_mutations", []), "protected_diagnostics": report["protected_diagnostics"]}))
     return 0 if report["status"] == "pass" else 1
 
