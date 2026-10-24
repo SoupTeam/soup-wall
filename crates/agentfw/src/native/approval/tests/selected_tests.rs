@@ -61,10 +61,7 @@ async fn pilot_runtime_metadata_is_authenticated_bounded_and_not_bearer_authorit
 
 #[test]
 fn run_operator_scope_cannot_claim_another_session_or_epoch() {
-    for format in [
-        crate::mcp::server_profile::FORMAT,
-        crate::mcp::server_profile::git::FORMAT,
-    ] {
+    for format in FORMATS {
         let (env, name, args, schema, context) = fixture(format);
         let opened = open_selected(&env, &name, &args, &schema, &context).unwrap();
         let pending = opened["pending_id"].as_str().unwrap();
@@ -286,9 +283,10 @@ async fn selected_status_cancel_require_the_private_owner_even_when_header_is_ab
     }
 }
 
-const FORMATS: [&str; 2] = [
+const FORMATS: [&str; 3] = [
     crate::mcp::server_profile::FORMAT,
     crate::mcp::server_profile::git::FORMAT,
+    crate::mcp::server_profile::git::SHALLOW_FORMAT,
 ];
 
 #[test]

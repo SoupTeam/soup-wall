@@ -9,7 +9,16 @@ use serde_json::Value;
 
 use super::ToolProfile;
 
+pub(crate) mod shallow_view;
+
 pub const FORMAT: &str = "sw-mcp/git-readonly/1";
+/// Explicitly selected shallow contract; the original v1 stays narrow.
+pub const SHALLOW_FORMAT: &str = "sw-mcp/git-readonly-shallow/1";
+
+pub fn is_profile(format: &str) -> bool {
+    matches!(format, FORMAT | SHALLOW_FORMAT)
+}
+
 pub const PYTHON: &str = "/mcp-server/python/bin/python3.11";
 const MANIFEST: &str =
     include_str!("../../../../../profiles/mcp/git-readonly-v1/upstream-tools-list.json");
@@ -97,54 +106,10 @@ pub fn validate_arguments(name: &str, value: &Value) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Refuse unsupported repository machinery without running Git or altering it.
-/// All inspection is repeated at protected startup on the fd-pinned directory.
 #[cfg(any(target_os = "linux", test))]
-pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
-    use std::io::Read;
-    ensure!(
-        fs::symlink_metadata(root.join(".git"))?.is_dir(),
-        "Git requires a standalone non-bare repository"
-    );
-    ensure!(
-        fs::symlink_metadata(root.join(".git/config"))?.is_file(),
-        "Git config must be a regular file, not a link or special file"
-    );
-    for path in [
-        ".gitmodules",
-        ".gitattributes",
-        ".git/commondir",
-        ".git/gitdir",
-        ".git/config.worktree",
-        ".git/worktrees",
-        ".git/modules",
-        ".git/objects/info/alternates",
-        ".git/objects/info/http-alternates",
-        ".git/info/attributes",
-        ".git/shallow",
-    ] {
-        ensure!(
-            fs::symlink_metadata(root.join(path))
-                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
-            "unsupported Git repository indirection or attributes"
-        );
-    }
-    let mut config = Vec::new();
-    let mut options = fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    let file = options.open(root.join(".git/config"))?;
-    ensure!(
-        file.metadata()?.is_file(),
-        "Git config changed to a special file"
-    );
-    file.take(8193).read_to_end(&mut config)?;
+pub(super) fn validate_configuration(config: &[u8]) -> anyhow::Result<()> {
     ensure!(config.len() <= 8192, "Git config exceeds limit");
-    let config = std::str::from_utf8(&config)?;
+    let config = std::str::from_utf8(config)?;
     let mut core = false;
     for raw in config.lines() {
         let line = raw.trim();
@@ -174,6 +139,73 @@ pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
             "unsupported Git configuration"
         );
     }
+    Ok(())
+}
+
+/// Refuse unsupported repository machinery without running Git or altering it.
+/// All inspection is repeated at protected startup on the fd-pinned directory.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
+    validate_repository_with_shallow(root, false)
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> anyhow::Result<()> {
+    use std::io::Read;
+    ensure!(
+        fs::symlink_metadata(root.join(".git"))?.is_dir(),
+        "Git requires a standalone non-bare repository"
+    );
+    ensure!(
+        fs::symlink_metadata(root.join(".git/config"))?.is_file(),
+        "Git config must be a regular file, not a link or special file"
+    );
+    for path in [
+        ".gitmodules",
+        ".gitattributes",
+        ".git/commondir",
+        ".git/gitdir",
+        ".git/config.worktree",
+        ".git/worktrees",
+        ".git/modules",
+        ".git/objects/info/alternates",
+        ".git/objects/info/http-alternates",
+        ".git/info/attributes",
+    ] {
+        ensure!(
+            fs::symlink_metadata(root.join(path))
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
+            "unsupported Git repository indirection or attributes"
+        );
+    }
+    if !shallow {
+        ensure!(
+            fs::symlink_metadata(root.join(".git/shallow"))
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
+            "shallow repositories require explicit opt-in"
+        );
+    } else if let Ok(metadata) = fs::symlink_metadata(root.join(".git/shallow")) {
+        ensure!(
+            metadata.is_file(),
+            "Git shallow boundary must be a regular file"
+        );
+    }
+    let mut config = Vec::new();
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(root.join(".git/config"))?;
+    ensure!(
+        file.metadata()?.is_file(),
+        "Git config changed to a special file"
+    );
+    file.take(8193).read_to_end(&mut config)?;
+    ensure!(config.len() <= 8192, "Git config exceeds limit");
+    validate_configuration(&config)?;
     fn walk(path: &Path, depth: usize, count: &mut usize) -> anyhow::Result<()> {
         ensure!(depth <= 32, "Git repository depth limit");
         for entry in fs::read_dir(path)? {
