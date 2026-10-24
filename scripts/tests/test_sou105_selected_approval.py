@@ -70,6 +70,86 @@ class OperatorInspect(unittest.TestCase):
             with self.subTest(text=bad, identifier=identifier, digest=digest), self.assertRaises(ValueError):
                 M.inspected_output(bad, identifier, digest)
 
+
+class PendingPublicationObservation(unittest.TestCase):
+    def setUp(self):
+        self.now = 0.0
+        self.enterContext(patch.object(M.time, "monotonic", side_effect=lambda: self.now))
+        self.enterContext(patch.object(M.time, "sleep", side_effect=self.advance))
+        self.record = {"pending_id": "selected", "binding_sha256": "a" * 64}
+        self.publication = {"event": "mcp_native_approval_pending", "host_call_id": 50, **self.record}
+        self.evidence = {}
+
+    def advance(self, seconds):
+        self.now += seconds
+
+    def events_after_preparation(self, _path):
+        return [self.publication] if self.now >= 6 else []
+
+    def observe(self):
+        return M.published_pending(None, {}, Path("owned-collector.log"), 50, self.evidence)
+
+    def test_six_second_preparation_then_exact_pending_among_concurrent_peers(self):
+        foreign = {"pending_id": "other", "binding_sha256": "b" * 64}
+        def listed(*_args):
+            self.assertGreaterEqual(self.now, 6, "broker polled before selected publication")
+            return json.dumps([foreign, self.record])
+        with patch.object(M.BASE, "events", side_effect=self.events_after_preparation), \
+                patch.object(M, "command", side_effect=listed) as command:
+            self.assertEqual(self.observe(), self.record)
+        command.assert_called_once_with(None, {}, "native-approval", "list")
+        observation, = self.evidence["pending_observations"]
+        self.assertGreaterEqual(observation["publication_elapsed_ms"], 6000)
+        self.assertEqual(observation["publication_budget_ms"], 20000)
+        self.assertEqual(observation["broker_budget_ms"], 5000)
+        self.assertEqual(observation["broker_elapsed_ms"], 0)
+
+    def test_foreign_or_wrong_kind_events_cannot_start_broker_observation(self):
+        unrelated = [{**self.publication, "host_call_id": 70},
+                     {**self.publication, "event": "mcp_real_call"},
+                     {**self.publication, "host_call_id": True}]
+        with patch.object(M.BASE, "events", return_value=unrelated), \
+                patch.object(M, "command") as command:
+            with self.assertRaisesRegex(ValueError, "publication missed preparation deadline"):
+                self.observe()
+        command.assert_not_called()
+        self.assertGreaterEqual(self.evidence["pending_observations"][0]["publication_elapsed_ms"], 20000)
+        self.assertNotIn("broker_elapsed_ms", self.evidence["pending_observations"][0])
+
+    def test_preparation_does_not_extend_five_second_broker_deadline(self):
+        foreign = {"pending_id": "other", "binding_sha256": "b" * 64}
+        with patch.object(M.BASE, "events", side_effect=self.events_after_preparation), \
+                patch.object(M, "command", return_value=json.dumps([foreign])):
+            with self.assertRaisesRegex(ValueError, "pending approval state missed declared deadline"):
+                self.observe()
+        observation, = self.evidence["pending_observations"]
+        self.assertGreaterEqual(observation["broker_elapsed_ms"], 5000)
+        self.assertLess(observation["broker_elapsed_ms"], 5026)
+
+    def test_changed_published_binding_is_a_failure(self):
+        changed = {**self.record, "binding_sha256": "b" * 64}
+        with patch.object(M.BASE, "events", return_value=[self.publication]), \
+                patch.object(M, "command", return_value=json.dumps([changed])):
+            with self.assertRaisesRegex(ValueError, "binding changed"):
+                self.observe()
+
+    def test_ambiguous_publication_is_a_failure_before_cli(self):
+        with patch.object(M.BASE, "events", return_value=[self.publication, self.publication]), \
+                patch.object(M, "command") as command:
+            with self.assertRaisesRegex(ValueError, "ambiguous selected approval publication"):
+                self.observe()
+        command.assert_not_called()
+
+    def test_cleanup_keeps_its_existing_eight_second_deadline(self):
+        with patch.object(M.BASE, "events") as events, \
+                patch.object(M, "command", return_value=json.dumps([self.record])):
+            with self.assertRaisesRegex(ValueError, "pending approval state missed declared deadline"):
+                M.pending(None, {}, timeout=8, empty=True)
+        events.assert_not_called()
+        self.assertGreaterEqual(self.now, 8)
+        self.assertLess(self.now, 8.026)
+
+
 class ApprovedResponseObservation(unittest.TestCase):
     def test_post_decision_observation_preserves_original_bytes(self):
         raw = b'{"jsonrpc":"2.0","id":50,"result":{"content":[]}}\n'
