@@ -858,6 +858,56 @@ impl CollectorLivenessClient {
         Ok(header)
     }
 
+    /// Existing owner cleanup may finish after revocation has made this lease
+    /// uncertain. This capability only confirms cleanup; it cannot renew/admit.
+    pub(crate) async fn pilot_cleanup(&self, action: &str) -> anyhow::Result<()> {
+        let mut endpoint = reqwest::Url::parse(&self.url)?;
+        endpoint.set_path(crate::native::pilot_cleanup::ENDPOINT);
+        endpoint.set_query(None);
+        endpoint.set_fragment(None);
+        let epoch = self
+            .epoch
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("native_liveness_not_enrolled"))?;
+        let owner = self
+            .owner_token
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("native_liveness_owner_token_required"))?;
+        if action == "begin" {
+            anyhow::ensure!(!self.is_uncertain(), "native_liveness_uncertain");
+        }
+        let response = self
+            .client
+            .post(endpoint)
+            .bearer_auth(&self.token)
+            .timeout(Duration::from_secs(2))
+            .json(&json!({
+                "contract_version":crate::native::pilot_cleanup::CONTRACT,
+                "instance_id":self.instance_id,"registry_sha256":self.registry_sha256,
+                "session_id":self.session_id,"epoch":epoch,"owner_token":owner,"action":action
+            }))
+            .send()
+            .await?;
+        anyhow::ensure!(response.status().is_success(), "pilot_cleanup_unconfirmed");
+        let reply: Value = response.json().await?;
+        anyhow::ensure!(
+            reply["contract_version"] == crate::native::pilot_cleanup::CONTRACT
+                && reply["instance_id"] == self.instance_id
+                && reply["session_id"] == self.session_id
+                && reply["epoch"] == epoch
+                && reply["status"]
+                    == if action == "begin" {
+                        "registered"
+                    } else {
+                        "verified"
+                    },
+            "pilot_cleanup_unconfirmed"
+        );
+        Ok(())
+    }
+
     pub async fn retire(&self) -> anyhow::Result<()> {
         // Latch uncertainty before any await, including bootstrap cleanup.
         self.mark_failed();
