@@ -1,5 +1,29 @@
 # Pilot storage recovery evidence
 
+## Integration with current main
+
+The [integration report](integration-report.json) records a fresh non-root native
+Ubuntu 24.04 run on clean source `df55d6890cf826f8a7d42ae8bcb994650a0a53d5`,
+after integrating main `68d8a5973ce3aa6926006f92eda641e98ca01c7e`.
+The [targeted run](https://github.com/SoupTeam/soup-wall/actions/runs/40115658348)
+passed all 23 storage cases, with no skipped or incomplete cases.
+[Artifact verification](integration-verification.json) checks the archive digest,
+106 references to 94 unique files, all 15 injected-fault event files, nine
+publication cases and nine fresh-authority recovery paths. All 13 raw state
+snapshots preserve filesystem/Git maps, the foreign process identity and foreign
+file; receiver journals remain empty. The [baseline and final maps](integration-state-snapshots.json)
+are retained here with their original references.
+
+Supporting sanitized traces and host/wire observations remain in
+[artifact 12569320061](https://github.com/SoupTeam/soup-wall/actions/runs/40115658348/artifacts/12569320061)
+under the workflow's seven-day development retention. Verification was performed
+by the delivery assistant and is not a separate human approval. Only CI coverage
+tests and evidence documentation follow that qualified source; the runtime,
+storage qualification driver and build inputs remain unchanged. Full candidate
+CI and admission must separately qualify the publication head.
+
+## Historical qualification
+
 The [final native report](native-report.json) contains all 23 required passed cases
 from exact clean commit `7008678508c180f25fdffb97bc900b1d8a70ef39`, tree
 `cf18b6813fc31bdef2fefce2bd6d1dd6af51ecab`. The
