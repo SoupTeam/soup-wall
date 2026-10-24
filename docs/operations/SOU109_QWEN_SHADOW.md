@@ -15,7 +15,7 @@ at 3daf4eb with 56 native tests passing. The ten benign refusals remain.
 - Runtime: upstream llama.cpp `b11852`, Windows CPU x64 archive SHA-256
   `89d28c3d7d810a57524f4c9b13397b2485cbe32937fb302c09c1b04d2a6b3e06`.
   The runner verifies the archive and every extracted runtime file before launch.
-- Local CPU only, six threads, one slot, 131072-token context, batch 256,
+- Local CPU only, six threads, one slot, 67584-token context, batch 256,
   microbatch 64, Q8_0 K/V cache with Flash Attention, thinking off,
   temperature zero, seed 109, 512 output tokens, 3600-second request deadline.
   CPU avoids claiming the complete 5.7 GB model fits the laptop's 4 GB GPU.
@@ -52,6 +52,14 @@ uses Q8_0 K/V cache to reduce memory without shortening the prompt. The request
 deadline is extended for the four 256 KiB public inputs; observed CPU prompt
 throughput in the aborted attempt was about 36 tokens/second. This is a resource
 configuration correction, not a label/prompt change based on predictions.
+
+The second, Q8-cache startup still left only approximately 316 MiB free RAM
+with the unnecessarily large 131072 context. Before reducing context, full
+tokenization of the four long inputs measured 65844, 65859, 63559 and 63572
+tokens respectively, including the complete chat template. The context is now
+67584, above the maximum full prompt plus 512 output tokens. No text was cut.
+The second startup is also retained as an aborted technical attempt; neither
+aborted run is an accuracy claim. The final full run uses a fresh output folder.
 
 ```text
 python -B -m unittest discover -s scripts/tests -p test_qwen_result_context.py -v

@@ -110,7 +110,7 @@ def main():
     parser.add_argument('--assets', type=Path, required=True)
     parser.add_argument('--prepared', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--context', type=int, default=131072)
+    parser.add_argument('--context', type=int, default=67584)
     parser.add_argument('--port', type=int, default=18965)
     args = parser.parse_args()
     model = args.assets / 'Qwen3.5-9B-Q4_K_M.gguf'
