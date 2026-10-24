@@ -23,6 +23,8 @@ pub mod child_authority;
 pub mod continuity;
 mod invocation;
 pub mod liveness;
+pub mod pilot_cleanup;
+pub mod pilot_stop;
 pub mod resource;
 pub mod resource_approval;
 pub mod workspace;
@@ -475,6 +477,7 @@ pub(crate) struct Sessions {
     // Spent child authority ledger: maps authority_digest to expires_at_ms.
     // Prevents reuse of signed child authority grants across sessions or after reclamation.
     pub(crate) spent_authorities: BTreeMap<String, u64>,
+    pub(crate) pilot_cleanup: BTreeMap<String, pilot_cleanup::Record>,
 }
 
 pub fn now_ms() -> u64 {
@@ -499,6 +502,14 @@ pub(crate) fn validate_lineage(
 ) -> Result<(), &'static str> {
     let mut current = session;
     for _ in 0..=MAX_SESSIONS {
+        if current.authority_digest.as_ref().is_some_and(|digest| {
+            state
+                .spent_authorities
+                .get(digest)
+                .is_some_and(|expiry| *expiry > now_ms)
+        }) {
+            return Err("native_child_authority_revoked");
+        }
         if current.terminal {
             return Err("native_child_parent_unavailable");
         }
@@ -1535,6 +1546,10 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
             "registry_sha256": native.registry_sha256,
             "bindings": bindings,
             "pilot_collectors": pilot_collectors,
+            "pilot_cleanup": sessions.pilot_cleanup.iter().map(|(digest, row)| json!({
+                "authority_sha256":digest,"host_session":row.host_session,
+                "server_id":row.server_id,"verified":row.verified
+            })).collect::<Vec<_>>(),
             "pilot_pending": pilot_pending,
             "approval_enabled": native.approval.is_some(),
             "liveness_enabled": st.config.native.as_ref().and_then(|n| n.liveness.as_ref()).is_some(),
