@@ -2,13 +2,15 @@
 
 This implementation profiles the approved
 path and retains per-Ask verified inputs with kernel fs-verity or a bounded local
-read lease. Native run `40038036266` on exact source `1137780` completed all
-eighty same-runner before/after approvals with zero failed/incomplete samples.
-Candidate p95 was 1938.429574 ms for filesystem and 2914.567600 ms for Git, both
-within 3000 ms. Full denominators, source identities and historical failures are
-retained in `evidence/sou-124/`. A missing or missed target remains an explicit
-performance blocker. The later tree-completeness/portable-atomic/observer correction
-requires fresh current-source qualification; the prior source is not relabelled.
+read lease. The comparison in native run `40052146937` on exact source `6da8216`
+completed all eighty same-runner before/after approvals with zero failed/incomplete
+samples. Candidate p95 was 1118.506491 ms for filesystem and 1727.172854 ms for Git,
+both within 3000 ms. Full denominators, source identities and historical failures
+are retained in `evidence/sou-124/`. That workflow's subsequent demo refused a
+package changed by an isolated pip import; the preparation correction explicitly
+disables bytecode and checks the authenticated tree before/after download.
+The passing comparison and later full CI are separately attributed. A missing or
+missed target remains an explicit performance blocker.
 
 ## What the measurements mean
 

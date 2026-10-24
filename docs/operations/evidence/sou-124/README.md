@@ -1,6 +1,38 @@
 # SOU-124 qualification evidence
 
-## Current native result
+## Current native comparison
+
+`native-linux-current.json` records the passing comparison in run `40052146937`
+on exact clean runtime/harness source
+`6da8216b07bb936e2da5908fbae64726ffedcb3a`. All eighty same-runner approvals
+completed: twenty filesystem and twenty Git samples on each side, with zero
+failed/incomplete cases. Independently recomputed candidate p50/p95 was
+1054.528047/1118.506491 ms for filesystem and 1668.458611/1727.172854 ms for Git.
+Baseline was 3050.336640/3126.399458 ms and 3651.970215/3732.601800 ms.
+Both candidate p95 values meet the unchanged 3000 ms target.
+
+Every candidate and both preflight samples had a genuine selected-collector reuse
+observation scoped to the completed original approval (52 retained leases for
+filesystem, 144 for Git). All original effects, useful follow-ups, peer progress,
+cross-run controls and owned cleanup passed. Strict real-kernel/process-budget
+qualification and all eleven Linux identity controls passed. The optional
+already-verity-enabled fixture was ignored; no actual fs-verity reuse, paid
+provider, live-model effectiveness or physical human presence is claimed.
+
+The **whole workflow failed after the passing comparison**: the subsequent
+first-use demo refused `profile_package_changed` before execution. Preparing
+hash-locked wheels had run the already authenticated package's Python with `-I`
+but without `-B`. Isolated Python ignores `PYTHONDONTWRITEBYTECODE` and can add
+`__pycache__` inside that package. The download now uses explicit `-B` and checks
+the authenticated package digest before and after. An offline local behavioral
+control reproduced 300 added bytecode files without `-B` and verified an unchanged
+tree with it. Eighty CI workflow controls pass with one intentional skip.
+`offline-input-bytecode-correction.json` records this follow-up. No Rust or
+measured Ask harness changed; current full CI separately qualifies the workflow
+and demo correction. A passing comparison is not a claim that the failed whole
+workflow passed. Source identities and all report/log digests remain attributable.
+
+## Historical passing comparison on 1137780
 
 `native-linux-1137780.json` records passing run `40038036266` on exact clean
 runtime/harness source `11377802ba4fa9868bf7502fc798fd0f3f06e7a4`. Both sides
