@@ -14,6 +14,20 @@ SPEC.loader.exec_module(RESULTS)
 
 
 class ResultContract(unittest.TestCase):
+    def test_terminal_diagnostics_do_not_export_arguments(self):
+        path = PATH.parent / "qualify-ask-inbox.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        function = next(node for node in tree.body
+                        if isinstance(node, ast.FunctionDef) and node.name == "terminal_diagnostic")
+        namespace = {}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), namespace)
+        result = namespace["terminal_diagnostic"](
+            'private-sentinel {"state":"rejected"} Decision outcome unavailable.', None)
+        self.assertTrue(result["markers"]["rejection_compact"])
+        self.assertTrue(result["markers"]["decision_unavailable"])
+        self.assertNotIn("private-sentinel", json.dumps(result))
+        self.assertIsNone(result["exit_code"])
+
     def test_harness_resolves_default_adapter_at_call_time(self):
         path = PATH.parent / "qualify-pilot-ask.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))

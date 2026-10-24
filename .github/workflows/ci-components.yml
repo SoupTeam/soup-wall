@@ -2202,6 +2202,12 @@ jobs:
           cargo test --locked -p agentfw -- --test-threads=2 2>&1 | tee "$RUNNER_TEMP/sou140-rust-tests.log"
           cargo clippy --locked -p agentfw --all-targets -- -D warnings
           asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B scripts/qualify-ask-inbox.py \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --node "$asset/node/bin/node" --npm "$asset/node/bin/npm" \
+            --bwrap "$SOU111_BWRAP" --git "$SOU115_GIT" --strace "$(command -v strace)" \
+            --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou135-inbox"
           python3 -B scripts/qualify-operator-results.py \
             --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \

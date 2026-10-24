@@ -24,6 +24,20 @@ SPEC.loader.exec_module(ASK)
 require = ASK.require
 
 
+def terminal_diagnostic(text, exit_code):
+    markers = {
+        "rejection_compact": '"state":"rejected"',
+        "rejection_spaced": '"state": "rejected"',
+        "decision_unavailable": "Decision outcome unavailable.",
+        "inspection_required": "Use inspect N, then approve or reject;",
+        "request_changed": "Request changed or expired.",
+        "list_changed": "List changed.",
+        "inspection_unavailable": "Inspection unavailable or over 16384 bytes.",
+    }
+    return {"tail_bytes": len(text), "exit_code": exit_code,
+            "markers": {name: marker in text for name, marker in markers.items()}}
+
+
 class Terminal:
     def __init__(self, pilot):
         import pty
@@ -33,6 +47,7 @@ class Terminal:
         settings[3] &= ~termios.ECHO
         termios.tcsetattr(slave, termios.TCSANOW, settings)
         self.master, self.text, self.cursor, self.closed = master, "", 0, False
+        self.failure = None
         command = [str(pilot.setup.binary), "pilot-approval", "--home", str(pilot.setup.home),
                    "--run", pilot.run_id, "watch", "--refresh-seconds", "1"]
         try:
@@ -58,7 +73,9 @@ class Terminal:
     def expect(self, marker, seconds=10):
         deadline = time.monotonic() + seconds
         while marker not in self.text[self.cursor:]:
-            require(time.monotonic() < deadline, "terminal_marker_timeout")
+            if time.monotonic() >= deadline:
+                self.failure = terminal_diagnostic(self.text[self.cursor:], self.process.poll())
+                raise ValueError("terminal_marker_timeout")
             if not self.read():
                 require(marker in self.text[self.cursor:], "terminal_closed_before_marker")
         end = self.text.index(marker, self.cursor) + len(marker)
@@ -228,6 +245,7 @@ def main():
             try:
                 ASK.qualify(args, Path(private), report)
             finally:
+                report["terminal_diagnostics"] = [t.failure for t in InboxPilot.terminals if t.failure is not None]
                 for terminal in InboxPilot.terminals:
                     terminal.close()
                 report["terminal_controls"] = InboxPilot.observations
