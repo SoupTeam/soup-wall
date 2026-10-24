@@ -105,3 +105,9 @@ original independent dispatch/effect witnesses, source identity and failed
 attempts. Supply a new output directory for each attempt; an existing directory
 is refused rather than overwritten. Scripted operator/provider inputs do not prove physical human presence
 or live-model efficacy. Local container tests are not native acceptance.
+
+For the focused hosted run, dispatch `mcp-real-filesystem.yml` on the candidate
+branch with `operator_results_only=true`. Leave the other mode switches off.
+The existing native lane supplies the pinned tools and job-scoped sandbox
+permission. It retains `sou140-operator-results/operator-results.json` in its
+artifact, including failed attempts. This development run is not merge admission.

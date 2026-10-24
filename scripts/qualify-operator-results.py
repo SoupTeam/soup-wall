@@ -8,10 +8,22 @@ import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import signal
 
 from pilot_operator_results import validate
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class QualificationFailure(ValueError):
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def require(condition, reason):
+    if not condition:
+        raise QualificationFailure(reason)
 
 
 def arguments():
@@ -40,27 +52,27 @@ class StructuredPilot(ASK.Pilot):
         command = [str(self.setup.binary), "pilot-approval", "--output", "json-v1",
                    "--home", str(self.setup.home), "--run", self.run_id, *words]
         result = subprocess.run(command, cwd=self.root, env=env, capture_output=True, timeout=12)
-        ASK.require(len(result.stdout) < 16 * 1024 * 1024 and not result.stderr,
+        require(len(result.stdout) < 16 * 1024 * 1024 and not result.stderr,
                     "operator_output_contract_failed")
         record = validate(json.loads(result.stdout), words[0], result.returncode)
-        ASK.require(len(self.results) < 4096, "operator_observation_limit")
+        require(len(self.results) < 4096, "operator_observation_limit")
         self.results.append({key: record[key] for key in ("operation", "outcome", "reason", "identity")})
         self.results[-1]["exit_code"] = result.returncode
         if success is not None:
-            ASK.require((result.returncode == 0) == success, "operator_unexpected_exit")
+            require((result.returncode == 0) == success, "operator_unexpected_exit")
         if record["identity"] is not None:
-            ASK.require(record["identity"]["run_id"] == self.run_id, "operator_wrong_run_identity")
+            require(record["identity"]["run_id"] == self.run_id, "operator_wrong_run_identity")
             if "pending_id" in record["identity"]:
-                ASK.require(record["identity"]["pending_id"] == words[1], "operator_wrong_pending_identity")
+                require(record["identity"]["pending_id"] == words[1], "operator_wrong_pending_identity")
         if words[0] in ("approve", "reject") and words[-1] == "0" * 64:
-            ASK.require(record["reason"] == "binding_changed", "wrong_binding_reason_not_preserved")
+            require(record["reason"] == "binding_changed", "wrong_binding_reason_not_preserved")
         legacy_control = result.returncode == 0 and (words[0] == "inspect" or
             (words[0] == "list" and not self.proposals.released.is_set()))
         if legacy_control:
             legacy = subprocess.run([str(self.setup.binary), "pilot-approval", "--home",
                 str(self.setup.home), "--run", self.run_id, *words], cwd=self.root, env=env,
                 capture_output=True, timeout=12)
-            ASK.require(legacy.returncode == 0 and not legacy.stderr
+            require(legacy.returncode == 0 and not legacy.stderr
                         and len(legacy.stdout) < 16 * 1024 * 1024
                         and json.loads(legacy.stdout) == record["data"], "legacy_result_shape_changed")
             self.results[-1]["legacy_compatible"] = True
@@ -84,21 +96,21 @@ def qualify_stop(args, private, report):
         with (private / "daemon.private").open("ab") as log:
             daemon = subprocess.Popen([str(setup.binary), "serve"], cwd=private,
                                       env=setup.env, stdout=log, stderr=log)
-        ASK.require(ASK.BASE.DEMO.wait_healthy(setup.port, daemon), "daemon_not_ready")
+        require(ASK.BASE.DEMO.wait_healthy(setup.port, daemon), "daemon_not_ready")
         pilot = StructuredPilot(setup, private / "stop", classifier, "filesystem")
         waiting = pilot.waiting()
         pilot.inspect(waiting)
-        ASK.require(pilot.undispatched(), "dispatch_before_stop")
+        require(pilot.undispatched(), "dispatch_before_stop")
         result = pilot.operator("stop")
-        ASK.require(result["status"] == "stopped", "stop_not_confirmed")
+        require(result["status"] == "stopped", "stop_not_confirmed")
         pilot.process.wait(timeout=15)
         pilot.out.flush()
         host = json.loads((pilot.root / "host.stdout.private").read_text())
-        ASK.require(host["status"] == "stopped" and pilot.process.returncode == 0, "host_stop_not_confirmed")
+        require(host["status"] == "stopped" and pilot.process.returncode == 0, "host_stop_not_confirmed")
         cleanup = pilot.witness.finish()
-        ASK.require(cleanup["all_stopped"], "owned_process_survived_stop")
-        ASK.require(pilot.effects() == pilot.dispatches() == 0, "stopped_request_executed")
-        ASK.require(pilot.operator("stop")["status"] == "already_stopped", "stop_retry_not_idempotent")
+        require(cleanup["all_stopped"], "owned_process_survived_stop")
+        require(pilot.effects() == pilot.dispatches() == 0, "stopped_request_executed")
+        require(pilot.operator("stop")["status"] == "already_stopped", "stop_retry_not_idempotent")
         report.update(stop_confirmed=True, forbidden_dispatches=0, process_cleanup=cleanup)
         pilot.close()
         report["concurrent_decisions"] = {"status": "incomplete"}
@@ -113,20 +125,49 @@ def qualify_stop(args, private, report):
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = [pool.submit(approve) for _ in range(2)]
             decisions = [future.result(timeout=15) for future in futures]
-        ASK.require(sum(item["outcome"] == "decision_submitted" for item in decisions) == 1,
+        require(sum(item["outcome"] == "decision_submitted" for item in decisions) == 1,
                     "concurrent_submission_count_wrong")
         refused = [item for item in decisions if item["outcome"] != "decision_submitted"]
-        ASK.require(len(refused) == 1 and refused[0]["reason"] in ("decision_conflict", "pending_unavailable"),
+        require(len(refused) == 1 and refused[0]["reason"] in ("decision_conflict", "pending_unavailable"),
                     "concurrent_refusal_not_attributed")
         pilot.finish()
         primary = pilot.model.results.get("primary")
-        ASK.require(primary and primary["is_error"] is False and "7 red widgets" in json.dumps(primary),
+        require(primary and primary["is_error"] is False and "7 red widgets" in json.dumps(primary),
                     "concurrent_useful_result_missing")
-        ASK.require(pilot.effects() == pilot.dispatches() == 1, "concurrent_request_executed_twice")
+        require(pilot.effects() == pilot.dispatches() == 1, "concurrent_request_executed_twice")
         report["concurrent_decisions"] = {"status": "pass", "submissions": 1, "dispatches": 1,
                                           "kernel_effects": 1, "useful_result": True}
+        pilot.close()
+        report["daemon_unavailable"] = {"status": "incomplete"}
+        pilot = StructuredPilot(setup, private / "daemon-unavailable", classifier, "filesystem")
+        waiting = pilot.waiting()
+        pilot.inspect(waiting)
+        require(ASK.BASE.ProcessWitness.identity(pilot.launcher_pid) == pilot.launcher_start,
+                "unavailable_launcher_identity_changed")
+        owner = os.pidfd_open(pilot.launcher_pid)
+        try:
+            require(ASK.BASE.ProcessWitness.identity(pilot.launcher_pid) == pilot.launcher_start,
+                    "unavailable_launcher_identity_changed")
+            signal.pidfd_send_signal(owner, signal.SIGSTOP)
+            ASK.until(lambda: Path(f"/proc/{pilot.launcher_pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+                      in ("T", "t"), "unavailable_launcher_not_paused", seconds=2)
+            ASK.stop(daemon)
+            daemon = None
+            unavailable = pilot.operator("list", success=None)
+            require(unavailable["outcome"] == "unavailable" and unavailable["reason"] == "daemon_unavailable",
+                    "daemon_loss_not_reported_as_unavailable")
+        finally:
+            try:
+                signal.pidfd_send_signal(owner, signal.SIGCONT)
+            except ProcessLookupError:
+                pass
+            os.close(owner)
+        pilot.close()
+        require(pilot.effects() == pilot.dispatches() == 0, "daemon_loss_dispatched_request")
+        require(pilot.witness.finish()["all_stopped"], "unavailable_owned_process_survived")
+        report["daemon_unavailable"] = {"status": "pass", "reason": "daemon_unavailable", "dispatches": 0}
         report["source_after"] = ASK.BASE.source()
-        ASK.require(report["source"] == report["source_after"], "stop_source_changed")
+        require(report["source"] == report["source_after"], "stop_source_changed")
         report["status"] = "pass"
     finally:
         try:
@@ -144,15 +185,15 @@ def main(args):
               "native_ubuntu_verified": False, "stage": "native_environment"}
     StructuredPilot.results = []
     try:
-        ASK.require(ASK.BASE.platform.system() == "Linux", "linux_required")
+        require(ASK.BASE.platform.system() == "Linux", "linux_required")
         os_release = Path("/etc/os-release").read_text()
-        ASK.require('ID=ubuntu' in os_release and 'VERSION_ID="24.04"' in os_release
+        require('ID=ubuntu' in os_release and 'VERSION_ID="24.04"' in os_release
                     and not any(Path(name).exists() for name in ("/.dockerenv", "/run/.containerenv"))
                     and "microsoft" not in ASK.BASE.platform.release().lower(),
                     "native_ubuntu_24_04_required")
         report["stage"] = "source_identity"
         report["source"] = ASK.BASE.source()
-        ASK.require(not report["source"]["dirty"], "clean_source_required")
+        require(not report["source"]["dirty"], "clean_source_required")
         with tempfile.TemporaryDirectory(prefix="operator-results-") as directory:
             original = Path(directory) / "original"
             original.mkdir(mode=0o700)
@@ -164,7 +205,8 @@ def main(args):
         report["stage"] = "completed"
         report["native_ubuntu_verified"] = report.get("status") == "pass"
     except Exception as error:
-        report.update(status="failed", failure_type=type(error).__name__)
+        report.update(status="failed", failure_type=type(error).__name__,
+                      failure_reason=error.reason if isinstance(error, QualificationFailure) else "unknown")
     finally:
         report["operator_results"] = StructuredPilot.results
         ASK.BASE.write(args.output / "operator-results.json", report)

@@ -4,6 +4,7 @@ import unittest
 import subprocess
 import sys
 import tempfile
+import json
 
 PATH = Path(__file__).resolve().parents[1] / "pilot_operator_results.py"
 SPEC = importlib.util.spec_from_file_location("operator_results", PATH)
@@ -27,6 +28,18 @@ class ResultContract(unittest.TestCase):
             result = subprocess.run([*command, "--output", directory], capture_output=True, timeout=15)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(evidence.read_text(encoding="utf-8"), "retained attempt")
+
+    def test_failed_native_attempt_keeps_a_safe_producer_reason(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "attempt"
+            command = [sys.executable, "-B", str(PATH.parent / "qualify-operator-results.py")]
+            for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace"):
+                command.extend(["--" + name, "missing-owned-test-tool"])
+            result = subprocess.run([*command, "--output", str(output)], capture_output=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            record = json.loads((output / "operator-results.json").read_text())
+            self.assertIn(record["failure_reason"], ("linux_required", "native_ubuntu_24_04_required", "unknown"))
+            self.assertNotIn("missing-owned-test-tool", json.dumps(record))
 
     def record(self, operation="approve", outcome="decision_submitted", reason="approval_submitted"):
         return {"format": "sw-pilot-operator-result/1", "operation": operation,
