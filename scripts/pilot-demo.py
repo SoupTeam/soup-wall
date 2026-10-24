@@ -68,6 +68,8 @@ def run(args, report):
     check = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
                                ask_wait_seconds=0, timeout_seconds=60, port=0)
     selection, _, profiles = driver.RUN.selected(check)
+    if "prepared_workspaces" in selection:
+        raise ValueError("generated_demo_requires_demo_selection_use_pilot_run_for_existing_project")
     generation = args.selection.parent
     fixtures = fixture_paths(generation)
     if any(args.output.is_relative_to(generation / name)
