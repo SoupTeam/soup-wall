@@ -36,7 +36,7 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def private_json(path):
+def private_json(path, snapshot=False):
     """Bounded descriptor-based owner/type/identity read, including ancestors."""
     require(path.is_absolute() and ".." not in path.parts)
     parent = REPORT._open_dir_nofollow(path.parent)
@@ -52,9 +52,12 @@ def private_json(path):
         raw = os.read(fd, 65537)
         after = os.fstat(fd)
         current = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
-        require(len(raw) <= 65536 and (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+        stable = (len(raw) <= 65536 and (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
                 == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
                 and (current.st_dev, current.st_ino) == (before.st_dev, before.st_ino))
+        if snapshot and not stable:
+            raise REPORT.ReportError("retention changed during export; retry")
+        require(stable)
         require(len(raw) == before.st_size and REPORT._bounded_json_depth(raw))
         return json.loads(raw, object_pairs_hook=REPORT._pair_object,
                           parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite metadata")))
@@ -106,6 +109,12 @@ def verify_cleanup(private):
     return receipt["run_id"]
 
 
+def selected_manifest(directory):
+    value = private_json(directory / "manifest.json", snapshot=True)
+    require(value.get("version") == 1 and value.get("limits") ==
+            {key: limit for key, limit in LIMITS.items() if key != "version"})
+
+
 def export_run(private, output, expected_run):
     """Export this run only; raw intermediate bytes never enter the summary."""
     require(output.is_absolute() and not output.is_relative_to(private))
@@ -126,6 +135,7 @@ def export_run(private, output, expected_run):
         require((info.st_dev, info.st_ino) == (receipt["directory_device"], receipt["directory_inode"]))
     finally:
         os.close(fd)
+    selected_manifest(directory)
     # SOU-84 validates manifest, closed hashes, active files, concurrent changes
     # and finite export limits. Missing/rotated/partial evidence remains explicit.
     with tempfile.TemporaryDirectory(prefix="pilot-audit-export-", dir=private) as temporary:
@@ -133,6 +143,7 @@ def export_run(private, output, expected_run):
         retained = REPORT.export_retained(directory, raw)
         projected = REPORT._read_report(raw)
     require(private_json(private / "audit-run.json") == receipt)
+    selected_manifest(directory)
     info = directory.lstat()
     require(stat.S_ISDIR(info.st_mode) and
             (info.st_dev, info.st_ino) == (receipt["directory_device"], receipt["directory_inode"]))

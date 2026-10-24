@@ -167,15 +167,22 @@ class PilotAudit(unittest.TestCase):
         self.segments([self.row()])
         original = A.REPORT._pair_object
         changed = False
+        exporting = False
+        original_export = A.REPORT.export_retained
+        def begin_export(*args, **kwargs):
+            nonlocal exporting
+            exporting = True
+            return original_export(*args, **kwargs)
         def mutate(pairs):
             nonlocal changed
             value = original(pairs)
-            if value.get("version") == 1 and "segments" in value and not changed:
+            if exporting and value.get("version") == 1 and "segments" in value and not changed:
                 changed = True
                 manifest = self.private / "audit" / "manifest.json"
                 manifest.write_bytes(manifest.read_bytes() + b" ")
             return value
-        with patch.object(A.REPORT, "_pair_object", side_effect=mutate), self.assertRaises(A.REPORT.ReportError):
+        with patch.object(A.REPORT, "export_retained", side_effect=begin_export), \
+             patch.object(A.REPORT, "_pair_object", side_effect=mutate), self.assertRaises(A.REPORT.ReportError):
             self.export()
         self.assertFalse(self.output.exists())
 
@@ -185,6 +192,17 @@ class PilotAudit(unittest.TestCase):
         foreign.write_text(self.canary)
         self.export()
         self.assertEqual(foreign.read_text(), self.canary)
+
+    def test_manifest_limits_must_match_the_selected_run(self):
+        self.segments([self.row()])
+        path = self.private / "audit" / "manifest.json"
+        value = json.loads(path.read_bytes())
+        # An otherwise valid SOU-84 profile is still not this run's selection.
+        value["limits"].update(segment_count=2, total_disk_bytes=300000, max_record_bytes=4096)
+        self.write(path, value)
+        with self.assertRaises(ValueError):
+            self.export()
+        self.assertFalse(self.output.exists())
 
 
 if __name__ == "__main__":
