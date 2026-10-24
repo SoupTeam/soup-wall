@@ -1958,7 +1958,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement --list | rg -q pinned_existing_workspace_refuses_replacement
+          "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement --list > "$RUNNER_TEMP/sou134-tests.list"
+          python3 -c 'import pathlib,sys; assert "pinned_existing_workspace_refuses_replacement: test" in pathlib.Path(sys.argv[1]).read_text()' "$RUNNER_TEMP/sou134-tests.list"
           "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \
