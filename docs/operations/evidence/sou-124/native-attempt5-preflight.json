@@ -1,0 +1,97 @@
+{
+  "cases": [
+    {
+      "approved": false,
+      "broker_ttl_seconds": 30,
+      "case": "approve",
+      "configuration_sha256": "17bf7c807a13f35777a4624fd694e92cdeef18ae6631c9842362714e0f7f60c5",
+      "configured": true,
+      "passed": false,
+      "pending": false,
+      "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+      "profile": "git",
+      "sample_index": 0,
+      "stage": "wait_primary"
+    }
+  ],
+  "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+  "contract_version": "sw-pilot-ask-acceptance/1",
+  "error": "selected_pending_missing",
+  "error_location": [
+    {
+      "function": "main",
+      "line": 634
+    },
+    {
+      "function": "qualify",
+      "line": 441
+    },
+    {
+      "function": "waiting",
+      "line": 235
+    },
+    {
+      "function": "until",
+      "line": 87
+    }
+  ],
+  "error_type": "ValueError",
+  "failure_observations": [
+    {
+      "asset_timings": [
+        {
+          "elapsed_ms": 2068.212039,
+          "server": "git",
+          "stage": "runtime_and_libraries"
+        }
+      ],
+      "collector_failures": [],
+      "entry_returncode": null,
+      "offered_count": 1,
+      "primary_present": false,
+      "profile": "git",
+      "provider_requests": 1,
+      "stderr_diagnostic": "unclassified",
+      "trace_sha256": "cc52a4fb5965a50bff4173c10b3b585fcf7f38abfddfaec0c796ac59815a264f"
+    }
+  ],
+  "paid_api_calls": 0,
+  "physical_human_presence_proven": false,
+  "profiles": {
+    "filesystem": {
+      "format": "sw-mcp/filesystem-readonly/1",
+      "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+      "profile_sha256": "f02a0a6fb3d6ec5c8b73b3a10763862936d5f0c1a4720152fc7b1be399134c71",
+      "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+      "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31"
+    },
+    "git": {
+      "format": "sw-mcp/git-readonly/1",
+      "package_tree_sha256": "32183e212d22b627c04c40225efb673255224e85a61a87dd1018e53eb9c26a69",
+      "profile_sha256": "447c03415c845e1fd91d58b672b442b3ac673522b1b1b4fc5bb6a3419bd66edf",
+      "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c"
+    }
+  },
+  "qualification_scope": "two_profile_correctness_probe_not_performance",
+  "raw_report_sha256": "91935bb002c982de8e8ea60d486bc637026ed05d0478366fdfd5369d9277d944",
+  "real_host_executed": false,
+  "scripted_owned_provider": true,
+  "selected_sha256": {
+    "agentfw": "b7d8c2555ae4e3206b912c848b5a859aa9fd5b457cc4d4985b6be74c3fc1cb13",
+    "bwrap": "1dd62677cde47c1ce4608acd263a42ff83f959708f58cbfd4e88bdcaffdd03e1",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "git": "941509bc612650be4f414d86327915929599e1f56227297ae917bfd56aee95c0",
+    "git_launcher": "92939af472725ee2218e9b2a0c24504dcda1cc6a2b90b7c08bdee4d85932788d",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+  },
+  "source": {
+    "commit": "9c5e87b35ef140755cdff929eb42aba470f607b6",
+    "dirty": false,
+    "tree": "3ba9cbd1eca95a7a9557ff967896ce4f9330a89e"
+  },
+  "status": "failed",
+  "workflow_run": 40007430105
+}
