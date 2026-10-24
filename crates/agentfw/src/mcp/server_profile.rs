@@ -592,30 +592,55 @@ impl ToolProfile {
     }
 }
 
+/// Why a path argument was refused before dispatch. Typed so the transport can
+/// tell the user which boundary applied, with fixed text that never echoes the
+/// argument.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathRefusal {
+    /// Absolute path outside `/workspace`.
+    Outside,
+    /// Empty, overlong, control character, backslash, `~`, drive, or an
+    /// empty / `.` / `..` segment.
+    Spelling,
+}
+
+impl std::fmt::Display for PathRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            PathRefusal::Outside => "MCP path is outside selected workspace",
+            PathRefusal::Spelling => "unsupported MCP workspace path spelling",
+        })
+    }
+}
+
+impl std::error::Error for PathRefusal {}
+
 fn validate_workspace_path(value: &Value) -> anyhow::Result<()> {
     let text = value.as_str().context("MCP path must be text")?;
-    ensure!(
-        !text.is_empty() && text.len() <= 4096 && !text.chars().any(char::is_control),
-        "invalid MCP workspace path"
-    );
+    let spelling = || anyhow::Error::new(PathRefusal::Spelling);
+    if text.is_empty() || text.len() > 4096 || text.chars().any(char::is_control) {
+        return Err(spelling());
+    }
     // These are paths inside the Linux sandbox, even when this parser or its
     // tests are hosted on Windows. Host Path semantics would treat `/etc` as a
     // relative Windows path and accept drive/backslash spellings incorrectly.
-    ensure!(
-        !text.contains(['\\', ':']) && !text.starts_with('~'),
-        "unsupported MCP workspace path spelling"
-    );
+    // A colon is an ordinary Linux name byte. It is accepted only inside an
+    // absolute `/workspace/` path, which cannot be read as a drive or stream;
+    // relative spellings such as `C:/x` or `file:stream` stay refused.
+    let absolute = text.starts_with("/workspace/");
+    if text.starts_with('/') && text != "/workspace" && !absolute {
+        return Err(PathRefusal::Outside.into());
+    }
+    if text.contains('\\') || text.starts_with('~') || (text.contains(':') && !absolute) {
+        return Err(spelling());
+    }
     let relative = text.strip_prefix('/').unwrap_or(text);
-    ensure!(
-        relative
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != ".."),
-        "unsupported MCP path traversal"
-    );
-    ensure!(
-        !text.starts_with('/') || text == "/workspace" || text.starts_with("/workspace/"),
-        "MCP path is outside selected workspace"
-    );
+    if !relative
+        .split('/')
+        .all(|part| !part.is_empty() && part != "." && part != "..")
+    {
+        return Err(spelling());
+    }
     Ok(())
 }
 
@@ -1107,8 +1132,65 @@ mod tests {
             "\\workspace\\file",
             "file:stream",
             "~/file",
+            "/workspace/back\\slash",
+            "/workspace/tab\tname",
+            "/workspace:extra",
+            "/workspace/a/../../etc/passwd",
         ] {
             assert!(validate_workspace_path(&json!(path)).is_err(), "{path}");
         }
+    }
+
+    #[test]
+    fn path_refusals_name_their_boundary_and_accept_linux_names() {
+        let refusal = |path: &str| {
+            validate_workspace_path(&json!(path))
+                .unwrap_err()
+                .downcast_ref::<PathRefusal>()
+                .copied()
+        };
+        for path in ["/etc/passwd", "/workspaces/file.txt", "/", "/tmp/x:y"] {
+            assert_eq!(refusal(path), Some(PathRefusal::Outside), "{path}");
+        }
+        for path in [
+            "",
+            "../file",
+            "/workspace/../etc/passwd",
+            "sub//file",
+            "/workspace/",
+            "C:/workspace/file",
+            "file:stream",
+            "~/file",
+            "/workspace/a\\b",
+            "/workspace/a\nb",
+        ] {
+            assert_eq!(refusal(path), Some(PathRefusal::Spelling), "{path:?}");
+        }
+        assert_eq!(
+            refusal(&format!("/workspace/{}", "a".repeat(4096))),
+            Some(PathRefusal::Spelling)
+        );
+        // Ordinary Linux names stay exact: nothing is normalized or decoded.
+        for path in [
+            "/workspace/a:b.txt",
+            "/workspace/dir with spaces/file name.txt",
+            "/workspace/кириллица/файл.txt",
+            "/workspace/-leading-dash.txt",
+            "-leading-dash.txt",
+            "/workspace/.hidden",
+            "/workspace/$(touch pwned).txt",
+            "/workspace/; ls.txt",
+            "/workspace/quote\"name.txt",
+            "/workspace/caf\u{e9}.txt",
+            "/workspace/cafe\u{301}.txt",
+            "/workspace/percent%2F.txt",
+        ] {
+            assert!(validate_workspace_path(&json!(path)).is_ok(), "{path}");
+        }
+        // A type error is not a path refusal.
+        assert!(validate_workspace_path(&json!(7))
+            .unwrap_err()
+            .downcast_ref::<PathRefusal>()
+            .is_none());
     }
 }
