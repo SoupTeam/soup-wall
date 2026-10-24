@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
       - name: Verify historical import and free runtime adapter contracts
         run: python3 -m unittest discover -s scripts/benchmarks -p 'test_*.py' -v
