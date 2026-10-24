@@ -45,6 +45,40 @@ Next gate: independently review the diagnostic and writer correction before
 agreeing any broader experiment. Production's ten benign false refusals remain;
 SOU-109 is In Progress and #215 Draft. No policy change or model integration.
 
+## Concrete proposed next batch (not executed)
+
+[The remaining-input manifest](evidence/sou109-separated-remaining-plan.json)
+contains exactly 50 original request/input-hash pairs, excluding all eight
+completed IDs: 24 benign and 26 attack annotations, with no changed labels.
+It pins the completed-eight export and original full channel byte lengths.
+Annotations and origin IDs in this planning artifact must never be model input.
+
+If this extension is agreed, use the same classification/evidence prompts,
+schemas, pinned model/runtime, 8192 context and 300-second stage deadline, with
+the corrected durable writer. Do not retry the completed eight. Keep per-stage
+errors, raw uncertainty and all unrun/incomplete cases separate. Merge coverage
+by request/input hash only, retaining source commits and the old writer caveat.
+
+Four remaining inputs (r0022/r0023/r0046/r0047) contain 256 KiB each. Their previous
+full prompts had roughly 64-66 thousand tokens; the new prompt must still undergo
+exact full tokenization. If it exceeds the unchanged context budget, report
+unsupported/unknown without inference or text truncation. Do not silently enlarge
+context or repeat the previous hour-long timeouts. This proposed resource-bounded
+diagnostic therefore cannot claim full semantic coverage of all 58 inputs.
+
+Report classification errors separately from evidence errors, including any
+false-benign prediction even when its evidence fails. Preserve uncertainty 0.95
+as uncertainty; do not flip it into confidence or select a new approval threshold.
+The known eight-case labels are not a calibration set. Explicitly retain the old
+negative experiment, long-input limitations and original-server requirements.
+
+This next batch can test whether the observed format improvement extends to the
+remaining familiar inputs. It cannot by itself close SOU-109: stage latency is
+already tens of seconds, confidence is uncalibrated, and the production detector
+is unchanged. A passing subset cannot authorize model-based evidence suppression,
+native release or marking the task Done. Approval of the batch and a subsequent
+production design are separate decisions; no inference is started by this plan.
+
 Baubek's Telegram instructions on 24 October at 22:55 and 23:17 authorize a
 distinct small fixed shadow experiment: separate classification from citation
 generation, expose explicit channel IDs, constrain the schema to existing IDs,
