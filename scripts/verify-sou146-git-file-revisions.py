@@ -213,6 +213,14 @@ def exact_reads(stack, first, report):
             for identifier, (tool, args, ref) in enumerate(reads(first), 10):
                 witness.drain()
                 response, raw = client.exchange(GIT.call(identifier, tool, args))
+                if BASE.refused(response) and tool in ("git_show", "git_diff") and ":" not in ref:
+                    # Preserve this benign expectation as FAILED. SOU-109 owns the
+                    # shared structural-result detector; continue unrelated checks.
+                    report.setdefault("failed_benign_controls", []).append({"id": identifier, "tool": tool,
+                        "reference": ref, "expected": "original_bytes_released", "observed": "withheld",
+                        "passed": False, "related_issue": "SOU-109", "response": response,
+                        "original_sha256": hashlib.sha256(originals[identifier]).hexdigest()})
+                    continue
                 GIT.text(response)
                 require(raw == originals[identifier], "original response bytes changed: " + tool + " " + ref)
                 require(any(row.get("host_call_id") == identifier and row.get("state") == "inflight" for row in BASE.events(path)), "original dispatch witness absent")
@@ -222,7 +230,7 @@ def exact_reads(stack, first, report):
             poison, _ = client.exchange(GIT.call(80, "git_show", {"revision": stack.poison}))
             require(BASE.refused(poison) and GIT.INJECTION not in json.dumps(poison) and any(row.get("host_call_id") == 80 and row.get("state") == "inflight" for row in BASE.events(path)),
                     "unsafe executed original output escaped result inspection")
-            GIT.text(client.exchange(GIT.call(81))[0])
+            GIT.text(client.exchange(GIT.call(81, "git_show", {"revision": REFS[0]}))[0])
             report["result_injection_withheld"] = True
             denials = [(tool, {key: ref}, "syntax") for ref in INVALID
                        for tool, key in (("git_show", "revision"), ("git_diff", "target"))]
@@ -268,7 +276,14 @@ def legacy_refusal(stack, report):
                     response, _ = client.exchange(GIT.call(identifier + offset, tool, {key: ref}))
                     require(BASE.refused(response), "default v1 unexpectedly admits named references")
                     report["legacy_refusals"].append({"id": identifier + offset, "response": response})
-            GIT.text(client.exchange(GIT.call(200))[0])
+            baseline, _ = client.exchange(GIT.call(200))
+            if BASE.refused(baseline):
+                report.setdefault("failed_benign_controls", []).append({"id": 200, "tool": "git_show",
+                    "reference": "HEAD", "profile": INSTALL.FORMAT, "expected": "original_bytes_released",
+                    "observed": "withheld", "passed": False, "related_issue": "SOU-109", "response": baseline})
+            else:
+                GIT.text(baseline)
+            GIT.text(client.exchange(GIT.call(201, "git_status"))[0])
         finally:
             client.close()
             report["legacy_client"] = client.transcript()
@@ -380,26 +395,26 @@ def policy_controls(stack, config, second, report):
                     APPROVAL.pending(args, stack.env, empty=True, timeout=8)
                     APPROVAL.command(args, stack.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
                     report["approval_controls"].append({"case": case, "preapproval_effects": 0, "passed": True, "first_pending_budget_ms": 5000, "execution_dispatched": False})
-                    continue
-                APPROVAL.command(args, stack.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"])
-                response, raw = client.receive()
-                require(response["id"] == 50, "approval response correlation changed")
-                if case == "approve":
-                    require(raw == expected and any(row.get("host_call_id") == 50 and row.get("state") == "inflight" for row in BASE.events(path)), "approved original bytes/execution changed")
-                    client.send(GIT.call(51, "git_show", {"revision": REFS[0]}))
-                    again = APPROVAL.pending(args, stack.env, timeout=5)
-                    require(again["pending_id"] != waiting["pending_id"] and witness.drain() == 0, "approval was reused")
-                    APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
-                    require(BASE.refused(client.receive()[0]), "second Ask was not independently refused")
                 else:
-                    require(response.get("error", {}).get("code") == -32602 and witness.drain() == 0,
-                            "approved substituted reference dispatched")
-                APPROVAL.pending(args, stack.env, empty=True, timeout=8)
-                APPROVAL.command(args, stack.env, "native-approval", "approve", waiting["pending_id"],
-                    "--binding", waiting["binding_sha256"], success=False)
-                report["approval_controls"].append({"case": case, "preapproval_effects": 0, "passed": True,
-                    "first_pending_budget_ms": 5000,
-                    "binding_sha256": waiting["binding_sha256"], "execution_dispatched": case == "approve"})
+                    APPROVAL.command(args, stack.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"])
+                    response, raw = client.receive()
+                    require(response["id"] == 50, "approval response correlation changed")
+                    if case == "approve":
+                        require(raw == expected and any(row.get("host_call_id") == 50 and row.get("state") == "inflight" for row in BASE.events(path)), "approved original bytes/execution changed")
+                        client.send(GIT.call(51, "git_show", {"revision": REFS[0]}))
+                        again = APPROVAL.pending(args, stack.env, timeout=5)
+                        require(again["pending_id"] != waiting["pending_id"] and witness.drain() == 0, "approval was reused")
+                        APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
+                        require(BASE.refused(client.receive()[0]), "second Ask was not independently refused")
+                    else:
+                        require(response.get("error", {}).get("code") == -32602 and witness.drain() == 0,
+                                "approved substituted reference dispatched")
+                    APPROVAL.pending(args, stack.env, empty=True, timeout=8)
+                    APPROVAL.command(args, stack.env, "native-approval", "approve", waiting["pending_id"],
+                        "--binding", waiting["binding_sha256"], success=False)
+                    report["approval_controls"].append({"case": case, "preapproval_effects": 0, "passed": True,
+                        "first_pending_budget_ms": 5000,
+                        "binding_sha256": waiting["binding_sha256"], "execution_dispatched": case == "approve"})
             finally:
                 close_mapping(opened)
                 client.close()
@@ -418,7 +433,7 @@ def policy_controls(stack, config, second, report):
             witness.drain()
             response, _ = client.exchange(GIT.call(50, "git_show", {"revision": REFS[0]}))
             require(BASE.refused(response) and witness.drain() == 0, "classifier uncertainty floor bypassed")
-            GIT.text(client.exchange(GIT.call(51))[0])
+            GIT.text(client.exchange(GIT.call(51, "git_status"))[0])
             report["classifier_uncertainty_refused"] = True
         finally:
             client.close()
@@ -627,7 +642,10 @@ def run(args):
             BASE.DEMO.stop(stack.daemon)
         report["source_after"] = BASE.source()
         require(report["source_after"] == before, "candidate source changed")
-        report["status"] = "pass"
+        report["per_file_qualification"] = "pass"
+        report["status"] = "fail" if report.get("failed_benign_controls") else "pass"
+        if report.get("failed_benign_controls"):
+            report["error"] = "SOU-109: existing benign whole-commit/diff result controls remain withheld; expectations unchanged"
     except Exception as error:
         report["status"], report["error"] = "fail", type(error).__name__ + ": " + str(error)
     finally:
@@ -645,6 +663,7 @@ def run(args):
         report["protected_diagnostics"] = GIT.protected_diagnostics(report, output)
         write(output / "report.json", report)
     print(json.dumps({"status": report["status"], "error": report.get("error"), "report": str(output / "report.json"),
+        "per_file_qualification": report.get("per_file_qualification"), "failed_benign_controls": report.get("failed_benign_controls", []),
         "reads": len(report.get("reads", [])), "refusals": len(report.get("refusals", [])),
         "legacy_refusals": len(report.get("legacy_refusals", [])), "helper_control": report.get("helper_control"),
         "approval_controls": report.get("approval_controls", []),
