@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import platform
 import signal
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -46,7 +47,7 @@ def prepare_repo(workspace, git, env):
     command("add", "notes.txt"); command("commit", "-m", "Synthetic second local version")
     second = command("rev-parse", "HEAD")
     # Preparation uses only this owned file:// fixture. Runtime never fetches.
-    command("clone", "--depth", "1", "--no-local", "--template=", source.as_uri(), str(workspace), cwd=workspace.parent)
+    command("clone", "--depth", "1", "--no-local", "--template=", "--upload-pack=" + shlex.quote(str(git)) + " upload-pack", source.as_uri(), str(workspace), cwd=workspace.parent)
     # Retain accepted strict core-only semantics; general remote clone config is
     # deliberately outside SOU-147. Normalize only this generated owned fixture.
     (workspace / ".git/config").write_text("[core]\nrepositoryformatversion = 0\nbare = false\nfilemode = true\nlogallrefupdates = true\n")
@@ -67,10 +68,11 @@ def prepare_repo(workspace, git, env):
     return first, second, poison
 
 
-def reads(first):
+def reads(head):
     return [("git_status", {}, "status"), ("git_log", {"max_count": 2}, "local-history"),
             ("git_show", {"revision": "HEAD"}, "HEAD"), ("git_diff", {"target": "HEAD"}, "HEAD"),
-            ("git_diff_staged", {}, "index"), ("git_diff_unstaged", {}, "working-tree")]
+            ("git_diff_staged", {}, "index"), ("git_diff_unstaged", {}, "working-tree"),
+            ("git_show", {"revision": head}, head), ("git_diff", {"target": head}, head)]
 
 
 def writable_mapping(path):
@@ -88,8 +90,8 @@ def close_mapping(value):
         value[0].close()
 
 
-def mapped_source_controls(stack, second, report):
-    ref = stack.workspace / ".git/shallow"
+def mapped_source_controls(stack, second, report, source_path=None):
+    ref = source_path or stack.workspace / ".git/shallow"
     before = ref.read_bytes()
     snapshot = BASE.snapshot(stack.workspace)
     report["mapped_source_controls"] = []
@@ -120,7 +122,7 @@ def mapped_source_controls(stack, second, report):
                 client.initialize()
                 GIT.text(client.exchange(GIT.call(10, "git_show", {"revision": REFS[0]}))[0])
                 opened = writable_mapping(ref)
-                opened[1][:] = (second + "\n").encode()
+                opened[1][:] = ((second + "\n").encode() if source_path is None else bytes([before[0] ^ 1]) + before[1:])
                 opened[1].flush()
                 require(ref.read_bytes() != before, "owned mmap write did not change source bytes")
                 if restore_before_call:
@@ -185,7 +187,7 @@ def collector(stack, log, *, legacy=False, bound=None):
         env, stack.workspace, log, "protected shallow original Git")
 
 
-def exact_reads(stack, first, report):
+def exact_reads(stack, head, report):
     originals = {}
     python = stack.install / "package/python/bin/python3.11"
     env = dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git), GIT_OPTIONAL_LOCKS="0")
@@ -194,7 +196,7 @@ def exact_reads(stack, first, report):
                             env, stack.workspace, log, "direct original Git")
         try:
             client.initialize()
-            for identifier, (tool, args, ref) in enumerate(reads(first), 10):
+            for identifier, (tool, args, ref) in enumerate(reads(head), 10):
                 response, raw = client.exchange(GIT.call(identifier, tool, args, stack.workspace))
                 GIT.text(response)
                 originals[identifier] = raw
@@ -211,7 +213,7 @@ def exact_reads(stack, first, report):
         try:
             client.initialize()
             report["reads"], report["refusals"] = [], []
-            for identifier, (tool, args, ref) in enumerate(reads(first), 10):
+            for identifier, (tool, args, ref) in enumerate(reads(head), 10):
                 witness.drain()
                 response, raw = client.exchange(GIT.call(identifier, tool, args))
                 GIT.text(response)
@@ -268,7 +270,7 @@ def legacy_refusal(stack, report):
     report["default_shallow_refused_before_start"] = True
 
 
-def ordinary_controls(stack, first, report):
+def ordinary_controls(stack, head, report):
     old_workspace = stack.workspace
     old_profile = stack.profile.read_bytes()
     ordinary = old_workspace.parent / "ordinary-source"
@@ -280,7 +282,7 @@ def ordinary_controls(stack, first, report):
         profile["workspace"] = str(ordinary)
         write(stack.profile, profile)
         stack.workspace = ordinary
-        exact_reads(stack, first, report.setdefault("ordinary", {}))
+        exact_reads(stack, head, report.setdefault("ordinary", {}))
     finally:
         stack.profile.write_bytes(old_profile)
         stack.workspace = old_workspace
@@ -651,14 +653,22 @@ def run(args):
             report["sandbox_positive"] = True
             daemon = start_daemon(stack, config, "shallow")
             legacy_refusal(stack, report)
-            ordinary_controls(stack, first, report)
+            ordinary_controls(stack, second, report)
             boundary_refusals(stack, report)
             helper_control(stack, report)
             GIT.startup_refusals(stack, report)
-            exact_reads(stack, first, report)
+            exact_reads(stack, second, report)
             absent_ancestry(stack, first, report)
             source_mutations(stack, first, first, report)
             mapped_source_controls(stack, first, report)
+            original_root = stack.root
+            stack.root = original_root / "mapped-pack"
+            stack.root.mkdir(mode=0o700)
+            try:
+                packed = next((workspace / ".git/objects/pack").glob("*.pack"))
+                mapped_source_controls(stack, first, report.setdefault("mapped_pack_controls", {}), source_path=packed)
+            finally:
+                stack.root = original_root
             inflight_substitution(stack, first, report)
             inflight_substitution(stack, first, report, mapped=True)
             inflight_substitution(stack, first, report, mapped=True, restore=True)

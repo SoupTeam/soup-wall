@@ -167,6 +167,8 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
     ).unwrap(), DEFAULT_TAINT_CAP));
     let args = if name == "read_text_file" {
         json!({"path":"/workspace/notes.txt"})
+    } else if format == crate::mcp::server_profile::git::LOCAL_REFS_FORMAT {
+        json!({"repo_path":"/workspace","revision":"refs/heads/feature/機能"})
     } else {
         json!({"repo_path":"/workspace","revision":"HEAD"})
     };
@@ -283,9 +285,10 @@ async fn selected_status_cancel_require_the_private_owner_even_when_header_is_ab
     }
 }
 
-const FORMATS: [&str; 3] = [
+const FORMATS: [&str; 4] = [
     crate::mcp::server_profile::FORMAT,
     crate::mcp::server_profile::git::FORMAT,
+    crate::mcp::server_profile::git::LOCAL_REFS_FORMAT,
     crate::mcp::server_profile::git::SHALLOW_FORMAT,
 ];
 

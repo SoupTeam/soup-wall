@@ -22,6 +22,18 @@ VERIFY_SPEC.loader.exec_module(VERIFY)
 
 
 class GitProfile(unittest.TestCase):
+    def test_local_reference_opt_in_has_separate_registry_identity_only(self):
+        manifest = json.loads((INSTALL.ASSETS / "upstream-tools-list.json").read_text())
+        legacy = INSTALL.registry(manifest)
+        selected = INSTALL.registry(manifest, local_references=True)
+        self.assertNotEqual(legacy["registry_id"], selected["registry_id"])
+        self.assertEqual(selected["registry_id"], "git-readonly-local-refs-v1")
+        for old, new in zip(legacy["tools"], selected["tools"]):
+            if old["name"] in INSTALL.READS:
+                self.assertEqual(new["mcp_result_profile"], INSTALL.LOCAL_REFS_FORMAT)
+                new["mcp_result_profile"] = INSTALL.FORMAT
+            self.assertEqual(old, new)
+
     def test_original_discovery_lock_and_registry_are_bound(self):
         identity = json.loads((INSTALL.ASSETS / "upstream-identity.json").read_text())
         self.assertEqual(len(identity["python"]["sha256"]), 64)

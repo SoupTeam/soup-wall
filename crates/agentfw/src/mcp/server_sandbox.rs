@@ -33,6 +33,8 @@ pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap
 pub(crate) fn profile_name(format: &str) -> &'static str {
     if format == super::server_profile::git::SHALLOW_FORMAT {
         "sw-mcp/git-readonly-shallow/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git::LOCAL_REFS_FORMAT {
+        "sw-mcp/git-readonly-local-refs/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git::FORMAT {
         "sw-mcp/git-readonly/linux-bwrap-landlock/1"
     } else {
@@ -49,7 +51,7 @@ pub(crate) struct PreparedServerSandbox {
     command: Command,
     _pins: Vec<File>,
     workspace: PathBuf,
-    shallow_repository: Option<Arc<super::server_profile::git::shallow_view::View>>,
+    git_view: Option<Arc<super::server_profile::git::SelectedView>>,
     #[cfg(target_os = "linux")]
     budget: Option<super::linux_budget::OwnedBudget>,
     #[cfg(target_os = "linux")]
@@ -59,10 +61,8 @@ pub(crate) struct PreparedServerSandbox {
 }
 
 impl PreparedServerSandbox {
-    pub(crate) fn shallow_repository(
-        &self,
-    ) -> Option<Arc<super::server_profile::git::shallow_view::View>> {
-        self.shallow_repository.clone()
+    pub(crate) fn git_view(&self) -> Option<Arc<super::server_profile::git::SelectedView>> {
+        self.git_view.clone()
     }
 
     pub(crate) fn workspace(&self) -> &Path {
@@ -623,18 +623,15 @@ fn prepare_linux_command(
     }
     let git_profile = super::server_profile::git::is_profile(&profile.format);
     if git_profile {
-        super::server_profile::git::validate_repository_with_shallow(
-            &descriptor_path(&workspace_pin).join("."),
-            profile.format == super::server_profile::git::SHALLOW_FORMAT,
-        )?;
+        let root = descriptor_path(&workspace_pin).join(".");
+        if profile.format == super::server_profile::git::SHALLOW_FORMAT {
+            super::server_profile::git::validate_repository_with_shallow(&root, true)?;
+        } else {
+            super::server_profile::git::validate_repository(&root)?;
+        }
     }
-    let shallow_repository = if profile.format == super::server_profile::git::SHALLOW_FORMAT {
-        Some(super::server_profile::git::shallow_view::View::capture(
-            &workspace_pin,
-        )?)
-    } else {
-        None
-    };
+    let git_view =
+        super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?;
     let (package_root, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
     {
@@ -735,7 +732,7 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
-    if let Some(view) = &shallow_repository {
+    if let Some(view) = &git_view {
         view.mount(&mut command, &mut pins)?;
     }
     let seccomp = network_filter(git_profile)?;
@@ -818,7 +815,7 @@ fn prepare_linux_command(
         command,
         _pins: pins,
         workspace,
-        shallow_repository,
+        git_view,
         budget,
         bwrap_fd,
         owner_executable_fd,

@@ -466,12 +466,8 @@ def run(args):
                 return page
 
             def browser_fetch(page, path, method="GET", headers=None, body=None):
-                return page.evaluate("""async ({path, method, headers, body}) => {
-                    const response = await fetch(path, {method, headers, body, credentials:'same-origin', cache:'no-store'});
-                    const text = await response.text();
-                    let data = null; try { data = JSON.parse(text); } catch (_) {}
-                    return {status:response.status, data};
-                }""", {"path": path, "method": method, "headers": headers or {}, "body": body})
+                return diagnostics.browser_api_fetch(page, gateway_base, path, report,
+                                                     method=method, headers=headers, body=body)
 
             def capture_assertion():
                 captured = {}

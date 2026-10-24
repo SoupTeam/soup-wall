@@ -1,0 +1,48 @@
+--- a/crates/agentfw/src/mcp/linux_budget.rs
++++ b/crates/agentfw/src/mcp/linux_budget.rs
+@@ -958,0 +959,6 @@
++            self.member_with_open(pid, |path| File::open(path))
++        }
++
++        // Test-only opener seam: the accepted decision body is unchanged.
++        fn member_with_open(&self, pid: u32,
++            open: impl FnOnce(&str) -> std::io::Result<File>) -> Checked<()> {
+@@ -960 +966 @@
+-            let file = match File::open(path) {
++            let file = match open(&path) {
+@@ -1180,0 +1187,35 @@
++        }
++
++        #[test]
++        fn sou136_regression_enumerated_exit_before_member_open() {
++            let root = tempfile::tempdir().unwrap();
++            let stub = tempfile::tempfile().unwrap();
++            let boundary = Boundary {
++                config_root:root.path().to_owned(),root:File::open(root.path()).unwrap(),
++                leaf:stub.try_clone().unwrap(),name:"observation-only".into(),
++                procs:stub.try_clone().unwrap(),kill:stub.try_clone().unwrap(),
++                root_controllers:stub.try_clone().unwrap(),root_subtree:stub.try_clone().unwrap(),
++                root_type:stub.try_clone().unwrap(),root_procs:stub,
++                expected_leader:None,membership_failures:MembershipFailures::default(),
++                started:std::time::Instant::now(),removed:false,
++            };
++            let mut child = TestChild(std::process::Command::new("/bin/sleep")
++                .arg("30").spawn().unwrap());
++            let pid = child.0.id();
++            // Deterministic kernel boundary: the lookup has pinned this PID
++            // directory, then the task exits/is reaped before the record opens.
++            let directory = File::open(format!("/proc/{pid}")).unwrap();
++            child.0.kill().unwrap();child.0.wait().unwrap();
++            let raw = unsafe { libc::openat(directory.as_raw_fd(),c"cgroup".as_ptr(),
++                libc::O_RDONLY|libc::O_CLOEXEC|libc::O_NOFOLLOW) };
++            if raw >= 0 {
++                drop(unsafe {File::from_raw_fd(raw)});
++                panic!("required real-kernel ESRCH boundary not reproduced");
++            }
++            let error=std::io::Error::last_os_error();
++            assert_eq!(error.raw_os_error(),Some(libc::ESRCH));
++            println!("sou136_real_kernel_member_open_errno=3");
++            // Inject that actual kernel open error at the accepted member-open
++            // decision, without changing its errno classification or fallback.
++            let result=boundary.member_with_open(pid,move |_|Err(error));
++            assert_eq!(result,Ok(()),"departed member still closes accepted budget path");

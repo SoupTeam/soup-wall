@@ -40,3 +40,8 @@ class ShallowProfile(unittest.TestCase):
             self.assertTrue(any((workspace/".git/objects/pack").glob("*.pack")))
             self.assertFalse((workspace/".git/refs/remotes").exists())
             self.assertNotIn("[remote",(workspace/".git/config").read_text())
+
+    def test_unqualified_local_reference_combination_refuses(self):
+        manifest=json.loads((INSTALL.ASSETS/"upstream-tools-list.json").read_text())
+        with self.assertRaisesRegex(ValueError,"not qualified"):
+            INSTALL.registry(manifest,local_references=True,shallow_repository=True)

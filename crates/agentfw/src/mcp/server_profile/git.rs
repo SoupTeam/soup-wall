@@ -9,16 +9,50 @@ use serde_json::Value;
 
 use super::ToolProfile;
 
+pub(crate) mod reference_view;
+pub(crate) mod selected_view;
 pub(crate) mod shallow_view;
+pub(crate) use selected_view::SelectedView;
 
 pub const FORMAT: &str = "sw-mcp/git-readonly/1";
-/// Explicitly selected shallow contract; the original v1 stays narrow.
+/// Explicitly selected local-reference contract; the original v1 stays narrow.
 pub const SHALLOW_FORMAT: &str = "sw-mcp/git-readonly-shallow/1";
+pub const LOCAL_REFS_FORMAT: &str = "sw-mcp/git-readonly-local-refs/1";
+pub const MAX_LOCAL_REF_BYTES: usize = 255;
 
 pub fn is_profile(format: &str) -> bool {
-    matches!(format, FORMAT | SHALLOW_FORMAT)
+    matches!(format, FORMAT | LOCAL_REFS_FORMAT | SHALLOW_FORMAT)
 }
 
+/// A literal, fully qualified local name, never a Git revision expression.
+/// Keep this finite grammar in sync with the separately selected classifier.
+pub fn is_local_reference(reference: &str) -> bool {
+    let Some(name) = reference
+        .strip_prefix("refs/heads/")
+        .or_else(|| reference.strip_prefix("refs/tags/"))
+    else {
+        return false;
+    };
+    reference.len() <= MAX_LOCAL_REF_BYTES
+        && !name.is_empty()
+        && name.split('/').count() <= 8
+        && !name.contains("..")
+        && !name.contains("@{")
+        && name.chars().all(|c| {
+            let scalar = c as u32;
+            c.is_ascii_alphanumeric()
+                || matches!(c, '/' | '-' | '_' | '.' | '@' | '+')
+                || (scalar >= 0xa1
+                    && !matches!(scalar, 0x1680 | 0x180e | 0x2000..=0x200f | 0x2028..=0x202f
+                        | 0x205f..=0x206f | 0x3000 | 0xfeff | 0xe0000..=0xe0fff))
+        })
+        && name.split('/').all(|part| {
+            !part.is_empty()
+                && !part.starts_with(['.', '-'])
+                && !part.ends_with('.')
+                && !part.ends_with(".lock")
+        })
+}
 pub const PYTHON: &str = "/mcp-server/python/bin/python3.11";
 const MANIFEST: &str =
     include_str!("../../../../../profiles/mcp/git-readonly-v1/upstream-tools-list.json");
@@ -39,6 +73,13 @@ pub fn validate_initialization(value: &Value) -> anyhow::Result<()> {
 }
 
 pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
+    classify_manifest_with_local_refs(value, false)
+}
+
+pub fn classify_manifest_with_local_refs(
+    value: &Value,
+    local_references: bool,
+) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     ensure!(
         value == &original_manifest(),
         "Git discovery differs from pin"
@@ -62,6 +103,7 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
                 output: None,
                 unsupported_reason: (!supported).then_some("selected_git_operation_unsupported"),
                 git_tool: Some(name.to_owned()),
+                git_local_references: local_references,
             },
         );
     }
@@ -69,6 +111,14 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
 }
 
 pub fn validate_arguments(name: &str, value: &Value) -> anyhow::Result<()> {
+    validate_arguments_with_local_refs(name, value, false)
+}
+
+pub fn validate_arguments_with_local_refs(
+    name: &str,
+    value: &Value,
+    local_references: bool,
+) -> anyhow::Result<()> {
     let allowed: &[&str] = match name {
         "git_status" => &["repo_path"],
         "git_log" => &["repo_path", "max_count"],
@@ -99,8 +149,14 @@ pub fn validate_arguments(name: &str, value: &Value) -> anyhow::Result<()> {
         let reference = reference.as_str().context("Git revision required")?;
         ensure!(
             reference == "HEAD"
-                || (reference.len() == 40 && reference.bytes().all(|c| c.is_ascii_hexdigit())),
-            "only HEAD or a full SHA-1 revision is supported"
+                || (reference.len() == 40 && reference.bytes().all(|c| c.is_ascii_hexdigit()))
+                || (local_references && is_local_reference(reference)),
+            "{}",
+            if local_references {
+                "Git revision violates the selected local-reference contract"
+            } else {
+                "only HEAD or a full SHA-1 revision is supported"
+            }
         );
     }
     Ok(())
@@ -291,6 +347,64 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn local_reference_names_are_literal_bounded_and_explicit() {
+        for reference in [
+            "refs/heads/main",
+            "refs/heads/topic/nested",
+            "refs/heads/機能/読取",
+            "refs/heads/café",
+            "refs/heads/cafe\u{301}",
+            "refs/heads/owned-🦀",
+            "refs/tags/lightweight",
+            "refs/tags/releases/annotated",
+        ] {
+            assert!(is_local_reference(reference), "{reference}");
+            // The existing profile must continue refusing named references.
+            for (tool, key) in [("git_show", "revision"), ("git_diff", "target")] {
+                let args = json!({"repo_path":"/workspace", key:reference});
+                assert!(validate_arguments(tool, &args).is_err(), "{reference}");
+            }
+        }
+        for reference in [
+            "main",
+            "HEAD",
+            "refs/remotes/origin/main",
+            "refs/heads/",
+            "refs/tags/",
+            "refs/heads/-option",
+            "refs/heads/.hidden",
+            "refs/heads/a.lock",
+            "refs/heads/a..b",
+            "refs/heads/a.",
+            "refs/heads/a//b",
+            "refs/heads/a/",
+            "refs/heads/a@{1}",
+            "refs/heads/a~1",
+            "refs/heads/a^",
+            "refs/heads/a:file",
+            "refs/heads/a b",
+            "refs/heads/a\n",
+            "refs/heads/a\\b",
+            "refs/tags/a?",
+            "refs/heads/a;echo",
+            "refs/heads/a$(echo)",
+            "refs/heads/a\u{202e}",
+        ] {
+            assert!(!is_local_reference(reference), "{reference:?}");
+        }
+        let prefix = "refs/heads/";
+        assert!(is_local_reference(&format!(
+            "{prefix}{}",
+            "a".repeat(255 - prefix.len())
+        )));
+        assert!(!is_local_reference(&format!(
+            "{prefix}{}",
+            "a".repeat(256 - prefix.len())
+        )));
+        assert!(!is_local_reference("refs/heads/a/b/c/d/e/f/g/h/i"));
+    }
+
+    #[test]
     fn git_keeps_upstream_tools_but_bounds_repository_and_arguments() {
         let tools = classify_manifest(&original_manifest()).unwrap();
         assert_eq!(tools.len(), 12);
@@ -454,4 +568,34 @@ mod tests {
             "[core]\nbare = false\n"
         );
     }
+}
+#[test]
+fn local_reference_contract_matches_the_reviewed_classifier_fixture() {
+    let contract: Value = serde_json::from_str(include_str!(
+        "../../../../../profiles/mcp/git-readonly-local-refs-v1/contract.json"
+    ))
+    .unwrap();
+    for reference in contract["accepted"].as_array().unwrap() {
+        let reference = reference.as_str().unwrap();
+        assert!(is_local_reference(reference), "{reference}");
+        for (tool, key) in [("git_show", "revision"), ("git_diff", "target")] {
+            let args = serde_json::json!({"repo_path": "/workspace", key: reference});
+            assert!(validate_arguments_with_local_refs(tool, &args, true).is_ok());
+            assert!(validate_arguments(tool, &args).is_err());
+        }
+    }
+    for reference in contract["rejected"].as_array().unwrap() {
+        assert!(
+            !is_local_reference(reference.as_str().unwrap()),
+            "{reference}"
+        );
+    }
+    assert!(!is_local_reference(&format!(
+        "refs/heads/{}",
+        "é".repeat(123)
+    )));
+    assert!(!is_local_reference(&format!(
+        "refs/heads/{}",
+        ["a"; 9].join("/")
+    )));
 }
