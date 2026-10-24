@@ -66,5 +66,158 @@
     "failed": 0,
     "full_python_log_sha256": "4924f625053e54f950d71623e464284a4f34d38edf34ae01df92adfc529144cf"
   },
-  "native_followup": "current full CI required; previous 80-row comparison remains attributed to 6da8216"
+  "native_followup": "all 14 lifecycle cases passed on f6963c6; later CI steps separately failed as recorded in witness-observer-consistency-correction.json",
+  "native_confirmation": {
+    "run_id": 40058255940,
+    "source": {
+      "commit": "f6963c69046c943df167e609fb15bfdd366c95a9",
+      "tree": "63f7ea04f585c5fef15ed28b7d5756e8d0872bf3",
+      "dirty": false
+    },
+    "source_after": {
+      "commit": "f6963c69046c943df167e609fb15bfdd366c95a9",
+      "tree": "63f7ea04f585c5fef15ed28b7d5756e8d0872bf3",
+      "dirty": false
+    },
+    "status": "pass",
+    "all_14_cases_passed": true,
+    "workspace_unchanged": true,
+    "qualification_sha256": "e6e0f93269f3cd96bf279e985be6a454107c4f5d8aaad70ce9e26b4e09d70dd4",
+    "cases": [
+      {
+        "profile": "git",
+        "case": "expire",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "refusal_after_original_expiry_ms": 57,
+        "primary_refusal_codes": [
+          "native_approval_timeout"
+        ],
+        "trace_sha256": "13b2b2897e57fd3b9b70f12eb105acdb681a6e39b453de4aed8b00c57ef81c71"
+      },
+      {
+        "profile": "git",
+        "case": "restart",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "git",
+        "case": "approve",
+        "passed": true,
+        "dispatched": 1,
+        "kernel_effects": 1,
+        "released": true,
+        "primary_refusal_codes": [],
+        "trace_sha256": "4dfc17efbd4dbe95c3f0feb601071db6eae3221d6e1fd55af890dd7763c31d62"
+      },
+      {
+        "profile": "git",
+        "case": "reject",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "primary_refusal_codes": [],
+        "trace_sha256": "88ae6ef451e8108ee1280b40ccd4164abc563668cb6629a9767d6bd9dc70b766"
+      },
+      {
+        "profile": "git",
+        "case": "cancel",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "git",
+        "case": "approved_cancel",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "git",
+        "case": "default",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "primary_refusal_codes": [],
+        "trace_sha256": "c117692e9434cc3a41e1da49659ddb16b31561d569aabaf098d02d5147f30cee"
+      },
+      {
+        "profile": "filesystem",
+        "case": "expire",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "refusal_after_original_expiry_ms": 45,
+        "primary_refusal_codes": [
+          "native_approval_timeout"
+        ],
+        "trace_sha256": "92208b00fc238bf60e2487c7442d45c6126cc6e1fd357de5309b208c88601aa3"
+      },
+      {
+        "profile": "filesystem",
+        "case": "restart",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "filesystem",
+        "case": "approve",
+        "passed": true,
+        "dispatched": 1,
+        "kernel_effects": 1,
+        "released": true,
+        "primary_refusal_codes": [],
+        "trace_sha256": "eedb77014577f5bf32d8914b95156ccacfac1618dee9ed74c3967ff224502264"
+      },
+      {
+        "profile": "filesystem",
+        "case": "reject",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "primary_refusal_codes": [],
+        "trace_sha256": "5c9e7fa8f7852abfce7f52ff84c6c969682dde190a6be1971d0e8cbe3317cfc8"
+      },
+      {
+        "profile": "filesystem",
+        "case": "cancel",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "filesystem",
+        "case": "approved_cancel",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "filesystem",
+        "case": "default",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "primary_refusal_codes": [],
+        "trace_sha256": "2de0b24d367aa429bee2cc98bde56c921e85d0b623d9315c965f2936f561bd2e"
+      }
+    ]
+  }
 }

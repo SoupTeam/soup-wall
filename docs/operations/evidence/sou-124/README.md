@@ -48,8 +48,14 @@ diagnostics and raw-report digest remain in
 `expiry-followup-scheduling-correction.json`; current full CI still determines
 readiness.
 
-The subsequent `f6963c6` full CI (`40058255940`) stopped before the corrected
-expiry case. The selected-server approval witness missed its unchanged five-second
+The subsequent `f6963c6` full CI (`40058255940`) passed all fourteen Ask
+lifecycle cases, including both original-expiry refusals with zero dispatch/effect
+and a useful continuation. Git refused 57 ms after its original deadline;
+filesystem refused 45 ms after its original deadline. Clean source before/after,
+unchanged workspace and the raw report digest are retained in
+`expiry-followup-scheduling-correction.json`. This corrects the earlier summary
+that placed the failure before the expiry cases: the separate later
+selected-server approval witness missed its unchanged five-second
 pending observation: its traced capture alone took 4733.702660 ms for runtime/
 libraries and 4299.371333 ms for the package. Separately, the prepared demo's Ask
 case observed all three useful correlated results and two operator decisions,
