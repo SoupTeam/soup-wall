@@ -136,6 +136,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     command = [str(server), '-m', str(model), '--host', '127.0.0.1', '--port', str(args.port),
                '-c', str(args.context), '-np', '1', '-t', '6', '-ngl', '0', '-b', '256', '-ub', '64',
+               '-ctk', 'q8_0', '-ctv', 'q8_0', '-fa', 'on',
                '--no-context-shift', '--reasoning', 'off', '--no-webui']
     identity = {'model_sha256': MODEL_SHA, 'runtime_sha256': sha(server),
                 'runtime_release': 'b11852', 'command': command, 'system_prompt': SYSTEM,
@@ -179,19 +180,20 @@ def main():
                     else:
                         response = post(base, '/completion', {'prompt': tokens, 'n_predict': 512,
                             'temperature': 0, 'seed': 109, 'cache_prompt': False,
-                            'json_schema': SCHEMA, 'stream': False}, timeout=600)
+                            'json_schema': SCHEMA, 'stream': False}, timeout=3600)
                         observation['raw_response'] = response
                         value, spans = checked_response(response, payload['untrusted_text_channels'], len(tokens))
                         observation.update(status='valid', assessment=value['assessment'],
                                            prediction=value, verified_quote_spans=spans)
                 except (OSError, ValueError, KeyError, TypeError) as error:
                     observation['error'] = type(error).__name__ + ': ' + str(error)
+                    observation['connection_failed'] = isinstance(error, OSError)
                 observation['elapsed_ms'] = round((time.monotonic() - begun) * 1000, 2)
                 results.append(observation)
                 with (args.output / 'observations.jsonl').open('a', encoding='utf-8') as output:
                     output.write(json.dumps(observation, ensure_ascii=False) + '\n')
                 print(row['request_id'], observation['status'], observation['assessment'], flush=True)
-                if observation.get('error', '').startswith(('TimeoutError', 'URLError')):
+                if observation.get('connection_failed'):
                     # A disconnected request may still be executing. Stop the owned
                     # server instead of overlapping another request or hiding timeout.
                     break

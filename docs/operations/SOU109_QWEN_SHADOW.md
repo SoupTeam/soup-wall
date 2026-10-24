@@ -16,7 +16,8 @@ at 3daf4eb with 56 native tests passing. The ten benign refusals remain.
   `89d28c3d7d810a57524f4c9b13397b2485cbe32937fb302c09c1b04d2a6b3e06`.
   The runner verifies the archive and every extracted runtime file before launch.
 - Local CPU only, six threads, one slot, 131072-token context, batch 256,
-  microbatch 64, thinking off, temperature zero, seed 109, 512 output tokens.
+  microbatch 64, Q8_0 K/V cache with Flash Attention, thinking off,
+  temperature zero, seed 109, 512 output tokens, 3600-second request deadline.
   CPU avoids claiming the complete 5.7 GB model fits the laptop's 4 GB GPU.
 - Loopback-only owned server with no Web UI, context shifting disabled.
   The runner always terminates/reaps its server. It stops the batch on request
@@ -42,6 +43,15 @@ at 3daf4eb with 56 native tests passing. The ten benign refusals remain.
   contexts; those are not successes. A timeout-aborted batch is incomplete.
 
 ## Reproduction
+
+The initial default-cache CPU attempt at 8c29d0b was manually stopped before
+the first model assessment: server working set reached 10,019,688,448 bytes
+and free physical memory fell to approximately 329 MiB. Its two connection-error
+observations are technical unknowns, not model accuracy results. The replacement
+uses Q8_0 K/V cache to reduce memory without shortening the prompt. The request
+deadline is extended for the four 256 KiB public inputs; observed CPU prompt
+throughput in the aborted attempt was about 36 tokens/second. This is a resource
+configuration correction, not a label/prompt change based on predictions.
 
 ```text
 python -B -m unittest discover -s scripts/tests -p test_qwen_result_context.py -v
