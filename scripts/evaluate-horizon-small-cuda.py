@@ -37,6 +37,21 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def views(channels):
+    text, spans = h.envelope(channels)
+    out = [('ordered_envelope', text, spans)]
+    for i, channel in enumerate(channels):
+        out.append((f'raw_channel_{i}',channel,[{'channel':i,'start_char':0,'end_char':len(channel),
+                    'source_start_byte':0,'source_end_byte':len(channel.encode())}]))
+    return out
+
+
+def view_identity(name, text, spans, enc):
+    return {'view':name,'text_sha256':sha(text.encode()),'tokens':len(enc.ids),'source_spans':spans,
+            'token_ids_sha256':sha(json.dumps(enc.ids,separators=(',',':')).encode()),
+            'offsets_sha256':sha(json.dumps(enc.offsets,separators=(',',':')).encode())}
+
+
 def blob(path):
     return subprocess.check_output(['git', '-C', str(ROOT), 'show', '327b164ed54d921027253f9ced6621d27d8c8067:'+path])
 
@@ -118,6 +133,8 @@ def prepare(args):
             'envelope_sha256':sha(text.encode()), 'source_spans':spans, 'tokens':len(enc.ids),
             'token_ids_sha256':sha(json.dumps(enc.ids,separators=(',',':')).encode()),
             'offsets_sha256':sha(json.dumps(enc.offsets,separators=(',',':')).encode())})
+        frozen[-1]['views'] = [view_identity(name,value,parts,tok.encode(value,add_special_tokens=True))
+                               for name,value,parts in views(row['channels'])]
     args.output.mkdir(parents=True,exist_ok=False)
     raw = ''.join(json.dumps(r,ensure_ascii=True)+'\n' for r in rows).encode()
     (args.output/'requests.jsonl').write_bytes(raw)
@@ -129,6 +146,7 @@ def prepare(args):
         'threshold':0.5,'max_context':CONTEXT,'per_input_seconds':10,'startup_seconds':120,
         'future_data_score_ceiling':0.05,'future_runtime_total_ms_ceiling':1500,
         'future_eligibility_is_not_authority_or_calibrated_certainty':True,
+        'views':'complete ordered historical envelope AND every complete raw channel; max score only tightens; one total deadline',
         'windowing':False,'truncation':False,'warmup':'Warm-up: ordinary sample text.',
         'gate':'required supported raw classes correct; required benign score <=0.05; roundtrip <=1500ms; oversized unknown; stop on first failure; research hard ceiling remains 10s',
         'unsupported_not_utility_success':True,'production_authority':False})
@@ -180,6 +198,7 @@ def worker(assets):
         request = json.loads(line)
         begun = time.monotonic()
         torch.cuda.reset_peak_memory_stats()
+        view_results = []
         try:
             text, spans = h.envelope(request['channels'])
             enc = tokenizer.encode(text,add_special_tokens=True)
@@ -188,16 +207,28 @@ def worker(assets):
                 'token_ids_sha256':sha(json.dumps(enc.ids,separators=(',',':')).encode()),
                 'offsets_sha256':sha(json.dumps(enc.offsets,separators=(',',':')).encode()),
                 'windowed':False,'truncated':False}
-            if len(enc.ids)>CONTEXT:
+            encoded_views = [(name,value,parts,tokenizer.encode(value,add_special_tokens=True))
+                             for name,value,parts in views(request['channels'])]
+            common['views'] = [view_identity(name,value,parts,encoded) for name,value,parts,encoded in encoded_views]
+            if any(len(encoded.ids)>CONTEXT for _,_,_,encoded in encoded_views):
                 result = common | {'assessment':'unknown','reason':'unsupported_full_context','coverage_complete':False,'score':None}
             else:
-                raw = forward(enc.ids)
-                label, score = h.assessment(raw)
-                result = common | {'assessment':label,'score':score,'logits':raw,'reason':'full_cuda_sdpa_pass',
-                                   'coverage_complete':True,'token_range':[0,len(enc.ids)],'offsets':enc.offsets}
+                for name,value,parts,encoded in encoded_views:
+                    started = time.monotonic()
+                    raw = forward(encoded.ids)
+                    label, score = h.assessment(raw)
+                    view_results.append(view_identity(name,value,parts,encoded) | {'assessment':label,'score':score,
+                        'logits':raw,'coverage_complete':True,'token_range':[0,len(encoded.ids)],
+                        'offsets':encoded.offsets,'infer_ms':(time.monotonic()-started)*1000})
+                score = max(v['score'] for v in view_results)
+                result = common | {'assessment':'instruction' if score>=0.5 else 'data','score':score,
+                    'envelope_score':view_results[0]['score'],'envelope_assessment':view_results[0]['assessment'],
+                    'view_observations':view_results,'aggregation':'max over full envelope and each raw channel',
+                    'reason':'full_cuda_sdpa_all_views_pass','coverage_complete':True}
         except Exception as error:
             result = {'id':request['id'],'worker_pid':os.getpid(),'assessment':'unknown','reason':'worker_error',
-                      'error':type(error).__name__+': '+str(error),'coverage_complete':False,'score':None}
+                      'error':type(error).__name__+': '+str(error),'coverage_complete':False,'score':None,
+                      'completed_view_observations':view_results}
         result |= {'elapsed_ms':(time.monotonic()-begun)*1000,
             'gpu_allocated_bytes':torch.cuda.memory_allocated(),'gpu_reserved_bytes':torch.cuda.memory_reserved(),
             'gpu_peak_allocated_bytes':torch.cuda.max_memory_allocated(),
@@ -276,6 +307,7 @@ def run(args):
                 if result.get('reason') != 'worker_error':
                     for key in ('envelope_sha256','tokens','source_spans','token_ids_sha256','offsets_sha256'):
                         assert result[key] == frozen[key], key
+                    assert result['views'] == frozen['views'], 'complete view identity'
             except (TimeoutError,AssertionError) as e:
                 result = {'id':row['id'],'assessment':'unknown','reason':'deadline_or_transport_failure',
                           'coverage_complete':False,'error':str(e),'score':None,'worker_pid':current.p.pid}
