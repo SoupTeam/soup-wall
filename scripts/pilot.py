@@ -594,15 +594,36 @@ def bound_to(record, expected):
             and daemon[:2] == [expected["agentfw"], "serve"])
 
 
+def selected_policy_digest(expected, cwd):
+    """The selection's parsed `agent-policy-json/1` identity, computed offline
+    by the selected binary with the accepted policy parser."""
+    result = subprocess.run([expected["agentfw"], "protection-status", "--expect-policy-file", expected["policy"],
+        "--selected-policy-digest"], cwd=cwd, env={"PATH": "/usr/bin:/bin", "HOME": str(cwd), "LANG": "C.UTF-8"},
+        stdin=subprocess.DEVNULL, capture_output=True, timeout=8)
+    if result.returncode != 0 or len(result.stdout) > 4096:
+        return None
+    value = PREP.PILOT.strict_json(result.stdout)
+    digest = value.get("sha256")
+    if value.get("digest_format") != "agent-policy-json/1" or not re.fullmatch(r"[0-9a-f]{64}", str(digest)):
+        return None
+    return digest
+
+
 def authenticated(record, expected):
-    """The existing nonce-checked status query: this selection's exact binary
-    and registry, answered by the run's own daemon process, whose current
-    configuration (bound by the query's config digest) names this selection's
-    policy file with the selected bytes."""
+    """The existing nonce-checked status query, answered by the run's own
+    daemon process, for this selection's exact binary and registry and its
+    loaded policy: the active `agent-policy-json/1` digest must equal the
+    selected policy's parsed digest. The query also binds the daemon's
+    current configuration, which must name this selection's policy file."""
     home = Path(record["home"])
+    if sha(expected["policy"]) != expected["policy_sha256"]:
+        return None
+    policy_digest = selected_policy_digest(expected, home.parent)
+    if policy_digest is None:
+        return None
     query = subprocess.run([expected["agentfw"], "protection-status", "--home", str(home), "--query-only",
         "--require-enforce", "--expect-binary-sha256", expected["agentfw_sha256"],
-        "--expect-registry-sha256", expected["registry_sha256"]],
+        "--expect-registry-sha256", expected["registry_sha256"], "--expect-policy-sha256", policy_digest],
         cwd=home.parent, env={"PATH": "/usr/bin:/bin", "HOME": str(home.parent), "LANG": "C.UTF-8"},
         stdin=subprocess.DEVNULL, capture_output=True, timeout=8)
     if query.returncode != 0 or len(query.stdout) > 65536:
@@ -610,12 +631,13 @@ def authenticated(record, expected):
     snapshot = PREP.PILOT.strict_json(query.stdout)["snapshot"]
     config = PREP.PILOT.strict_json(PREP.bounded_file(home / "config.yaml", MAX_STATE).read_bytes())
     if (snapshot["runtime"]["pid"] != record["daemon_pid"] or config.get("enforce") is not True
+            or snapshot["policy"].get("digest_format") != "agent-policy-json/1"
+            or snapshot["policy"]["sha256"] != policy_digest
             or config.get("policy") != expected["policy"]
-            or config.get("native", {}).get("registry_sha256") != expected["registry_sha256"]
-            or sha(expected["policy"]) != expected["policy_sha256"]):
+            or config.get("native", {}).get("registry_sha256") != expected["registry_sha256"]):
         return None
     return {"daemon_pid": snapshot["runtime"]["pid"], "instance": snapshot["runtime"]["instance"],
-            "policy_digest": snapshot["policy"]["sha256"]}
+            "policy_digest": policy_digest}
 
 
 def live_runs(state_roots, expected):

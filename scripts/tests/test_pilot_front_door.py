@@ -278,7 +278,7 @@ class Status(unittest.TestCase):
         self.processes.append(process)
         return process.pid
 
-    def live_run(self, name, identity, daemon_policy=None, registry=None):
+    def live_run(self, name, identity, daemon_policy=None, registry=None, active_digest=None):
         """Owned processes whose argv is exactly what pilot-run starts."""
         directory = self.root / ("soup-wall-run-" + name)
         home = directory / ".agentfw"
@@ -299,9 +299,18 @@ class Status(unittest.TestCase):
         actual_registry = registry or identity["registry_sha256"]
         (home / "config.yaml").write_text(json.dumps({"enforce": True, "policy": daemon_policy or identity["policy"],
             "native": {"registry_sha256": actual_registry}}))
+        # Stand-in for the selected binary: offline mode prints the selection's
+        # parsed digest (here: a digest derived from the file); query mode
+        # returns the daemon's active digest, which a test may make differ.
+        selected = "7" * 63 + "1"
+        active = active_digest or selected
         snapshot = json.dumps({"snapshot": {"runtime": {"pid": daemon, "instance": "i-" + name},
-                                            "policy": {"sha256": "9" * 64}}})
-        (directory / "protection-status").write_text(f'[ "$8" = "{actual_registry}" ] || exit 2\necho \'{snapshot}\'\n')
+                                            "policy": {"digest_format": "agent-policy-json/1", "sha256": active}}})
+        (directory / "protection-status").write_text(
+            'if [ "$1" = "--expect-policy-file" ]; then\n'
+            f'  echo \'{{"digest_format": "agent-policy-json/1", "sha256": "{selected}"}}\'; exit 0\nfi\n'
+            f'[ "$8" = "{actual_registry}" ] || exit 2\n'
+            f'echo \'{snapshot}\'\n')
         (directory / "run.json").write_text(json.dumps({"format": "sw-prepared-pilot-run/1", "home": str(home),
             "supervisor_pid": supervisor, "launcher_pid": launcher, "daemon_pid": daemon, "port": 1}))
         import time
@@ -346,6 +355,15 @@ class Status(unittest.TestCase):
         other = self.expected("b")["policy"]
         self.live_run("policy", a, daemon_policy=other)
         self.live_run("registry", a, registry="0" * 64)
+        rows = self.rows(a)
+        self.assertEqual([(row["protection"], row["selection_match"]) for row in rows], [("unavailable", True)] * 2)
+        self.assertEqual(M.overall(rows, "configured"), "unavailable")
+        # Same path, same config, same binary and registry, but the daemon's
+        # authenticated active policy digest differs from the selection's:
+        # two distinct active policies can never both be reported live.
+        subprocess.run(["rm", "-rf", *[str(path) for path in self.root.glob("soup-wall-run-*")]])
+        for index, active in enumerate(("1" * 64, "2" * 64)):
+            self.live_run(f"active-{index}", a, active_digest=active)
         rows = self.rows(a)
         self.assertEqual([(row["protection"], row["selection_match"]) for row in rows], [("unavailable", True)] * 2)
         self.assertEqual(M.overall(rows, "configured"), "unavailable")

@@ -115,7 +115,7 @@ python3 -B "$repo/scripts/pilot.py" status --prefix "$prefix"
 
 | Protection | Meaning |
 | --- | --- |
-| `observed-live` | a run of **this prefix's selection** is live: its supervisor names this selection and commit, its launcher uses this selection's binary, policy, profiles and project roots, and its own daemon answered an authenticated `protection-status` query for this selection's binary and registry, configured with this policy |
+| `observed-live` | a run of **this prefix's selection** is live: its supervisor names this selection and commit, its launcher uses this selection's binary, Claude host, policy, profiles and project roots, and its own daemon answers an authenticated `protection-status` query for this selection's binary and registry whose active `agent-policy-json/1` digest equals the selected policy's parsed digest (computed offline by the selected binary with `--expect-policy-file ... --selected-policy-digest`) |
 | `configured-not-running` | a verified selection exists; nothing is protected until `run` |
 | `unavailable` | a run or selection exists but cannot protect now: its daemon does not answer, or the selection is stale |
 | `unknown` | state could not be read safely |
