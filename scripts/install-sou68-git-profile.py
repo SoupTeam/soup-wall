@@ -86,7 +86,7 @@ def registry(manifest, *, local_references=False, shallow_repository=False):
 
 
 def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
-            *, python_archive=None, wheelhouse=None, allow_download=True, log=None,
+            *, static_git=False, python_archive=None, wheelhouse=None, allow_download=True, log=None,
             local_references=False, shallow_repository=False):
     if local_references and shallow_repository:
         raise ValueError("combined Git capabilities are not qualified")
@@ -149,7 +149,9 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
                     *offline_args, "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
                    stdout=log, stderr=subprocess.STDOUT if log is not None else None)
     # Python extension modules may depend on libraries not used by its launcher.
-    elf_files = [python, git, git_launcher]
+    # The separate opt-in clone installer validates an interpreter-free ELF Git.
+    # Default v1 dependency discovery and all v1 CLI behavior remain unchanged.
+    elf_files = [python, git_launcher] if static_git else [python, git, git_launcher]
     elf_files.extend(path for path in (package / "python/lib").rglob("*.so") if path.is_file())
     profile = {"format": SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT,
                "workspace": str(workspace), "runtimePath": str(python),
