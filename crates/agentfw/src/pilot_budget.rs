@@ -1146,12 +1146,12 @@ mod tests {
 
     #[test]
     fn strict_binding_rejects_duplicate_fields_and_symlinks() {
-        let (temp, _binding, path) = fixture();
+        let (_temp, _binding, path) = fixture();
         fs::write(&path, br#"{"format":"x","format":"x"}"#).unwrap();
         assert!(private_json::<Binding>(&path).is_err());
         #[cfg(unix)]
         {
-            let link = temp.path().join("link");
+            let link = _temp.path().join("link");
             std::os::unix::fs::symlink(&path, &link).unwrap();
             assert!(private_json::<Binding>(&link).is_err());
         }
