@@ -1,0 +1,6 @@
+{
+  "worker_pid": 601724,
+  "supervisor_pid": 601595,
+  "startup_budget_seconds": 120,
+  "actual_child_process": true
+}
