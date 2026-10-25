@@ -134,7 +134,10 @@ private logs and process identities stay in disposable scratch.
 ## Host helper execution boundary
 
 The pinned Claude itself probes system Git during startup. Its trusted Bun
-preload is embedded in Agent and supplied through a sealed anonymous code FD.
+preload is embedded in Agent and supplied as a fixed inline data URL through the
+launcher-controlled Bun startup environment. No code pathname can be replaced
+between validation and loading; the bootstrap code contains no provider values.
+The separate inherited code descriptor remains anonymous and sealed.
 The host initial exec receives no provider values. Ambient Bun/Node preload
 settings are discarded; a private empty Bun configuration and disabled env-file
 loading prevent project configuration from selecting additional code.

@@ -239,7 +239,7 @@ def observe(text, paths, values, normalize, rejected=False):
                 code = env.get('AGENTFW_PROVIDER_CODE', '')
                 require(channel.isdecimal() and code.isdecimal() and int(channel) >= 3
                         and int(code) >= 3 and channel != code
-                        and '--preload=/proc/self/fd/' + code in env.get('BUN_OPTIONS', '')
+                        and '--preload=data:text/javascript;base64,' in env.get('BUN_OPTIONS', '')
                         and int(match[1]) not in hosts, 'provider_host_channel_unproven')
                 hosts[int(match[1])] = int(channel)
             leaked = {word.split('=', 1)[0] for word in environment
@@ -267,7 +267,7 @@ def observe(text, paths, values, normalize, rejected=False):
         # Raw read mode retains exact kernel counts without exporting unrelated
         # file contents or expanding source/module reads into huge private logs.
         reading = re.match(r'^(\d+)\s+read\((0x[0-9a-f]+|\d+),\s*0x[0-9a-f]+,\s*(?:0x[0-9a-f]+|\d+)\)\s*=\s*(0x[0-9a-f]+|\d+)\s*$', row)
-        if reading and hosts.get(int(reading[1])) == int(reading[2], 0):
+        if reading and int(reading[1]) not in closed and hosts.get(int(reading[1])) == int(reading[2], 0):
             reads.append((int(reading[1]), int(reading[3], 0)))
         closing = re.match(r'^(\d+)\s+close\((\d+)\)\s*=\s*0\s*$', row)
         if closing and hosts.get(int(closing[1])) == int(closing[2]) and any(pid == int(closing[1]) for pid, _ in reads):

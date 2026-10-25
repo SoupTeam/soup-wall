@@ -10,6 +10,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{ensure, Context, Result};
+use base64::{engine::general_purpose::STANDARD, Engine};
 
 pub(crate) struct Bootstrap {
     parent: UnixDatagram,
@@ -83,8 +84,11 @@ impl Bootstrap {
             .env(
                 "BUN_OPTIONS",
                 format!(
-                    "--preload=/proc/self/fd/{} --config={} --no-env-file",
-                    code.as_raw_fd(),
+                    "--preload=data:text/javascript;base64,{} --config={} --no-env-file",
+                    STANDARD.encode([
+                        b"import {createRequire} from \"node:module\"; const require=createRequire(\"file:///agentfw-provider-preload.cjs\");\n".as_slice(),
+                        include_bytes!("provider_preload.cjs").as_slice(),
+                    ].concat()),
                     config.display()
                 ),
             )
@@ -227,6 +231,23 @@ assert json.loads(s.recv(16385)) == {'ANTHROPIC_API_KEY':'owned-channel-canary'}
         assert!(!command
             .get_envs()
             .any(|(key, _)| super::super::PROVIDER_ENV.contains(&key.to_str().unwrap())));
+        let startup = command
+            .get_envs()
+            .find(|(key, _)| *key == "BUN_OPTIONS")
+            .unwrap()
+            .1
+            .unwrap()
+            .to_str()
+            .unwrap();
+        let encoded = startup
+            .strip_prefix("--preload=data:text/javascript;base64,")
+            .unwrap()
+            .split(' ')
+            .next()
+            .unwrap();
+        let bytes = STANDARD.decode(encoded).unwrap();
+        assert!(bytes.ends_with(include_bytes!("provider_preload.cjs")));
+        assert!(!startup.contains("owned-channel-canary"));
         let mut child = command.spawn().unwrap();
         bootstrap.deliver(child.id()).unwrap();
         assert!(child.wait().unwrap().success());

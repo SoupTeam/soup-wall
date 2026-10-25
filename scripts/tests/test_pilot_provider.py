@@ -195,7 +195,7 @@ class IndependentExecEvidence(unittest.TestCase):
         rows = []
         roles = [('/usr/bin/python3', ['python3', '/owned/scripts/pilot-run.py'], values),
                  ('/owned/claude', ['claude', '--restricted', '-p', 'owned prompt'], {'AGENTFW_PROVIDER_CHANNEL':'23',
-                     'AGENTFW_PROVIDER_CODE':'24', 'BUN_OPTIONS':'--preload=/proc/self/fd/24'})]
+                     'AGENTFW_PROVIDER_CODE':'24', 'BUN_OPTIONS':'--preload=data:text/javascript;base64,dHJ1c3RlZA=='})]
         roles += [('/owned/agentfw', ['agentfw', role], {})
                   for role in ('serve', 'pilot-launch', 'mcp', 'protection-status')]
         roles += [('/mcp-runtime/node', ['node', 'server.js'], {}),
@@ -209,6 +209,8 @@ class IndependentExecEvidence(unittest.TestCase):
         normalize = lambda text: (text.splitlines(), {})
         result = witness.observe('\n'.join(rows), paths, values, normalize)
         self.assertEqual(result['unrelated_provider_values'], 0)
+        # Descriptor reuse after the authenticated channel closes carries no IPC scope.
+        self.assertEqual(witness.observe('\n'.join(rows + ['11 read(0x17, 0x987abc, 0x4001) = 0x50']), paths, values, normalize)['unrelated_provider_values'], 0)
         self.assertEqual(result['successful_exec_counts']['classifier'], 1)
         self.assertFalse(any(value in json.dumps(result) for value in values.values()))
         for missing in [rows[:-4], rows[:-2] + [rows[-2].replace('11 read', '99 read'), rows[-1]],
