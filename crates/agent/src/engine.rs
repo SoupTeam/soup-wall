@@ -415,6 +415,16 @@ impl AgentFirewall {
     /// The daemon must revalidate the delivery and current authority/policy
     /// after review. All independent detectors and policy floors still run.
     pub fn preview_native_result_after_data_review(&mut self, ev: &AgentEvent) -> Outcome {
+        self.preview_native_result_after_data_review_with_positive(ev, &[])
+    }
+
+    /// Same private review binding; additional original-delivery positives
+    /// cannot be erased by the complete-content reviewer.
+    pub fn preview_native_result_after_data_review_with_positive(
+        &mut self,
+        ev: &AgentEvent,
+        positive: &[Finding],
+    ) -> Outcome {
         let reviewed = matches!(
             ev.kind,
             EventKind::ToolResult {
@@ -422,7 +432,27 @@ impl AgentFirewall {
                 ..
             }
         );
-        self.inspect_inner_content(ev, None, false, reviewed)
+        self.inspect_inner_content(ev, None, false, reviewed, Some((None, positive)))
+    }
+
+    /// Trusted native creator only: spans are positively attributed fixed
+    /// formatter bytes bound to this exact delivery, not a safety assertion.
+    pub fn preview_native_attributed_result(
+        &mut self,
+        ev: &AgentEvent,
+        spans: &[std::ops::Range<usize>],
+        positive: &[Finding],
+    ) -> Outcome {
+        if !matches!(
+            &ev.kind,
+            EventKind::ToolResult {
+                source: crate::event::Provenance::McpServer { .. },
+                ..
+            }
+        ) {
+            return self.preview_native_result(ev);
+        }
+        self.inspect_inner_content(ev, None, false, false, Some((Some(spans), positive)))
     }
 
     /// Compatibility recorder for content already admitted by a legacy caller.
@@ -475,7 +505,7 @@ impl AgentFirewall {
         native: Option<(ActionClass, &[String], NativeArgumentRoles)>,
         record_results: bool,
     ) -> Outcome {
-        self.inspect_inner_content(ev, native, record_results, false)
+        self.inspect_inner_content(ev, native, record_results, false, None)
     }
 
     fn inspect_inner_content(
@@ -484,6 +514,7 @@ impl AgentFirewall {
         native: Option<(ActionClass, &[String], NativeArgumentRoles)>,
         record_results: bool,
         reviewed_result_data: bool,
+        result_evidence: Option<(Option<&[std::ops::Range<usize>]>, &[Finding])>,
     ) -> Outcome {
         // Lifecycle events only mutate state.
         match &ev.kind {
@@ -511,7 +542,11 @@ impl AgentFirewall {
                 soup_wall_core::Direction::Output => Context::output(text),
             };
             for det in &self.detectors {
-                let detected = if reviewed_result_data && *facet == Facet::ToolResult {
+                let detected = if let Some((Some(spans), _)) =
+                    result_evidence.filter(|_| *facet == Facet::ToolResult)
+                {
+                    det.inspect_attributed_result(&ctx, spans)
+                } else if reviewed_result_data && *facet == Facet::ToolResult {
                     det.inspect_reviewed_result_data(&ctx)
                 } else {
                     det.inspect(&ctx)
@@ -520,6 +555,9 @@ impl AgentFirewall {
                     findings.push((*facet, f));
                 }
             }
+        }
+        if let Some((_, positive)) = result_evidence {
+            findings.extend(positive.iter().cloned().map(|f| (Facet::ToolResult, f)));
         }
         // Dedupe before scoring. `score_findings` is noisy-OR
         // (`1 - Π(1 - weight·confidence)`), so N copies of the SAME signal compound
@@ -747,6 +785,43 @@ impl AgentFirewall {
 mod tests {
     use super::*;
     use crate::event::{EventKind, Provenance};
+
+    #[test]
+    fn untrusted_source_claim_is_not_a_native_attribution_context() {
+        let policy=crate::AgentPolicySet::from_yaml("agent_policies:\n  - name: refuse\n    when: { detector: injection, facet: tool_result }\n    action: deny\ndefault: allow\n").unwrap();
+        let mut firewall = AgentFirewall::new(policy, 1024);
+        let content = "ordinary\n---\nmore\n---\nend\n---\n".to_string();
+        let spans = content
+            .match_indices("---")
+            .map(|(i, _)| i..i + 3)
+            .collect::<Vec<_>>();
+        for source in [
+            Provenance::UserPrompt,
+            Provenance::LocalProject,
+            Provenance::Network {
+                host: "untrusted.invalid".into(),
+            },
+        ] {
+            let ev = AgentEvent {
+                session: "proof".into(),
+                agent: "main".into(),
+                parent: None,
+                seq: 1,
+                at_ms: 0,
+                kind: EventKind::ToolResult {
+                    tool: "read_multiple_files".into(),
+                    content: content.clone(),
+                    source,
+                },
+            };
+            assert_eq!(
+                firewall
+                    .preview_native_attributed_result(&ev, &spans, &[])
+                    .verdict,
+                Verdict::Deny
+            );
+        }
+    }
 
     fn fw() -> AgentFirewall {
         AgentFirewall::with_default_policy()

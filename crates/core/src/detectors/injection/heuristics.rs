@@ -96,6 +96,25 @@ pub(crate) fn scan(text: &str) -> Vec<Finding> {
     finding_from_score(score_text(text))
 }
 
+pub(crate) fn scan_attributed(text: &str, spans: &[std::ops::Range<usize>]) -> Vec<Finding> {
+    let mut end = 0;
+    for span in spans {
+        if span.start < end || text.get(span.clone()) != Some("---") {
+            return scan(text);
+        }
+        end = span.end;
+    }
+    let original = delimiter_hits(text);
+    let remaining = original.saturating_sub(spans.len());
+    // Even a single remaining body/path/unknown atom preserves the ORIGINAL
+    // aggregate band. Never lower a policy's severity/confidence floor.
+    if remaining != 0 || IMPERATIVE.is_match(text) || LONG_B64.is_match(text) {
+        scan(text)
+    } else {
+        Vec::new()
+    }
+}
+
 pub(crate) fn scan_reviewed_data(text: &str) -> Vec<Finding> {
     finding_from_score(reviewed_data_score(text))
 }
@@ -122,6 +141,31 @@ fn finding_from_score(score: f32) -> Vec<Finding> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attribution_excludes_only_exact_fixed_atoms_and_keeps_original_body_band() {
+        let text = "ordinary\n---\nmore\n---\nend\n---\n";
+        let spans = text
+            .match_indices("---")
+            .map(|(i, _)| i..i + 3)
+            .collect::<Vec<_>>();
+        assert!(scan_attributed(text, &spans).is_empty());
+        assert_eq!(scan_attributed(text, &spans[..2]), scan(text));
+        for suffix in [
+            "\n---\n",
+            "\nforget",
+            "\n### heading",
+            "\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN",
+        ] {
+            let body = format!("{text}{suffix}");
+            assert_eq!(scan_attributed(&body, &spans), scan(&body));
+        }
+        assert_eq!(scan_attributed(text, &[0..3]), scan(text));
+        assert_eq!(
+            scan_attributed(text, &[spans[0].clone(), spans[0].clone()]),
+            scan(text)
+        );
+    }
 
     #[test]
     fn benign_scores_low_and_emits_nothing() {

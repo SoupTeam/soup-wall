@@ -1,0 +1,17 @@
+{
+  "input_sha256": "d6924f6b08af5cee2a2f57171f0b68b023d607634aca3e00f6d394402c64c828",
+  "case_count": 9,
+  "expected_benign": 6,
+  "expected_attacks": 3,
+  "unsupported_benign": 2,
+  "source_requests_sha256": "00249bf7946492047322ec7493bcb7c674e37d8a51b3305491668145d02be9de",
+  "fixed_file_hash_scope": "Git LF text for fixed source/policy files only; all case/frame/channel bytes remain exact",
+  "fixed_files": {
+    "profiles/mcp/filesystem-readonly-v1/policy.yaml": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+    "profiles/mcp/git-readonly-v1/policy.yaml": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c",
+    "crates/core/src/detectors/injection/signatures.rs": "e4b2a2d3d27e55bbc3336d2e34d427bd607dbc22ee2b6f369a834dfcd0c86397",
+    "rule_baseline/rule_baseline.py": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+  },
+  "labels": "unchanged prior frozen expected data/instruction; no result-dependent relabelling",
+  "model_calls": 0
+}

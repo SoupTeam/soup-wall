@@ -11,6 +11,16 @@ pub trait Detector: Send + Sync {
     /// Inspect `ctx` and return zero or more findings.
     fn inspect(&self, ctx: &Context) -> Vec<Finding>;
 
+    /// Trusted native result boundary only. Ranges attribute fixed formatter
+    /// separators, never body safety or authority. No wire field selects this.
+    fn inspect_attributed_result(
+        &self,
+        ctx: &Context,
+        _: &[std::ops::Range<usize>],
+    ) -> Vec<Finding> {
+        self.inspect(ctx)
+    }
+
     /// Inspect a native MCP result after a trusted local, content-sensitive
     /// reviewer has affirmatively classified the complete original delivery
     /// as data. Callers must bind the review to every original channel; format,

@@ -1,0 +1,16 @@
+{
+  "formatter_package": "mcp-server-git",
+  "version": "2026.10.10",
+  "formatter_source_sha256": "02bf93b1c14e42cff8038297234c26d3b7485a8fa70ae1d19fb1a2d0cccbf0bd",
+  "runtime_git": "git version 2.43.0",
+  "qualification": "direct official function counterexample, not protected pinned-Git runtime acceptance",
+  "selector": {
+    "repo_path": "/workspace",
+    "revision": "da72a31c99ce50975cf2cc66b105e4c0cb6581ee"
+  },
+  "resolved_object_kind": "blob",
+  "returned_text_sha256": "62067547d8c014ce56579f2edc8ae7bd482c65f3a1bc7fd32148f054634fe04d",
+  "equals_original_multifile_git_show_channel": true,
+  "limitation": "Formatter returns arbitrary blob bytes verbatim as well as commit patches. Current daemon receipt has no independently verified resolved object-kind/snapshot witness; format-looking lines alone cannot be given formatter attribution. No Git relief added; original git_show remains a gap.",
+  "model_calls": 0
+}

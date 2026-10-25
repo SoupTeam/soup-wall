@@ -27,6 +27,7 @@ pub mod pilot_cleanup;
 pub mod pilot_stop;
 pub mod resource;
 pub mod resource_approval;
+mod result_evidence;
 pub mod workspace;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -1730,6 +1731,11 @@ fn result_review_candidate(
             && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
             && matches!(tool.result_provenance, ResultProvenance::Untrusted)
     })?;
+    // This formatter now has a positive, daemon-derived attribution contract.
+    // Ambiguity/failure must keep baseline, never fall through to an ML permit.
+    if result_evidence::target(tool) {
+        return None;
+    }
     let texts = selected_result_texts(tool, request).ok()?;
     if texts
         .iter()
@@ -2932,17 +2938,37 @@ fn inspect_bound_at(
         && request.result_kind.as_deref() == Some("value")
         && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
         && permit.is_some_and(|permit| permit.matches(&texts));
+    let attributed_target = result_evidence::target(tool);
+    let attribution = result_evidence::ResultEvidence::derive(tool, &request, &call, &texts);
+    let attributed_spans = attribution
+        .as_ref()
+        .and_then(|e| e.spans(tool, &request, &call, &texts));
+    let mcp_evidence =
+        mcp_host_result(&request) && matches!(tool.result_provenance, ResultProvenance::Untrusted);
+    let positive = if mcp_evidence {
+        soup_wall_core::InjectionDetector::ordered_result_evidence(&texts)
+    } else {
+        Vec::new()
+    };
     let mut review_used = false;
-    for text in texts {
+    for (block_index, text) in texts.into_iter().enumerate() {
         session.seq += 1;
         let ev = session.event(EventKind::ToolResult {
             tool: name.into(),
             content: text,
             source: provenance.clone(),
         });
-        let outcome = if complete_data && firewall.native_result_needs_data_review(&ev) {
+        let outcome = if attributed_target {
+            firewall.preview_native_attributed_result(
+                &ev,
+                attributed_spans.map_or(&[], |all| all[block_index].as_slice()),
+                &positive,
+            )
+        } else if complete_data && firewall.native_result_needs_data_review(&ev) {
             review_used = true;
-            firewall.preview_native_result_after_data_review(&ev)
+            firewall.preview_native_result_after_data_review_with_positive(&ev, &positive)
+        } else if mcp_evidence {
+            firewall.preview_native_attributed_result(&ev, &[], &positive)
         } else {
             firewall.preview_native_result(&ev)
         };
@@ -3054,6 +3080,11 @@ fn inspect_bound_at(
             .reason_codes
             .push("native_result_data_review_base".into());
     }
+    if attributed_spans.is_some() {
+        response
+            .reason_codes
+            .push("native_fixed_formatter_attribution".into());
+    }
     audit(
         st,
         &request,
@@ -3144,6 +3175,16 @@ fn audit(
     if response
         .reason_codes
         .iter()
+        .any(|code| code == "native_fixed_formatter_attribution")
+    {
+        record["result_evidence"] = json!({"format":"sw-result-format-evidence/1",
+            "formatter_entrypoint_sha256": result_evidence::FORMATTER,
+            "scope":"fixed formatter separators only; not body trust or permission",
+            "coverage_complete":true});
+    }
+    if response
+        .reason_codes
+        .iter()
         .any(|code| code == "native_result_data_review_base")
     {
         record["result_data_review"] = json!({
@@ -3186,6 +3227,7 @@ fn audit(
 mod tests {
     use super::*;
     mod literal_arguments;
+    mod result_evidence_tests;
     mod result_review_tests;
     use crate::{
         audit::AuditSink,
