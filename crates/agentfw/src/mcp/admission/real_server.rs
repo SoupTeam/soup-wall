@@ -1632,6 +1632,14 @@ pub(super) async fn run(
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("install selected collector termination handler")?;
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
+    let selected_budget = collector.prepared_budget.as_ref();
+    ensure!(
+        selected_budget.is_some() || std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
+        "pilot_budget_binding_required"
+    );
+    let mut budget_record = selected_budget
+        .map(|selection| selection.reserve(&collector.config.server_id))
+        .transpose()?;
     // Register before even preparing/starting the selected owner's namespace.
     // Stop spends grants under the same native lock, so a late registration
     // cannot start a server after an unenrolled grant was revoked.
@@ -1645,7 +1653,10 @@ pub(super) async fn run(
     if let Some(owner) = cleanup_owner {
         owner.pilot_cleanup("begin").await?;
     }
-    let prepared = match server_sandbox::prepare(profile) {
+    let prepared = match server_sandbox::prepare_with_budget(
+        profile,
+        selected_budget.map(crate::pilot_budget::VerifiedSelection::bound),
+    ) {
         Ok(prepared) => prepared,
         Err(error) => {
             if let Some(owner) = cleanup_owner {
@@ -1698,6 +1709,9 @@ pub(super) async fn run(
         let transport = async {
             attached?;
             owner.check()?;
+            if let (Some(record), Some(budget)) = (&mut budget_record, &budget) {
+                record.record(budget.metadata(), false)?;
+            }
             let stderr = process
                 .stderr
                 .take()
@@ -1879,6 +1893,11 @@ pub(super) async fn run(
     // Only the existing independent owner/budget/reap/stderr boundaries can
     // discharge this obligation. A transport error (including revoked lease)
     // does not prevent cleanup confirmation, and a failed boundary never does.
+    let record_result = if let (Some(record), Some(budget)) = (&mut budget_record, &budget) {
+        record.record(budget.metadata(), true)
+    } else {
+        Ok(())
+    };
     let cleanup_confirmation = if cleanup.is_ok()
         && stderr_cleanup.is_ok()
         && budget_cleanup.is_ok()
@@ -1893,6 +1912,7 @@ pub(super) async fn run(
         Err(anyhow::anyhow!("pilot_cleanup_unconfirmed"))
     };
     cleanup_confirmation?;
+    record_result?;
     operation?;
     budget_check?;
     owner_check?;

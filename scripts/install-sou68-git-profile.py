@@ -138,16 +138,23 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
         raise ValueError("Python distribution digest mismatch")
     extract_python(archive, package)
     python = package / "python/bin/python3.11"
-    env = {"PATH": os.environ.get("PATH", ""), "HOME": str(destination), "LANG": "C.UTF-8"}
+    tmp = Path(os.environ.get("TMPDIR", destination / "tmp")).resolve()
+    tmp.mkdir(mode=0o700, exist_ok=True)
+    env = {"PATH": os.environ.get("PATH", ""), "HOME": str(destination),
+           "TMPDIR": str(tmp), "TEMP": str(tmp), "TMP": str(tmp), "LANG": "C.UTF-8"}
     if subprocess.check_output([str(python), "-I", "--version"], env=env, text=True, timeout=10).strip() != "Python " + identity["python"]["version"]:
         raise ValueError("Python version mismatch")
     if not allow_download and wheelhouse is None:
         raise ValueError("local wheelhouse is required without explicit downloads")
     offline_args = ["--no-index", "--find-links", str(Path(wheelhouse).resolve(strict=True))] if not allow_download else []
-    subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", "--require-hashes",
-                    "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
-                    *offline_args, "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
-                   stdout=log, stderr=subprocess.STDOUT if log is not None else None)
+    try:
+        subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", "--require-hashes",
+                        "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
+                        *offline_args, "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
+                       stdout=log, stderr=subprocess.STDOUT if log is not None else None)
+    finally:
+        if tmp == (destination / "tmp").resolve():
+            shutil.rmtree(tmp, ignore_errors=True)
     # Python extension modules may depend on libraries not used by its launcher.
     # The separate opt-in clone installer validates an interpreter-free ELF Git.
     # Default v1 dependency discovery and all v1 CLI behavior remain unchanged.

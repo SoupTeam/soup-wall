@@ -1003,6 +1003,7 @@ pub struct Collector<'a> {
     config: &'a AdmissionCfg,
     host_session: Option<String>,
     child_authority: Option<String>,
+    prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
     client: reqwest::Client,
     session: String,
     pub liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
@@ -1026,6 +1027,7 @@ impl<'a> Collector<'a> {
             config,
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
+            prepared_budget: None,
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
@@ -3327,7 +3329,15 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
 }
 
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
+    run_with_budget(config, None).await
+}
+
+pub async fn run_with_budget(
+    config: AdmissionCfg,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+) -> anyhow::Result<()> {
     let mut collector = Collector::new(&config)?;
+    collector.prepared_budget = selected;
     let env_liveness_flag = std::env::var("AGENTFW_NATIVE_LIVENESS").ok().map(|v| {
         let v = v.trim().to_ascii_lowercase();
         v != "0" && v != "false" && v != "no" && v != "off"
