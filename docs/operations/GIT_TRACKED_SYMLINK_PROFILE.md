@@ -110,6 +110,24 @@ and filesystem/kernel errors also remain fail-closed.
 
 ## Targeted native reproduction
 
+For hosted Linux acceptance, manually dispatch the existing **Real Git MCP
+profile** workflow from the exact candidate branch with only
+`tracked_symlinks_only=true`; keep `local_refs_only=false` and
+`shallow_only=false`. Any pair or triple of selectors is refused. This opt-in
+mode reuses the existing Ubuntu 22.04 job and pinned runtime provisioning,
+runs only the tracked-symlink regressions/acceptance, and retains
+`sou150-acceptance/` plus its log in the existing evidence artifact. Ordinary
+qualification and previous manual selectors retain their behavior. The
+workflow's source SHA must match the report; a later source change needs new
+qualification. Required CI/admission/main integration remains TL work.
+
+The default-profile negative control first proves an actual useful original
+v1 read on a link-free, v1-compatible fixture with its own matching registry,
+policy and daemon. It then adds an indexed link without changing those inputs
+and requires the specific repository-link diagnostic before server startup;
+a generic startup error is never accepted as this proof. Removing the owned
+link restores a byte-identical useful default read.
+
 This command is opt-in; CI/admission integration belongs to TL. Use a clean exact
 candidate checkout and fresh evidence outside it. Provision the pinned static
 Git and bubblewrap through the existing reviewed procedure. Then build the

@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Explicit identity/selection controls. Native containment is tested separately."""
 import importlib.util
+import ast
+import itertools
+import re
 import json
 from pathlib import Path
 import os
@@ -126,6 +129,63 @@ class NativeDriverTests(unittest.TestCase):
             self.assertIn(b"synthetic staged text", git("diff", "--cached"))
             self.assertIn(b"synthetic changed text", git("diff"))
             self.assertIn(b"120000", git("show", "HEAD"))
+
+
+class DefaultRefusalEvidenceTests(unittest.TestCase):
+    def test_unrelated_startup_failure_or_success_never_proves_link_refusal(self):
+        marker = NATIVE.DEFAULT_LINK_REFUSAL
+        for code, stderr in [(1, b"registry authority mismatch"), (1, b"unsupported config"),
+                             (0, marker), (1, marker + b'\n{"event":"mcp_real_server_start"}')]:
+            with self.subTest(code=code, stderr=stderr):
+                result = subprocess.CompletedProcess([], code, b"", stderr)
+                with self.assertRaisesRegex(ValueError, "specific repository diagnostic"):
+                    NATIVE.require_default_link_refusal(result)
+        NATIVE.require_default_link_refusal(subprocess.CompletedProcess([], 1, b"", b"Error: " + marker))
+
+
+class ManualSelectorTests(unittest.TestCase):
+    workflow = ROOT / ".github/workflows/mcp-real-git.yml"
+    flags = ("local_refs_only", "shallow_only", "tracked_symlinks_only")
+    broad = ("Pilot selection and policy controls", "Git and existing filesystem regressions",
+             "Actual Git server and independent OS isolation", "SOU-98 same-preset original-server acceptance",
+             "SOU-107 opt-in local-clone acceptance", "Required persistent onboarding of the installed Git profile")
+    lanes = ("Opt-in local branch and tag acceptance", "Opt-in shallow Git acceptance", "Opt-in tracked-symlink Git acceptance")
+
+    def condition(self, name, selected, event="workflow_dispatch"):
+        text = self.workflow.read_text()
+        step = re.search(r"(?ms)^      - name: " + re.escape(name) + r"\n(.*?)(?=^      - |\Z)", text)
+        self.assertIsNotNone(step)
+        expression = re.search(r"(?m)^        if: (.+)$", step[1])[1]
+        expression = expression.removeprefix("${{").removesuffix("}}")
+        for flag, value in zip(self.flags, selected):
+            expression = expression.replace("inputs." + flag, repr(value))
+        expression = expression.replace("github.event_name", repr(event))
+        expression = expression.replace("&&", " and ").replace("||", " or ").replace("!", " not ").strip()
+        tree = ast.parse(expression, mode="eval")
+        allowed = (ast.Expression, ast.BoolOp, ast.UnaryOp, ast.Compare, ast.Constant, ast.And, ast.Or, ast.Not, ast.Eq)
+        self.assertTrue(all(isinstance(node, allowed) for node in ast.walk(tree)), "only bounded selector expressions")
+        return bool(eval(compile(tree, "<workflow condition>", "eval"), {"__builtins__": {}}, {}))
+
+    def test_all_pairs_and_triple_refuse_and_single_modes_remain_separate(self):
+        for selected in itertools.product((False, True), repeat=3):
+            with self.subTest(selected=selected):
+                refused = self.condition("Refuse unqualified combined capability selection", selected)
+                self.assertEqual(refused, sum(selected) > 1)
+                if refused:
+                    continue
+                expected_broad = not any(selected)
+                self.assertTrue(all(self.condition(name, selected) == expected_broad for name in self.broad))
+                actual = [self.condition(name, selected) for name in self.lanes]
+                self.assertEqual(actual, [True, True, False] if expected_broad else list(selected))
+
+    def test_new_lane_requires_explicit_manual_selection_and_isolated_concurrency(self):
+        name = self.lanes[-1]
+        self.assertFalse(self.condition(name, (False, False, False)))
+        self.assertFalse(self.condition(name, (False, False, True), event="pull_request"))
+        text = self.workflow.read_text()
+        self.assertRegex(text, r"(?s)tracked_symlinks_only:\n        description:[^\n]+\n        type: boolean\n        default: false")
+        self.assertIn("inputs.tracked_symlinks_only && '-tracked-symlinks'", text)
+        self.assertIn('--expected-commit "${{ github.sha }}"', text)
 
 
 if __name__ == "__main__":

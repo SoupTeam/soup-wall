@@ -185,20 +185,88 @@ def late_changes(stack, report):
             "late-state controls did not reach the actual original server")
 
 
+DEFAULT_LINK_REFUSAL = b"Git repository links and special files are unsupported"
+
+
+def require_default_link_refusal(result):
+    require(result.returncode != 0 and DEFAULT_LINK_REFUSAL in result.stderr
+            and b'"event":"mcp_real_server_start"' not in result.stderr,
+            "default link refusal lacks its specific repository diagnostic")
+
+
 def default_refusal(stack, report):
+    """Calibrate v1 with its own valid fixture/registry, then change only links."""
+    private = stack.workspace.parent / "default-control"
+    private.mkdir(mode=0o700)
+    home, workspace = private / "home", private / "workspace"
+    home.mkdir(mode=0o700)
+    env = BASE.environment(home)
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0")
+    V1.prepare_repo(workspace, stack.git, env)
     profile = json.loads((stack.install / "profile.json").read_text())
-    profile["format"] = "sw-mcp/git-readonly/1"
-    path = stack.root / "default-profile.json"
-    write(path, profile)
+    profile.update(format=V1.INSTALL.FORMAT, workspace=str(workspace))
+    profile_path, registry_path = private / "profile.json", private / "registry.json"
+    write(profile_path, profile)
+    manifest = json.loads((V1.INSTALL.ASSETS / "upstream-tools-list.json").read_text())
+    write(registry_path, V1.INSTALL.registry(manifest))
+    port = BASE.DEMO.free_port()
+    policy = V1.INSTALL.ASSETS / "policy.yaml"
+    subprocess.run([str(stack.binary), "install"], env=env, stdin=subprocess.DEVNULL, capture_output=True, check=True, timeout=30)
+    write(home / ".agentfw/config.yaml", {"port": port, "enforce": True, "max_record_bytes": 1048576,
+        "policy": str(policy), "native": {"registry_path": str(registry_path), "registry_sha256": sha(registry_path)}})
+    env.update(AGENTFW_MCP_SERVER_PROFILE=str(profile_path), AGENTFW_WORKSPACE=str(workspace),
+               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_CLASSIFIER_PYTHON=sys.executable,
+               AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"))
     python = str(stack.install / "package/python/bin/python3.11")
-    result = subprocess.run([str(stack.binary), "mcp", "--native-admission", "--id", "sou150-default", "--",
-        python, "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"],
-        env=dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(path)), cwd=stack.workspace,
-        input=b"", capture_output=True, timeout=20)
-    (stack.root / "default-refusal.log").write_bytes(result.stderr)
-    require(result.returncode != 0 and b'mcp_real_server_start' not in result.stderr,
-            "default profile gained link-containing repository authority")
-    report["default_refused_before_startup"] = True
+    command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou150-default", "--",
+               python, "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
+    state = {"profile_sha256": sha(profile_path), "registry_sha256": sha(registry_path),
+             "policy_sha256": sha(policy), "profile": profile["format"]}
+    report["default_control"] = state
+    daemon = None
+    with (stack.root / "default-daemon.log").open("wb") as daemon_log:
+        try:
+            daemon = subprocess.Popen([str(stack.binary), "serve"], env=env, stdout=daemon_log, stderr=daemon_log)
+            require(BASE.DEMO.wait_healthy(port, daemon), "default control daemon unavailable")
+            def useful(label):
+                before = BASE.snapshot(workspace)
+                with (stack.root / (label + ".log")).open("wb") as log:
+                    client = V1.Client(command, env, workspace, log, "default v1 positive control")
+                    try:
+                        client.initialize()
+                        result, raw = client.exchange(V1.call(10, "git_log", {"max_count": 1}))
+                        require("SOU-68 synthetic initial commit" in V1.text(result), "default link-free useful read failed")
+                    finally:
+                        client.close()
+                        state[label] = client.transcript()
+                require(client.process_witness.final["all_stopped"], "default control descendants remain")
+                require(BASE.snapshot(workspace) == before, "default control read changed repository")
+                return raw
+            original = useful("default-link-free")
+            index = workspace / ".git/index"
+            original_index = index.read_bytes()
+            link = workspace / "tracked-link"
+            link.symlink_to("notes.txt")
+            control = SimpleNamespace(workspace=workspace, git=stack.git, env=env)
+            git(control, "add", "tracked-link")
+            require(b"120000" in git(control, "ls-files", "--stage", "tracked-link"), "negative link is not tracked")
+            before = BASE.snapshot(workspace)
+            request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "sou150-default-negative", "version": "1"}}}).encode() + b"\n"
+            result = subprocess.run(command, env=env, cwd=workspace, input=request, capture_output=True, timeout=20)
+            (stack.root / "default-refusal.log").write_bytes(result.stderr)
+            state.update(exit_code=result.returncode, diagnostic=result.stderr.decode("utf-8", "replace"))
+            require_default_link_refusal(result)
+            require(BASE.snapshot(workspace) == before, "default refusal changed owned tracked-link fixture")
+            link.unlink()
+            index.write_bytes(original_index)
+            require(useful("default-restored") == original, "default continuation payload changed")
+            report["default_refused_before_startup"] = True
+        finally:
+            if daemon is not None:
+                BASE.DEMO.stop(daemon)
+                state["daemon_stopped"] = daemon.poll() is not None
+                require(state["daemon_stopped"], "default control daemon remains")
 
 
 def run(args):
@@ -232,6 +300,8 @@ def run(args):
             require(positive.returncode == 0 and b"SOU150_LATE_RACE_OS_MARKER_PASSED" in positive.stdout
                     and b"1 passed; 0 failed" in positive.stdout, "independent late/racing OS marker proof failed")
             report["sandbox_positive"] = True
+            default_refusal(SimpleNamespace(root=output, binary=args.agentfw, git=args.git,
+                                           workspace=workspace, install=install), report)
             subprocess.run([str(args.agentfw), "install"], env=env, stdin=subprocess.DEVNULL, capture_output=True, check=True, timeout=30)
             port = BASE.DEMO.free_port()
             config, selection = INSTALL.prepare(install, output / "selection", port)
@@ -242,7 +312,6 @@ def run(args):
                 require(BASE.DEMO.wait_healthy(port, daemon), "owned enforcing daemon failed")
                 stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace,
                                         install=install, env=env, selection=selection)
-                default_refusal(stack, report)
                 byte_reads(stack, report)
                 late_changes(stack, report)
             require(INSTALL.SHARED.V1.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"], "original package changed")
