@@ -84,3 +84,7 @@ scripts/probe-result-content-collision.py text eol=lf
 scripts/prepare-result-content-main.py text eol=lf
 docs/operations/evidence/sou109-content-collision/** text eol=lf
 docs/operations/evidence/sou109-content-collision/*.jsonl -text
+scripts/evaluate-horizon-small-cuda.py text eol=lf
+scripts/fetch-horizon-small-cuda.py text eol=lf
+scripts/tests/test_horizon_small_cuda.py text eol=lf
+docs/operations/evidence/sou109-small-cuda/** text eol=lf
