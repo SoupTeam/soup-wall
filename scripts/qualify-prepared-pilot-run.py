@@ -61,10 +61,6 @@ def validation_timeout(args):
 
 def prepare_owned_workspaces(selection, profiles):
     require("prepared_workspaces" not in selection, "generated_qualification_refuses_existing_project")
-    transition_plan = None
-    if args.transition_target:
-        transition_plan = SWITCH.plan(args.selection.parent.parent.parent, args.transition_target,
-                                      ROOT, ROOT)[3]
     fs = Path(profiles["filesystem"]["profile"]["path"]).parent.parent / "filesystem-workspace"
     git = Path(profiles["git"]["profile"]["path"]).parent.parent / "git-workspace"
     # Owned preparation directories only, never a user repository.
@@ -83,6 +79,10 @@ def qualify(args, private, report):
     config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
         ask_wait_seconds=0, timeout_seconds=60, port=0)
     selection, paths, profiles = RUN.selected(config)
+    transition_plan = None
+    if args.transition_target:
+        transition_plan = SWITCH.plan(args.selection.parent.parent.parent, args.transition_target,
+                                      ROOT, ROOT)[3]
     fs, git, notes = prepare_owned_workspaces(selection, profiles)
     env = {"PATH": "/usr/bin:/bin", "HOME": str(private), "LANG": "C.UTF-8"}
     workspace_before = {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}
