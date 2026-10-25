@@ -11,9 +11,19 @@ import hashlib
 ROLES = {'other', 'mention', 'description', 'adoption', 'action_request', 'unresolved'}
 
 
-def source_hash(channels):
+def frozen_channels(channels):
+    if type(channels) not in (list,tuple):
+        raise ValueError('unsupported_source_array')
     if len(channels) > 1024:
         raise ValueError('channel_limit')
+    snapshot=tuple(channels)
+    if any(type(c) is not str for c in snapshot):
+        raise ValueError('unsupported_source_type')
+    return snapshot
+
+
+def source_hash(channels):
+    channels=frozen_channels(channels)
     digest = hashlib.sha256(b'sw-context-relations/1\0')
     total = 0
     for channel in channels:
@@ -26,6 +36,8 @@ def source_hash(channels):
 
 
 def check(channels, proposal):
+    # Bind and inspect one immutable snapshot even if the caller retains a list.
+    channels=frozen_channels(channels)
     if set(proposal) != {'source_sha256', 'scopes', 'relations'}:
         raise ValueError('unsupported_proposal_fields')
     if proposal['source_sha256'] != source_hash(channels):
@@ -35,6 +47,10 @@ def check(channels, proposal):
         raise ValueError('unsupported_relation_arrays')
     if len(scopes) > 65536 or len(relations) > 65536:
         raise ValueError('relation_limit')
+    if any(type(s) is not dict for s in scopes) or any(type(e) is not dict for e in relations):
+        raise ValueError('unsupported_relation_object')
+    scopes=[dict(s) for s in scopes]
+    relations=[dict(e) for e in relations]
     raw_channels = [c.encode('utf-8') for c in channels]
     inventory = [[] for _ in channels]
     for i, scope in enumerate(scopes):

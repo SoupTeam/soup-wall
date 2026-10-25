@@ -77,6 +77,9 @@ dropped or overlapping scope coverage, invalid UTF-8 ranges, unsupported origin
 fields, duplicate or cyclic relations. Limits are 1024 channels, 8 MiB source,
 65,536 scopes and 65,536 edges. Source bytes are encoded once for range checking;
 the checker does not repeatedly decode whole prefixes for every scope.
+The checker snapshots the channel list and graph dictionaries before validation;
+caller-side list changes cannot swap source bytes after hash binding. This has
+an explicit deterministic mutation regression.
 
 No role label or metadata establishes authority. Every origin remains untrusted
 MCP; even a structurally valid graph claiming only mentions has enforcement

@@ -36,6 +36,7 @@ def main(args):
                                  'expected_shape':'mention_candidate' if role=='description' else 'instruction_candidate'})
     args.output.mkdir(parents=True,exist_ok=True)
     freeze={'source_commit':subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD']).decode().strip(),
+            'worker_source_commit':args.worker_source_commit,
             'checker_sha256':hashlib.sha256((ROOT/'scripts/result-context-relations.py').read_bytes()).hexdigest(),
             'controls_sha256':hashlib.sha256((ROOT/'scripts/tests/test_result_context_relations.py').read_bytes()).hexdigest(),
             'worker_sha256':hashlib.sha256(args.worker.read_bytes()).hexdigest(),
@@ -44,6 +45,10 @@ def main(args):
             'cases':[{'id':r['id'],'channels_sha256':[hashlib.sha256(c.encode()).hexdigest() for c in r['channels']],
                       'proposal_sha256':hashlib.sha256(json.dumps(r['proposal'],sort_keys=True).encode()).hexdigest()}
                      for r in rows]}
+    if args.compare_manifest:
+        previous=json.loads(args.compare_manifest.read_bytes())
+        if freeze['cases'] != previous['cases']:
+            raise ValueError('fixed control source/proposal hashes changed')
     (args.output/'manifest.json').write_text(json.dumps(freeze,indent=2)+'\n')
     policy=subprocess.check_output(['git','-C',str(ROOT),'show',
         '465c77c23b4ae0ff30fc063cee17062c8ac52f8b:profiles/pilot/linux-readonly-v1/policy.yaml']).decode()
@@ -69,4 +74,6 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--worker',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--worker-source-commit')
+    parser.add_argument('--compare-manifest',type=Path)
     main(parser.parse_args())

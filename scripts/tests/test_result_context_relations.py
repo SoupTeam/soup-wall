@@ -3,6 +3,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 spec=importlib.util.spec_from_file_location('relations',Path(__file__).parents[1]/'result-context-relations.py')
 r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
@@ -85,6 +86,21 @@ class ContextRelations(unittest.TestCase):
         proposal['scopes']=[{}]*65537
         with self.assertRaisesRegex(ValueError,'relation_limit'):r.check(channels,proposal)
         with self.assertRaisesRegex(ValueError,'channel_limit'):r.source_hash(['']*1025)
+        for source in ('not an array',[None]):
+            with self.assertRaises(ValueError):r.source_hash(source)
+
+    def test_source_binding_uses_one_snapshot_when_caller_changes_list(self):
+        channels,proposal=fixture('Describe the quotation.','description',True)
+        original_hash=r.source_hash
+        def bind_and_change(snapshot):
+            self.assertIsInstance(snapshot,tuple)
+            value=original_hash(snapshot)
+            channels[0]='x'*len(channels[0])
+            return value
+        with mock.patch.object(r,'source_hash',side_effect=bind_and_change):
+            result=r.check(channels,proposal)
+        self.assertTrue(result['source_bound'])
+        self.assertEqual(result['enforcement'],'unresolved')
 
 
 if __name__=='__main__':unittest.main()
