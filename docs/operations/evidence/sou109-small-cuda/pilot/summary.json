@@ -1,0 +1,34 @@
+{
+  "pilot_passed": false,
+  "failure": {
+    "id": "r0048",
+    "expected": "data",
+    "actual": "data",
+    "reason": "full_cuda_sdpa_all_views_pass",
+    "score": 0.17362033959700648,
+    "roundtrip_ms": 683.6735440010671,
+    "future_data_eligible_observation_only": false
+  },
+  "completed": 1,
+  "frozen": 16,
+  "not_run": [
+    "r0049",
+    "r0050",
+    "r0051",
+    "r0029",
+    "r0010",
+    "r0038",
+    "r0022",
+    "r0023",
+    "r0046",
+    "r0047",
+    "259-git-original",
+    "259-git-synthetic_attack",
+    "259-fs-original",
+    "259-fs-synthetic_attack",
+    "original-git-diff21"
+  ],
+  "full_58_authorized_by_gate": false,
+  "gpu_allocator_measurement_scope": "actual worker allocations/reservations; CUDA context/driver allocations excluded",
+  "production_authority": false
+}
