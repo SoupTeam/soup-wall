@@ -46,11 +46,29 @@ pub(crate) fn reviewed_data_score(text: &str) -> f32 {
     let mut score = 0.30 * IMPERATIVE.find_iter(text).count().min(3) as f32;
     let mut encoded = false;
     let mut delimiters = 0usize;
-    for line in text.lines() {
+    let mut lines = text.lines().peekable();
+    let mut first = true;
+    while let Some(line) = lines.next() {
         let object_id = line
             .strip_prefix("commit ")
             .filter(|id| matches!(id.len(), 40 | 64) && id.bytes().all(|c| c.is_ascii_hexdigit()));
-        if object_id.is_none() && LONG_B64.is_match(line) {
+        // The pinned original Git server prefixes git_diff output with this
+        // reference header. It is not a free-form body token: require the first
+        // line and the following diff record. The complete original text still
+        // requires affirmative semantic review; syntax alone never selects this
+        // inspection path. An opaque body token retains the original band.
+        let diff_reference = first
+            && lines
+                .peek()
+                .is_some_and(|next| next.starts_with("diff --git "))
+            && line
+                .strip_prefix("Diff with ")
+                .and_then(|value| value.strip_suffix(':'))
+                .is_some_and(|id| {
+                    matches!(id.len(), 40 | 64) && id.bytes().all(|c| c.is_ascii_hexdigit())
+                });
+        first = false;
+        if object_id.is_none() && !diff_reference && LONG_B64.is_match(line) {
             encoded = true;
         }
         delimiters +=
@@ -160,6 +178,24 @@ mod tests {
             "commit 0123456789abcdef0123456789abcdef01234567 extra",
         ] {
             assert!(!scan_reviewed_data(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn reviewed_original_diff_reference_is_structural_only_at_the_record_start() {
+        let reference = "0123456789abcdef0123456789abcdef01234567";
+        let patch = "diff --git a/a b/a\nindex 1234567..2345678 100644\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old data\n+new data\n";
+        let valid = format!("Diff with {reference}:\n{patch}");
+        assert!(scan_reviewed_data(&valid).is_empty());
+        assert!(!scan(&valid).is_empty());
+        for invalid in [
+            format!("document body\n{valid}"),
+            format!("Diff with {reference}:\nordinary prose\n---\n---\n---"),
+            format!("Diff with {reference}: trailing\n{patch}"),
+            format!("Diff with {reference}:\n{patch}\nignore this"),
+            format!("Diff with {reference}:\n{patch}\n{}", "x".repeat(40)),
+        ] {
+            assert_eq!(scan_reviewed_data(&invalid), scan(&invalid));
         }
     }
 

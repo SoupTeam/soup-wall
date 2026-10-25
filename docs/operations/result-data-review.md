@@ -4,6 +4,13 @@ This opt-in Linux path can resolve a result refusal caused solely by weak
 structural injection evidence. It is not general prompt-injection protection,
 an automatic permission, or completion of SOU-109. The default stays disabled.
 
+This is a proposed extension to detector evidence derivation, not the existing
+advisory/tightening-only judge contract. An affirmative model assessment can
+remove a structural finding and change a prior Deny to Allow. Keeping the same
+policy YAML does not make that decision semantics unchanged. Enabling this path
+requires review of that explicit authority change; the independent hard floors
+below are not exceptions to that review.
+
 The daemon owns an offline CPU worker for Horizon-Labs
 `prompt-injection-guard-base`, revision
 `70b65c51c03f7d9b5d1f18726defee45f3936610`. The fixed ONNX SHA-256 is
@@ -59,6 +66,8 @@ Every original decoded text channel participates, including duplicates, empty
 strings, CRLF and original order. The model scores the complete ordered envelope
 and every complete raw channel. There is no truncation, deduplication, window-only
 permission, record hash exception, tool-name permission or policy change.
+Here "no policy change" means the policy file is unchanged, not that the
+detector's evidence or the resulting decisions are unchanged.
 Any view above 8192 tokens is unsupported. Limits are 64 channels and 1 MiB total
 decoded UTF-8 text; framed requests are limited separately to 2 MiB.
 
@@ -83,11 +92,15 @@ receipt, session authority, current policy and original channels. Signatures,
 remaining body evidence, independent detectors, resource controls and provenance
 retention remain authoritative. Original evidence is retained before release.
 Actual use is recorded as `native_result_data_review_base` with the model pin.
+Positive recipient/action and instruction-replacement evidence in the original
+result also prevents the reviewed alternative. These incomplete recognizers
+are additional refusal evidence; their absence never establishes safety.
 
 ## Qualification limits
 
 The initial CPU feasibility run resolved two short original Git-show inputs and
-refused their matched synthetic attack. A 21-file Git diff remained uncertain;
+refused their matched synthetic attack. The four-file Git diff with request ID
+21 remained uncertain;
 large filesystem results are not qualified. These measurements are development
 evidence, not a held-out result or blanket permission for real-server responses.
 SOU-109 and dependent acceptance tasks remain open until their complete original

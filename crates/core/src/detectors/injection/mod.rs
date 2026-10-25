@@ -4,6 +4,7 @@
 //! Stage C (candle ML) is added in Plan 3 behind this same `Detector` impl.
 
 mod heuristics;
+mod result_directives;
 mod signatures;
 
 #[cfg(feature = "ml")]
@@ -60,6 +61,12 @@ impl InjectionDetector {
         } else {
             heuristics::scan(ctx.text)
         });
+        // A negative model label cannot erase positive recipient/action or
+        // instruction-replacement evidence in the original result. Keep this
+        // result-only extension off the ordinary user-input inspection path.
+        if reviewed_result_data {
+            findings.extend(result_directives::scan(ctx.text));
+        }
 
         // Stage C: only escalate to the ML classifier when the cheap stages were
         // inconclusive (keeps p99 low). Attached via `with_ml` under `feature = "ml"`.
