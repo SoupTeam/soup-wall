@@ -333,7 +333,7 @@
     "crates/agentfw/src/native/approval/tests/selected_tests.rs": "8724fb6556113d086bf71089a7d9efa91f32150d4894e3f1cc5aeb0c02f0f0e3",
     "docs/operations/MCP_FILESYSTEM_CREATE_AUDIT.md": "f89e508d14e2e1007e7f895d2856ed26c62708462e17ed4e435127493c4f73be",
     "docs/operations/MCP_FILESYSTEM_CREATE_ONLY.md": "d5978c7bab14eb3b54d4433ed86286bd7462215d416f9b7df09004071da8fb66",
-    "scripts/managed-native-transitions.py": "5cd037dc645e7e4761b70d40f5544568ef90da2846e9d4194f0d4b610deac12a",
+    "scripts/managed-native-transitions.py": "1890d56ee6a07d1526c35e4271deb9857b30f58d4a3d5219069a0f2980249c5c",
     "scripts/tests/test_sou83_create_approval.py": "2ab20b547801cb48c5e60e1c219a052eac6ab1ccf8510129f7cf5ed7d50e7f6a",
     "scripts/verify-sou105-selected-approval.py": "3569b64a16953488a18e0ad5d21bc231bc3b64b6a82a15980d7f18c5c8b7e8f3",
     "scripts/verify-sou83-create-approval.py": "69f7272ab77d0557c294c76ec92c2318988885e6aedc3f21b0999056ecc851c4",
@@ -365,6 +365,14 @@
       "failure": "Linux test-only staging witness attempted to reuse VerifiedOutput after consuming prepare_atomic_publication; fixed by fresh actual original invocation for each independent boundary, no Clone or production guard change",
       "artifact": 12606984964,
       "artifact_sha256": "513aab7a01f0e5caf92b5084ad16cefda3ce1c9fd02f97dc0c2c6c7e8a74f70a"
+    },
+    {
+      "run_id": 40215593732,
+      "head": "ddb129bb7fba5b4fd58557983d436faea47af666",
+      "job_id": 121235953637,
+      "failure": "new global liveness configuration opted legacy Git collector into autonomous restart retirement, making the existing post-restart send hit BrokenPipe; restore unchanged legacy config and opt only the new original writer in via its explicit environment. Original guard, TTL and old restart expectation preserved.",
+      "artifact": 12607272128,
+      "artifact_sha256": "e447ee424c80816ba6e14742fb0e268932554a4af30de142a0a46c4de43e5817"
     }
   ],
   "native_staging_controls": "actual pinned original writes followed by test-only post-cleanup perturbation and production validator; execution pending focused Linux qualification"

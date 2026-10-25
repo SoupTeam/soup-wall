@@ -223,8 +223,7 @@ def run(args):
                 subprocess.run([str(binaries["agentfw"]), "install"], env=env, capture_output=True, check=True, timeout=30)
                 FS.write(home / ".agentfw/config.yaml", {"port": a.port, "enforce": True, "max_record_bytes": 1048576,
                     "policy": str(installed / "policy.yaml"), "native": {"registry_path": str(installed / "registry.json"),
-                    "registry_sha256": a.registry_sha256, "approval": {"ttl_seconds": 120},
-                    "liveness": {"default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100}}})
+                    "registry_sha256": a.registry_sha256, "approval": {"ttl_seconds": 120}}})
                 a.env.update(SOUP_MANAGED_AGENT_CONSOLE=origin, SOUP_MANAGED_AGENT_TLS_CA_FILE=str(ca),
                     SOUP_MANAGED_AGENT_TOKEN=a.token, SOUP_MANAGED_AGENT_TENANT=tenant, SOUP_MANAGED_AGENT_ID=name,
                     SOUP_MANAGED_AGENT_KEY_ID="sou82-owned-issuer", SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX=issuer["public_key_hex"])
