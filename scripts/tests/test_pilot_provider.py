@@ -210,6 +210,15 @@ class IndependentExecEvidence(unittest.TestCase):
         self.assertFalse(any(value in json.dumps(result) for value in values.values()))
         argv_data = '26 execve("/owned/agentfw", ["agentfw", "protection-status", "/owned/scripts/pilot-run.py"], []) = 0'
         self.assertEqual(witness.observe('\n'.join(rows+[argv_data]),paths,values,normalize)['successful_exec_counts']['entry'],1)
+        # Clone ancestry remains a finite role label; no PID or argv is emitted.
+        import io,contextlib
+        emitted=io.StringIO()
+        borrowed='25 execve("/owned/claude", ["claude", "--version"], '+json.dumps(['ANTHROPIC_API_KEY='+values['ANTHROPIC_API_KEY']])+') = 0'
+        with contextlib.redirect_stderr(emitted), self.assertRaisesRegex(ValueError,'provider_value_in_unrelated_process'):
+            witness.observe('\n'.join(rows+['10 clone(child_stack=NULL, flags=SIGCHLD) = 25',borrowed]),paths,values,normalize)
+        notice=json.loads(emitted.getvalue())
+        self.assertEqual(notice['parent_role'],'entry')
+        self.assertNotIn('25',emitted.getvalue())
         helper = f'25 execve("/owned/claude", ["claude", "--helper"], []) = 0'
         self.assertEqual(witness.observe('\n'.join(rows + [helper]), paths, values, normalize)['successful_exec_counts']['other'], 1)
         with self.assertRaisesRegex(ValueError, 'provider_value_in_unrelated_process'):

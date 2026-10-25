@@ -200,6 +200,11 @@ def observe(text, paths, values, normalize, rejected=False):
     counts = {role: 0 for role in ('entry', 'host', 'daemon', 'launcher', 'collector',
                                   'diagnostic', 'original', 'classifier', 'other')}
     host_pids = set()
+    parents, process_roles = {}, {}
+    for row in rows:
+        birth=re.match(r'^(\d+)\s+(?:clone3?|vfork|fork)\(.*\)\s*=\s*(\d+)\s*$',row)
+        if birth:parents[int(birth[2])]=int(birth[1])
+
     for row in rows:
         match = re.match(r'^(\d+)\s+execve\((.*)\)\s+=\s+0\s*$', row)
         if not match:
@@ -226,6 +231,7 @@ def observe(text, paths, values, normalize, rejected=False):
         elif any('rule_baseline.py' in word for word in arguments):
             role = 'classifier'
         counts[role] += 1
+        process_roles[int(match[1])]=role
         env = dict(item.split('=', 1) for item in environment if '=' in item)
         # Command lines never need a provider credential, even for the host.
         require(not any(value in word for value in values.values() for word in arguments),
@@ -240,7 +246,15 @@ def observe(text, paths, values, normalize, rejected=False):
                       if any(value in word for value in values.values())}
             if leaked:
                 image_class = 'same-image-diagnostic' if executable == str(paths['claude']) else                     'system-git' if executable in ('/usr/bin/git','/bin/git') else                     'env-utility' if executable in ('/usr/bin/env','/bin/env') else                     'system-shell' if executable in ('/bin/sh','/usr/bin/sh','/bin/bash','/usr/bin/bash','/bin/dash','/usr/bin/dash') else                     'selected-fd' if executable.startswith('/proc/self/fd/') else 'other-helper'
+                ancestor=parents.get(int(match[1]));parent_role='unresolved'
+                visited=set()
+                while ancestor is not None and ancestor not in visited and len(visited)<64:
+                    visited.add(ancestor)
+                    if process_roles.get(ancestor) not in (None,'other'):
+                        parent_role=process_roles[ancestor];break
+                    ancestor=parents.get(ancestor)
                 print(json.dumps({'event': 'provider_routing_refusal', 'role': role, 'image_class':image_class,
+                    'parent_role':parent_role,
                     'reviewed_flags':[flag for flag in ('--version','--help','--restricted','-p','-c','-i') if flag in arguments],
                     'selected_keys': sorted(leaked.intersection(KEYS)),
                     'other_key_count': len(leaked.difference(KEYS))}), file=sys.stderr, flush=True)

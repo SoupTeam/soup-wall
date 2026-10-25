@@ -167,7 +167,7 @@ class Prepared:
             ANTHROPIC_API_KEY="owned-loopback-only", HTTP_PROXY="http://127.0.0.1:9",
             HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
         command = [str(context.args.strace), "-f", "-qq", "-s", "1048576", "-e",
-            "trace=execve,openat,close,write,writev,kill", "-o", str(self.trace), sys.executable, "-B",
+            "trace=execve,openat,close,write,writev,clone,clone3,vfork,fork,kill", "-o", str(self.trace), sys.executable, "-B",
             str(context.source / "scripts/pilot-run.py"), "--run", "--selection",
             str(context.args.selection), "--expected-commit", context.args.expected_commit,
             "--state-root", str(self.state), "--timeout-seconds", "90"]
