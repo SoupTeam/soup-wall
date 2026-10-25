@@ -3191,6 +3191,8 @@ jobs:
       - name: Offline pinned host and original filesystem Git routing observations
         if: github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '142'
         shell: bash
+        env:
+          SOU142_PHASE: ${{ github.event.inputs.prepared_budget_phase }}
         run: |
           set -euo pipefail
           unit="sou79-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -3210,7 +3212,7 @@ jobs:
             --working-directory="$GITHUB_WORKSPACE" \
             /usr/bin/env -i PATH=/usr/bin:/bin HOME="$SOU142_HOST/home" TMPDIR="$SOU142_HOST/runtime-tmp" \
             "$SOU142_PYTHON" -B "$GITHUB_WORKSPACE/scripts/ci/native-prepared-budget-host.py" --run --unit="$unit.service" \
-            --source "$GITHUB_WORKSPACE" --scratch "$SOU142_HOST" \
+            --source "$GITHUB_WORKSPACE" --scratch "$SOU142_HOST" --phase "$SOU142_PHASE" \
             --expected-commit "$SOU_FOCUSED_COMMIT" --bwrap "$SOU111_BWRAP" || status=$?
           if [[ -d "/sys/fs/cgroup/system.slice/$unit.service" ]]; then status=125; fi
           printf '{"unit_exit_code":%s}\n' "$status" > "$SOU142_HOST/runtime-unit-exit.json"
@@ -3220,7 +3222,7 @@ jobs:
             --raw "$SOU142_HOST/prepared-budget-native/report.json" \
             --attempt "$SOU142_HOST/budget-runtime-attempt.json" \
             --output "$SOU142_HOST/budget-host-public.json" \
-            --expected-commit "$SOU_FOCUSED_COMMIT" --exit-code "$status"
+            --expected-commit "$SOU_FOCUSED_COMMIT" --exit-code "$status" --phase "$SOU142_PHASE"
           exit "$status"
 
       - name: Remove only the owned runtime unit and accepted job sandbox permission

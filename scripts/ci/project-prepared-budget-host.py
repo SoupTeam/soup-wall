@@ -121,6 +121,23 @@ def pressure(value, attempt):
                    'bounded_calibration_attempt_incomplete')
         need(row.get('reason') in reasons, 'pressure_reason_invalid')
         item['reason'] = row['reason']
+        calibration = row.get('calibration')
+        if calibration is not None:
+            need(type(calibration) is dict and type(calibration.get('target_advertised')) is bool,
+                 'pressure_calibration_invalid')
+            item['calibration'] = {'target_advertised': calibration['target_advertised'], **{
+                key:number(calibration.get(key)) for key in
+                ('provider_requests','offered_calls','correlated_results','error_results')}}
+        git_counts = row.get('pinned_git_exec_counts')
+        refusals = row.get('calibration_refusals')
+        if refusals is not None:
+            need(type(refusals) is dict and set(refusals) ==
+                 {'policy_unconfirmed_ask','policy_denied','classifier_error'}, 'pressure_refusal_counts_invalid')
+            item['calibration_refusals'] = {key:number(count) for key,count in refusals.items()}
+        if git_counts is not None:
+            need(type(git_counts) is dict and set(git_counts) ==
+                 {'status','diff','diff-tree','log','show','version','other'}, 'pressure_git_counts_invalid')
+            item['pinned_git_exec_counts'] = {key:number(count) for key,count in git_counts.items()}
         observations = row.get('kernel_observations', [])
         need(type(observations) is list and len(observations) <= 64, 'pressure_kernel_inventory_invalid')
         item['kernel_observations'] = []

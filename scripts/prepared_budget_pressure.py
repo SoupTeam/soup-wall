@@ -5,6 +5,7 @@ No injected workers, substituted servers or observer cleanup. Non-exhaustion is
 retained as incomplete, never silently changed into a successful refusal.
 """
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -17,6 +18,20 @@ import time
 from prepared_budget_observer import BudgetObserver
 
 PRESSURE_BYTES = 40 * 1024 * 1024
+
+
+def git_exec_counts(rows):
+    """Finite successful original Git verbs; never return process/argv data."""
+    import re
+    verbs = {key: 0 for key in ('status', 'diff', 'diff-tree', 'log', 'show', 'version', 'other')}
+    for row in rows:
+        match = re.search(r'execve\("/mcp-runtime/git",\s*(\[.*\]),.*\)\s*=\s*0\s*$', row)
+        if match:
+            words = ast.literal_eval(match[1])
+            verb = next((word for word in words[1:] if word in verbs),
+                        'version' if '--version' in words else 'other')
+            verbs[verb] += 1
+    return verbs
 
 
 def finish_useful(pilot):
@@ -98,6 +113,11 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
             def phase(name):
                 row['phase']=name
                 row['elapsed_millis']=int((time.monotonic()-started)*1000)
+                row['calibration']={'provider_requests':len(model.requests),
+                    'target_advertised':calibration['advertised'], 'offered_calls':len(offered),
+                    'correlated_results':len(model.results),
+                    'error_results':sum(value is True for value in model.results.values())}
+                row['calibration_refusals']=dict(refusals)
                 if on_progress is not None:
                     on_progress({'format':'sou142-original-pressure/1','status':'incomplete',
                         'workspace_unchanged':False,'attempts':attempts,
@@ -112,16 +132,24 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
             model = base.DEMO.ScriptedModel([])
             model.server.handle_error = lambda *_: None
             offered = set()
+            calibration = {'advertised': False}
+            refusals = {code:0 for code in ('policy_unconfirmed_ask','policy_denied','classifier_error')}
             def next_step(body):
                 for message in body.get('messages', []):
                     for block in message.get('content', []) if isinstance(message.get('content'), list) else []:
                         if isinstance(block, dict) and block.get('type') == 'tool_result' and block.get('tool_use_id') in offered:
+                            fresh=block['tool_use_id'] not in model.results
                             model.results[block['tool_use_id']] = bool(block.get('is_error'))
+                            if fresh:
+                                content=json.dumps(block.get('content'))
+                                for code in refusals:
+                                    if code in content:refusals[code]+=1
                 tools = {tool.get('name') for tool in body.get('tools', [])}
                 tool = 'read_text_file' if server == 'filesystem' else 'git_diff' if kind == 'memory' else 'git_status'
                 name = f'mcp__{server}__{tool}'
                 if name not in tools:
                     return [{'type': 'text', 'text': 'Owned calibration startup.'}]
+                calibration['advertised'] = True
                 if kind == 'wall':
                     time.sleep(2)
                     return [{'type': 'text', 'text': 'Owned wall calibration.'}]
@@ -181,6 +209,8 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                             raise subprocess.TimeoutExpired(command,100)
                         time.sleep(.05)
                 outcome = json.loads((root / 'stdout.private').read_text().splitlines()[-1])
+                row['pinned_git_exec_counts'] = git_exec_counts(q.LAUNCH.normalized_syscalls(
+                    (root / 'trace.private').read_text())[0])
                 phase('subject-observation')
                 cleanup = witness.finish()
                 observed = observer.finish()

@@ -17,6 +17,16 @@ SPEC.loader.exec_module(P)
 
 
 class Pressure(unittest.TestCase):
+    def test_git_diagnostics_count_only_successful_pinned_images_without_argv(self):
+        value=P.git_exec_counts([
+            '11 execve("/mcp-runtime/git", ["/mcp-runtime/git", "status"], []) = 0',
+            '12 execve("/mcp-runtime/git", ["/mcp-runtime/git", "diff", "HEAD"], []) = 0',
+            '13 execve("/mcp-runtime/git", ["/mcp-runtime/git", "log"], []) = -1 ENOENT',
+            '14 execve("/private/other", ["/private/other", "status"], []) = 0'])
+        self.assertEqual(value['status'],1)
+        self.assertEqual(value['diff'],1)
+        self.assertEqual(sum(value.values()),2)
+        self.assertNotIn('private',json.dumps(value))
     def test_peer_release_requires_classified_original_kernel_refusal(self):
         import copy
         row={'servers':['filesystem'],'original_runtime_seen':True,'errors':[],
@@ -54,7 +64,9 @@ class Pressure(unittest.TestCase):
 
     def test_refused_peer_setup_preserves_owned_bytes_and_never_claims_pressure_pass(self):
         class Model:
-            def __init__(self, _steps): self.server = SimpleNamespace()
+            def __init__(self, _steps):
+                self.server = SimpleNamespace()
+                self.requests, self.results = [], {}
             def close(self): pass
         def refused(peer_context, *_args, **_kwargs):
             self.assertTrue(all(isinstance(value, Path) for value in peer_context.paths.values()))
