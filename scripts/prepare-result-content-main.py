@@ -22,6 +22,7 @@ source=source.replace('firewall.preview_native_mcp_result_with_evidence(&ev, &cr
 a=source.index('    // BEGIN LEDGER:');b=source.index('    // END LEDGER',a)
 source=source[:a]+source[b+len('    // END LEDGER'):]
 source=source.replace('let mut result = json!', 'let result = json!')
+(out/'crates/agent/examples').mkdir(exist_ok=True)
 (out/'crates/agent/examples/result_content_main.rs').write_text(source)
 identity['diagnostic_example_sha256']=hashlib.sha256(source.encode()).hexdigest()
 (out/'build-identity.json').write_text(json.dumps({'accepted_main':ref,'tracked_build_sources':identity,'diagnostic_transform':'no cross evidence (not present on main); preview_native_result; no ledger'},indent=2)+'\n')
