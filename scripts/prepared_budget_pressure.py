@@ -28,6 +28,21 @@ def finish_useful(pilot):
     return result
 
 
+def kernel_refusal(snapshot, server, kind):
+    if not isinstance(snapshot,dict) or snapshot.get('errors') != []:
+        return False
+    for row in snapshot.get('rows',[]):
+        if row.get('servers') != [server] or row.get('original_runtime_seen') is not True \
+                or row.get('errors') != [] or row.get('observer_errors') != []:
+            continue
+        if kind == 'wall':
+            if row.get('removed') is True:return True
+        else:
+            count=row.get('counter_max',{}).get('oom_kill' if kind=='memory' else 'pids_max')
+            if type(count) is int and count>0:return True
+    return False
+
+
 def qualify(context, selection, paths, profiles, delegation, output, commit, on_progress=None):
     base, resource = context.BASE, context.RESOURCE
     paths = {key: Path(value) for key, value in paths.items()}
@@ -123,6 +138,9 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                 return [{'type': 'text', 'text': 'Owned calibration completed.'}]
             model.next = next_step
             process = witness = observer = peer = recovery = None
+            peer_released = False
+            peer_release_ns = None
+            peer_after_kernel = False
             try:
                 if any(path.is_dir() for path in delegation.iterdir()):
                     raise ValueError('pressure_root_not_empty')
@@ -144,7 +162,18 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                     process = subprocess.Popen(command, cwd=root, env=run_env, stdout=out, stderr=err,
                                                start_new_session=True)
                     witness = base.ProcessWitness(process.pid)
-                    process.wait(timeout=100)
+                    deadline=time.monotonic()+100
+                    while process.poll() is None:
+                        if not peer_released and kernel_refusal(observer.snapshot(),server,kind):
+                            if peer.process.poll() is not None:
+                                raise ValueError('pressure_changed_independent_peer')
+                            peer_release_ns=time.monotonic_ns()
+                            peer.provider.release.set()
+                            peer_released=peer_after_kernel=True
+                            phase('subject-resource-refused')
+                        if time.monotonic()>=deadline:
+                            raise subprocess.TimeoutExpired(command,100)
+                        time.sleep(.05)
                 outcome = json.loads((root / 'stdout.private').read_text().splitlines()[-1])
                 phase('subject-observation')
                 cleanup = witness.finish()
@@ -169,10 +198,31 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                     for item in receipts) and budget_result.get('budget_sha256') == digest
                 verified = verified and process.returncode != 0 and outcome.get('status') == 'failed' \
                     and cleanup.get('all_stopped') is True and not any(path.is_dir() for path in delegation.iterdir())
-                if peer.process.poll() is not None:
-                    raise ValueError('pressure_changed_independent_peer')
+                # Keep partial kernel/refusal evidence even if a later peer or
+                # recovery control fails; private cleanup identities stay private.
+                row.update(original_runtime_observed=bool(target),
+                    kernel_observations=[{'counter_max':item.get('counter_max'),
+                        'memory_peak_bytes':item.get('memory_peak_bytes'),'tasks_peak':item.get('tasks_peak'),
+                        'leaf_duration_millis':item.get('leaf_duration_millis'),'removed':item.get('removed'),
+                        'errors':item.get('errors'),'incomplete_reasons':item.get('incomplete_reasons')}
+                        for item in target], target_receipts=receipts,
+                    observed_children=budget_result.get('observed_children'),
+                    owned_cleanup_verified=cleanup.get('all_stopped') is True)
+                if not peer_released:
+                    if peer.process.poll() is not None:
+                        raise ValueError('pressure_changed_independent_peer')
+                    peer_after_kernel=verified and kernel_refusal({'errors':[],'rows':observed},server,kind)
+                    peer_release_ns=time.monotonic_ns()
+                    peer.provider.release.set()
+                    peer_released=True
                 phase('peer-finish')
-                peer_result = finish_useful(peer)
+                peer_result = peer.finish()
+                peer.check_useful()
+                if not all(peer.provider.offered_at.get('toolu_prepared_stop_'+str(index),0)>=peer_release_ns
+                           for index in (0,1)):
+                    raise ValueError('pressure_peer_dispatched_before_refusal_barrier')
+                verified = verified and peer_after_kernel
+                row['peer_survived_kernel_refusal']=peer_after_kernel
                 # A new real prepared run on the reclaimed subject substrate
                 # creates fresh host authority/binding; no grant is replayed.
                 phase('recovery-start')

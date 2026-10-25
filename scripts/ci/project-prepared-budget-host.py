@@ -141,6 +141,7 @@ def pressure(value, attempt):
                  and row.get('original_runtime_observed') is True and observations
                  and row.get('owned_cleanup_verified') is True
                  and row.get('peer_useful_after_subject') is True
+                 and row.get('peer_survived_kernel_refusal') is True
                  and row.get('fresh_prepared_recovery_useful') is True
                  and number(row.get('observed_children')) >= 2, 'pressure_runtime_or_recovery_unverified')
             counter = 'oom_kill' if kind == 'memory' else 'pids_max'

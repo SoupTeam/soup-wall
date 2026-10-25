@@ -97,7 +97,7 @@ class Projection(unittest.TestCase):
                         'pidsMax':16 if kind=='pids' else 64, 'cpuQuotaMicros':100000,
                         'wallMillis':1000 if kind=='wall' else 120000},
                     'reason':'original_resource_refusal_verified', 'original_runtime_observed':True,
-                    'owned_cleanup_verified':True, 'peer_useful_after_subject':True,
+                    'owned_cleanup_verified':True, 'peer_useful_after_subject':True, 'peer_survived_kernel_refusal':True,
                     'fresh_prepared_recovery_useful':True, 'observed_children':2,
                     'kernel_observations':[{'counter_max':{'oom':1,'oom_kill':1,'pids_max':1,'throttled':0},
                         'memory_peak_bytes':1000,'tasks_peak':16,'leaf_duration_millis':5,'removed':True,

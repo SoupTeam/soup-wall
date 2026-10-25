@@ -17,6 +17,27 @@ SPEC.loader.exec_module(P)
 
 
 class Pressure(unittest.TestCase):
+    def test_peer_release_requires_classified_original_kernel_refusal(self):
+        import copy
+        row={'servers':['filesystem'],'original_runtime_seen':True,'errors':[],
+            'observer_errors':[],'removed':False,'counter_max':{'oom_kill':0,'pids_max':0}}
+        snapshot={'errors':[],'rows':[row]}
+        self.assertFalse(P.kernel_refusal(snapshot,'filesystem','memory'))
+        row['counter_max']['oom_kill']=1
+        self.assertTrue(P.kernel_refusal(snapshot,'filesystem','memory'))
+        self.assertFalse(P.kernel_refusal(snapshot,'git','memory'))
+        self.assertFalse(P.kernel_refusal(snapshot,'filesystem','pids'))
+        row['counter_max']['pids_max']=1
+        self.assertTrue(P.kernel_refusal(snapshot,'filesystem','pids'))
+        self.assertFalse(P.kernel_refusal(snapshot,'filesystem','wall'))
+        row['removed']=True
+        self.assertTrue(P.kernel_refusal(snapshot,'filesystem','wall'))
+        for change in [lambda v:v['rows'][0].update(original_runtime_seen=False),
+                       lambda v:v.update(errors=['unknown']),
+                       lambda v:v['rows'][0].update(observer_errors=['unverified'])]:
+            bad=copy.deepcopy(snapshot);change(bad)
+            self.assertFalse(P.kernel_refusal(bad,'filesystem','memory'))
+
     def test_finite_peer_finishes_after_release_without_waiting_for_stop_only_barrier(self):
         import threading
         calls=[]
