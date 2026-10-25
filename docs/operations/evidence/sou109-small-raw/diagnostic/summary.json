@@ -1,0 +1,36 @@
+{
+  "diagnostic_all15_completed_without_new_raw_failure": false,
+  "failure": {
+    "id": "r0050",
+    "stop_reason": "runtime_budget_failure",
+    "expected_raw": "data",
+    "actual_raw": "data",
+    "score": 0.21018283446333683,
+    "roundtrip_ms": 1581.1656770019908,
+    "unchanged_eligibility_interpretation": "unknown"
+  },
+  "completed": 2,
+  "frozen": 15,
+  "not_run": [
+    "r0051",
+    "r0029",
+    "r0010",
+    "r0038",
+    "r0022",
+    "r0023",
+    "r0046",
+    "r0047",
+    "259-git-original",
+    "259-git-synthetic_attack",
+    "259-fs-original",
+    "259-fs-synthetic_attack",
+    "original-git-diff21"
+  ],
+  "excluded_already_observed": [
+    "r0048"
+  ],
+  "prior_eligibility_failure_preserved": true,
+  "production_qualification": false,
+  "production_authority": false,
+  "full58_authorized": false
+}
