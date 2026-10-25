@@ -307,6 +307,7 @@ def plan(args):
         stages.append({"stage": "node", "action": "download pinned Node 22.22.0 archive into " + str(paths["inputs"]),
                        "url": PREP.NODE_URL, "sha256": PREP.NODE_ARCHIVE_SHA256,
                        "missing": [] if args.allow_download else ["--node-archive PINNED_TAR_XZ, --node and --npm, or --allow-download"]})
+    automatic_node = not ("node_archive" in inputs or ("node" in inputs and "npm" in inputs))
     if "claude" in inputs:
         stages.append({"stage": "claude", "action": "use supplied Claude Code", "inputs": {"claude": describe(inputs["claude"])},
                        "required_version": CLAUDE_VERSION})
@@ -314,7 +315,8 @@ def plan(args):
         stages.append({"stage": "claude", "action": "install the locked Claude Code package without scripts into " +
                        str(paths["inputs"] / "claude"), "required_version": CLAUDE_VERSION,
                        "lockfile_sha256": sha(ROOT / "profiles/mcp/filesystem-readonly-v1/claude-host/package-lock.json"),
-                       "missing": [] if args.allow_download else ["--claude ABSOLUTE_PATH or --allow-download"]})
+                       "missing": [] if args.allow_download and ("node_archive" in inputs or automatic_node)
+                       else ["--claude ABSOLUTE_PATH, or --allow-download with the pinned Node archive"]})
     stages.append({"stage": "policy", "action": "write the accepted pilot policy to " + str(paths["inputs"] / "policy.yaml"),
                    "sha256": hashlib.sha256(PREP.PILOT.PILOT_POLICY.encode("utf-8")).hexdigest()})
     words = prepare_words(args, inputs, paths, current["commit"], {})
@@ -394,9 +396,8 @@ def prepare(args):
     if "claude" not in inputs:
         inputs["claude"] = install_claude(inputs, inputs_dir)
         report["steps"].append({"stage": "claude", "status": "installed-locked"})
-    version = subprocess.run([str(inputs["claude"]), "--version"], stdin=subprocess.DEVNULL, capture_output=True,
-                             timeout=30, env={"PATH": "/usr/bin:/bin", "HOME": str(inputs_dir), "LANG": "C.UTF-8"})
-    require(version.stdout.decode("utf-8", "replace").strip() == CLAUDE_VERSION, "claude_version_mismatch", "claude")
+    # The front door never executes a supplied or installed host to probe it:
+    # the accepted selection step pins and verifies the exact host image.
     policy = inputs_dir / "policy.yaml"
     expected = PREP.PILOT.PILOT_POLICY.encode("utf-8")
     if not policy.exists():
@@ -440,31 +441,32 @@ def download(url, target, digest):
 
 
 def install_claude(inputs, inputs_dir):
-    """Locked package, no lifecycle scripts, the same command as the quickstart."""
+    """Locked package, no lifecycle scripts. npm runs only from the pinned
+    Node archive this command verified and extracted itself."""
     target = inputs_dir / "claude"
     binary = target / CLAUDE_RELATIVE
     if binary.is_file():
         return binary
-    npm = inputs.get("npm")
-    node_dir = None
-    if npm is None:
-        node_dir = inputs_dir / "node"
-        if not node_dir.exists():
-            node_dir.mkdir(mode=0o700)
-            PREP.extract_node(inputs["node_archive"], node_dir)
-        candidates = list(node_dir.glob("**/bin/npm"))
-        require(len(candidates) == 1, "node_archive_layout", "claude")
-        npm = candidates[0]
+    archive = inputs.get("node_archive")
+    require(archive is not None and sha(archive) == PREP.NODE_ARCHIVE_SHA256,
+            "claude_install_requires_pinned_node_archive_or_supply_claude", "claude")
+    node_dir = inputs_dir / "node"
+    if not node_dir.exists():
+        node_dir.mkdir(mode=0o700)
+        PREP.extract_node(archive, node_dir)
+    nodes = list(node_dir.glob("**/bin/node"))
+    clis = list(node_dir.glob("**/lib/node_modules/npm/bin/npm-cli.js"))
+    require(len(nodes) == 1 and len(clis) == 1, "node_archive_layout", "claude")
     target.mkdir(mode=0o700, exist_ok=True)
     for name in ("package.json", "package-lock.json"):
         (target / name).write_bytes((ROOT / "profiles/mcp/filesystem-readonly-v1/claude-host" / name).read_bytes())
-    env = {"PATH": str(Path(npm).parent) + ":/usr/bin:/bin", "HOME": str(inputs_dir), "LANG": "C.UTF-8",
+    env = {"PATH": str(nodes[0].parent) + ":/usr/bin:/bin", "HOME": str(inputs_dir), "LANG": "C.UTF-8",
            "npm_config_cache": str(inputs_dir / "npm-cache")}
     for key in ("HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "NODE_EXTRA_CA_CERTS", "npm_config_cafile"):
         if key in os.environ:
             env[key] = os.environ[key]
-    result = subprocess.run([str(npm), "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--prefix", str(target)],
-                            stdin=subprocess.DEVNULL, capture_output=True, timeout=600, env=env)
+    result = subprocess.run([str(nodes[0]), str(clis[0]), "ci", "--ignore-scripts", "--no-audit", "--no-fund",
+                             "--prefix", str(target)], stdin=subprocess.DEVNULL, capture_output=True, timeout=600, env=env)
     require(result.returncode == 0 and binary.is_file(), "claude_locked_install_failed", "claude")
     return binary
 
@@ -541,7 +543,85 @@ def run(args):
     return process.returncode
 
 
-def live_runs(state_roots, binary, expected_binary):
+def expected_identity(state, selection):
+    """What a run protecting THIS selection must show. Computed from the
+    verified selection only, never from a run's own files."""
+    generation = Path(state["selection"]).parent
+    profiles = {kind: Path(selection["prepared_profiles"][kind]["profile"]["path"]) for kind in ("filesystem", "git")}
+    tools = []
+    for kind in ("filesystem", "git"):
+        tools.extend(PREP.PILOT.strict_json((profiles[kind].parent / "registry.json").read_bytes())["tools"])
+    registry = {"contract_version": "sw-native/1", "registry_id": "prepared-pilot-v1", "tools": tools}
+    raw = (json.dumps(registry, sort_keys=True, indent=2) + "\n").encode()
+    roots = PREP.workspace_paths(selection, generation, revalidate=False)
+    files = selection["files"]
+    return {"selection": state["selection"], "commit": state["commit"], "selection_sha256": state["selection_sha256"],
+            "agentfw": files["agentfw"]["path"], "agentfw_sha256": files["agentfw"]["sha256"],
+            "policy": files["policy"]["path"], "policy_sha256": files["policy"]["sha256"],
+            "claude": files["claude"]["path"], "registry_sha256": hashlib.sha256(raw).hexdigest(),
+            "workspace": str(roots["filesystem"]), "git_workspace": str(roots["git"]),
+            "fs_profile": str(profiles["filesystem"]), "git_profile": str(profiles["git"])}
+
+
+def argv(pid):
+    raw = Path(f"/proc/{int(pid)}/cmdline").read_bytes()
+    require(Path(f"/proc/{int(pid)}").stat().st_uid == os.getuid(), "foreign_process")
+    return [os.fsdecode(word) for word in raw.split(b"\0")[:-1]]
+
+
+def option(words, name):
+    return words[words.index(name) + 1] if name in words and words.index(name) + 1 < len(words) else None
+
+
+def bound_to(record, expected):
+    """True only if this live run was started for exactly this selection:
+    its supervisor names the selection and commit, and its launcher uses the
+    selected binary, policy, profiles and project roots."""
+    supervisor = argv(record["supervisor_pid"])
+    launcher = argv(record["launcher_pid"])
+    daemon = argv(record["daemon_pid"])
+    return (str(RUNNER) in supervisor and "--run" in supervisor
+            and option(supervisor, "--selection") == expected["selection"]
+            and option(supervisor, "--expected-commit") == expected["commit"]
+            and launcher[:2] == [expected["agentfw"], "pilot-launch"]
+            and option(launcher, "--home") == record["home"]
+            and option(launcher, "--claude") == expected["claude"]
+            and option(launcher, "--policy") == expected["policy"]
+            and option(launcher, "--workspace") == expected["workspace"]
+            and option(launcher, "--git-workspace") == expected["git_workspace"]
+            and option(launcher, "--fs-profile") == expected["fs_profile"]
+            and option(launcher, "--git-profile") == expected["git_profile"]
+            and daemon[:2] == [expected["agentfw"], "serve"])
+
+
+def authenticated(record, expected):
+    """The existing nonce-checked status query: this selection's exact binary
+    and registry, answered by the run's own daemon process, whose current
+    configuration (bound by the query's config digest) names this selection's
+    policy file with the selected bytes."""
+    home = Path(record["home"])
+    query = subprocess.run([expected["agentfw"], "protection-status", "--home", str(home), "--query-only",
+        "--require-enforce", "--expect-binary-sha256", expected["agentfw_sha256"],
+        "--expect-registry-sha256", expected["registry_sha256"]],
+        cwd=home.parent, env={"PATH": "/usr/bin:/bin", "HOME": str(home.parent), "LANG": "C.UTF-8"},
+        stdin=subprocess.DEVNULL, capture_output=True, timeout=8)
+    if query.returncode != 0 or len(query.stdout) > 65536:
+        return None
+    snapshot = PREP.PILOT.strict_json(query.stdout)["snapshot"]
+    config = PREP.PILOT.strict_json(PREP.bounded_file(home / "config.yaml", MAX_STATE).read_bytes())
+    if (snapshot["runtime"]["pid"] != record["daemon_pid"] or config.get("enforce") is not True
+            or config.get("policy") != expected["policy"]
+            or config.get("native", {}).get("registry_sha256") != expected["registry_sha256"]
+            or sha(expected["policy"]) != expected["policy_sha256"]):
+        return None
+    return {"daemon_pid": snapshot["runtime"]["pid"], "instance": snapshot["runtime"]["instance"],
+            "policy_digest": snapshot["policy"]["sha256"]}
+
+
+def live_runs(state_roots, expected):
+    """Classify owned run records. Only a run bound to the requested selection
+    and confirmed by an authenticated answer counts as observed-live; other
+    owned runs are reported as unrelated and never prove this selection."""
     rows = []
     for root in state_roots:
         try:
@@ -558,39 +638,52 @@ def live_runs(state_roots, binary, expected_binary):
                 home = Path(record["home"])
                 require(record.get("format") == "sw-prepared-pilot-run/1" and home.parent == record_path.parent,
                         "run_record_invalid")
-                alive = all(Path(f"/proc/{int(record[key])}").exists()
+                for key in ("supervisor_pid", "launcher_pid", "daemon_pid"):
+                    require(type(record[key]) is int and record[key] > 1, "run_record_invalid")
+                alive = all(Path(f"/proc/{record[key]}").exists()
                             for key in ("supervisor_pid", "launcher_pid", "daemon_pid"))
                 runs = sorted(path.parent.name for path in (home / "pilot-runs").glob("*/run.json"))
                 row.update(home=str(home), run_ids=runs)
                 if not alive:
-                    row["protection"] = "unavailable"
-                    row["reason"] = "owned processes are not running; private state may need recovery"
-                elif binary is None:
-                    row["protection"] = "unknown"
-                    row["reason"] = "no verified selected agentfw to query"
+                    row.update(protection="unavailable", selection_match=None,
+                               reason="owned processes are not running; private state may need recovery")
+                elif expected is None:
+                    row.update(protection="unknown", selection_match=None, reason="no verified selection to compare")
+                elif not bound_to(record, expected):
+                    row.update(protection="unrelated", selection_match=False,
+                               reason="a different selection, workspace or policy; not evidence for this prefix")
                 else:
-                    query = subprocess.run([str(binary), "protection-status", "--home", str(home), "--query-only",
-                        "--require-enforce", "--expect-binary-sha256", expected_binary], cwd=record_path.parent,
-                        env={"PATH": "/usr/bin:/bin", "HOME": str(record_path.parent), "LANG": "C.UTF-8"},
-                        stdin=subprocess.DEVNULL, capture_output=True, timeout=8)
-                    if query.returncode == 0 and len(query.stdout) <= 65536:
-                        snapshot = PREP.PILOT.strict_json(query.stdout)["snapshot"]
-                        row.update(protection="observed-live", enforce=True,
-                                   policy_sha256=snapshot["policy"]["sha256"],
-                                   daemon_pid=snapshot["runtime"]["pid"])
+                    live = authenticated(record, expected)
+                    row["selection_match"] = True
+                    if live:
+                        row.update(protection="observed-live", enforce=True, **live)
                     else:
-                        row.update(protection="unavailable", reason="enforcing daemon did not answer an authenticated status query")
+                        row.update(protection="unavailable",
+                                   reason="this selection's daemon did not answer an authenticated status query")
             except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired, Failure):
-                row.update(protection="unknown", reason="run record unreadable or not owned")
+                row.update(protection="unknown", selection_match=None, reason="run record unreadable or not owned")
             rows.append(row)
     return rows
+
+
+def overall(runs, selection_state):
+    """Only runs bound to this selection decide its protection."""
+    mine = [row for row in runs if row.get("selection_match") is True]
+    unclear = [row for row in runs if row.get("selection_match") is None]
+    if any(row["protection"] == "observed-live" for row in mine):
+        return "observed-live"
+    if mine:
+        return "unavailable"
+    if any(row["protection"] == "unknown" for row in unclear):
+        return "unknown"
+    return {"configured": "configured-not-running", "stale": "unavailable"}.get(selection_state, "not-configured")
 
 
 def status(args):
     report = {"format": FORMAT, "command": "status", "executed": False}
     reason = platform_reason()
     report["platform"] = {"supported": reason is None, "reason": reason}
-    binary = expected = None
+    expected = None
     try:
         state = verified_state(args.prefix)
         code, value = child(["scripts/pilot-run.py", "--selection", state["selection"],
@@ -599,8 +692,7 @@ def status(args):
             report["selection"] = {"state": "configured", "path": state["selection"], "commit": state["commit"],
                                    "workspaces": value.get("workspaces")}
             selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
-            binary = Path(selection["files"]["agentfw"]["path"])
-            expected = selection["files"]["agentfw"]["sha256"]
+            expected = expected_identity(state, selection)
         else:
             report["selection"] = {"state": "stale", "reason": value.get("reason") or "selection_invalid",
                                    "hint": HINTS.get(value.get("reason"), "Prepare again with --apply.")}
@@ -608,22 +700,11 @@ def status(args):
         report["selection"] = {"state": "missing" if failure.code == "not_prepared" else "stale",
                                "reason": failure.code, "hint": HINTS.get(failure.code, "Prepare again with --apply.")}
     roots = [args.state_root] if args.state_root else [Path(tempfile.gettempdir()).resolve()]
-    runs = live_runs(roots, binary, expected)
-    report["runs"] = runs
-    live = [row for row in runs if row.get("protection") == "observed-live"]
-    if live:
-        report["protection"] = "observed-live"
-    elif any(row.get("protection") == "unknown" for row in runs):
-        report["protection"] = "unknown"
-    elif runs:
-        report["protection"] = "unavailable"
-    elif report["selection"]["state"] == "configured":
-        report["protection"] = "configured-not-running"
-    elif report["selection"]["state"] == "stale":
-        report["protection"] = "unavailable"
-    else:
-        report["protection"] = "not-configured"
-    report["meaning"] = {"observed-live": "an owned enforcing daemon answered an authenticated status query now",
+    runs = live_runs(roots, expected)
+    report["runs"] = [row for row in runs if row.get("protection") != "unrelated"]
+    report["unrelated_owned_runs"] = sum(1 for row in runs if row.get("protection") == "unrelated")
+    report["protection"] = overall(runs, report["selection"]["state"])
+    report["meaning"] = {"observed-live": "a run of this exact selection answered an authenticated status query now",
                          "configured-not-running": "a verified selection exists; nothing is protected until `run`",
                          "unavailable": "a run or selection exists but cannot protect now (see selection and runs)",
                          "unknown": "state could not be read safely", "not-configured": "nothing prepared"}[report["protection"]]

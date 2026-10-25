@@ -73,20 +73,21 @@ class FrontDoor:
     def __init__(self, args, env, cwd):
         self.args, self.env, self.cwd = args, env, cwd
 
-    def words(self, command, *extra, inputs=True):
-        words = [sys.executable, "-B", str(ROOT / "scripts/pilot.py"), command, "--prefix", str(self.args.prefix)]
+    def words(self, command, *extra, inputs=True, prefix=None, project_roots=True):
+        words = [sys.executable, "-B", str(ROOT / "scripts/pilot.py"), command, "--prefix", str(prefix or self.args.prefix)]
         if inputs:
             for name in INPUT_NAMES:
                 value = getattr(self.args, name)
                 if value is not None:
                     words += ["--" + name.replace("_", "-"), str(value)]
-            words += ["--filesystem-workspace", str(self.args.project), "--git-workspace", str(self.args.repository)]
+            if project_roots:
+                words += ["--filesystem-workspace", str(self.args.project), "--git-workspace", str(self.args.repository)]
             if self.args.allow_download:
                 words.append("--allow-download")
         return words + [str(word) for word in extra]
 
-    def call(self, command, *extra, inputs=True, trace=None, env=None, timeout=900):
-        words = self.words(command, *extra, inputs=inputs)
+    def call(self, command, *extra, inputs=True, trace=None, env=None, timeout=900, prefix=None, project_roots=True):
+        words = self.words(command, *extra, inputs=inputs, prefix=prefix, project_roots=project_roots)
         if trace is not None:
             words = [str(self.args.strace), "-f", "-qq", "-s", "256", "-e", "trace=execve,connect", "-o", str(trace), *words]
         result = subprocess.run(words, cwd=self.cwd, env=env or self.env, stdin=subprocess.DEVNULL,
@@ -151,10 +152,15 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None):
                     model.results[block["tool_use_id"]] = {"is_error": bool(block.get("is_error")),
                                                            "content": block.get("content")}
         if not live:
-            # Observe status while the protected host is active.
+            # Observe status while the protected host is active, for this
+            # prefix and for a second prepared prefix that is not running.
             code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=60)
             live.update(code=code, protection=value.get("protection"),
                         runs=[{k: row.get(k) for k in ("protection", "run_ids")} for row in value.get("runs", [])])
+            code, other, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=60,
+                                       prefix=args.other_prefix)
+            live.update(other_prefix_protection=other.get("protection"),
+                        other_prefix_unrelated_runs=other.get("unrelated_owned_runs"))
         ready.set()
         if hold:
             time.sleep(30)
@@ -254,6 +260,12 @@ def qualify(args, report):
                                 "second": again["status"], "steps": first.get("steps")})
         selection = Path(first["selection"])
         report["selection_sha256"] = BASE.sha(selection)
+        # A second prefix with generated demo roots: a different selection and
+        # workspaces from the same binaries and policy bytes.
+        code, other, _ = door.call("prepare", "--apply", prefix=args.other_prefix, project_roots=False, timeout=3600)
+        require(code == 0 and other.get("status") == "prepared-not-active" and other["selection"] != first["selection"],
+                "second_prefix_prepare_failed:" + str(other.get("reason")))
+        report["cases"].append({"case": "second-prefix-prepared", "passed": True, "status": other["status"]})
 
         code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=120)
         require(code == 0 and value.get("protection") == "configured-not-running", "status_before_run")
@@ -278,6 +290,9 @@ def qualify(args, report):
         require(snapshot(args.project) == baseline["project"] and snapshot(args.repository) == baseline["repository"],
                 "run_changed_project")
         require(row["live_status"].get("protection") == "observed-live", "status_did_not_observe_live_protection")
+        require(row["live_status"].get("other_prefix_protection") == "configured-not-running"
+                and row["live_status"].get("other_prefix_unrelated_runs") == 1,
+                "another_prefix_reported_this_run_as_its_protection")
         require(row["process_cleanup"]["all_stopped"], "useful_run_processes_remain")
         row["passed"] = True
 
@@ -358,6 +373,7 @@ def main():
         require(args.git is not None, "explicit_git_required_for_owned_fixture_repository")
         args.output.mkdir(mode=0o700, parents=True)
         args.prefix = args.output / "pilot-prefix"
+        args.other_prefix = args.output / "pilot-prefix-other"
         args.project = args.output / "project"
         args.repository = args.output / "repository"
         args.state_root = args.output / "run-state"

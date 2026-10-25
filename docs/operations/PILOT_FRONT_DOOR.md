@@ -54,7 +54,7 @@ All runtime inputs are explicit; nothing is chosen from `PATH`.
 | `--git PATH --bwrap PATH` | built by the native step into `PREFIX/native` (needs `--git-archive`/`--bwrap-archive` or `--allow-download`) |
 | `--agentfw --git-launcher --sandbox-tests` | built from this commit by the Agent step into `PREFIX/agent` (exact Rust 1.94.1, installed in advance; never auto-installed) |
 | `--node-archive TAR_XZ` or `--node --npm` | pinned Node 22.22.0 archive downloaded with `--allow-download` and digest-checked |
-| `--claude PATH` | locked Claude Code 2.1.251 installed with `npm ci --ignore-scripts` (needs `--allow-download`) |
+| `--claude PATH` | locked Claude Code 2.1.251 installed with `npm ci --ignore-scripts`, using only npm from the pinned Node archive this command verified (needs `--allow-download`) |
 | `--python PATH` | the interpreter that runs `pilot.py`, resolved and recorded |
 | `--python-archive --npm-cache --wheelhouse` | offline inputs; otherwise `--allow-download` |
 | `--native-output DIR`, `--agent-output DIR` | reuse an existing SOU-115/SOU-119 generation directory |
@@ -70,8 +70,10 @@ python3 -B "$repo/scripts/pilot.py" prepare --apply --prefix "$prefix" \
 ```
 
 Without `--apply`, `prepare` only shows the plan. With it, the steps run in
-order and stop at the first failure, naming the step and its reason. Each step
-keeps its accepted transaction: a failed step leaves the previous selected
+order and stop at the first failure, naming the step and its reason. The front
+door never executes a supplied or installed Claude host, Node or npm to probe
+it; the selection step verifies the pinned host image. Each step keeps its
+accepted transaction: a failed step leaves the previous selected
 generation and unrelated files unchanged. The result is a selection that is
 **prepared, not active**. The explicit options are recorded in
 `PREFIX/front-door.json` (mode 0600), so repeating `prepare --apply --prefix`
@@ -113,12 +115,14 @@ python3 -B "$repo/scripts/pilot.py" status --prefix "$prefix"
 
 | Protection | Meaning |
 | --- | --- |
-| `observed-live` | an owned enforcing daemon answered an authenticated `protection-status` query just now |
+| `observed-live` | a run of **this prefix's selection** is live: its supervisor names this selection and commit, its launcher uses this selection's binary, policy, profiles and project roots, and its own daemon answered an authenticated `protection-status` query for this selection's binary and registry, configured with this policy |
 | `configured-not-running` | a verified selection exists; nothing is protected until `run` |
 | `unavailable` | a run or selection exists but cannot protect now: its daemon does not answer, or the selection is stale |
 | `unknown` | state could not be read safely |
 | `not-configured` | nothing prepared under this prefix |
 
+A live run of another prefix, selection, policy or project root is counted as
+`unrelated_owned_runs` and never reported as protection for this prefix.
 The selection is shown as `configured`, `stale` (with the reason) or `missing`.
 Status reads only; it does not start, stop or repair anything and never prints
 tokens, environment or private logs. Use `--state-root` if the run used one.

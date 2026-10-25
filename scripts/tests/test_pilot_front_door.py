@@ -224,40 +224,137 @@ class Run(unittest.TestCase):
 
 
 class Status(unittest.TestCase):
+    """Status counts only a live run of the requested selection."""
+
     def setUp(self):
         self.root = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(self.root)]))
+        self.processes = []
+        self.addCleanup(self.cleanup)
+        # A stand-in "agentfw": bash runs the subcommand file of the same name
+        # from its working directory, keeping argv[0:2] as `agentfw SUBCOMMAND`.
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.agentfw = self.bin / "agentfw"
+        self.agentfw.write_bytes(Path("/bin/bash").read_bytes())
+        self.agentfw.chmod(0o755)
+        self.runner = self.root / "fake-pilot-run.py"
+        self.runner.write_text("import time\ntime.sleep(60)\n")
+        self.policies = {}
 
-    def run_dir(self, pids):
-        directory = self.root / "soup-wall-run-abc"
+    def cleanup(self):
+        for process in self.processes:
+            process.kill()
+            process.wait()
+        subprocess.run(["rm", "-rf", str(self.root)])
+
+    def expected(self, name, workspace=None):
+        prefix = self.root / name
+        prefix.mkdir(exist_ok=True)
+        policy = prefix / "policy.yaml"
+        policy.write_text("default: allow # " + name + "\n")
+        return {"selection": str(prefix / "selection.json"), "commit": COMMIT, "selection_sha256": "c" * 64,
+                "agentfw": str(self.agentfw), "agentfw_sha256": "d" * 64,
+                "policy": str(policy), "policy_sha256": M.sha(policy),
+                "claude": str(prefix / "claude"), "registry_sha256": "e" * 64,
+                "workspace": workspace or str(self.root / "project"), "git_workspace": str(self.root / "repo"),
+                "fs_profile": str(prefix / "fs.json"), "git_profile": str(prefix / "git.json")}
+
+    def start(self, words, cwd):
+        process = subprocess.Popen(words, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+        self.processes.append(process)
+        return process.pid
+
+    def live_run(self, name, identity, daemon_policy=None, registry=None):
+        """Owned processes whose argv is exactly what pilot-run starts."""
+        directory = self.root / ("soup-wall-run-" + name)
         home = directory / ".agentfw"
         (home / "pilot-runs" / ("f" * 32)).mkdir(parents=True)
         (home / "pilot-runs" / ("f" * 32) / "run.json").write_text("{}")
         (home / "native-token").write_text("SECRET-TOKEN-MUST-NOT-APPEAR")
+        for script in ("pilot-launch", "serve"):
+            (directory / script).write_text("sleep 60\n")
+        supervisor = self.start([sys.executable, str(self.runner), "--run", "--selection", identity["selection"],
+                                 "--expected-commit", identity["commit"]], directory)
+        launcher = self.start([str(self.agentfw), "pilot-launch", "--claude", identity["claude"], "--agent-bin",
+                               str(self.agentfw), "--home", str(home), "--workspace", identity["workspace"],
+                               "--git-workspace", identity["git_workspace"], "--fs-profile", identity["fs_profile"],
+                               "--git-profile", identity["git_profile"], "--policy", identity["policy"]], directory)
+        daemon = self.start([str(self.agentfw), "serve"], directory)
+        # The daemon's current configuration and an authenticated-query stand-in
+        # that answers only for the daemon's actual registry.
+        actual_registry = registry or identity["registry_sha256"]
+        (home / "config.yaml").write_text(json.dumps({"enforce": True, "policy": daemon_policy or identity["policy"],
+            "native": {"registry_sha256": actual_registry}}))
+        snapshot = json.dumps({"snapshot": {"runtime": {"pid": daemon, "instance": "i-" + name},
+                                            "policy": {"sha256": "9" * 64}}})
+        (directory / "protection-status").write_text(f'[ "$8" = "{actual_registry}" ] || exit 2\necho \'{snapshot}\'\n')
         (directory / "run.json").write_text(json.dumps({"format": "sw-prepared-pilot-run/1", "home": str(home),
-            "supervisor_pid": pids[0], "launcher_pid": pids[1], "daemon_pid": pids[2], "port": 1}))
+            "supervisor_pid": supervisor, "launcher_pid": launcher, "daemon_pid": daemon, "port": 1}))
+        import time
+        for _ in range(100):
+            try:
+                if all(M.argv(pid)[:1] for pid in (supervisor, launcher, daemon)) and len(M.argv(launcher)) > 3:
+                    break
+            except OSError:
+                pass
+            time.sleep(.02)
         return home
 
-    def test_dead_run_is_unavailable_and_live_needs_an_authenticated_answer(self):
-        self.run_dir([2 ** 22 + 1] * 3)
-        rows = M.live_runs([self.root], Path("/bin/false"), "0" * 64)
-        self.assertEqual(rows[0]["protection"], "unavailable")
-        self.assertEqual(rows[0]["run_ids"], ["f" * 32])
-        self.assertNotIn("SECRET-TOKEN", json.dumps(rows))
-        subprocess.run(["rm", "-rf", str(self.root / "soup-wall-run-abc")])
-        self.run_dir([os.getpid()] * 3)
-        rows = M.live_runs([self.root], Path("/bin/false"), "0" * 64)
-        self.assertEqual(rows[0]["protection"], "unavailable")
-        rows = M.live_runs([self.root], None, None)
-        self.assertEqual(rows[0]["protection"], "unknown")
+    def rows(self, expected):
+        with mock.patch.object(M, "RUNNER", self.runner):
+            return M.live_runs([self.root], expected)
+
+    def test_live_run_of_this_selection_is_observed(self):
+        a = self.expected("a")
+        self.live_run("a", a)
+        rows = self.rows(a)
+        self.assertEqual((rows[0]["protection"], rows[0]["selection_match"]), ("observed-live", True))
+        self.assertEqual(M.overall(rows, "configured"), "observed-live")
         self.assertNotIn("SECRET-TOKEN", json.dumps(rows))
 
-    def test_unreadable_or_foreign_record_is_unknown_not_live(self):
-        directory = self.root / "soup-wall-run-xyz"
-        directory.mkdir()
-        (directory / "run.json").write_text("{not json")
-        rows = M.live_runs([self.root], Path("/bin/true"), "0" * 64)
-        self.assertEqual(rows[0]["protection"], "unknown")
+    def test_another_prefix_live_run_never_proves_this_selection(self):
+        a, b = self.expected("a"), self.expected("b")
+        self.live_run("b", b)
+        rows = self.rows(a)
+        self.assertEqual(rows[0]["protection"], "unrelated")
+        self.assertEqual(M.overall(rows, "configured"), "configured-not-running")
+
+    def test_same_binary_with_another_policy_or_workspace_is_not_this_selection(self):
+        a = self.expected("a")
+        self.live_run("policy", dict(a, policy=str(self.root / "other-policy.yaml")))
+        self.live_run("workspace", dict(a, workspace=str(self.root / "other-project")))
+        rows = self.rows(a)
+        self.assertEqual([row["protection"] for row in rows], ["unrelated", "unrelated"])
+        self.assertEqual(M.overall(rows, "configured"), "configured-not-running")
+
+    def test_matching_argv_but_different_enforced_policy_or_registry_is_unavailable_not_live(self):
+        a = self.expected("a")
+        other = self.expected("b")["policy"]
+        self.live_run("policy", a, daemon_policy=other)
+        self.live_run("registry", a, registry="0" * 64)
+        rows = self.rows(a)
+        self.assertEqual([(row["protection"], row["selection_match"]) for row in rows], [("unavailable", True)] * 2)
+        self.assertEqual(M.overall(rows, "configured"), "unavailable")
+        # Policy bytes changed after the run started: not live either.
+        subprocess.run(["rm", "-rf", *[str(path) for path in self.root.glob("soup-wall-run-*")]])
+        self.live_run("a", a)
+        Path(a["policy"]).write_text("default: deny\n")
+        self.assertEqual(self.rows(a)[0]["protection"], "unavailable")
+
+    def test_dead_or_unreadable_records_are_never_live(self):
+        directory = self.root / "soup-wall-run-dead"
+        home = directory / ".agentfw"
+        home.mkdir(parents=True)
+        (directory / "run.json").write_text(json.dumps({"format": "sw-prepared-pilot-run/1", "home": str(home),
+            "supervisor_pid": 2 ** 22 + 1, "launcher_pid": 2 ** 22 + 2, "daemon_pid": 2 ** 22 + 3, "port": 1}))
+        broken = self.root / "soup-wall-run-broken"
+        broken.mkdir()
+        (broken / "run.json").write_text("{not json")
+        rows = self.rows(self.expected("a"))
+        self.assertEqual(sorted(row["protection"] for row in rows), ["unavailable", "unknown"])
+        self.assertEqual(M.overall(rows, "configured"), "unknown")
+        self.assertNotEqual(M.overall(rows, "configured"), "observed-live")
 
     def test_human_status_lists_the_existing_stop_command(self):
         text = M.human({"command": "status", "protection": "observed-live", "meaning": "m",
@@ -265,6 +362,51 @@ class Status(unittest.TestCase):
                         "runs": [{"run_directory": "/r", "protection": "observed-live", "home": "/r/.agentfw",
                                   "run_ids": ["f" * 32]}]})
         self.assertIn("agentfw pilot-approval --home /r/.agentfw --run " + "f" * 32 + " stop", text)
+
+
+class Prepare(unittest.TestCase):
+    def test_claude_install_never_runs_an_unverified_node_or_npm(self):
+        temporary = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(temporary)]))
+        marker = temporary / "marker"
+        helper = temporary / "npm"
+        helper.write_text(f"#!/bin/sh\ntouch {marker}\n")
+        helper.chmod(0o755)
+        archive = temporary / "node.tar.xz"
+        archive.write_bytes(b"not the pinned archive")
+        for inputs in ({"npm": helper, "node": helper}, {"node_archive": archive, "npm": helper}):
+            with self.assertRaises(M.Failure) as caught:
+                M.install_claude(inputs, temporary)
+            self.assertEqual(caught.exception.code, "claude_install_requires_pinned_node_archive_or_supply_claude")
+        self.assertFalse(marker.exists())
+
+    def test_prepare_never_executes_the_supplied_host(self):
+        """A helper with the right name and version output is never run by the
+        front door; the accepted selection step decides from the pinned digest."""
+        temporary = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(temporary)]))
+        marker = temporary / "marker"
+        helper = temporary / "claude"
+        helper.write_text(f"#!/bin/sh\ntouch {marker}\necho '{M.CLAUDE_VERSION}'\n")
+        helper.chmod(0o755)
+        prefix = temporary / "prefix"
+        words = ["prepare", "--apply", "--prefix", str(prefix), "--claude", str(helper)]
+        for name in ("git", "bwrap", "agentfw", "git-launcher", "sandbox-tests", "node", "npm", "python"):
+            words += ["--" + name, str(helper)]
+        args = M.parser().parse_args(words)
+        selection = prefix / "preparation/generations" / ("c" * 32) / "selection.json"
+        report = {"command": "prepare", "missing": [], "source": clean_source(), "stages": []}
+
+        def child(command, **_):
+            # The real selection step would compare the pinned host digest here.
+            selection.parent.mkdir(parents=True, exist_ok=True)
+            selection.write_text("{}")
+            return 0, {"status": "prepared-not-active", "selection": str(selection)}
+        with mock.patch.object(M, "plan", lambda _: dict(report)), mock.patch.object(M, "child", child), \
+                mock.patch.object(M.PREP, "private_dir", lambda path, create=False: path):
+            result = M.prepare(args)
+        self.assertEqual(result["status"], "prepared-not-active")
+        self.assertFalse(marker.exists(), "the front door executed the supplied host")
 
 
 class Preview(unittest.TestCase):
