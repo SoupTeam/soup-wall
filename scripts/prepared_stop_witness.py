@@ -152,7 +152,7 @@ class Provider:
 
 
 class Prepared:
-    def __init__(self, context, root, hold_after=True, defer_ready=False):
+    def __init__(self, context, root, hold_after=True, defer_ready=False, trace_string_bytes=1048576):
         self.c, self.root = context, root
         root.mkdir(mode=0o700)
         self.state = root / "state"
@@ -166,7 +166,9 @@ class Prepared:
         self.env = dict(context.env, ANTHROPIC_BASE_URL=self.model.url,
             ANTHROPIC_API_KEY="owned-loopback-only", HTTP_PROXY="http://127.0.0.1:9",
             HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
-        command = [str(context.args.strace), "-f", "-qq", "-s", "1048576", "-e",
+        require(type(trace_string_bytes) is int and trace_string_bytes in (4096, 1048576),
+                "stop_trace_string_bound_invalid")
+        command = [str(context.args.strace), "-f", "-qq", "-s", str(trace_string_bytes), "-e",
             "trace=execve,openat,write,writev,kill", "-o", str(self.trace), sys.executable, "-B",
             str(context.source / "scripts/pilot-run.py"), "--run", "--selection",
             str(context.args.selection), "--expected-commit", context.args.expected_commit,

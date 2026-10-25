@@ -145,7 +145,10 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                 if any(path.is_dir() for path in delegation.iterdir()):
                     raise ValueError('pressure_root_not_empty')
                 phase('peer-start')
-                peer = q.STOP.Prepared(peer_context, root / 'peer', hold_after=False)
+                peer = q.STOP.Prepared(peer_context, root / 'peer', hold_after=False, trace_string_bytes=4096)
+                # The independent peer needs complete small MCP requests and exact
+                # target open/exec syscalls, not megabyte Git diff writes. The
+                # existing 32 MiB total cap and truncated-frame refusal stay.
                 # Peer tools remain behind its owned provider barrier until
                 # the subject has completed its real resource refusal.
                 if peer.observe()['calls']:
@@ -226,7 +229,7 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                 # A new real prepared run on the reclaimed subject substrate
                 # creates fresh host authority/binding; no grant is replayed.
                 phase('recovery-start')
-                recovery = q.STOP.Prepared(peer_context, root / 'recovery', hold_after=False)
+                recovery = q.STOP.Prepared(peer_context, root / 'recovery', hold_after=False, trace_string_bytes=4096)
                 phase('recovery-finish')
                 recovery_result = finish_useful(recovery)
                 row.update(status='passed' if verified else 'incomplete',
