@@ -11,6 +11,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import resource
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,8 +82,11 @@ def make_pairs():
 
 
 def run(worker, request):
+    def limits():
+        resource.setrlimit(resource.RLIMIT_AS, (512*1024*1024, 512*1024*1024))
     p = subprocess.run([str(worker)], input=(json.dumps(request)+'\n').encode(),
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, check=True)
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, check=True,
+                       preexec_fn=limits)
     assert len(p.stdout) <= 64*1024*1024
     result = json.loads(p.stdout)
     assert not result.get('diagnostic_incomplete')
@@ -92,11 +96,17 @@ def run(worker, request):
 def main(args):
     assert not subprocess.check_output(['git', '-C', str(ROOT), 'status', '--porcelain']), 'commit before probing'
     pairs = make_pairs()
+    build_identity = json.loads(args.main_build_identity.read_bytes())
+    assert build_identity['accepted_main'] == MAIN
+    old_manifest = json.loads(blob('HEAD', 'docs/operations/evidence/sou109-ledger/manifest.json'))
+    assert sha(args.ledger_worker.read_bytes()) == old_manifest['candidate_binary_sha256']
     freeze = {'source_commit': subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD']).decode().strip(),
               'accepted_main': MAIN, 'ledger_worker_source_commit': args.ledger_source,
               'main_worker_sha256': sha(args.main_worker.read_bytes()),
               'ledger_worker_sha256': sha(args.ledger_worker.read_bytes()),
               'probe_sha256': sha(Path(__file__).read_bytes()),
+              'main_build_identity': build_identity, 'deadline_seconds': 10,
+              'worker_address_space_bytes': 512*1024*1024,
               'production_authority': False, 'cases': []}
     requests = []
     args.output.mkdir(parents=True, exist_ok=False)
@@ -146,6 +156,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--main-worker', type=Path, required=True)
+    parser.add_argument('--main-build-identity', type=Path, required=True)
     parser.add_argument('--ledger-worker', type=Path, required=True)
     parser.add_argument('--ledger-source', required=True)
     parser.add_argument('--output', type=Path, required=True)
