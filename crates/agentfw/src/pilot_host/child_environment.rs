@@ -53,6 +53,11 @@ impl Guard {
     pub(crate) fn confirm_until(self, host_deadline: Instant) -> Result<()> {
         let Self { mut parent, child } = self;
         drop(child);
+        // Darwin can reject SO_RCVTIMEO after the peer closes even while its
+        // complete acknowledgement remains buffered. Nonblocking I/O and poll
+        // preserve the absolute deadline without changing a closed socket's
+        // timeout options or treating an I/O error as successful readiness.
+        parent.set_nonblocking(true)?;
         // Readiness consumes the existing host budget. Neither partial reads
         // nor waiting for EOF may restart that budget or the startup cap.
         let deadline = host_deadline.min(Instant::now() + Duration::from_secs(3));
@@ -62,9 +67,23 @@ impl Guard {
                     .checked_duration_since(Instant::now())
                     .filter(|value| !value.is_zero())
                     .ok_or_else(|| anyhow::anyhow!("provider_child_environment_unavailable"))?;
-                parent.set_read_timeout(Some(remaining))?;
                 match parent.read(bytes) {
                     Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        let mut poll = libc::pollfd {
+                            fd: parent.as_raw_fd(),
+                            events: libc::POLLIN,
+                            revents: 0,
+                        };
+                        // The startup cap bounds this to at most 3000ms.
+                        // Round down and recheck the deadline before reading.
+                        if unsafe { libc::poll(&mut poll, 1, remaining.as_millis() as i32) } < 0 {
+                            let error = std::io::Error::last_os_error();
+                            if error.kind() != std::io::ErrorKind::Interrupted {
+                                return Err(error.into());
+                            }
+                        }
+                    }
                     result => return Ok(result?),
                 }
             }
@@ -130,14 +149,43 @@ os.write(fd,b'sw-provider-ready/1');os.close(fd)
                 .ends_with(include_bytes!("child_environment.cjs")));
             assert!(!startup.contains("owned-marker-test"));
             let mut child = command.spawn().unwrap();
+            let confirmation = guard.confirm_until(Instant::now() + Duration::from_secs(3));
+            assert_eq!(confirmation.is_ok(), installed, "{confirmation:?}");
+            assert!(child.wait().unwrap().success());
+        }
+    }
+
+    #[test]
+    fn closed_peer_requires_exact_complete_ready_and_eof() {
+        use std::io::Write;
+        for (payload, accepted) in [
+            (b"sw-provider-ready/1".as_slice(), true),
+            (b"sw-provider-ready/1x".as_slice(), false),
+            (b"sw-provider-ready/".as_slice(), false),
+            (b"".as_slice(), false),
+        ] {
+            let (parent, mut child) = UnixStream::pair().unwrap();
+            child.write_all(payload).unwrap();
+            let guard = Guard { parent, child };
             assert_eq!(
                 guard
                     .confirm_until(Instant::now() + Duration::from_secs(3))
                     .is_ok(),
-                installed
+                accepted
             );
-            assert!(child.wait().unwrap().success());
         }
+    }
+
+    #[test]
+    fn complete_ready_without_eof_cannot_extend_the_host_deadline() {
+        use std::io::Write;
+        let (parent, mut child) = UnixStream::pair().unwrap();
+        child.write_all(b"sw-provider-ready/1").unwrap();
+        let _still_open = child.try_clone().unwrap();
+        let guard = Guard { parent, child };
+        assert!(guard
+            .confirm_until(Instant::now() + Duration::from_millis(30))
+            .is_err());
     }
 
     #[test]

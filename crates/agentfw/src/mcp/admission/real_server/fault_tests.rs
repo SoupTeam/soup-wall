@@ -20,6 +20,250 @@ type Reader = BufReader<ReadHalf<DuplexStream>>;
 type Writer = WriteHalf<DuplexStream>;
 
 #[tokio::test]
+async fn selected_admission_errors_stay_bounded_without_echoing_private_bodies() {
+    for (body, expected) in [
+        (
+            json!({"error_code":"native_fixture_refused","private":"private fixture payload"})
+                .to_string(),
+            "code=native_fixture_refused",
+        ),
+        (
+            json!({"error_code":"private fixture payload"}).to_string(),
+            "code=unavailable",
+        ),
+        (
+            "private fixture payload".repeat(1024),
+            "MCP admission response exceeds limit",
+        ),
+    ] {
+        let daemon = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(409).set_body_string(body))
+            .mount(&daemon)
+            .await;
+        let config =
+            installed_registry_config(installed_registry_entries(server_profile::FORMAT)).unwrap();
+        let collector = Collector::new(&config).unwrap();
+        let error = collector
+            .post(&daemon.uri(), "fixture-token", &json!({}))
+            .await
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains(expected), "{message}");
+        assert!(!message.contains("private fixture payload"));
+    }
+}
+
+// Only unit-test builds have this task-local producer/completion seam. The
+// real relay, native receipt transport, policy boundary and Linux publisher
+// run unchanged; this is deterministic phase coverage, not upstream evidence.
+#[cfg(target_os = "linux")]
+struct CreateDriver {
+    phase: &'static str,
+    paused: AtomicBool,
+    reached: tokio::sync::Notify,
+    resume: tokio::sync::Notify,
+}
+
+#[cfg(target_os = "linux")]
+tokio::task_local! { static CREATE_DRIVER: Arc<CreateDriver>; }
+
+#[cfg(target_os = "linux")]
+pub(super) fn controlled_create_output(
+    args: &Value,
+) -> Option<anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)>> {
+    CREATE_DRIVER
+        .try_with(|_| {
+            let output = crate::mcp::original_create::verified_test_output(args)?;
+            let text = format!("Successfully wrote to {}", args["path"].as_str().unwrap());
+            Ok((
+                frame(&json!({"jsonrpc":"2.0","id":3,"result":{
+            "content":[{"type":"text","text":text}],"structuredContent":{"content":text}}})),
+                Some(output),
+            ))
+        })
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+pub(super) async fn pause_create_completion(phase: &str) {
+    if let Ok(driver) = CREATE_DRIVER.try_with(Arc::clone) {
+        if driver.phase == phase && !driver.paused.swap(true, Ordering::SeqCst) {
+            driver.reached.notify_one();
+            driver.resume.notified().await;
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn create_phase_fixture(phase: &'static str) -> (Harness, Arc<CreateDriver>) {
+    create_phase_fixture_with_fault(phase, "normal").await
+}
+
+#[cfg(target_os = "linux")]
+async fn create_phase_fixture_with_fault(
+    phase: &'static str,
+    fault: &'static str,
+) -> (Harness, Arc<CreateDriver>) {
+    let driver = Arc::new(CreateDriver {
+        phase,
+        paused: AtomicBool::new(false),
+        reached: tokio::sync::Notify::new(),
+        resume: tokio::sync::Notify::new(),
+    });
+    let fixture = CREATE_DRIVER
+        .scope(
+            driver.clone(),
+            Harness::for_format(fault, server_profile::filesystem_create::FORMAT),
+        )
+        .await;
+    (fixture, driver)
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn original_create_daemon_size_refusal_cannot_authorize_publication() {
+    let (mut fixture, _) = create_phase_fixture_with_fault("none", "create-result-cap").await;
+    fixture.ready().await;
+    fixture.host(json!({"jsonrpc":"2.0","id":"capped-create","method":"tools/call",
+        "params":{"name":"write_file","arguments":{"path":"/workspace/refused.txt","content":"private"}}})).await;
+    let refusal = fixture.host_reply().await;
+    assert_eq!(refusal["id"], "capped-create");
+    assert_eq!(
+        refusal["error"]["message"],
+        DaemonSizeLimit("native_record_over_cap").message()
+    );
+    assert_eq!(
+        std::fs::read_dir(fixture.boundary_home.path().join("workspace"))
+            .unwrap()
+            .count(),
+        0
+    );
+    fixture.useful(json!("useful-after-create-cap")).await;
+    fixture.host(json!({"jsonrpc":"2.0","id":"capped-create","method":"tools/call",
+        "params":{"name":"write_file","arguments":{"path":"/workspace/replay.txt","content":"private"}}})).await;
+    assert_eq!(fixture.host_reply().await["error"]["code"], -32600);
+    let inspected = completions(&fixture).await;
+    assert_eq!(inspected.len(), 3);
+    assert_eq!(inspected[0]["result_kind"], "value");
+    assert_eq!(inspected[1]["result_kind"], "error");
+    assert_eq!(inspected[0]["call_id"], inspected[1]["call_id"]);
+    assert_eq!(
+        std::fs::read_dir(fixture.boundary_home.path().join("workspace"))
+            .unwrap()
+            .count(),
+        0
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn original_create_cancel_after_inspection_or_staging_never_publishes_and_continues() {
+    for phase in ["inspected", "staged"] {
+        let (mut fixture, driver) = create_phase_fixture(phase).await;
+        fixture.ready().await;
+        fixture.host(json!({"jsonrpc":"2.0","id":"cancel-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/cancelled.txt","content":"private"}}})).await;
+        tokio::time::timeout(Duration::from_secs(5), driver.reached.notified())
+            .await
+            .unwrap();
+        let workspace = fixture.boundary_home.path().join("workspace");
+        let barrier = crate::policy_transition::Barrier::new(fixture.boundary_home.path()).unwrap();
+        assert!(
+            barrier.try_activation().unwrap().is_none(),
+            "policy activation overtook the original-create {phase} boundary"
+        );
+        assert_eq!(std::fs::read_dir(&workspace).unwrap().count(), 0);
+        fixture
+            .host(json!({"jsonrpc":"2.0","method":"notifications/cancelled",
+            "params":{"requestId":"cancel-write"}}))
+            .await;
+        assert_eq!(fixture.host_reply().await["error"]["code"], -32800);
+        driver.resume.notify_one();
+        fixture.useful(json!("useful-after-cancel")).await;
+        // A spent ID cannot regain publication authority even for a different
+        // leaf after the cancelled result has already spent its native grant.
+        fixture.host(json!({"jsonrpc":"2.0","id":"cancel-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/replayed.txt","content":"private"}}})).await;
+        assert_eq!(fixture.host_reply().await["error"]["code"], -32600);
+        fixture.host(json!({"jsonrpc":"2.0","id":"fresh-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/fresh.txt","content":"continued"}}})).await;
+        let reply = fixture.host_reply().await;
+        assert!(reply.get("result").is_some(), "{phase}: {reply}");
+        assert_eq!(
+            std::fs::read_to_string(workspace.join("fresh.txt")).unwrap(),
+            "continued"
+        );
+        assert!(!workspace.join("cancelled.txt").exists());
+        assert!(!workspace.join("replayed.txt").exists());
+        assert_eq!(std::fs::read_dir(workspace).unwrap().count(), 1);
+        assert!(
+            barrier.try_activation().unwrap().is_some(),
+            "completed original creates leaked their policy boundary"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn original_create_eof_after_inspection_or_staging_discards_output() {
+    for phase in ["inspected", "staged"] {
+        let (mut fixture, driver) = create_phase_fixture(phase).await;
+        fixture.ready().await;
+        fixture.host(json!({"jsonrpc":"2.0","id":"eof-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/eof.txt","content":"private"}}})).await;
+        tokio::time::timeout(Duration::from_secs(5), driver.reached.notified())
+            .await
+            .unwrap();
+        fixture.host_input.shutdown().await.unwrap();
+        driver.resume.notify_one();
+        tokio::time::timeout(Duration::from_secs(5), &mut fixture.task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            std::fs::read_dir(fixture.boundary_home.path().join("workspace"))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn original_create_native_ask_cannot_use_selected_readonly_approval() {
+    let mut fixture = Harness::for_format(
+        "create-daemon-ask",
+        server_profile::filesystem_create::FORMAT,
+    )
+    .await;
+    fixture.ready().await;
+    fixture.host(json!({"jsonrpc":"2.0","id":"write-ask","method":"tools/call",
+        "params":{"name":"write_file","arguments":{"path":"/workspace/ask.txt","content":"private"}}})).await;
+    let response = fixture.host_reply().await;
+    assert_eq!(response["id"], "write-ask");
+    assert!(
+        response.to_string().contains("fixture_native_ask"),
+        "{response}"
+    );
+    assert!(!fixture
+        .boundary_home
+        .path()
+        .join("workspace/ask.txt")
+        .exists());
+    assert!(!fixture
+        .daemon
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .any(|request| request.url.path() == "/approval"));
+    fixture.useful(json!("read-after-create-ask")).await;
+}
+
+#[tokio::test]
 async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classification() {
     struct Evidence {
         actions: Vec<String>,
@@ -102,6 +346,9 @@ async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classif
             progress: None,
             progress_count: 0,
             last_progress: 0.0,
+            create_lease: None,
+            #[cfg(target_os = "linux")]
+            pinned_workspace: None,
         };
         let profile = server_profile::ProfileConfig {
             workspace_identity: None,
@@ -172,6 +419,9 @@ async fn selected_pending_approval_cancellation_rejection_and_timeout_close_exac
             progress: None,
             progress_count: 0,
             last_progress: 0.0,
+            create_lease: None,
+            #[cfg(target_os = "linux")]
+            pinned_workspace: None,
         };
         let context = crate::native::approval::SelectedInvocation {
             host_call_id: call.id.clone(),
@@ -242,7 +492,15 @@ fn installed_registry_entries(format: &str) -> Vec<Value> {
 }
 
 fn installed_registry_config(tools: Vec<Value>) -> anyhow::Result<AdmissionCfg> {
-    let registry = json!({"contract_version":CONTRACT,"registry_id":"installed-shared-regression","tools":tools}).to_string();
+    installed_registry_config_with_id(tools, "installed-shared-regression")
+}
+
+fn installed_registry_config_with_id(
+    tools: Vec<Value>,
+    registry_id: &str,
+) -> anyhow::Result<AdmissionCfg> {
+    let registry =
+        json!({"contract_version":CONTRACT,"registry_id":registry_id,"tools":tools}).to_string();
     Ok(AdmissionCfg {
         host_session: None,
         child_authority: None,
@@ -267,23 +525,32 @@ fn installed_registry_config(tools: Vec<Value>) -> anyhow::Result<AdmissionCfg> 
 
 #[tokio::test]
 async fn selected_registry_shared_daemon_accepts_both_exact_original_profiles() {
-    let formats = [server_profile::FORMAT, server_profile::git::FORMAT];
-    let tools = formats
-        .into_iter()
-        .flat_map(installed_registry_entries)
-        .collect();
-    let config = installed_registry_config(tools).unwrap();
-    let collector = Collector::new(&config).unwrap();
-    for format in formats {
-        let manifest = server_profile::original_manifest_for(format).unwrap();
-        let profiles = server_profile::classify_manifest_for(format, &manifest).unwrap();
-        validate_registry(
-            &collector,
-            &profiles,
-            manifest["tools"].as_array().unwrap(),
-            format,
-        )
-        .expect("a daemon registry may explicitly install both original read-only server families");
+    for git_format in [
+        server_profile::git::FORMAT,
+        server_profile::git::LOCAL_REFS_FORMAT,
+        server_profile::git::SHALLOW_FORMAT,
+        server_profile::git_local_clone::FORMAT,
+    ] {
+        let formats = [server_profile::FORMAT, git_format];
+        let tools = formats
+            .into_iter()
+            .flat_map(installed_registry_entries)
+            .collect();
+        let config = installed_registry_config(tools).unwrap();
+        let collector = Collector::new(&config).unwrap();
+        for format in formats {
+            let manifest = server_profile::original_manifest_for(format).unwrap();
+            let profiles = server_profile::classify_manifest_for(format, &manifest).unwrap();
+            validate_registry(
+                &collector,
+                &profiles,
+                manifest["tools"].as_array().unwrap(),
+                format,
+            )
+            .expect(
+                "a daemon registry may explicitly install both original read-only server families",
+            );
+        }
     }
 }
 
@@ -355,6 +622,47 @@ async fn selected_registry_shared_daemon_preserves_each_family_authority_and_sch
             format
         )
         .is_err());
+    }
+}
+
+#[tokio::test]
+async fn selected_registry_create_only_does_not_inherit_shared_daemon_peer_authority() {
+    let format = server_profile::filesystem_create::FORMAT;
+    let manifest = server_profile::original_manifest_for(format).unwrap();
+    let profiles = server_profile::classify_manifest_for(format, &manifest).unwrap();
+    let own = installed_registry_entries(format);
+    for peer_format in [
+        None,
+        Some(server_profile::git::FORMAT),
+        Some(server_profile::git::LOCAL_REFS_FORMAT),
+        Some(server_profile::git::SHALLOW_FORMAT),
+        Some(server_profile::git_local_clone::FORMAT),
+    ] {
+        let mut tools = own.clone();
+        if let Some(peer_format) = peer_format {
+            let peer = installed_registry_entries(peer_format)
+                .into_iter()
+                .find(|tool| tool["name"] == "git_show")
+                .unwrap();
+            tools.push(peer);
+        }
+        let config = installed_registry_config_with_id(tools, "filesystem-create-only-v1")
+            .expect("native loader must accept these individually pinned tool entries");
+        let collector = Collector::new(&config).unwrap();
+        let result = validate_registry(
+            &collector,
+            &profiles,
+            manifest["tools"].as_array().unwrap(),
+            format,
+        );
+        if peer_format.is_some() {
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "selected registry contains an unadvertised tool"
+            );
+        } else {
+            result.expect("exact original create-only registry must remain supported");
+        }
     }
 }
 
@@ -447,6 +755,13 @@ impl Harness {
             .respond_with(move |request:&Request| {
                 let value:Value=serde_json::from_slice(&request.body).unwrap();
                 if fault=="daemon-loss" && value["event"]=="call" { return ResponseTemplate::new(503); }
+                if fault == "create-daemon-ask" && value["event"] == "call" && value["tool"] == "write_file" {
+                    return ResponseTemplate::new(200).set_body_json(json!({
+                        "contract_version":CONTRACT,"registry_sha256":value["registry_sha256"],
+                        "session_id":value["session_id"],"event":"call","verdict":"ask",
+                        "enforced":true,"release":false,"call_id":null,"binding_sha256":null,
+                        "content_sha256":null,"reason_codes":["fixture_native_ask"]}));
+                }
                 let allowed=value["args"]["path"]!="/workspace/deny";
                 let mut receipt=json!({"contract_version":CONTRACT,"registry_sha256":value["registry_sha256"],
                     "session_id":value["session_id"],"event":value["event"],"verdict":if allowed{"allow"}else{"deny"},
@@ -458,7 +773,8 @@ impl Harness {
                     grants.lock().unwrap().insert(call_id.clone(),binding.clone());
                     receipt["call_id"]=json!(call_id);receipt["binding_sha256"]=json!(binding);
                 } else if value["event"]=="result" {
-                    if fault=="record-cap" && value["content"].as_str().unwrap().contains("OVER_DAEMON_RECORD") {
+                    if (fault=="record-cap" && value["content"].as_str().unwrap().contains("OVER_DAEMON_RECORD"))
+                        || (fault=="create-result-cap" && value["tool"]=="write_file" && value["result_kind"]=="value") {
                         // Refused before any state change; the grant stays unspent.
                         return ResponseTemplate::new(413).set_body_json(json!({"contract_version":CONTRACT,"release":false,"error_code":"native_record_over_cap"}));
                     }
@@ -477,13 +793,21 @@ impl Harness {
             if !unsupported {entry["mcp_result_profile"]=json!(server_profile::FORMAT);}
             entry
         }).collect::<Vec<_>>();
-        if format == server_profile::git::FORMAT {
+        if format == server_profile::git::FORMAT
+            || format == server_profile::filesystem_create::FORMAT
+        {
             tools = installed_registry_entries(format);
         }
         if fault == "shared-registry" {
             tools.extend(installed_registry_entries(server_profile::git::FORMAT));
         }
-        let registry=json!({"contract_version":CONTRACT,"registry_id":"selected-relay-faults","tools":tools}).to_string();
+        let registry_id = if format == server_profile::filesystem_create::FORMAT {
+            "filesystem-create-only-v1"
+        } else {
+            "selected-relay-faults"
+        };
+        let registry = json!({"contract_version":CONTRACT,"registry_id":registry_id,"tools":tools})
+            .to_string();
         let native = NativeState::from_bytes(
             registry.as_bytes(),
             &sha(registry.as_bytes()),
@@ -502,9 +826,16 @@ impl Harness {
             native,
             command: "never-spawned".into(),
             args: vec![],
-            classifier: Some(Arc::new(ReadTestDouble)),
+            classifier: Some(if format == server_profile::filesystem_create::FORMAT {
+                Arc::new(crate::mcp::admission::FixtureTestDouble)
+            } else {
+                Arc::new(ReadTestDouble)
+            }),
             resource_profiles: BTreeMap::new(),
-            approval: None,
+            approval: (fault == "create-daemon-ask").then(|| super::super::ApprovalWait {
+                url: format!("{}/approval", daemon.uri()),
+                wait: Duration::from_millis(300),
+            }),
             liveness_url: None,
             liveness_lease_seconds: None,
         };
@@ -518,14 +849,18 @@ impl Harness {
         let release_gate = Arc::new(WriteGate::default());
         let mut relay_child = GatedWriter(relay_child, dispatch_gate.clone());
         let mut relay_host = GatedWriter(relay_host, release_gate.clone());
-        let task = tokio::spawn(async move {
+        let workspace = boundary_home.path().join("workspace");
+        std::fs::create_dir(&workspace).unwrap();
+        #[cfg(target_os = "linux")]
+        let create_driver = CREATE_DRIVER.try_with(Arc::clone).ok();
+        let run = async move {
             let collector = Collector::new(&config)?;
             // Protocol-only fixture: this profile is never spawned or used to
             // qualify approval resumption / Linux filesystem confinement.
             let profile = server_profile::ProfileConfig {
                 workspace_identity: None,
                 format: format.into(),
-                workspace: "/workspace".into(),
+                workspace,
                 runtime_path: "/never-spawned/runtime".into(),
                 runtime_sha256: "0".repeat(64),
                 package_root: "/never-spawned/package".into(),
@@ -546,7 +881,16 @@ impl Harness {
                 None,
             )
             .await
+        };
+        #[cfg(target_os = "linux")]
+        let task = tokio::spawn(async move {
+            if let Some(driver) = create_driver {
+                return CREATE_DRIVER.scope(driver, run).await;
+            }
+            run.await
         });
+        #[cfg(not(target_os = "linux"))]
+        let task = tokio::spawn(run);
         Self {
             format,
             host_input,
