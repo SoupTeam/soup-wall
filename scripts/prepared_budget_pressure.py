@@ -79,6 +79,12 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                    'limits': {key: limits[key] for key in ('memoryMaxBytes', 'pidsMax', 'cpuQuotaMicros', 'wallMillis')},
                    'server_origin': 'pinned-original', 'forced_cleanup': False}
             attempts.append(row)
+            def phase(name):
+                row['phase']=name
+                if on_progress is not None:
+                    on_progress({'format':'sou142-original-pressure/1','status':'incomplete',
+                        'workspace_unchanged':False,'attempts':attempts,
+                        'raw_process_metadata_exported':False,'observer_cleanup_performed':False})
             payload, original = None, None
             if kind == 'memory':
                 payload = workspaces[server] / ('sou142-pressure.txt' if server == 'filesystem' else 'tracked.txt')
@@ -120,11 +126,13 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
             try:
                 if any(path.is_dir() for path in delegation.iterdir()):
                     raise ValueError('pressure_root_not_empty')
+                phase('peer-start')
                 peer = q.STOP.Prepared(peer_context, root / 'peer', hold_after=False)
                 # Peer tools remain behind its owned provider barrier until
                 # the subject has completed its real resource refusal.
                 if peer.observe()['calls']:
                     raise ValueError('pressure_peer_dispatched_before_barrier')
+                phase('subject-start')
                 observer = BudgetObserver(delegation, resource, classify_member=classify)
                 command = ['/usr/bin/strace', '-f', '-qq', '-s', '4096', '-e', 'trace=execve',
                     '-o', str(root / 'trace.private'), sys.executable, '-B', str(context.ROOT / 'scripts/pilot-run.py'),
@@ -138,6 +146,7 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                     witness = base.ProcessWitness(process.pid)
                     process.wait(timeout=100)
                 outcome = json.loads((root / 'stdout.private').read_text().splitlines()[-1])
+                phase('subject-observation')
                 cleanup = witness.finish()
                 observed = observer.finish()
                 budget_result = outcome.get('resource_budget', {})
@@ -162,10 +171,13 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                     and cleanup.get('all_stopped') is True and not any(path.is_dir() for path in delegation.iterdir())
                 if peer.process.poll() is not None:
                     raise ValueError('pressure_changed_independent_peer')
+                phase('peer-finish')
                 peer_result = finish_useful(peer)
                 # A new real prepared run on the reclaimed subject substrate
                 # creates fresh host authority/binding; no grant is replayed.
+                phase('recovery-start')
                 recovery = q.STOP.Prepared(peer_context, root / 'recovery', hold_after=False)
+                phase('recovery-finish')
                 recovery_result = finish_useful(recovery)
                 row.update(status='passed' if verified else 'incomplete',
                     reason='original_resource_refusal_verified' if verified else 'original_resource_refusal_unproven',
@@ -179,9 +191,20 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                     peer_useful_after_subject=True, peer_budget=peer_result.get('resource_budget'),
                     fresh_prepared_recovery_useful=True, recovery_budget=recovery_result.get('resource_budget'),
                     trace_sha256=base.sha(root / 'trace.private'))
-            except (OSError, ValueError, subprocess.TimeoutExpired, IndexError):
+            except (OSError, ValueError, subprocess.TimeoutExpired, IndexError) as error:
                 row['reason'] = 'bounded_calibration_attempt_incomplete'
+                row['error_type']=type(error).__name__
+                message=str(error)
+                import re,traceback
+                if isinstance(error,ValueError) and re.fullmatch(r'(?:pressure_|stop_)[a-z0-9_]{1,100}',message):
+                    row['error_code']=message
+                if isinstance(error,OSError):row['errno']=error.errno
+                row['error_frames']=[{'source':str(Path(frame.filename).relative_to(context.ROOT)),
+                    'line':frame.lineno} for frame in traceback.extract_tb(error.__traceback__)
+                    if Path(frame.filename).is_relative_to(context.ROOT)][-8:]
+
             finally:
+                phase('cleanup-subject')
                 if process is not None and process.poll() is None:
                     for manifest in state.glob('*/run.json'):
                         record = json.loads(manifest.read_bytes())
@@ -199,13 +222,17 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                         row['forced_cleanup'] = True
                         process.kill(); process.wait(timeout=5)
                 if witness is not None: witness.finish()
+                phase('cleanup-observer')
                 if observer is not None: observer.finish()
+                phase('cleanup-peer')
                 if recovery is not None: recovery.close()
                 if peer is not None: peer.close()
+                phase('cleanup-provider')
                 model.close()
                 if payload is not None:
                     if original is None: payload.unlink(missing_ok=True)
                     else: payload.write_bytes(original)
+                row['phase']='finished'
                 (output / 'attempts.json').write_text(json.dumps(attempts, indent=2) + '\n')
                 if on_progress is not None:
                     on_progress({'format':'sou142-original-pressure/1', 'status':'incomplete',
