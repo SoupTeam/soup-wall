@@ -1646,6 +1646,7 @@ pub async fn handler(
     // Inference is outside both native and firewall locks. It cannot consume a
     // receipt or authorize a call. All authority and current-policy checks run
     // again after the await against the same immutable original request.
+    let review_started = Instant::now();
     let permit = match &native.result_data_review {
         Some(reviewer) if reviewer.ready() => {
             match result_review_candidate(&st, native, &request, identity.as_ref()) {
@@ -1655,7 +1656,14 @@ pub async fn handler(
         }
         _ => None,
     };
-    match inspect_bound_reviewed(&st, native, request, identity.as_ref(), permit.as_ref()) {
+    match inspect_bound_at(
+        &st,
+        native,
+        request,
+        identity.as_ref(),
+        permit.as_ref(),
+        review_started,
+    ) {
         Ok(response) => (
             StatusCode::OK,
             Json(serde_json::to_value(response).expect("native response serializes")),
@@ -1980,12 +1988,24 @@ fn inspect_bound(
     inspect_bound_reviewed(st, native, request, identity, None)
 }
 
+#[cfg(test)]
 fn inspect_bound_reviewed(
     st: &Shared,
     native: &NativeState,
     request: Request,
     identity: Option<&liveness::CollectorIdentity>,
     permit: Option<&crate::result_data_review::DataPermit>,
+) -> Result<Response, &'static str> {
+    inspect_bound_at(st, native, request, identity, permit, Instant::now())
+}
+
+fn inspect_bound_at(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+    permit: Option<&crate::result_data_review::DataPermit>,
+    started: Instant,
 ) -> Result<Response, &'static str> {
     if request.event == "session_start"
         && request.host_session.is_none()
@@ -1997,7 +2017,6 @@ fn inspect_bound_reviewed(
         return Err("native_profile_authority_required");
     }
 
-    let started = Instant::now();
     // One lock covers sequencing, inspection, admission and audit. No await,
     // external judge, or network request occurs while this guard is held.
     let mut state = native

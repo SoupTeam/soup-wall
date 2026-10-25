@@ -17,10 +17,15 @@ No remote code, custom-op libraries, external tensor files or pickle are loaded.
 
 Install the reviewed dependencies in an owner-private Python venv and copy the
 six pinned model assets (including `onnx/model.onnx`) into a separate private
-directory. Both roots must have mode 0700, real directory ancestors and no
+directory. Both roots must be owner-private, with real directory ancestors and no
 untrusted writable ancestor. Standard trusted sticky parents such as `/tmp`
-are supported. Runtime files must not be writable by other users. Only standard
+are supported. Make the runtime tree read-only before pinning: remove all write
+bits from its files/directories, preserving execute bits; the root can be 0500.
+Model assets can also be installed read-only. Only standard
 venv Python aliases and `lib64 -> lib` symlinks are supported.
+Ancestors, runtime entries and canonical interpreter ancestors must belong to
+root or the daemon's effective user. A private leaf under a different user's
+directory is rejected even if that ancestor has mode 0755.
 
 These are trusted operator assets: keep the runtime, its configuration, system
 interpreter and model outside **every tool-writable workspace**. Do not enroll
@@ -64,7 +69,10 @@ Neither outcome creates a permit. Technical failures and incomplete coverage
 also create no permit.
 
 Inference has a 1400 ms wall deadline. At most one request runs; busy calls do
-not queue. A timeout, bad binding, oversized reply or worker failure retires and
+not queue. The worker's Linux address space is capped at 6 GiB (or the inherited
+lower limit), file descriptors at 128, and core dumps disabled. This is an
+address-space ceiling, not a reserved-memory or whole-machine availability guarantee.
+A timeout, bad binding, oversized reply or worker failure retires and
 reaps the owned process. No restart happens inside a result request. Restarting
 the daemon is required to re-enable a retired reviewer. The existing five-second
 native RPC timeout is unchanged.

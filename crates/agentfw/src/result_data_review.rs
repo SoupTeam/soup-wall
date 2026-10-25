@@ -244,11 +244,17 @@ mod tests {
     fn default_config_does_not_enable_or_serialize_review() {
         let legacy = crate::Config::default();
         assert!(legacy.result_data_review.is_none());
-        assert!(serde_json::to_value(legacy).unwrap().get("result_data_review").is_none());
+        assert!(serde_json::to_value(legacy)
+            .unwrap()
+            .get("result_data_review")
+            .is_none());
         let config = serde_json::json!({"result_data_review": {
             "runtime_dir": "/private/runtime", "assets_dir": "/private/assets",
             "runtime_sha256": "a".repeat(64), "interpreter_sha256": "b".repeat(64),
         }});
-        assert!(crate::Config::from_yaml(&config.to_string()).is_err(), "native enforce must be configured");
+        assert!(
+            crate::Config::from_yaml(&config.to_string()).is_err(),
+            "native enforce must be configured"
+        );
     }
 }

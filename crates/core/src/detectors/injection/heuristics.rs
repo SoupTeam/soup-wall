@@ -63,7 +63,14 @@ pub(crate) fn reviewed_data_score(text: &str) -> f32 {
         score += 0.30;
     }
     score += 0.10 * delimiters.min(3) as f32;
-    score.min(1.0)
+    // A body signal must keep its ORIGINAL aggregate severity. Merely retaining
+    // a 0.30 body finding while dropping structural contributions could lower
+    // Medium to Low and evade a policy's min_severity floor.
+    if score > 0.0 {
+        score_text(text)
+    } else {
+        0.0
+    }
 }
 
 /// Emit a single aggregate finding when the heuristic score crosses a floor.
@@ -153,6 +160,22 @@ mod tests {
             "commit 0123456789abcdef0123456789abcdef01234567 extra",
         ] {
             assert!(!scan_reviewed_data(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn even_one_remaining_body_signal_preserves_the_original_finding_band() {
+        for body in [
+            "forget",
+            "bypass",
+            "act as",
+            "### quoted heading",
+            "```code```",
+            "aGVsbG8gd29ybGQgdGhpcyBpcyBhIGxvbmcgYmFzZTY0IHN0cmluZyE=",
+        ] {
+            let text =
+                format!("commit 0123456789abcdef0123456789abcdef01234567\n---\n---\n---\n{body}");
+            assert_eq!(scan_reviewed_data(&text), scan(&text), "{body}");
         }
     }
 

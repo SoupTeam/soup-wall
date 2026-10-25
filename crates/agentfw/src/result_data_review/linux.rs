@@ -21,6 +21,7 @@ const BOOTSTRAP: &str = include_str!("../../../../scripts/result-data-review-wor
 const STARTUP: Duration = Duration::from_secs(120);
 const POLL: Duration = Duration::from_millis(25);
 const MAX_REQUEST: usize = 2 * 1024 * 1024;
+const MAX_ADDRESS_SPACE: u64 = 6 * 1024 * 1024 * 1024;
 
 struct Flags {
     ready: AtomicBool,
@@ -134,7 +135,12 @@ impl Drop for Reviewer {
     }
 }
 
-fn private_directory(path: &Path) -> anyhow::Result<()> {
+fn trusted_owner(uid: u32) -> bool {
+    // SAFETY: geteuid is a read-only libc query.
+    uid == 0 || uid == unsafe { libc::geteuid() }
+}
+
+fn trusted_directory_chain(path: &Path) -> anyhow::Result<()> {
     ensure!(path.is_absolute(), "absolute directory required");
     let mut prefix = PathBuf::new();
     for part in path.components() {
@@ -144,20 +150,24 @@ fn private_directory(path: &Path) -> anyhow::Result<()> {
         );
         prefix.push(part);
         let meta = fs::symlink_metadata(&prefix)?;
+        ensure!(trusted_owner(meta.uid()), "untrusted directory owner");
         ensure!(
             meta.is_dir() && !meta.file_type().is_symlink(),
             "directory symlink forbidden"
         );
         // Sticky system parents such as /tmp cannot rename a different owner's
         // private entry. Every other ancestor must be non-writable to others.
-        // SAFETY: geteuid is a read-only libc query.
-        let trusted_sticky = meta.mode() & 0o1000 != 0
-            && (meta.uid() == 0 || meta.uid() == unsafe { libc::geteuid() });
+        let trusted_sticky = meta.mode() & 0o1000 != 0;
         ensure!(
             meta.mode() & 0o022 == 0 || trusted_sticky,
             "writable ancestor"
         );
     }
+    Ok(())
+}
+
+fn private_directory(path: &Path) -> anyhow::Result<()> {
+    trusted_directory_chain(path)?;
     let meta = fs::symlink_metadata(path)?;
     // SAFETY: geteuid has no preconditions and does not mutate process state.
     ensure!(
@@ -168,13 +178,17 @@ fn private_directory(path: &Path) -> anyhow::Result<()> {
 }
 
 fn hash_file(path: &Path, cap: u64) -> anyhow::Result<String> {
+    trusted_directory_chain(path.parent().context("runtime parent missing")?)?;
     let mut file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
         .open(path)?;
     let metadata = file.metadata()?;
     ensure!(
-        metadata.is_file() && metadata.len() <= cap && metadata.mode() & 0o022 == 0,
+        metadata.is_file()
+            && metadata.len() <= cap
+            && metadata.mode() & 0o022 == 0
+            && trusted_owner(metadata.uid()),
         "unsafe runtime file"
     );
     let mut hasher = Sha256::new();
@@ -199,8 +213,13 @@ fn hash_file(path: &Path, cap: u64) -> anyhow::Result<String> {
 /// This is an operator installation pin, not authorization supplied by a tool.
 pub fn runtime_digest(root: &Path) -> anyhow::Result<String> {
     private_directory(root)?;
+    ensure!(
+        fs::symlink_metadata(root)?.mode() & 0o222 == 0,
+        "runtime installation must be read-only"
+    );
     let mut pending = vec![root.to_path_buf()];
     let mut entries = Vec::new();
+    let mut total_bytes = 0u64;
     let interpreter = fs::canonicalize(root.join("bin/python"))?;
     while let Some(directory) = pending.pop() {
         for entry in fs::read_dir(&directory)? {
@@ -212,6 +231,10 @@ pub fn runtime_digest(root: &Path) -> anyhow::Result<String> {
                 .context("non UTF-8 runtime path")?
                 .to_owned();
             let metadata = fs::symlink_metadata(&path)?;
+            ensure!(
+                trusted_owner(metadata.uid()),
+                "untrusted runtime entry owner"
+            );
             let (kind, digest) = if metadata.file_type().is_symlink() {
                 let target = fs::read_link(&path)?;
                 let allowed_python = path.parent() == Some(root.join("bin").as_path())
@@ -232,11 +255,18 @@ pub fn runtime_digest(root: &Path) -> anyhow::Result<String> {
                         .to_owned(),
                 )
             } else {
-                ensure!(metadata.mode() & 0o022 == 0, "writable runtime entry");
+                ensure!(
+                    metadata.mode() & 0o222 == 0,
+                    "runtime installation must be read-only"
+                );
                 if metadata.is_dir() {
                     pending.push(path.clone());
                     ("dir", String::new())
                 } else {
+                    total_bytes = total_bytes
+                        .checked_add(metadata.len())
+                        .context("runtime size overflow")?;
+                    ensure!(total_bytes <= 1024 * 1024 * 1024, "runtime tree byte cap");
                     ("file", hash_file(&path, 512 * 1024 * 1024)?)
                 }
             };
@@ -316,8 +346,34 @@ impl Worker {
                 if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
                     return Err(std::io::Error::last_os_error());
                 }
+                if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
                 if libc::getppid() as u32 != parent {
                     return Err(std::io::Error::other("parent changed"));
+                }
+                for (resource, ceiling) in [
+                    (libc::RLIMIT_AS, MAX_ADDRESS_SPACE),
+                    (libc::RLIMIT_CORE, 0),
+                    (libc::RLIMIT_NOFILE, 128),
+                ] {
+                    let mut inherited = libc::rlimit {
+                        rlim_cur: 0,
+                        rlim_max: 0,
+                    };
+                    if libc::getrlimit(resource, &mut inherited) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    let limit = (ceiling as libc::rlim_t)
+                        .min(inherited.rlim_max)
+                        .min(inherited.rlim_cur);
+                    let bound = libc::rlimit {
+                        rlim_cur: limit,
+                        rlim_max: limit,
+                    };
+                    if libc::setrlimit(resource, &bound) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
                 }
                 Ok(())
             });
@@ -461,6 +517,14 @@ fn serve_worker(
         if flags.stop.load(Ordering::Acquire) {
             break;
         }
+        ensure!(
+            worker.child.try_wait()?.is_none(),
+            "idle review worker exited"
+        );
+        match worker.output.as_ref().context("output closed")?.try_recv() {
+            Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            _ => anyhow::bail!("unsolicited frame or idle review output closed"),
+        }
         let job = match jobs.recv_timeout(POLL) {
             Ok(job) => job,
             Err(RecvTimeoutError::Timeout) => continue,
@@ -469,19 +533,21 @@ fn serve_worker(
         let data = run_job(&mut worker, &job, flags);
         match data {
             Ok(true) if Instant::now() < job.deadline => {
+                flags.busy.store(false, Ordering::Release);
                 let _ = job.reply.send(Some(DataPermit {
                     input_sha256: job.digest,
                 }));
             }
             Ok(_) => {
+                flags.busy.store(false, Ordering::Release);
                 let _ = job.reply.send(None);
             }
             Err(error) => {
+                flags.ready.store(false, Ordering::Release);
                 let _ = job.reply.send(None);
                 return Err(error); // Retire; no late reply can reach another job.
             }
         }
-        flags.busy.store(false, Ordering::Release);
     }
     Ok(())
 }
@@ -527,6 +593,40 @@ mod tests {
     }
 
     #[test]
+    fn runtime_pin_requires_readonly_files_and_detects_dependency_changes() {
+        use std::os::unix::fs::PermissionsExt;
+        struct Restore(PathBuf);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o700));
+                let _ = fs::set_permissions(self.0.join("bin"), fs::Permissions::from_mode(0o700));
+            }
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let _restore = Restore(temp.path().to_path_buf());
+        fs::create_dir(temp.path().join("bin")).unwrap();
+        let executable = temp.path().join("bin/python");
+        fs::write(&executable, "fake test runtime").unwrap();
+        assert!(
+            runtime_digest(temp.path()).is_err(),
+            "writable install must not be enrolled"
+        );
+        for path in [
+            temp.path().to_path_buf(),
+            temp.path().join("bin"),
+            executable.clone(),
+        ] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o500)).unwrap();
+        }
+        let before = runtime_digest(temp.path()).unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(runtime_digest(temp.path()).is_err());
+        fs::write(&executable, "changed dependency").unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o500)).unwrap();
+        assert_ne!(runtime_digest(temp.path()).unwrap(), before);
+    }
+
+    #[test]
     fn stalled_owned_child_is_killed_and_reaped() {
         let flags = Flags {
             ready: AtomicBool::new(false),
@@ -546,10 +646,41 @@ mod tests {
         assert_eq!(unsafe { libc::kill(pid as i32, 0) }, -1);
     }
 
+    #[test]
+    fn owned_worker_has_address_space_descriptor_and_core_limits() {
+        let flags = Flags {
+            ready: AtomicBool::new(false),
+            busy: AtomicBool::new(false),
+            stop: AtomicBool::new(false),
+        };
+        let mut command = Command::new("/usr/bin/python3");
+        command.args(["-I", "-u", "-c", "import json,resource; print(json.dumps([resource.getrlimit(r)[0] for r in (resource.RLIMIT_AS,resource.RLIMIT_NOFILE,resource.RLIMIT_CORE)])); input()"]);
+        let worker = Worker::spawn(&mut command).unwrap();
+        let values: Vec<u64> = serde_json::from_slice(
+            &worker
+                .receive(Instant::now() + Duration::from_secs(2), &flags)
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(values[0] <= MAX_ADDRESS_SPACE);
+        assert!(values[1] <= 128);
+        assert_eq!(values[2], 0);
+    }
+
     fn fake_reviewer(body: &str) -> (Reviewer, Arc<std::sync::atomic::AtomicU32>) {
+        fake_program(&format!(
+            "for line in sys.stdin:\n r=json.loads(line)\n {body}\n"
+        ))
+    }
+
+    fn fake_program(tail: &str) -> (Reviewer, Arc<std::sync::atomic::AtomicU32>) {
         let ready = serde_json::json!({"v": PROTOCOL, "type": "ready", "model_sha256": MODEL_SHA256,
             "runtime": {"onnxruntime":"1.23.2", "tokenizers":"0.22.1", "numpy":"2.3.4"}});
-        let code = format!("import json,sys,time\nprint({:?},flush=True)\nfor line in sys.stdin:\n r=json.loads(line)\n {}\n", ready.to_string(), body);
+        let code = format!(
+            "import json,sys,time,os\nprint({:?},flush=True)\n{}\n",
+            ready.to_string(),
+            tail
+        );
         let flags = Arc::new(Flags {
             ready: AtomicBool::new(false),
             busy: AtomicBool::new(false),
@@ -607,6 +738,13 @@ mod tests {
         let permit = reviewer.review(texts.clone()).await.unwrap();
         assert!(permit.matches(&texts));
         assert!(!permit.matches(&["replacement".into()]));
+        for _ in 0..20 {
+            assert!(reviewer
+                .review(texts.clone())
+                .await
+                .unwrap()
+                .matches(&texts));
+        }
     }
 
     #[tokio::test]
@@ -631,7 +769,13 @@ mod tests {
         assert!(first.await.unwrap().is_none());
         assert!(started.elapsed() < Duration::from_millis(1800));
         let cleanup = Instant::now() + Duration::from_secs(2);
-        while reviewer.ready() {
+        loop {
+            // SAFETY: signal zero observes only. Readiness can become false
+            // just before asynchronous kill/wait completes; wait for both.
+            let alive = unsafe { libc::kill(pid.load(Ordering::Acquire) as i32, 0) } == 0;
+            if !reviewer.ready() && !alive {
+                break;
+            }
             assert!(Instant::now() < cleanup);
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
@@ -644,5 +788,28 @@ mod tests {
             .review(vec!["after retirement".into()])
             .await
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn idle_exit_and_idle_stdout_loss_retire_and_reap_without_a_request() {
+        for action in ["sys.exit(0)", "os.close(1); time.sleep(60)"] {
+            let (reviewer, pid) = fake_program(&format!("time.sleep(0.25)\n{action}"));
+            wait_ready(&reviewer).await;
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while reviewer.ready() {
+                assert!(Instant::now() < deadline);
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert_eq!(
+                reviewer.next.load(Ordering::Acquire),
+                1,
+                "no request needed for retirement"
+            );
+            // SAFETY: signal zero observes only; supervisor already reaped its child.
+            assert_eq!(
+                unsafe { libc::kill(pid.load(Ordering::Acquire) as i32, 0) },
+                -1
+            );
+        }
     }
 }
