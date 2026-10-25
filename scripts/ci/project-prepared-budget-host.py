@@ -166,6 +166,37 @@ def pressure(value, attempt):
             'observer_cleanup_performed': False, 'attempts': projected}
 
 
+def project_pressure(attempt, expected, exit_code):
+    """Independent bounded pressure phase; never substitutes for baseline proof."""
+    result = {'format': 'sou142-prepared-pressure-host-evidence/1', 'status': 'failed',
+              'source_commit': expected, 'full_sou142_qualification': False, 'acceptance_pass': False}
+    try:
+        need(type(expected) is str and re.fullmatch('[0-9a-f]{40}', expected), 'source_identity_invalid')
+        need(type(attempt) is dict and exit_code == 0 and attempt.get('phase') == 'pressure'
+             and attempt.get('format') == 'sou142-offline-budget-host-attempt/1'
+             and attempt.get('status') == 'partial-runtime-completed-pending-parent-projection'
+             and attempt.get('source_commit') == expected and attempt.get('source_read_only') is True
+             and attempt.get('actual_original_host_covered') is False
+             and attempt.get('provider') == 'owned-scripted-loopback'
+             and type(attempt.get('paid_api_calls')) is int and attempt['paid_api_calls'] == 0
+             and attempt.get('reused_binaries_read_only') is True
+             and attempt.get('network') == 'private-loopback-only'
+             and attempt.get('owned_budget_root_empty') is True
+             and attempt.get('owned_peer_budget_root_empty') is True, 'pressure_phase_unverified')
+        selected = attempt.get('selected_sha256')
+        need(type(selected) is dict and set(selected) == {'agentfw', 'git_launcher', 'sandbox_tests',
+             'python', 'node', 'bwrap_source', 'git', 'claude'}, 'selected_identity_missing')
+        result['selected_sha256'] = {key: digest(value) for key, value in selected.items()}
+        result['selection_sha256'] = digest(attempt.get('selection_sha256'))
+        result['original_pressure'] = pressure(attempt.get('original_pressure'), attempt)
+        need(result['original_pressure']['status'] == 'passed', 'original_pressure_incomplete')
+        result.update(status='pressure-slice-passed', owned_budget_root_empty=True,
+                      owned_peer_budget_root_empty=True, baseline_required_separately=True)
+    except (Invalid, KeyError, TypeError) as error:
+        result['reason'] = str(error) if isinstance(error, Invalid) else 'malformed_private_report'
+    return result
+
+
 def project(attempt, raw, expected, exit_code):
     output = {'format': 'sou142-prepared-budget-host-evidence/1', 'status': 'failed',
               'source_commit': expected, 'full_sou142_qualification': False,
@@ -324,13 +355,19 @@ def read(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    for name in ('raw', 'attempt', 'output'):
+    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure'), default='all')
+    parser.add_argument('--raw', type=Path)
+    for name in ('attempt', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--expected-commit', required=True)
     parser.add_argument('--exit-code', type=int, required=True)
     args = parser.parse_args()
     try:
-        result = project(read(args.attempt), read(args.raw), args.expected_commit, args.exit_code)
+        if args.phase == 'pressure':
+            result = project_pressure(read(args.attempt), args.expected_commit, args.exit_code)
+        else:
+            need(args.raw is not None, 'baseline_report_required')
+            result = project(read(args.attempt), read(args.raw), args.expected_commit, args.exit_code)
     except (OSError, ValueError):
         result = {'format': 'sou142-prepared-budget-host-evidence/1', 'status': 'failed',
                   'acceptance_pass': False, 'full_sou142_qualification': False,
@@ -338,7 +375,7 @@ def main():
     rendered = json.dumps(result, indent=2) + '\n'
     need(len(rendered.encode()) <= 128 * 1024, 'finite_public_report_bound')
     args.output.write_text(rendered)
-    return 0 if result['status'] == 'partial-slice-passed' else 1
+    return 0 if result['status'] in ('partial-slice-passed', 'pressure-slice-passed') else 1
 
 
 if __name__ == '__main__':

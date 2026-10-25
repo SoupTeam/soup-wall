@@ -58,13 +58,7 @@ def validation_timeout(args):
     return value
 
 
-def qualify(args, private, report):
-    control_seconds = validation_timeout(args)
-    before = RUN.PREP.PILOT.source()
-    require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
-    config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
-        ask_wait_seconds=0, timeout_seconds=60, port=0)
-    selection, paths, profiles = RUN.selected(config)
+def prepare_owned_workspaces(selection, profiles):
     require("prepared_workspaces" not in selection, "generated_qualification_refuses_existing_project")
     fs = Path(profiles["filesystem"]["profile"]["path"]).parent.parent / "filesystem-workspace"
     git = Path(profiles["git"]["profile"]["path"]).parent.parent / "git-workspace"
@@ -74,6 +68,17 @@ def qualify(args, private, report):
     (fs / "followup.txt").write_text("Owned prepared continuation.\n")
     (fs / "credentials.txt").write_text("Owned synthetic sensitive path control.\n")
     (git / "tracked.txt").write_text("Owned prepared Git change.\n")
+    return fs, git, notes
+
+
+def qualify(args, private, report):
+    control_seconds = validation_timeout(args)
+    before = RUN.PREP.PILOT.source()
+    require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
+    config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
+        ask_wait_seconds=0, timeout_seconds=60, port=0)
+    selection, paths, profiles = RUN.selected(config)
+    fs, git, notes = prepare_owned_workspaces(selection, profiles)
     env = {"PATH": "/usr/bin:/bin", "HOME": str(private), "LANG": "C.UTF-8"}
     workspace_before = {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}
     selected_before = {role: BASE.sha(path) for role, path in paths.items()}

@@ -111,6 +111,23 @@ class Projection(unittest.TestCase):
             'raw_process_metadata_exported':False,'observer_cleanup_performed':False,'attempts':rows}
         self.assertEqual(P.pressure(value,a)['status'],'passed')
         self.assertNotIn('never-publish',json.dumps(P.pressure(value,a)))
+        separate=copy.deepcopy(a)
+        separate.update(phase='pressure', original_pressure=copy.deepcopy(value), source_read_only=True,
+            reused_binaries_read_only=True, network='private-loopback-only', provider='owned-scripted-loopback',
+            paid_api_calls=0, actual_original_host_covered=False)
+        public=P.project_pressure(separate,COMMIT,0)
+        self.assertEqual(public['status'],'pressure-slice-passed',public)
+        self.assertIs(public['baseline_required_separately'],True)
+        self.assertIs(public['acceptance_pass'],False)
+        self.assertNotEqual(P.project(separate,raw,COMMIT,0)['status'],'partial-slice-passed')
+        for change in (lambda v:v.update(phase='baseline'), lambda v:v.update(source_read_only=False),
+                       lambda v:v.update(source_commit='c'*40), lambda v:v.update(owned_peer_budget_root_empty=False),
+                       lambda v:v.update(original_pressure=None), lambda v:v.update(paid_api_calls=1),
+                       lambda v:v.update(actual_original_host_covered=True),
+                       lambda v:v['original_pressure']['attempts'].pop()):
+            bad=copy.deepcopy(separate);change(bad)
+            self.assertNotEqual(P.project_pressure(bad,COMMIT,0)['status'],'pressure-slice-passed')
+        self.assertNotEqual(P.project_pressure(separate,COMMIT,1)['status'],'pressure-slice-passed')
         for mutate in [lambda v:v['attempts'].pop(),
             lambda v:v['attempts'][0].update(original_runtime_observed=False),
             lambda v:v['attempts'][0].update(fresh_prepared_recovery_useful=False),

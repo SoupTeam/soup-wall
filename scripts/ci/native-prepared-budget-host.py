@@ -4,7 +4,8 @@
 
 Default is a plan. --run requires the ordinary-user read-only/private-network
 transient unit and trusted same-source assets.json prepared by the parent.
-This does not claim original pressure or budgeted emergency-stop acceptance.
+Baseline and pressure may run in separate bounded services on the same source.
+Neither phase alone claims full task or shared admission acceptance.
 """
 import argparse
 import hashlib
@@ -92,6 +93,7 @@ def owner_observation(log, test):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', action='store_true')
+    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure'), default='all')
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--scratch', type=Path, required=True)
     parser.add_argument('--expected-commit', required=True)
@@ -100,6 +102,7 @@ def main():
     args = parser.parse_args()
     if not args.run:
         print(json.dumps({'format': FORMAT, 'status': 'plan', 'executed': False,
+            'phase': args.phase,
             'normal_limits': NORMAL, 'actual_host_cases': sorted(HOST_CASES),
             'owner_controls': [row[0] for row in OWNER_TESTS],
             'owner_profiles': ['filesystem', 'git'], 'remaining_gaps': GAPS,
@@ -108,7 +111,7 @@ def main():
     os.umask(0o077)
     src, out = args.source.resolve(strict=True), args.scratch.resolve(strict=True)
     record = {'format': FORMAT, 'status': 'incomplete', 'source_commit': args.expected_commit,
-              'steps': [], 'owner_controls': [], 'qualifier_exit_code': None,
+              'steps': [], 'owner_controls': [], 'qualifier_exit_code': None, 'phase': args.phase,
               'provider': 'owned-scripted-loopback', 'paid_api_calls': 0,
               'remaining_gaps': list(GAPS), 'full_sou142_qualification': False,
               'budgeted_emergency_stop_qualified': False}
@@ -241,83 +244,87 @@ def main():
         save()
 
         entry = load(src, 'sou142_prepared_entry', 'scripts/pilot-run.py')
-        _, _, profiles = entry.selected(argparse.Namespace(selection=selection,
+        selected, _, profiles = entry.selected(argparse.Namespace(selection=selection,
             expected_commit=args.expected_commit, ask_wait_seconds=0, timeout_seconds=60, port=0))
-        for server in ('filesystem', 'git'):
-            for label, test, stage, leaf_created in OWNER_TESTS:
-                empty_root(delegated)
-                log = run('native-owner-' + label + '-' + server, [paths['sandbox_tests'], test,
-                    '--exact', '--ignored', '--nocapture', '--test-threads=1'], 25,
-                    {'SOU142_BUDGET_CONFIG': str(budget),
-                     'SOU142_OWNER_PROFILE': profiles[server]['profile']['path'],
-                     'SOU86_TEST_AGENTFW': paths['agentfw']})
-                observed = owner_observation(log, test)
-                expected = {'status': 'pass', 'stage': stage, 'leaf_created': leaf_created,
-                    'binary_sha256': identity['binaries']['sandbox_tests'],
-                    'owner_binary_sha256': identity['binaries']['agentfw'],
-                    'budget_sha256': budget_digest, 'original_started': False, 'owned_members': 0,
-                    'production_cleanup_verified': True, 'witness_cleanup_attempted': False}
-                require(all(observed.get(key) == value for key, value in expected.items()),
-                        'owner_control_observation_unverified')
-                empty_root(delegated)
-                record['owner_controls'].append({'server': server, **observed})
-                save()
+        if args.phase != 'pressure':
+            for server in ('filesystem', 'git'):
+                for label, test, stage, leaf_created in OWNER_TESTS:
+                    empty_root(delegated)
+                    log = run('native-owner-' + label + '-' + server, [paths['sandbox_tests'], test,
+                        '--exact', '--ignored', '--nocapture', '--test-threads=1'], 25,
+                        {'SOU142_BUDGET_CONFIG': str(budget),
+                         'SOU142_OWNER_PROFILE': profiles[server]['profile']['path'],
+                         'SOU86_TEST_AGENTFW': paths['agentfw']})
+                    observed = owner_observation(log, test)
+                    expected = {'status': 'pass', 'stage': stage, 'leaf_created': leaf_created,
+                        'binary_sha256': identity['binaries']['sandbox_tests'],
+                        'owner_binary_sha256': identity['binaries']['agentfw'],
+                        'budget_sha256': budget_digest, 'original_started': False, 'owned_members': 0,
+                        'production_cleanup_verified': True, 'witness_cleanup_attempted': False}
+                    require(all(observed.get(key) == value for key, value in expected.items()),
+                            'owner_control_observation_unverified')
+                    empty_root(delegated)
+                    record['owner_controls'].append({'server': server, **observed})
+                    save()
 
-        # Existing actual pinned host and original FS/Git qualification. The
-        # --linux-budget flag goes through real pilot-run -> pilot-launch ->
-        # explicit collector binding/digest, not RESOURCE.Client constructors.
-        run('actual-host-budget-qualification', [sys.executable, '-B', src / 'scripts/qualify-prepared-pilot-run.py',
-            '--selection', selection, '--expected-commit', args.expected_commit,
-            '--strace', '/usr/bin/strace', '--linux-budget', budget, '--linux-budget-peer', peer_budget,
-            '--validation-timeout-seconds', '120', '--output', out / 'prepared-budget-native'], 850)
-        record['qualifier_exit_code'] = 0
-        result = bounded_json(out / 'prepared-budget-native/report.json', 4 * 1024 * 1024)
-        require(result.get('status') == 'passed', 'actual_host_budget_report_failed')
-        cases = {row['case']: row for row in result['cases'] if row.get('case') in HOST_CASES}
-        require(set(cases) == HOST_CASES, 'required_actual_host_cases_missing')
-        summary = []
-        for name in sorted(HOST_CASES):
-            row = cases[name]
-            observed = row.get('resource_budget', {})
-            require(row.get('status') == 'passed' and observed.get('format') == 'sw-prepared-pilot-budget/1'
-                    and observed.get('budget_sha256') == budget_digest
-                    and observed.get('observed_children', 0) >= 2,
-                    'prepared_host_budget_binding_unverified')
-            if name in ('useful-refusal', 'ask', 'default'):
-                require(observed.get('status') == 'closed-enforced'
-                        and observed.get('failed_children') == 0
-                        and observed.get('unresolved_children') == 0, 'useful_budget_enforcement_unverified')
-            summary.append({'case': name, 'status': 'passed', 'outcome': row.get('outcome'),
-                            'budget_status': observed['status'],
-                            'observed_children': observed['observed_children']})
-        empty_root(delegated)
-        empty_root(peer_root)
-        record['actual_host_cases'] = summary
-        section = result.get('emergency_stop', {})
-        require(section.get('status') == 'passed' and len(section.get('cases', [])) == 4,
-                'budgeted_stop_qualification_incomplete')
-        record['budgeted_emergency_stop_qualified'] = True
+            # Existing actual pinned host and original FS/Git qualification. The
+            # --linux-budget flag goes through real pilot-run -> pilot-launch ->
+            # explicit collector binding/digest, not RESOURCE.Client constructors.
+            run('actual-host-budget-qualification', [sys.executable, '-B', src / 'scripts/qualify-prepared-pilot-run.py',
+                '--selection', selection, '--expected-commit', args.expected_commit,
+                '--strace', '/usr/bin/strace', '--linux-budget', budget, '--linux-budget-peer', peer_budget,
+                '--validation-timeout-seconds', '120', '--output', out / 'prepared-budget-native'], 850)
+            record['qualifier_exit_code'] = 0
+            result = bounded_json(out / 'prepared-budget-native/report.json', 4 * 1024 * 1024)
+            require(result.get('status') == 'passed', 'actual_host_budget_report_failed')
+            cases = {row['case']: row for row in result['cases'] if row.get('case') in HOST_CASES}
+            require(set(cases) == HOST_CASES, 'required_actual_host_cases_missing')
+            summary = []
+            for name in sorted(HOST_CASES):
+                row = cases[name]
+                observed = row.get('resource_budget', {})
+                require(row.get('status') == 'passed' and observed.get('format') == 'sw-prepared-pilot-budget/1'
+                        and observed.get('budget_sha256') == budget_digest
+                        and observed.get('observed_children', 0) >= 2,
+                        'prepared_host_budget_binding_unverified')
+                if name in ('useful-refusal', 'ask', 'default'):
+                    require(observed.get('status') == 'closed-enforced'
+                            and observed.get('failed_children') == 0
+                            and observed.get('unresolved_children') == 0, 'useful_budget_enforcement_unverified')
+                summary.append({'case': name, 'status': 'passed', 'outcome': row.get('outcome'),
+                                'budget_status': observed['status'],
+                                'observed_children': observed['observed_children']})
+            empty_root(delegated)
+            empty_root(peer_root)
+            record['actual_host_cases'] = summary
+            section = result.get('emergency_stop', {})
+            require(section.get('status') == 'passed' and len(section.get('cases', [])) == 4,
+                    'budgeted_stop_qualification_incomplete')
+            record['budgeted_emergency_stop_qualified'] = True
         sys.path.insert(0, str(src / 'scripts'))
         pressure = load(src, 'sou142_original_pressure', 'scripts/prepared_budget_pressure.py')
         from types import SimpleNamespace
         qualifier = load(src, 'sou142_actual_host_baseline', 'scripts/qualify-prepared-pilot-run.py')
         context = SimpleNamespace(BASE=qualifier.BASE, RESOURCE=resource, ROOT=src, QUALIFIER=qualifier,
             budget=budget, peer_budget=peer_budget)
-        def checkpoint(value):
-            record['original_pressure'] = value
+        if args.phase != 'baseline':
+            if args.phase == 'pressure':
+                qualifier.prepare_owned_workspaces(selected, profiles)
+            def checkpoint(value):
+                record['original_pressure'] = value
+                save()
+            record['original_pressure'] = pressure.qualify(context, selection, paths, profiles,
+                delegated, out / 'original-pressure', args.expected_commit, on_progress=checkpoint)
+            # Failed/non-exhausting calibration remains a retained environmental
+            # outcome. This partial slice never asserts final acceptance.
+            if record['original_pressure']['status'] == 'passed':
+                record['remaining_gaps'].remove('original-memory-pid-wall-calibration')
             save()
-        record['original_pressure'] = pressure.qualify(context, selection, paths, profiles,
-            delegated, out / 'original-pressure', args.expected_commit, on_progress=checkpoint)
-        # Failed/non-exhausting calibration remains a retained environmental
-        # outcome. This partial slice never asserts final acceptance.
-        if record['original_pressure']['status'] == 'passed':
-            record['remaining_gaps'].remove('original-memory-pid-wall-calibration')
-        save()
         clean_source()
         for role, digest in identity['binaries'].items():
             require(sha(paths[role]) == digest, 'closing_runtime_identity_changed')
         record.update(status='partial-runtime-completed-pending-parent-projection',
-                      owned_budget_root_empty=True, actual_original_host_covered=True)
+                      owned_budget_root_empty=True, actual_original_host_covered=args.phase != 'pressure')
     except BaseException as error:
         record['status'] = 'failed'
         record['reason'] = str(error) if isinstance(error, Refusal) else 'runtime_failure'

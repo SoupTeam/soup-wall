@@ -122,6 +122,18 @@ witnesses. Preserve every failed/incomplete native attempt. Do not change limits
 timeouts, policy floors or expected labels to make one pass. Final shared
 CI/admission/main integration remains TL-owned.
 
+The manual native workflow has two independent bounded SOU-142 phases:
+`prepared_budget_phase: baseline` and `prepared_budget_phase: pressure`.
+Run both on the **same exact source commit**. Each receives its own disposable
+15-minute service and retains the existing 2 GiB / 256-task outer caps. This
+separates the long lifecycle/stop suite from six original pressure/peer/recovery
+controls without increasing any deadline, policy floor, workload concurrency or
+product budget. The default workflow phase is baseline; a successful baseline
+alone is not full qualification. The pressure projection requires all six
+controls, original kernel refusals, surviving useful peers, fresh recovery and
+empty owned roots. It explicitly requires separate baseline proof. Preserve
+both exact source/config/binary identities, and failed/incomplete attempts.
+
 ## Focused native first slice
 
 The existing manual `sou79-resource-budgets.yml` workflow accepts
