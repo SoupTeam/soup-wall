@@ -135,6 +135,14 @@ def controls(show, diff):
 
 def main(args):
     rows = json.loads(args.inputs.read_text(encoding='utf-8'))
+    if subprocess.check_output(['git','-C',str(ROOT),'status','--porcelain']):
+        raise ValueError('commit the probe before running counterfactual verdicts')
+    for row in rows:
+        raw = (args.inputs.parent/f'server-response{row["id"]}.jsonl').read_bytes()
+        assert hashlib.sha256(raw).hexdigest() == row['frame_sha256']
+        result = json.loads(raw)['result']
+        assert 'structuredContent' not in result, 'add explicit complete channel mapping for a new frame shape'
+        assert row['channels'] == [c['text'] for c in result['content'] if c['type'] == 'text']
     original = {r['id']: r['channels'][0] for r in rows}
     rows += controls(original[20], original[21])
     requests = []
@@ -149,6 +157,8 @@ def main(args):
                'channels_sha256':[hashlib.sha256(t.encode()).hexdigest() for t in r['channels']]}
               for r in requests]
     (args.output/'manifest.json').write_text(json.dumps({'requests':frozen,
+         'original_input_sha256':hashlib.sha256(args.inputs.read_bytes()).hexdigest(),
+         'raw_original_frames':{str(r['id']):r['frame_sha256'] for r in rows if isinstance(r['id'],int)},
          'parser_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
          'worker_sha256':hashlib.sha256(args.worker.read_bytes()).hexdigest(),
          'source_commit':subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD']).decode().strip(),
