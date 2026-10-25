@@ -1,0 +1,27 @@
+{
+  "attempts": [
+    {
+      "runtime": "torch 2.11.0+cu128 / transformers 5.17.0",
+      "result": "resolution rejected tokenizers 0.22.1; requires >=0.23.1,<0.24.0; no packages installed"
+    },
+    {
+      "runtime": "torch 2.11.0+cu128 / transformers 5.17.0 / tokenizers 0.23.3",
+      "result": "download failed after four retries on pypi.nvidia.com nvidia-cusparse-cu12 12.5.8.93"
+    },
+    {
+      "torch_wheel": "https://download-r2.pytorch.org/whl/cu128/torch-2.11.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl",
+      "torch_wheel_sha256": "d252cf975fb18c94a85336323ad425f473df56dab35a44b00399bd70c7a3b997",
+      "dependency_index": "https://pypi.org/simple",
+      "result": "installed 53 packages successfully in isolated WSL venv; exact installed environment retained"
+    }
+  ],
+  "inference_run": true,
+  "model_transport": {
+    "initial_received_bytes": 337100393,
+    "expected_bytes": 562583392,
+    "initial_result": "size assertion rejected incomplete file",
+    "range_repair": "reused owned completed Content-Range/length-checked segments; resumed missing ranges with bounded retries",
+    "final_sha256": "a23196c117baf414b4b8abd138c5f5656e728877c0bdb2775c361ee89df16deb",
+    "full_object_verified": true
+  }
+}

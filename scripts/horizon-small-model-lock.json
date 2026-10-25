@@ -1,0 +1,31 @@
+{
+  "repo": "Horizon-Labs/prompt-injection-guard-small",
+  "revision": "0e3774536debbcd71dbb8534ef71451b583853b8",
+  "license": "apache-2.0",
+  "files": {
+    "README.md": {
+      "sha256": "9bbe0defa7b7394dfb086fcc4804c73cd0856bd47a947b834b669d945bd95608",
+      "bytes": 22498
+    },
+    "config.json": {
+      "sha256": "d6264037c9aa4b3d821c1c9a0329572033adbdb622788ecca91c3636066d9622",
+      "bytes": 2031
+    },
+    "tokenizer.json": {
+      "sha256": "47834a7dbbb0c4324fe9569fe47955241594a9ee539c9e478755d6fbc51e5f46",
+      "bytes": 34387555
+    },
+    "tokenizer_config.json": {
+      "sha256": "ea349495764b24570b4560fe2e4a557e5c0a47e6bce782c2409b1d6445cf8633",
+      "bytes": 46440
+    },
+    "special_tokens_map.json": {
+      "sha256": "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351",
+      "bytes": 636
+    },
+    "model.safetensors": {
+      "sha256": "a23196c117baf414b4b8abd138c5f5656e728877c0bdb2775c361ee89df16deb",
+      "bytes": 562583392
+    }
+  }
+}

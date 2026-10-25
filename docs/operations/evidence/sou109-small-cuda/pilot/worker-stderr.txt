@@ -1,0 +1,3 @@
+Loading weights:   0%|          | 0/138 [00:00<?, ?it/s]Loading weights:  62%|██████▏   | 85/138 [00:00<00:00, 836.40it/s]Loading weights: 100%|██████████| 138/138 [00:00<00:00, 1081.31it/s]
+/tmp/sou109-small-cuda-venv/lib/python3.12/site-packages/torch/profiler/profiler.py:224: UserWarning: Warning: Profiler clears events at the end of each cycle.Only events from the current cycle will be reported.To keep events across cycles, set acc_events=True.
+  _warn_once(
