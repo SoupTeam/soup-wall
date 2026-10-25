@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Failure boundaries for the SOU-111 preparation transaction."""
 import errno
+from contextlib import contextmanager, ExitStack, redirect_stdout, redirect_stderr
 import importlib.util
 import io
 import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -17,6 +19,78 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("sou111_preparation", ROOT / "scripts/prepare-installed-pilot.py")
 PREP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREP)
+
+
+@unittest.skipUnless(os.name == "posix", "private installer logs require POSIX permissions")
+class InstallerFailurePrivacy(unittest.TestCase):
+    @contextmanager
+    def failed_installer(self, root, kind, exit_code):
+        output = root / "output"
+        generation = "a" * 32
+        canary = b"owned-installer-diagnostic-canary"
+        contents = b"x" * (2 * 1024 * 1024) + b"\n" + canary + b"\xff\n"
+        args = SimpleNamespace(output=output, expected_commit="b" * 40, rebuild=False,
+                               npm_cache=None, wheelhouse=None, python_archive=None, node_archive=None,
+                               allow_download=True, refusal_verdict="ask", refusal_rule="exact-rule")
+        paths = {role: Path(os.sys.executable) for role in PREP.PILOT.ROLES}
+
+        def init_git(command, **_):
+            (Path(command[-1]) / ".git").mkdir()
+
+        def fail(*_, log, **__):
+            log.write(contents)
+            log.flush()
+            raise subprocess.CalledProcessError(exit_code, [canary.decode()],
+                                                output=canary, stderr=canary)
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(PREP, "supported_platform"))
+            stack.enter_context(patch.object(PREP.PILOT, "source", return_value={
+                "dirty": False, "commit": args.expected_commit}))
+            stack.enter_context(patch.object(PREP, "selected_paths", return_value=paths))
+            stack.enter_context(patch.object(PREP.uuid, "uuid4", return_value=SimpleNamespace(hex=generation)))
+            stack.enter_context(patch.object(PREP.subprocess, "run", side_effect=init_git))
+            for name, installer in (("filesystem", PREP.FS), ("git", PREP.GIT)):
+                stack.enter_context(patch.object(installer, "install", side_effect=fail if name == kind else None))
+            yield args, output / "generations" / generation / (kind + "-install.log"), contents
+
+    def assert_retained_private_log(self, args, log_path, contents):
+        self.assertEqual(log_path.read_bytes(), contents)
+        self.assertEqual(stat.S_IMODE(log_path.stat().st_mode), 0o600)
+        self.assertFalse((args.output / "current.json").exists())
+
+    def test_actual_failed_preparation_never_reads_installer_log(self):
+        for kind in ("filesystem", "git"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                with self.failed_installer(Path(temporary), kind, 9) as (args, log_path, contents):
+                    original_open = Path.open
+
+                    def no_log_reads(path, mode="r", *positional, **keywords):
+                        if path.name.endswith("-install.log") and ("r" in mode or "+" in mode):
+                            self.fail("failure formatting must not read the private installer log")
+                        return original_open(path, mode, *positional, **keywords)
+
+                    with patch.object(Path, "open", no_log_reads):
+                        with self.assertRaises(ValueError) as caught:
+                            PREP.prepare(args)
+                    self.assertEqual(str(caught.exception), kind + "_installer_failed")
+                    self.assert_retained_private_log(args, log_path, contents)
+
+    def test_actual_main_exports_only_finite_installer_failure_fields(self):
+        for kind in ("filesystem", "git"):
+            for exit_code in (9, -15):
+                with self.subTest(kind=kind, exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
+                    with self.failed_installer(Path(temporary), kind, exit_code) as (args, log_path, contents):
+                        stdout, stderr = io.StringIO(), io.StringIO()
+                        argv = ["prepare-installed-pilot.py", "--prepare", "--allow-download",
+                                "--output", str(args.output), "--expected-commit", args.expected_commit]
+                        with patch.object(PREP.sys, "argv", argv), redirect_stdout(stdout), redirect_stderr(stderr):
+                            self.assertEqual(PREP.main(), 2)
+                        self.assertEqual(json.loads(stdout.getvalue()), {
+                            "status": "failed", "reason": kind + "_installer_failed", "exit_code": exit_code,
+                            "private_log": log_path.relative_to(args.output).as_posix()})
+                        self.assertEqual(stderr.getvalue(), "")
+                        self.assert_retained_private_log(args, log_path, contents)
 
 
 class MarkerStorageRecovery(unittest.TestCase):

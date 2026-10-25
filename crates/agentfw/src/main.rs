@@ -210,6 +210,12 @@ enum Cmd {
         /// Parent host session to bind this collector and its provenance to.
         #[arg(long)]
         host_session: Option<String>,
+        /// Exact private prepared-run budget binding; environment must agree.
+        #[arg(long)]
+        pilot_budget_binding: Option<PathBuf>,
+        /// Frozen canonical identity of the prepared budget selection.
+        #[arg(long, requires = "pilot_budget_binding")]
+        pilot_budget_sha256: Option<String>,
         /// Authenticated child authority grant token minted for this session and server.
         #[arg(long)]
         child_authority: Option<String>,
@@ -278,6 +284,8 @@ enum Cmd {
     PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
     /// Read-only inspection using the accepted original-profile workspace validators.
     PilotWorkspaces(agentfw::pilot_launcher::PilotWorkspacesArgs),
+    /// Inspect or probe an explicitly selected prepared-pilot Linux budget.
+    PilotBudget(agentfw::pilot_budget::BudgetArgs),
     /// Inspect and decide one exact pending call owned by a live pilot run.
     PilotApproval(agentfw::pilot_approval::OperatorArgs),
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
@@ -755,6 +763,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::PilotApproval(args) if args.output.is_some() => {
             std::process::exit(agentfw::pilot_approval::operator_json(args));
         }
+        Cmd::PilotBudget(args) => agentfw::pilot_budget::inspect(args),
         Cmd::PilotApproval(args) => agentfw::pilot_approval::operator(args),
         Cmd::McpProfile { home, command } => {
             let home = match home {
@@ -851,6 +860,8 @@ fn main() -> anyhow::Result<()> {
         Cmd::Mcp {
             id,
             host_session,
+            pilot_budget_binding,
+            pilot_budget_sha256,
             child_authority,
             native_admission,
             native_approval_wait_seconds,
@@ -868,6 +879,12 @@ fn main() -> anyhow::Result<()> {
                     "both --host-session and --child-authority must be provided together for authenticated binding"
                 );
             }
+            let prepared_budget = agentfw::pilot_budget::verify_launch(
+                pilot_budget_binding.as_deref(),
+                pilot_budget_sha256.as_deref(),
+                host_session.as_deref(),
+                id.as_deref().unwrap_or(""),
+            )?;
             let (cmd, args) = command
                 .split_first()
                 .ok_or_else(|| anyhow::anyhow!("no server command given after --"))?;
@@ -942,7 +959,10 @@ fn main() -> anyhow::Result<()> {
                 let runtime = tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .build()?;
-                let result = runtime.block_on(agentfw::mcp::admission::run(admission));
+                let result = runtime.block_on(agentfw::mcp::admission::run_with_budget(
+                    admission,
+                    prepared_budget,
+                ));
                 // Tokio's stdin uses a blocking thread. A closed admission path must
                 // exit even when the MCP host keeps its stdin handle open.
                 runtime.shutdown_timeout(Duration::from_millis(100));

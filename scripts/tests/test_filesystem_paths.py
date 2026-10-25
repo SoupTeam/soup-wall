@@ -55,6 +55,42 @@ class WitnessControls(unittest.TestCase):
         server_escape = TRACE + '104  openat(AT_FDCWD, "/etc/passwd", O_RDONLY|O_CLOEXEC) = 19\n'
         self.assertEqual(M.reads(self.trace(server_escape), "/etc/passwd"), 1)
 
+    def test_interleaved_unfinished_opens_keep_exact_server_attribution(self):
+        trace = TRACE + r'''
+104  openat(AT_FDCWD, "/workspace/quote\"name.txt", O_RDONLY|O_CLOEXEC <unfinished ...>
+101  openat(AT_FDCWD, "/workspace/quote\"name.txt", O_RDONLY <unfinished ...>
+104  <... openat resumed>) = 21
+101  <... openat resumed>) = 22
+'''
+        self.assertEqual(M.reads(self.trace(trace), '/workspace/quote"name.txt'), 2)
+
+    def test_only_matched_successful_readonly_resumes_count(self):
+        base = TRACE
+        target = '/workspace/resume.txt'
+        for suffix in (
+            '104  <... openat resumed>) = 21\n',
+            '104  openat(AT_FDCWD, "/workspace/resume.txt", O_RDONLY <unfinished ...>\n',
+            '104  openat(AT_FDCWD, "/workspace/resume.txt", O_RDONLY <unfinished ...>\n105  <... openat resumed>) = 21\n',
+            '104  openat(AT_FDCWD, "/workspace/resume.txt", O_RDONLY <unfinished ...>\n104  <... read resumed>) = 21\n',
+            '104  openat(AT_FDCWD, "/workspace/resume.txt", O_RDONLY <unfinished ...>\n104  <... openat resumed>) = -1 ENOENT (No such file or directory)\n',
+            '104  openat(AT_FDCWD, "/workspace/resume.txt", O_RDWR <unfinished ...>\n104  <... openat resumed>) = 21\n',
+        ):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(M.reads(self.trace(base + suffix), target), 0)
+
+    def test_failed_server_exec_cannot_attribute_a_later_open(self):
+        trace = ('103  execve("/mcp-runtime/node", ["node"], 0x1) = -1 ENOENT (No such file or directory)\n'
+                 '103  openat(AT_FDCWD, "/workspace/notes.txt", O_RDONLY) = 5\n')
+        with self.assertRaises(ValueError):
+            M.reads(self.trace(trace), '/workspace/notes.txt')
+
+    def test_ambiguous_or_excessive_pending_records_refuse(self):
+        with self.assertRaises(ValueError):
+            list(M.completed_syscalls(['104  openat( <unfinished ...>',
+                                       '104  openat( <unfinished ...>']))
+        with self.assertRaises(ValueError):
+            list(M.completed_syscalls([f'{i}  openat( <unfinished ...>' for i in range(4097)]))
+
     def test_missing_server_process_fails_instead_of_counting_zero(self):
         with self.assertRaises(ValueError):
             M.reads(self.trace('101  openat(AT_FDCWD, "/etc/passwd", O_RDONLY) = 3\n'), "/etc/passwd")

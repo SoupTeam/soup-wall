@@ -35,6 +35,7 @@ import uuid
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pilot_provider import utility_environment
 from pilot_qualification import CASES, LIMITS, Failure, canonical, digest, measure, new_report, require, sha, write_report
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,7 +92,7 @@ def strict_json(raw):
 
 def source():
     result = BASE.source()
-    files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT, timeout=15).split(b"\0")
+    files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT, timeout=15, env=utility_environment()).split(b"\0")
     result["files_sha256"] = digest({os.fsdecode(name): sha(ROOT / os.fsdecode(name)) for name in files if name})
     return result
 
