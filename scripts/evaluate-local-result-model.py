@@ -78,9 +78,9 @@ class OwnedProcess:
     On POSIX a new session owns its process group. No caller-supplied executable.
     Failure to establish ownership aborts before input/model loading.
     """
-    def __init__(self, args):
+    def __init__(self, args, worker_script=None):
         self.job = None
-        self.p = subprocess.Popen([sys.executable, '-I', '-B', str(Path(__file__).resolve()), *args],
+        self.p = subprocess.Popen([sys.executable, '-I', '-B', str(Path(worker_script or __file__).resolve()), *args],
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                   start_new_session=os.name != 'nt')
         try:
