@@ -26,7 +26,7 @@ V1, BASE = CLONE.V1, CLONE.BASE
 INSTALL = CLONE.load("sou150_installer", "install-sou150-git-profile.py")
 require, sha, write = BASE.require, BASE.sha, BASE.write
 READS = (
-    ("git_show", {"revision": "HEAD"}, "120000"),
+    ("git_show", {"revision": "HEAD"}, "tracked-link"),
     ("git_status", {}, "notes.txt"),
     ("git_log", {"max_count": 3}, "SOU150 tracked link objects"),
     ("git_diff", {"target": "HEAD", "context_lines": 3}, "synthetic changed text"),
