@@ -40,7 +40,6 @@ if ! echo "$NODE_SHA256  $TARGET_DIR/$NODE_TAR" | sha256sum -c -; then
     exit 1
 fi
 
-# 1. Use the accepted native preparation receipt for bwrap if available in CI, else fallback locally
 BWRAP_SRC="${SOU111_BWRAP:-$(which bwrap)}"
 if [ ! -f "$BWRAP_SRC" ]; then
     echo "CRITICAL: bwrap not found at $BWRAP_SRC"
@@ -48,7 +47,6 @@ if [ ! -f "$BWRAP_SRC" ]; then
 fi
 cp "$BWRAP_SRC" "$TARGET_DIR/bin/bwrap"
 
-# 2. Copy the profile BEFORE running npm to keep the source tree pristine
 cp scripts/install-sou62-filesystem-profile.py "$TARGET_DIR/scripts/"
 cp -R profiles/mcp/filesystem-readonly-v1 "$TARGET_DIR/profiles/mcp/"
 cp LICENSE NOTICE README.md "$TARGET_DIR/" 2>/dev/null || true
@@ -57,9 +55,8 @@ echo "=> Populating NPM cache (strictly isolated from source tree)..."
 tar -xf "$TARGET_DIR/$NODE_TAR" -C target
 export PATH="$(pwd)/target/node-${NODE_VERSION}-linux-x64/bin:$PATH"
 
-# Run npm ci ONLY inside the extracted target copy, then purge the local node_modules 
-# so the candidate kit ships exactly the offline cache and nothing else.
-(cd "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1" && npm ci --cache "$(pwd)/../../npm-cache" --prefer-offline && rm -rf node_modules)
+# Use explicit absolute path for the cache to fix the directory traversal mismatch
+(cd "$TARGET_DIR/profiles/mcp/filesystem-readonly-v1" && npm ci --cache "$TARGET_DIR/npm-cache" --prefer-offline && rm -rf node_modules)
 
 SOURCE_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 CARGO_LOCK_HASH=$(sha256sum Cargo.lock | awk '{print $1}')

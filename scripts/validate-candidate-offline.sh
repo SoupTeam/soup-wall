@@ -17,29 +17,18 @@ trap cleanup EXIT
 cd "$VALIDATION_DIR"
 
 cat <<'EOF' > make_bad_archives.py
-import tarfile
-# 1. Duplicate entries
+import tarfile, json
 with tarfile.open("dup.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("test.txt")
-    ti.size = 0
-    tar.addfile(ti)
-    tar.addfile(ti)
-# 2. Absolute path
+    ti = tarfile.TarInfo("test.txt"); ti.size = 0; tar.addfile(ti); tar.addfile(ti)
 with tarfile.open("abs.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("/etc/passwd")
-    ti.size = 0
-    tar.addfile(ti)
-# 3. Symlink escape
+    ti = tarfile.TarInfo("/etc/passwd"); ti.size = 0; tar.addfile(ti)
 with tarfile.open("sym.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("link")
-    ti.type = tarfile.SYMTYPE
-    ti.linkname = "../../../etc/passwd"
-    tar.addfile(ti)
-# 4. Oversize
+    ti = tarfile.TarInfo("link"); ti.type = tarfile.SYMTYPE; ti.linkname = "../../../etc/passwd"; tar.addfile(ti)
 with tarfile.open("big.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("big.bin")
-    ti.size = 2 * 1024 * 1024 * 1024
-    tar.addfile(ti)
+    ti = tarfile.TarInfo("big.bin"); ti.size = 2 * 1024 * 1024 * 1024; tar.addfile(ti)
+# 5. Empty manifest (missing required assets)
+with open("manifest.json", "w") as f: json.dump({"schema_version":2,"files":{}}, f)
+with tarfile.open("empty_manifest.tar.gz", "w:gz") as tar: tar.add("manifest.json")
 EOF
 
 cat <<'EOF' > preflight_validate_archive.py
@@ -54,8 +43,7 @@ try:
     with tarfile.open(archive_path, "r:gz") as tar:
         members = tar.getmembers()
         total_size = sum(m.size for m in members)
-        if total_size > MAX_SIZE:
-            sys.exit("CRITICAL: Archive exceeds expansion size limit")
+        if total_size > MAX_SIZE: sys.exit("CRITICAL: Archive exceeds expansion size limit")
         
         seen_names = set()
         manifest_member = None
@@ -64,38 +52,36 @@ try:
             name = m.name
             if name.startswith("/") or ".." in name.split("/"):
                 sys.exit(f"CRITICAL: Unsafe path traversal or absolute path in archive: {name}")
-            if name in seen_names:
-                sys.exit(f"CRITICAL: Duplicate entry in archive: {name}")
+            if name in seen_names: sys.exit(f"CRITICAL: Duplicate entry in archive: {name}")
             seen_names.add(name)
             
             if m.issym() or m.islnk():
                 linkname = m.linkname
                 if linkname.startswith("/") or ".." in linkname.split("/"):
                     sys.exit(f"CRITICAL: Unsafe symlink/hardlink destination: {linkname}")
-            
             if not (m.isreg() or m.isdir() or m.issym() or m.islnk()):
                 sys.exit(f"CRITICAL: Unsupported archive member type for {name}")
-                
-            if name.endswith("manifest.json") and manifest_member is None:
-                manifest_member = m
+            if name.endswith("manifest.json") and manifest_member is None: manifest_member = m
 
-        if not manifest_member:
-            sys.exit("CRITICAL: manifest.json not found in archive root/members")
+        if not manifest_member: sys.exit("CRITICAL: manifest.json not found in archive root/members")
             
         f_manifest = tar.extractfile(manifest_member)
         manifest_data = json.load(f_manifest)
         expected_files = manifest_data.get("files", {})
+
+        # Strict requirement for mandatory candidate assets
+        required_components = ["bin/agentfw", "bin/llm-firewall", "assets/baseline.classifier"]
+        for req in required_components:
+            if req not in expected_files: sys.exit(f"CRITICAL: Mandatory component missing from manifest: {req}")
 
         extracted_paths = set()
         os.makedirs(dest_dir, exist_ok=True)
         
         for m in members:
             parts = Path(m.name).parts
-            if len(parts) <= 1:
-                continue
+            if len(parts) <= 1: continue
             rel_path = str(Path(*parts[1:]))
-            if rel_path == ".":
-                continue
+            if rel_path == ".": continue
                 
             target_path = os.path.join(dest_dir, rel_path)
             
@@ -105,8 +91,7 @@ try:
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 source = tar.extractfile(m)
                 if source:
-                    with open(target_path, "wb") as out:
-                        out.write(source.read())
+                    with open(target_path, "wb") as out: out.write(source.read())
                     extracted_paths.add(rel_path)
             elif m.issym():
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
@@ -114,10 +99,8 @@ try:
 
         for rel_path, expected_hash in expected_files.items():
             full_path = os.path.join(dest_dir, rel_path)
-            if not os.path.isfile(full_path):
-                sys.exit(f"CRITICAL: Manifest lists missing file: {rel_path}")
-            file_hash = hashlib.sha256(open(full_path, "rb").read()).hexdigest()
-            if file_hash != expected_hash:
+            if not os.path.isfile(full_path): sys.exit(f"CRITICAL: Manifest lists missing file: {rel_path}")
+            if hashlib.sha256(open(full_path, "rb").read()).hexdigest() != expected_hash:
                 sys.exit(f"CRITICAL: Manifest hash mismatch for {rel_path}")
 
         for rel_path in extracted_paths:
@@ -128,9 +111,9 @@ except Exception as e:
     sys.exit(f"CRITICAL: Preflight archive validation failed: {e}")
 EOF
 
-echo "Testing Archive Integrity Negative Controls..."
+echo "Testing Archive Integrity & Completeness Negative Controls..."
 python3 make_bad_archives.py
-for bad in dup.tar.gz abs.tar.gz sym.tar.gz big.tar.gz; do
+for bad in dup.tar.gz abs.tar.gz sym.tar.gz big.tar.gz empty_manifest.tar.gz; do
     if python3 preflight_validate_archive.py "$bad" out >/dev/null 2>&1; then
         echo "CRITICAL: preflight_validate_archive.py failed to reject $bad"
         exit 1
@@ -196,7 +179,6 @@ def read_response(expected_id):
             if msg.get("id") == expected_id:
                 return msg
         except: pass
-    
     errs = proc.stderr.read()
     sys.exit(f"CRITICAL: No JSON-RPC response for id={expected_id}. Stderr: {errs}")
 
@@ -227,10 +209,8 @@ if action == "read":
         sys.exit("CRITICAL: Useful read failed to return expected content.")
 elif action in ["write", "write_bad"]:
     error_obj = resp.get("error")
-    if error_obj:
-        err_code = error_obj.get("code")
-        if err_code in [-32601, -32602]:
-            sys.exit(f"CRITICAL: Generic/protocol error code {err_code} falsely accepted as policy denial: {resp}")
+    if error_obj and error_obj.get("code") in [-32601, -32602]:
+        sys.exit(f"CRITICAL: Generic/protocol error code {error_obj.get('code')} falsely accepted as policy denial: {resp}")
     
     refused = "error" in resp or resp.get("result", {}).get("isError") is True
     if not refused:
@@ -240,12 +220,10 @@ elif action in ["write", "write_bad"]:
     is_policy_denial = "baseline-deny-injection" in err_str or "deny" in err_str
     
     if action == "write_bad":
-        if is_policy_denial:
-            sys.exit("CRITICAL: Bad schema error was treated as a valid policy deny instead of setup/protocol error.")
+        if is_policy_denial: sys.exit("CRITICAL: Bad schema error was treated as a valid policy deny instead of setup/protocol error.")
         sys.exit(0)
     else:
-        if not is_policy_denial:
-            sys.exit(f"CRITICAL: Generic or setup error instead of calibrated policy refusal: {resp}")
+        if not is_policy_denial: sys.exit(f"CRITICAL: Generic or setup error instead of calibrated policy refusal: {resp}")
         sys.exit(0)
 EOF
 
