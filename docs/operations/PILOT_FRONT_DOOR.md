@@ -175,3 +175,5 @@ not measure live-model effectiveness or general product readiness.
 WSL reproduction: this flow refuses WSL by design
 (`native_ubuntu_required_wsl_is_separate`); running the same `preview` command
 in WSL2 Ubuntu 24.04 shows that refusal and no other effect.
+
+Evidence: [first-use run, 2026-10-25](evidence/PILOT_FRONT_DOOR_2026-10-25.md).
