@@ -38,11 +38,18 @@ class Prefix(unittest.TestCase):
         good = self.temporary / "prefix"
         M.check_prefix(good, [])
         for bad, code in ((Path("relative"), "absolute_prefix_required"),
-                          (ROOT / "pilot-state", "prefix_inside_checkout"),
-                          (Path.home().resolve(), "home_directory_prefix_refused")):
+                          (ROOT / "pilot-state", "prefix_inside_checkout")):
             with self.assertRaises(M.Failure) as caught:
                 M.check_prefix(bad, [])
             self.assertEqual(caught.exception.code, code)
+        # Isolate the home refusal from checkout ancestry. Hosted runners can
+        # keep the checkout under HOME, where the earlier checkout guard wins.
+        home = self.temporary / "operator-home"
+        home.mkdir()
+        with mock.patch.object(Path, "home", return_value=home):
+            with self.assertRaises(M.Failure) as caught:
+                M.check_prefix(home, [])
+            self.assertEqual(caught.exception.code, "home_directory_prefix_refused")
         link = self.temporary / "link"
         link.symlink_to(self.temporary)
         with self.assertRaises(M.Failure) as caught:
@@ -63,6 +70,12 @@ class Prefix(unittest.TestCase):
         with self.assertRaises(M.Failure) as caught:
             M.roots(args)
         self.assertEqual(caught.exception.code, "both_workspaces_or_neither")
+
+    def test_checkout_nested_in_home_keeps_checkout_refusal(self):
+        with mock.patch.object(Path, "home", return_value=ROOT.parent):
+            with self.assertRaises(M.Failure) as caught:
+                M.check_prefix(ROOT.parent, [])
+            self.assertEqual(caught.exception.code, "prefix_inside_checkout")
 
 
 class State(unittest.TestCase):
