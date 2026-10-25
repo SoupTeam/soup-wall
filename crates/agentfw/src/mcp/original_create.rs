@@ -450,19 +450,26 @@ mod linux {
         use super::*;
         use serde_json::json;
         use std::os::unix::fs::symlink;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
 
         // Unit-test binary only: a trusted adversary changes the real original
         // server's output after its owned processes are conclusively stopped.
         // This does not replace the producer or alter its installed assets.
-        tokio::task_local! { static STAGE_ADVERSARY: &'static str; }
+        tokio::task_local! { static STAGE_ADVERSARY: (&'static str, Arc<AtomicBool>); }
 
         pub(super) fn perturb_completed_original_stage(
             stage: &OwnedStage,
             selection: &CreateSelection,
         ) -> anyhow::Result<Option<tempfile::TempDir>> {
-            let Ok(fault) = STAGE_ADVERSARY.try_with(|fault| *fault) else {
+            let Ok((fault, observed)) =
+                STAGE_ADVERSARY.try_with(|(fault, observed)| (*fault, observed.clone()))
+            else {
                 return Ok(None);
             };
+            // An earlier startup/cleanup error must never count as a successful
+            // negative witness. Require valid actual upstream bytes first.
+            stage.verify(selection)?;
             let target = stage.path().join(&selection.leaf);
             match fault {
                 "extra" => fs::write(stage.path().join("unapproved-extra"), b"unapproved")?,
@@ -472,6 +479,7 @@ mod linux {
                     let alias = tempfile::tempdir()?;
                     fs::hard_link(&target, alias.path().join("alias"))?;
                     // Keep the alias alive through the production validator.
+                    observed.store(true, Ordering::SeqCst);
                     return Ok(Some(alias));
                 }
                 "symlink" | "fifo" | "directory" => {
@@ -491,6 +499,7 @@ mod linux {
                 }
                 _ => anyhow::bail!("unregistered original-stage control"),
             }
+            observed.store(true, Ordering::SeqCst);
             Ok(None)
         }
 
@@ -563,9 +572,17 @@ mod linux {
                 "fifo",
                 "directory",
             ] {
+                let observed = Arc::new(AtomicBool::new(false));
                 let refused = STAGE_ADVERSARY
-                    .scope(fault, super::run_original_upstream(&profile, &args))
+                    .scope(
+                        (fault, observed.clone()),
+                        super::run_original_upstream(&profile, &args),
+                    )
                     .await;
+                assert!(
+                    observed.load(Ordering::SeqCst),
+                    "{fault} never reached verified completed-original output"
+                );
                 assert!(refused.is_err(), "original stage accepted {fault}");
                 assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
                 assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
@@ -576,53 +593,56 @@ mod linux {
                 );
             }
 
-            let (_, fresh) = super::run_original_upstream(&profile, &args).await.unwrap();
-            let verified = fresh.expect("fresh original create must recover after stage refusals");
-            assert_eq!(verified.content, "upstream 🌍");
             let pinned = crate::sandbox::PinnedWorkspace::open(&workspace).unwrap();
-            let staged = verified
-                .prepare_atomic_publication(&pinned)
-                .unwrap()
-                .stage()
-                .unwrap();
-            drop(staged);
-            assert_eq!(
-                fs::read_dir(&workspace).unwrap().count(),
-                0,
-                "dropping anonymous original output published it"
-            );
-            let staged = verified
-                .prepare_atomic_publication(&pinned)
-                .unwrap()
-                .stage()
-                .unwrap();
-            fs::write(workspace.join("original.txt"), b"competing inventory").unwrap();
-            assert!(
-                staged.publish().is_err(),
-                "original publication overwrote competing target"
-            );
-            assert_eq!(
-                fs::read(workspace.join("original.txt")).unwrap(),
-                b"competing inventory"
-            );
-            fs::remove_file(workspace.join("original.txt")).unwrap();
-            let staged = verified
-                .prepare_atomic_publication(&pinned)
-                .unwrap()
-                .stage()
-                .unwrap();
-            let moved = root.path().join("moved-original-workspace");
-            fs::rename(&workspace, &moved).unwrap();
-            fs::create_dir(&workspace).unwrap();
-            assert!(
-                staged.publish().is_err(),
-                "original output published after root replacement"
-            );
-            assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
-            assert_eq!(fs::read_dir(&moved).unwrap().count(), 0);
-            fs::remove_dir(&workspace).unwrap();
-            fs::rename(&moved, &workspace).unwrap();
-            assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
+            for boundary in ["drop", "competing-target", "root-replacement"] {
+                // Publication preparation consumes its output capability. Each
+                // boundary gets a fresh real original invocation, never a clone.
+                let (_, fresh) = super::run_original_upstream(&profile, &args).await.unwrap();
+                let verified =
+                    fresh.expect("fresh original create must recover after stage refusals");
+                assert_eq!(verified.content, "upstream 🌍");
+                let staged = verified
+                    .prepare_atomic_publication(&pinned)
+                    .unwrap()
+                    .stage()
+                    .unwrap();
+                match boundary {
+                    "drop" => drop(staged),
+                    "competing-target" => {
+                        fs::write(workspace.join("original.txt"), b"competing inventory").unwrap();
+                        assert!(
+                            staged.publish().is_err(),
+                            "original publication overwrote competing target"
+                        );
+                        assert_eq!(
+                            fs::read(workspace.join("original.txt")).unwrap(),
+                            b"competing inventory"
+                        );
+                        fs::remove_file(workspace.join("original.txt")).unwrap();
+                    }
+                    "root-replacement" => {
+                        let moved = root.path().join("moved-original-workspace");
+                        fs::rename(&workspace, &moved).unwrap();
+                        fs::create_dir(&workspace).unwrap();
+                        assert!(
+                            staged.publish().is_err(),
+                            "original output published after root replacement"
+                        );
+                        assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+                        assert_eq!(fs::read_dir(&moved).unwrap().count(), 0);
+                        fs::remove_dir(&workspace).unwrap();
+                        fs::rename(&moved, &workspace).unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+                assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
+                eprintln!(
+                    "{}",
+                    json!({"event":"sou83_original_publication_boundary_refused",
+                    "case":boundary,"visible_publications":0,"original_worker_completed":true})
+                );
+            }
 
             // These refusals happen *before* any upstream process is spawned.
             for denied in [

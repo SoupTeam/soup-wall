@@ -291,6 +291,33 @@
       "source_files_sha256": "d075b8d8437d72a7432366274ebb975b01343c0a1cb394f5b9a588bb32a25ca2",
       "source_after_sha256": "d075b8d8437d72a7432366274ebb975b01343c0a1cb394f5b9a588bb32a25ca2",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "proof-attribution-clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 6.11,
+      "source_files_sha256": "60b2f899859c33ac30e6b5ce8620e69f0336291331437757de7a8100deb67c84",
+      "source_after_sha256": "60b2f899859c33ac30e6b5ce8620e69f0336291331437757de7a8100deb67c84",
+      "log_sha256": "957a351001c4e01eb497f3e71ee12105e33b6bd00647f050f3e747cd7d82cee0"
+    },
+    {
+      "label": "once-only-stage-clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 7.35,
+      "source_files_sha256": "02fe93de81de995c61339dc2be99e847b5f0a44bbe152a35805fb5c339446d46",
+      "source_after_sha256": "02fe93de81de995c61339dc2be99e847b5f0a44bbe152a35805fb5c339446d46",
+      "log_sha256": "312f55400cf6b8a353522652d3e58c92780a2b04bd2ca60725c394049d43d999"
+    },
+    {
+      "label": "once-only-stage-fmt",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 1.39,
+      "source_files_sha256": "02fe93de81de995c61339dc2be99e847b5f0a44bbe152a35805fb5c339446d46",
+      "source_after_sha256": "02fe93de81de995c61339dc2be99e847b5f0a44bbe152a35805fb5c339446d46",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ],
   "file_sha256": {
@@ -299,7 +326,7 @@
     "crates/agentfw/src/mcp/admission.rs": "63f2ad2b3543696cdd346fde9db97f05bb2943d19b52210b9310eb104ef89748",
     "crates/agentfw/src/mcp/admission/real_server.rs": "7f5e8bacb71a7cd1e19610c98100b6791feac4cca198e66f8a3b135fb6afe5a3",
     "crates/agentfw/src/mcp/admission/real_server/fault_tests.rs": "a595cdeef31bd4e4cc0f313734b4d811c164729f1079a941819d7f337fae961f",
-    "crates/agentfw/src/mcp/original_create.rs": "dd6d158902c9e95d8942e90ab89cac66123c100312b6fc63067769b1854455a7",
+    "crates/agentfw/src/mcp/original_create.rs": "597d202621bd7d50da5bf5d3196c6bbd64f45a0bbd359260869e8afd5a423462",
     "crates/agentfw/src/mcp/server_profile/filesystem_create.rs": "81d555de44515e971b7ab6a5ebf4c6e4771109fdc205092d64edff791950ce42",
     "crates/agentfw/src/native.rs": "dcbcbd320a7819936563cbb7dbd49e67858ac9fa5386a8b865cb8a4839df7018",
     "crates/agentfw/src/native/approval.rs": "1f09c9d2befeb407ba50ba98d0dcd615cdece67d1e16e54754769f1121657119",
@@ -330,6 +357,14 @@
       "run_id": 40214153694,
       "job_id": 121231590087,
       "failure": "same refusal witness plus existing private executable calibration failed with ETXTBSY; retained as failure, no product guard or argument-limit expectation changed"
+    },
+    {
+      "run_id": 40215590136,
+      "head": "ddb129bb7fba5b4fd58557983d436faea47af666",
+      "job_id": 121235939208,
+      "failure": "Linux test-only staging witness attempted to reuse VerifiedOutput after consuming prepare_atomic_publication; fixed by fresh actual original invocation for each independent boundary, no Clone or production guard change",
+      "artifact": 12606984964,
+      "artifact_sha256": "513aab7a01f0e5caf92b5084ad16cefda3ce1c9fd02f97dc0c2c6c7e8a74f70a"
     }
   ],
   "native_staging_controls": "actual pinned original writes followed by test-only post-cleanup perturbation and production validator; execution pending focused Linux qualification"
