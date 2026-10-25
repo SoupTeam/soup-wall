@@ -297,6 +297,19 @@ fn yaml_plain_quotes_cannot_hide_aliases_and_block_scalars_are_excluded() {
             "offline_policy_yaml_extension"
         );
     }
+    for root in [
+        "--- &policy\nagent_policies: []\ndefault: allow\n",
+        "--- !!map\nagent_policies: []\ndefault: allow\n",
+        "\u{feff}&policy\ndefault: allow\n",
+        "\u{feff}!!map\ndefault: allow\n",
+        "%YAML 1.2\n---\ndefault: allow\n",
+        "default: allow\n...\n",
+    ] {
+        assert_eq!(
+            policy(root.as_bytes()).unwrap_err().0,
+            "offline_policy_yaml_subset"
+        );
+    }
     let cr = "agent_policies:\r- name: owner's rule\r  when: &condition {}\r  action: allow\rdefault: deny\r";
     assert_eq!(
         policy(cr.as_bytes()).unwrap_err().0,

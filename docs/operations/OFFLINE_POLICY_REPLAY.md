@@ -110,7 +110,8 @@ parser. Anchors, aliases and tags are excluded before YAML decoding in this
 bounded subset. The lexical precheck distinguishes plain scalars (where internal
 apostrophes and quotes are data), quoted scalars and comments. Quoted scalars
 must close on one physical line; block scalars (`|`/`>`), explicit complex keys,
-Unicode NEL/line/paragraph separators and flow nesting above 32 are unsupported
+BOM, document markers/directives, Unicode NEL/line/paragraph separators and
+flow nesting above 32 are unsupported
 (`offline_policy_yaml_subset`). Use single-line quoted strings with escapes for
 messages requiring line breaks. Each policy is explicit; there is no implicit shipped or local
 policy selection. The shipped Deny floor is still mandatory inside production
@@ -233,10 +234,13 @@ creation. FIFO polling alone cannot exclude every short-lived read.
 On macOS, an additional sandbox attempt denies process forks, network operations,
 file writes, fake Agent-home reads and the target FIFO read. It positively
 calibrates state-read/write/fork/network denials and opening the exact FIFO
-tool target before calling the offline CLI. A bounded Python helper opens that
-FIFO read-only with `O_NONBLOCK` and closes it, first successfully without the
-sandbox and then with a required denial under the exact target filter. The
-parity report names `target_read` among the calibrated denials, and the driver
+tool target before calling the offline CLI. A bounded owned Rust test-executable
+probe opens that FIFO read-only with `O_NONBLOCK` and closes it, first successfully
+without the sandbox and then with a required EACCES/EPERM from that exact open
+(exit 73) under the target filter. The same probe must successfully open a
+separate allowed FIFO under the same sandbox, so probe startup failures
+cannot count as target denials. The driver clears the probe-only environment
+flag from the ordinary test run. The parity report names `target_read` among the calibrated denials, and the driver
 requires it before accepting a passed sandbox claim.
 Unavailable sandbox support is recorded as unavailable, never passed; the driver
 then reports `passed_with_limits` and makes no syscall-level no-read claim.

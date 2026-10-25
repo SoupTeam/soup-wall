@@ -121,12 +121,16 @@ fn validate_yaml_subset(yaml: &str) -> Result<()> {
     }
     if yaml
         .chars()
-        .any(|c| matches!(c, '\u{85}' | '\u{2028}' | '\u{2029}'))
+        .any(|c| matches!(c, '\u{85}' | '\u{2028}' | '\u{2029}' | '\u{feff}'))
     {
         return Err(Failure("offline_policy_yaml_subset"));
     }
     let mut flow = 0usize;
     for line in yaml.split(['\n', '\r']) {
+        let start = line.trim_start();
+        if start.starts_with("---") || start.starts_with("...") || start.starts_with('%') {
+            return Err(Failure("offline_policy_yaml_subset"));
+        }
         let bytes = line.as_bytes();
         let mut state = State::Start;
         let mut i = 0;

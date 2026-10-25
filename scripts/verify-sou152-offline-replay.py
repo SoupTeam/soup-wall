@@ -162,7 +162,7 @@ def qualify(args):
             # replay child receives only its disposable home in the Rust tests.
             env = {**os.environ, "CARGO_TARGET_DIR": str(target), "TMPDIR": str(build),
                    "CARGO_TERM_COLOR": "never", "CARGO_INCREMENTAL": "0"}
-            for name in ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "SOU152_AGENTFW_BINARY", "SOU152_PARITY_REPORT"):
+            for name in ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "SOU152_AGENTFW_BINARY", "SOU152_PARITY_REPORT", "SOU152_OWNED_FIFO_PROBE"):
                 env.pop(name, None)
             env["PATH"] = str(cargo.parent) + os.pathsep + env.get("PATH", "")
             code, out, err = bounded_run([str(cargo), "test", "--locked", "--offline", "-p", "agentfw",
@@ -206,7 +206,9 @@ def qualify(args):
             if effects["host_sandbox"]["status"] == "passed":
                 require(set(effects["host_sandbox"].get("calibrated_denials", [])) ==
                         {"target_read", "state_read", "file_write", "process_fork", "network"}
-                        and effects["host_sandbox"].get("target_read_denied") is True,
+                        and effects["host_sandbox"].get("target_read_denied") is True
+                        and effects["host_sandbox"].get("target_denial_exit_code") == 73
+                        and effects["host_sandbox"].get("allowed_fifo_under_same_sandbox") is True,
                         "host_sandbox_target_calibration_missing")
             report["limitations"] = ["Owned synthetic fixtures do not establish detection or protection rates.",
                 "FIFO observation samples opens; it does not independently prove absence of every short-lived file read.",

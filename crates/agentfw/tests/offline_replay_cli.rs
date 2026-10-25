@@ -131,6 +131,29 @@ fn snapshot(root: &Path) -> Value {
 
 #[test]
 fn offline_policy_cli_parity_and_effect_witnesses() {
+    // The exact test executable doubles as a bounded owned syscall probe. This
+    // branch runs only in explicitly spawned calibration children, never CLI.
+    #[cfg(target_os = "macos")]
+    if let Some(path) = std::env::var_os("SOU152_OWNED_FIFO_PROBE") {
+        use std::os::unix::fs::OpenOptionsExt;
+        let code = match fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(path)
+        {
+            Ok(file) => {
+                drop(file);
+                0
+            }
+            Err(error)
+                if matches!(error.raw_os_error(), Some(libc::EACCES) | Some(libc::EPERM)) =>
+            {
+                73
+            }
+            Err(_) => 74,
+        };
+        std::process::exit(code);
+    }
     let temporary = temp();
     let root = temporary.path();
     let home = root.join("home");
@@ -381,19 +404,48 @@ fn host_sandbox(home: &Path, input: &Path, policy: &Path) -> Value {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port().to_string();
     let target = root.join("target-fifo");
+    let allowed_target = root.join("sandbox-allowed-fifo");
+    use std::os::unix::ffi::OsStrExt;
+    let allowed_name = std::ffi::CString::new(allowed_target.as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(allowed_name.as_ptr(), 0o600) }, 0);
+    let probe_binary = std::env::current_exe().unwrap();
+    let probe = |path: &Path, confined: bool| {
+        let mut command = if confined {
+            let mut command = Command::new("/usr/bin/sandbox-exec");
+            command.args(["-p", &profile]).arg(&probe_binary);
+            command
+        } else {
+            Command::new(&probe_binary)
+        };
+        command
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", home)
+            .env("SOU152_OWNED_FIFO_PROBE", path)
+            .args([
+                "--exact",
+                "offline_policy_cli_parity_and_effect_witnesses",
+                "--nocapture",
+                "--test-threads=1",
+            ]);
+        run(command)
+    };
+    assert_eq!(
+        probe(&target, false).status.code(),
+        Some(0),
+        "owned exact target open positive control failed"
+    );
+    assert_eq!(
+        probe(&allowed_target, true).status.code(),
+        Some(0),
+        "owned probe could not open allowed FIFO under same sandbox"
+    );
+    assert_eq!(
+        probe(&target, true).status.code(),
+        Some(73),
+        "exact target open was not denied with EACCES/EPERM"
+    );
     let controls: Vec<(&str, &Path, Vec<&std::ffi::OsStr>)> = vec![
-        (
-            "target_read",
-            Path::new("/usr/bin/python3"),
-            vec![
-                "-I".as_ref(),
-                "-S".as_ref(),
-                "-c".as_ref(),
-                "import os,sys; fd=os.open(sys.argv[1],os.O_RDONLY|os.O_NONBLOCK); os.close(fd)"
-                    .as_ref(),
-                target.as_os_str(),
-            ],
-        ),
         (
             "state_read",
             Path::new("/bin/cat"),
@@ -421,7 +473,7 @@ fn host_sandbox(home: &Path, input: &Path, policy: &Path) -> Value {
             ],
         ),
     ];
-    let mut calibrated = Vec::new();
+    let mut calibrated = vec!["target_read"];
     for (name, program, args) in controls {
         let mut cmd = Command::new(program);
         cmd.env_clear().env("PATH", "/usr/bin:/bin").args(&args);
@@ -455,7 +507,7 @@ fn host_sandbox(home: &Path, input: &Path, policy: &Path) -> Value {
         output.status.success(),
         "offline simulation failed under calibrated denials"
     );
-    json!({"status":"passed","calibrated_denials":calibrated,"offline_cli_under_denials":true,"target_read_denied":true})
+    json!({"status":"passed","calibrated_denials":calibrated,"offline_cli_under_denials":true,"target_read_denied":true,"target_denial_exit_code":73,"allowed_fifo_under_same_sandbox":true})
 }
 #[cfg(not(target_os = "macos"))]
 fn host_sandbox(_: &Path, _: &Path, _: &Path) -> Value {
@@ -537,6 +589,10 @@ fn cli_missing_context_unsafe_io_and_legacy_replay_stay_explicit() {
         }
     }
     for bad in [
+        "--- &policy\nagent_policies: []\ndefault: allow\n",
+        "--- !!map\nagent_policies: []\ndefault: allow\n",
+        "\u{feff}&policy\ndefault: allow\n",
+        "\u{feff}!!map\ndefault: allow\n",
         "agent_policies:\n- name: owner's rule\n  when: &condition {}\n  action: allow\n- name: second\n  when: *condition\n  action: ask\ndefault: deny\n",
         "agent_policies:\n- name: owned\n  message: |\n    owner's \"rule\n  when: &condition {}\n  action: allow\ndefault: deny\n",
     ] {
