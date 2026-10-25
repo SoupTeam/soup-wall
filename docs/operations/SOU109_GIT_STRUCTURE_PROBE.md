@@ -211,3 +211,37 @@ or its reviewed successor. The stacked #215 experimental materials and #255
 baseline comparison are not automatically accepted production code. Original
 useful Git/FS delivery, matched withheld-output/effect witnesses and exact-source
 Ready/admission remain required before completion.
+
+## Broader checks and fixture integrity
+
+[Validation metadata](evidence/sou109-git-structure/validation.json) records the
+normal locked workspace checks on `e19b152cc359351faa39b2eecc6fe666ad7c2172`.
+No Rust/Cargo source changed in the subsequent hardening commits. Workspace tests
+completed 1,665 passes, 15 ignored and the three unchanged positive-regression
+failures, then stopped; remaining test targets are not claimed executed.
+Workspace all-target Clippy with warnings denied passed.
+
+The initial Python run retained one checkout-converted Git-fixture failure and
+two missing-NumPy stub-test errors. The isolated NumPy environment initially
+lacked the system urllib3 dependency; that second failed attempt is retained
+separately. After restoring the exact committed Git bytes and using CPython
+3.12.3 with NumPy 2.3.4 plus existing system packages, all 1,222 unit tests
+completed with 39 explicit skips and no failures/errors. The benchmark-control
+suite completed 66 tests with 19 skips and no failures/errors. These are unit
+controls, not real model inference or installed-pilot acceptance. The additional
+current-source six relation and one Git-environment boundary tests also pass.
+
+The Git fixture's SHA-256 is
+`a57a7771a54974355a18da1224cc1f4a04a58b8bec3cde9208286802dc4b1f0a`.
+Its stored blob was already LF; the new attribute preserves those exact bytes on
+checkout and changes no payload or label. The focused Rust original-result
+suite was rerun on those committed bytes and remains six pass / three fail.
+No original positive expectation was weakened to make the gate green.
+
+The direct reproduction now removes inherited `GIT_*` redirection/config/object
+variables before creating its owned repository. An actual Git boundary test
+sets foreign GIT_DIR/work-tree/config paths and confirms the foreign sentinel
+is untouched. A separate source-stamped report from
+`f4a649ef5375319c6459e5142246e6531733fdf0` reproduces the same raw ID200 hash;
+the earlier source/report remains unchanged. This hardening affects the local
+reproduction harness, not production policy or admission.

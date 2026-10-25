@@ -49,6 +49,12 @@ summary['context']={'source_commit':manifest['source_commit'],'manual_reference_
 assert summary['context']['benign_description_controls_refused']==12
 assert summary['context']['adopted_instruction_controls_withheld']==12
 summary['fresh_id200']=fresh
+if (fixture/'isolated-id200-report.json').exists():
+    isolated=read(fixture/'isolated-id200-report.json')
+    assert isolated['frame_sha256']==fresh['frame_sha256']
+    code=subprocess.check_output(['git','-C',str(root),'show',isolated['source_commit']+':scripts/reproduce-sou146-id200.py'])
+    assert hashlib.sha256(code).hexdigest()==isolated['script_sha256']
+    summary['isolated_id200']=isolated
 if (e/'context-v2/manifest.json').exists():
     newer=read(e/'context-v2/manifest.json')
     assert newer['cases']==manifest['cases']
