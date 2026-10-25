@@ -2,6 +2,9 @@
 """Independent original-schema and per-file grammar boundary regressions."""
 import importlib.util
 import json
+import itertools
+import subprocess
+import sys
 from pathlib import Path
 import unittest
 
@@ -49,8 +52,26 @@ class PerFileRevisions(unittest.TestCase):
 
     def test_combined_registry_capabilities_refuse_before_any_installation(self):
         manifest = json.loads((INSTALL.ASSETS / "upstream-tools-list.json").read_text())
-        with self.assertRaisesRegex(ValueError, "not qualified"):
-            INSTALL.registry(manifest, local_references=True, file_revisions=True)
-        with self.assertRaisesRegex(ValueError, "not qualified"):
-            INSTALL.install(Path("unused"), Path("unused"), Path("unused"), "a" * 64,
-                            Path("unused"), Path("unused"), local_references=True, file_revisions=True)
+        names = ("local_references", "file_revisions", "shallow_repository")
+        for count in (2, 3):
+            for selected in itertools.combinations(names, count):
+                options = dict.fromkeys(selected, True)
+                with self.subTest(selected=selected):
+                    with self.assertRaisesRegex(ValueError, "not qualified"):
+                        INSTALL.registry(manifest, **options)
+                    with self.assertRaisesRegex(ValueError, "not qualified"):
+                        INSTALL.install(Path("unused"), Path("unused"), Path("unused"), "a" * 64,
+                                        Path("unused"), Path("unused"), **options)
+
+    def test_cli_refuses_every_combined_selector_before_installation(self):
+        flags = ("--local-references", "--file-revisions", "--shallow-repository")
+        required = [value for name in ("destination", "workspace", "git", "bwrap", "git-launcher")
+                    for value in ("--" + name, "/unused")]
+        required += ["--git-sha256", "a" * 64]
+        for count in (2, 3):
+            for selected in itertools.combinations(flags, count):
+                with self.subTest(selected=selected):
+                    result = subprocess.run([sys.executable, str(ROOT / "scripts/install-sou68-git-profile.py"),
+                                             "--run", *required, *selected], capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("not allowed with argument", result.stderr)

@@ -33,6 +33,8 @@ pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap
 pub(crate) fn profile_name(format: &str) -> &'static str {
     if format == super::server_profile::git::FILE_READS_FORMAT {
         "sw-mcp/git-readonly-file-revisions/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git::SHALLOW_FORMAT {
+        "sw-mcp/git-readonly-shallow/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git::LOCAL_REFS_FORMAT {
         "sw-mcp/git-readonly-local-refs/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git::FORMAT {
@@ -623,9 +625,12 @@ fn prepare_linux_command(
     }
     let git_profile = super::server_profile::git::is_profile(&profile.format);
     if git_profile {
-        super::server_profile::git::validate_repository(
-            &descriptor_path(&workspace_pin).join("."),
-        )?;
+        let root = descriptor_path(&workspace_pin).join(".");
+        if profile.format == super::server_profile::git::SHALLOW_FORMAT {
+            super::server_profile::git::validate_repository_with_shallow(&root, true)?;
+        } else {
+            super::server_profile::git::validate_repository(&root)?;
+        }
     }
     let git_view =
         super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?;

@@ -335,6 +335,48 @@ mod tests {
     }
 
     #[test]
+    fn separately_selected_profiles_keep_disjoint_argument_contracts_after_integration() {
+        use super::super::{FILE_READS_FORMAT, FORMAT, LOCAL_REFS_FORMAT, SHALLOW_FORMAT};
+        use crate::mcp::{server_profile, server_sandbox};
+
+        let manifest = super::super::original_manifest();
+        let mut sandbox_profiles = std::collections::BTreeSet::new();
+        for format in [FORMAT, LOCAL_REFS_FORMAT, FILE_READS_FORMAT, SHALLOW_FORMAT] {
+            assert!(server_profile::selected(Some(format)));
+            assert_eq!(
+                server_profile::original_manifest_for(format).unwrap(),
+                manifest
+            );
+            assert!(sandbox_profiles.insert(server_sandbox::profile_name(format)));
+            let tools = server_profile::classify_manifest_for(format, &manifest).unwrap();
+            for (revision, accepted) in [
+                ("HEAD", true),
+                ("refs/heads/main", format == LOCAL_REFS_FORMAT),
+                ("HEAD:notes.txt", format == FILE_READS_FORMAT),
+                ("refs/heads/main:notes.txt", false),
+            ] {
+                assert_eq!(
+                    tools["git_show"]
+                        .validate_arguments(&json!({
+                            "repo_path": "/workspace", "revision": revision
+                        }))
+                        .is_ok(),
+                    accepted,
+                    "{format}: {revision}"
+                );
+            }
+        }
+        for combined in [
+            "sw-mcp/git-readonly-shallow-file-revisions/1",
+            "sw-mcp/git-readonly-local-refs-shallow/1",
+            "sw-mcp/git-readonly-file-revisions-local-refs/1",
+        ] {
+            assert!(!server_profile::selected(Some(combined)));
+            assert!(server_profile::classify_manifest_for(combined, &manifest).is_err());
+        }
+    }
+
+    #[test]
     fn selected_file_grammar_preserves_v1_and_rejects_combinations() {
         let selected = super::super::classify_manifest_with_extension(
             &super::super::original_manifest(),
