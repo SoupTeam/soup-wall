@@ -8,8 +8,8 @@ Guide: [PILOT_FRONT_DOOR.md](../PILOT_FRONT_DOOR.md).
 | --- | --- |
 | Platform | hosted Ubuntu 24.04.5 x86_64 container, kernel `6.18.44-fc-v153`; `platform.kind` = `linux` (not WSL2, not a physical host) |
 | User | non-root `tester` |
-| Base | main `6c19914b32ddf105397ba3c124c2a6682507d2f0` (descendant of `c1a6918`) |
-| Source | implementation commit of this change, tree `5b76054a1056e4b30cbd44d12f1f08e7d1830153`, clean before and after |
+| Base | main `49268d85` (descendant of `c1a6918`), the base of PR head `79af830` |
+| Source | review-fix commit of this change, tree `6add96a871f02772a42f20c9905e074a13f46670`, clean before and after (first run: tree `5b76054`, 8 cases passed) |
 | Claude Code 2.1.251 | `fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7` (locked package) |
 | Node 22.22.0 | `1bec56ef...` (official binary, supplied as `--node`/`--npm`) |
 | bubblewrap 0.13.1 | `f56b4f97...` |
@@ -39,19 +39,20 @@ not live-model effectiveness or general product readiness.
 
 ## Result
 
-`scripts/qualify-pilot-front-door.py`: **passed, 8 cases, 0 skipped**, about
-1.5 minutes in total.
+`scripts/qualify-pilot-front-door.py`: **passed, 9 cases, 0 skipped**, about
+2 minutes in total.
 
 | Case | Outcome |
 | --- | --- |
 | preview, zero effects | exit 0, no missing items; prefix not created; only `python3` and `git` (source identity) executed, no selected program (`agentfw`, `claude`, `node`, `npm`, `bwrap`), no `AF_INET`/`AF_INET6` connect; projects and user Claude configuration unchanged |
 | prepare and reuse | `prepare --apply` on owned existing roots (a source tree with hostile project Claude settings, and a supported Git repository): `prepared-not-active`; `prepare --apply --prefix` alone: `reused`, same selection; projects unchanged |
+| second prefix | `prepare --apply` with generated demo roots: a different selection and workspaces from the same binaries and policy bytes |
 | status before run | `configured-not-running` |
-| useful run | exit 0, `completed`, cleanup `owned_processes_stopped_audit_retained`, 21 s; `read_text_file README.md` returned the file; `git_show HEAD` returned the owned commit; `write_file`, `git_reset` and a `Bash` send were refused; no created file, no receiver request, no hostile hook marker; status during the run: `observed-live` with the run ID; all 41 owned descendants stopped |
+| useful run | exit 0, `completed`, cleanup `owned_processes_stopped_audit_retained`, 21 s; `read_text_file README.md` returned the file; `git_show HEAD` returned the owned commit; `write_file`, `git_reset` and a `Bash` send were refused; no created file, no receiver request, no hostile hook marker; status during the run: `observed-live` with the run ID for this prefix, while the second prefix reported `configured-not-running` with one unrelated owned run; all 44 owned descendants stopped |
 | status after run | `configured-not-running` |
 | stale record | refused `selection_not_current`, no selected program started, operator message printed |
 | changed selected policy | refused `selected_artifact_changed`, no selected program started, operator message printed |
-| Ctrl-C cancellation | SIGINT to the foreground group while the host was active: exit 1, `pilot_cancelled`, cleanup `owned_processes_stopped_audit_retained`; status during the run `observed-live`; all 36 owned descendants stopped; afterwards `configured-not-running` |
+| Ctrl-C cancellation | SIGINT to the foreground group while the host was active: exit 1, `pilot_cancelled`, cleanup `owned_processes_stopped_audit_retained`; status during the run `observed-live` (second prefix not live); all 39 owned descendants stopped; afterwards `configured-not-running` |
 
 Project and repository snapshots, the user `~/.claude` settings,
 `~/.claude.json` and an unrelated file were identical before and after. The
@@ -59,14 +60,17 @@ selection file was unchanged.
 
 ## Deterministic tests
 
-`python3 -B -m unittest scripts/tests/test_pilot_front_door.py` (17 tests):
+`python3 -B -m unittest scripts/tests/test_pilot_front_door.py` (22 tests):
 prefix rules (absolute, canonical, outside checkout, project and home), both or
 neither root, record tampering (missing, other commit, not current, wrong mode,
 duplicate keys, other format), dirty checkout, fixed argument list without a
 shell, exact non-zero status, signal death reproduced, TERM forwarded while
-SIGINT is left to the supervisor, unprepared run starts nothing, status never
-reports live without an authenticated answer and never prints tokens, explicit
-`--apply`, sanitized failures, and no toolchain auto-install. CI helper tests
+SIGINT is left to the supervisor, unprepared run starts nothing; status is
+live only for a run bound to this selection (two prefixes, same binary with
+another policy, registry or workspace, changed policy bytes, dead or unreadable
+records are never live) and never prints tokens; the front door never executes
+a supplied host or an unverified npm; explicit `--apply`, sanitized failures,
+and no toolchain auto-install. CI helper tests
 and `check_docs` pass.
 
 ## Not claimed
