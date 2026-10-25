@@ -1,0 +1,75 @@
+{
+  "rust_workspace_source_commit": "e19b152cc359351faa39b2eecc6fe666ad7c2172",
+  "head_for_code_equivalence_check": "f4a649ef5375319c6459e5142246e6531733fdf0",
+  "rust_cargo_source_changes_after_broad_snapshot": [],
+  "rust_workspace": {
+    "command": "cargo test --locked --workspace",
+    "status": "failed",
+    "completed_test_targets": 58,
+    "passed": 1665,
+    "failed": 3,
+    "ignored": 15,
+    "stopped_on": "soup-wall-agent/result_detector: three unchanged positive regressions",
+    "remaining_targets_not_run": true,
+    "raw_log_sha256": "82dc860e2e3b4ddf0e5da05fd9642adc5fac89e27db89cb630156e3b68707152"
+  },
+  "exact_committed_fixture_recheck": {
+    "source_commit": "e19b152cc359351faa39b2eecc6fe666ad7c2172",
+    "passed": 6,
+    "failed": 3,
+    "ignored": 0,
+    "raw_log_sha256": "08ceb9bc12cc6edc3006a8a04e64e1faf28613a4282a79aae501bcb5fb230938"
+  },
+  "workspace_clippy": {
+    "command": "cargo clippy --locked --workspace --all-targets -- -D warnings",
+    "status": "pass",
+    "raw_log_sha256": "e2dbec189702cf92e3c067ae2ca5f440619af92ec2f7b983ee6633ce3daf355c"
+  },
+  "python_runs": {
+    "python-tests-e19.log": {
+      "ran": 1222,
+      "summary": "FAILED (failures=1, errors=2, skipped=39)",
+      "raw_log_sha256": "081c2a46064a4a320098fe863bd4f65db6eb8865ddab761f3553157a32cfb805"
+    },
+    "python-tests-e19-repaired.log": {
+      "ran": 1222,
+      "summary": "FAILED (errors=1, skipped=40)",
+      "raw_log_sha256": "5654553cb99c485a68d339b268bb18a1f9357832f6fcacecf5d9f11791d24872"
+    },
+    "python-tests-e19-final.log": {
+      "ran": 1222,
+      "summary": "OK (skipped=39)",
+      "raw_log_sha256": "7bc2d4556bf471e16cb2cfb28e74705298cf1bc7fa617d3f5838a277bd07ee3b"
+    },
+    "benchmark-tests-e19.log": {
+      "ran": 66,
+      "summary": "OK (skipped=19)",
+      "raw_log_sha256": "b38489d25a19eb61adfd5124c36bb2804acd02f846ee91c74fcd686984421ce5"
+    }
+  },
+  "python_environment_repair": {
+    "source_commit": "e19b152cc359351faa39b2eecc6fe666ad7c2172",
+    "repair": "restore committed original fixture bytes, not relabeling or acceptance normalization",
+    "before_raw_sha256": "08fdd3b1596ce46e11da3d0524272229bb7917aa4760a85a6236758ef014c840",
+    "before_crlf_count": 30,
+    "after_raw_sha256": "a57a7771a54974355a18da1224cc1f4a04a58b8bec3cde9208286802dc4b1f0a",
+    "after_crlf_count": 0,
+    "numpy": "2.3.4",
+    "runtime": "CPython 3.12.3",
+    "model_inference": false
+  },
+  "verification_environment": {
+    "python": "3.12.3",
+    "numpy": "2.3.4",
+    "urllib3": "2.0.7",
+    "system_site_packages": true,
+    "models_or_inference": false
+  },
+  "limits": [
+    "Broad checks qualify their e19 source, not fresh-main Ready/admission.",
+    "The initial Git fixture was checkout-converted; the focused raw-byte recheck restores its committed bytes and retains all three failures.",
+    "Both unsuccessful Python attempts remain separate; no expected labels or timeouts changed.",
+    "Additional current-source relation/environment tests are reported separately.",
+    "No live original protected useful delivery qualification or semantic correction."
+  ]
+}

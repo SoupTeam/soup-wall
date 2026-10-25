@@ -1,0 +1,31 @@
+{
+  "source_commit": "b353c10e06dae947cc7ebb6f0d2ebb57d1e1213d",
+  "resource_script_sha256": "834fc9029a2eb14c9d2b443e902a58887058e0f4371cabcfd32d9ff155fb6942",
+  "checker_sha256": "211475a228b1babc5e4d5b91724405d727064cd8c3ccae136706796e7985ae19",
+  "wrapper_sha256": "db0b757d33f2728b3216110c7abb5a8ea5f3ee01966ac049ba770b98f78e4407",
+  "measurement": "GNU time wait4 for one worker that execs Python; 10s; 512MiB RLIMIT_AS",
+  "measurement_result": {
+    "elapsed_ms": 473.4933670042665,
+    "actual_worker_peak_rss_bytes": 78434304,
+    "returncode": 0,
+    "reason": null,
+    "output_bytes": 378,
+    "output_sha256": "297eb5d66cc844fb196635b8c5a800c21b81f8ddaed59be625c68f794659b716"
+  },
+  "result": {
+    "source_bytes": 8388608,
+    "scope_count": 65536,
+    "elapsed_ms": 351.6288699975121,
+    "integrity_result": {
+      "source_bound": true,
+      "coverage_complete": true,
+      "relation_observation": "unresolved",
+      "origin": "untrusted_mcp",
+      "semantic_validation": "not_performed",
+      "enforcement": "unresolved",
+      "production_authority": false
+    },
+    "oversize_rejected": true,
+    "semantic_efficacy_claim": false
+  }
+}

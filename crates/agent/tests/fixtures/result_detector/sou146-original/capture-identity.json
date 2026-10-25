@@ -1,0 +1,15 @@
+{
+  "artifact_id": 12587037385,
+  "artifact_sha256": "141302ea67f55ab6cc48dc72cad17b9cd85b30ae2a0b561d4a63de180243d2e7",
+  "source": {
+    "commit": "2f5c3f52a865d771ad8fd99ff76c9487e695c710",
+    "tree": "e0d781d180cf2949bc66447f32240b50ac7b5a08",
+    "dirty": false
+  },
+  "driver_sha256": "17dcd42980eba77a5999146eb9ce62d6a72e6cbe99f2bce65a046a36a91e694b",
+  "raw_frame_sha256": {
+    "20": "3daf4efa6b31bc50294a38612e8ea3d24c8930c9104cab9c3bb453f2ba45bcbe",
+    "21": "846e8e3a0a720526a6c9bd9ea7d9d5b420d44809631b9e8a7d57c11d283ec83e"
+  },
+  "id200_original_frame": "not retained in failed control; request/dispatched/withheld witnessed, exact result-byte attribution unavailable; ID20 is not substituted as an exact ID200 capture"
+}

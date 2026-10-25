@@ -5,9 +5,13 @@ models/**/*.bin filter=lfs diff=lfs merge=lfs -text
 docs/operations/evidence/sou109-qwen-separated-8.json text eol=lf
 docs/operations/evidence/sou109-separated-remaining-plan.json text eol=lf
 docs/operations/evidence/sou109-ledger/*.json text eol=lf
+docs/operations/evidence/sou109-git-structure/**/*.json text eol=lf
+docs/operations/evidence/sou109-git-structure/*.json text eol=lf
 
 # Original SOU-113 capture: preserve all hash-bound bytes without conversion.
 crates/agent/tests/fixtures/result_detector/sou113-original/** -text
+crates/agent/tests/fixtures/result_detector/git-multifile-show.txt text eol=lf
+crates/agent/tests/fixtures/result_detector/sou146-original/** -text
 crates/agent/tests/fixtures/result_detector/sou123-first-batch.json -text
 
 # Preserve the pinned upstream package bytes on every platform.

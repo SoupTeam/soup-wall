@@ -1,0 +1,1546 @@
+{
+  "production_authority": false,
+  "observations": [
+    {
+      "id": 20,
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "commit_oid",
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 175,
+                "start": 172
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 291,
+                "start": 288
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 413,
+                "start": 410
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 549,
+                "start": 546
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": 21,
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "diff_target_oid",
+              "span": {
+                "end": 50,
+                "start": 10
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 124,
+                "start": 121
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 334,
+                "start": 331
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 604,
+                "start": 601
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 850,
+                "start": 847
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": []
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "attack_commit_message",
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "commit_oid",
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 224,
+                "start": 221
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 340,
+                "start": 337
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 462,
+                "start": 459
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 598,
+                "start": 595
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "attack_added_line",
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "commit_oid",
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 175,
+                "start": 172
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 339,
+                "start": 336
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 461,
+                "start": 458
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 597,
+                "start": 594
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "attack_deleted_line",
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "commit_oid",
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 175,
+                "start": 172
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 340,
+                "start": 337
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 462,
+                "start": 459
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 598,
+                "start": 595
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "attack_path",
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "commit_oid",
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 175,
+                "start": 172
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 433,
+                "start": 430
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 555,
+                "start": 552
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 691,
+                "start": 688
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "strong_added_line",
+      "attribution": [
+        {
+          "after_score": 0.6000000238418579,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 2,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 2,
+            "typed_records": null
+          },
+          "before_score": 1.0,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "imperative",
+              "owner": null,
+              "span": {
+                "end": 258,
+                "start": 252
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "imperative",
+              "owner": null,
+              "span": {
+                "end": 291,
+                "start": 285
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "commit_oid",
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 175,
+                "start": 172
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 316,
+                "start": 313
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 438,
+                "start": 435
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 574,
+                "start": 571
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": {
+                "atlas": "AML.T0051",
+                "confidence": 0.8999999761581421,
+                "detector": "injection",
+                "direction": "input",
+                "label": "instruction-override phrase",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "high",
+                "span": {
+                  "end": 280,
+                  "start": 252
+                }
+              },
+              "kind": "signature",
+              "owner": null,
+              "span": {
+                "end": 280,
+                "start": 252
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": {
+                "atlas": "AML.T0051",
+                "confidence": 0.8999999761581421,
+                "detector": "injection",
+                "direction": "input",
+                "label": "system-prompt exfiltration",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "medium",
+                "span": {
+                  "end": 310,
+                  "start": 285
+                }
+              },
+              "kind": "signature",
+              "owner": null,
+              "span": {
+                "end": 310,
+                "start": 285
+              },
+              "weak_discount_candidate": false
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0051",
+                "confidence": 0.8999999761581421,
+                "detector": "injection",
+                "direction": "input",
+                "label": "instruction-override phrase",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "high",
+                "span": {
+                  "end": 280,
+                  "start": 252
+                }
+              }
+            ],
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0051",
+                "confidence": 0.8999999761581421,
+                "detector": "injection",
+                "direction": "input",
+                "label": "system-prompt exfiltration",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "medium",
+                "span": {
+                  "end": 310,
+                  "start": 285
+                }
+              }
+            ],
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0051",
+                "confidence": 0.6000000238418579,
+                "detector": "injection",
+                "direction": "input",
+                "label": "heuristic injection signals (score 0.60)",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "medium",
+                "span": null
+              }
+            ],
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Deny"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "metadata_adoption",
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "commit_oid",
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 235,
+                "start": 232
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 351,
+                "start": 348
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 473,
+                "start": 470
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 609,
+                "start": 606
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "forged_hunk_count",
+      "attribution": [
+        {
+          "after_score": 0.6000000238418579,
+          "after_weak_discount": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": null,
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 175,
+                "start": 172
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 293,
+                "start": 290
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 415,
+                "start": 412
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 551,
+                "start": 548
+              },
+              "weak_discount_candidate": false
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0051",
+                "confidence": 0.6000000238418579,
+                "detector": "injection",
+                "direction": "input",
+                "label": "heuristic injection signals (score 0.60)",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "medium",
+                "span": null
+              }
+            ],
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Deny"
+      ],
+      "parsed": false,
+      "production_authority": false
+    },
+    {
+      "id": "partial_tail",
+      "attribution": [
+        {
+          "after_score": 0.6000000238418579,
+          "after_weak_discount": {
+            "delimiters": 5,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 5,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": null,
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 175,
+                "start": 172
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 291,
+                "start": 288
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 413,
+                "start": 410
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 549,
+                "start": 546
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 661,
+                "start": 658
+              },
+              "weak_discount_candidate": false
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0051",
+                "confidence": 0.6000000238418579,
+                "detector": "injection",
+                "direction": "input",
+                "label": "heuristic injection signals (score 0.60)",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "medium",
+                "span": null
+              }
+            ],
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Deny"
+      ],
+      "parsed": false,
+      "production_authority": false
+    },
+    {
+      "id": "forged_commit_header",
+      "attribution": [
+        {
+          "after_score": 0.6000000238418579,
+          "after_weak_discount": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": null,
+              "span": {
+                "end": 58,
+                "start": 18
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 186,
+                "start": 183
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 302,
+                "start": 299
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 424,
+                "start": 421
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": null,
+              "span": {
+                "end": 560,
+                "start": 557
+              },
+              "weak_discount_candidate": false
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0051",
+                "confidence": 0.6000000238418579,
+                "detector": "injection",
+                "direction": "input",
+                "label": "heuristic injection signals (score 0.60)",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "medium",
+                "span": null
+              }
+            ],
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 107,
+                  "start": 85
+                }
+              }
+            ]
+          ]
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Deny"
+      ],
+      "parsed": false,
+      "production_authority": false
+    },
+    {
+      "id": "attack_diff_added",
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "diff_target_oid",
+              "span": {
+                "end": 50,
+                "start": 10
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 124,
+                "start": 121
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 382,
+                "start": 379
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 652,
+                "start": 649
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 898,
+                "start": 895
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": []
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "attack_context_line",
+      "attribution": [
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "diff_target_oid",
+              "span": {
+                "end": 50,
+                "start": 10
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 124,
+                "start": 121
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 422,
+                "start": 419
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 692,
+                "start": 689
+              },
+              "weak_discount_candidate": true
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 938,
+                "start": 935
+              },
+              "weak_discount_candidate": true
+            }
+          ],
+          "retained_findings": []
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny"
+      ],
+      "counterfactual_verdicts": [
+        "Allow"
+      ],
+      "parsed": true,
+      "production_authority": false
+    },
+    {
+      "id": "two_channel_split",
+      "attribution": [
+        {
+          "after_score": 0.6000000238418579,
+          "after_weak_discount": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.6000000238418579,
+          "channel": 0,
+          "components": [
+            {
+              "finding": null,
+              "kind": "encoded_looking_token",
+              "owner": "commit_oid",
+              "span": {
+                "end": 47,
+                "start": 7
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 175,
+                "start": 172
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 291,
+                "start": 288
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 413,
+                "start": 410
+              },
+              "weak_discount_candidate": false
+            },
+            {
+              "finding": null,
+              "kind": "delimiter",
+              "owner": "old_file_marker",
+              "span": {
+                "end": 549,
+                "start": 546
+              },
+              "weak_discount_candidate": false
+            }
+          ],
+          "retained_findings": [
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0051",
+                "confidence": 0.6000000238418579,
+                "detector": "injection",
+                "direction": "input",
+                "label": "heuristic injection signals (score 0.60)",
+                "owasp": "LLM01:2025 Prompt Injection",
+                "severity": "medium",
+                "span": null
+              }
+            ],
+            [
+              "tool_result",
+              {
+                "atlas": "AML.T0057",
+                "confidence": 0.8999999761581421,
+                "detector": "pii.email",
+                "direction": "input",
+                "label": "email address",
+                "owasp": "LLM02:2025 Sensitive Information Disclosure",
+                "severity": "medium",
+                "span": {
+                  "end": 96,
+                  "start": 74
+                }
+              }
+            ]
+          ]
+        },
+        {
+          "after_score": 0.0,
+          "after_weak_discount": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before": {
+            "delimiters": 0,
+            "encoded_tokens": 0,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "before_score": 0.0,
+          "channel": 1,
+          "components": [],
+          "retained_findings": []
+        }
+      ],
+      "baseline_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "counterfactual_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "parsed": false,
+      "production_authority": false
+    }
+  ]
+}
