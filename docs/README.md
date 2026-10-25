@@ -44,6 +44,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Managed policy transitions in active MCP sessions](operations/MANAGED_NATIVE_TRANSITIONS.md) | Dispatch/result boundaries, stale approvals, signed rollback and independent runtime evidence |
 | [Native MCP diagnostic output](operations/NATIVE_MCP_STDERR.md) | Bounded discarded child stderr, safe metadata, owned cleanup and required Linux evidence |
 | [MCP result evidence ledger](operations/SOU109_EVIDENCE_LEDGER.md) | Offline typed attribution, exact-source differential replay and unresolved-context limits |
+| [Full-content critical pairs](operations/SOU109_CONTENT_COLLISION.md) | Minimal Git/FS counterexamples to release by injection-ledger projection |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
 | [Installed two-server pilot qualification](operations/INSTALLED_PILOT_QUALIFICATION.md) | Actual Claude Code, installed filesystem/Git MCP, independent refusal witnesses and bounded recovery |
 | [Linux MCP resource budgets](operations/MCP_LINUX_RESOURCE_BUDGETS.md) | Opt-in delegated aggregate memory, CPU and task limits, wall expiry and independent Linux witnesses |
