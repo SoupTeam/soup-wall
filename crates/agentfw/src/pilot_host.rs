@@ -8,6 +8,11 @@ use std::process::Command;
 use anyhow::{ensure, Context, Result};
 use sha2::{Digest, Sha256};
 
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod child_environment;
+#[cfg(target_os = "linux")]
+pub(crate) use child_environment::Guard as ChildEnvironmentGuard;
+
 pub(crate) const CLAUDE_SHA256: &str =
     "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7";
 

@@ -1631,6 +1631,15 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     if args.allow_command_fixtures || args.mock_daemon_token.is_some() {
         cmd.env("PATH", "/usr/bin:/bin");
     }
+    #[cfg(target_os = "linux")]
+    let child_environment = if !args.allow_command_fixtures && args.mock_daemon_token.is_none() {
+        Some(crate::pilot_host::ChildEnvironmentGuard::install(
+            &mut cmd,
+            &guard.path,
+        )?)
+    } else {
+        None
+    };
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL", "1")
@@ -1674,6 +1683,9 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     };
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
     let child_pid = child.id();
+    drop(cmd);
+    #[cfg(target_os = "linux")]
+    let child_environment_ready = child_environment.map(|guard| guard.confirm()).transpose();
 
     let timeout = config.timeout;
     let home_path = config.home_path.clone();
@@ -1685,6 +1697,15 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let mut intercepted_term = false;
     let mut cleanup_waiter = pilot_run.as_ref().map(|run| run.cleanup_waiter());
     let exit_status = rt.block_on(async {
+        #[cfg(target_os = "linux")]
+        if child_environment_ready.is_err() {
+            let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
+            host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+            if let Some(waiter) = cleanup_waiter.take() {
+                let _ = tokio::task::spawn_blocking(waiter).await;
+            }
+            bail!("provider_child_environment_unavailable");
+        }
         let deadline = tokio::time::Instant::now() + timeout;
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
         interval.tick().await;

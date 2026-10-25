@@ -151,6 +151,14 @@ independent owned provider must also observe its expected authentication.
 The existing sealed anonymous prepared-entry carrier is consumed and closed by
 the native launcher before host execution. Native child authentication, strict
 MCP settings, private HOME/TMPDIR and cleanup retain their existing boundaries.
-No runtime preload, injected JavaScript, new credential broker or alternate
-host is used. Earlier Landlock and Bun-preload compatibility attempts remain
+The exact pinned Bun client also receives a source-embedded inline startup
+module that clears these seven keys in Node child_process (including explicit
+child environments and asynchronous prototype spawn) and Bun spawn APIs before
+application modules run. Unreviewed native Bun shell execution refuses. The
+loader has a private empty configuration, disables project env-file loading and
+runtime transpiler caching, and drops loader/installation metadata from children.
+A bounded private stream confirms installation and closes before application
+startup; this acknowledgement carries no provider credentials and delegates no
+child authority. Unsupported/failed startup refuses and uses existing owned
+cleanup. No code pathname, new credential broker or alternate host is used. Earlier Landlock and Bun-preload compatibility attempts remain
 retained as failed evidence rather than being counted as acceptance.
