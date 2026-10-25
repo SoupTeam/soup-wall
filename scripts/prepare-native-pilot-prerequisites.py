@@ -29,6 +29,8 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.dont_write_bytecode = True
+import pilot_capacity as capacity
 from pilot_provider import utility_environment
 SOURCES = {
     "git": ("2.51.2", "git-2.51.2",
@@ -209,6 +211,7 @@ def bounded_archive(path, kind):
 
 
 def download(kind, destination):
+    capacity.recheck("before_download")
     url = SOURCES[kind][2]
     require(url.startswith("https://"), "unpinned_download_refused", "download")
     limit = SOURCES[kind][4]
@@ -232,6 +235,7 @@ def download(kind, destination):
 
 def extract(archive, destination, kind):
     """Preflight the complete layout before writing any archive member."""
+    capacity.recheck("before_extraction")
     prefix = SOURCES[kind][1]
     with tarfile.open(archive, "r:xz") as bundle:
         members = bundle.getmembers()
@@ -328,6 +332,7 @@ def stop_group(process):
 
 def build(command, *, cwd, env, log, seconds, stage):
     """Drain bounded output and stop the entire owned process group on every exit."""
+    capacity.recheck("before_build")
     cancelled = False
 
     def mark_cancelled(_signum, _frame):
@@ -586,6 +591,7 @@ def prepare(args):
     freeze(generation)
     current = {"format": "sw-native-pilot-current/1", "generation": generation.name,
                "receipt_sha256": digest(generation / "receipt.json")}
+    capacity.recheck("before_selection")
     temporary = output / (".current-" + uuid.uuid4().hex)
     write_json(temporary, current)
     os.replace(temporary, marker)
@@ -600,6 +606,7 @@ def prepare(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    capacity.add_arguments(parser)
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--allow-download", action="store_true")
@@ -611,9 +618,20 @@ def main():
     parser.add_argument("--pkg-config-sysroot", type=Path)
     parser.add_argument("--meson-pythonpath", type=Path)
     args = parser.parse_args()
+    if args.capacity_plan:
+        if args.prepare or args.guard_capacity:
+            parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
+        print(json.dumps(capacity.cli_plan("native", args), sort_keys=True))
+        return 0
+    if args.guard_capacity and not args.prepare:
+        parser.error("--guard-capacity requires --prepare")
     try:
-        print(json.dumps(prepare(args)))
+        with capacity.checked("native", args):
+            print(json.dumps(prepare(args)))
         return 0 if not args.prepare or not platform_missing() else 2
+    except capacity.Refusal as error:
+        print(json.dumps(error.report, sort_keys=True))
+        return 2
     except (Failure, OSError, ValueError, KeyError, TypeError, tarfile.TarError,
             subprocess.SubprocessError, urllib.error.URLError) as error:
         failure = error if isinstance(error, Failure) else Failure(type(error).__name__ + "_failed", "prepare")
