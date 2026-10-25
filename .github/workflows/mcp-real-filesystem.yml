@@ -32,6 +32,10 @@ on:
         description: Run targeted native Ubuntu SOU-134 existing-project acceptance only
         type: boolean
         default: false
+      prepared_switch_lifecycle:
+        description: Exercise SOU-133 A-B-A on the selected native Ubuntu pilot
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -411,9 +415,10 @@ jobs:
     needs: impact
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true'))
     runs-on: ubuntu-24.04
-    # The optional paired measurement owns two <=3600s side budgets plus setup.
-    # Ordinary PR/default native qualification retains its existing 65 minutes.
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != '' && 140 || 65 }}
+    # Optional paired Ask measurement owns two <=3600s side budgets plus setup;
+    # opt-in A-B-A repeats the original-host qualifier twice. Ordinary PR/default
+    # native qualification retains its existing 65-minute cap.
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != '' && 140 || github.event_name == 'workflow_dispatch' && github.event.inputs.prepared_switch_lifecycle == 'true' && 105 || 65 }}
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
@@ -458,6 +463,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_run.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_validation.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_demo.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_switch_prepared_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_cleanup.py -v
@@ -982,6 +988,126 @@ jobs:
           python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --output "$RUNNER_TEMP/sou134-qualification"
+      - name: Exercise explicit prepared-generation A-B-A selection and rollback
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.prepared_switch_lifecycle == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          output="$RUNNER_TEMP/sou111-preparation"
+          source="$PWD"
+          commit="$(git rev-parse HEAD)"
+          first="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["generation"])')"
+          args=(--output "$output" --expected-commit "$commit"
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER"
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" --node-archive "$asset/node.tar.xz"
+            --bwrap "$SOU111_BWRAP" --git "$SOU115_GIT"
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude"
+            --python "$(command -v python3)"
+            --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py"
+            --git-classifier "$PWD/rule_baseline/git_readonly_v1/rule_baseline.py"
+            --policy "$asset/policy.yaml" --allow-download)
+          python3 -B scripts/prepare-installed-pilot.py --prepare --rebuild "${args[@]}" > "$asset/switch-second.json"
+          second="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/switch-second.json").read_text())["generation"])')"
+          test "$first" != "$second"
+          # Preparation selected B. Return to A through the reviewed transition,
+          # then select B and return to A again. The original A proof ran above.
+          switch() {
+            local target="$1" label="$2" plan
+            python3 -B scripts/switch-prepared-pilot.py --output "$output" --target "$target" \
+              --previous-source "$source" --target-source "$source" > "$asset/switch-$label-plan.json"
+            plan="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plan_sha256"])' "$asset/switch-$label-plan.json")"
+            python3 -B scripts/switch-prepared-pilot.py --output "$output" --target "$target" \
+              --previous-source "$source" --target-source "$source" --apply --confirm "$plan" \
+              > "$asset/switch-$label-applied.json"
+          }
+          switch "$first" return-a
+          switch "$second" select-b
+          python3 -B scripts/qualify-prepared-pilot-run.py --selection "$output/generations/$second/selection.json" \
+            --expected-commit "$commit" --strace "$(command -v strace)" \
+            --output "$RUNNER_TEMP/sou133-b-qualification" --transition-target "$first"
+          switch "$first" rollback-a
+          python3 -B scripts/qualify-prepared-pilot-run.py --selection "$output/generations/$first/selection.json" \
+            --expected-commit "$commit" --strace "$(command -v strace)" \
+            --output "$RUNNER_TEMP/sou133-a-qualification"
+          python3 -B - "$output" "$source" "$first" "$second" "$asset/switch-fault-controls.json" <<'PY'
+          import importlib.util, json, os, subprocess, sys
+          from pathlib import Path
+          output, source, first, second, report = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4], Path(sys.argv[5])
+          spec = importlib.util.spec_from_file_location('transition', source/'scripts/switch-prepared-pilot.py')
+          switch = importlib.util.module_from_spec(spec); spec.loader.exec_module(switch)
+          original_publish = switch.publish_json
+          selected = (output/'current.json').read_bytes()
+          unrelated = output.parent/'sou133-unrelated.txt'
+          unrelated.write_text('preserve this unrelated state\n')
+          target_selection = output/'generations'/second/'selection.json'
+          target_bytes = target_selection.read_bytes()
+          tampered = json.loads(target_bytes)
+          tampered['files']['agentfw']['sha256'] = '0'*64
+          try:
+              target_selection.write_text(json.dumps(tampered))
+              result = subprocess.run([sys.executable, '-B', str(source/'scripts/switch-prepared-pilot.py'),
+                  '--output',str(output),'--target',second,'--previous-source',str(source),
+                  '--target-source',str(source)],capture_output=True,timeout=120)
+              assert result.returncode == 2
+              assert (output/'current.json').read_bytes() == selected
+          finally:
+              target_selection.write_bytes(target_bytes)
+          def interrupted(directory, name, value):
+              if name == 'current.json':
+                  raise OSError('owned interruption control')
+              return original_publish(directory, name, value)
+          plan = switch.plan(output, second, source, source)[3]
+          switch.publish_json = interrupted
+          try:
+              try:
+                  switch.apply(output, second, source, source, plan['plan_sha256'])
+              except OSError:
+                  pass
+              else:
+                  raise AssertionError('publication interruption was not exercised')
+          finally:
+              switch.publish_json = original_publish
+          assert (output/'current.json').read_bytes() == selected
+          assert switch.recover(output)['status'] == 'interrupted_before_publication'
+          modified = False
+          def concurrent(directory, name, value):
+              global modified
+              result = original_publish(directory, name, value)
+              if name == switch.JOURNAL and value.get('pending') is not None and not modified:
+                  modified = True
+                  original_publish(directory, 'current.json', switch.marker(output)[2])
+              return result
+          switch.publish_json = concurrent
+          try:
+              try:
+                  switch.apply(output, second, source, source, plan['plan_sha256'])
+              except ValueError as error:
+                  assert str(error) == 'concurrent_marker_edit'
+              else:
+                  raise AssertionError('concurrent pointer edit was not refused')
+          finally:
+              switch.publish_json = original_publish
+          assert switch.recover(output)['status'] == 'interrupted_before_publication'
+          assert switch.marker(output)[2]['generation'] == first
+          assert unrelated.read_text() == 'preserve this unrelated state\n'
+          report.write_text(json.dumps({'status':'passed','tampered_target_refused':True,
+              'interrupted_before_publication_recovered':True,'concurrent_edit_refused':True,
+              'unrelated_preserved':True},sort_keys=True)+'\n')
+          PY
+          python3 -B scripts/switch-prepared-pilot.py --output "$output" --status > "$asset/switch-status.json"
+          python3 - "$asset" "$first" "$second" <<'PY'
+          import json, sys
+          from pathlib import Path
+          asset, first, second = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+          assert json.loads((asset/'switch-status.json').read_text())['actual_generation'] == first
+          for label, expected in [('return-a', first), ('select-b', second), ('rollback-a', first)]:
+              assert json.loads((asset/f'switch-{label}-applied.json').read_text())['target'] == expected
+          assert json.loads((asset/'switch-return-a-plan.json').read_text())['previous']['generation'] == second
+          print(json.dumps({'status':'passed','sequence':[first,second,first],
+                            'source_commit':json.loads((asset/'switch-rollback-a-plan.json').read_text())['target']['source']['commit'],
+                            'scripted_provider':True,'active_protection_claim':False}))
+          PY
       - name: Remove only this job's sandbox permission and executable
         if: always()
         shell: bash
@@ -1041,6 +1167,9 @@ jobs:
             ${{ runner.temp }}/sou135-inbox/qualification.json
             ${{ runner.temp }}/sou121-cleanup/report.json
             ${{ runner.temp }}/sou121-cleanup/dry-run.json
+            ${{ runner.temp }}/sou133-a-qualification/report.json
+            ${{ runner.temp }}/sou133-b-qualification/report.json
+            ${{ runner.temp }}/sou111-assets/switch-*.json
             ${{ runner.temp }}/sou111-qualification/filesystem-sandbox.log
             ${{ runner.temp }}/sou111-qualification/git-sandbox.log
             ${{ runner.temp }}/sou111-qualification/sandbox-positive-failure.txt

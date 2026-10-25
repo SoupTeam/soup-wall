@@ -39,6 +39,7 @@ def load(name, filename):
 FS = load("sou111_fs", "install-sou62-filesystem-profile.py")
 GIT = load("sou111_git", "install-sou68-git-profile.py")
 PILOT = load("sou111_pilot", "qualify-installed-pilot.py")
+SELECTION_LOCK = load("pilot_preparation_selection_lock", "pilot-selection-lock.py")
 
 
 def require(condition, code):
@@ -378,6 +379,11 @@ def prepare(args):
             require(not args.output.resolve().is_relative_to(root)
                     and not root.is_relative_to(args.output.resolve()), "preparation_overlaps_workspace")
     output = private_dir(args.output, create=not args.output.exists())
+    with SELECTION_LOCK.hold(output, exclusive=True):
+        return prepare_locked(args, output, requested)
+
+
+def prepare_locked(args, output, requested):
     generations = output / "generations"
     if not generations.exists():
         generations.mkdir(mode=0o700)
