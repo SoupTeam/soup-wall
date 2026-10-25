@@ -203,6 +203,11 @@ def qualify(args):
             require(len(evidence["cases"]) == 3 and all(case.get("production_parity") is True
                     and case.get("trace_state_parity") is True for case in evidence["cases"]), "production_parity_missing")
             report["host_sandbox"] = effects["host_sandbox"]
+            if effects["host_sandbox"]["status"] == "passed":
+                require(set(effects["host_sandbox"].get("calibrated_denials", [])) ==
+                        {"target_read", "state_read", "file_write", "process_fork", "network"}
+                        and effects["host_sandbox"].get("target_read_denied") is True,
+                        "host_sandbox_target_calibration_missing")
             report["limitations"] = ["Owned synthetic fixtures do not establish detection or protection rates.",
                 "FIFO observation samples opens; it does not independently prove absence of every short-lived file read.",
                 "Source/build identities assume the explicitly selected local Cargo/Rust toolchain and dependency cache."]

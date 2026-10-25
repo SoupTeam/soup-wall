@@ -276,6 +276,59 @@ fn duplicate_partial_overbound_and_yaml_extensions_are_explicit_failures() {
 }
 
 #[test]
+fn yaml_plain_quotes_cannot_hide_aliases_and_block_scalars_are_excluded() {
+    for name in [
+        "owner's rule",
+        "owner's 'rule'",
+        "owner \"rule",
+        "owner 'rule",
+        "owner#rule",
+    ] {
+        let plain = format!(
+            "agent_policies:\n- name: {name}\n  when: {{}}\n  action: allow\ndefault: deny\n"
+        );
+        assert!(
+            policy(plain.as_bytes()).is_ok(),
+            "plain quote was treated as syntax"
+        );
+        let aliased = format!("agent_policies:\n- name: {name}\n  when: &condition {{}}\n  action: allow\n- name: second\n  when: *condition\n  action: ask\ndefault: deny\n");
+        assert_eq!(
+            policy(aliased.as_bytes()).unwrap_err().0,
+            "offline_policy_yaml_extension"
+        );
+    }
+    let cr = "agent_policies:\r- name: owner's rule\r  when: &condition {}\r  action: allow\rdefault: deny\r";
+    assert_eq!(
+        policy(cr.as_bytes()).unwrap_err().0,
+        "offline_policy_yaml_extension"
+    );
+    for separator in ['\u{85}', '\u{2028}', '\u{2029}'] {
+        let alternate = cr.replace('\r', &separator.to_string());
+        assert_eq!(
+            policy(alternate.as_bytes()).unwrap_err().0,
+            "offline_policy_yaml_subset"
+        );
+    }
+    for indicator in ["|", ">", "|-", ">+", "|2"] {
+        let block = format!("agent_policies:\n- name: owned\n  message: {indicator}\n    owner's \"rule\n  when: &condition {{}}\n  action: allow\ndefault: deny\n");
+        assert_eq!(
+            policy(block.as_bytes()).unwrap_err().0,
+            "offline_policy_yaml_subset"
+        );
+    }
+    for name in ["'owner''s & * ! rule'", "\"owner's & * ! rule\""] {
+        let quoted = format!("agent_policies:\n- name: {name}\n  when: {{}} # quotes ' and \" here are comments\n  action: allow\ndefault: deny\n");
+        assert!(policy(quoted.as_bytes()).is_ok());
+    }
+    assert_eq!(
+        policy(b"agent_policies:\n- name: 'multi\n    line'\n  when: {}\n  action: allow\n")
+            .unwrap_err()
+            .0,
+        "offline_policy_yaml_subset"
+    );
+}
+
+#[test]
 fn comparison_has_fresh_state_and_json_and_text_do_not_leak_contents() {
     let private = "SOU152_PRIVATE_CONTENT_NEVER_PRINT";
     let mut input = envelope(vec![call(

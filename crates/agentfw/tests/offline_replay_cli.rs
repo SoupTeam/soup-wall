@@ -380,7 +380,20 @@ fn host_sandbox(home: &Path, input: &Path, policy: &Path) -> Value {
     let write_target = root.join("sandbox-write-control");
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port().to_string();
+    let target = root.join("target-fifo");
     let controls: Vec<(&str, &Path, Vec<&std::ffi::OsStr>)> = vec![
+        (
+            "target_read",
+            Path::new("/usr/bin/python3"),
+            vec![
+                "-I".as_ref(),
+                "-S".as_ref(),
+                "-c".as_ref(),
+                "import os,sys; fd=os.open(sys.argv[1],os.O_RDONLY|os.O_NONBLOCK); os.close(fd)"
+                    .as_ref(),
+                target.as_os_str(),
+            ],
+        ),
         (
             "state_read",
             Path::new("/bin/cat"),
@@ -523,6 +536,17 @@ fn cli_missing_context_unsafe_io_and_legacy_replay_stay_explicit() {
             assert!(!rendered.contains(private));
         }
     }
+    for bad in [
+        "agent_policies:\n- name: owner's rule\n  when: &condition {}\n  action: allow\n- name: second\n  when: *condition\n  action: ask\ndefault: deny\n",
+        "agent_policies:\n- name: owned\n  message: |\n    owner's \"rule\n  when: &condition {}\n  action: allow\ndefault: deny\n",
+    ] {
+        write(&policy, bad);
+        let output = run(invocation(&home, &input, &policy));
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8(output.stderr).unwrap().contains("offline_policy_yaml_"));
+    }
+    write(&policy, SHIPPED);
     let export = root.join("report.json");
     let mut cmd = invocation(&home, &input, &policy);
     cmd.arg("--output").arg(&export);

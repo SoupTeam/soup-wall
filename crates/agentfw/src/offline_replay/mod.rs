@@ -107,51 +107,113 @@ fn hash(bytes: &[u8]) -> String {
 fn identity(bytes: &[u8]) -> Value {
     json!({"sha256":hash(bytes),"bytes":bytes.len()})
 }
+// A deliberately narrow lexical subset checked before serde_yaml can expand
+// aliases. Plain scalars retain apostrophes/quotes as data; quoted scalars must
+// close on the same line. Block scalars and explicit complex keys are excluded.
+fn validate_yaml_subset(yaml: &str) -> Result<()> {
+    #[derive(Clone, Copy, PartialEq)]
+    enum State {
+        Start,
+        Plain,
+        Single,
+        Double,
+        AfterQuoted,
+    }
+    if yaml
+        .chars()
+        .any(|c| matches!(c, '\u{85}' | '\u{2028}' | '\u{2029}'))
+    {
+        return Err(Failure("offline_policy_yaml_subset"));
+    }
+    let mut flow = 0usize;
+    for line in yaml.split(['\n', '\r']) {
+        let bytes = line.as_bytes();
+        let mut state = State::Start;
+        let mut i = 0;
+        while i < bytes.len() {
+            let c = bytes[i];
+            let next = bytes.get(i + 1).copied();
+            let separator = next.is_none_or(|n| n.is_ascii_whitespace());
+            match state {
+                State::Single => {
+                    if c == b'\'' {
+                        if next == Some(b'\'') {
+                            i += 1;
+                        } else {
+                            state = State::AfterQuoted;
+                        }
+                    }
+                }
+                State::Double => {
+                    if c == b'\\' {
+                        i += 1;
+                        if i == bytes.len() {
+                            return Err(Failure("offline_policy_yaml_subset"));
+                        }
+                    } else if c == b'"' {
+                        state = State::AfterQuoted;
+                    }
+                }
+                State::Start | State::AfterQuoted => {
+                    if c.is_ascii_whitespace() {
+                        i += 1;
+                        continue;
+                    }
+                    match c {
+                        b'#' => break,
+                        b':' | b',' => state = State::Start,
+                        b'[' | b'{' => {
+                            flow += 1;
+                            if flow > 32 {
+                                return Err(Failure("offline_policy_yaml_subset"));
+                            }
+                            state = State::Start;
+                        }
+                        b']' | b'}' => {
+                            flow = flow.saturating_sub(1);
+                            state = State::AfterQuoted;
+                        }
+                        _ if state == State::AfterQuoted => {
+                            return Err(Failure("offline_policy_yaml_subset"))
+                        }
+                        b'&' | b'*' | b'!' => return Err(Failure("offline_policy_yaml_extension")),
+                        b'|' | b'>' | b'?' => return Err(Failure("offline_policy_yaml_subset")),
+                        b'-' if separator => {}
+                        b'\'' => state = State::Single,
+                        b'"' => state = State::Double,
+                        _ => state = State::Plain,
+                    }
+                }
+                State::Plain => {
+                    match c {
+                        // A quote inside a plain scalar never starts a quoted
+                        // scalar, even after a space (e.g. owner's 'rule').
+                        b'#' if i > 0 && bytes[i - 1].is_ascii_whitespace() => break,
+                        b':' if separator => state = State::Start,
+                        b',' if flow > 0 => state = State::Start,
+                        b']' | b'}' if flow > 0 => {
+                            flow -= 1;
+                            state = State::AfterQuoted;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            i += 1;
+        }
+        if state == State::Single || state == State::Double {
+            return Err(Failure("offline_policy_yaml_subset"));
+        }
+    }
+    Ok(())
+}
 
 fn policy(bytes: &[u8]) -> Result<AgentPolicySet> {
     if bytes.len() > MAX_POLICY_BYTES {
         return Err(Failure("offline_policy_bounds"));
     }
     let yaml = std::str::from_utf8(bytes).map_err(|_| Failure("offline_policy_utf8"))?;
-    // The bounded v1 YAML subset excludes aliases/anchors/tags before serde can
-    // expand them. Quoted scalars and comments remain ordinary policy text.
-    let (mut quote, mut escaped, mut comment) = (None, false, false);
-    let mut boundary = true;
-    for c in yaml.chars() {
-        if c == '\n' {
-            comment = false;
-            boundary = true;
-        }
-        if comment {
-            continue;
-        }
-        if let Some(q) = quote {
-            if escaped {
-                escaped = false;
-                continue;
-            }
-            if q == '"' && c == '\\' {
-                escaped = true;
-                continue;
-            }
-            if c == q {
-                quote = None;
-            }
-            continue;
-        }
-        if c == '#' {
-            comment = true;
-            continue;
-        }
-        if c == '\'' || c == '"' {
-            quote = Some(c);
-            continue;
-        }
-        if boundary && matches!(c, '&' | '*' | '!') {
-            return Err(Failure("offline_policy_yaml_extension"));
-        }
-        boundary = c.is_whitespace() || matches!(c, ':' | ',' | '[' | '{');
-    }
+    validate_yaml_subset(yaml)?;
     let policy = AgentPolicySet::from_yaml(yaml).map_err(|_| Failure("offline_policy_invalid"))?;
     if policy.agent_policies.len() > 64
         || policy.egress_allowlist.len() > 128
