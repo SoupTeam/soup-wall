@@ -603,11 +603,12 @@ fn validate_registry(
             .tools
             .iter()
             .filter_map(|tool| tool.mcp_result_profile.as_deref())
-            .find(|format| server_profile::git::is_profile(format))
+            .find(|format| server_profile::git_selected(format))
             .unwrap_or(server_profile::git::FORMAT),
         server_profile::git::FORMAT
         | server_profile::git::LOCAL_REFS_FORMAT
-        | server_profile::git::SHALLOW_FORMAT => server_profile::FORMAT,
+        | server_profile::git::SHALLOW_FORMAT
+        | server_profile::git_local_clone::FORMAT => server_profile::FORMAT,
         _ => bail!("unsupported selected registry profile"),
     };
     let peer_manifest = server_profile::original_manifest_for(peer_format)?;
@@ -677,7 +678,7 @@ fn forwarded_cancellation_limit(format: &str) -> usize {
     // A wire abort during response backpressure kills its sibling tasks/stdio.
     // Withdraw locally and drain instead: keep the physical slot and deadline
     // until the original response arrives, without modifying the upstream server.
-    if server_profile::git::is_profile(format) {
+    if server_profile::git_selected(format) {
         0
     } else {
         FORWARDED_CANCELLATIONS
