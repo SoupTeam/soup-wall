@@ -1,0 +1,13 @@
+{
+  "acceptance_pass": false,
+  "format": "sou142-prepared-budget-host-evidence/1",
+  "full_sou142_qualification": false,
+  "reason": "bounded_private_report_unavailable",
+  "remaining_gaps": [
+    "original-memory-pid-wall-calibration",
+    "budgeted-emergency-stop",
+    "owner-loss-before-descriptor-handback"
+  ],
+  "status": "failed",
+  "workflow_run": 40130278191
+}

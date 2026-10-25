@@ -1,0 +1,81 @@
+{
+  "active_probe": "native_readonly_preflight",
+  "binary_sha256": {
+    "agentfw": "7ecb68d7888836221055cbd09b8824f2cee9379ce055e2367e19541f49f9ffb1",
+    "agentfw-git-sandbox": "5164cf232ab862229350e24282773795f68ae5ddec302ef68262250e7673a0b2"
+  },
+  "config_sha256": "640ec221cb16f038aec1c58eb921f55450f1770715fd63c8e02de82810237917",
+  "format": "sou142143-native-first-slice/1",
+  "full_original_host_qualification": false,
+  "issue": "142",
+  "kernel_preflight": {
+    "owned_cgroup_kill_available": true,
+    "root_flock_exclusion_release": true,
+    "same_leaf_adoption_and_wall_epoch": true,
+    "zero_owned_members_and_leaves": true
+  },
+  "network": "private-loopback-only",
+  "original_profile_parent_loss_qualification": "pending",
+  "source": "7c5fd094351e079c390a1ada39efc4444252c64c",
+  "source_read_only": true,
+  "status": "passed",
+  "steps": [
+    {
+      "exit_code": 0,
+      "label": "native-build",
+      "log_sha256": "a561a188bd61c89a9a2115c5096654a6760aba7e643a4c9ce260f01482209528",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-test-build",
+      "log_sha256": "eb319908f32572cb2c0a84a37360eb17c02695f58b2b380dece374ee0033cafd",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-budget-unit",
+      "log_sha256": "77f6b3f00d4aea9c3d29a45f05f586eb5fea4fd6478f23b544be7f40a9f306d3",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-owner-unit",
+      "log_sha256": "74653a150b3791fbef4a1a67ca0b249b3ba2c1f45d61484177465fee6906e41b",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-engine-unit",
+      "log_sha256": "529cff938098da09150920cbfda476f3a509b58893df7de8d4f2db1b0907fffa",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-budget-cli",
+      "log_sha256": "06bb57b8727d8deb088e23280a787dd159d4e80cc521e5914f56dc6f794d5cc9",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-readonly-preflight",
+      "log_sha256": "ffc9f5ba61083887b4c817eb5c102d75661e18c851694f4dfdc8590b6baf169c",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-clippy",
+      "log_sha256": "0c9ff49d9e1bc0b35f599b764b6f9c4fb77a02e4d85fa03b71b04ad41aba95c5",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-owner-budget-adoption",
+      "log_sha256": "a994773b4b184bc5ec9732403d918d24ef9f7c046cf1f862cf380d083d8a5c55",
+      "status": "passed"
+    }
+  ],
+  "toolchain": "1.94.1",
+  "workflow_run": 40138639111,
+  "writes": "isolated-scratch-and-owned-delegation-only"
+}

@@ -1,0 +1,67 @@
+{
+  "active_probe": "native_readonly_preflight",
+  "binary_sha256": {
+    "agentfw": "5017198be78c83ed58dcf297d8f498dba56c351670ec3e268d48c5517507da66",
+    "agentfw-git-sandbox": "5164cf232ab862229350e24282773795f68ae5ddec302ef68262250e7673a0b2"
+  },
+  "config_sha256": "f893147998225af3d3d22e6a4d87c26e1fcbb0ea7b21075336a30248a50b2feb",
+  "format": "sou142143-native-first-slice/1",
+  "full_original_host_qualification": false,
+  "issue": "142",
+  "kernel_preflight": {
+    "owned_cgroup_kill_available": true,
+    "root_flock_exclusion_release": true,
+    "zero_owned_members_and_leaves": true
+  },
+  "network": "private-loopback-only",
+  "source": "419fc6244cf2d764cd9b797f6bfd0bb8164c4da6",
+  "source_read_only": true,
+  "status": "blocked",
+  "steps": [
+    {
+      "exit_code": 0,
+      "label": "native-build",
+      "log_sha256": "7dca4dfe3dded5f1e7bb83b955601106c6f93d7f21bc0a03dfc68c1661d8fc9e",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-test-build",
+      "log_sha256": "4025efdb4ae40a0bd1925c96af4107b361dc7f97b1faa6cbb40f4b9139748e1f",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-budget-unit",
+      "log_sha256": "98ad7b3dd8a00f8ad6e2934cf2eb1f849ee7716db77f5197934d8300105a7fd1",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-budget-cli",
+      "log_sha256": "8d0848f830e8aef62dd4c0965ab574dd2bb4765e55193f4390021adf0b59e994",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-readonly-preflight",
+      "log_sha256": "73af7a48d50259ffe130ded6872f88c9e1df88413af9cdd046c9bfba9f788bcb",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-clippy",
+      "log_sha256": "dba4145e2eb4a1d233263f42eaf796d3726767eedf36f7834ee6a69dd236c4eb",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-preowner-blocker",
+      "log_sha256": "1595bdea9aa6425c66bc042d0ac1b120bd155439da6b2b6e26fdad14ae74cab4",
+      "status": "passed"
+    }
+  ],
+  "toolchain": "1.94.1",
+  "workflow_run": 40124301683,
+  "writes": "isolated-scratch-and-owned-delegation-only"
+}
