@@ -2,6 +2,9 @@
 """Explicit identity/selection controls. Native containment is tested separately."""
 import importlib.util
 import ast
+import contextlib
+import hashlib
+import io
 import itertools
 import re
 import json
@@ -103,6 +106,21 @@ class NativeDriverTests(unittest.TestCase):
             result = subprocess.run(command, capture_output=True, timeout=10, check=True)
             self.assertEqual(json.loads(result.stdout)["executed"], False)
             self.assertFalse(output.exists())
+
+    def test_owned_evidence_log_keeps_exact_bytes_hash_and_explicit_bound(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = b'{"status":"fail","skipped":0}\n'
+            (root / "report.json").write_bytes(data)
+            (root / "os-marker.log").write_bytes(b"x" * (1024 * 1024 + 1))
+            stream = io.StringIO()
+            with contextlib.redirect_stdout(stream):
+                NATIVE.emit_owned_evidence(root)
+            rendered = stream.getvalue()
+            self.assertIn(data.decode(), rendered)
+            self.assertIn(hashlib.sha256(data).hexdigest(), rendered)
+            self.assertIn("SOU150_EVIDENCE_LIMITED os-marker.log", rendered)
+            self.assertNotIn("x" * 100, rendered)
 
     def test_non_linux_run_refuses_before_provisioning(self):
         with patch.object(NATIVE.platform, "system", return_value="Darwin"), patch.object(NATIVE.INSTALL, "install") as install:

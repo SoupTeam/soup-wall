@@ -269,6 +269,22 @@ def default_refusal(stack, report):
                 require(state["daemon_stopped"], "default control daemon remains")
 
 
+def emit_owned_evidence(output):
+    """Expose only bounded files created by this synthetic acceptance run."""
+    for name in ("report.json", "os-marker.log"):
+        path = output / name
+        if not path.is_file():
+            continue
+        with path.open("rb") as stream:
+            data = stream.read(1024 * 1024 + 1)
+        if len(data) > 1024 * 1024:
+            print("SOU150_EVIDENCE_LIMITED " + name + "; full file remains in the artifact")
+            continue
+        print("SOU150_EVIDENCE_BEGIN " + name + " sha256=" + hashlib.sha256(data).hexdigest())
+        print(data.decode("utf-8", "strict"), end="" if data.endswith(b"\n") else "\n")
+        print("SOU150_EVIDENCE_END " + name)
+
+
 def run(args):
     require(platform.system() == "Linux" and platform.machine() == "x86_64", "Linux x86-64 required")
     before = BASE.source()
@@ -335,6 +351,7 @@ def run(args):
             report["status"], report["source_error"] = "fail", type(error).__name__
         report["protected_diagnostics"] = V1.protected_diagnostics(report, output)
         write(output / "report.json", report)
+        emit_owned_evidence(output)
     print(json.dumps({"status": report["status"], "error": report.get("error"), "report": str(output / "report.json")}))
     return 0 if report["status"] == "pass" else 1
 
