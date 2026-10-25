@@ -17,10 +17,13 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pilot_provider import utility_environment
 ASSETS = ROOT / "profiles/mcp/git-readonly-v1"
 FORMAT = "sw-mcp/git-readonly/1"
 SHALLOW_FORMAT = "sw-mcp/git-readonly-shallow/1"
@@ -56,7 +59,7 @@ def dependencies(executables, package):
     """Pin explicit system ELF files; packaged Python libraries stay in its tree."""
     paths = set()
     for executable in executables:
-        result = subprocess.run(["ldd", str(executable)], capture_output=True, text=True, check=True, timeout=15)
+        result = subprocess.run(["ldd", str(executable)], capture_output=True, text=True, check=True, timeout=15, env=utility_environment())
         if "not found" in result.stdout:
             raise ValueError("unresolved runtime ELF dependency")
         for raw in re.findall(r"(?:=>\s*)?(/[^\s()]+)", result.stdout):
@@ -101,10 +104,10 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     if not re.fullmatch(r"[0-9a-f]{64}", git_sha256) or sha(git) != git_sha256:
         raise ValueError("supplied Git binary digest mismatch")
     identity = json.loads((ASSETS / "upstream-identity.json").read_text())
-    git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10).strip()
+    git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10, env=utility_environment()).strip()
     if git_version != "git version " + identity["git_version"]:
         raise ValueError("Git version differs from selected runtime")
-    bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10)
+    bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10, env=utility_environment())
     if "--ro-bind-fd" not in bwrap_help:
         raise ValueError("bubblewrap --ro-bind-fd is required")
     if (local_references or shallow_repository) and "--ro-bind-data" not in bwrap_help:
@@ -138,16 +141,23 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
         raise ValueError("Python distribution digest mismatch")
     extract_python(archive, package)
     python = package / "python/bin/python3.11"
-    env = {"PATH": os.environ.get("PATH", ""), "HOME": str(destination), "LANG": "C.UTF-8"}
+    tmp = Path(os.environ.get("TMPDIR", destination / "tmp")).resolve()
+    tmp.mkdir(mode=0o700, exist_ok=True)
+    env = {"PATH": os.environ.get("PATH", ""), "HOME": str(destination),
+           "TMPDIR": str(tmp), "TEMP": str(tmp), "TMP": str(tmp), "LANG": "C.UTF-8"}
     if subprocess.check_output([str(python), "-I", "--version"], env=env, text=True, timeout=10).strip() != "Python " + identity["python"]["version"]:
         raise ValueError("Python version mismatch")
     if not allow_download and wheelhouse is None:
         raise ValueError("local wheelhouse is required without explicit downloads")
     offline_args = ["--no-index", "--find-links", str(Path(wheelhouse).resolve(strict=True))] if not allow_download else []
-    subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", "--require-hashes",
-                    "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
-                    *offline_args, "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
-                   stdout=log, stderr=subprocess.STDOUT if log is not None else None)
+    try:
+        subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", "--require-hashes",
+                        "--only-binary=:all:", "--no-compile", "--no-cache-dir", "--disable-pip-version-check",
+                        *offline_args, "-r", str(ASSETS / "requirements.lock")], env=env, check=True, timeout=300,
+                       stdout=log, stderr=subprocess.STDOUT if log is not None else None)
+    finally:
+        if tmp == (destination / "tmp").resolve():
+            shutil.rmtree(tmp, ignore_errors=True)
     # Python extension modules may depend on libraries not used by its launcher.
     # The separate opt-in clone installer validates an interpreter-free ELF Git.
     # Default v1 dependency discovery and all v1 CLI behavior remain unchanged.
@@ -170,7 +180,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
         "format": "sou68-profile-installation/1", "profile": profile, "upstream_identity": identity,
         "git_version": git_version, "profile_sha256": sha(destination / "profile.json"),
         "registry_sha256": sha(destination / "registry.json"), "policy_sha256": sha(destination / "policy.yaml"),
-        "bwrap_version": subprocess.check_output([str(bwrap), "--version"], text=True, timeout=10).strip()})
+        "bwrap_version": subprocess.check_output([str(bwrap), "--version"], text=True, timeout=10, env=utility_environment()).strip()})
     return {"status": "installed", "profile": str(destination / "profile.json")}
 
 

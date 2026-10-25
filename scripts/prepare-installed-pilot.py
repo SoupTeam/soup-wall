@@ -24,6 +24,8 @@ import uuid
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pilot_provider import utility_environment
 MAX_JSON = 65536
 NODE_ARCHIVE_SHA256 = "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
 NODE_URL = "https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz"
@@ -40,6 +42,15 @@ FS = load("sou111_fs", "install-sou62-filesystem-profile.py")
 GIT = load("sou111_git", "install-sou68-git-profile.py")
 PILOT = load("sou111_pilot", "qualify-installed-pilot.py")
 SELECTION_LOCK = load("pilot_preparation_selection_lock", "pilot-selection-lock.py")
+
+
+class InstallerFailure(ValueError):
+    """Finite public failure fields; installer output stays in its private log."""
+
+    def __init__(self, kind, exit_code, private_log):
+        super().__init__(kind + "_installer_failed")
+        self.exit_code = exit_code
+        self.private_log = private_log
 
 
 def require(condition, code):
@@ -193,7 +204,7 @@ def extract_node(archive, destination):
 
 
 def check_native(path):
-    result = subprocess.run(["ldd", str(path)], text=True, capture_output=True, timeout=15)
+    result = subprocess.run(["ldd", str(path)], text=True, capture_output=True, timeout=15, env=utility_environment())
     require(result.returncode == 0 or "not a dynamic executable" in result.stdout + result.stderr,
             "native_dependency_probe_failed")
     require("not found" not in result.stdout + result.stderr, "native_dependency_missing")
@@ -314,9 +325,9 @@ def selected_paths(args, generation):
         require(os.access(paths[role], os.X_OK), f"{role}_not_executable")
         check_native(paths[role])
     require(FS.sha(paths["node"]) == FS.NODE_SHA256, "node_binary_digest_mismatch")
-    require(subprocess.check_output([str(paths["node"]), "--version"], text=True, timeout=10).strip()
+    require(subprocess.check_output([str(paths["node"]), "--version"], text=True, timeout=10, env=utility_environment()).strip()
             == FS.NODE_VERSION, "node_version_mismatch")
-    require("--ro-bind-fd" in subprocess.check_output([str(paths["bwrap"]), "--help"], text=True, timeout=10),
+    require("--ro-bind-fd" in subprocess.check_output([str(paths["bwrap"]), "--help"], text=True, timeout=10, env=utility_environment()),
             "bubblewrap_ro_bind_fd_required")
     for role in PILOT.ARTIFACT_ROLES:
         bounded_file(paths[role], 1024 * 1024)
@@ -439,7 +450,10 @@ def prepare_locked(args, output, requested):
                                 paths["bwrap"], paths["git_launcher"], python_archive=args.python_archive,
                                 wheelhouse=args.wheelhouse, allow_download=args.allow_download, log=log)
             except subprocess.CalledProcessError as error:
-                raise ValueError(f"{kind}_installer_failed_exit_{error.returncode}; private_log={log_path}") from None
+                # Never read the log (even a suffix): arbitrary installer output
+                # can contain secrets and the failed log can exceed the size cap.
+                raise InstallerFailure(kind, error.returncode,
+                                       log_path.relative_to(output).as_posix()) from None
         require(log_path.stat().st_size <= 1024 * 1024, kind + "_installer_log_limit")
         if requested:
             bind_profile_workspace(generation / (kind + "-profile"), requested["roots"][kind])
@@ -541,9 +555,13 @@ def main():
         require(re.fullmatch(r"[0-9a-f]{40}", args.expected_commit or ""), "full_expected_commit_required")
         print(json.dumps(prepare(args)))
         return 0
+    except InstallerFailure as error:
+        print(json.dumps({"status": "failed", "reason": str(error),
+                          "exit_code": error.exit_code, "private_log": error.private_log}))
+        return 2
     except (OSError, ValueError, KeyError, TypeError, AttributeError, tarfile.TarError, subprocess.SubprocessError,
             PILOT.Failure) as error:
-        print(json.dumps({"status": "failed", "reason": str(error)[:240]}))
+        print(json.dumps({"status": "failed", "reason": str(error)[:1500]}))
         return 2
 
 

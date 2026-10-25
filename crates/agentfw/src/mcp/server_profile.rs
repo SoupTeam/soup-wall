@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 
 use super::input::InputSchema;
 
+pub mod filesystem_create;
 pub mod git;
 pub mod git_local_clone;
 #[cfg(test)]
@@ -40,6 +41,7 @@ pub fn selected(format: Option<&str>) -> bool {
         format,
         Some(
             FORMAT
+                | filesystem_create::FORMAT
                 | git::FORMAT
                 | git::LOCAL_REFS_FORMAT
                 | git::SHALLOW_FORMAT
@@ -456,7 +458,7 @@ pub fn original_manifest() -> Value {
 
 pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
     match format {
-        FORMAT => Ok(original_manifest()),
+        FORMAT | filesystem_create::FORMAT => Ok(original_manifest()),
         git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT | git_local_clone::FORMAT => {
             Ok(git::original_manifest())
         }
@@ -466,7 +468,7 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
 
 pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
     match format {
-        FORMAT => validate_initialization(value),
+        FORMAT | filesystem_create::FORMAT => validate_initialization(value),
         git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT | git_local_clone::FORMAT => {
             git::validate_initialization(value)
         }
@@ -480,6 +482,7 @@ pub fn classify_manifest_for(
 ) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     match format {
         FORMAT => classify_manifest(value),
+        filesystem_create::FORMAT => filesystem_create::classify_manifest(value),
         git::FORMAT | git_local_clone::FORMAT => git::classify_manifest(value),
         git::LOCAL_REFS_FORMAT => git::classify_manifest_with_local_refs(value, true),
         git::SHALLOW_FORMAT => git::classify_manifest(value),

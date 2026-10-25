@@ -1,0 +1,16 @@
+{
+  "acceptance_pass": false,
+  "cases": [],
+  "format": "sou142-prepared-budget-host-evidence/1",
+  "full_sou142_qualification": false,
+  "owner_controls": [],
+  "raw_process_metadata_or_logs_exported": false,
+  "reason": "runtime_slice_unverified",
+  "remaining_gaps": [
+    "original-memory-pid-wall-calibration",
+    "owner-loss-before-descriptor-handback"
+  ],
+  "source_commit": "2608b1ccd8328dbebfd2380b038a49942abb8893",
+  "status": "failed",
+  "workflow_run": 40168777016
+}

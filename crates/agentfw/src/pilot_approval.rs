@@ -19,6 +19,17 @@ use std::{
     time::Duration,
 };
 
+pub(crate) mod result;
+use result::{tag, Output, Reason};
+
+macro_rules! require {
+    ($condition:expr, $reason:ident, $message:literal) => {
+        if !$condition {
+            return Err(tag(anyhow::anyhow!($message), Reason::$reason));
+        }
+    };
+}
+
 const MAX_RUNS: usize = 16;
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 
@@ -31,8 +42,15 @@ pub struct OperatorArgs {
     pub run: String,
     #[arg(long)]
     pub home: Option<PathBuf>,
+    #[arg(long, value_enum, global = true)]
+    pub output: Option<OutputFormat>,
     #[command(subcommand)]
     pub action: OperatorAction,
+}
+
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub enum OutputFormat {
+    JsonV1,
 }
 
 #[derive(Subcommand)]
@@ -413,9 +431,11 @@ fn snapshot(home: &Path) -> Result<Value> {
                 .bearer_auth(key)
                 .send()
                 .await
-                .context("live daemon unavailable; no approval issued")?;
-            ensure!(
+                .context("live daemon unavailable; no approval issued")
+                .map_err(|error| tag(error, Reason::DaemonUnavailable))?;
+            require!(
                 response.status().is_success(),
+                DaemonRefused,
                 "daemon refused operator identity discovery"
             );
             let mut bytes = Vec::new();
@@ -771,8 +791,9 @@ fn string<'a>(v: &'a Value, key: &str) -> Result<&'a str> {
 }
 
 fn pending(run: &Run, live: &Value) -> Result<Vec<(Value, String)>> {
-    ensure!(
+    require!(
         live["instance_id"] == run.instance_id && live["registry_sha256"] == run.registry_sha256,
+        DaemonIdentityChanged,
         "wrong or restarted daemon; run cannot be resumed"
     );
     let collectors = live["pilot_collectors"]
@@ -805,10 +826,22 @@ fn pending(run: &Run, live: &Value) -> Result<Vec<(Value, String)>> {
 fn checked_record(home: &Path, observed: &Value) -> Result<Value> {
     let identifier = string(observed, "pending_id")?;
     id(identifier)?;
-    let value: Value = serde_json::from_slice(&read_file(
-        &approval::pending_dir(home).join(format!("{identifier}.json")),
-        true,
-    )?)?;
+    let value: Value = serde_json::from_slice(
+        &read_file(
+            &approval::pending_dir(home).join(format!("{identifier}.json")),
+            true,
+        )
+        .map_err(|error| {
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|cause| cause.kind() == std::io::ErrorKind::NotFound)
+            {
+                tag(error, Reason::PendingUnavailable)
+            } else {
+                error
+            }
+        })?,
+    )?;
     for key in [
         "pending_id",
         "session_id",
@@ -817,21 +850,28 @@ fn checked_record(home: &Path, observed: &Value) -> Result<Value> {
         "binding_sha256",
         "args_sha256",
     ] {
-        ensure!(
+        require!(
             value[key] == observed[key] && value[key].is_string(),
+            BindingChanged,
             "pending identity changed; inspect again"
         );
     }
-    ensure!(
+    require!(
         crate::native::canonical_digest(&value["args"]) == string(observed, "args_sha256")?,
+        BindingChanged,
         "pending arguments differ from the daemon's original call"
     );
-    ensure!(
+    require!(
         value["scope"] == "native-mcp/approval/v1"
-            && value["expires_at_ms"] == observed["expires_at_ms"]
-            && value["expires_at_ms"]
-                .as_u64()
-                .is_some_and(|t| t > approval::now_ms()),
+            && value["expires_at_ms"] == observed["expires_at_ms"],
+        BindingChanged,
+        "pending call expired"
+    );
+    require!(
+        value["expires_at_ms"]
+            .as_u64()
+            .is_some_and(|t| t > approval::now_ms()),
+        PendingExpired,
         "pending call expired"
     );
     Ok(value)
@@ -942,8 +982,11 @@ fn record_inspection(
 ) -> Result<()> {
     // A blocked pipe/terminal must not prevent the independent stop command.
     // Still persist proof of inspection only after the output was flushed.
-    writeln!(terminal, "{display}")?;
-    terminal.flush()?;
+    writeln!(terminal, "{display}")
+        .map_err(|error| tag(error.into(), Reason::OutputUnavailable))?;
+    terminal
+        .flush()
+        .map_err(|error| tag(error.into(), Reason::OutputUnavailable))?;
     let _reservation = lock_dir(dir)?;
     ensure!(!has_stop(dir)?, "pilot run is stopping or stopped");
     prune_inspections(dir)?;
@@ -1012,9 +1055,11 @@ fn revoke(run: &Run) -> Result<()> {
                 .bearer_auth(key)
                 .json(&request)
                 .send()
-                .await?;
-            ensure!(
+                .await
+                .map_err(|error| tag(error.into(), Reason::DaemonUnavailable))?;
+            require!(
                 response.status().is_success(),
+                StopUnconfirmed,
                 "pilot stop incomplete: daemon did not confirm revocation"
             );
             let mut bytes = Vec::new();
@@ -1079,16 +1124,27 @@ fn signal_launcher(_handle: &fs::File) -> Result<()> {
     anyhow::bail!("pilot stop requires qualified Linux")
 }
 
-fn stop(dir: &Path, run: &Run, bytes: &[u8], expected: &str, home: &Path) -> Result<()> {
-    ensure!(
+fn stop(
+    dir: &Path,
+    run: &Run,
+    bytes: &[u8],
+    expected: &str,
+    home: &Path,
+    output: &mut Output,
+) -> Result<Value> {
+    require!(
         run.contract == "sw-pilot-run/1"
             && run.run_id == expected
             && run.home == home
             && run.authorities.len() == 2,
+        UnsafeRunRecord,
         "invalid pilot stop ownership"
     );
     let existing = if has_stop(dir)? {
-        Some(read_stop(dir, run, bytes)?)
+        Some(
+            read_stop(dir, run, bytes)
+                .map_err(|error| tag(error, Reason::StopOwnershipUnverified))?,
+        )
     } else {
         None
     };
@@ -1096,24 +1152,28 @@ fn stop(dir: &Path, run: &Run, bytes: &[u8], expected: &str, home: &Path) -> Res
         .as_ref()
         .is_some_and(|marker| marker.status == "stopped")
     {
-        println!(
-            "{}",
-            json!({"run":run.run_id,"status":"already_stopped","running_effects_rolled_back":false})
+        output.identity = verified_identity(run, bytes);
+        return Ok(
+            json!({"run":run.run_id,"status":"already_stopped","running_effects_rolled_back":false}),
         );
-        return Ok(());
     }
     // A stale/forged durable record is never sufficient to signal a process.
     // Pin the live owner before revocation; pidfd prevents PID reuse during the request.
-    let handle = launcher_handle(run).with_context(|| {
-        if existing.is_some() {
-            "pilot stop incomplete: recorded request has no confirmed live launcher"
-        } else {
-            "pilot stop unknown ownership: launcher identity is unavailable"
-        }
-    })?;
+    let handle = launcher_handle(run)
+        .with_context(|| {
+            if existing.is_some() {
+                "pilot stop incomplete: recorded request has no confirmed live launcher"
+            } else {
+                "pilot stop unknown ownership: launcher identity is unavailable"
+            }
+        })
+        .map_err(|error| tag(error, Reason::StopOwnershipUnverified))?;
     verify_manifest(run, bytes)
-        .context("pilot stop unknown ownership: sealed owner verification failed")?;
+        .context("pilot stop unknown ownership: sealed owner verification failed")
+        .map_err(|error| tag(error, Reason::StopOwnershipUnverified))?;
+    output.identity = verified_identity(run, bytes);
     write_stop(dir, run, bytes, "requested")?;
+    output.stop_requested = true;
     let revoked = revoke(run);
     if revoked.is_ok() {
         write_stop(dir, run, bytes, "revoked")?;
@@ -1124,14 +1184,13 @@ fn stop(dir: &Path, run: &Run, bytes: &[u8], expected: &str, home: &Path) -> Res
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     loop {
         if read_stop(dir, run, bytes)?.status == "stopped" {
-            println!(
-                "{}",
-                json!({"run":run.run_id,"status":"stopped","running_effects_rolled_back":false})
+            return Ok(
+                json!({"run":run.run_id,"status":"stopped","running_effects_rolled_back":false}),
             );
-            return Ok(());
         }
-        ensure!(
+        require!(
             std::time::Instant::now() < deadline,
+            StopUnconfirmed,
             "pilot stop incomplete: owned cleanup was not confirmed"
         );
         std::thread::sleep(Duration::from_millis(50));
@@ -1145,41 +1204,115 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
     operator_to(args, &mut std::io::stdout().lock(), None)
 }
 
-fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u8]>) -> Result<()> {
-    ensure!(
+fn operator_to(args: OperatorArgs, writer: &mut impl Write, expected: Option<&[u8]>) -> Result<()> {
+    let mut output = Output::new(false, operation(&args.action));
+    operate(args, &mut output, writer, expected)
+}
+
+pub fn operator_json(args: OperatorArgs) -> i32 {
+    let mut output = Output::new(true, operation(&args.action));
+    let mut writer = std::io::stdout().lock();
+    match operate(args, &mut output, &mut writer, None) {
+        Ok(()) => 0,
+        Err(error) => output.failure(&error, &mut writer),
+    }
+}
+
+fn operation(action: &OperatorAction) -> &'static str {
+    match action {
+        OperatorAction::List => "list",
+        OperatorAction::Inspect { .. } => "inspect",
+        OperatorAction::Approve { .. } => "approve",
+        OperatorAction::Reject { .. } => "reject",
+        OperatorAction::Stop => "stop",
+        OperatorAction::Watch { .. } => "watch",
+    }
+}
+
+fn verified_identity(run: &Run, bytes: &[u8]) -> Value {
+    json!({"run_id": run.run_id, "run_sha256": digest(bytes),
+        "instance_id": run.instance_id, "registry_sha256": run.registry_sha256})
+}
+
+fn directory_error(error: anyhow::Error) -> anyhow::Error {
+    let missing = error
+        .downcast_ref::<std::io::Error>()
+        .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound);
+    tag(
+        error,
+        if missing {
+            Reason::RunUnavailable
+        } else {
+            Reason::UnsafeRunRecord
+        },
+    )
+}
+
+fn operate(
+    args: OperatorArgs,
+    output: &mut Output,
+    writer: &mut impl Write,
+    expected: Option<&[u8]>,
+) -> Result<()> {
+    require!(
+        !matches!(args.action, OperatorAction::Watch { .. }),
+        InvalidInput,
+        "watch is not a structured result stream"
+    );
+    require!(
         cfg!(target_os = "linux"),
+        UnsupportedPlatform,
         "run-scoped pilot approval requires qualified Linux"
     );
-    ensure!(
+    require!(
         args.run.len() == 32 && args.run.bytes().all(|b| b.is_ascii_hexdigit()),
+        InvalidInput,
         "invalid pilot run id"
     );
     let home = match args.home {
         Some(home) => home,
         None => Config::home_path()?,
     }
-    .canonicalize()?;
+    .canonicalize()
+    .map_err(|error| directory_error(error.into()))?;
     let root = home.join("pilot-runs");
-    private_dir(&root)?;
+    private_dir(&root).map_err(directory_error)?;
     let dir = root.join(&args.run);
-    private_dir(&dir)?;
-    let bytes = read_file(&dir.join("run.json"), true)?;
+    private_dir(&dir).map_err(directory_error)?;
+    let bytes = read_file(&dir.join("run.json"), true)
+        .map_err(|error| tag(error, Reason::UnsafeRunRecord))?;
     if let Some(expected) = expected {
-        ensure!(bytes == expected, "pilot run identity changed");
+        require!(
+            bytes == expected,
+            SelectionChanged,
+            "pilot run identity changed"
+        );
     }
-    let run: Run = serde_json::from_slice(&bytes)?;
+    let run: Run = serde_json::from_slice(&bytes)
+        .map_err(|error| tag(error.into(), Reason::UnsafeRunRecord))?;
     if matches!(args.action, OperatorAction::Stop) {
-        return stop(&dir, &run, &bytes, &args.run, &home);
+        let data = stop(&dir, &run, &bytes, &args.run, &home, output)?;
+        return output.emit(&data, "stop_confirmed", "owned_stop_receipt", writer);
     }
-    ensure!(!has_stop(&dir)?, "pilot run is stopping or stopped");
-    verify_manifest(&run, &bytes)?;
-    ensure!(
+    require!(
+        !has_stop(&dir)?,
+        RunStopping,
+        "pilot run is stopping or stopped"
+    );
+    verify_manifest(&run, &bytes).map_err(|error| tag(error, Reason::UnsafeRunRecord))?;
+    require!(
         run.contract == "sw-pilot-run/1"
             && run.run_id == args.run
             && run.home == home
             && run.files.len() == 5
-            && run.authorities.len() == 2
-            && run.expires_at_ms > approval::now_ms(),
+            && run.authorities.len() == 2,
+        UnsafeRunRecord,
+        "invalid or expired pilot run"
+    );
+    output.identity = verified_identity(&run, &bytes);
+    require!(
+        run.expires_at_ms > approval::now_ms(),
+        RunExpired,
         "invalid or expired pilot run"
     );
     ensure!(
@@ -1187,8 +1320,9 @@ fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u
         "pilot launcher no longer owns this run"
     );
     for file in &run.files {
-        ensure!(
+        require!(
             digest(&read_file(&file.path, false)?) == file.sha256,
+            SelectionChanged,
             "pilot selection changed; no continuation issued"
         );
     }
@@ -1197,13 +1331,16 @@ fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u
     if matches!(args.action, OperatorAction::List) {
         let mut summaries = Vec::new();
         for (observed, server) in rows {
-            if let Ok(record) = checked_record(&home, &observed) {
+            let checked = match checked_record(&home, &observed) {
+                Err(error) if output.structured => return Err(error),
+                result => result,
+            };
+            if let Ok(record) = checked {
                 summaries.push(json!({"server":server, "tool":record["tool"], "pending_id":record["pending_id"],
                     "binding_sha256":record["binding_sha256"], "expires_at_ms":record["expires_at_ms"], "state":"pending"}));
             }
         }
-        writeln!(output, "{}", escaped(&json!(summaries))?)?;
-        return Ok(());
+        return output.emit(&json!(summaries), "listed", "pending_snapshot", writer);
     }
     let identifier = match &args.action {
         OperatorAction::Inspect { id }
@@ -1213,41 +1350,55 @@ fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u
             unreachable!()
         }
     };
-    id(&identifier)?;
+    id(&identifier).map_err(|error| tag(error, Reason::InvalidInput))?;
     let (observed, server) = rows
         .iter()
         .find(|(r, _)| r["pending_id"] == identifier)
-        .context("pending call is not owned by this live pilot run")?;
+        .context("pending call is not owned by this live pilot run")
+        .map_err(|error| tag(error, Reason::PendingUnavailable))?;
     let record = checked_record(&home, observed)?;
     let binding = string(&record, "binding_sha256")?;
+    output.identity["pending_id"] = json!(identifier);
+    output.identity["binding_sha256"] = json!(binding);
     let receipt = dir.join(format!("inspected-{identifier}.json"));
     match args.action {
         OperatorAction::Inspect { .. } => {
             let value = json!({"binding_sha256": binding, "args_sha256": record["args_sha256"],
                 "expires_at_ms":record["expires_at_ms"]});
-            let display = escaped(
-                &json!({"server":server,"pending_id":identifier,"tool":record["tool"],
-                "args":record["args"],"binding_sha256":binding,"expires_at_ms":record["expires_at_ms"],"state":"pending"}),
-            )?;
-            record_inspection(&dir, &receipt, &value, &display, output)?;
+            let data = json!({"server":server,"pending_id":identifier,"tool":record["tool"],
+                "args":record["args"],"binding_sha256":binding,"expires_at_ms":record["expires_at_ms"],"state":"pending"});
+            let display = output
+                .render(&data, "inspection_presented", "exact_pending_arguments")
+                .map_err(|error| tag(error, Reason::OutputLimit))?;
+            output.emitted = true;
+            record_inspection(&dir, &receipt, &value, &display, writer)?;
         }
         OperatorAction::Approve {
             binding: requested, ..
         } => {
-            ensure!(
+            require!(
                 requested == binding,
+                BindingChanged,
                 "binding differs from exact pending call"
             );
             let inspected: Value = serde_json::from_slice(
-                &read_file(&receipt, true).context("inspect this exact call before approval")?,
+                &read_file(&receipt, true)
+                    .context("inspect this exact call before approval")
+                    .map_err(|error| tag(error, Reason::InspectionRequired))?,
             )?;
-            ensure!(
+            require!(
                 inspected["binding_sha256"] == binding
                     && inspected["args_sha256"] == record["args_sha256"]
                     && inspected["expires_at_ms"] == record["expires_at_ms"],
+                BindingChanged,
                 "arguments changed since inspection"
             );
-            approval::operator_approve_for_session(
+            let submit = if output.structured {
+                approval::operator_submit_for_session
+            } else {
+                approval::operator_approve_for_session
+            };
+            submit(
                 &home,
                 &token(&home, "token")?,
                 &identifier,
@@ -1256,17 +1407,15 @@ fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u
                 string(&record, "session_epoch")?,
             )?;
             let _ = fs::remove_file(receipt);
-            writeln!(
-                output,
-                "{}",
-                json!({"pending_id":identifier,"state":"decision_submitted","decision":"approve","dispatched":"not_observed","released":"not_observed"})
-            )?;
+            output.emit(&json!({"pending_id":identifier,"state":"decision_submitted","decision":"approve","dispatched":"not_observed","released":"not_observed"}),
+                "decision_submitted", "approval_submitted", writer)?;
         }
         OperatorAction::Reject {
             binding: requested, ..
         } => {
-            ensure!(
+            require!(
                 requested == binding,
+                BindingChanged,
                 "binding differs from exact pending call"
             );
             approval::operator_reject_for_session(
@@ -1277,10 +1426,11 @@ fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u
                 string(&record, "session_epoch")?,
             )?;
             let _ = fs::remove_file(receipt);
-            writeln!(
-                output,
-                "{}",
-                json!({"pending_id":identifier,"state":"rejected","released":false})
+            output.emit(
+                &json!({"pending_id":identifier,"state":"rejected","released":false}),
+                "rejection_submitted",
+                "rejection_submitted",
+                writer,
             )?;
         }
         OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
@@ -1293,6 +1443,40 @@ fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn incomplete_inspection_output_never_creates_a_receipt() {
+        struct Partial {
+            remaining: usize,
+        }
+        impl Write for Partial {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                if self.remaining == 0 {
+                    return Err(std::io::ErrorKind::BrokenPipe.into());
+                }
+                let size = self.remaining.min(bytes.len());
+                self.remaining -= size;
+                Ok(size)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(std::io::ErrorKind::BrokenPipe.into())
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let receipt = root.path().join("inspected-call.json");
+        for remaining in [0, 7, 1000] {
+            let error = record_inspection(
+                root.path(),
+                &receipt,
+                &json!({}),
+                "complete arguments",
+                &mut Partial { remaining },
+            )
+            .unwrap_err();
+            assert!(matches!(result::reason(&error), Reason::OutputUnavailable));
+            assert!(!receipt.exists());
+        }
+    }
 
     fn run() -> Run {
         Run {
@@ -1760,6 +1944,18 @@ mod tests {
     }
 
     #[test]
+    fn pending_record_removed_after_snapshot_has_a_producer_reason() {
+        let home = tempfile::tempdir().unwrap();
+        create_dir(&approval::pending_dir(home.path())).unwrap();
+        let observed = live()["pilot_pending"][0].clone();
+        let path = approval::pending_dir(home.path()).join("pending-one.json");
+        write_new(&path, &observed).unwrap();
+        fs::remove_file(path).unwrap();
+        let error = checked_record(home.path(), &observed).unwrap_err();
+        assert!(matches!(result::reason(&error), Reason::PendingUnavailable));
+    }
+
+    #[test]
     #[cfg(unix)]
     fn raw_arguments_cannot_change_behind_a_trusted_binding() {
         let dir = tempfile::tempdir().unwrap();
@@ -1776,6 +1972,16 @@ mod tests {
         let path = approval::pending_dir(dir.path()).join("pending-one.json");
         write_new(&path, &file).unwrap();
         assert!(checked_record(dir.path(), &observed).is_ok());
+        for key in ["scope", "expires_at_ms"] {
+            let mut changed = file.clone();
+            changed[key] = json!("foreign");
+            fs::write(&path, serde_json::to_vec(&changed).unwrap()).unwrap();
+            let error = checked_record(dir.path(), &observed).unwrap_err();
+            assert!(
+                matches!(result::reason(&error), Reason::BindingChanged),
+                "{key}"
+            );
+        }
         for key in [
             "session_id",
             "session_epoch",

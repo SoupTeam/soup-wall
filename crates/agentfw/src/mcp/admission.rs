@@ -1003,6 +1003,7 @@ pub struct Collector<'a> {
     config: &'a AdmissionCfg,
     host_session: Option<String>,
     child_authority: Option<String>,
+    prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
     client: reqwest::Client,
     session: String,
     pub liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
@@ -1026,6 +1027,7 @@ impl<'a> Collector<'a> {
             config,
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
+            prepared_budget: None,
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
@@ -1254,12 +1256,34 @@ impl<'a> Collector<'a> {
         if let Some(limit) = DaemonSizeLimit::from_refusal(status, &bytes) {
             return Err(limit.into());
         }
-        ensure!(
-            status.is_success(),
-            "MCP admission request rejected: status {}, body: {}",
-            status,
-            String::from_utf8_lossy(&bytes)
-        );
+        if !status.is_success() {
+            let status = status.as_u16();
+            // Log only the daemon's stable, low-entropy failure code.
+            // Never echo request arguments, tokens or a raw response body.
+            let body = &bytes;
+            let reason = if body.len() <= 1024 {
+                serde_json::from_slice::<Value>(body)
+                    .ok()
+                    .and_then(|reply| {
+                        reply
+                            .get("error_code")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .filter(|code| {
+                        code.len() <= 96
+                            && code
+                                .bytes()
+                                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+                    })
+            } else {
+                None
+            };
+            anyhow::bail!(
+                "MCP admission request rejected: status={status} code={}",
+                reason.as_deref().unwrap_or("unavailable")
+            );
+        }
         let Strict(reply) =
             serde_json::from_slice(&bytes).context("malformed MCP admission receipt")?;
         Ok(reply)
@@ -3327,7 +3351,15 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
 }
 
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
+    run_with_budget(config, None).await
+}
+
+pub async fn run_with_budget(
+    config: AdmissionCfg,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+) -> anyhow::Result<()> {
     let mut collector = Collector::new(&config)?;
+    collector.prepared_budget = selected;
     let env_liveness_flag = std::env::var("AGENTFW_NATIVE_LIVENESS").ok().map(|v| {
         let v = v.trim().to_ascii_lowercase();
         v != "0" && v != "false" && v != "no" && v != "off"

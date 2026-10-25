@@ -28,6 +28,8 @@ from urllib.parse import unquote, urlparse
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pilot_provider import utility_environment
 PIN = "1.94.1"  # The checked-in native Ubuntu CI toolchain; never `stable`.
 FORMAT = "sw-native-pilot-agent-source-build/1"
 CURRENT_FORMAT = "sw-native-pilot-agent-source-current/1"
@@ -62,7 +64,7 @@ def require(ok, reason, stage="inventory"):
 
 def git(root, *args):
     result = subprocess.run(["git", *args], cwd=root, stdout=subprocess.PIPE,
-                            stderr=subprocess.DEVNULL, timeout=15, check=False)
+                            stderr=subprocess.DEVNULL, timeout=15, check=False, env=utility_environment())
     require(result.returncode == 0 and len(result.stdout) <= 4 * 1024 * 1024,
             "source_git_query_failed", "source")
     return result.stdout
@@ -107,7 +109,7 @@ def selected_tools():
         for name in ("cargo", "rustc"):
             try:
                 result = subprocess.run([found["rustup"], "which", "--toolchain", PIN, name],
-                                        env={**os.environ, "RUSTUP_AUTO_INSTALL": "0"},
+                                        env={**utility_environment(build=True), "RUSTUP_AUTO_INSTALL": "0"},
                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                         timeout=10, check=False)
                 if result.returncode:
@@ -123,14 +125,14 @@ def selected_tools():
             try:
                 result = subprocess.run([found[name], "--version"], stdout=subprocess.PIPE,
                                         stderr=subprocess.DEVNULL, timeout=10, check=False,
-                                        env={**os.environ, "RUSTUP_TOOLCHAIN": PIN,
+                                        env={**utility_environment(build=True), "RUSTUP_TOOLCHAIN": PIN,
                                              "RUSTUP_AUTO_INSTALL": "0"})
                 if result.returncode or not result.stdout.decode().startswith(prefix):
                     missing.append(f"{name}: exact version {PIN} required")
             except (OSError, subprocess.TimeoutExpired, UnicodeError):
                 missing.append(f"{name}: exact version {PIN} could not be verified")
         try:
-            result = subprocess.run([found["rustc"], "-vV"], stdout=subprocess.PIPE,
+            result = subprocess.run([found["rustc"], "-vV"], env=utility_environment(build=True), stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL, timeout=10, check=False)
             if result.returncode or b"host: x86_64-unknown-linux-gnu" not in result.stdout:
                 missing.append("rustc: x86_64-unknown-linux-gnu host required")

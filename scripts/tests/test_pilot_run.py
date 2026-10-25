@@ -19,6 +19,7 @@ RUN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUN)
 
 
+@patch.dict(os.environ, {"ANTHROPIC_API_KEY": "owned-provider-fixture"})
 class PreparedRunBoundary(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "linux", "Linux owned file-descriptor fault control")
     def test_authority_sync_storage_failure_refuses_before_daemon_and_cleans_only_owned_state(self):
@@ -115,6 +116,71 @@ class PreparedRunBoundary(unittest.TestCase):
             (root / (kind + ".json")).write_text(json.dumps({"workspace": str(root / kind)}))
         paths = {"git_classifier": ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"}
         return args, selection, paths, profiles
+
+    def test_explicit_budget_plan_reads_only_owned_bytes_without_execution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            args, selection, paths, profiles = self.fixture(root)
+            budget = root / "budget.json"
+            budget.write_bytes(b'{"operator":"selection-only"}')
+            budget.chmod(0o600)
+            before = sorted(str(p) for p in root.rglob("*"))
+            with patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(sys, "argv", ["pilot-run", "--selection", str(args.selection),
+                     "--expected-commit", args.expected_commit, "--linux-budget", str(budget)]), \
+                 patch.object(RUN.subprocess, "run") as utility, \
+                 patch.object(RUN.subprocess, "Popen") as spawn, \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 0)
+                report = json.loads(output.getvalue())
+                self.assertEqual(report["resource_budget"]["status"], "selected-not-validated")
+                self.assertFalse(report["executed"])
+                utility.assert_not_called()
+                spawn.assert_not_called()
+            self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
+
+    def test_budget_input_rejects_symlink_shared_write_and_overflow(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            budget = root / "budget"
+            budget.write_bytes(b'{}')
+            budget.chmod(0o600)
+            self.assertEqual(RUN.budget_input(budget), b'{}')
+            link = root / "link"
+            link.symlink_to(budget)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(link)
+            budget.chmod(0o622)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(budget)
+            budget.chmod(0o600)
+            budget.write_bytes(b'x' * 16385)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(budget)
+
+    def test_budget_probe_has_no_provider_environment_and_refusal_never_starts_daemon(self):
+        provider = {key: "distinct-owned-canary" for key in ("ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE")}
+        with patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout=b'')) as call:
+            with self.assertRaisesRegex(RUN.Failure, "linux_budget_preflight_refused"):
+                RUN.budget_cli({"agentfw": Path("/trusted/agentfw")}, Path("/owned"),
+                    {"PATH": "/usr/bin:/bin", **provider}, "--config", Path("/owned/budget"), True)
+            self.assertEqual(call.call_args.kwargs["env"], {"PATH": "/usr/bin:/bin"})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            args, selection, paths, profiles = self.fixture(root)
+            args.linux_budget = root / "budget.json"
+            args.linux_budget.write_bytes(b'{}')
+            args.linux_budget.chmod(0o600)
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "environment", return_value={}), \
+                 patch.object(RUN, "budget_cli", side_effect=RUN.Failure("linux_budget_preflight_refused")), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaisesRegex(RUN.Failure, "linux_budget_preflight_refused"):
+                    RUN.run(args, {})
+                spawn.assert_not_called()
+            self.assertFalse(list(root.glob("soup-wall-run-*")))
 
     def test_default_command_does_not_spawn_or_create_state(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -306,7 +372,8 @@ class PreparedRunBoundary(unittest.TestCase):
         for key in ("PYTHONPATH", "LD_PRELOAD", "CLAUDE_CONFIG_DIR", "AGENTFW_TOKEN"):
             self.assertNotIn(key, env)
         self.assertNotIn("untrusted", env["PATH"])
-        self.assertEqual(env["ANTHROPIC_API_KEY"], "owned-provider")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("ANTHROPIC_BASE_URL", env)
         # serve resolves HOME/.agentfw; AGENTFW_HOME alone is not its interface.
         self.assertEqual(env["AGENTFW_HOME"], str(Path(env["HOME"]) / ".agentfw"))
 
