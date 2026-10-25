@@ -38,6 +38,10 @@ class OriginalEnvelope(unittest.TestCase):
             self.assertEqual(text[span['start_char']:span['end_char']], value)
             self.assertEqual(span['source_start_byte'], 0)
             self.assertEqual(span['source_end_byte'], len(value.encode()))
+        separate = m.views(channels)
+        self.assertEqual(separate[0], ('ordered_envelope',text,spans))
+        self.assertEqual([v[1] for v in separate[1:]],channels)
+        self.assertEqual([v[2][0]['channel'] for v in separate[1:]], [0,1,2])
 
 
 if __name__ == '__main__':
