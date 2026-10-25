@@ -113,3 +113,30 @@ source, including later and other-channel references; the ledger's occurrence
 bag is insufficient. Existing full/global models remain disqualified by their
 retained misses and bounds. No replacement model or inference follows from this
 increment. Original Git/FS useful-delivery regressions stay mandatory.
+
+## Retained clean-source comparison
+
+[Manifest](evidence/sou109-ledger/manifest.json) and
+[report](evidence/sou109-ledger/report.json) qualify only implementation
+`ec3a7a97a93c28fb22aaa85bf40c0bff9af40a89` against the pinned #215 baseline.
+Both Rust binaries were built from independently verified LF-preserving Linux
+Git archive snapshots; compiler, lockfile, source and harness hashes are retained.
+The final replay began from a clean checkout. The earlier working-tree replay
+is kept locally as diagnostic history, not exact-source qualification.
+
+All 77 cases preserve the exact legacy output: 58 unchanged public requests,
+five original-frame/LF/CRLF cases, and fourteen frozen synthetic controls.
+The count/byte-budget stress case is explicitly incomplete; it is not a successful
+benign classification. Five malformed/unsupported input controls return explicit
+diagnostic failure. Three supervisor tests independently verify deadline cleanup,
+actual-worker memory measurement and address-space refusal. The bounded output
+writer also has a regression that rejects serialization before retaining excess.
+
+Cold end-to-end candidate median is 66.87 ms, nearest-rank p95 318.47 ms, and
+maximum actual-worker RSS 167,960,576 bytes. These include input parsing, policy
+preview, diagnostic collection and output. Every completed case remains below
+ten seconds and 512 MiB; measured results do not justify relaxing either bound.
+The three existing positive regression tests remain red (six pass / three fail).
+Core 96 and Agent 171 library tests pass; targeted all-target Clippy, formatting,
+the example test, three supervisor tests and documentation links pass. This is
+neither whole-workspace Ready qualification nor live original-server acceptance.
