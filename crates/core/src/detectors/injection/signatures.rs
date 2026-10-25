@@ -61,15 +61,19 @@ static SIGNATURES: LazyLock<Vec<Signature>> = LazyLock::new(|| {
 /// Scan `text` for signature matches, returning one `Finding` per match with its byte span.
 pub(crate) fn scan(text: &str) -> Vec<Finding> {
     let mut out = Vec::new();
+    visit(text, |f| out.push(f));
+    out
+}
+
+pub(super) fn visit(text: &str, mut emit: impl FnMut(Finding)) {
     for sig in SIGNATURES.iter() {
         for m in sig.re.find_iter(text) {
-            out.push(
+            emit(
                 Finding::new("injection", sig.severity, 0.9, sig.label)
                     .with_span(m.start()..m.end()),
             );
         }
     }
-    out
 }
 
 #[cfg(test)]

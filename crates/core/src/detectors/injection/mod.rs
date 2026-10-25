@@ -3,9 +3,14 @@
 //! Prompt-injection detection. Composes Stage A (signatures) + Stage B (heuristics).
 //! Stage C (candle ML) is added in Plan 3 behind this same `Detector` impl.
 
+mod evidence;
 mod heuristics;
 mod result_directives;
 mod signatures;
+pub use evidence::{
+    ChannelInventory, ContextStatus, Evidence, EvidenceKind, EvidenceLedger, HeuristicSummary,
+    SourceRange,
+};
 
 #[cfg(feature = "ml")]
 mod ml;
@@ -46,10 +51,36 @@ impl InjectionDetector {
     /// blocks. No aggregate heuristic score or benign inference is produced.
     /// Callers must still inspect every original block and apply their policy.
     pub fn cross_block_signatures(texts: &[String]) -> Vec<Finding> {
-        if texts.len() < 2 {
-            return Vec::new();
-        }
         let mut findings = Vec::new();
+        Self::visit_cross_block(texts, None, |e| {
+            if let Some(f) = e.finding {
+                findings.push(f);
+            }
+        });
+        findings
+    }
+
+    /// Same complete joins as the production preview, retaining typed origins.
+    pub fn cross_block_evidence(texts: &[String]) -> Vec<Evidence> {
+        let mut findings = Vec::new();
+        Self::visit_cross_block(texts, None, |e| findings.push(e));
+        findings
+    }
+
+    fn visit_cross_block(
+        texts: &[String],
+        max_bytes: Option<usize>,
+        mut emit: impl FnMut(Evidence),
+    ) -> bool {
+        if texts.len() < 2 {
+            return true;
+        }
+        let total = texts
+            .iter()
+            .try_fold(texts.len(), |n, t| n.checked_add(t.len()));
+        if max_bytes.is_some_and(|cap| total.is_none_or(|n| n > cap)) {
+            return false;
+        }
         // A renderer may concatenate blocks directly or separate them with
         // whitespace. Inspect both without changing the delivered bytes.
         for separator in ["", "\n"] {
@@ -63,10 +94,7 @@ impl InjectionDetector {
                 joined.push_str(text);
                 ranges.push(start..joined.len());
             }
-            for mut finding in signatures::scan(&joined)
-                .into_iter()
-                .chain(result_directives::scan(&joined))
-            {
+            let mut record = |kind, mut finding: Finding| {
                 let span = finding.span.as_ref().expect("signature span");
                 let first = ranges.partition_point(|range| range.end <= span.start);
                 let sources: Vec<_> = ranges
@@ -77,25 +105,98 @@ impl InjectionDetector {
                     .filter_map(|(index, range)| {
                         let start = span.start.max(range.start);
                         let end = span.end.min(range.end);
-                        (start < end).then(|| {
-                            format!("{index}:{}..{}", start - range.start, end - range.start)
+                        (start < end).then(|| SourceRange {
+                            channel: index,
+                            bytes: start - range.start..end - range.start,
                         })
                     })
                     .collect();
                 if sources.len() < 2 {
-                    continue;
+                    return;
                 }
                 // A joined offset would falsely point inside a single original
                 // block. Retain the exact original byte ranges in the reason.
                 finding.label = format!(
                     "{}; cross-block lexical evidence; join={}; original byte spans [{}]; contextual attribution unresolved",
-                    finding.label, if separator.is_empty() { "direct" } else { "whitespace" }, sources.join(", ")
+                    finding.label, if separator.is_empty() { "direct" } else { "whitespace" },
+                    sources.iter().map(|s| format!("{}:{}..{}", s.channel, s.bytes.start, s.bytes.end)).collect::<Vec<_>>().join(", ")
                 );
                 finding.span = None;
-                findings.push(finding);
-            }
+                emit(Evidence {
+                    kind,
+                    sources,
+                    context: ContextStatus::Unresolved,
+                    active: true,
+                    finding: Some(finding),
+                    join: Some(separator.into()),
+                });
+            };
+            signatures::visit(&joined, |f| record(EvidenceKind::Signature, f));
+            result_directives::visit(&joined, &mut record);
         }
-        findings
+        true
+    }
+
+    /// Complete-channel diagnostic inventory. It cannot authorize release and
+    /// is separate from the production verdict. The cap never hides incompleteness.
+    pub fn mcp_result_evidence(texts: &[String], max_observations: usize) -> EvidenceLedger {
+        let mut ledger = EvidenceLedger {
+            channels: Vec::new(),
+            observations: Vec::new(),
+            complete: true,
+            remaining_bytes: (64 * 1024 * 1024usize)
+                .saturating_sub(1024 + texts.len().saturating_mul(256)),
+        };
+        if texts.len() > 1024
+            || texts
+                .iter()
+                .try_fold(0usize, |n, t| n.checked_add(t.len()))
+                .is_none_or(|n| n > 8 * 1024 * 1024)
+        {
+            ledger.complete = false;
+            return ledger;
+        }
+        for (channel, text) in texts.iter().enumerate() {
+            let heuristic = heuristics::analyze(text, |kind, bytes, active| {
+                ledger.push(
+                    Evidence {
+                        kind,
+                        sources: vec![SourceRange { channel, bytes }],
+                        context: ContextStatus::Unresolved,
+                        active,
+                        finding: None,
+                        join: None,
+                    },
+                    max_observations,
+                );
+            });
+            ledger.channels.push(ChannelInventory {
+                channel,
+                utf8_bytes: text.len(),
+                heuristic,
+            });
+            let mut record = |kind, finding: Finding| {
+                let bytes = finding.span.clone().expect("lexical occurrence span");
+                ledger.push(
+                    Evidence {
+                        kind,
+                        sources: vec![SourceRange { channel, bytes }],
+                        context: ContextStatus::Unresolved,
+                        active: true,
+                        finding: Some(finding),
+                        join: None,
+                    },
+                    max_observations,
+                );
+            };
+            signatures::visit(text, |f| record(EvidenceKind::Signature, f));
+            result_directives::visit(text, &mut record);
+        }
+        let complete = Self::visit_cross_block(texts, Some(8 * 1024 * 1024), |e| {
+            ledger.push(e, max_observations)
+        });
+        ledger.complete &= complete;
+        ledger
     }
 
     pub fn new() -> Self {
