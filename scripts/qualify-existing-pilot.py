@@ -21,6 +21,8 @@ import time
 import traceback
 import urllib.request
 
+from pilot_project_fixtures import PROJECTS, create_files, identity as project_identity
+
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -65,6 +67,10 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
              ("filesystem", "read_text_file", {"path": str(sentinel)}),
              (None, "Bash", {"command": "touch " + str(marker)}),
              ("filesystem", "read_text_file", {"path": "/workspace/followup.txt"})]
+    fixture = PROJECTS.get(getattr(args, "project_fixture", "legacy"))
+    if fixture is not None:
+        steps += [("filesystem", "read_text_file", {"path": "/workspace/" + fixture["read_path"]}),
+                  ("git", "git_log", {"repo_path": "/workspace", "max_count": 2})]
     offered = set()
     def next_step(body):
         names = {tool.get("name") for tool in body.get("tools", [])}
@@ -151,6 +157,13 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                     "original_git_diff_missing")
             require(all(model.results[f"toolu_existing_{index}"]["is_error"] is True for index in range(4, 9)),
                     "forbidden_tool_not_refused")
+            if fixture is not None:
+                require(all(model.results[f"toolu_existing_{index}"]["is_error"] is False for index in (10, 11)),
+                        "ordinary_project_followup_interrupted")
+                require(fixture["read_marker"] in json.dumps(model.results["toolu_existing_10"]["content"]),
+                        "ordinary_project_bytes_missing")
+                require(all(message in json.dumps(model.results["toolu_existing_11"]["content"])
+                            for message in fixture["history_messages"]), "ordinary_local_history_missing")
             observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
             forbidden = {"git_reset", "write_file", "Bash"}
             require(not any(call["tool"] in forbidden for call in observation["calls"]), "forbidden_original_dispatch")
@@ -161,6 +174,9 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                     and any('"diff"' in row for row in git_execs), "original_git_execution_witness_missing")
             result.update(useful_original_results=5, refused_results=5, original_dispatches=len(observation["calls"]),
                           git_execution_sha256=digest(git_execs), result_sha256=digest(model.results))
+            if fixture is not None:
+                result.update(useful_original_results=7, ordinary_followup_results=2,
+                              project_fixture_sha256=project_identity(args.project_fixture))
         return result
     finally:
         if process is not None and process.poll() is None:
@@ -191,7 +207,11 @@ def qualify(args, private, report):
     config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
                                 ask_wait_seconds=0, timeout_seconds=60, port=0)
     seed, paths, _ = RUN.selected(config)
-    fs, git, prefix = private / "source-project", private / "git-project", private / "preparation"
+    report.update(source=seed["source"], selected_sha256={role: BASE.sha(path) for role, path in paths.items()})
+    fixture_name = getattr(args, "project_fixture", "legacy")
+    fixture = PROJECTS.get(fixture_name)
+    suffix = fixture["root_name"] if fixture is not None else "project"
+    fs, git, prefix = private / ("source-" + suffix), private / ("git-" + suffix), private / "preparation"
     for path in (fs, git):
         path.mkdir(mode=0o700)
     sentinel = private / "outside-sentinel.txt"; sentinel.write_text("Owned outside sentinel")
@@ -218,9 +238,19 @@ def qualify(args, private, report):
         (fs / "followup.txt").write_text("Owned useful continuation\n")
         (fs / "outside-link").symlink_to(sentinel)
         (git / "tracked.txt").write_text("Owned committed project\n")
-        for words in (("init", "-q", str(git)), ("-C", str(git), "add", "tracked.txt"),
+        if fixture is not None:
+            create_files(fs, fixture_name)
+            create_files(git, fixture_name)
+        staged = "." if fixture is not None else "tracked.txt"
+        for words in (("init", "-q", str(git)), ("-C", str(git), "add", staged),
                       ("-C", str(git), "commit", "-qm", "Owned project baseline")):
             subprocess.run([str(paths["git"]), *words], env=env, check=True, capture_output=True, timeout=15)
+        if fixture_name == "local-history":
+            (git / "docs/history.md").write_text(fixture["files"]["docs/history.md"] + "Revision two adds local release notes.\n", encoding="utf-8")
+            (git / "tracked.txt").write_text("Owned committed project revision two\n", encoding="utf-8")
+            for words in (("-C", str(git), "add", "docs/history.md", "tracked.txt"),
+                          ("-C", str(git), "commit", "-qm", "Owned documentation revision")):
+                subprocess.run([str(paths["git"]), *words], env=env, check=True, capture_output=True, timeout=15)
         (git / "tracked.txt").write_text("Owned operator Git edit v1\n")
         (git / "preserved-untracked.txt").write_text("Preserve this untracked user file\n")
         for project in (fs, git):
@@ -310,11 +340,17 @@ def main():
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--project-fixture", choices=("legacy", *PROJECTS), default="legacy",
+                        help="Optional owned project data; uses the original execution and witness path")
     args = parser.parse_args()
     args.output.mkdir(mode=0o700)
     report = {"format": "sw-existing-pilot-acceptance/1", "status": "failed", "cases": [],
               "provider": "owned-scripted-loopback", "live_model_effectiveness": "not_tested",
               "scope": "native Ubuntu 24.04 x86-64, supported original read-only profiles"}
+    if args.project_fixture != "legacy":
+        report.update(project_fixture=args.project_fixture,
+                      project_fixture_sha256=project_identity(args.project_fixture),
+                      ordinary_project_required_cases=9)
     try:
         with tempfile.TemporaryDirectory(prefix="sou134-private-") as temporary:
             qualify(args, Path(temporary).resolve(), report)
