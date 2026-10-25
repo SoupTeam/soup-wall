@@ -240,5 +240,12 @@
     "channel_sha256": "62067547d8c014ce56579f2edc8ae7bd482c65f3a1bc7fd32148f054634fe04d",
     "requirements_lock_sha256": "a2cfeda583ce58ab092610ee5b8902ef2f6ab1c97dabebf7eb67bcc512f5f1e5"
   },
+  "context_snapshot_recheck": {
+    "source_commit": "b353c10e06dae947cc7ebb6f0d2ebb57d1e1213d",
+    "fixed_source_and_proposal_hashes_unchanged": true,
+    "controls": 24,
+    "semantic_validation": "not_performed",
+    "all_whole_results_withheld": true
+  },
   "decision": "Reject structure-only discount; residual obligation preserves attacks and benign refusals. Relation integrity is bounded but has no semantic or Allow authority."
 }

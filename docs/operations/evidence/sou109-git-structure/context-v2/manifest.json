@@ -1,0 +1,192 @@
+{
+  "source_commit": "b353c10e06dae947cc7ebb6f0d2ebb57d1e1213d",
+  "worker_source_commit": "9b1886ad2a8e96a04037c032eee8d611f7eb779e",
+  "checker_sha256": "6e6ea59aafabff9b11530ec900031e071ee0ff24221ff5fc31bee636858914a4",
+  "controls_sha256": "2db533d9e4f8798caace7fb072ea40ff817b2ef217b1ad1200cf6063d1490572",
+  "worker_sha256": "6cb58ad57f8de29fa0dda64a48197f7805c66963c873eb7da2cb31a6e6d93c5a",
+  "source_script_sha256": "65d0e29c8a4081067334f3bd9430320213e1fb51461d17a238b116bf505c86b3",
+  "manual_reference_annotations": true,
+  "semantic_efficacy_claim": false,
+  "cases": [
+    {
+      "id": "ru-description-cross0-far0",
+      "channels_sha256": [
+        "8d188ea56ab1c5fb7b31ef351cd5834d987620d4daff1368c81643ed21e79e22"
+      ],
+      "proposal_sha256": "f18c5d368364dc90e2759b8a06950bb7d3a737a2ae96a42e4172b083967ca2b1"
+    },
+    {
+      "id": "ru-adoption-cross0-far0",
+      "channels_sha256": [
+        "354c71329ff0d06562d1812e5049363b2eb555bb101cdbd1b094d979f73be0f8"
+      ],
+      "proposal_sha256": "d41cc44f55736434d876b4150f247629a6ddbdeff1d6767a51601928ce327a82"
+    },
+    {
+      "id": "ru-description-cross0-far1",
+      "channels_sha256": [
+        "0d9fd073615964f15c2f4ffa99ef82f0ce2b209a078132eeece35332bb420622"
+      ],
+      "proposal_sha256": "192d7155da2130dbcdf0759600fa85152d5a5dbc4287f09e856a8e8a790b0f27"
+    },
+    {
+      "id": "ru-adoption-cross0-far1",
+      "channels_sha256": [
+        "b88ed8f70011280b7df0a9d09caf41f073b0fee1848ba4cab18619ce87d73862"
+      ],
+      "proposal_sha256": "12031fc576588f50d7458b7ea1bdad6d80a205fef604b47e31dc0b71f9b980d7"
+    },
+    {
+      "id": "ru-description-cross1-far0",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "6e501489ee1fcb33890379ee048c00a129ac7611a06d44f5aff1c024d3b364da"
+      ],
+      "proposal_sha256": "3d8ee609ab6167e64fe977b7198039f4f93c2cd4d7a7236a39fe536933570d0a"
+    },
+    {
+      "id": "ru-adoption-cross1-far0",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "3e7ff752ceb7cd5ed5ee1922afb00b9338d5e6854937e7f2d71c402f4bd908b6"
+      ],
+      "proposal_sha256": "abbae91bf896729dfe46bded0e280504266d5da8ae437790dc43d181629f95bc"
+    },
+    {
+      "id": "ru-description-cross1-far1",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "268100db419b22df862b538954c448e39dc8517297b851d3a6d0253a43943e8c"
+      ],
+      "proposal_sha256": "7fccea0e3323edf9f95cdcef67ba2c1140ead34e1fe690a582cae1f8783f46d8"
+    },
+    {
+      "id": "ru-adoption-cross1-far1",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "27e9459498beb85c214b12c87fc308c51ec5d7b7d283f383ce714dee0b4acd1e"
+      ],
+      "proposal_sha256": "6738faaf5a3f92f7e1a863d1a3fba4dacd7e3cff7bbf9484b71caedd3b653e0d"
+    },
+    {
+      "id": "es-description-cross0-far0",
+      "channels_sha256": [
+        "45dfaf249454bc3f1849d054dbd10cccbf425598a8e3d3366a95e3b7858db742"
+      ],
+      "proposal_sha256": "8b02b8de53723e3a9cc09624c55d685a9b081bdb0f5a5e2879d52c6fcc735bae"
+    },
+    {
+      "id": "es-adoption-cross0-far0",
+      "channels_sha256": [
+        "8639971786e5ab5374f1fe7e1173ac9105a4c5afc1c5d044518a69ea10e4444a"
+      ],
+      "proposal_sha256": "2893439051de89f299632baa8842c625f1f0d15650bec07b370289f795953aea"
+    },
+    {
+      "id": "es-description-cross0-far1",
+      "channels_sha256": [
+        "5147e6d218d3d9b754c3d9aecaae0d9df6bf7891af8834c527a4855d2ebc558c"
+      ],
+      "proposal_sha256": "f966dfd423e1f1158cc630c7f584894629d74925d193fd380916df15c5a0d139"
+    },
+    {
+      "id": "es-adoption-cross0-far1",
+      "channels_sha256": [
+        "c0910484d298a8cdf04101f52faa8a19b83d6fe42c0455b52b48617ee8f94177"
+      ],
+      "proposal_sha256": "c001f8ed1e75dfbbc925e886c4bde29630e7af1473b96ba289212ab6d500e65c"
+    },
+    {
+      "id": "es-description-cross1-far0",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "1dc82ab42c3b77091a25f0e3c78e013007c972f6c752425c788787a733aa1f29"
+      ],
+      "proposal_sha256": "4c9dbcc19656fdb23bab4079ae043c33bbe75b50b7a4794a5f1da271abe38b9a"
+    },
+    {
+      "id": "es-adoption-cross1-far0",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "d611a7f9c7d13d90521b7e3d1d25f21d5b6ae0f9b8ec38e77c854aa07eca46c9"
+      ],
+      "proposal_sha256": "cc43130d012bb7937f69d207ac73f203b4a6056b5e7f71861c8a6d01623cc885"
+    },
+    {
+      "id": "es-description-cross1-far1",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "bb190ecba96b6c8a023047cf07eb95ca04e68e91bfd6351823c02a0a3036b627"
+      ],
+      "proposal_sha256": "9ad0d7a1b3334dde5a435922ae9e4b36e54bca92767a7d85f18467828e21ef39"
+    },
+    {
+      "id": "es-adoption-cross1-far1",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "7abe1f551ae4c9458abcccae1b133b046c0666f92ee82525e8ad12f94ecbf43f"
+      ],
+      "proposal_sha256": "bf3f00ce93cee772aa3e371fc09ec3403739358e484a421f4bda456a16317dfd"
+    },
+    {
+      "id": "de-description-cross0-far0",
+      "channels_sha256": [
+        "81a06ae4d2dfc017e91f99a18e8e583119010d9862c9154850dbcc81ade3de14"
+      ],
+      "proposal_sha256": "bca7c8f6affed6b59791691022a63be99a264560273dbcc4f8fee8801b4d0c47"
+    },
+    {
+      "id": "de-adoption-cross0-far0",
+      "channels_sha256": [
+        "66cd49fb4a871ed821f00eeed850e102dc7930a70653bb3e37ff93676830fed5"
+      ],
+      "proposal_sha256": "7539333845c36c2a8807b1647656640ca430639d32b752937d69d7ff08ef5700"
+    },
+    {
+      "id": "de-description-cross0-far1",
+      "channels_sha256": [
+        "8e8c58dc2beefb226ff96e8f2630ad5c9d77fd1bbef6599d15ab75d2115f7cfe"
+      ],
+      "proposal_sha256": "2040d61c0acad627fe6963044705f61c96374e2648831ce7edd14b8d568fbc18"
+    },
+    {
+      "id": "de-adoption-cross0-far1",
+      "channels_sha256": [
+        "ba3c7e47aa4cae80c557b649bc4410c4531342a8d4e6239fea05af7e79c74145"
+      ],
+      "proposal_sha256": "9abc5911c4a628533c091d734dbebeda96e677a75c6bed4adb7b35850abb90a1"
+    },
+    {
+      "id": "de-description-cross1-far0",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "ca6cdfaf6ac4856a0e547acfde00d1e62246acc0c04b2806d999c4c0588c1d3b"
+      ],
+      "proposal_sha256": "cd936c4f67f32a3578dcd2635b890da30e14c9bf976277e795f03584f70804e2"
+    },
+    {
+      "id": "de-adoption-cross1-far0",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "b6a79b1d6c2c3fbaabf7c1c69cc734c0506e1f46fa56b152f6e5a0ae72c94b96"
+      ],
+      "proposal_sha256": "b3e2b600debc682e3df2debed50050286a15569042de36878ef0a1e3d9a97567"
+    },
+    {
+      "id": "de-description-cross1-far1",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "c9cbb9e2dbbd222d85226db807aee3d62fe1f77411d19dc5962c585d499c94b1"
+      ],
+      "proposal_sha256": "43372b086112b3b6a8ee0979d313ce54c4920f42e0b607a346cb31dd4ffa7326"
+    },
+    {
+      "id": "de-adoption-cross1-far1",
+      "channels_sha256": [
+        "bef7d3aa877bd795500ce4e1c28ecb0788a8553bf554c81d1c6d5bcfb241bed8",
+        "219e5a96a682f74f8faecf4dc2f8bdd4a9a700db453d47aff5060ab1d6986852"
+      ],
+      "proposal_sha256": "ff40acabd108c675f946a99ad81889dba47ebf38cf5afaed9a4c03a59b543478"
+    }
+  ]
+}

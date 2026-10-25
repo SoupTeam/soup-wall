@@ -121,8 +121,9 @@ increment. Original Git/FS useful-delivery regressions stay mandatory.
 [Manifest](evidence/sou109-ledger/manifest.json) and
 [report](evidence/sou109-ledger/report.json) qualify only implementation
 `ec3a7a97a93c28fb22aaa85bf40c0bff9af40a89` against the pinned #215 baseline.
-Both Rust binaries were built from independently verified LF-preserving Linux
-Git archive snapshots; compiler, lockfile, source and harness hashes are retained.
+Both Rust binaries were built from independent Linux snapshots; every compiled
+Rust/Cargo source was byte-checked against its Git blob. Compiler, lockfile,
+source and harness hashes are retained.
 The final replay began from a clean checkout. The earlier working-tree replay
 is kept locally as diagnostic history, not exact-source qualification.
 

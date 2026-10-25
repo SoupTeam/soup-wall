@@ -193,6 +193,19 @@ intent would reopen the same bypass. No tested semantic producer is qualified;
 the earlier negative model reports remain immutable, and no new model/inference
 is started. SOU-109 stays In Progress and all runtime PRs stay Draft.
 
+The immutable-input hardening has a separate
+[recheck manifest](evidence/sou109-git-structure/context-v2/manifest.json) and
+[report](evidence/sou109-git-structure/context-v2/report.json), source
+`b353c10e06dae947cc7ebb6f0d2ebb57d1e1213d`. All 24 source/proposal hashes must
+equal the earlier frozen cases before the worker is called. Six integrity tests
+pass, including a caller-side mutation between binding and inspection. No scope
+roles or intended benign/attack outcomes changed. Its separate
+[maximum-size measurement](evidence/sou109-git-structure/context-v2/resource.json)
+is 473.49 ms end-to-end and 78,434,304 B actual-worker RSS, still under the same
+ten seconds / 512 MiB. An unrelated two-job Rust build was running during this
+measurement; this is a bound check, not a matched performance comparison. The
+earlier 267.62 ms record remains unchanged and qualifies its own earlier source.
+
 Future runtime integration must be reviewed on accepted main `1ebc5854e67d788ec3a72367ff398af244384bc8`
 or its reviewed successor. The stacked #215 experimental materials and #255
 baseline comparison are not automatically accepted production code. Original

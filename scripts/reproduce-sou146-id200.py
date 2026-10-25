@@ -21,13 +21,20 @@ import threading
 ROOT=Path(__file__).resolve().parents[1]
 
 
+def original_environment(git):
+    # A caller's GIT_DIR/config/object paths must never redirect this owned fixture.
+    env={k:v for k,v in os.environ.items() if not k.startswith('GIT_')}
+    env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL='/dev/null',
+        GIT_AUTHOR_DATE='2026-10-25T04:47:21+0000',GIT_COMMITTER_DATE='2026-10-25T04:47:21+0000',
+        GIT_TERMINAL_PROMPT='0',GIT_OPTIONAL_LOCKS='0',GIT_PYTHON_GIT_EXECUTABLE=str(git))
+    return env
+
+
 def main(args):
     if importlib.metadata.version('mcp-server-git') != '2026.10.10':
         raise ValueError('original_server_version')
     args.output.mkdir(parents=True,exist_ok=True)
-    env=dict(os.environ,GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL='/dev/null',
-        GIT_AUTHOR_DATE='2026-10-25T04:47:21+0000',GIT_COMMITTER_DATE='2026-10-25T04:47:21+0000',
-        GIT_TERMINAL_PROMPT='0',GIT_OPTIONAL_LOCKS='0',GIT_PYTHON_GIT_EXECUTABLE=str(args.git))
+    env=original_environment(args.git)
     with tempfile.TemporaryDirectory(prefix='sou109-id200-') as directory:
         repo=Path(directory)
         def git(*words):

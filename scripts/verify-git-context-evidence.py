@@ -49,6 +49,17 @@ summary['context']={'source_commit':manifest['source_commit'],'manual_reference_
 assert summary['context']['benign_description_controls_refused']==12
 assert summary['context']['adopted_instruction_controls_withheld']==12
 summary['fresh_id200']=fresh
+if (e/'context-v2/manifest.json').exists():
+    newer=read(e/'context-v2/manifest.json')
+    assert newer['cases']==manifest['cases']
+    for field,path in [('checker_sha256','scripts/result-context-relations.py'),('controls_sha256','scripts/tests/test_result_context_relations.py')]:
+        code=subprocess.check_output(['git','-C',str(root),'show',newer['source_commit']+':'+path])
+        assert hashlib.sha256(code).hexdigest()==newer[field]
+    rows=read(e/'context-v2/report.json')['observations']
+    assert len(rows)==24 and all(r['relation_integrity']['enforcement']=='unresolved' and r['current_whole_result_verdict']=='Deny' for r in rows)
+    summary['context_snapshot_recheck']={'source_commit':newer['source_commit'],
+        'fixed_source_and_proposal_hashes_unchanged':True,'controls':24,
+        'semantic_validation':'not_performed','all_whole_results_withheld':True}
 summary['decision']='Reject structure-only discount; residual obligation preserves attacks and benign refusals. Relation integrity is bounded but has no semantic or Allow authority.'
 (e/'summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print('Verified seven unsafe discounts, preserved whole-result refusals, independent signature findings, all source hashes and fresh ID200 bytes.')
