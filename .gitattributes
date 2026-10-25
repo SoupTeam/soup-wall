@@ -78,3 +78,9 @@ scripts/benchmarks/installed-pilot-workload-v2.json text eol=lf
 docs/operations/evidence/sou109-qwen-separated-58.json text eol=lf
 docs/operations/evidence/sou109-horizon-58.json text eol=lf
 scripts/horizon-model-lock.json text eol=lf
+
+# SOU-109 content collision: preserve diagnostic identities across checkouts.
+scripts/probe-result-content-collision.py text eol=lf
+scripts/prepare-result-content-main.py text eol=lf
+docs/operations/evidence/sou109-content-collision/** text eol=lf
+docs/operations/evidence/sou109-content-collision/*.jsonl -text

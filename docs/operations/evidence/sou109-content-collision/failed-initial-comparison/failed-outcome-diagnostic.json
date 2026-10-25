@@ -1,0 +1,236 @@
+[
+  {
+    "core_findings": [
+      [
+        {
+          "atlas": "AML.T0051",
+          "confidence": 0.6000000238418579,
+          "detector": "injection",
+          "direction": "input",
+          "label": "heuristic injection signals (score 0.60)",
+          "owasp": "LLM01:2025 Prompt Injection",
+          "severity": "medium",
+          "span": null
+        }
+      ]
+    ],
+    "cross_findings": [],
+    "ledger": {
+      "channels": [
+        {
+          "channel": 0,
+          "heuristic": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "utf8_bytes": 657
+        }
+      ],
+      "complete": true,
+      "observations": [
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "encoded_looking_token",
+          "sources": [
+            {
+              "bytes": {
+                "end": 47,
+                "start": 7
+              },
+              "channel": 0
+            }
+          ]
+        },
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "delimiter",
+          "sources": [
+            {
+              "bytes": {
+                "end": 175,
+                "start": 172
+              },
+              "channel": 0
+            }
+          ]
+        },
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "delimiter",
+          "sources": [
+            {
+              "bytes": {
+                "end": 291,
+                "start": 288
+              },
+              "channel": 0
+            }
+          ]
+        },
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "delimiter",
+          "sources": [
+            {
+              "bytes": {
+                "end": 413,
+                "start": 410
+              },
+              "channel": 0
+            }
+          ]
+        },
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "delimiter",
+          "sources": [
+            {
+              "bytes": {
+                "end": 549,
+                "start": 546
+              },
+              "channel": 0
+            }
+          ]
+        }
+      ]
+    },
+    "outcomes": [
+      "Outcome { verdict: Deny, rule: Some(\"git-profile-refuse-result-injection\"), message: Some(\"Blocked: tool result contains instruction-like content\"), findings: [(ToolResult, Finding { detector: \"injection\", severity: Medium, confidence: 0.6, span: None, label: \"heuristic injection signals (score 0.60)\", direction: Input, owasp: Some(\"LLM01:2025 Prompt Injection\"), atlas: Some(\"AML.T0051\") }), (ToolResult, Finding { detector: \"pii.email\", severity: Medium, confidence: 0.9, span: Some(74..96), label: \"email address\", direction: Input, owasp: Some(\"LLM02:2025 Sensitive Information Disclosure\"), atlas: Some(\"AML.T0057\") })], taint: None, provenance_incomplete: false, risk_score: 71, egress_hosts: [], fallback: None, authority_pending: false }"
+    ]
+  },
+  {
+    "core_findings": [
+      [
+        {
+          "atlas": "AML.T0051",
+          "confidence": 0.6000000238418579,
+          "detector": "injection",
+          "direction": "input",
+          "label": "heuristic injection signals (score 0.60)",
+          "owasp": "LLM01:2025 Prompt Injection",
+          "severity": "medium",
+          "span": null
+        }
+      ]
+    ],
+    "cross_findings": [],
+    "ledger": {
+      "channels": [
+        {
+          "channel": 0,
+          "heuristic": {
+            "delimiters": 4,
+            "encoded_tokens": 1,
+            "imperatives": 0,
+            "typed_records": null
+          },
+          "utf8_bytes": 657
+        }
+      ],
+      "complete": true,
+      "observations": [
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "encoded_looking_token",
+          "sources": [
+            {
+              "bytes": {
+                "end": 47,
+                "start": 7
+              },
+              "channel": 0
+            }
+          ]
+        },
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "delimiter",
+          "sources": [
+            {
+              "bytes": {
+                "end": 175,
+                "start": 172
+              },
+              "channel": 0
+            }
+          ]
+        },
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "delimiter",
+          "sources": [
+            {
+              "bytes": {
+                "end": 291,
+                "start": 288
+              },
+              "channel": 0
+            }
+          ]
+        },
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "delimiter",
+          "sources": [
+            {
+              "bytes": {
+                "end": 413,
+                "start": 410
+              },
+              "channel": 0
+            }
+          ]
+        },
+        {
+          "active": true,
+          "context": "Unresolved",
+          "finding": null,
+          "join": null,
+          "kind": "delimiter",
+          "sources": [
+            {
+              "bytes": {
+                "end": 549,
+                "start": 546
+              },
+              "channel": 0
+            }
+          ]
+        }
+      ]
+    },
+    "outcomes": [
+      "Outcome { verdict: Deny, rule: Some(\"git-profile-refuse-result-injection\"), message: Some(\"Blocked: tool result contains instruction-like content\"), findings: [(ToolResult, Finding { detector: \"injection\", severity: Medium, confidence: 0.6, span: None, label: \"heuristic injection signals (score 0.60)\", direction: Input, owasp: Some(\"LLM01:2025 Prompt Injection\"), atlas: Some(\"AML.T0051\") }), (ToolResult, Finding { detector: \"pii.email\", severity: Medium, confidence: 0.9, span: Some(74..96), label: \"email address\", direction: Input, owasp: Some(\"LLM02:2025 Sensitive Information Disclosure\"), atlas: Some(\"AML.T0057\") })], taint: None, provenance_incomplete: false, risk_score: 71, egress_hosts: [], fallback: None, authority_pending: false }"
+    ]
+  }
+]
