@@ -94,8 +94,10 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                    'limits': {key: limits[key] for key in ('memoryMaxBytes', 'pidsMax', 'cpuQuotaMicros', 'wallMillis')},
                    'server_origin': 'pinned-original', 'forced_cleanup': False}
             attempts.append(row)
+            started = time.monotonic()
             def phase(name):
                 row['phase']=name
+                row['elapsed_millis']=int((time.monotonic()-started)*1000)
                 if on_progress is not None:
                     on_progress({'format':'sou142-original-pressure/1','status':'incomplete',
                         'workspace_unchanged':False,'attempts':attempts,
@@ -145,7 +147,8 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                 if any(path.is_dir() for path in delegation.iterdir()):
                     raise ValueError('pressure_root_not_empty')
                 phase('peer-start')
-                peer = q.STOP.Prepared(peer_context, root / 'peer', hold_after=False, trace_string_bytes=4096)
+                peer = q.STOP.Prepared(peer_context, root / 'peer', hold_after=False,
+                                       trace_string_bytes=4096, trace_seccomp=True)
                 # The independent peer needs complete small MCP requests and exact
                 # target open/exec syscalls, not megabyte Git diff writes. The
                 # existing 32 MiB total cap and truncated-frame refusal stay.
@@ -155,7 +158,7 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                     raise ValueError('pressure_peer_dispatched_before_barrier')
                 phase('subject-start')
                 observer = BudgetObserver(delegation, resource, classify_member=classify)
-                command = ['/usr/bin/strace', '-f', '-qq', '-s', '4096', '-e', 'trace=execve',
+                command = ['/usr/bin/strace', '-f', '--seccomp-bpf', '-qq', '-s', '4096', '-e', 'trace=execve',
                     '-o', str(root / 'trace.private'), sys.executable, '-B', str(context.ROOT / 'scripts/pilot-run.py'),
                     '--run', '--selection', str(selection), '--expected-commit', commit,
                     '--state-root', str(state), '--timeout-seconds', '60', '--linux-budget', str(budget)]
@@ -229,7 +232,8 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
                 # A new real prepared run on the reclaimed subject substrate
                 # creates fresh host authority/binding; no grant is replayed.
                 phase('recovery-start')
-                recovery = q.STOP.Prepared(peer_context, root / 'recovery', hold_after=False, trace_string_bytes=4096)
+                recovery = q.STOP.Prepared(peer_context, root / 'recovery', hold_after=False,
+                                           trace_string_bytes=4096, trace_seccomp=True)
                 phase('recovery-finish')
                 recovery_result = finish_useful(recovery)
                 row.update(status='passed' if verified else 'incomplete',
@@ -247,6 +251,12 @@ def qualify(context, selection, paths, profiles, delegation, output, commit, on_
             except (OSError, ValueError, subprocess.TimeoutExpired, IndexError) as error:
                 row['reason'] = 'bounded_calibration_attempt_incomplete'
                 row['error_type']=type(error).__name__
+                if peer is not None:
+                    diagnostic=peer.diagnostic()
+                    row['peer_diagnostic']={key:diagnostic[key] for key in (
+                        'provider_request_count','offered_proposal_count','entry_returncode','entry_status',
+                        'entry_reason','entry_report','budget_status','budget_failed_children',
+                        'budget_unresolved_children') if key in diagnostic}
                 message=str(error)
                 import re,traceback
                 if isinstance(error,ValueError) and re.fullmatch(r'(?:pressure_|stop_)[a-z0-9_]{1,100}',message):

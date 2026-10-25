@@ -152,7 +152,8 @@ class Provider:
 
 
 class Prepared:
-    def __init__(self, context, root, hold_after=True, defer_ready=False, trace_string_bytes=1048576):
+    def __init__(self, context, root, hold_after=True, defer_ready=False, trace_string_bytes=1048576,
+                 trace_seccomp=False):
         self.c, self.root = context, root
         root.mkdir(mode=0o700)
         self.state = root / "state"
@@ -173,6 +174,9 @@ class Prepared:
             str(context.source / "scripts/pilot-run.py"), "--run", "--selection",
             str(context.args.selection), "--expected-commit", context.args.expected_commit,
             "--state-root", str(self.state), "--timeout-seconds", "90"]
+        require(type(trace_seccomp) is bool, "stop_trace_filter_invalid")
+        if trace_seccomp:
+            command.insert(1, '--seccomp-bpf')
         self.budget_path = getattr(context.args, "linux_budget", None)
         if self.budget_path is not None:
             if root.name == "peer":
