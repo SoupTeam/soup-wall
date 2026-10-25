@@ -43,6 +43,7 @@ class Numpy:
 class Tokenizer:
     def __init__(self):
         self.texts = []
+        self.encode_special_tokens = False
         self.no_cut = False
         self.no_pad = False
         self.oversized = None
@@ -55,6 +56,7 @@ class Tokenizer:
 
     def encode(self, text, add_special_tokens):
         assert add_special_tokens
+        assert self.encode_special_tokens, "untrusted text must not emit special token IDs"
         self.texts.append(text)
         ids = [2, *text.encode("utf-8"), 1]
         if text == self.oversized:
@@ -115,7 +117,7 @@ class Protocol(unittest.TestCase):
         return result
 
     def test_exact_utf8_json_digest_and_all_original_views(self):
-        channels = ["Я😀\r\n---\n", "", "Я😀\r\n---\n", "\x00tail\r"]
+        channels = ["Я😀\r\n---\n", "", "Я😀\r\n---\n", "\x00tail\r <bos> <eos> <mask> "]
         raw = '{ "channels" : ' + json.dumps(channels, ensure_ascii=False) + ' }\r\n'
         reviewer, tok, session = engine([.01, .02, .03, .8, .04])
         original = request(input_json=raw, request_id=(1 << 64) - 1)

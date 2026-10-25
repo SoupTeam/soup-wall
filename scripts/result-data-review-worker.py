@@ -277,6 +277,10 @@ class Reviewer:
         self.np = numpy
         tokenizer.no_truncation()
         tokenizer.no_padding()
+        # Caller text is data. Literal <bos>/<eos>/<mask> strings must not
+        # become model control IDs; the post-processor still adds its own
+        # trusted boundary IDs. This changes no original input bytes.
+        tokenizer.encode_special_tokens = True
         inputs = session.get_inputs()
         if (session.get_providers() != ["CPUExecutionProvider"] or len(inputs) != 2
                 or {item.name for item in inputs} != {"input_ids", "attention_mask"}

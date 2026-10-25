@@ -70,6 +70,9 @@ Here "no policy change" means the policy file is unchanged, not that the
 detector's evidence or the resulting decisions are unchanged.
 Any view above 8192 tokens is unsupported. Limits are 64 channels and 1 MiB total
 decoded UTF-8 text; framed requests are limited separately to 2 MiB.
+Literal special-token spellings in caller text are tokenized as data; only the
+tokenizer post-processor inserts trusted model boundary IDs. Original bytes are
+neither removed nor rewritten to achieve this.
 
 `data` requires every view to complete and their maximum injection score to be
 at most 0.05. This is a fixed experimental cutoff, **not a calibrated probability**.
