@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use super::evidence::{EvidenceKind, HeuristicSummary};
 use crate::{Finding, Severity};
 
 static IMPERATIVE: LazyLock<Regex> = LazyLock::new(|| {
@@ -62,38 +63,60 @@ fn filesystem_data_records(text: &str) -> Option<bool> {
 }
 
 /// Count of suspicious delimiter characters commonly used to smuggle instructions.
-fn delimiter_hits(text: &str, data_only: bool) -> usize {
-    text.matches("```").count()
-        + text.matches("###").count()
-        + text
-            .lines()
-            .filter(|line| !data_only || *line != "---")
-            .map(|line| line.matches("---").count())
-            .sum::<usize>()
-        + text.matches("<|").count()
-}
-
-/// Compute a heuristic score in `[0.0, 1.0]`. Pure function so it is trivially testable.
-pub(crate) fn score_text(text: &str) -> f32 {
-    let mut score = 0.0f32;
-
-    let imperatives = IMPERATIVE.find_iter(text).count().min(3);
-    score += 0.30 * imperatives as f32;
-    if LONG_B64.is_match(text) {
-        score += 0.30;
+pub(super) fn analyze(
+    text: &str,
+    mut emit: impl FnMut(EvidenceKind, std::ops::Range<usize>, bool),
+) -> HeuristicSummary {
+    let mut imperatives = 0;
+    for m in IMPERATIVE.find_iter(text) {
+        emit(EvidenceKind::Imperative, m.range(), true);
+        imperatives += 1;
+    }
+    let mut encoded_tokens = 0;
+    for m in LONG_B64.find_iter(text) {
+        emit(EvidenceKind::EncodedLookingToken, m.range(), true);
+        encoded_tokens += 1;
     }
     let records = filesystem_data_records(text);
-    let delimiters = delimiter_hits(text, records == Some(true) && imperatives == 0);
-    score += 0.10 * delimiters.min(3) as f32;
-
-    // A valid wrapper cannot turn unclassified prose into harmless data.
-    // Explicitly retain a Medium result finding for unresolved framed bodies.
-    // Existing policy decides its verdict; no policy threshold is relaxed.
-    if records == Some(false) && delimiters >= 3 {
-        score = score.max(0.5);
+    if records.is_some() {
+        emit(EvidenceKind::FilesystemRecords, 0..text.len(), false);
     }
+    let mut delimiters = 0;
+    for pattern in ["```", "###", "<|"] {
+        for (start, _) in text.match_indices(pattern) {
+            emit(EvidenceKind::Delimiter, start..start + pattern.len(), true);
+            delimiters += 1;
+        }
+    }
+    let mut offset = 0;
+    for line in text.lines() {
+        let active = !(records == Some(true) && imperatives == 0 && line == "---");
+        for (start, _) in line.match_indices("---") {
+            emit(
+                EvidenceKind::Delimiter,
+                offset + start..offset + start + 3,
+                active,
+            );
+            delimiters += usize::from(active);
+        }
+        offset += line.len();
+        if text[offset..].starts_with("\r\n") {
+            offset += 2;
+        } else if text[offset..].starts_with('\n') {
+            offset += 1;
+        }
+    }
+    HeuristicSummary {
+        imperatives,
+        encoded_tokens,
+        delimiters,
+        typed_records: records,
+    }
+}
 
-    score.min(1.0)
+/// The production scanner and diagnostic ledger use this same decomposition.
+pub(crate) fn score_text(text: &str) -> f32 {
+    analyze(text, |_, _, _| {}).score()
 }
 
 /// Emit a single aggregate finding when the heuristic score crosses a floor.

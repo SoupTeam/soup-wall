@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use super::evidence::EvidenceKind;
 use crate::{Finding, Severity};
 
 static TARGET: LazyLock<Regex> = LazyLock::new(|| {
@@ -38,6 +39,11 @@ static SUPERSESSION: LazyLock<Regex> = LazyLock::new(|| {
 
 pub(super) fn scan(text: &str) -> Vec<Finding> {
     let mut findings = Vec::new();
+    visit(text, |_, f| findings.push(f));
+    findings
+}
+
+pub(super) fn visit(text: &str, mut emit: impl FnMut(EvidenceKind, Finding)) {
     for target in TARGET.find_iter(text) {
         let Some(address) = ADDRESS.find(&text[target.end()..]) else {
             continue;
@@ -53,7 +59,7 @@ pub(super) fn scan(text: &str) -> Vec<Finding> {
             continue;
         }
         if let Some(effect) = EFFECT.find(&text[body..end]) {
-            findings.push(Finding::new(
+            emit(EvidenceKind::RecipientAction, Finding::new(
                 "injection", Severity::Medium, 0.65,
                 "MCP result addresses an agent and requests a possible action; contextual attribution unresolved",
             ).with_span(target.start()..body + effect.end()));
@@ -62,12 +68,11 @@ pub(super) fn scan(text: &str) -> Vec<Finding> {
     // A direct second-person authority claim does not require a literal
     // assistant name. Its absence never discounts other evidence.
     for claim in SUPERSESSION.find_iter(text) {
-        findings.push(Finding::new(
+        emit(EvidenceKind::InstructionReplacement, Finding::new(
             "injection", Severity::Medium, 0.65,
             "MCP result claims replacement of the recipient's instructions; contextual attribution unresolved",
         ).with_span(claim.range()));
     }
-    findings
 }
 
 #[cfg(test)]
