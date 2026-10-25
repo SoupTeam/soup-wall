@@ -109,3 +109,12 @@ disappears when the namespace exits. No global mount or quota settings change.
 Evidence includes source-file SHA-256 values, observation UID and environment.
 A WSL fixture is not native Ubuntu acceptance. An unknown small-budget/quota
 observation is retained as unknown, even when the low-space refusal control passes.
+
+For hosted native qualification, dispatch `mcp-real-filesystem.yml` at the PR
+branch with only `capacity_only=true`. This reuses the existing Ubuntu 24.04
+preparation job. All three real preparers run with the opt-in guard, including
+verified reuse and recovery after rejected inputs. Native build and asset
+allowances are declared by the workflow; they are not measured size predictions.
+The focused mode skips daemon and host scenarios and retains capacity plans,
+private-mount observations, test logs and `qualification.json` in the existing
+native preparation artifact. It does not change ordinary CI or admission rules.

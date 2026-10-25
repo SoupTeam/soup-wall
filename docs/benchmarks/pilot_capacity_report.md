@@ -1,7 +1,11 @@
-# Preparation capacity controls
+# Preparation capacity evidence
 
 Task: [SOU-151](https://linear.app/soup-wall/issue/SOU-151/deliver-read-only-preparation-capacity-planning-and-early-low-space).
 Base: `a5c6172b0a13232ae586ed5f02dfa6bd03ad4b98`.
+
+The table and local JSON below describe the initial local controls published in
+`97715670ddcf24acbb1149f736c66a57e0d030a9`. They are historical WSL evidence,
+not a native qualification claim for subsequent changes.
 
 | Local control | Result |
 | --- | --- |
@@ -23,8 +27,10 @@ The small-budget fixture returned `unknown_quota` and `admitted: false`.
 This remains unknown; passing the low-space control does not establish usable
 quota headroom. Sufficient-budget dispatch, destination replacement and phase
 space loss are covered with mocks. No actual download or compiler build was
-performed for this change. Native Ubuntu guarded preparation, real preparation
-and reuse, and hosted CI acceptance remain pending.
+performed in that local snapshot. Native Ubuntu acceptance requires the focused
+`capacity_only=true` preparation run. Its source-bound `qualification.json`,
+three capacity plans, private-mount control and unit logs are retained in the
+workflow artifact; the PR records the run URL and tested commit.
 
 The guard observes an initial declared budget and rechecks the reserve at phase
 boundaries. It does not reserve space or guarantee that remaining work will fit.

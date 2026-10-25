@@ -238,6 +238,77 @@ class DestinationBoundaries(unittest.TestCase):
                     self.assertEqual(caught.exception.report["reason"], "destination_changed")
 
 
+class PreparedEvidence(unittest.TestCase):
+    def driver(self):
+        spec = importlib.util.spec_from_file_location("capacity_driver", ROOT / "scripts/test-pilot-capacity.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def records(self, root):
+        for stage in ("native", "source", "assets"):
+            (root / ("capacity-" + stage + ".json")).write_text(json.dumps({
+                "format": capacity.FORMAT, "status": "sufficient", "admitted": True,
+                "space_reserved": False, "inventory": {"stage": stage}}))
+        for prefix, first_status in (("native-", "prepared-not-qualified"),
+                                     ("source-", "built-not-qualified"), ("", "prepared-not-active")):
+            for label, state in (("first", first_status), ("reused", "reused"), ("recovered", "reused")):
+                (root / (prefix + label + ".json")).write_text(json.dumps({"status": state}))
+
+    def test_prepared_evidence_requires_all_three_real_stage_outcomes(self):
+        module = self.driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.records(root)
+            result = module.prepared_records(root, "a" * 40)
+            self.assertEqual(result["status"], "passed")
+            self.assertEqual(result["source_commit"], "a" * 40)
+            self.assertEqual(len(result["stages"]), 3)
+            (root / "source-reused.json").write_text('{"status":"built-not-qualified"}')
+            with self.assertRaises(ValueError):
+                module.prepared_records(root, "a" * 40)
+
+    def test_unknown_or_falsely_successful_capacity_cannot_be_published_as_pass(self):
+        module = self.driver()
+        for change in ({"status": "unknown", "admitted": False}, {"admitted": False},
+                       {"space_reserved": True}, {"format": "other"}):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.records(root)
+                plan = json.loads((root / "capacity-native.json").read_text())
+                plan.update(change)
+                (root / "capacity-native.json").write_text(json.dumps(plan))
+                with self.assertRaises(ValueError):
+                    module.prepared_records(root, "a" * 40)
+
+    def test_oversized_evidence_is_rejected(self):
+        module = self.driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.records(root)
+            target = root / "capacity-native.json"
+            target.write_bytes(b" " * 65537)
+            with self.assertRaises(ValueError):
+                module.prepared_records(root, "a" * 40)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX links")
+    def test_linked_evidence_is_rejected(self):
+        module = self.driver()
+        for link in ("symlink", "hardlink"):
+            with self.subTest(link=link), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.records(root)
+                target = root / "capacity-native.json"
+                retained = root / "retained.json"
+                target.rename(retained)
+                if link == "symlink":
+                    target.symlink_to(retained)
+                else:
+                    os.link(retained, target)
+                with self.assertRaises(ValueError):
+                    module.prepared_records(root, "a" * 40)
+
+
 class CapacityCLI(unittest.TestCase):
     def test_guarded_refusals_never_enter_preparers_or_write_failure_records(self):
         for name, flag, operation in (("prepare-native-pilot-prerequisites.py", "--prepare", "prepare"),
