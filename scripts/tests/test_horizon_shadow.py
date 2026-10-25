@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import time
+import os
 import unittest
 
 spec=importlib.util.spec_from_file_location('horizon',Path(__file__).parents[1]/'evaluate-horizon-shadow.py')
@@ -62,6 +63,16 @@ class HorizonTests(unittest.TestCase):
         self.assertIsNotNone(worker.owned.p.poll())
         self.assertFalse(any(t.is_alive() for t in worker.readers))
         self.assertLess(time.monotonic()-begun,5)
+
+    @unittest.skipUnless(os.name=='nt','Windows venv launcher regression')
+    def test_memory_is_measured_on_actual_worker(self):
+        worker=h.Worker(Path('.'),memory_test=True)
+        try:
+            ready,memory=worker.receive(5)
+            self.assertEqual(memory['last_sample']['scope'],'model_worker')
+            self.assertEqual(memory['last_sample']['pid'],ready['worker_pid'])
+            self.assertGreater(memory['process_peak_rss_bytes'],32*1024*1024)
+        finally:worker.close()
 
 
 if __name__=='__main__':unittest.main()

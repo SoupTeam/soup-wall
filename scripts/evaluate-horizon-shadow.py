@@ -86,7 +86,7 @@ def worker(assets):
     session=ort.InferenceSession(str(assets/'onnx/model.onnx'), options, providers=['CPUExecutionProvider'])
     # Fixed synthetic warm-up, never a benchmark case; included in startup time.
     infer(session, tokenizer, ['Warm-up: ordinary sample text.'])
-    print(json.dumps({'ready':True,'providers':session.get_providers()}),flush=True)
+    print(json.dumps({'ready':True,'providers':session.get_providers(),'worker_pid':os.getpid()}),flush=True)
     for line in sys.stdin.buffer:
         try:
             request=json.loads(line)
@@ -97,7 +97,7 @@ def worker(assets):
         print(json.dumps(result,ensure_ascii=True,allow_nan=False),flush=True)
 
 
-def rss(process):
+def rss(process, worker_pid=None):
     if os.name != 'nt': return None
     from ctypes import wintypes as w
     class Counters(ctypes.Structure):
@@ -106,15 +106,25 @@ def rss(process):
     value=Counters(); value.cb=ctypes.sizeof(value)
     call=ctypes.WinDLL('psapi').GetProcessMemoryInfo
     call.argtypes=[w.HANDLE,ctypes.c_void_p,w.DWORD]
-    if call(w.HANDLE(int(process._handle)),ctypes.byref(value),value.cb):
-        return {'rss_bytes':value.rss,'process_peak_rss_bytes':value.peak_rss}
-    return None
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    kernel.OpenProcess.argtypes=[w.DWORD,w.BOOL,w.DWORD];kernel.OpenProcess.restype=w.HANDLE
+    kernel.CloseHandle.argtypes=[w.HANDLE]
+    handle=kernel.OpenProcess(0x410,False,worker_pid) if worker_pid else w.HANDLE(int(process._handle))
+    if not handle:return None
+    try:
+        if call(handle,ctypes.byref(value),value.cb):
+            return {'rss_bytes':value.rss,'process_peak_rss_bytes':value.peak_rss,
+                    'scope':'model_worker' if worker_pid else 'launcher_only','pid':worker_pid or process.pid}
+        return None
+    finally:
+        if worker_pid:kernel.CloseHandle(handle)
 
 
 class Worker:
-    def __init__(self,assets,test=False):
+    def __init__(self,assets,test=False,memory_test=False):
         self.events=queue.Queue(maxsize=4)
-        self.owned=owned.OwnedProcess(['--hang-worker'] if test else ['--worker',str(assets)],worker_script=__file__)
+        self.worker_pid=None
+        self.owned=owned.OwnedProcess(['--memory-worker'] if memory_test else ['--hang-worker'] if test else ['--worker',str(assets)],worker_script=__file__)
         self.stderr=[]
         def reader():
             try:
@@ -133,14 +143,19 @@ class Worker:
     def receive(self,seconds):
         start=time.monotonic();peak=0;last=None
         while time.monotonic()-start<seconds:
-            last=rss(self.owned.p)
+            last=rss(self.owned.p,self.worker_pid)
             if last:peak=max(peak,last['process_peak_rss_bytes'])
             try:kind,raw=self.events.get(timeout=min(.02,max(.001,seconds-(time.monotonic()-start))))
             except queue.Empty:
                 if self.owned.p.poll() is not None:raise RuntimeError('worker exited')
                 continue
             if kind!='line':raise ValueError(raw)
-            return json.loads(raw),{'process_peak_rss_bytes':peak,'last_sample':last}
+            value=json.loads(raw)
+            if value.get('ready') and type(value.get('worker_pid')) is int:
+                self.worker_pid=value['worker_pid']
+                last=rss(self.owned.p,self.worker_pid)
+                if last:peak=last['process_peak_rss_bytes']
+            return value,{'process_peak_rss_bytes':peak,'last_sample':last}
         raise TimeoutError('hard per-input deadline')
     def close(self):
         self.owned.close()
@@ -177,7 +192,7 @@ def main(args):
                 started=time.monotonic();current=Worker(args.assets)
                 try:
                     ready,memory=current.receive(120)
-                    if ready!={'ready':True,'providers':['CPUExecutionProvider']}:raise ValueError('invalid readiness')
+                    if not ready.get('worker_pid') or ready.get('ready') is not True or ready.get('providers')!=['CPUExecutionProvider']:raise ValueError('invalid readiness')
                 except BaseException:
                     current.close();current=None;raise
                 persist(args.output/'startups.jsonl',{'elapsed_ms':(time.monotonic()-started)*1000,'memory':memory})
@@ -194,7 +209,7 @@ def main(args):
                 if time.monotonic()-started>BUDGET:raise TimeoutError('deadline elapsed')
                 result['memory']=memory
             except (TimeoutError,RuntimeError,ValueError) as error:
-                memory=rss(current.owned.p)
+                memory=rss(current.owned.p,current.worker_pid)
                 current.close();current=None
                 result={'assessment':'unknown','reason':'timeout' if isinstance(error,TimeoutError) else 'worker_failure',
                         'error':str(error),'coverage_complete':False,'score':None,'memory_at_failure':memory}
@@ -214,6 +229,9 @@ if __name__=='__main__':
     if len(sys.argv)>1 and sys.argv[1]=='--worker':worker(Path(sys.argv[2]))
     elif len(sys.argv)>1 and sys.argv[1]=='--hang-worker':
         sys.stdin.buffer.readline();time.sleep(600)
+    elif len(sys.argv)>1 and sys.argv[1]=='--memory-worker':
+        sys.stdin.buffer.readline();allocation=bytearray(32*1024*1024)
+        print(json.dumps({'ready':True,'worker_pid':os.getpid()}),flush=True);time.sleep(600)
     else:
         parser=argparse.ArgumentParser(description=__doc__)
         for name in ('assets','prepared','output'):parser.add_argument('--'+name,type=Path,required=True)

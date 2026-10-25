@@ -71,3 +71,5 @@ policy/third-party-notices/webpki-roots-1.0.10/LICENSE text eol=lf
 scripts/benchmarks/installed-pilot-workload-v1.json text eol=lf
 scripts/benchmarks/installed-pilot-workload-v2.json text eol=lf
 docs/operations/evidence/sou109-qwen-separated-58.json text eol=lf
+docs/operations/evidence/sou109-horizon-58.json text eol=lf
+scripts/horizon-model-lock.json text eol=lf
