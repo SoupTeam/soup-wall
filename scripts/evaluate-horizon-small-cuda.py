@@ -158,10 +158,17 @@ def worker(assets):
         torch.cuda.synchronize()
         return logits.float().cpu().tolist()
     warmup = tokenizer.encode('Warm-up: ordinary sample text.').ids
-    forward(warmup)
+    # Only the preregistered synthetic warm-up is profiled, never a case retry.
+    with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
+                                           torch.profiler.ProfilerActivity.CUDA]) as profile:
+        forward(warmup)
+    attention_ops = sorted({e.key for e in profile.key_averages() if 'scaled_dot_product' in e.key})
+    cuda_events = sum(str(e.device_type).endswith('CUDA') for e in profile.events())
+    assert attention_ops and cuda_events, 'actual CUDA SDPA execution not observed'
     print(json.dumps({'ready':True,'worker_pid':os.getpid(),'device':str(next(model.parameters()).device),
         'device_name':torch.cuda.get_device_name(0),'capability':torch.cuda.get_device_capability(0),
         'torch':torch.__version__,'cuda_runtime':torch.version.cuda,'attention':model.config._attn_implementation,
+        'warmup_attention_ops':attention_ops,'warmup_cuda_events':cuda_events,
         'dtype':str(next(model.parameters()).dtype),'parameters':sum(p.numel() for p in model.parameters()),
         'loading':{k:list(v) if isinstance(v,set) else v for k,v in info.items()},
         'gpu_allocated_bytes':torch.cuda.memory_allocated(),'gpu_reserved_bytes':torch.cuda.memory_reserved(),
