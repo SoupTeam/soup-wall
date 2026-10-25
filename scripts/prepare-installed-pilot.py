@@ -43,6 +43,15 @@ GIT = load("sou111_git", "install-sou68-git-profile.py")
 PILOT = load("sou111_pilot", "qualify-installed-pilot.py")
 
 
+class InstallerFailure(ValueError):
+    """Finite public failure fields; installer output stays in its private log."""
+
+    def __init__(self, kind, exit_code, private_log):
+        super().__init__(kind + "_installer_failed")
+        self.exit_code = exit_code
+        self.private_log = private_log
+
+
 def require(condition, code):
     if not condition:
         raise ValueError(code)
@@ -435,10 +444,10 @@ def prepare(args):
                                 paths["bwrap"], paths["git_launcher"], python_archive=args.python_archive,
                                 wheelhouse=args.wheelhouse, allow_download=args.allow_download, log=log)
             except subprocess.CalledProcessError as error:
-                diag = ""
-                if log_path.exists():
-                    diag = ": " + log_path.read_text(errors="replace")[-800:].replace("\n", " -- ")
-                raise ValueError(f"{kind}_installer_failed_exit_{error.returncode}{diag}") from None
+                # Never read the log (even a suffix): arbitrary installer output
+                # can contain secrets and the failed log can exceed the size cap.
+                raise InstallerFailure(kind, error.returncode,
+                                       log_path.relative_to(output).as_posix()) from None
         require(log_path.stat().st_size <= 1024 * 1024, kind + "_installer_log_limit")
         if requested:
             bind_profile_workspace(generation / (kind + "-profile"), requested["roots"][kind])
@@ -540,6 +549,10 @@ def main():
         require(re.fullmatch(r"[0-9a-f]{40}", args.expected_commit or ""), "full_expected_commit_required")
         print(json.dumps(prepare(args)))
         return 0
+    except InstallerFailure as error:
+        print(json.dumps({"status": "failed", "reason": str(error),
+                          "exit_code": error.exit_code, "private_log": error.private_log}))
+        return 2
     except (OSError, ValueError, KeyError, TypeError, AttributeError, tarfile.TarError, subprocess.SubprocessError,
             PILOT.Failure) as error:
         print(json.dumps({"status": "failed", "reason": str(error)[:1500]}))

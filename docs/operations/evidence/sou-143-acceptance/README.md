@@ -18,8 +18,7 @@ it never claims successful authentication. Every other exercised runtime case
 has observed authenticated loopback requests. Paid provider calls: zero.
 
 The implementation is ready for TL review. This is not TL approval or final shared
-CI/admission; those remain TL-owned. The evidence-only commit does not change the
-qualified runtime source.
+CI/admission; those remain TL-owned.
 
 - `local-attempts.json` records every retained local attempt, including failures,
   source hashes, elapsed time and private-log hashes. macOS controls do not prove
@@ -35,3 +34,18 @@ loopback-only networking. Runtime inputs are pinned. No paid provider, live
 credentials, private raw process tables, environment arrays, argv, or raw
 subprocess logs are published here. The public files contain only finite
 statuses, counts, hashes and reviewed reason codes.
+
+## Installer failure privacy follow-up
+
+The shared preparation failure path now reports only a finite installer reason,
+integer exit code and a private-log reference relative to `--output`. It does not
+read installer output, including oversized or invalid-UTF-8 logs. The private
+`0600` log is retained; failed preparation cannot publish a completion marker.
+Regression controls call actual `prepare()` and actual `main()` with owned mocked
+installer failures for both installers, positive exits and signal termination.
+
+`installer-failure-privacy.json` records exact script/test identities and isolated
+local checks for this follow-up. Existing native reports qualify only their
+explicit earlier runtime sources; this preparation error-path change has not
+been rerun through native qualification. Prior failures and scope limitations
+remain recorded. Final shared/current-main acceptance is still TL-owned.
