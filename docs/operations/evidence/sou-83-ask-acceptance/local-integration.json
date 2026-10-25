@@ -18,7 +18,7 @@
       "total": 66,
       "explicit_skipped": 19
     },
-    "linux_native": "pending-required-current-source-CI"
+    "linux_native": "focused original Ask/staging and signed SQLite/PostgreSQL controls independently verified; see focused-native.json and focused-managed.json for exact source identities"
   },
   "limits": [
     "macOS cannot establish original Linux execution or publication acceptance",
@@ -318,6 +318,51 @@
       "source_files_sha256": "02fe93de81de995c61339dc2be99e847b5f0a44bbe152a35805fb5c339446d46",
       "source_after_sha256": "02fe93de81de995c61339dc2be99e847b5f0a44bbe152a35805fb5c339446d46",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "managed-driver-syntax",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.15,
+      "source_files_sha256": "df9c3d96916f0d1d06a82c16ad127a039a63ab0aade299ee072a66247ae50285",
+      "source_after_sha256": "df9c3d96916f0d1d06a82c16ad127a039a63ab0aade299ee072a66247ae50285",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "managed-TLS-controls",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.21,
+      "source_files_sha256": "df9c3d96916f0d1d06a82c16ad127a039a63ab0aade299ee072a66247ae50285",
+      "source_after_sha256": "df9c3d96916f0d1d06a82c16ad127a039a63ab0aade299ee072a66247ae50285",
+      "log_sha256": "6f283ee6225d2cef4c0127d95456a6f954c45141c92b97dd89016cb1c630e8f4"
+    },
+    {
+      "label": "ready-python",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 55.69,
+      "source_files_sha256": "0c6944fe92bcea739a962f848f5012f684fefe2cf1d125bd24b9b59f9bc7962d",
+      "source_after_sha256": "0c6944fe92bcea739a962f848f5012f684fefe2cf1d125bd24b9b59f9bc7962d",
+      "log_sha256": "f5113c001f50e2141c4bc6045b035e7157876bd63238d79feeb0a3ca82c5bb8e"
+    },
+    {
+      "label": "ready-docs",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.36,
+      "source_files_sha256": "0c6944fe92bcea739a962f848f5012f684fefe2cf1d125bd24b9b59f9bc7962d",
+      "source_after_sha256": "0c6944fe92bcea739a962f848f5012f684fefe2cf1d125bd24b9b59f9bc7962d",
+      "log_sha256": "a71f2e13eac28394742143846ca6918062d82774d649381cb0464ce5929ac311"
+    },
+    {
+      "label": "ready-fmt",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 1.51,
+      "source_files_sha256": "0c6944fe92bcea739a962f848f5012f684fefe2cf1d125bd24b9b59f9bc7962d",
+      "source_after_sha256": "0c6944fe92bcea739a962f848f5012f684fefe2cf1d125bd24b9b59f9bc7962d",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ],
   "file_sha256": {
@@ -332,12 +377,15 @@
     "crates/agentfw/src/native/approval.rs": "1f09c9d2befeb407ba50ba98d0dcd615cdece67d1e16e54754769f1121657119",
     "crates/agentfw/src/native/approval/tests/selected_tests.rs": "8724fb6556113d086bf71089a7d9efa91f32150d4894e3f1cc5aeb0c02f0f0e3",
     "docs/operations/MCP_FILESYSTEM_CREATE_AUDIT.md": "f89e508d14e2e1007e7f895d2856ed26c62708462e17ed4e435127493c4f73be",
-    "docs/operations/MCP_FILESYSTEM_CREATE_ONLY.md": "d5978c7bab14eb3b54d4433ed86286bd7462215d416f9b7df09004071da8fb66",
+    "docs/operations/MCP_FILESYSTEM_CREATE_ONLY.md": "23884d2bd88235d34ae4fcf2267a9abc45da4d5e3612d82f902aee4447790359",
+    "docs/operations/evidence/sou-83-ask-acceptance/README.md": "08695677c6ecc0e862455c07a8abbef00bd900099ab26f916a0c358223549e69",
+    "docs/operations/evidence/sou-83-ask-acceptance/focused-managed.json": "ca99426299d0d62fd0e248ccb0c48666c0ca47b7f710c09a996c3a8c2e4f41a6",
+    "docs/operations/evidence/sou-83-ask-acceptance/focused-native.json": "27a7759d3e04e9b4943bceef7ed29a494e5b1a2d76b67127becf2e14f7b6b674",
     "scripts/managed-native-transitions.py": "1890d56ee6a07d1526c35e4271deb9857b30f58d4a3d5219069a0f2980249c5c",
     "scripts/tests/test_sou83_create_approval.py": "2ab20b547801cb48c5e60e1c219a052eac6ab1ccf8510129f7cf5ed7d50e7f6a",
     "scripts/verify-sou105-selected-approval.py": "3569b64a16953488a18e0ad5d21bc231bc3b64b6a82a15980d7f18c5c8b7e8f3",
-    "scripts/verify-sou83-create-approval.py": "69f7272ab77d0557c294c76ec92c2318988885e6aedc3f21b0999056ecc851c4",
-    "scripts/verify-sou62-real-mcp.py": "8ad6fd60ea0f9edcdf4b86f44e52bbb3f611d21f58c7dbc0df2d165cbb4860ec"
+    "scripts/verify-sou62-real-mcp.py": "8ad6fd60ea0f9edcdf4b86f44e52bbb3f611d21f58c7dbc0df2d165cbb4860ec",
+    "scripts/verify-sou83-create-approval.py": "69f7272ab77d0557c294c76ec92c2318988885e6aedc3f21b0999056ecc851c4"
   },
   "failed_ci_attempts": [
     {
@@ -375,5 +423,5 @@
       "artifact_sha256": "e447ee424c80816ba6e14742fb0e268932554a4af30de142a0a46c4de43e5817"
     }
   ],
-  "native_staging_controls": "actual pinned original writes followed by test-only post-cleanup perturbation and production validator; execution pending focused Linux qualification"
+  "native_staging_controls": "passed on exact focused source f7a45ed; see focused-native.json. Current-candidate full qualification is required separately."
 }

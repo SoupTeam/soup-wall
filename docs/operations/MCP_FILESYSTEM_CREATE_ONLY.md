@@ -205,8 +205,15 @@ writer under seven trusted output perturbations **after owned child cleanup**:
 extra artifact, wrong bytes, oversized file, external hardlink, symlink, FIFO and
 directory. The production output validator must refuse every case with zero
 visible publications. A task-local seam exists only in the library test binary;
-there is no environment switch or mutation hook in production. The same actual
-verified original output is anonymously staged then dropped, challenged by a
-competing target, and challenged by root replacement before publication. These
+there is no environment switch or mutation hook in production. Each publication boundary receives fresh verified output from a separate actual
+original invocation: anonymous staging then drop, a competing target, and root
+replacement before publication. The output capability is consumed once. These
 controls test output verification/publication independently from upstream
 semantics; they do not claim that the original pinned server itself is malicious.
+
+
+For a focused Draft check, dispatch the existing `mcp-real-filesystem.yml` with
+`original_create_only=true` on the exact branch. It builds the pinned Linux
+runtime, runs real staging/authority tests and the complete create Ask driver.
+The ordinary PR/Ready workflow keeps all filesystem, Git, actual-host and
+native Ubuntu qualification; a focused manual result cannot replace admission.
