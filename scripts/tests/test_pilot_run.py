@@ -79,7 +79,9 @@ class PreparedRunBoundary(unittest.TestCase):
                           storage_failure="storage_full", cleanup="failed",
                           cleanup_storage_failure="storage_permission_denied")
             raise RUN.Failure("owned_process_cleanup_failed")
-        with patch.object(RUN, "selected", return_value=({"source": {}}, {}, {})), \
+        with patch.object(RUN.PREP, "supported_platform"), \
+             patch.object(RUN.SELECTION_LOCK, "hold"), \
+             patch.object(RUN, "selected", return_value=({"source": {}}, {}, {})), \
              patch.object(RUN.PREP.FS, "sha", return_value="a" * 64), \
              patch.object(RUN, "run", side_effect=failed_run), \
              patch.object(sys, "argv", ["pilot-run", "--run", "--selection", "/unused", "--expected-commit", "b" * 40]), \
@@ -91,6 +93,7 @@ class PreparedRunBoundary(unittest.TestCase):
             self.assertEqual(value["cleanup_storage_failure"], "storage_permission_denied")
             self.assertIn("may have occurred", value["effects"])
             self.assertEqual(value["stage"], "run_publication")
+            self.assertEqual(value["audit_retention"], RUN.AUDIT.LIMITS)
 
     def args(self, root):
         return SimpleNamespace(selection=root / "generations" / ("a" * 32) / "selection.json",
@@ -126,9 +129,27 @@ class PreparedRunBoundary(unittest.TestCase):
                 self.assertEqual(RUN.main(), 0)
                 self.assertEqual(json.loads(output.getvalue())["status"], "plan")
                 self.assertFalse(json.loads(output.getvalue())["executed"])
+                self.assertEqual(json.loads(output.getvalue())["audit_retention"], RUN.AUDIT.LIMITS)
                 spawn.assert_not_called()
                 execute.assert_not_called()
             self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
+
+    @unittest.skipUnless(os.name == "posix", "lifetime lock requires POSIX")
+    def test_active_transition_refuses_run_before_selection_or_spawn(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args, _, _, _ = self.fixture(root)
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 RUN.SELECTION_LOCK.hold(root, exclusive=True), \
+                 patch.object(RUN, "selected") as selected, patch.object(RUN, "run") as launch, \
+                 patch.object(sys, "argv", ["pilot-run", "--run", "--selection", str(args.selection),
+                                            "--expected-commit", args.expected_commit]), \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 1)
+                self.assertEqual(json.loads(output.getvalue())["reason"],
+                                 "selected_generation_in_use_or_transitioning")
+                selected.assert_not_called()
+                launch.assert_not_called()
 
     def test_unsupported_platform_reports_a_finite_actionable_reason_without_spawn(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -193,10 +214,11 @@ class PreparedRunBoundary(unittest.TestCase):
             args.port = owner.getsockname()[1]
             before = sorted(str(p) for p in root.rglob("*"))
             with patch.object(RUN.PREP, "supported_platform"), \
-                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "selected", side_effect=AssertionError("slow generation recheck reached")) as recheck, \
                  patch.object(RUN.subprocess, "Popen") as spawn:
                 with self.assertRaisesRegex(RUN.Failure, "occupied_port_refused"):
                     RUN.run(args, {})
+                recheck.assert_not_called()
                 spawn.assert_not_called()
             self.assertEqual(owner.getsockname()[1], args.port)
             self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
