@@ -1717,10 +1717,20 @@ async fn original_create_approval_cannot_rescue_unknown_mixed_or_understated_cla
                 "content":format!("classifier-fault-{marker}")}}}),
             )
             .await;
-        assert!(
-            fixture.host_reply().await.get("error").is_some(),
-            "{marker}"
-        );
+        let refused = fixture.host_reply().await;
+        assert_eq!(refused["id"], "unclassified-write");
+        let reason = if matches!(marker, "duplicate" | "invalid") {
+            assert_eq!(refused["error"]["code"], -32603, "{marker}: {refused}");
+            "classifier_invalid"
+        } else if marker == "mixed" {
+            "classifier_deny"
+        } else {
+            "classifier_ask"
+        };
+        if !matches!(marker, "duplicate" | "invalid") {
+            assert_eq!(refused["result"]["isError"], true, "{marker}: {refused}");
+        }
+        assert!(refused.to_string().contains(reason), "{marker}: {refused}");
         assert_eq!(
             std::fs::read_dir(fixture.boundary_home.path().join("workspace"))
                 .unwrap()
