@@ -221,19 +221,21 @@ def stage_distributions(rows):
 
 
 def read_events(path):
-    rows = []
+    """Read driver JSONL rows or tab-separated `source<TAB>event` rows; the source column names the host launch."""
+    rows, launches = [], {}
     if path and Path(path).is_file():
         for line in Path(path).read_text(errors='replace').splitlines():
-            line = line.split('\t', 1)[-1]
-            if line.startswith('{'):
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    continue
-                if 'event' in row and 'launch' in row:
-                    rows.append(row)
-                elif row.get('event') in EVENT_NAMES:
-                    rows.append({'launch': 0, 'event': row})
+            origin, rest = line.split('\t', 1) if '\t' in line else ('', line)
+            if not rest.startswith('{'):
+                continue
+            try:
+                row = json.loads(rest)
+            except ValueError:
+                continue
+            if 'event' in row and 'launch' in row:
+                rows.append(row)
+            elif row.get('event') in EVENT_NAMES:
+                rows.append({'launch': launches.setdefault(origin, len(launches)), 'event': row})
     return rows
 
 

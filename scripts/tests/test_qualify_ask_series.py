@@ -66,6 +66,23 @@ class Watching(unittest.TestCase):
             self.assertEqual(len(sink.getvalue().splitlines()), 2)
 
 
+class ReadingEvents(unittest.TestCase):
+    def test_tab_separated_rows_group_by_source_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'events.tsv'
+            lines = []
+            for source in ('/x/a/host.stderr.private', '/x/b/host.stderr.private'):
+                for _ in range(2):
+                    lines.append(source + '\t' + json.dumps(stage('git', 'package_tree', 10)))
+            lines.append('/x/a/trace.private\t' + json.dumps({'write': 'timing'}))
+            path.write_text('\n'.join(lines) + '\n')
+            rows = SERIES.read_events(path)
+            self.assertEqual([r['launch'] for r in rows], [0, 0, 1, 1])
+            passes = SERIES.stage_distributions(rows)['asset_verification_by_pass']['git']['package_tree']
+            self.assertEqual(sorted(passes), ['pass_1', 'pass_2'])
+            self.assertEqual(passes['pass_1']['n'], 2)
+
+
 class Summaries(unittest.TestCase):
     def test_stage_passes_and_first_pass_proxy(self):
         rows = []
