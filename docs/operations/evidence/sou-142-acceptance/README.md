@@ -40,4 +40,17 @@ unconfirmed same-name leaf is retained as unresolved rather than swept or
 reported successfully cleaned. The four actual collector-parent-loss controls
 are covered; original startup waits for descriptor adoption acknowledgement.
 
-The final documentation/evidence commit changes no qualified runtime code.
+## Installer failure privacy follow-up
+
+The shared preparation failure path now reports only a finite installer reason,
+integer exit code and a private-log reference relative to `--output`. It does not
+read installer output, including oversized or invalid-UTF-8 logs. The private
+`0600` log is retained; failed preparation cannot publish a completion marker.
+Regression controls call actual `prepare()` and actual `main()` with owned mocked
+installer failures for both installers, positive exits and signal termination.
+
+`installer-failure-privacy.json` records exact script/test identities and isolated
+local checks for this follow-up. Existing native reports qualify only their
+explicit earlier runtime sources; this preparation error-path change has not
+been rerun through native qualification. Prior failures and scope limitations
+remain recorded. Final shared/current-main acceptance is still TL-owned.
