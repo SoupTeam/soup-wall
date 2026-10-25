@@ -23,6 +23,7 @@ def enabled(body, **overrides):
         "github.event.inputs.audit_retention_only": "",
         "github.event.inputs.storage_recovery_only": "",
         "github.event.inputs.operator_results_only": "",
+        "github.event.inputs.capacity_only": "",
     }
     values.update(overrides)
     condition = next(line.strip()[4:] for line in body.splitlines() if line.strip().startswith("if: "))
@@ -106,6 +107,17 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 self.assertIn("scripts/qualify-pilot-storage.py --run", body)
                 self.assertIn('$RUNNER_TEMP/pilot-storage-qualification', body)
                 self.assertIn('${{ runner.temp }}/pilot-storage-qualification/**', text)
+
+    def test_capacity_dispatch_cannot_claim_host_or_audit_qualification(self):
+        context = {"github.event_name": "workflow_dispatch", "github.event.inputs.capacity_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                self.assertFalse(enabled(step(text, FULL), **context))
+                self.assertFalse(enabled(step(text, AUDIT), **context))
+                preparation = step(text, "Verify guarded preparation outcomes")
+                self.assertTrue(enabled(preparation, **context))
+                self.assertFalse(enabled(preparation))
+                self.assertIn("--prepared-records", preparation)
 
 
 if __name__ == "__main__":
