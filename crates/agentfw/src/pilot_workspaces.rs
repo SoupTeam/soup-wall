@@ -227,7 +227,18 @@ mod linux {
     struct Stamp(u64, u64, u64, u32, u32, u32, i64, i64, i64, i64);
 
     fn stamp(m: &Metadata) -> Stamp {
-        Stamp(m.dev(), m.ino(), m.len(), m.mode(), m.uid(), m.gid(), m.mtime(), m.mtime_nsec(), m.ctime(), m.ctime_nsec())
+        Stamp(
+            m.dev(),
+            m.ino(),
+            m.len(),
+            m.mode(),
+            m.uid(),
+            m.gid(),
+            m.mtime(),
+            m.mtime_nsec(),
+            m.ctime(),
+            m.ctime_nsec(),
+        )
     }
 
     fn anchored(file: &File) -> PathBuf {
@@ -235,9 +246,20 @@ mod linux {
     }
 
     fn open_directory(parent: i32, name: &Path) -> Result<File, Reason> {
-        let name = CString::new(name.as_os_str().as_bytes()).map_err(|_| Reason::CanonicalRootRequired)?;
+        let name =
+            CString::new(name.as_os_str().as_bytes()).map_err(|_| Reason::CanonicalRootRequired)?;
         // No helper and no symlink following on the selected component.
-        let fd = unsafe { libc::openat(parent, name.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK) };
+        let fd = unsafe {
+            libc::openat(
+                parent,
+                name.as_ptr(),
+                libc::O_RDONLY
+                    | libc::O_DIRECTORY
+                    | libc::O_NOFOLLOW
+                    | libc::O_CLOEXEC
+                    | libc::O_NONBLOCK,
+            )
+        };
         if fd < 0 {
             return Err(Reason::InspectionIoUnavailable);
         }
@@ -251,17 +273,28 @@ mod linux {
     }
 
     fn snapshot(pin: &File) -> Result<BTreeMap<PathBuf, Stamp>, Reason> {
-        fn walk(pin: &File, relative: &Path, depth: usize, bytes: &mut usize, rows: &mut BTreeMap<PathBuf, Stamp>) -> Result<(), Reason> {
+        fn walk(
+            pin: &File,
+            relative: &Path,
+            depth: usize,
+            bytes: &mut usize,
+            rows: &mut BTreeMap<PathBuf, Stamp>,
+        ) -> Result<(), Reason> {
             if depth > MAX_DEPTH || rows.len() >= MAX_ENTRIES {
                 return Err(Reason::InspectionBoundExceeded);
             }
-            let before = pin.metadata().map_err(|_| Reason::InspectionIoUnavailable)?;
+            let before = pin
+                .metadata()
+                .map_err(|_| Reason::InspectionIoUnavailable)?;
             rows.insert(relative.to_owned(), stamp(&before));
             for entry in fs::read_dir(anchored(pin)).map_err(|_| Reason::InspectionIoUnavailable)? {
                 let entry = entry.map_err(|_| Reason::InspectionIoUnavailable)?;
                 let rel = relative.join(entry.file_name());
                 *bytes += rel.as_os_str().len();
-                if rows.len() >= MAX_ENTRIES || *bytes > MAX_PATH_BYTES || rel.as_os_str().len() > 4096 {
+                if rows.len() >= MAX_ENTRIES
+                    || *bytes > MAX_PATH_BYTES
+                    || rel.as_os_str().len() > 4096
+                {
                     return Err(Reason::InspectionBoundExceeded);
                 }
                 let m = fs::symlink_metadata(entry.path()).map_err(|_| Reason::SourceChanged)?;
@@ -308,7 +341,9 @@ mod linux {
             for component in root.components().skip(1) {
                 pin = open_directory(pin.as_raw_fd(), Path::new(component.as_os_str()))?;
             }
-            let m = pin.metadata().map_err(|_| Reason::InspectionIoUnavailable)?;
+            let m = pin
+                .metadata()
+                .map_err(|_| Reason::InspectionIoUnavailable)?;
             if m.uid() != unsafe { libc::geteuid() } || m.mode() & 0o022 != 0 {
                 return Err(Reason::OwnedPrivateRootRequired);
             }
@@ -316,12 +351,20 @@ mod linux {
                 return Err(Reason::SourceChanged);
             }
             let entries = snapshot(&pin)?;
-            Ok(Self { root: root.to_owned(), pin, entries })
+            Ok(Self {
+                root: root.to_owned(),
+                pin,
+                entries,
+            })
         }
 
         fn unchanged(&self) -> Result<(), Reason> {
-            if crate::sandbox::validate_workspace_path(&self.root).ok().as_ref() != Some(&self.root)
-                || stamp(&fs::symlink_metadata(&self.root).map_err(|_| Reason::SourceChanged)?) != self.entries[Path::new("")]
+            if crate::sandbox::validate_workspace_path(&self.root)
+                .ok()
+                .as_ref()
+                != Some(&self.root)
+                || stamp(&fs::symlink_metadata(&self.root).map_err(|_| Reason::SourceChanged)?)
+                    != self.entries[Path::new("")]
                 || snapshot(&self.pin).map_err(|_| Reason::SourceChanged)? != self.entries
             {
                 return Err(Reason::SourceChanged);
@@ -335,24 +378,56 @@ mod linux {
         // are never echoed (I/O paths and config text may be sensitive).
         for error in error.chain() {
             let reason = match error.to_string().as_str() {
-                "Git requires a standalone non-bare repository" | "git_clone_standalone_required" => Reason::GitStandaloneRequired,
+                "Git requires a standalone non-bare repository"
+                | "git_clone_standalone_required" => Reason::GitStandaloneRequired,
                 "git_attributes_unsupported" => Reason::GitAttributesUnsupported,
                 "git_submodules_unsupported" => Reason::GitSubmodulesUnsupported,
                 "git_worktree_indirection_unsupported" => Reason::GitWorktreeIndirectionUnsupported,
                 "git_object_indirection_unsupported" => Reason::GitObjectIndirectionUnsupported,
-                "nested Git attributes and submodule declarations are unsupported" => Reason::GitNestedAttributesOrSubmodules,
+                "nested Git attributes and submodule declarations are unsupported" => {
+                    Reason::GitNestedAttributesOrSubmodules
+                }
                 "active Git hooks are unsupported" => Reason::GitHooksUnsupported,
-                "shallow repositories require explicit opt-in" => Reason::GitShallowRequiresSelectedProfile,
-                "Git repository depth limit" | "Git repository entry limit" | "Git config exceeds limit" | "git_clone_depth_limit" | "git_clone_entry_limit" | "git_clone_control_bounds" | "git_clone_index_bounds" | "git_clone_attributes_bounds" | "git_clone_config_bounds" | "git_clone_path_bounds" => Reason::InspectionBoundExceeded,
-                "Git config must be a regular file, not a link or special file" | "Git config changed to a special file" | "Git repository links and special files are unsupported" | "git_clone_file_type" => Reason::UnsafeLinkOrSpecialFile,
-                "only the bounded core Git config is supported" | "Git config section required" | "invalid Git config" | "unsupported Git configuration" | "git_clone_config_syntax" | "git_clone_config_section" | "git_clone_config_duplicate" | "git_clone_config_value" | "git_clone_config_required" => Reason::GitConfigUnsupported,
-                "git_clone_metadata_unsupported" | "git_clone_attributes_syntax" | "git_clone_attributes_pattern" | "git_clone_attributes_token" => Reason::GitLocalMetadataUnsupported,
+                "shallow repositories require explicit opt-in" => {
+                    Reason::GitShallowRequiresSelectedProfile
+                }
+                "Git repository depth limit"
+                | "Git repository entry limit"
+                | "Git config exceeds limit"
+                | "git_clone_depth_limit"
+                | "git_clone_entry_limit"
+                | "git_clone_control_bounds"
+                | "git_clone_index_bounds"
+                | "git_clone_attributes_bounds"
+                | "git_clone_config_bounds"
+                | "git_clone_path_bounds" => Reason::InspectionBoundExceeded,
+                "Git config must be a regular file, not a link or special file"
+                | "Git config changed to a special file"
+                | "Git repository links and special files are unsupported"
+                | "git_clone_file_type" => Reason::UnsafeLinkOrSpecialFile,
+                "only the bounded core Git config is supported"
+                | "Git config section required"
+                | "invalid Git config"
+                | "unsupported Git configuration"
+                | "git_clone_config_syntax"
+                | "git_clone_config_section"
+                | "git_clone_config_duplicate"
+                | "git_clone_config_value"
+                | "git_clone_config_required" => Reason::GitConfigUnsupported,
+                "git_clone_metadata_unsupported"
+                | "git_clone_attributes_syntax"
+                | "git_clone_attributes_pattern"
+                | "git_clone_attributes_token" => Reason::GitLocalMetadataUnsupported,
                 "git_clone_identity_changed" => Reason::SourceChanged,
                 _ => continue,
             };
             return reason;
         }
-        if error.chain().any(|cause| cause.downcast_ref::<std::io::Error>().is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound)) {
+        if error.chain().any(|cause| {
+            cause
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound)
+        }) {
             Reason::GitStandaloneRequired
         } else if error.chain().any(|cause| cause.is::<std::io::Error>()) {
             Reason::InspectionIoUnavailable
@@ -361,7 +436,13 @@ mod linux {
         }
     }
 
-    pub(super) fn run(report: &mut Report, filesystem: &Path, git: &Path, selected: GitProfileKind, between_checks: impl FnOnce()) {
+    pub(super) fn run(
+        report: &mut Report,
+        filesystem: &Path,
+        git: &Path,
+        selected: GitProfileKind,
+        between_checks: impl FnOnce(),
+    ) {
         let mut captures = Vec::new();
         for (role, root) in [("filesystem", filesystem), ("git", git)] {
             match Capture::begin(root) {
@@ -369,20 +450,32 @@ mod linux {
                     report.record(role, "canonical_owned_root_and_bounded_tree", Ok(()));
                     captures.push((role, capture));
                 }
-                Err(reason) => report.record(role, "canonical_owned_root_and_bounded_tree", Err(reason)),
+                Err(reason) => {
+                    report.record(role, "canonical_owned_root_and_bounded_tree", Err(reason))
+                }
             }
         }
         if let Some((_, capture)) = captures.iter().find(|(role, _)| *role == "git") {
             let root = anchored(&capture.pin);
             let result = match selected {
-                GitProfileKind::V1 => server_profile::git::validate_repository(&root).map_err(|e| validator_reason(&e)),
-                GitProfileKind::LocalClone => server_profile::git_local_clone::validate_repository(&root).map_err(|e| validator_reason(&e)),
-                GitProfileKind::LocalRefs | GitProfileKind::Shallow => Err(Reason::ProfileNotInspectedOffline),
+                GitProfileKind::V1 => server_profile::git::validate_repository(&root)
+                    .map_err(|e| validator_reason(&e)),
+                GitProfileKind::LocalClone => {
+                    server_profile::git_local_clone::validate_repository(&root)
+                        .map_err(|e| validator_reason(&e))
+                }
+                GitProfileKind::LocalRefs | GitProfileKind::Shallow => {
+                    Err(Reason::ProfileNotInspectedOffline)
+                }
             };
             let layout_passed = result.is_ok();
             report.record("git", "selected_production_repository_validator", result);
             if layout_passed && matches!(selected, GitProfileKind::LocalClone) {
-                report.record("git", "index_and_object_semantics", Err(Reason::SelectedProfileRequiresRuntimeProof));
+                report.record(
+                    "git",
+                    "index_and_object_semantics",
+                    Err(Reason::SelectedProfileRequiresRuntimeProof),
+                );
             }
         }
         between_checks();
@@ -408,7 +501,11 @@ mod tests {
         fs::set_permissions(&fs_root, fs::Permissions::from_mode(0o700)).unwrap();
         fs::set_permissions(&git_root, fs::Permissions::from_mode(0o700)).unwrap();
         fs::write(fs_root.join("note"), "synthetic untrusted content").unwrap();
-        fs::write(git_root.join(".git/config"), "[core]\nbare = false\nrepositoryformatversion = 0\n").unwrap();
+        fs::write(
+            git_root.join(".git/config"),
+            "[core]\nbare = false\nrepositoryformatversion = 0\n",
+        )
+        .unwrap();
         fs::write(git_root.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
         (temp, fs_root, git_root)
     }
@@ -425,7 +522,9 @@ mod tests {
         assert_eq!(report.state, State::Supported);
         assert_eq!(report.status, "supported-read-only");
         assert_eq!(report.checks.len(), 5);
-        assert!(!report.executed && !report.launch_authorized && !report.runtime_protection_verified);
+        assert!(
+            !report.executed && !report.launch_authorized && !report.runtime_protection_verified
+        );
         assert!(report.revalidate_at_launch);
         assert_eq!(report.profile.validator_sha256.len(), 64);
         let encoded = serde_json::to_string(&report).unwrap();
@@ -467,9 +566,18 @@ mod tests {
             (".gitmodules", Reason::GitSubmodulesUnsupported),
             (".git/commondir", Reason::GitWorktreeIndirectionUnsupported),
             (".git/gitdir", Reason::GitWorktreeIndirectionUnsupported),
-            (".git/config.worktree", Reason::GitWorktreeIndirectionUnsupported),
-            (".git/objects/info/alternates", Reason::GitObjectIndirectionUnsupported),
-            (".git/objects/info/http-alternates", Reason::GitObjectIndirectionUnsupported),
+            (
+                ".git/config.worktree",
+                Reason::GitWorktreeIndirectionUnsupported,
+            ),
+            (
+                ".git/objects/info/alternates",
+                Reason::GitObjectIndirectionUnsupported,
+            ),
+            (
+                ".git/objects/info/http-alternates",
+                Reason::GitObjectIndirectionUnsupported,
+            ),
             (".git/shallow", Reason::GitShallowRequiresSelectedProfile),
         ] {
             let (_temp, files, git) = fixture();
@@ -485,11 +593,16 @@ mod tests {
     fn gitfile_and_absent_git_are_not_supported() {
         let (_temp, files, git) = fixture();
         fs::rename(git.join(".git"), git.join("saved-git")).unwrap();
-        assert!(has(&inspect(&files, &git, GitProfileKind::V1), Reason::GitStandaloneRequired));
+        assert!(has(
+            &inspect(&files, &git, GitProfileKind::V1),
+            Reason::GitStandaloneRequired
+        ));
         fs::write(git.join(".git"), "gitdir: /private/external\n").unwrap();
         let report = inspect(&files, &git, GitProfileKind::V1);
         assert!(has(&report, Reason::GitStandaloneRequired));
-        assert!(!serde_json::to_string(&report).unwrap().contains("/private/external"));
+        assert!(!serde_json::to_string(&report)
+            .unwrap()
+            .contains("/private/external"));
     }
 
     #[test]
@@ -497,23 +610,38 @@ mod tests {
         let (_temp, files, git) = fixture();
         fs::create_dir(git.join("nested")).unwrap();
         fs::write(git.join("nested/.gitattributes"), "* filter=custom").unwrap();
-        assert!(has(&inspect(&files, &git, GitProfileKind::V1), Reason::GitNestedAttributesOrSubmodules));
+        assert!(has(
+            &inspect(&files, &git, GitProfileKind::V1),
+            Reason::GitNestedAttributesOrSubmodules
+        ));
         fs::remove_file(git.join("nested/.gitattributes")).unwrap();
         fs::create_dir(git.join(".git/hooks")).unwrap();
         fs::write(git.join(".git/hooks/pre-commit"), "exit 99").unwrap();
-        assert!(has(&inspect(&files, &git, GitProfileKind::V1), Reason::GitHooksUnsupported));
+        assert!(has(
+            &inspect(&files, &git, GitProfileKind::V1),
+            Reason::GitHooksUnsupported
+        ));
     }
 
     #[test]
     fn links_special_files_and_shared_permissions_refuse() {
         let (temp, files, git) = fixture();
         symlink(temp.path(), git.join("outside-link")).unwrap();
-        assert!(has(&inspect(&files, &git, GitProfileKind::V1), Reason::UnsafeLinkOrSpecialFile));
+        assert!(has(
+            &inspect(&files, &git, GitProfileKind::V1),
+            Reason::UnsafeLinkOrSpecialFile
+        ));
         fs::remove_file(git.join("outside-link")).unwrap();
         fs::set_permissions(files.join("note"), fs::Permissions::from_mode(0o666)).unwrap();
-        assert!(has(&inspect(&files, &git, GitProfileKind::V1), Reason::SharedWriteAccess));
+        assert!(has(
+            &inspect(&files, &git, GitProfileKind::V1),
+            Reason::SharedWriteAccess
+        ));
         fs::set_permissions(&files, fs::Permissions::from_mode(0o777)).unwrap();
-        assert!(has(&inspect(&files, &git, GitProfileKind::V1), Reason::OwnedPrivateRootRequired));
+        assert!(has(
+            &inspect(&files, &git, GitProfileKind::V1),
+            Reason::OwnedPrivateRootRequired
+        ));
     }
 
     #[test]
@@ -523,7 +651,10 @@ mod tests {
         let (_temp, files, git) = fixture();
         let name = CString::new(files.join("pipe").as_os_str().as_bytes()).unwrap();
         assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
-        assert!(has(&inspect(&files, &git, GitProfileKind::V1), Reason::UnsafeLinkOrSpecialFile));
+        assert!(has(
+            &inspect(&files, &git, GitProfileKind::V1),
+            Reason::UnsafeLinkOrSpecialFile
+        ));
     }
 
     #[test]
@@ -548,7 +679,10 @@ mod tests {
         assert_eq!(report.state, State::Unavailable);
         assert!(has(&report, Reason::InspectionBoundExceeded));
         fs::write(git.join(".git/config"), "x".repeat(8193)).unwrap();
-        assert!(has(&inspect(&git, &git, GitProfileKind::V1), Reason::InspectionBoundExceeded));
+        assert!(has(
+            &inspect(&git, &git, GitProfileKind::V1),
+            Reason::InspectionBoundExceeded
+        ));
     }
 
     #[test]
@@ -569,7 +703,9 @@ mod tests {
             fs::create_dir(&files).unwrap();
         });
         assert_eq!(report.state, State::Unavailable);
-        assert!(report.checks.iter().any(|c| c.role == "git" && c.check == "source_stable_across_inspection" && c.state == State::Supported));
+        assert!(report.checks.iter().any(|c| c.role == "git"
+            && c.check == "source_stable_across_inspection"
+            && c.state == State::Supported));
     }
 
     #[test]
@@ -580,8 +716,13 @@ mod tests {
         assert_eq!(report.state, State::Conditional);
         assert!(!report.is_supported());
         assert!(has(&report, Reason::SelectedProfileRequiresRuntimeProof));
-        assert!(!serde_json::to_string(&report).unwrap().contains("synthetic-token"));
-        assert_eq!(inspect(&files, &git, GitProfileKind::V1).state, State::Unsupported);
+        assert!(!serde_json::to_string(&report)
+            .unwrap()
+            .contains("synthetic-token"));
+        assert_eq!(
+            inspect(&files, &git, GitProfileKind::V1).state,
+            State::Unsupported
+        );
     }
 
     #[test]
@@ -600,8 +741,14 @@ mod tests {
 mod platform_tests {
     #[test]
     fn unsupported_host_is_structured_unavailable_without_inspecting_paths() {
-        let report = super::inspect(std::path::Path::new("private-root"), std::path::Path::new("private-git"), super::GitProfileKind::V1);
+        let report = super::inspect(
+            std::path::Path::new("private-root"),
+            std::path::Path::new("private-git"),
+            super::GitProfileKind::V1,
+        );
         assert_eq!(report.state, super::State::Unavailable);
-        assert!(!serde_json::to_string(&report).unwrap().contains("private-root"));
+        assert!(!serde_json::to_string(&report)
+            .unwrap()
+            .contains("private-root"));
     }
 }

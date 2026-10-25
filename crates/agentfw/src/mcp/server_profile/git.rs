@@ -228,11 +228,20 @@ pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> an
         (".gitattributes", "git_attributes_unsupported"),
         (".git/commondir", "git_worktree_indirection_unsupported"),
         (".git/gitdir", "git_worktree_indirection_unsupported"),
-        (".git/config.worktree", "git_worktree_indirection_unsupported"),
+        (
+            ".git/config.worktree",
+            "git_worktree_indirection_unsupported",
+        ),
         (".git/worktrees", "git_worktree_indirection_unsupported"),
         (".git/modules", "git_submodules_unsupported"),
-        (".git/objects/info/alternates", "git_object_indirection_unsupported"),
-        (".git/objects/info/http-alternates", "git_object_indirection_unsupported"),
+        (
+            ".git/objects/info/alternates",
+            "git_object_indirection_unsupported",
+        ),
+        (
+            ".git/objects/info/http-alternates",
+            "git_object_indirection_unsupported",
+        ),
         (".git/info/attributes", "git_attributes_unsupported"),
     ] {
         ensure!(

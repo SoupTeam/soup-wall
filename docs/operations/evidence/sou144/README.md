@@ -34,3 +34,14 @@ against the exact Draft PR commit. Retain build identity and all failed/incomple
 attempts, then append the resulting exact-source evidence. Final shared CI,
 admission and main integration remain TL-owned. No shared CI configuration was
 changed or heavyweight matrix dispatched by this increment.
+
+## Draft formatting follow-up
+
+Implementation source: `59b6a24bc9f1a0495cabf21d9158a383082c4d51`.
+The existing [Draft CI run](https://github.com/SoupTeam/soup-wall/actions/runs/40207696526)
+parsed the Rust source but failed the formatting check. Its 30 rustfmt hunks
+were applied to the three affected Rust files, without installing local tools
+or changing shared CI. This is formatting feedback, not a compilation/test pass.
+Local documentation check: 277 Markdown files / 990 links / zero errors.
+The subsequent Draft result must be checked separately; Linux compilation and
+runtime witness blockers remain until explicitly executed.

@@ -65,7 +65,10 @@ pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
         args.git_profile_kind,
     );
     println!("{}", serde_json::to_string(&report)?);
-    ensure!(report.is_supported(), "workspace compatibility not established; see reason codes");
+    ensure!(
+        report.is_supported(),
+        "workspace compatibility not established; see reason codes"
+    );
     Ok(())
 }
 
