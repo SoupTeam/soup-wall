@@ -8,7 +8,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub(crate) struct Guard {
     parent: UnixStream,
@@ -22,7 +22,6 @@ impl Guard {
             include_bytes!("child_environment.cjs").as_slice(),
         ].concat();
         let (parent, child) = UnixStream::pair()?;
-        parent.set_read_timeout(Some(Duration::from_secs(3)))?;
         let config = private.join("host-bun.toml");
         std::fs::write(&config, b"")?;
         command
@@ -51,18 +50,39 @@ impl Guard {
         Ok(Self { parent, child })
     }
 
-    pub(crate) fn confirm(self) -> Result<()> {
+    pub(crate) fn confirm_until(self, host_deadline: Instant) -> Result<()> {
         let Self { mut parent, child } = self;
         drop(child);
+        // Readiness consumes the existing host budget. Neither partial reads
+        // nor waiting for EOF may restart that budget or the startup cap.
+        let deadline = host_deadline.min(Instant::now() + Duration::from_secs(3));
+        let read = |parent: &mut UnixStream, bytes: &mut [u8]| -> Result<usize> {
+            loop {
+                let remaining = deadline
+                    .checked_duration_since(Instant::now())
+                    .filter(|value| !value.is_zero())
+                    .ok_or_else(|| anyhow::anyhow!("provider_child_environment_unavailable"))?;
+                parent.set_read_timeout(Some(remaining))?;
+                match parent.read(bytes) {
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                    result => return Ok(result?),
+                }
+            }
+        };
         let mut ready = [0; 19];
-        parent.read_exact(&mut ready)?;
+        let mut offset = 0;
+        while offset < ready.len() {
+            let count = read(&mut parent, &mut ready[offset..])?;
+            ensure!(count > 0, "provider_child_environment_unavailable");
+            offset += count;
+        }
         ensure!(
             &ready == b"sw-provider-ready/1",
             "provider_child_environment_unavailable"
         );
         let mut tail = [0];
         ensure!(
-            parent.read(&mut tail)? == 0,
+            read(&mut parent, &mut tail)? == 0,
             "provider_child_environment_unavailable"
         );
         Ok(())
@@ -110,8 +130,25 @@ os.write(fd,b'sw-provider-ready/1');os.close(fd)
                 .ends_with(include_bytes!("child_environment.cjs")));
             assert!(!startup.contains("owned-marker-test"));
             let mut child = command.spawn().unwrap();
-            assert_eq!(guard.confirm().is_ok(), installed);
+            assert_eq!(
+                guard
+                    .confirm_until(Instant::now() + Duration::from_secs(3))
+                    .is_ok(),
+                installed
+            );
             assert!(child.wait().unwrap().success());
         }
+    }
+
+    #[test]
+    fn even_complete_ready_and_eof_cannot_rescue_an_expired_host_budget() {
+        use std::io::Write;
+        let (parent, mut child) = UnixStream::pair().unwrap();
+        let deadline = Instant::now();
+        child.write_all(b"sw-provider-ready/1").unwrap();
+        let guard = Guard { parent, child };
+        // The complete valid message and EOF are already available. The old
+        // readiness check accepted them and then started a fresh host timer.
+        assert!(guard.confirm_until(deadline).is_err());
     }
 }

@@ -67,6 +67,11 @@ exceptions or subprocess output. Ordinary state is removed; authenticated stop
 state retains its existing recovery semantics. No support artifact should contain
 raw successful-exec environment traces.
 
+The host execution deadline starts before spawn and includes the guard's readiness
+exchange. The guard keeps its existing three-second startup cap, bounded further
+by the host's remaining budget. Partial reads and EOF cannot restart either
+deadline; a late acknowledgement never grants a fresh execution interval.
+
 ## Qualification
 
 Local boundary controls:

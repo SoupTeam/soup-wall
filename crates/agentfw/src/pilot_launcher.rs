@@ -1777,13 +1777,16 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     if let Some(budget) = &budget {
         budget.verify_root()?;
     }
+    let timeout = config.timeout;
+    let deadline = tokio::time::Instant::now() + timeout;
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
     let child_pid = child.id();
     drop(cmd);
     #[cfg(target_os = "linux")]
-    let child_environment_ready = child_environment.map(|guard| guard.confirm()).transpose();
+    let child_environment_ready = child_environment
+        .map(|guard| guard.confirm_until(deadline.into_std()))
+        .transpose();
 
-    let timeout = config.timeout;
     let home_path = config.home_path.clone();
     let is_mock = config.mock_daemon_token.is_some();
     let initial_instance = instance_id.clone();
@@ -1795,18 +1798,30 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let exit_status = rt.block_on(async {
         #[cfg(target_os = "linux")]
         if child_environment_ready.is_err() {
+            let host_deadline_expired = tokio::time::Instant::now() >= deadline;
             let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
             host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
             if let Some(waiter) = cleanup_waiter.take() {
                 let _ = tokio::task::spawn_blocking(waiter).await;
             }
+            if host_deadline_expired {
+                bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
+            }
             bail!("provider_child_environment_unavailable");
         }
-        let deadline = tokio::time::Instant::now() + timeout;
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
         interval.tick().await;
 
         loop {
+            if tokio::time::Instant::now() >= deadline {
+                let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                #[cfg(not(unix))]
+                {
+                    let _ = child.kill();
+                }
+                host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+                bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
+            }
             // Check if child has exited
             match owned_host_exited(&mut child) {
                 Ok(true) => {
