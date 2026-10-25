@@ -5,6 +5,24 @@ use soup_wall_agent::{AgentEvent, AgentFirewall, AgentPolicySet, EventKind, Prov
 const POLICY: &str = include_str!("../../../profiles/pilot/linux-readonly-v1/policy.yaml");
 const GIT: &str = include_str!("fixtures/result_detector/git-multifile-show.txt");
 
+#[test]
+fn sou150_captured_benign_link_object_diff_must_remain_useful() {
+    let frame: serde_json::Value = serde_json::from_str(include_str!(
+        "fixtures/result_detector/sou150-original.jsonl"
+    ))
+    .unwrap();
+    assert_eq!(frame["id"], 10);
+    assert_eq!(frame["result"]["isError"], false);
+    let content = frame["result"]["content"].as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let text = content[0]["text"].as_str().unwrap();
+    assert_eq!(
+        policy_verdict(text, POLICY),
+        Verdict::Allow,
+        "independent SOU-150 original git_show HEAD must remain useful; native refusal is retained separately"
+    );
+}
+
 // Shape reconstruction from SOU-113 / PR #230, not a captured original frame.
 // Exact responses are retained separately below; this helper makes attack variations.
 fn sou113_small_multiread(count: usize) -> String {

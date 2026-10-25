@@ -73,3 +73,4 @@ scripts/benchmarks/installed-pilot-workload-v2.json text eol=lf
 docs/operations/evidence/sou109-qwen-separated-58.json text eol=lf
 docs/operations/evidence/sou109-horizon-58.json text eol=lf
 scripts/horizon-model-lock.json text eol=lf
+crates/agent/tests/fixtures/result_detector/sou150-original.jsonl -text

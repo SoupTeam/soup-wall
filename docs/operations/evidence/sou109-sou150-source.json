@@ -1,0 +1,54 @@
+{
+  "source_pr": 256,
+  "artifact_id": 12595784493,
+  "run_id": 40186301242,
+  "report_sha256": "61a1db20e2d608e71427b68b689d0c281753b1d0fd5b4218eb0ec9c25e45e696",
+  "source_before": {
+    "commit": "f5e7c759d75ac0c90b141e7b13a33e7720e50c47",
+    "tree": "9141627ce95c6bf50bd42fd4ea4c45d200ec3f6e",
+    "dirty": false
+  },
+  "source_after": {
+    "commit": "f5e7c759d75ac0c90b141e7b13a33e7720e50c47",
+    "tree": "9141627ce95c6bf50bd42fd4ea4c45d200ec3f6e",
+    "dirty": false
+  },
+  "original_response_sha256": "24fac7674296164c8b040d684935a06bcb5c938c333319d1689fd1796a4b5c88",
+  "original_response_bytes": 456,
+  "native_refusal": [
+    {
+      "tool": "git_show",
+      "response": {
+        "id": 10,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "Soup Wall withheld MCP result (git-profile-refuse-result-injection)",
+              "type": "text"
+            }
+          ],
+          "isError": true
+        }
+      }
+    }
+  ],
+  "policy_sha256": "8a8a8f7e7147a977f9d268091152bfd424fe6e61531a313c66eae1bc1fa46f5a",
+  "profile": "sw-mcp/git-tracked-symlinks-readonly/1",
+  "original_server_rerun_by_us": false,
+  "production_fixed": false,
+  "original_request": {
+    "jsonrpc": "2.0",
+    "id": 10,
+    "method": "tools/call",
+    "params": {
+      "name": "git_show",
+      "arguments": {
+        "repo_path": "/tmp/sou150-owned-81betmha/workspace",
+        "revision": "HEAD"
+      }
+    }
+  },
+  "original_request_sha256": "dda6cd52a3187136fe36b47bd82c458a945684a47ba017c2713df8a253eaff63",
+  "policy_identical_to_branch_pilot": true
+}
