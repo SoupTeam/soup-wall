@@ -116,6 +116,11 @@ def main():
             '--disable-userns', '--assert-userns-disabled', '--ro-bind', '/', '/',
             '--proc', '/proc', '--dev', '/dev', '--', '/usr/bin/true'], 15)
         require(code == 0, 'same_unit_namespace_probe_failed')
+        code, _ = run('pinned-bootstrap-probe', [sys.executable, '-B',
+            src / 'scripts/ci/probe-prepared-provider-bootstrap.py', '--run', '--source',src,
+            '--host',paths['claude'], '--scratch',out / 'bootstrap-probe-private',
+            '--output',out / 'bootstrap-probe-public.json'], 45)
+        require(code == 0, 'bootstrap_diagnostic_incomplete')
         spec = importlib.util.spec_from_file_location('sou143_offline_policy', src / 'scripts/qualify-installed-pilot.py')
         pilot = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(pilot)

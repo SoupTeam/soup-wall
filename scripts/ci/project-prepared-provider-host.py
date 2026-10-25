@@ -277,6 +277,11 @@ def project(raw, expected, exit_code):
                     'mcp_owner_startup_failed', 'mcp_owner_spawn_failed', 'mcp_owner_image_unavailable',
                     'mcp_budget_membership_unverified', 'classifier_execution_failed', 'classifier_unavailable',
                     'provider_host_exec_boundary_unavailable', 'provider_bootstrap_unavailable', 'Permission denied', 'Operation not permitted') if value in known]
+            bootstrap=stage.get('bootstrap_counts',{})
+            if type(bootstrap) is dict:
+                observed['bootstrap_counts']={key:value for key,value in bootstrap.items()
+                    if key in ('host_execs','host_metadata','ready_writes','input_reads','code_closed')
+                    and type(value) is int and 0<=value<=65536}
             phases = stage.get('bootstrap_failure_stages', [])
             if type(phases) is list:
                 observed['bootstrap_failure_stages'] = [item for item in

@@ -183,10 +183,29 @@ def failure_stage(text, paths, normalize):
             else 'other-helper'
         key = role + ':' + error
         counts[key] = counts.get(key, 0) + 1
+    bootstrap = {key:0 for key in ('host_execs','host_metadata','ready_writes','input_reads','code_closed')}
+    clients = {}
+    for row in normalize(text)[0]:
+        m=re.match(r'^(\d+)\s+execve\((.*)\)\s*=\s*0$',row)
+        if m:
+            try: executable,args,environment=ast.literal_eval('('+m[2]+')')
+            except (ValueError,SyntaxError): continue
+            if executable==str(paths['claude']) and '--restricted' in args and '-p' in args:
+                bootstrap['host_execs']+=1
+                env=dict(item.split('=',1) for item in environment if '=' in item)
+                channel,code=env.get('AGENTFW_PROVIDER_CHANNEL',''),env.get('AGENTFW_PROVIDER_CODE','')
+                if channel.isdecimal() and code.isdecimal():
+                    clients[int(m[1])]=(int(channel),int(code));bootstrap['host_metadata']+=1
+        m=re.match(r'^(\d+)\s+(write|read|close)\((0x[0-9a-f]+|\d+),?',row)
+        if m and int(m[1]) in clients:
+            channel,code=clients[int(m[1])];fd=int(m[3],0)
+            if m[2]=='write' and fd==channel and 'sw-provider-ready/1' in row:bootstrap['ready_writes']+=1
+            if m[2]=='read' and fd==channel:bootstrap['input_reads']+=1
+            if m[2]=='close' and fd==code and re.search(r'= 0$',row):bootstrap['code_closed']+=1
     known = ('mcp_owner_startup_failed', 'mcp_owner_spawn_failed', 'mcp_owner_image_unavailable',
              'mcp_budget_membership_unverified', 'classifier_execution_failed', 'classifier_unavailable',
              'provider_host_exec_boundary_unavailable', 'provider_bootstrap_unavailable', 'Permission denied', 'Operation not permitted')
-    return {'denied_exec_counts': counts, 'known_refusals': [value for value in known if value in text],
+    return {'bootstrap_counts':bootstrap, 'denied_exec_counts': counts, 'known_refusals': [value for value in known if value in text],
             'bootstrap_failure_stages': [stage for stage in ('hooks', 'descriptors', 'ready', 'delivery', 'values')
                 if 'sw-provider-bootstrap-failed/' + stage in text]}
 
