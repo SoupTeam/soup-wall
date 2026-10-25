@@ -193,6 +193,7 @@ def worker(assets):
         'dtype':str(next(model.parameters()).dtype),'parameters':sum(p.numel() for p in model.parameters()),
         'loading':{k:list(v) if isinstance(v,set) else v for k,v in info.items()},
         'gpu_allocated_bytes':torch.cuda.memory_allocated(),'gpu_reserved_bytes':torch.cuda.memory_reserved(),
+        'device_free_total_bytes':torch.cuda.mem_get_info(),
         'rss_peak_bytes':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024}),flush=True)
     for line in sys.stdin:
         request = json.loads(line)
@@ -233,6 +234,7 @@ def worker(assets):
             'gpu_allocated_bytes':torch.cuda.memory_allocated(),'gpu_reserved_bytes':torch.cuda.memory_reserved(),
             'gpu_peak_allocated_bytes':torch.cuda.max_memory_allocated(),
             'gpu_peak_reserved_bytes':torch.cuda.max_memory_reserved(),
+            'device_free_total_bytes':torch.cuda.mem_get_info(),
             'rss_peak_bytes':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024}
         print(json.dumps(result,allow_nan=False),flush=True)
 
