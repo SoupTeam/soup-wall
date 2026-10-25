@@ -558,6 +558,7 @@ def prepare(args):
                 "bwrap": receipt["binaries"]["bwrap"]["path"],
                 "receipt": str(generation / "receipt.json"), "active_protection": False}
     generation = private(generations / uuid.uuid4().hex, create=True)
+    capacity.bind(generation)
     (generation / "tmp").mkdir(mode=0o700)
     env = environment(tools, generation, args)
     archives = {}

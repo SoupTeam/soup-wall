@@ -64,6 +64,8 @@ writable ancestors. Existing ancestor device/inode identities are checked again
 at phase boundaries. New owned descendants are accepted; replacements and mount
 changes are refused. This is a point-in-time check, not a lock against all
 concurrent path changes. Existing preparation validation and locking still apply.
+Each newly created generation is bound before expensive work. Its identity is
+rechecked while allowing the preparer's normal read-only completion freeze.
 
 Rechecks run before native downloads, extraction and builds; Cargo stages and
 artifact copying; installed input preparation and each profile installer; and

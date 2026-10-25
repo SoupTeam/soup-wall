@@ -464,8 +464,7 @@ jobs:
           [[ "$NATIVE_ONLY" == true ]]
           [[ "$ASK_BASELINE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ASK_BASELINE_SHA" == 8c275fcc9abdee99d4997cd4a985e6ce14d751e6 ]]
-      - name: Verify focused capacity controls
-        if: env.PILOT_CAPACITY_ONLY == '1'
+      - name: Verify capacity controls
         shell: bash
         env:
           DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
@@ -473,17 +472,20 @@ jobs:
           set -euo pipefail
           python3 -B - <<'PY'
           import json, os
-          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
-          allowed = {'capacity_only', 'stability_mode'}
-          assert inputs.get('stability_mode', 'off') == 'off'
-          assert all(value in ('', 'false') for key, value in inputs.items() if key not in allowed)
+          if os.environ['PILOT_CAPACITY_ONLY'] == '1':
+              inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+              allowed = {'capacity_only', 'stability_mode'}
+              assert inputs.get('stability_mode', 'off') == 'off'
+              assert all(value in ('', 'false') for key, value in inputs.items() if key not in allowed)
           PY
           mkdir -m 700 "$RUNNER_TEMP/sou151-capacity"
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_capacity.py -v \
             > "$RUNNER_TEMP/sou151-capacity/controls.log" 2>&1
-          sudo "$(command -v python3)" -B scripts/test-pilot-capacity.py \
-            --private-mount --standard-uid "$(id -u)" \
-            > "$RUNNER_TEMP/sou151-capacity/fixture.json"
+          if [[ "$PILOT_CAPACITY_ONLY" == 1 ]]; then
+            sudo "$(command -v python3)" -B scripts/test-pilot-capacity.py \
+              --private-mount --standard-uid "$(id -u)" \
+              > "$RUNNER_TEMP/sou151-capacity/fixture.json"
+          fi
       - name: Attest compiler and interpreter inputs for the native lane
         shell: bash
         run: |

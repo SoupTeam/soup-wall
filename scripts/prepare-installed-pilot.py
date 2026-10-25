@@ -418,6 +418,7 @@ def prepare_locked(args, output, requested):
         return {"status": "reused", "selection": str(selection), "generation": record["generation"]}
     generation = generations / uuid.uuid4().hex
     generation.mkdir(mode=0o700)
+    capacity.bind(generation)
     paths = selected_paths(args, generation)
     fs_workspace, git_workspace = generation / "filesystem-workspace", generation / "git-workspace"
     if requested:

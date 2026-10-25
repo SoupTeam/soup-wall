@@ -212,14 +212,26 @@ def plan(demands, reserve_bytes):
 
 class Guard:
     def __init__(self, demands, reserve_bytes):
-        self.demands = demands
+        self.demands = list(demands)
         self.reserve_bytes = reserve_bytes
 
     def __enter__(self):
         report, self.identities = inspect(self.demands, self.reserve_bytes)
         if not report["admitted"]:
             raise Refusal({**report, "phase": "before_preparation", "work": "not_started"})
+        self.bound = []
         return self
+
+    def bind(self, path):
+        self.recheck("before_generation_binding")
+        report, identities = inspect([Demand("generation_work", path, 0)], self.reserve_bytes)
+        if not report["admitted"]:
+            raise Refusal({**report, "phase": "generation_binding", "work": "may_have_started"})
+        if (path.parent != self.demands[0].path or identities[0][-1][0] != str(path)
+                or identities[0][-1][1] != self.identities[0][-1][1]):
+            raise Refusal(record("refused", "destination_changed", phase="generation_binding",
+                                 work="may_have_started"))
+        self.bound.append((path, identities[0]))
 
     def recheck(self, phase):
         remaining = [Demand(item.role, item.path, 0) for item in self.demands]
@@ -227,9 +239,26 @@ class Guard:
         if not report["admitted"]:
             raise Refusal({**report, "phase": phase, "work": "may_have_started"})
         self.identities = identities
+        try:
+            for path, previous in self.bound:
+                fd, current = open_destination(path)
+                try:
+                    if current != previous:
+                        raise Refusal(record("refused", "destination_changed"))
+                finally:
+                    os.close(fd)
+        except (OSError, Refusal):
+            raise Refusal(record("refused", "destination_changed", phase=phase,
+                                 work="may_have_started")) from None
 
     def __exit__(self, *exc):
         return False
+
+
+def bind(path):
+    guard = _active.get()
+    if guard is not None:
+        guard.bind(path)
 
 
 def recheck(phase):

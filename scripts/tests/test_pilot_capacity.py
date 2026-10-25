@@ -101,6 +101,33 @@ class QuotaObservation(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "linux", "Linux descriptor observations")
 class DestinationBoundaries(unittest.TestCase):
+    def test_completed_read_only_generation_can_still_be_selected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generation = root / "generation"
+            observation = CapacityTotals().observation(available=1000)
+            with patch.object(capacity, "observe", return_value=observation):
+                with capacity.Guard([capacity.Demand("build", root, 100)], 0) as guard:
+                    generation.mkdir(mode=0o700)
+                    guard.bind(generation)
+                    generation.chmod(0o500)
+                    guard.recheck("before_selection")
+
+    def test_new_generation_replacement_invalidates_the_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generation = root / "generation"
+            observation = CapacityTotals().observation(available=1000)
+            with patch.object(capacity, "observe", return_value=observation):
+                with capacity.Guard([capacity.Demand("build", root, 100)], 0) as guard:
+                    generation.mkdir(mode=0o700)
+                    guard.bind(generation)
+                    generation.rename(root / "retained")
+                    generation.mkdir(mode=0o700)
+                    with self.assertRaises(capacity.Refusal) as caught:
+                        guard.recheck("before_build")
+                    self.assertEqual(caught.exception.report["reason"], "destination_changed")
+
     def test_unwritable_destination_is_refused_before_work(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(capacity.os, "access", return_value=False):
             result = capacity.plan([capacity.Demand("build", Path(directory), 100)], 0)

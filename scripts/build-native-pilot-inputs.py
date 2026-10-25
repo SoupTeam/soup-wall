@@ -473,6 +473,7 @@ def run_build(root, output, expected_commit, *, rebuild=False):
     elif any(generations.iterdir()) and not rebuild:
         raise Failure("interrupted_generation_without_selection", "reuse")
     generation = native.private(generations / uuid.uuid4().hex, create=True)
+    capacity.bind(generation)
     seconds = build_generation(root, generation, plan["tools"])
     require(source_identity(root, expected_commit) == source,
             "candidate_source_changed_during_build", "source")
