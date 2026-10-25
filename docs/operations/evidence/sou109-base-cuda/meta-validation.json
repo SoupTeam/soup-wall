@@ -1,0 +1,591 @@
+{
+  "all_expected_state_dict_names_and_shapes_match": true,
+  "tensor_count": 138,
+  "parameters": 307531778,
+  "model_device": "meta",
+  "no_parameter_data_randomly_initialized_or_used": true,
+  "inference_performed": false,
+  "derived_container_sha256": "d0c0f899f118481855cfe34ba718cf5e44613d266270721c380d54741626d405",
+  "expected_shapes": {
+    "model.embeddings.tok_embeddings.weight": [
+      256000,
+      768
+    ],
+    "model.embeddings.norm.weight": [
+      768
+    ],
+    "model.layers.0.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.0.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.0.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.0.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.0.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.1.attn_norm.weight": [
+      768
+    ],
+    "model.layers.1.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.1.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.1.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.1.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.1.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.2.attn_norm.weight": [
+      768
+    ],
+    "model.layers.2.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.2.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.2.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.2.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.2.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.3.attn_norm.weight": [
+      768
+    ],
+    "model.layers.3.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.3.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.3.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.3.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.3.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.4.attn_norm.weight": [
+      768
+    ],
+    "model.layers.4.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.4.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.4.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.4.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.4.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.5.attn_norm.weight": [
+      768
+    ],
+    "model.layers.5.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.5.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.5.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.5.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.5.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.6.attn_norm.weight": [
+      768
+    ],
+    "model.layers.6.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.6.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.6.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.6.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.6.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.7.attn_norm.weight": [
+      768
+    ],
+    "model.layers.7.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.7.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.7.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.7.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.7.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.8.attn_norm.weight": [
+      768
+    ],
+    "model.layers.8.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.8.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.8.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.8.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.8.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.9.attn_norm.weight": [
+      768
+    ],
+    "model.layers.9.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.9.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.9.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.9.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.9.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.10.attn_norm.weight": [
+      768
+    ],
+    "model.layers.10.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.10.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.10.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.10.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.10.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.11.attn_norm.weight": [
+      768
+    ],
+    "model.layers.11.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.11.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.11.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.11.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.11.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.12.attn_norm.weight": [
+      768
+    ],
+    "model.layers.12.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.12.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.12.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.12.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.12.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.13.attn_norm.weight": [
+      768
+    ],
+    "model.layers.13.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.13.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.13.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.13.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.13.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.14.attn_norm.weight": [
+      768
+    ],
+    "model.layers.14.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.14.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.14.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.14.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.14.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.15.attn_norm.weight": [
+      768
+    ],
+    "model.layers.15.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.15.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.15.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.15.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.15.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.16.attn_norm.weight": [
+      768
+    ],
+    "model.layers.16.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.16.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.16.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.16.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.16.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.17.attn_norm.weight": [
+      768
+    ],
+    "model.layers.17.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.17.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.17.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.17.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.17.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.18.attn_norm.weight": [
+      768
+    ],
+    "model.layers.18.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.18.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.18.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.18.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.18.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.19.attn_norm.weight": [
+      768
+    ],
+    "model.layers.19.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.19.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.19.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.19.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.19.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.20.attn_norm.weight": [
+      768
+    ],
+    "model.layers.20.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.20.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.20.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.20.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.20.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.layers.21.attn_norm.weight": [
+      768
+    ],
+    "model.layers.21.attn.Wqkv.weight": [
+      2304,
+      768
+    ],
+    "model.layers.21.attn.Wo.weight": [
+      768,
+      768
+    ],
+    "model.layers.21.mlp_norm.weight": [
+      768
+    ],
+    "model.layers.21.mlp.Wi.weight": [
+      2304,
+      768
+    ],
+    "model.layers.21.mlp.Wo.weight": [
+      768,
+      1152
+    ],
+    "model.final_norm.weight": [
+      768
+    ],
+    "head.dense.weight": [
+      768,
+      768
+    ],
+    "head.norm.weight": [
+      768
+    ],
+    "classifier.weight": [
+      2,
+      768
+    ],
+    "classifier.bias": [
+      2
+    ]
+  },
+  "runtime": {
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "os_release": {
+      "NAME": "Ubuntu",
+      "ID": "ubuntu",
+      "PRETTY_NAME": "Ubuntu 24.04.5 LTS",
+      "VERSION_ID": "24.04",
+      "VERSION": "24.04.5 LTS (Noble Numbat)",
+      "VERSION_CODENAME": "noble",
+      "ID_LIKE": "debian",
+      "HOME_URL": "https://www.ubuntu.com/",
+      "SUPPORT_URL": "https://help.ubuntu.com/",
+      "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+      "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+      "UBUNTU_CODENAME": "noble",
+      "LOGO": "ubuntu-logo"
+    },
+    "executable_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "packages": {
+      "setuptools": "81.0.0",
+      "anyio": "4.15.1",
+      "nvidia-cuda-cupti-cu12": "12.8.90",
+      "nvidia-nvshmem-cu12": "3.4.5",
+      "tqdm": "4.70.1",
+      "nvidia-nccl-cu12": "2.28.9",
+      "regex": "2026.9.29",
+      "tokenizers": "0.23.3",
+      "nvidia-cusolver-cu12": "11.7.3.90",
+      "torch": "2.11.0+cu128",
+      "annotated-doc": "0.0.5",
+      "httpx": "0.28.1",
+      "filelock": "4.2.4",
+      "PyYAML": "6.0.3",
+      "idna": "3.20",
+      "markdown-it-py": "4.2.0",
+      "fsspec": "2026.9.0",
+      "rich": "15.0.0",
+      "nvidia-cusparselt-cu12": "0.7.1",
+      "nvidia-cufile-cu12": "1.13.1.3",
+      "typing_extensions": "4.16.0",
+      "nvidia-nvjitlink-cu12": "12.8.93",
+      "sympy": "1.14.0",
+      "nvidia-cusparse-cu12": "12.5.8.93",
+      "nvidia-cudnn-cu12": "9.19.0.56",
+      "typer": "0.27.3",
+      "hf-xet": "1.7.0",
+      "nvidia-nvtx-cu12": "12.8.90",
+      "safetensors": "0.8.0",
+      "nvidia-curand-cu12": "10.3.9.90",
+      "cuda-bindings": "12.9.10",
+      "Jinja2": "3.1.6",
+      "mdurl": "0.1.2",
+      "networkx": "3.7",
+      "nvidia-cublas-cu12": "12.8.4.1",
+      "MarkupSafe": "3.0.4",
+      "numpy": "2.5.4",
+      "click": "8.5.0",
+      "nvidia-cuda-runtime-cu12": "12.8.90",
+      "cuda-pathfinder": "1.8.4",
+      "Pygments": "2.21.0",
+      "mpmath": "1.3.0",
+      "cuda-toolkit": "12.8.1",
+      "httpcore": "1.0.9",
+      "certifi": "2026.10.23",
+      "nvidia-cufft-cu12": "11.3.3.83",
+      "packaging": "26.3",
+      "nvidia-cuda-nvrtc-cu12": "12.8.93",
+      "triton": "3.6.0",
+      "shellingham": "1.5.4",
+      "huggingface_hub": "1.33.0",
+      "h11": "0.16.0",
+      "transformers": "5.17.0"
+    }
+  }
+}
