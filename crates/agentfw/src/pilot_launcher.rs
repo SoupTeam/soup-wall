@@ -53,36 +53,20 @@ pub struct PilotWorkspacesArgs {
     pub workspace: PathBuf,
     #[arg(long)]
     pub git_workspace: PathBuf,
+    /// Explicit compatibility grammar; does not load or authorize a runtime profile.
+    #[arg(long, value_enum, default_value = "v1")]
+    pub git_profile_kind: crate::pilot_workspaces::GitProfileKind,
 }
 
 pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::MetadataExt;
-        for root in [&args.workspace, &args.git_workspace] {
-            ensure!(
-                crate::sandbox::validate_workspace_path(root)? == *root,
-                "canonical workspace required"
-            );
-            let metadata = fs::metadata(root)?;
-            ensure!(
-                metadata.uid() == unsafe { libc::geteuid() } && metadata.mode() & 0o022 == 0,
-                "owned workspace without shared write access required"
-            );
-        }
-        crate::mcp::server_profile::git::validate_repository(&args.git_workspace)
-            .context("unsupported Git layout; use a supported standalone repository; do not repair the project")?;
-        println!(
-            "{}",
-            serde_json::json!({"status":"supported-read-only", "executed":false})
-        );
-        Ok(())
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = args;
-        bail!("native Linux required for original pilot workspace validation")
-    }
+    let report = crate::pilot_workspaces::inspect(
+        &args.workspace,
+        &args.git_workspace,
+        args.git_profile_kind,
+    );
+    println!("{}", serde_json::to_string(&report)?);
+    ensure!(report.is_supported(), "workspace compatibility not established; see reason codes");
+    Ok(())
 }
 
 /// Helper to generate random hex identifier without external uuid crate.

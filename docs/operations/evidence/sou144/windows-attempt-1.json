@@ -1,0 +1,8 @@
+{
+  "format": "sw-pilot-workspace-witness/1",
+  "status": "incomplete",
+  "cases": [],
+  "scope": "synthetic-linux-inspection-only",
+  "runtime_protection_verified": false,
+  "reason": "native_linux_required"
+}

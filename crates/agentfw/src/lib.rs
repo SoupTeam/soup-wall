@@ -27,6 +27,7 @@ pub mod pilot_budget;
 pub mod pilot_doctor;
 mod pilot_host;
 pub mod pilot_launcher;
+pub mod pilot_workspaces;
 pub mod policy_transition;
 pub use native::child_authority;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
