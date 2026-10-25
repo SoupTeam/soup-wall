@@ -603,11 +603,12 @@ fn validate_registry(
             .tools
             .iter()
             .filter_map(|tool| tool.mcp_result_profile.as_deref())
-            .find(|format| server_profile::git::is_profile(format))
+            .find(|format| server_profile::git_selected(format))
             .unwrap_or(server_profile::git::FORMAT),
-        server_profile::git::FORMAT | server_profile::git::LOCAL_REFS_FORMAT => {
-            server_profile::FORMAT
-        }
+        server_profile::git::FORMAT
+        | server_profile::git::LOCAL_REFS_FORMAT
+        | server_profile::git::SHALLOW_FORMAT
+        | server_profile::git_local_clone::FORMAT => server_profile::FORMAT,
         _ => bail!("unsupported selected registry profile"),
     };
     let peer_manifest = server_profile::original_manifest_for(peer_format)?;
@@ -677,7 +678,7 @@ fn forwarded_cancellation_limit(format: &str) -> usize {
     // A wire abort during response backpressure kills its sibling tasks/stdio.
     // Withdraw locally and drain instead: keep the physical slot and deadline
     // until the original response arrives, without modifying the upstream server.
-    if server_profile::git::is_profile(format) {
+    if server_profile::git_selected(format) {
         0
     } else {
         FORWARDED_CANCELLATIONS
@@ -691,7 +692,7 @@ async fn relay<R, W, S, T>(
     server: &mut S,
     child: &mut T,
     profile: &server_profile::ProfileConfig,
-    local_references: Option<&server_profile::git::reference_view::View>,
+    git_view: Option<&server_profile::git::SelectedView>,
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
@@ -1006,7 +1007,7 @@ where
                                 continue;
                             }
                         };
-                        if local_references.is_some_and(|view| view.validate_call(name, &args).is_err()) {
+                        if git_view.is_some_and(|view| view.validate_call(name, &args).is_err()) {
                             write(host, &error(request_id, -32602,
                                 "Git local reference unavailable, unsupported, or its source changed")).await?;
                             continue;
@@ -1071,7 +1072,7 @@ where
                                     grants.insert(id(&grant.call_id)?),
                                     "native receipt call ID was reused"
                                 );
-                                if !call.cancelled && local_references.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
+                                if !call.cancelled && git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
                                     write(host, &error(&call.id, -32602, "Git local-reference view changed or target unsupported")).await?;
                                     call.cancelled = true;
                                 }
@@ -1115,7 +1116,7 @@ where
                         let result = result?;
                         if !call.cancelled {
                             if let Some(release) = result {
-                                if local_references.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
+                                if git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
                                     write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
                                 } else {
                                     write(host, &release.raw).await?;
@@ -1668,7 +1669,7 @@ pub(super) async fn run(
         prepared.workspace() == workspace,
         "selected sandbox workspace changed"
     );
-    let local_references = prepared.local_references();
+    let git_view = prepared.git_view();
     let (mut process, mut budget, mut owner, sandbox_pid) = prepared.spawn().await?;
     let attached = if let Some(budget) = budget.as_mut() {
         budget.verify_attached(sandbox_pid)
@@ -1757,7 +1758,7 @@ pub(super) async fn run(
                     &mut server,
                     &mut child,
                     profile,
-                    local_references.as_deref(),
+                    git_view.as_deref(),
                 );
                 tokio::pin!(exchange);
                 tokio::select! {

@@ -2717,7 +2717,7 @@ fn inspect_bound(
             if tool
                 .mcp_result_profile
                 .as_deref()
-                .is_some_and(crate::mcp::server_profile::git::is_profile)
+                .is_some_and(crate::mcp::server_profile::git_selected)
             {
                 selected_mcp_host_text_profile(
                     content,
