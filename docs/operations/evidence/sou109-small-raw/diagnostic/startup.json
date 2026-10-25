@@ -1,0 +1,34 @@
+{
+  "ready": true,
+  "worker_pid": 606504,
+  "device": "cuda:0",
+  "device_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "capability": [
+    8,
+    6
+  ],
+  "torch": "2.11.0+cu128",
+  "cuda_runtime": "12.8",
+  "attention": "sdpa",
+  "warmup_attention_ops": [
+    "aten::_scaled_dot_product_efficient_attention",
+    "aten::scaled_dot_product_attention"
+  ],
+  "warmup_operator_trace": "CPU dispatch events; tensors and parameters CUDA; synchronize completed",
+  "dtype": "torch.float32",
+  "parameters": 140642306,
+  "loading": {
+    "missing_keys": [],
+    "unexpected_keys": [],
+    "mismatched_keys": [],
+    "error_msgs": []
+  },
+  "gpu_allocated_bytes": 573188608,
+  "gpu_reserved_bytes": 601882624,
+  "device_free_total_bytes": [
+    4768923648,
+    6441926656
+  ],
+  "rss_peak_bytes": 1750511616,
+  "elapsed_ms": 12000.823488000606
+}
