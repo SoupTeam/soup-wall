@@ -608,7 +608,8 @@ fn validate_registry(
         server_profile::git::FORMAT
         | server_profile::git::LOCAL_REFS_FORMAT
         | server_profile::git::SHALLOW_FORMAT
-        | server_profile::git_local_clone::FORMAT => server_profile::FORMAT,
+        | server_profile::git_local_clone::FORMAT
+        | server_profile::git_tracked_symlinks::FORMAT => server_profile::FORMAT,
         _ => bail!("unsupported selected registry profile"),
     };
     let peer_manifest = server_profile::original_manifest_for(peer_format)?;

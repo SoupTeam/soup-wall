@@ -285,11 +285,12 @@ async fn selected_status_cancel_require_the_private_owner_even_when_header_is_ab
     }
 }
 
-const FORMATS: [&str; 4] = [
+const FORMATS: [&str; 5] = [
     crate::mcp::server_profile::FORMAT,
     crate::mcp::server_profile::git::FORMAT,
     crate::mcp::server_profile::git::LOCAL_REFS_FORMAT,
     crate::mcp::server_profile::git::SHALLOW_FORMAT,
+    crate::mcp::server_profile::git_tracked_symlinks::FORMAT,
 ];
 
 #[test]
