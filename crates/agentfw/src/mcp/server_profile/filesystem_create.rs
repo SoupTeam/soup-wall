@@ -256,6 +256,7 @@ mod resource_tests {
     use serde_json::json;
 
     #[test]
+    #[cfg(unix)]
     fn typed_create_resource_binds_exact_bytes_target_and_absent_only_semantics() {
         let args = json!({"path":"/workspace/a.txt","content":"café 🥣"});
         let selection = validate_request(&args).unwrap();
@@ -292,5 +293,23 @@ mod resource_tests {
         let mut changed = json!(valid);
         changed["overwrite"] = json!(true);
         assert!(serde_json::from_value::<CreateResource>(changed).is_err());
+    }
+
+    #[test]
+    #[cfg(not(unix))]
+    fn unix_original_create_resource_is_not_a_windows_absolute_workspace() {
+        let args = json!({"path":"/workspace/a.txt","content":"café 🥣"});
+        let selection = validate_request(&args).unwrap();
+        let resource = CreateResource {
+            contract_version: CreateResource::CONTRACT.into(),
+            workspace: "/tmp/selected-root".into(),
+            device: 1,
+            inode: 2,
+            target: selection.virtual_target,
+            content_sha256: selection.content_sha256,
+            content_bytes: selection.content_bytes,
+            must_be_absent: true,
+        };
+        assert!(resource.validate(&args).is_err());
     }
 }

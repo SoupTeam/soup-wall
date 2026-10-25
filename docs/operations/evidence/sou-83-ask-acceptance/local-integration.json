@@ -363,6 +363,24 @@
       "source_files_sha256": "0c6944fe92bcea739a962f848f5012f684fefe2cf1d125bd24b9b59f9bc7962d",
       "source_after_sha256": "0c6944fe92bcea739a962f848f5012f684fefe2cf1d125bd24b9b59f9bc7962d",
       "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "platform-resource-clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 6.45,
+      "source_files_sha256": "e34380f0009b2e2a2c601f4de9c3b0331dc071b7468b062fd0a1492e2798699c",
+      "source_after_sha256": "e34380f0009b2e2a2c601f4de9c3b0331dc071b7468b062fd0a1492e2798699c",
+      "log_sha256": "e33fb865f73a3d3e148b9a25ea41d07b04973fe6a27602ac16af908843a76b21"
+    },
+    {
+      "label": "platform-resource-tests",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 5.38,
+      "source_files_sha256": "e34380f0009b2e2a2c601f4de9c3b0331dc071b7468b062fd0a1492e2798699c",
+      "source_after_sha256": "e34380f0009b2e2a2c601f4de9c3b0331dc071b7468b062fd0a1492e2798699c",
+      "log_sha256": "2af38ad1b9ab21c4a33bc8c97878f611f56c9d6d44de0d83cf6add04028324d6"
     }
   ],
   "file_sha256": {
@@ -372,7 +390,7 @@
     "crates/agentfw/src/mcp/admission/real_server.rs": "7f5e8bacb71a7cd1e19610c98100b6791feac4cca198e66f8a3b135fb6afe5a3",
     "crates/agentfw/src/mcp/admission/real_server/fault_tests.rs": "a595cdeef31bd4e4cc0f313734b4d811c164729f1079a941819d7f337fae961f",
     "crates/agentfw/src/mcp/original_create.rs": "597d202621bd7d50da5bf5d3196c6bbd64f45a0bbd359260869e8afd5a423462",
-    "crates/agentfw/src/mcp/server_profile/filesystem_create.rs": "81d555de44515e971b7ab6a5ebf4c6e4771109fdc205092d64edff791950ce42",
+    "crates/agentfw/src/mcp/server_profile/filesystem_create.rs": "86d26a6b324fdf0a31612d0b50ef62f0ee7d204e3a1359c839b9ef330f8d082b",
     "crates/agentfw/src/native.rs": "dcbcbd320a7819936563cbb7dbd49e67858ac9fa5386a8b865cb8a4839df7018",
     "crates/agentfw/src/native/approval.rs": "1f09c9d2befeb407ba50ba98d0dcd615cdece67d1e16e54754769f1121657119",
     "crates/agentfw/src/native/approval/tests/selected_tests.rs": "8724fb6556113d086bf71089a7d9efa91f32150d4894e3f1cc5aeb0c02f0f0e3",
@@ -421,6 +439,12 @@
       "failure": "new global liveness configuration opted legacy Git collector into autonomous restart retirement, making the existing post-restart send hit BrokenPipe; restore unchanged legacy config and opt only the new original writer in via its explicit environment. Original guard, TTL and old restart expectation preserved.",
       "artifact": 12607272128,
       "artifact_sha256": "e447ee424c80816ba6e14742fb0e268932554a4af30de142a0a46c4de43e5817"
+    },
+    {
+      "run_id": 40217083115,
+      "head": "b724061ca5aec50bb0efe982ce8976533e741b7e",
+      "job_id": 121240625313,
+      "failure": "new positive typed-resource unit used a POSIX absolute workspace on Windows; production validation correctly refused it. Unix positive assertions retained, explicit Windows refusal test added; no ignored Windows job or changed production support."
     }
   ],
   "native_staging_controls": "passed on exact focused source f7a45ed; see focused-native.json. Current-candidate full qualification is required separately."
