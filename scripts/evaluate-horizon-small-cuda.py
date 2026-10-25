@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import platform
 import queue
 import signal
 import subprocess
@@ -52,7 +53,8 @@ def append(path, value):
 
 
 def runtime():
-    return {'python':sys.version, 'executable_sha256':digest(sys.executable),
+    return {'python':sys.version, 'platform':platform.platform(),
+            'os_release':platform.freedesktop_os_release(), 'executable_sha256':digest(sys.executable),
             'packages':{d.metadata['Name']:d.version for d in importlib.metadata.distributions()}}
 
 
