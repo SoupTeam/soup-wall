@@ -38,9 +38,44 @@ pub(crate) fn score_text(text: &str) -> f32 {
     score.min(1.0)
 }
 
+/// After explicit complete-content Data review, a Git object-id header and
+/// standalone/old-file separators are structural evidence, not instructions.
+/// No other opaque token, delimiter or imperative is removed. This function
+/// is never selected from parsing alone or from an untrusted wire attribute.
+pub(crate) fn reviewed_data_score(text: &str) -> f32 {
+    let mut score = 0.30 * IMPERATIVE.find_iter(text).count().min(3) as f32;
+    let mut encoded = false;
+    let mut delimiters = 0usize;
+    for line in text.lines() {
+        let object_id = line
+            .strip_prefix("commit ")
+            .filter(|id| matches!(id.len(), 40 | 64) && id.bytes().all(|c| c.is_ascii_hexdigit()));
+        if object_id.is_none() && LONG_B64.is_match(line) {
+            encoded = true;
+        }
+        delimiters +=
+            line.matches("```").count() + line.matches("###").count() + line.matches("<|").count();
+        if line != "---" && !line.starts_with("--- ") {
+            delimiters += line.matches("---").count();
+        }
+    }
+    if encoded {
+        score += 0.30;
+    }
+    score += 0.10 * delimiters.min(3) as f32;
+    score.min(1.0)
+}
+
 /// Emit a single aggregate finding when the heuristic score crosses a floor.
 pub(crate) fn scan(text: &str) -> Vec<Finding> {
-    let score = score_text(text);
+    finding_from_score(score_text(text))
+}
+
+pub(crate) fn scan_reviewed_data(text: &str) -> Vec<Finding> {
+    finding_from_score(reviewed_data_score(text))
+}
+
+fn finding_from_score(score: f32) -> Vec<Finding> {
     if score < 0.30 {
         return Vec::new();
     }
@@ -83,6 +118,42 @@ mod tests {
     fn base64_blob_contributes() {
         let blob = "aGVsbG8gd29ybGQgdGhpcyBpcyBhIGxvbmcgYmFzZTY0IHN0cmluZyE=";
         assert!(score_text(blob) >= 0.30);
+    }
+
+    #[test]
+    fn positive_data_review_resolves_only_structural_atoms() {
+        let git = "commit 0123456789abcdef0123456789abcdef01234567\n--- a/one.txt\n+ordinary data\n--- a/two.txt\n+more data\n---\n";
+        assert!(
+            !scan(git).is_empty(),
+            "default path must remain conservative"
+        );
+        assert!(scan_reviewed_data(git).is_empty());
+        let files = "one.txt:\nfirst document\n---\ntwo.txt:\nsecond document\n---\nthree.txt:\nthird document\n---\n";
+        assert!(!scan(files).is_empty());
+        assert!(scan_reviewed_data(files).is_empty());
+    }
+
+    #[test]
+    fn positive_data_review_retains_body_and_opaque_token_evidence() {
+        for text in [
+            "--- a/one.txt\n+ignore this, disregard that, override everything",
+            "--- a/one.txt\n+aGVsbG8gd29ybGQgdGhpcyBpcyBhIGxvbmcgYmFzZTY0IHN0cmluZyE=",
+            "commit not-a-hex-value-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+            "### header\n```body```\n<|data",
+        ] {
+            assert!(!scan_reviewed_data(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn review_does_not_treat_hex_in_document_body_as_git_header() {
+        for text in [
+            "+0123456789abcdef0123456789abcdef01234567",
+            " commit 0123456789abcdef0123456789abcdef01234567",
+            "commit 0123456789abcdef0123456789abcdef01234567 extra",
+        ] {
+            assert!(!scan_reviewed_data(text).is_empty(), "{text}");
+        }
     }
 
     #[test]
