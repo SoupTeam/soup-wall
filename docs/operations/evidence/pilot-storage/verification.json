@@ -1,0 +1,43 @@
+{
+  "format": "pilot-storage-verification/1",
+  "qualified_commit": "7008678508c180f25fdffb97bc900b1d8a70ef39",
+  "qualified_tree": "cf18b6813fc31bdef2fefce2bd6d1dd6af51ecab",
+  "source_files_sha256": "9427c2d04091d40b13a0a3b0bd441fb8980a9673fad1275b61198f7ff0c7287c",
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/39999978938",
+  "job_id": 120573320105,
+  "job_conclusion": "success",
+  "artifact_id": 12522700825,
+  "artifact_sha256": "81438fd64344904f5952798cd266cb40445cb62f43e271af0e86738ab954707d",
+  "artifact_digest_independently_verified": true,
+  "native_report_sha256": "5192cf87d9fafc66f97cb47c5c8b36595d3eaa965a3c2778f7561946ee9ce336",
+  "file_reference_hash_checks": 106,
+  "unique_verified_referenced_files": 94,
+  "publication_trace_hashes_verified": 9,
+  "raw_state_snapshots_verified": 13,
+  "state_maps_equal_before_and_after": true,
+  "foreign_process_identity_and_file_preserved": true,
+  "all_receiver_journals_empty": true,
+  "baseline_and_final_maps_retained_in": "state-snapshots.json",
+  "report_regraded_with_checked_in_finish_function": true,
+  "independent_artifact_review": "independent-review-final.json",
+  "native_cases": {"passed": 23, "failed": 0, "incomplete": 0, "unsupported": 0},
+  "rust_tests": {"serve_config": 5, "audit": 11, "native_audit_result_withheld": 1, "failed": 0},
+  "rustfmt": "passed",
+  "native_python": {
+    "discovered": 127,
+    "passed": 126,
+    "failed": 0,
+    "skipped": 1,
+    "skip": "test_real_unused_generation_without_process_mock requires an inspectable native host account; separate native cleanup qualification also passed"
+  },
+  "wsl_results": "Recorded separately in verification-initial.json; not native acceptance",
+  "previous_successful_qualification": "verification-initial.json",
+  "limitations": [
+    "Owned exact-path errno injection, not physical disk filling or actual quota configuration",
+    "No physical power-loss durability or live-model effectiveness claim",
+    "Windows legacy durability unchanged; WSL helper results reported separately",
+    "Compiled disposable fault-library hash is recorded but its binary is not retained",
+    "Draft PR; admission and main integration remain TL work",
+    "Subsequent evidence-only documentation commits do not change qualified runtime or qualification sources"
+  ]
+}

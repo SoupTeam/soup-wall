@@ -1,0 +1,5 @@
+# Frozen byte-exact artifacts: their SHA-256 digests are part of the corpus identity.
+payloads/* -text
+manifest.json -text
+baseline-*.json -text
+effect-controls-*.json -text

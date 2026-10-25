@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import errno
 import hashlib
 import importlib.util
 import json
@@ -41,6 +42,7 @@ def load(name, filename):
 PREP = load("pilot_run_preparation", "prepare-installed-pilot.py")
 GROUPS = load("pilot_run_groups", "prepare-native-pilot-prerequisites.py")
 SELECTION_LOCK = load("pilot_run_selection_lock", "pilot-selection-lock.py")
+AUDIT = load("pilot_run_audit", "pilot_audit.py")
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
@@ -114,6 +116,16 @@ PUBLIC_FAILURE_CODES = frozenset({
 
 class Failure(Exception):
     pass
+
+
+def storage_failure(error):
+    """Finite diagnostics only; never expose paths or exception messages."""
+    codes = {errno.ENOSPC: "storage_full", errno.EROFS: "storage_read_only",
+             errno.EACCES: "storage_permission_denied", errno.EPERM: "storage_permission_denied",
+             errno.EIO: "storage_io_failed", getattr(errno, "EDQUOT", -1): "storage_quota_exceeded"}
+    if isinstance(error, OSError):
+        return codes.get(error.errno)
+    return None
 
 
 def require(ok, code):
@@ -276,9 +288,11 @@ def run(args, report):
             raise Failure("occupied_port_refused") from None
         port = reservation.getsockname()[1]
     private = None
+    audit_selected = False
     daemon = launcher = None
     streams = []
     cancelled = False
+    report.update(stage="private_setup", host_started=False)
     def cancel(_signum, _frame):
         nonlocal cancelled
         cancelled = True
@@ -306,19 +320,29 @@ def run(args, report):
                                "maintenance_interval_ms": 250}}
         if args.ask_wait_seconds:
             native["approval"] = {"ttl_seconds": 120}
+        retention, audit_receipt = AUDIT.selection(private, args.expected_commit,
+            PREP.FS.sha(args.selection), PREP.FS.sha(paths["policy"]), registry_sha,
+            PREP.FS.sha(paths["agentfw"]))
+        json_file(private / "audit-run.json", audit_receipt)
+        audit_selected = True
+        report["audit"] = {"run_id": audit_receipt["run_id"], "retention": AUDIT.LIMITS,
+                           "retention_sha256": audit_receipt["retention_sha256"]}
         json_file(home / "config.yaml", {"bind": "127.0.0.1", "port": port, "enforce": True,
-                  "policy": str(paths["policy"]), "native": native})
+                  "policy": str(paths["policy"]), "native": native, "audit_retention": retention})
         token = secrets.token_urlsafe(32)
         for filename, value in (("native-token", token), ("token", secrets.token_urlsafe(32))):
             with (home / filename).open("x") as stream:
                 os.fchmod(stream.fileno(), 0o600)
                 stream.write(value)
+                stream.flush()
+                os.fsync(stream.fileno())
         # Last pre-effect verification, including source, selected bytes and package trees.
         require(selected(args)[0] == selection, "selection_changed_before_launch")
         require(not cancelled, "pilot_cancelled")
         daemon_log = (private / "daemon.private.log").open("xb")
         os.fchmod(daemon_log.fileno(), 0o600)
         streams.append(daemon_log)
+        report["stage"] = "daemon_start"
         daemon = subprocess.Popen([str(paths["agentfw"]), "serve"], cwd=private, env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             start_new_session=True, preexec_fn=parent_death)
@@ -341,15 +365,19 @@ def run(args, report):
             os.fchmod(log.fileno(), 0o600)
             streams.append(log)
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
+            report["stage"] = "host_start"
             launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=parent_death)
+            report["host_started"] = True
             selector.register(launcher.stdout, selectors.EVENT_READ, (log, True))
             report["launcher_pid"] = launcher.pid
+            report["stage"] = "run_publication"
             # Non-secret rendezvous for the existing second-terminal operator CLI.
             json_file(private / "run.json", {"format": "sw-prepared-pilot-run/1", "home": str(home),
                       "supervisor_pid": os.getpid(), "launcher_pid": launcher.pid, "daemon_pid": daemon.pid, "port": port})
             print(json.dumps({"status": "running", "run_directory": str(private), "home": str(home)},
                              ensure_ascii=True), file=sys.stderr, flush=True)
+            report["stage"] = "active_run"
             deadline, count = time.monotonic() + args.timeout_seconds + 15, 0
             while not GROUPS.leader_finished(launcher):
                 require(not cancelled, "pilot_cancelled")
@@ -373,6 +401,11 @@ def run(args, report):
             report.update(status="stopped", launcher_exit=0, running_effects_rolled_back=False)
         else:
             report.update(status="completed", launcher_exit=0)
+    except OSError as error:
+        code = storage_failure(error)
+        if code:
+            report["storage_failure"] = code
+        raise
     finally:
         errors = []
         for name, process in (("launcher", launcher), ("daemon", daemon)):
@@ -392,11 +425,14 @@ def run(args, report):
         for stream in streams:
             try:
                 stream.close()
-            except OSError:
+            except OSError as error:
                 errors.append("private_log")
+                if storage_failure(error):
+                    report["cleanup_storage_failure"] = storage_failure(error)
         for sig, handler in previous.items():
             signal.signal(sig, handler)
-        # Remove ordinary private state; retain explicit stop/recovery receipts below.
+        # Stop processes before snapshot/export. Retention housekeeping never
+        # resets a live session or its sticky risk, receipts or policy state.
         if not errors and private is not None:
             try:
                 # An authenticated stop may have completed, or may still need
@@ -406,12 +442,30 @@ def run(args, report):
                 stops = list((private / ".agentfw" / "pilot-runs").glob("*/stop.json"))
                 if stops:
                     report["retained_stop_state"] = str(private)
+                elif audit_selected:
+                    # Keep only selected bounded evidence. Tokens, raw host and
+                    # daemon logs, provider state and runtime settings are removed.
+                    for child in private.iterdir():
+                        if child.name not in ("audit", "audit-run.json"):
+                            if child.is_dir() and not child.is_symlink():
+                                shutil.rmtree(child)
+                            else:
+                                child.unlink()
                 else:
                     shutil.rmtree(private)
-            except OSError:
+                if audit_selected:
+                    json_file(private / "audit-finished.json", {"format": AUDIT.FORMAT,
+                        "run_id": report["audit"]["run_id"], "owned_processes_stopped": True})
+                    report["audit"].update(directory=str(private), snapshot=AUDIT.state(private))
+            except OSError as error:
                 errors.append("private_state")
+                if storage_failure(error):
+                    report["cleanup_storage_failure"] = storage_failure(error)
         report["cleanup"] = ("failed" if errors else "owned_processes_stopped_state_retained"
-                             if report.get("retained_stop_state") else "owned_state_removed")
+                             if report.get("retained_stop_state") else "owned_processes_stopped_audit_retained"
+                             if audit_selected else "owned_state_removed")
+        if errors:
+            report["cleanup_failures"] = errors
         require(not errors, "owned_process_cleanup_failed")
 
 
@@ -435,17 +489,25 @@ def main():
             with SELECTION_LOCK.hold(args.selection.parent.parent.parent, exclusive=False):
                 selection, _, profiles = selected(args)
                 report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
-                              workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
+                              workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}),
+                              audit_retention=AUDIT.LIMITS)
                 run(args, report)
         else:
             selection, _, profiles = selected(args)
             report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
-                          workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
+                          workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}),
+                              audit_retention=AUDIT.LIMITS)
     except Exception as error:
         # Never echo subprocess output, raw paths, arguments, credentials or arbitrary exception strings.
         code = str(error)
         report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
                       else "pilot_input_or_runtime_failure")
+        failure = storage_failure(error) or report.get("storage_failure") or report.get("cleanup_storage_failure")
+        if failure:
+            report.update(storage_failure=failure,
+                          recovery="Restore space and access to the owned state directory, then rerun with fresh authority.",
+                          effects="Host effects may have occurred; cleanup does not roll them back."
+                          if report.get("host_started") else "Protected host was not started.")
     print(json.dumps(report, sort_keys=True, ensure_ascii=True))
     return 1 if report["status"] == "failed" else 0
 

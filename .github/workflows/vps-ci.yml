@@ -29,6 +29,9 @@ jobs:
       run:
         shell: pwsh
     env:
+      # Match the shared host preflight and every Windows rustup run below.
+      # The repository toolchain file must not select a different host probe.
+      RUSTUP_TOOLCHAIN: stable
       CARGO_BUILD_JOBS: 2
       RUST_TEST_THREADS: 2
       CARGO_TERM_COLOR: never

@@ -104,6 +104,65 @@ def wait_for_browser(page, ready, observation, timeout_ms):
         page.wait_for_timeout(min(100, remaining * 1000))
 
 
+def browser_api_fetch(page, gateway, path, report, method="GET", headers=None, body=None):
+    """Retry one idempotent GET only on its observed pre-response network change.
+
+    A Docker network restart can invalidate Chromium's connection after login.
+    No response, mutation, unrelated request or unclassified failure is retried.
+    Failure evidence contains fixed labels only, never URL/body/header/error text.
+    """
+    expected = gateway + path
+    for attempt in range(2):
+        requests = []
+
+        def requested(request):
+            if request.url == expected and request.method == method and len(requests) < 8:
+                requests.append({"request": request, "failure": None, "response": False})
+
+        def failed(request):
+            for row in requests:
+                if row["request"] is request:
+                    row["failure"] = network_category(request.failure)
+
+        def responded(response):
+            for row in requests:
+                if row["request"] is response.request:
+                    row["response"] = True
+
+        listeners = (("request", requested), ("requestfailed", failed), ("response", responded))
+        for event, callback in listeners:
+            page.on(event, callback)
+        try:
+            return page.evaluate("""async ({path, method, headers, body}) => {
+                const response = await fetch(path, {method, headers, body, credentials:'same-origin', cache:'no-store'});
+                const text = await response.text();
+                let data = null; try { data = JSON.parse(text); } catch (_) {}
+                return {status:response.status, data};
+            }""", {"path": path, "method": method, "headers": headers or {}, "body": body})
+        except Exception as error:
+            # Fixed categories only; exception text may contain private URLs.
+            message = str(error)[:4096].lower()
+            category = ("context_replaced" if "execution context was destroyed" in message else
+                        "page_closed" if "page, context or browser has been closed" in message else
+                        "fetch_failed" if "failed to fetch" in message else "other")
+            retry = (attempt == 0 and method == "GET" and body is None and len(requests) == 1
+                     and not requests[0]["response"]
+                     and requests[0]["failure"] == "net::ERR_NETWORK_CHANGED")
+            failures = report.setdefault("browser_api_failures", [])
+            if len(failures) >= 32:
+                raise RuntimeError("browser API evidence limit exceeded") from None
+            failures.append({"attempt": attempt + 1, "error_category": category, "read_only": method == "GET" and body is None,
+                             "request_count": len(requests), "response_received": any(r["response"] for r in requests),
+                             "network_failures": [r["failure"] for r in requests if r["failure"] is not None],
+                             "retry": retry})
+            if not retry:
+                raise
+        finally:
+            for event, callback in listeners:
+                page.remove_listener(event, callback)
+        page.wait_for_timeout(100)
+
+
 class RunCancelled(InterruptedError):
     pass
 

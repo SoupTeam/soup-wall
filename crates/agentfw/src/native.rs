@@ -2714,7 +2714,11 @@ fn inspect_bound(
             return Err("native_delivery");
         }
         if request.delivery.as_deref() == Some("mcp_host") {
-            if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::git::FORMAT) {
+            if tool
+                .mcp_result_profile
+                .as_deref()
+                .is_some_and(crate::mcp::server_profile::git::is_profile)
+            {
                 selected_mcp_host_text_profile(
                     content,
                     request.result_kind.as_deref().unwrap_or(""),

@@ -1,0 +1,106 @@
+{
+  "format": "sw-pilot-dossier-selection/1",
+  "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+  "candidate": {
+    "commit": "c1a6918a05ae22cd89be6d98bfb13bbf9456a781",
+    "tree": "09d67510e1bac3e3b871cbaf7369e646e9b62ca4"
+  },
+  "accepted_main": "c1a6918a05ae22cd89be6d98bfb13bbf9456a781",
+  "environment": {
+    "platform": "linux",
+    "architecture": "x86_64",
+    "host": "Claude Code 2.1.251",
+    "provider": "owned-scripted-loopback",
+    "transport": "stdio",
+    "distribution": "Ubuntu 24.04",
+    "kernel_release": null
+  },
+  "identities": {
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "filesystem_profile": "26f28c0b1f50ebf8c13d73f7d3bc164d0ef730a75ce1546102717c64990d2014",
+    "git_profile": "c8ccba6e6fc2323f2c62915033accf8f3f08dbb1b917cf55ceebca7314891157",
+    "filesystem_registry": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+    "git_registry": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "agentfw": "e4afd91c134584fb783c446d49c52c9a8af11ecb36573bfb294dc61c3fd07b6c",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "git": "6a7514a539ff8a35d37ec6fef9b86967cb007c401e2be5923804b2e0eed173b4",
+    "bwrap": "a50e462cdfa865a7d222de00246549e5d73d858228ad14e3a4336ebac8b6ac68"
+  },
+  "support_index": {
+    "path": "docs/operations/roadmap-support-index.json",
+    "sha256": "3c6a96d39133b3c3e740ef9b73ff0ce3b7d12c19439af7c544296e11de0b190e",
+    "member": null,
+    "member_sha256": null
+  },
+  "workload": {
+    "path": "scripts/benchmarks/installed-pilot-workload-v2.json",
+    "sha256": "245110bb6c6b312a70d0bdc69771e44e3bec0da7c79c057019740befffdecd95",
+    "member": null,
+    "member_sha256": null
+  },
+  "evidence": [
+    {
+      "id": "sou106-final",
+      "file": {
+        "path": "docs/operations/evidence/sou106/measured-report.json",
+        "sha256": "6f3173364ded8d34bd2583fd6d520d5e6712c7ee3e5f1106b75fd317e1478dca",
+        "member": null,
+        "member_sha256": null
+      },
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "owner": "sou106",
+      "role": "candidate"
+    },
+    {
+      "id": "sou106-attempt1",
+      "file": {
+        "path": "docs/operations/evidence/sou106/attempt-1.json",
+        "sha256": "82527f0f0aaa61fa2ed93c3a8b9b2df16aacd7b5afe6336df99deffdf6e61779",
+        "member": null,
+        "member_sha256": null
+      },
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "owner": "sou106",
+      "role": "history"
+    },
+    {
+      "id": "sou106-attempt2",
+      "file": {
+        "path": "docs/operations/evidence/sou106/attempt-2.json",
+        "sha256": "db4e047e104b2e67f50ae112b035ab96210a2b00ea9349c157c92fef98fc5d08",
+        "member": null,
+        "member_sha256": null
+      },
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "owner": "sou106",
+      "role": "history"
+    },
+    {
+      "id": "sou112-ask",
+      "file": {
+        "path": "docs/operations/evidence/sou-112/linux-qualification.json",
+        "sha256": "9614e9b07e4300299cbf71cd7d060d232c79cf5ccc3882812bd06cc4e24daaf6",
+        "member": null,
+        "member_sha256": null
+      },
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "owner": "sou112",
+      "role": "candidate"
+    },
+    {
+      "id": "sou116-launch",
+      "file": {
+        "path": "docs/operations/evidence/sou-116/linux-prepared-run.json",
+        "sha256": "c1db4ef0c6114137b732d35fcda30c87e3ad239951209b0745f0e5c0cdec0db4",
+        "member": null,
+        "member_sha256": null
+      },
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "owner": "sou116",
+      "role": "candidate"
+    }
+  ]
+}

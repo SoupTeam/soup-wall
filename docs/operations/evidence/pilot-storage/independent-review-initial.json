@@ -1,0 +1,62 @@
+{
+  "status": "passed",
+  "review_kind": "independent-read-only-native-artifact-review",
+  "run_id": 39996830900,
+  "source_commit": "2e57584c861c0a0ab0c29d2c487598fb4ca0aee8",
+  "archive_sha256": "7093656bb7fd62d45bc1a51132780a0ec07dbec5d0ace136c18d17f4cd7fcd34",
+  "report_sha256": "d4ed33675436c7c32df1e16eaf558839af2946e48a9fc34527febbd5fafbc28f",
+  "native_environment": {
+    "kernel": "6.17.0-1022-azure",
+    "machine": "x86_64",
+    "non_root": true,
+    "os": "Linux",
+    "ubuntu": "24.04"
+  },
+  "cases_passed": 23,
+  "cases_skipped": 0,
+  "verified_file_sha256_references": 81,
+  "verified_fault_event_files": 15,
+  "startup_audit_recoveries_reviewed": [
+    "startup-enospc",
+    "startup-edquot",
+    "startup-erofs",
+    "startup-eacces",
+    "startup-config-unreadable",
+    "audit-enospc",
+    "audit-edquot",
+    "audit-erofs",
+    "audit-eacces"
+  ],
+  "publication_cases_reviewed": [
+    "publication-enospc",
+    "publication-edquot",
+    "publication-erofs",
+    "publication-eacces",
+    "publication-rename",
+    "publication-directory-sync",
+    "interrupted-publication",
+    "publication-cleanup-failure",
+    "publication-directory-permission"
+  ],
+  "checks": {
+    "distinct_instances_and_stale_409": true,
+    "fresh_actual_host_original_fs_and_git_useful": true,
+    "audit_io_failure_distinct_from_policy_deny": true,
+    "no_fifo_read_or_bytes": true,
+    "receiver_positive_control_and_no_delivery": true,
+    "foreign_process_identity_and_file_preserved_by_reviewed_driver": true,
+    "workspace_repository_snapshot_hashes_unchanged": true,
+    "directory_sync_publication_uncertainty_visible": true,
+    "interruption_before_rename_and_retry": true,
+    "preparation_reuse_and_recovery_same_generation": true,
+    "all_owned_processes_stopped_private_state_removed": true,
+    "runner_apparmor_profile_removed_without_sysctl_relaxation": true
+  },
+  "limitations": [
+    "Artifact review only; no host reruns.",
+    "Physical disk fullness, quota configuration and power-loss durability are not measured.",
+    "Useful host results use an owned scripted loopback provider; live-model effectiveness is not measured.",
+    "Foreign process identity, receiver delivery count and full filesystem snapshot preservation are verified by reviewed runner assertions and consistent retained digest/boolean witnesses; raw before/after snapshots and receiver journal are not separately retained.",
+    "Compiled fault-library hash is recorded; the disposable compiled library is not retained in the artifact."
+  ]
+}

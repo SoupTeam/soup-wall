@@ -23,6 +23,8 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "profiles/mcp/git-readonly-v1"
 FORMAT = "sw-mcp/git-readonly/1"
+SHALLOW_FORMAT = "sw-mcp/git-readonly-shallow/1"
+LOCAL_REFS_FORMAT = "sw-mcp/git-readonly-local-refs/1"
 READS = {"git_status", "git_log", "git_diff", "git_diff_staged", "git_diff_unstaged", "git_show"}
 spec = importlib.util.spec_from_file_location("filesystem_installer", ROOT / "scripts/install-sou62-filesystem-profile.py")
 filesystem = importlib.util.module_from_spec(spec)
@@ -69,18 +71,25 @@ def dependencies(executables, package):
     return [{"path": path, "sha256": sha(path)} for path in sorted(paths)]
 
 
-def registry(manifest):
-    return {"contract_version": "sw-native/1", "registry_id": "git-readonly-v1", "tools": [
+def registry(manifest, *, local_references=False, shallow_repository=False):
+    if local_references and shallow_repository:
+        raise ValueError("combined Git capabilities are not qualified")
+    selected_format = SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT
+    registry_id = "git-readonly-shallow-v1" if shallow_repository else "git-readonly-local-refs-v1" if local_references else "git-readonly-v1"
+    return {"contract_version": "sw-native/1", "registry_id": registry_id, "tools": [
         {"name": tool["name"],
          "schema_sha256": hashlib.sha256(filesystem.canonical(tool["inputSchema"])).hexdigest(),
          "action_class": "read_only" if tool["name"] in READS else "destructive",
          "result_provenance": "untrusted", "egress": [],
-         **({"mcp_result_profile": FORMAT} if tool["name"] in READS else {})}
+         **({"mcp_result_profile": selected_format} if tool["name"] in READS else {})}
         for tool in manifest["result"]["tools"]]}
 
 
 def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
-            *, python_archive=None, wheelhouse=None, allow_download=True, log=None):
+            *, python_archive=None, wheelhouse=None, allow_download=True, log=None,
+            local_references=False, shallow_repository=False):
+    if local_references and shallow_repository:
+        raise ValueError("combined Git capabilities are not qualified")
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("Git profile requires Linux x86-64; no isolation fallback")
     workspace, git, bwrap, git_launcher = [Path(p).resolve(strict=True) for p in (workspace, git, bwrap, git_launcher)]
@@ -95,8 +104,11 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     git_version = subprocess.check_output([str(git), "--version"], text=True, timeout=10).strip()
     if git_version != "git version " + identity["git_version"]:
         raise ValueError("Git version differs from selected runtime")
-    if "--ro-bind-fd" not in subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10):
+    bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10)
+    if "--ro-bind-fd" not in bwrap_help:
         raise ValueError("bubblewrap --ro-bind-fd is required")
+    if (local_references or shallow_repository) and "--ro-bind-data" not in bwrap_help:
+        raise ValueError("local references require bubblewrap --ro-bind-data")
     for name, expected in identity["files"].items():
         if Path(name).name != name or sha(ASSETS / name) != expected:
             raise ValueError("committed upstream asset digest mismatch")
@@ -139,7 +151,8 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     # Python extension modules may depend on libraries not used by its launcher.
     elf_files = [python, git, git_launcher]
     elf_files.extend(path for path in (package / "python/lib").rglob("*.so") if path.is_file())
-    profile = {"format": FORMAT, "workspace": str(workspace), "runtimePath": str(python),
+    profile = {"format": SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT,
+               "workspace": str(workspace), "runtimePath": str(python),
                "runtimeSha256": sha(python), "packageRoot": str(package), "packageTreeSha256": tree_sha(package),
                "bwrapPath": str(bwrap), "bwrapSha256": sha(bwrap),
                "git": {"path": str(git), "sha256": git_sha256},
@@ -147,7 +160,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
                "libraries": dependencies(elf_files, package)}
     private_json(destination / "profile.json", profile)
     manifest = json.loads((ASSETS / "upstream-tools-list.json").read_text())
-    private_json(destination / "registry.json", registry(manifest))
+    private_json(destination / "registry.json", registry(manifest, local_references=local_references, shallow_repository=shallow_repository))
     shutil.copyfile(ASSETS / "policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
     shutil.copytree(ASSETS / "upstream-notices", destination / "upstream-notices")
@@ -162,15 +175,21 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
+    selected = parser.add_mutually_exclusive_group()
+    selected.add_argument("--shallow-repository", action="store_true", help="explicitly select bounded local shallow repository reads")
+    selected.add_argument("--local-references", action="store_true",
+                        help="explicitly select the bounded local branch/tag reference contract")
     for name in ("destination", "workspace", "git", "bwrap", "git-launcher"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--git-sha256", required=True)
     args = parser.parse_args()
     if not args.run:
-        print(json.dumps({"status": "plan", "executed": False, "profile": FORMAT}))
+        print(json.dumps({"status": "plan", "executed": False,
+                          "profile": SHALLOW_FORMAT if args.shallow_repository else LOCAL_REFS_FORMAT if args.local_references else FORMAT}))
         return 0
     try:
-        print(json.dumps(install(args.destination, args.workspace, args.git, args.git_sha256, args.bwrap, args.git_launcher)))
+        print(json.dumps(install(args.destination, args.workspace, args.git, args.git_sha256,
+                                 args.bwrap, args.git_launcher, local_references=args.local_references, shallow_repository=args.shallow_repository)))
         return 0
     except (OSError, ValueError, subprocess.SubprocessError, tarfile.TarError) as error:
         print(json.dumps({"status": "failed", "error": str(error)}))

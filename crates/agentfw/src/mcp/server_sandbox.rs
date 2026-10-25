@@ -13,6 +13,7 @@ use std::path::Component;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::process::Stdio;
+use std::sync::Arc;
 
 use anyhow::{bail, Context};
 #[cfg(target_os = "linux")]
@@ -30,7 +31,11 @@ pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
-    if format == super::server_profile::git::FORMAT {
+    if format == super::server_profile::git::SHALLOW_FORMAT {
+        "sw-mcp/git-readonly-shallow/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git::LOCAL_REFS_FORMAT {
+        "sw-mcp/git-readonly-local-refs/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git::FORMAT {
         "sw-mcp/git-readonly/linux-bwrap-landlock/1"
     } else {
         SANDBOX_PROFILE
@@ -46,6 +51,7 @@ pub(crate) struct PreparedServerSandbox {
     command: Command,
     _pins: Vec<File>,
     workspace: PathBuf,
+    git_view: Option<Arc<super::server_profile::git::SelectedView>>,
     #[cfg(target_os = "linux")]
     budget: Option<super::linux_budget::OwnedBudget>,
     #[cfg(target_os = "linux")]
@@ -55,6 +61,10 @@ pub(crate) struct PreparedServerSandbox {
 }
 
 impl PreparedServerSandbox {
+    pub(crate) fn git_view(&self) -> Option<Arc<super::server_profile::git::SelectedView>> {
+        self.git_view.clone()
+    }
+
     pub(crate) fn workspace(&self) -> &Path {
         &self.workspace
     }
@@ -570,7 +580,7 @@ fn require_budget_mount_support(exposed_roots: &[&Path], pins: &[&File]) -> anyh
 
 #[cfg(target_os = "linux")]
 fn prepare_linux(profile: &ProfileConfig) -> anyhow::Result<PreparedServerSandbox> {
-    if profile.format == super::server_profile::git::FORMAT {
+    if super::server_profile::git::is_profile(&profile.format) {
         return prepare_linux_command(
             profile,
             &[
@@ -611,12 +621,17 @@ fn prepare_linux_command(
             bail!("selected workspace must remain owned and not shared writable");
         }
     }
-    let git_profile = profile.format == super::server_profile::git::FORMAT;
+    let git_profile = super::server_profile::git::is_profile(&profile.format);
     if git_profile {
-        super::server_profile::git::validate_repository(
-            &descriptor_path(&workspace_pin).join("."),
-        )?;
+        let root = descriptor_path(&workspace_pin).join(".");
+        if profile.format == super::server_profile::git::SHALLOW_FORMAT {
+            super::server_profile::git::validate_repository_with_shallow(&root, true)?;
+        } else {
+            super::server_profile::git::validate_repository(&root)?;
+        }
     }
+    let git_view =
+        super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?;
     let (package_root, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
     {
@@ -717,6 +732,9 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
+    if let Some(view) = &git_view {
+        view.mount(&mut command, &mut pins)?;
+    }
     let seccomp = network_filter(git_profile)?;
     command
         .arg("--seccomp")
@@ -797,6 +815,7 @@ fn prepare_linux_command(
         command,
         _pins: pins,
         workspace,
+        git_view,
         budget,
         bwrap_fd,
         owner_executable_fd,
@@ -912,7 +931,9 @@ mod tests {
         let profile_path = std::env::var("SOU68_SANDBOX_TEST_PROFILE")
             .expect("explicit Git sandbox profile required");
         let profile = ProfileConfig::read(&std::fs::read(profile_path).unwrap()).unwrap();
-        assert_eq!(profile.format, super::super::server_profile::git::FORMAT);
+        assert!(super::super::server_profile::git::is_profile(
+            &profile.format
+        ));
         let owned = tempfile::tempdir().unwrap();
         let outside = owned.path().join("outside-secret");
         std::fs::write(&outside, b"outside unchanged").unwrap();

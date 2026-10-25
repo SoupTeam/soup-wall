@@ -22,6 +22,8 @@ use std::{
 const MAX_RUNS: usize = 16;
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 
+mod watch;
+
 #[derive(Args)]
 pub struct OperatorArgs {
     /// Run identity printed by pilot-launch, not a caller-selected session label.
@@ -35,6 +37,11 @@ pub struct OperatorArgs {
 
 #[derive(Subcommand)]
 pub enum OperatorAction {
+    /// Watch this run and inspect each request before an explicit decision.
+    Watch {
+        #[arg(long, default_value_t = 2, value_parser = clap::value_parser!(u64).range(1..=30))]
+        refresh_seconds: u64,
+    },
     /// Revoke both collectors, then stop this exact owned launcher and host group.
     Stop,
     /// Digests and expiry only. Never displays raw arguments.
@@ -1132,6 +1139,13 @@ fn stop(dir: &Path, run: &Run, bytes: &[u8], expected: &str, home: &Path) -> Res
 }
 
 pub fn operator(args: OperatorArgs) -> Result<()> {
+    if let OperatorAction::Watch { refresh_seconds } = args.action {
+        return watch::run(args.run, args.home, refresh_seconds);
+    }
+    operator_to(args, &mut std::io::stdout().lock(), None)
+}
+
+fn operator_to(args: OperatorArgs, output: &mut impl Write, expected: Option<&[u8]>) -> Result<()> {
     ensure!(
         cfg!(target_os = "linux"),
         "run-scoped pilot approval requires qualified Linux"
@@ -1150,6 +1164,9 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
     let dir = root.join(&args.run);
     private_dir(&dir)?;
     let bytes = read_file(&dir.join("run.json"), true)?;
+    if let Some(expected) = expected {
+        ensure!(bytes == expected, "pilot run identity changed");
+    }
     let run: Run = serde_json::from_slice(&bytes)?;
     if matches!(args.action, OperatorAction::Stop) {
         return stop(&dir, &run, &bytes, &args.run, &home);
@@ -1185,14 +1202,16 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                     "binding_sha256":record["binding_sha256"], "expires_at_ms":record["expires_at_ms"], "state":"pending"}));
             }
         }
-        println!("{}", escaped(&json!(summaries))?);
+        writeln!(output, "{}", escaped(&json!(summaries))?)?;
         return Ok(());
     }
     let identifier = match &args.action {
         OperatorAction::Inspect { id }
         | OperatorAction::Approve { id, .. }
         | OperatorAction::Reject { id, .. } => id.clone(),
-        OperatorAction::List | OperatorAction::Stop => unreachable!(),
+        OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+            unreachable!()
+        }
     };
     id(&identifier)?;
     let (observed, server) = rows
@@ -1210,8 +1229,7 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                 &json!({"server":server,"pending_id":identifier,"tool":record["tool"],
                 "args":record["args"],"binding_sha256":binding,"expires_at_ms":record["expires_at_ms"],"state":"pending"}),
             )?;
-            let mut terminal = std::io::stdout().lock();
-            record_inspection(&dir, &receipt, &value, &display, &mut terminal)?;
+            record_inspection(&dir, &receipt, &value, &display, output)?;
         }
         OperatorAction::Approve {
             binding: requested, ..
@@ -1238,10 +1256,11 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                 string(&record, "session_epoch")?,
             )?;
             let _ = fs::remove_file(receipt);
-            println!(
+            writeln!(
+                output,
                 "{}",
                 json!({"pending_id":identifier,"state":"decision_submitted","decision":"approve","dispatched":"not_observed","released":"not_observed"})
-            );
+            )?;
         }
         OperatorAction::Reject {
             binding: requested, ..
@@ -1258,12 +1277,15 @@ pub fn operator(args: OperatorArgs) -> Result<()> {
                 string(&record, "session_epoch")?,
             )?;
             let _ = fs::remove_file(receipt);
-            println!(
+            writeln!(
+                output,
                 "{}",
                 json!({"pending_id":identifier,"state":"rejected","released":false})
-            );
+            )?;
         }
-        OperatorAction::List | OperatorAction::Stop => unreachable!(),
+        OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+            unreachable!()
+        }
     }
     Ok(())
 }
@@ -1691,7 +1713,9 @@ mod tests {
                     OperatorAction::Inspect { id }
                     | OperatorAction::Approve { id, .. }
                     | OperatorAction::Reject { id, .. } => id,
-                    OperatorAction::List | OperatorAction::Stop => unreachable!(),
+                    OperatorAction::List | OperatorAction::Stop | OperatorAction::Watch { .. } => {
+                        unreachable!()
+                    }
                 };
                 assert_eq!(parsed_id, id);
             }
