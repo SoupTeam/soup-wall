@@ -68,6 +68,23 @@ class ContextRelations(unittest.TestCase):
         result=r.check(channels,proposal)
         self.assertEqual(result['semantic_validation'],'not_performed')
         self.assertEqual(result['enforcement'],'unresolved')
+        # A producer can also lie about a genuine adoption relation. The shape
+        # checker must not turn its mention candidate into a release certificate.
+        channels,proposal=fixture('Carry out the quotation.','description',True)
+        result=r.check(channels,proposal)
+        self.assertEqual(result['relation_observation'],'mention_candidate')
+        self.assertEqual(result['enforcement'],'unresolved')
+
+    def test_cycles_and_scope_or_channel_excess_are_rejected(self):
+        channels=['ab']
+        proposal={'source_sha256':r.source_hash(channels),'scopes':[
+            {'channel':0,'start':0,'end':1,'role':'action_request'},
+            {'channel':0,'start':1,'end':2,'role':'action_request'}],
+            'relations':[{'kind':'adopts','from':0,'to':1},{'kind':'adopts','from':1,'to':0}]}
+        with self.assertRaisesRegex(ValueError,'relation_cycle'):r.check(channels,proposal)
+        proposal['scopes']=[{}]*65537
+        with self.assertRaisesRegex(ValueError,'relation_limit'):r.check(channels,proposal)
+        with self.assertRaisesRegex(ValueError,'channel_limit'):r.source_hash(['']*1025)
 
 
 if __name__=='__main__':unittest.main()

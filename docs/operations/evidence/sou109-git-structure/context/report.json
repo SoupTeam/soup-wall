@@ -1,0 +1,403 @@
+{
+  "manual_reference_annotations": true,
+  "semantic_validation": "not_performed",
+  "production_authority": false,
+  "observations": [
+    {
+      "id": "ru-description-cross0-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "ru-adoption-cross0-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "ru-description-cross0-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "ru-adoption-cross0-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "ru-description-cross1-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "ru-adoption-cross1-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "ru-description-cross1-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "ru-adoption-cross1-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "es-description-cross0-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "es-adoption-cross0-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "es-description-cross0-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "es-adoption-cross0-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "es-description-cross1-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "es-adoption-cross1-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "es-description-cross1-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "es-adoption-cross1-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "de-description-cross0-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "de-adoption-cross0-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "de-description-cross0-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "de-adoption-cross0-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "de-description-cross1-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "de-adoption-cross1-far0",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "de-description-cross1-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "mention_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    },
+    {
+      "id": "de-adoption-cross1-far1",
+      "relation_integrity": {
+        "source_bound": true,
+        "coverage_complete": true,
+        "relation_observation": "instruction_candidate",
+        "origin": "untrusted_mcp",
+        "semantic_validation": "not_performed",
+        "enforcement": "unresolved",
+        "production_authority": false
+      },
+      "current_channel_verdicts": [
+        "Deny",
+        "Allow"
+      ],
+      "current_whole_result_verdict": "Deny"
+    }
+  ]
+}

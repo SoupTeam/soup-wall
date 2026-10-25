@@ -1,0 +1,561 @@
+{
+  "requests": [
+    {
+      "id": 20,
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 7,
+            "end": 47,
+            "kind": "commit_oid"
+          },
+          {
+            "start": 172,
+            "end": 175,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 288,
+            "end": 291,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 410,
+            "end": 413,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 546,
+            "end": 549,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "62067547d8c014ce56579f2edc8ae7bd482c65f3a1bc7fd32148f054634fe04d"
+      ]
+    },
+    {
+      "id": 21,
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 10,
+            "end": 50,
+            "kind": "diff_target_oid"
+          },
+          {
+            "start": 97,
+            "end": 104,
+            "kind": "index_oid"
+          },
+          {
+            "start": 106,
+            "end": 113,
+            "kind": "index_oid"
+          },
+          {
+            "start": 121,
+            "end": 124,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 307,
+            "end": 314,
+            "kind": "index_oid"
+          },
+          {
+            "start": 316,
+            "end": 323,
+            "kind": "index_oid"
+          },
+          {
+            "start": 331,
+            "end": 334,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 577,
+            "end": 584,
+            "kind": "index_oid"
+          },
+          {
+            "start": 586,
+            "end": 593,
+            "kind": "index_oid"
+          },
+          {
+            "start": 601,
+            "end": 604,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 823,
+            "end": 830,
+            "kind": "index_oid"
+          },
+          {
+            "start": 832,
+            "end": 839,
+            "kind": "index_oid"
+          },
+          {
+            "start": 847,
+            "end": 850,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "8915db3483013585c9b2de8e17084c4c056feada0b56a228901a534fcbc85322"
+      ]
+    },
+    {
+      "id": "attack_commit_message",
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 7,
+            "end": 47,
+            "kind": "commit_oid"
+          },
+          {
+            "start": 221,
+            "end": 224,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 337,
+            "end": 340,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 459,
+            "end": 462,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 595,
+            "end": 598,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "227def16a22c06c90a1b738515c1ca2e6927571d22160a06f1b5fa97f9092b30"
+      ]
+    },
+    {
+      "id": "attack_added_line",
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 7,
+            "end": 47,
+            "kind": "commit_oid"
+          },
+          {
+            "start": 172,
+            "end": 175,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 336,
+            "end": 339,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 458,
+            "end": 461,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 594,
+            "end": 597,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "b8487563b2cad1248f89a5b8e2097c93769c9137244e8268882f877064fce865"
+      ]
+    },
+    {
+      "id": "attack_deleted_line",
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 7,
+            "end": 47,
+            "kind": "commit_oid"
+          },
+          {
+            "start": 172,
+            "end": 175,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 337,
+            "end": 340,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 459,
+            "end": 462,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 595,
+            "end": 598,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "fbc58a9388843411b5be1ab850b9459247a44518b8d5b2c71840fb3b02b645f6"
+      ]
+    },
+    {
+      "id": "attack_path",
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 7,
+            "end": 47,
+            "kind": "commit_oid"
+          },
+          {
+            "start": 172,
+            "end": 175,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 430,
+            "end": 433,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 552,
+            "end": 555,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 688,
+            "end": 691,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "2a9e503cff74d04938f75261340dc04db38277df8acb9727df3fab570cd7c4e2"
+      ]
+    },
+    {
+      "id": "strong_added_line",
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 7,
+            "end": 47,
+            "kind": "commit_oid"
+          },
+          {
+            "start": 172,
+            "end": 175,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 313,
+            "end": 316,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 435,
+            "end": 438,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 571,
+            "end": 574,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "987b439fb0b8c6834c7c3f39fa11181f8633cb0be2f313d2b301f465a93d8b8b"
+      ]
+    },
+    {
+      "id": "metadata_adoption",
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 7,
+            "end": 47,
+            "kind": "commit_oid"
+          },
+          {
+            "start": 232,
+            "end": 235,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 348,
+            "end": 351,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 470,
+            "end": 473,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 606,
+            "end": 609,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "6ec20463b46a190b35b95f073b627578853b938b4c6736c1bc4023422974fc67"
+      ]
+    },
+    {
+      "id": "forged_hunk_count",
+      "complete_parse": false,
+      "parsed": [
+        null
+      ],
+      "channels_sha256": [
+        "b36a7655922e49c6f4658c9a825b29743bee0793547704957a5e0b83196d981c"
+      ]
+    },
+    {
+      "id": "partial_tail",
+      "complete_parse": false,
+      "parsed": [
+        null
+      ],
+      "channels_sha256": [
+        "2d6209b8224803b4c1c6ead8cddcfc746fa81fceb5ee4295a529f4488937cdac"
+      ]
+    },
+    {
+      "id": "forged_commit_header",
+      "complete_parse": false,
+      "parsed": [
+        null
+      ],
+      "channels_sha256": [
+        "416d4d048ffd2a2229466cfdb790ead0441f827c3d8247773c72e6aaf8c1b15c"
+      ]
+    },
+    {
+      "id": "attack_diff_added",
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 10,
+            "end": 50,
+            "kind": "diff_target_oid"
+          },
+          {
+            "start": 97,
+            "end": 104,
+            "kind": "index_oid"
+          },
+          {
+            "start": 106,
+            "end": 113,
+            "kind": "index_oid"
+          },
+          {
+            "start": 121,
+            "end": 124,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 355,
+            "end": 362,
+            "kind": "index_oid"
+          },
+          {
+            "start": 364,
+            "end": 371,
+            "kind": "index_oid"
+          },
+          {
+            "start": 379,
+            "end": 382,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 625,
+            "end": 632,
+            "kind": "index_oid"
+          },
+          {
+            "start": 634,
+            "end": 641,
+            "kind": "index_oid"
+          },
+          {
+            "start": 649,
+            "end": 652,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 871,
+            "end": 878,
+            "kind": "index_oid"
+          },
+          {
+            "start": 880,
+            "end": 887,
+            "kind": "index_oid"
+          },
+          {
+            "start": 895,
+            "end": 898,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "09207444cfa0013b55b09ecdb5e5418d9f69d055bac5e5a708c007d53f8e44bb"
+      ]
+    },
+    {
+      "id": "attack_context_line",
+      "complete_parse": true,
+      "parsed": [
+        [
+          {
+            "start": 10,
+            "end": 50,
+            "kind": "diff_target_oid"
+          },
+          {
+            "start": 97,
+            "end": 104,
+            "kind": "index_oid"
+          },
+          {
+            "start": 106,
+            "end": 113,
+            "kind": "index_oid"
+          },
+          {
+            "start": 121,
+            "end": 124,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 395,
+            "end": 402,
+            "kind": "index_oid"
+          },
+          {
+            "start": 404,
+            "end": 411,
+            "kind": "index_oid"
+          },
+          {
+            "start": 419,
+            "end": 422,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 665,
+            "end": 672,
+            "kind": "index_oid"
+          },
+          {
+            "start": 674,
+            "end": 681,
+            "kind": "index_oid"
+          },
+          {
+            "start": 689,
+            "end": 692,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 911,
+            "end": 918,
+            "kind": "index_oid"
+          },
+          {
+            "start": 920,
+            "end": 927,
+            "kind": "index_oid"
+          },
+          {
+            "start": 935,
+            "end": 938,
+            "kind": "old_file_marker"
+          }
+        ]
+      ],
+      "channels_sha256": [
+        "afded97134aaa53e5cc6aa0833b52d0db9df8c148cd051f429e3641496f9ff99"
+      ]
+    },
+    {
+      "id": "two_channel_split",
+      "complete_parse": false,
+      "parsed": [
+        [
+          {
+            "start": 7,
+            "end": 47,
+            "kind": "commit_oid"
+          },
+          {
+            "start": 172,
+            "end": 175,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 288,
+            "end": 291,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 410,
+            "end": 413,
+            "kind": "old_file_marker"
+          },
+          {
+            "start": 546,
+            "end": 549,
+            "kind": "old_file_marker"
+          }
+        ],
+        null
+      ],
+      "channels_sha256": [
+        "62067547d8c014ce56579f2edc8ae7bd482c65f3a1bc7fd32148f054634fe04d",
+        "4e270d9b805c96faae2f3ae06af260914cddac2cc8bafe8e7f0e32102896e0ec"
+      ]
+    }
+  ],
+  "original_input_sha256": "90ca948cbc35892a99ef3a5fbb996e79dfe8c99a3047c610b5122c0b43e73667",
+  "raw_original_frames": {
+    "20": "3daf4efa6b31bc50294a38612e8ea3d24c8930c9104cab9c3bb453f2ba45bcbe",
+    "21": "846e8e3a0a720526a6c9bd9ea7d9d5b420d44809631b9e8a7d57c11d283ec83e"
+  },
+  "parser_sha256": "b635d0ce7baef0396f8a8e7dfaf17a606ee4ee45e3c42259cfcb2f7ddad44868",
+  "worker_sha256": "c60754b4a9673487e4f165d26e2ceeca8960bf034dc07d815d12a5f53f030ad1",
+  "source_commit": "23dde3da729a75a95d2613fffd3f8acc4cd8da8e",
+  "production_authority": false
+}

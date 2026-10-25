@@ -1,0 +1,17 @@
+{
+  "source_commit": "9b1886ad2a8e96a04037c032eee8d611f7eb779e",
+  "script_sha256": "50c0fe91ada2422d8ef74a8b5c534910c8d7d00303ee25bdf9d97e350244f89a",
+  "original_server": "mcp-server-git 2026.10.10",
+  "runtime": "CPython 3.11.16",
+  "python_binary_sha256": "1e761eb19d6f2594ab8dc64bd99ad4e1753589f3bf1ec199e4eef3aaa21e3930",
+  "git_binary_sha256": "2a8c18fbf43da9f692d75474c72bea9dfd796c260b0f3dfe456376abc3bbd668",
+  "git_version": "git version 2.43.0",
+  "scope": "fresh direct original-server ID200; not historical raw ID200 or protected admission",
+  "commit": "c8bc56ae3efc68049f4ba1131dfb30d3c13e18f3",
+  "result_equals_retained_id20": true,
+  "workspace_unchanged": true,
+  "returncode": 0,
+  "frame_sha256": "349bdb8035a0c28501e07199289a4cef2f00a3cf3b45b2612f8060e7bc8dedd4",
+  "channel_sha256": "62067547d8c014ce56579f2edc8ae7bd482c65f3a1bc7fd32148f054634fe04d",
+  "requirements_lock_sha256": "a2cfeda583ce58ab092610ee5b8902ef2f6ab1c97dabebf7eb67bcc512f5f1e5"
+}

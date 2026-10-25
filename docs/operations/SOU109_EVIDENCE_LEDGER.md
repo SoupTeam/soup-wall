@@ -90,6 +90,8 @@ development examples; no held-out cases, fitting, new model or inference occur.
 These previews do not prove original-server execution, useful delivery, admission,
 or that result withholding undoes server effects. Ready qualification remains a
 separate task after a reviewed behavioral correction.
+The subsequent [Git structure and context probes](SOU109_GIT_STRUCTURE_PROBE.md)
+retain the independently tested failure of a syntax-only discount.
 
 Replay requires a clean committed checkout. Build both binaries from Linux
 `git archive` snapshots; record `rustc -Vv`, `cargo -V`, build command/profile,

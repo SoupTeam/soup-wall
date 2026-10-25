@@ -122,3 +122,76 @@ commit IDs using fixed dates, content and author. It calls the actual pinned
 against retained ID20 without changing channel bytes, verifies the repository is
 unchanged, and closes/reaps the original process. This is a new direct-server
 witness; historical ID200 raw bytes and protected admission remain separate.
+
+## Observed results and decision
+
+[Retained summary](evidence/sou109-git-structure/summary.json) derives whole-result
+verdicts from the immutable [first](evidence/sou109-git-structure/v1/report.json)
+and [second](evidence/sou109-git-structure/v2/report.json) phases. The first source
+is `23dde3da729a75a95d2613fffd3f8acc4cd8da8e`; its worker was built from Linux
+archive `0305370ea482e5d66d4e4740a081965402f946eb` with identical Rust source.
+The second protocol/worker source is `4e2fda1` (full hash in its manifest).
+Both source/harness hashes were frozen before execution; the first run was not
+overwritten. The exact original captures are independently bound to artifact
+frame hashes.
+
+ID20 and ID21 each have exactly one encoded-looking object ID and four active
+old-file markers, no imperative contribution: 0.30 + capped 0.30 = float32
+0.6000000238418579. No weak heuristic contribution originates in their prose.
+Strict structural discount gives 0.0 and changes both benign previews to Allow.
+It also changes **seven matched attacks** to whole-result Allow, including
+message, path, added/deleted/context body and metadata adoption cases. The strong
+signature remains Deny. Three malformed/partial controls receive no discount.
+The two-channel control remains `[Deny, Allow]`, hence the complete result is
+withheld; it is not counted as a miss.
+
+The conservative unresolved-content obligation restores Deny for those attacks
+and also for both original benign cases. It therefore fails useful delivery.
+g05-a/g06-b/f05-a remain Deny even after complete heuristic removal: independent
+lexical findings still meet the unchanged result policy. A framing parser cannot
+resolve that separate cause. **Reject both criteria as a false-refusal fix.**
+No production heuristic, finding, signature, threshold or policy is changed by
+this probe PR.
+
+The [context phase](evidence/sou109-git-structure/context/report.json), source
+`9b1886ad2a8e96a04037c032eee8d611f7eb779e`, checks 24 frozen manually annotated
+Russian/Spanish/German scope controls with near/far and same/cross-channel edges.
+Every current complete MCP result is withheld. Validating reference graph shapes
+does not establish semantic understanding; all enforcement states remain
+unresolved. This includes twelve benign descriptions still falsely refused and
+twelve adopted-instruction controls withheld; desired benign Allow expectations
+are not changed into successful Deny labels. The [fixed resource probe](evidence/sou109-git-structure/context/resource.json)
+on CPython 3.12.3 processes 8 MiB / 65,536 scopes in 267.62 ms cold end-to-end,
+peak actual-worker RSS 65,093,632 B, under ten seconds / 512 MiB address space.
+The source/hash/range mechanism fits these bounds; semantic adjudication is
+unimplemented and unqualified. A valid but false annotation cannot grant Allow.
+
+The fresh direct ID200 report is retained beside its raw frame in the SOU-146
+fixture directory. On pinned `mcp-server-git 2026.10.10`, CPython 3.11.16 and Git
+2.43.0 it recreates commit `c8bc56ae3efc68049f4ba1131dfb30d3c13e18f3`, captures
+frame SHA-256 `349bdb8035a0c28501e07199289a4cef2f00a3cf3b45b2612f8060e7bc8dedd4`,
+and confirms its result equals retained ID20 without repository changes. This
+reproduces the mechanism, not historical ID200 byte capture or protected release.
+
+Verify the retained hashes, seven unsafe discounts, whole-result aggregation,
+independent findings and fresh original frame without executing models or servers:
+
+```sh
+python3 scripts/verify-git-context-evidence.py
+```
+
+The remaining concrete obligation is source-wide **semantic validation** of
+description versus adoption, with no uncovered later/cross-channel reference,
+followed by separately reviewed finding composition. The relation checker
+already rejects stale/partial/forged-authority proposals but cannot prove role
+annotations true. A false `other` annotation remains mechanically possible and
+is tested to stay unresolved. Supplying such an annotation as proof of benign
+intent would reopen the same bypass. No tested semantic producer is qualified;
+the earlier negative model reports remain immutable, and no new model/inference
+is started. SOU-109 stays In Progress and all runtime PRs stay Draft.
+
+Future runtime integration must be reviewed on accepted main `1ebc5854e67d788ec3a72367ff398af244384bc8`
+or its reviewed successor. The stacked #215 experimental materials and #255
+baseline comparison are not automatically accepted production code. Original
+useful Git/FS delivery, matched withheld-output/effect witnesses and exact-source
+Ready/admission remain required before completion.
