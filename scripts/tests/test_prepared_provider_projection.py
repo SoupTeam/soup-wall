@@ -82,6 +82,27 @@ def fixture():
 
 
 class FiniteEvidence(unittest.TestCase):
+    def test_early_deadline_is_not_reported_as_authenticated_or_accepted_without_exact_refusal(self):
+        raw=fixture()
+        row=raw['cases'][-1]
+        self.assertEqual(row['case'],'timeout')
+        row['provider_protocol']={'owned_loopback_requests':0,'expected_synthetic_authentication_seen':False,
+            'protocol_stage':'deadline-before-first-request','credential_values_exported':False}
+        row['provider_timeout_refusal']={'observer':'pinned-launcher-stderr-syscalls',
+            'observed':True,'timeout_seconds':3}
+        public=P.project(raw,COMMIT,0)
+        self.assertEqual(public['status'],'passed',public['verification_errors'])
+        self.assertIs(public['cases'][-1]['provider']['authenticated_owned_request_observed'],False)
+        self.assertIs(public['cases'][-1]['provider']['deadline_before_first_request_observed'],True)
+        for change in (lambda v:v['cases'][-1]['provider_timeout_refusal'].update(observed=False),
+                       lambda v:v['cases'][-1]['provider_timeout_refusal'].update(timeout_seconds=4),
+                       lambda v:v['cases'][-1]['provider_timeout_refusal'].update(observer='host-output'),
+                       lambda v:v['cases'][-1]['provider_protocol'].update(owned_loopback_requests=1),
+                       lambda v:v['cases'][6].update(provider_protocol=row['provider_protocol'],
+                                                   provider_timeout_refusal=row['provider_timeout_refusal'])):
+            bad=copy.deepcopy(raw);change(bad)
+            self.assertNotEqual(P.project(bad,COMMIT,0)['status'],'passed')
+
     def test_complete_schema_projects_counts_without_private_bytes(self):
         public = P.project(fixture(), COMMIT, 0)
         self.assertEqual(public['status'], 'passed', public['verification_errors'])

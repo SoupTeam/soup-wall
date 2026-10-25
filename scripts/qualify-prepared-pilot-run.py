@@ -394,7 +394,11 @@ def qualify(args, private, report):
                     result["provider_routing"] = PROVIDER_WITNESS.observe(
                         trace_text, paths, provider_values, LAUNCH.normalized_syscalls,
                         rejected=case == "provider-reject")
-                    result["provider_protocol"] = protocol.finish()
+                    if case == 'timeout':
+                        result['provider_timeout_refusal'] = PROVIDER_WITNESS.launcher_timeout(
+                            trace_text, paths['agentfw'], LAUNCH.normalized_syscalls, 3)
+                    result["provider_protocol"] = protocol.finish(before_request_timeout=case == 'timeout'
+                        and result['provider_timeout_refusal']['observed'] is True)
                     result["provider_private_logs"] = PROVIDER_WITNESS.private_log_writes(
                         trace_text, Path(record["home"]).parent, record["supervisor_pid"], provider_values,
                         LAUNCH.normalized_syscalls, rejection=case == "provider-reject")
@@ -447,6 +451,9 @@ def qualify(args, private, report):
                 if provider_values is not None and (root / 'trace.private').exists():
                     observation['provider_failure_stage'] = PROVIDER_WITNESS.failure_stage(
                         (root / 'trace.private').read_text(), paths, LAUNCH.normalized_syscalls)
+                    if case == 'timeout':
+                        observation['provider_timeout_refusal'] = PROVIDER_WITNESS.launcher_timeout(
+                            (root / 'trace.private').read_text(), paths['agentfw'], LAUNCH.normalized_syscalls, 3)
                 raise
             finally:
                 # strace is only an observer: terminating it does not cancel the

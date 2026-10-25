@@ -274,6 +274,41 @@ def observe(text, paths, values, normalize, rejected=False):
             'observation_stage': 'first-request-authentication-refusal' if rejected else 'original-server-runtime'}
 
 
+def launcher_timeout(text, binary, normalize, seconds):
+    """A deadline refusal must come from the exact launcher, not host output."""
+    rows, pending = normalize(text)
+    launchers = set()
+    quoted = r'("(?:[^"\\]|\\.)*")'
+    for row in rows:
+        match = re.match(r'^(\d+)\s+execve\(' + quoted + r',\s*(\[.*\]),.*\)\s*=\s*0\s*$', row)
+        if not match or ast.literal_eval(match[2]) != str(binary):
+            continue
+        arguments = ast.literal_eval(match[3])
+        if len(arguments) > 1 and arguments[1] == 'pilot-launch' and arguments.count('--timeout-seconds') == 1:
+            index = arguments.index('--timeout-seconds')
+            if index + 1 < len(arguments) and arguments[index + 1] == str(seconds):
+                launchers.add(int(match[1]))
+    content = bytearray()
+    for row in rows:
+        prefix = re.match(r'^(\d+)\s+(write|writev)\(2,', row)
+        if not prefix or int(prefix[1]) not in launchers:
+            continue
+        match = re.match(r'^\d+\s+write\(2,\s*' + quoted + r',\s*(\d+)\)\s*=\s*(\d+)\s*$', row)
+        if match:
+            raw, size, written = ast.literal_eval('b' + match[1]), int(match[2]), int(match[3])
+        else:
+            # Unknown/truncated writes cannot establish a complete refusal.
+            return {'observed': False}
+        require(len(raw) == size and 0 <= written <= size, 'provider_deadline_write_unproven')
+        content.extend(raw[:written])
+        require(len(content) <= 65536, 'provider_deadline_write_bound')
+    complete = len(launchers) == 1 and not any(int(pid) in launchers and
+        re.match(r'(?:write|writev)\(2,', call) for pid, call in pending.items())
+    marker = f'Error: pilot host execution exceeded declared timeout of {seconds}s'.encode()
+    return {'observer': 'pinned-launcher-stderr-syscalls', 'timeout_seconds': seconds,
+            'observed': complete and marker in content.splitlines()}
+
+
 class ProtocolEvidence:
     """Owned loopback server independently counts the host's authenticated requests."""
     def __init__(self, model, values, reject=False):
@@ -307,8 +342,11 @@ class ProtocolEvidence:
 
         model.server.RequestHandlerClass = Observed
 
-    def finish(self):
+    def finish(self, before_request_timeout=False):
         with self.lock:
+            if before_request_timeout and self.requests == self.authenticated == 0:
+                return {'owned_loopback_requests': 0, 'expected_synthetic_authentication_seen': False,
+                        'protocol_stage': 'deadline-before-first-request', 'credential_values_exported': False}
             require(self.requests > 0 and self.authenticated > 0, 'provider_authenticated_request_not_observed')
             return {'owned_loopback_requests': self.requests,
                     'expected_synthetic_authentication_seen': True, 'credential_values_exported': False}

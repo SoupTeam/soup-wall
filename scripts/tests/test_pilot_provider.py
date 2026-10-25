@@ -68,6 +68,24 @@ class ProviderBoundary(unittest.TestCase):
 
 
 class IndependentExecEvidence(unittest.TestCase):
+    def test_deadline_refusal_requires_exact_launcher_image_arguments_and_stderr(self):
+        import json
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import pilot_provider_witness as witness
+        normalize = lambda text: (text.splitlines(), {})
+        launch = '10 execve("/owned/agentfw", ["/owned/agentfw", "pilot-launch", "--timeout-seconds", "3"], []) = 0'
+        message = b'Error: pilot host execution exceeded declared timeout of 3s\n'
+        write = f'10 write(2, {json.dumps(message.decode())}, {len(message)}) = {len(message)}'
+        self.assertTrue(witness.launcher_timeout(launch+'\n'+write, '/owned/agentfw', normalize, 3)['observed'])
+        for changed in (write.replace('10 write', '11 write'), write.replace('write(2,', 'write(1,'),
+                        write.replace('3s', '4s'), write.replace(' = '+str(len(message)), ' = 0')):
+            self.assertFalse(witness.launcher_timeout(launch+'\n'+changed, '/owned/agentfw', normalize, 3)['observed'])
+        for changed in (launch.replace('"3"', '"4"'), launch.replace('pilot-launch', 'serve'),
+                        launch.replace('"/owned/agentfw", [', '"/owned/host", [')):
+            self.assertFalse(witness.launcher_timeout(changed+'\n'+write, '/owned/agentfw', normalize, 3)['observed'])
+        self.assertFalse(witness.launcher_timeout(launch+'\n'+write, '/owned/agentfw',
+            lambda text:(text.splitlines(), {'10':'write(2, "unfinished"'}), 3)['observed'])
+
     def test_failure_stage_never_exports_executables_arguments_or_environments(self):
         import json
         sys.path.insert(0, str(ROOT / 'scripts'))
@@ -172,6 +190,9 @@ class IndependentExecEvidence(unittest.TestCase):
         server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
         evidence = witness.ProtocolEvidence(SimpleNamespace(server=server), values)
+        with self.assertRaisesRegex(ValueError, 'provider_authenticated_request_not_observed'):
+            evidence.finish()
+        self.assertFalse(evidence.finish(before_request_timeout=True)['expected_synthetic_authentication_seen'])
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

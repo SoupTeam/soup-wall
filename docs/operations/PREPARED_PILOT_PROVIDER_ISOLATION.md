@@ -98,6 +98,14 @@ crash, daemon loss, timeout, exact Ask and emergency stop reuse the existing
 original-server witnesses. Raw trace arrays, argv, provider values and live paid
 provider traffic are excluded from retained evidence.
 
+The unchanged three-second timeout control can expire before an API request.
+Such a run never claims observed provider authentication. It requires the exact
+pinned launcher's own stderr syscall refusal, bound to its actual successful
+`pilot-launch --timeout-seconds 3` exec; a host message, another image, another
+deadline, or incomplete write cannot establish this observation. All role/env,
+log, artifact and owned-cleanup checks still apply. Every useful run and other
+lifecycle control requires an actual authenticated owned provider request.
+
 Required final qualification includes actual pinned-host environment observations,
 useful filesystem/Git operations, startup/missing-provider refusal, rejection,
 restart, stop, retained-state/log redaction and owned cleanup. Do not substitute

@@ -90,7 +90,7 @@ def stop_roles(value):
     return counts
 
 
-def provider(value, rejected=False):
+def provider(value, rejected=False, timeout=False):
     routing, protocol = value.get('provider_routing'), value.get('provider_protocol')
     logs, retained = value.get('provider_private_logs'), value.get('provider_retained_artifacts')
     need(all(isinstance(item, dict) for item in (routing, protocol, logs, retained)), 'provider_observations_missing')
@@ -107,8 +107,16 @@ def provider(value, rejected=False):
          and count(routing.get('provider_values_in_argv')) == 0
          and routing.get('raw_environment_exported') is False, 'provider_isolation_unproven')
     requests = count(protocol.get('owned_loopback_requests'))
-    need(requests > 0 and protocol.get('expected_synthetic_authentication_seen') is True
-         and protocol.get('credential_values_exported') is False, 'provider_authenticated_protocol_unproven')
+    authenticated = requests > 0 and protocol.get('expected_synthetic_authentication_seen') is True
+    deadline = value.get('provider_timeout_refusal', {})
+    before_request_timeout = timeout and requests == 0 \
+        and protocol.get('expected_synthetic_authentication_seen') is False \
+        and protocol.get('protocol_stage') == 'deadline-before-first-request' \
+        and type(deadline) is dict and deadline.get('observed') is True \
+        and deadline.get('observer') == 'pinned-launcher-stderr-syscalls' \
+        and type(deadline.get('timeout_seconds')) is int and deadline['timeout_seconds'] == 3
+    need((authenticated or before_request_timeout) and protocol.get('credential_values_exported') is False,
+         'provider_authenticated_protocol_unproven')
     writes = count(logs.get('successful_private_log_writes'))
     logbytes = count(logs.get('private_log_bytes'), 4 * 1024 * 1024)
     need(writes > 0 and logbytes > 0 and logs.get('all_selected_values_and_json_forms_absent') is True
@@ -122,16 +130,17 @@ def provider(value, rejected=False):
     return {'successful_exec_counts': counts, 'observation_stage': routing['observation_stage'],
             'all_seven_inputs_in_intended_host': True, 'intended_host_processes': 1,
             'unrelated_provider_values': 0, 'provider_values_in_argv': 0,
-            'owned_loopback_requests': requests, 'authenticated_owned_request_observed': True,
+            'owned_loopback_requests': requests, 'authenticated_owned_request_observed': authenticated,
+            'deadline_before_first_request_observed': before_request_timeout,
             'successful_private_log_writes': writes, 'private_log_bytes_checked': logbytes,
             'owned_rejection_redaction_observed': rejected, 'retained_entries_checked': entries,
             'retained_bytes_checked': retained_bytes, 'all_selected_values_and_json_forms_absent': True,
             'raw_environment_log_and_artifact_contents_exported': False}
 
 
-def observed_run(value, rejected=False, stop=False):
+def observed_run(value, rejected=False, stop=False, timeout=False):
     need(type(value) is dict, 'owned_run_observation_missing')
-    result = {'provider': provider(value, rejected), 'process_cleanup': cleanup(value.get('process_cleanup')),
+    result = {'provider': provider(value, rejected, timeout), 'process_cleanup': cleanup(value.get('process_cleanup')),
               'trace_sha256': digest(value.get('trace_sha256'))}
     if stop:
         result['observed_owned_role_counts'] = stop_roles(value)
@@ -194,7 +203,7 @@ def project(raw, expected, exit_code):
                             'daemon-loss': {'owned_daemon_lost'}, 'host-crash': {'restricted_launcher_failed'},
                             'timeout': {'restricted_launcher_failed', 'pilot_timeout'}}
                 terminal(row, 'failed' if name in failures else 'completed', failures.get(name))
-                result.update(observed_run(row, rejected=name == 'provider-reject'))
+                result.update(observed_run(row, rejected=name == 'provider-reject', timeout=name == 'timeout'))
                 classifiers += result['provider']['successful_exec_counts']['classifier']
             result['status'] = 'passed'
         except Invalid as error:
@@ -261,6 +270,9 @@ def project(raw, expected, exit_code):
                 observed[key] = value
         if type(failure.get('provider_request_count')) is int and 0 <= failure['provider_request_count'] <= 65536:
             observed['provider_request_count'] = failure['provider_request_count']
+        deadline = failure.get('provider_timeout_refusal', {})
+        if type(deadline) is dict and type(deadline.get('observed')) is bool:
+            observed['pinned_launcher_timeout_observed'] = deadline['observed']
         stage = failure.get('provider_failure_stage', {})
         if type(stage) is dict:
             counts = stage.get('denied_exec_counts', {})
