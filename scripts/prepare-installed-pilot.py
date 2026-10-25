@@ -41,6 +41,16 @@ def load(name, filename):
 FS = load("sou111_fs", "install-sou62-filesystem-profile.py")
 GIT = load("sou111_git", "install-sou68-git-profile.py")
 PILOT = load("sou111_pilot", "qualify-installed-pilot.py")
+SELECTION_LOCK = load("pilot_preparation_selection_lock", "pilot-selection-lock.py")
+
+
+class InstallerFailure(ValueError):
+    """Finite public failure fields; installer output stays in its private log."""
+
+    def __init__(self, kind, exit_code, private_log):
+        super().__init__(kind + "_installer_failed")
+        self.exit_code = exit_code
+        self.private_log = private_log
 
 
 class InstallerFailure(ValueError):
@@ -389,6 +399,11 @@ def prepare(args):
             require(not args.output.resolve().is_relative_to(root)
                     and not root.is_relative_to(args.output.resolve()), "preparation_overlaps_workspace")
     output = private_dir(args.output, create=not args.output.exists())
+    with SELECTION_LOCK.hold(output, exclusive=True):
+        return prepare_locked(args, output, requested)
+
+
+def prepare_locked(args, output, requested):
     generations = output / "generations"
     if not generations.exists():
         generations.mkdir(mode=0o700)

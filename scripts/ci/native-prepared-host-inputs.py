@@ -42,6 +42,7 @@ def require(value, reason):
 
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument('--issue', choices=('142', '143'), required=True)
     p.add_argument('--source', type=Path, required=True)
     p.add_argument('--scratch', type=Path, required=True)
     p.add_argument('--fast-scratch', type=Path, required=True)
@@ -56,7 +57,7 @@ def main():
         info = path.stat()
         require(info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o700, 'private_owned_scratch_required')
     record = {'format': 'sou143-trusted-host-inputs/1', 'status': 'incomplete',
-              'source': a.expected_commit, 'accepted_setup_source': ACCEPTED,
+              'source': a.expected_commit, 'issue': a.issue, 'accepted_setup_source': ACCEPTED,
               'candidate_code_executed': False, 'steps': []}
     def save():
         temporary = out / 'setup-attempt.next'
@@ -102,8 +103,8 @@ def main():
         git('merge-base', '--is-ancestor', ACCEPTED, a.expected_commit)
         first = json.loads((fast / 'native-first-slice.json').read_text())
         require(first.get('format') == 'sou142143-native-first-slice/1' and first.get('status') == 'passed'
-                and first.get('issue') == '143' and first.get('source') == a.expected_commit,
-                'passed_same_source_143_fast_slice_required')
+                and first.get('issue') == a.issue and first.get('source') == a.expected_commit,
+                'passed_same_source_fast_slice_required')
         step = [row for row in first['steps'] if row['label'] == 'native-test-build']
         require(len(step) == 1 and step[0]['status'] == 'passed'
                 and step[0]['log_sha256'] == sha(fast / 'native-test-build.log'), 'native_test_build_identity_changed')

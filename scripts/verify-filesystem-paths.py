@@ -140,6 +140,33 @@ def strace_quoted(path):
     return '"' + "".join(out) + '"'
 
 
+def completed_syscalls(lines):
+    """Join only matching per-task strace continuations; never invent a return.
+
+    The tracer may interleave openat/clone/execve with another task. Unfinished,
+    unmatched, wrong-task and wrong-syscall records cannot prove an execution.
+    """
+    pending = {}
+    for line in lines:
+        match = re.match(r"^(\d+)\s+(.*)$", line)
+        if not match:
+            continue
+        task, body = match.groups()
+        resumed = re.match(r"^<\.\.\. ([a-zA-Z0-9_]+) resumed>(.*)$", body)
+        if resumed:
+            previous = pending.pop(task, None)
+            if previous is not None and previous[0] == resumed.group(1):
+                yield task + "  " + previous[1] + resumed.group(2)
+        elif body.endswith(" <unfinished ...>"):
+            syscall = re.match(r"^([a-zA-Z0-9_]+)\(", body)
+            if syscall:
+                require(task not in pending and len(pending) < 4096,
+                        "syscall witness has ambiguous or excessive pending records")
+                pending[task] = (syscall.group(1), body[:-len(" <unfinished ...>")])
+        else:
+            yield line
+
+
 def server_tasks(lines):
     """Task IDs of the original server: the process that executed the pinned
     runtime inside the sandbox and every thread or child it created. Host-side
@@ -148,9 +175,10 @@ def server_tasks(lines):
     # With --pidns-translation a sandboxed creation returns its namespace ID
     # followed by the host task ID this witness uses.
     created = re.compile(r"^(\d+)\s+(?:<\.\.\. )?(?:clone3?|fork|vfork)\b.*= (\d+)(?: /\* (\d+) in strace's PID NS \*/)?$")
-    for line in lines:
+    for line in completed_syscalls(lines):
         head = line.split(None, 1)
-        if len(head) == 2 and head[1].startswith('execve("/mcp-runtime/node"'):
+        if (len(head) == 2 and head[1].startswith('execve("/mcp-runtime/node"')
+                and re.search(r"\)\s+= 0$", head[1])):
             tasks.add(head[0])
         match = created.match(line)
         if match and match.group(1) in tasks:
@@ -162,7 +190,7 @@ def reads(trace, target):
     """Successful read-only opens of the exact target by the original server."""
     raw = trace.read_bytes() if trace.exists() else b""
     require(len(raw) <= 64 * 1024 * 1024, "syscall witness exceeded bound")
-    lines = raw.decode("ascii", "replace").splitlines()
+    lines = list(completed_syscalls(raw.decode("ascii", "replace").splitlines()))
     tasks = server_tasks(lines)
     require(tasks, "original server process not observed by the syscall witness")
     pattern = re.compile(r'^(\d+)\s+openat\([^,]+, ' + re.escape(strace_quoted(target)) + r', O_RDONLY(?:\|[^)]*)?\) += [0-9]+$')

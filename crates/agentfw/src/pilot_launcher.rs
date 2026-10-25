@@ -142,6 +142,13 @@ pub struct PilotLaunchArgs {
     /// Anonymous sealed provider-input descriptor supplied by the prepared entry.
     #[arg(long, hide = true)]
     pub provider_env_fd: Option<i32>,
+    /// Explicit operator-owned Linux resource budget; absent means unbudgeted.
+    #[arg(long)]
+    pub linux_budget: Option<PathBuf>,
+
+    /// Expected canonical budget identity from an explicit preflight.
+    #[arg(long, requires = "linux_budget")]
+    pub linux_budget_sha256: Option<String>,
 
     /// Optional path to pilot policy YAML.
     #[arg(long)]
@@ -202,6 +209,8 @@ pub struct ValidatedConfig {
     pub fs_profile_path: PathBuf,
     pub git_profile_path: PathBuf,
     pub classifier_path: Option<PathBuf>,
+    pub linux_budget: Option<PathBuf>,
+    pub linux_budget_sha256: Option<String>,
     pub policy_path: Option<PathBuf>,
     pub host_session: String,
     pub agent_bin_path: PathBuf,
@@ -233,6 +242,8 @@ pub struct PilotLaunchReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
     pub checks_passed: Vec<String>,
+    #[serde(default)]
+    pub resource_budget: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -427,6 +438,27 @@ impl PilotLaunchArgs {
             self.allow_command_fixtures || self.mock_daemon_token.is_some(),
         )?;
 
+        let budget_identity = if let Some(path) = &self.linux_budget {
+            ensure!(
+                path.is_absolute() && path.canonicalize()? == *path,
+                "pilot_budget_selection_invalid"
+            );
+            let identity = crate::mcp::linux_budget::Config::load_file(path)?.identity();
+            ensure!(
+                self.linux_budget_sha256
+                    .as_ref()
+                    .is_none_or(|expected| expected == &identity),
+                "pilot_budget_selection_changed"
+            );
+            Some(identity)
+        } else {
+            ensure!(
+                self.linux_budget_sha256.is_none(),
+                "pilot_budget_selection_missing"
+            );
+            None
+        };
+
         Ok(ValidatedConfig {
             claude_path,
             workspace_path,
@@ -435,6 +467,8 @@ impl PilotLaunchArgs {
             fs_profile_path: resolved_fs_profile,
             git_profile_path: resolved_git_profile,
             classifier_path,
+            linux_budget: self.linux_budget.clone(),
+            linux_budget_sha256: budget_identity,
             policy_path,
             host_session,
             agent_bin_path,
@@ -1218,6 +1252,7 @@ pub fn write_per_process_mcp_config(
     private_dir: &Path,
     config: &ValidatedConfig,
     grants: &BTreeMap<String, child_authority::ChildAuthorityGrant>,
+    budget: Option<&crate::pilot_budget::RunBudget>,
 ) -> Result<(PathBuf, BTreeMap<String, ServerLaunchPlan>)> {
     let mut server_plans = BTreeMap::new();
     let mut mcp_servers = serde_json::Map::new();
@@ -1253,6 +1288,21 @@ pub fn write_per_process_mcp_config(
                 "--native-approval-wait-seconds".into(),
                 config.ask_wait_seconds.to_string(),
             ]);
+        }
+        if config.linux_budget.is_some() {
+            collector_args.extend([
+                "--pilot-budget-binding".into(),
+                budget
+                    .map(|b| b.binding_path.clone())
+                    .unwrap_or_else(|| {
+                        private_dir.join("budget-binding-required-at-execution.json")
+                    })
+                    .display()
+                    .to_string(),
+            ]);
+        }
+        if let Some(identity) = &config.linux_budget_sha256 {
+            collector_args.extend(["--pilot-budget-sha256".into(), identity.clone()]);
         }
         collector_args.push("--".into());
         collector_args.extend(runtime_cmd.clone());
@@ -1384,6 +1434,21 @@ pub fn write_per_process_mcp_config(
             );
         }
 
+        if let Some(source) = &config.linux_budget {
+            let selected = budget.map(|b| b.config_path()).unwrap_or(source);
+            let binding = budget
+                .map(|b| b.binding_path.clone())
+                .unwrap_or_else(|| private_dir.join("budget-binding-required-at-execution.json"));
+            env_obj.insert(
+                crate::mcp::linux_budget::ENVIRONMENT.into(),
+                serde_json::json!(selected),
+            );
+            env_obj.insert(
+                crate::pilot_budget::BINDING_ENV.into(),
+                serde_json::json!(binding),
+            );
+        }
+
         env_obj.insert("PATH".into(), serde_json::json!("/usr/bin:/bin"));
         env_obj.insert("LANG".into(), serde_json::json!("C.UTF-8"));
         env_obj.insert("TMPDIR".into(), serde_json::json!(private_dir));
@@ -1488,6 +1553,29 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let guard =
         PrivateDirGuard::for_workspaces(&[&config.workspace_path, &config.git_workspace_path])?;
 
+    let budget = if !config.dry_run {
+        if let Some(source) = &config.linux_budget {
+            ensure!(
+                !config.home_path.starts_with(&config.workspace_path)
+                    && !config.home_path.starts_with(&config.git_workspace_path),
+                "pilot_budget_private_state_required"
+            );
+            Some(crate::pilot_budget::RunBudget::for_run(
+                source,
+                &config.home_path,
+                &config.host_session,
+                config
+                    .linux_budget_sha256
+                    .as_deref()
+                    .expect("validated budget identity"),
+            )?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Discover live daemon instance or mock for testing
     let daemon_token = if let Some(ref mock) = config.mock_daemon_token {
         mock.clone()
@@ -1529,7 +1617,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         None
     };
     let (mcp_config_path, server_plans) =
-        write_per_process_mcp_config(&guard.path, &config, &grants)?;
+        write_per_process_mcp_config(&guard.path, &config, &grants, budget.as_ref())?;
 
     let mut allowed_tools = Vec::new();
     for t in &config.fs_tools {
@@ -1567,6 +1655,11 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             servers: server_plans,
             exit_code: Some(0),
             checks_passed,
+            resource_budget: if config.linux_budget.is_some() {
+                serde_json::json!({"status":"selected-not-active","requested":true})
+            } else {
+                serde_json::json!({"status":"unbudgeted","requested":false})
+            },
             error: None,
         };
 
@@ -1681,6 +1774,9 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,
         )
     };
+    if let Some(budget) = &budget {
+        budget.verify_root()?;
+    }
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
     let child_pid = child.id();
     drop(cmd);
@@ -1817,7 +1913,24 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .map(|run| run.finish(host_stopped && stop_can_complete))
         .transpose();
     let authenticated_stop = cleanup? == Some(true);
-    let exit_code = terminal_exit_code(exit_status, intercepted_term, authenticated_stop)?;
+    let resource_budget = if let Some(budget) = &budget {
+        budget.verify_root()?;
+        budget.summary()?
+    } else {
+        serde_json::json!({"status":"unbudgeted","requested":false})
+    };
+    let budget_refused = resource_budget
+        .get("failed_children")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0)
+        > 0
+        || resource_budget
+            .get("unresolved_children")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0)
+            > 0;
+    let host_exit = terminal_exit_code(exit_status, intercepted_term, authenticated_stop)?;
+    let exit_code = if budget_refused { 1 } else { host_exit };
     if !args.json {
         if authenticated_stop {
             eprintln!("Pilot owned run stopped; already dispatched effects were not rolled back");
@@ -1842,6 +1955,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             servers: server_plans,
             exit_code: Some(exit_code),
             checks_passed,
+            resource_budget: resource_budget.clone(),
             error: if exit_code == 0 {
                 None
             } else {
@@ -1851,6 +1965,7 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&report)?);
     }
 
+    ensure!(!budget_refused, "pilot_budget_terminal_refusal");
     if exit_code != 0 {
         bail!("host process failed with exit code {}", exit_code);
     }
@@ -2008,6 +2123,8 @@ mod tests {
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
             provider_env_fd: None,
+            linux_budget: None,
+            linux_budget_sha256: None,
             allow_command_fixtures: false,
         };
         assert!(args.validate().is_err());
@@ -2078,10 +2195,12 @@ mod tests {
             mock_daemon_token: Some(test_token.clone()),
             mock_instance_id: Some(test_instance_id.clone()),
             provider_env_fd: None,
+            linux_budget: None,
+            linux_budget_sha256: None,
             allow_command_fixtures: false,
         };
 
-        let config = args.validate().expect("validation should succeed");
+        let mut config = args.validate().expect("validation should succeed");
         assert_eq!(config.host_session, "test-session-123");
         assert_eq!(config.fs_tools, vec!["read_text_file"]);
         assert_eq!(config.git_tools, vec!["git_status"]);
@@ -2108,8 +2227,8 @@ mod tests {
         )
         .is_ok());
 
-        let (mcp_config, plans) =
-            write_per_process_mcp_config(&guard.path, &config, &grants).expect("write config");
+        let (mcp_config, plans) = write_per_process_mcp_config(&guard.path, &config, &grants, None)
+            .expect("write config");
         assert!(mcp_config.exists());
         let actual: serde_json::Value =
             serde_json::from_slice(&fs::read(&mcp_config).unwrap()).unwrap();
@@ -2165,6 +2284,37 @@ mod tests {
             fs_env["AGENTFW_WORKSPACE"],
             workspace.canonicalize().unwrap().display().to_string()
         );
+
+        // The credential scrubber must preserve explicitly selected budget
+        // authority in each collector's finite environment and launch arguments.
+        let budget_path = temp.path().join("selected-budget.json");
+        config.linux_budget = Some(budget_path.clone());
+        config.linux_budget_sha256 = Some("b".repeat(64));
+        let (budget_mcp, _) =
+            write_per_process_mcp_config(&guard.path, &config, &grants, None).unwrap();
+        let budget_mcp: serde_json::Value =
+            serde_json::from_slice(&fs::read(budget_mcp).unwrap()).unwrap();
+        for server in budget_mcp["mcpServers"].as_object().unwrap().values() {
+            assert_eq!(server["command"], "/usr/bin/env");
+            let words = server["args"].as_array().unwrap();
+            assert!(words.iter().any(|word| word
+                == &serde_json::json!(format!(
+                    "{}={}",
+                    crate::mcp::linux_budget::ENVIRONMENT,
+                    budget_path.display()
+                ))));
+            assert!(words.iter().any(|word| word
+                .as_str()
+                .is_some_and(|word| word.starts_with("AGENTFW_PILOT_BUDGET_BINDING="))));
+            assert!(words.iter().any(|word| word == "--pilot-budget-binding"));
+            assert!(words.iter().any(|word| word == "--pilot-budget-sha256"));
+            for key in crate::pilot_host::PROVIDER_ENV {
+                assert_eq!(server["env"][key], "");
+                assert!(!words.iter().any(|word| word
+                    .as_str()
+                    .is_some_and(|word| word.starts_with(&format!("{key}=")))));
+            }
+        }
     }
 
     #[test]
@@ -2202,6 +2352,8 @@ mod tests {
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
             provider_env_fd: None,
+            linux_budget: None,
+            linux_budget_sha256: None,
             allow_command_fixtures: false,
         };
 
@@ -2243,6 +2395,8 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            linux_budget: None,
+            linux_budget_sha256: None,
             allow_command_fixtures: false,
         };
 
@@ -2287,6 +2441,8 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            linux_budget: None,
+            linux_budget_sha256: None,
             allow_command_fixtures: false,
         };
 
@@ -2331,6 +2487,8 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            linux_budget: None,
+            linux_budget_sha256: None,
             allow_command_fixtures: true,
         };
 

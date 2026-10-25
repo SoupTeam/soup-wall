@@ -110,6 +110,8 @@ def main():
             run('native-provider-unit', [exact, 'pilot_host::', '--test-threads=1'])
         else:
             run('native-budget-unit', [exact, 'pilot_budget::tests::', '--test-threads=1'])
+            run('native-owner-unit', [exact, 'mcp::linux_owner::linux::tests::', '--test-threads=1'])
+            run('native-engine-unit', [exact, 'mcp::linux_budget::tests::', '--test-threads=1'])
             run('native-budget-cli', [a.cargo, 'test', '--offline', '--locked', '-p', 'agentfw',
                                      '--test', 'pilot_budget', '--', '--test-threads=1'])
             expected = '/system.slice/' + a.unit
@@ -171,6 +173,17 @@ def main():
         record['binary_sha256'] = {name: hashlib.sha256((out / 'target/debug' / name).read_bytes()).hexdigest()
                                    for name in ('agentfw', 'agentfw-git-sandbox')}
         record['status'] = 'passed'
+        if a.issue == '142':
+            adoption = run('native-owner-budget-adoption', [exact,
+                'mcp::linux_budget::tests::native_owner_preparation_adopts_same_leaf_without_restarting_wall_epoch',
+                '--exact', '--ignored', '--test-threads=1'])
+            if '1 passed;' not in adoption.read_text():
+                raise RuntimeError('exact_owner_budget_adoption_test_missing')
+            if any(path.is_dir() for path in delegated.iterdir()) or (delegated / 'cgroup.procs').read_text().strip():
+                raise RuntimeError('native_adoption_changed_owned_inventory')
+            record['kernel_preflight']['same_leaf_adoption_and_wall_epoch'] = True
+            record['original_profile_parent_loss_qualification'] = 'pending'
+
     except BaseException as error:
         record['status'] = 'failed'
         record['reason'] = str(error) if isinstance(error, RuntimeError) else type(error).__name__

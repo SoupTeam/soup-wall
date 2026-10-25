@@ -80,7 +80,9 @@ class PreparedRunBoundary(unittest.TestCase):
                           storage_failure="storage_full", cleanup="failed",
                           cleanup_storage_failure="storage_permission_denied")
             raise RUN.Failure("owned_process_cleanup_failed")
-        with patch.object(RUN, "selected", return_value=({"source": {}}, {}, {})), \
+        with patch.object(RUN.PREP, "supported_platform"), \
+             patch.object(RUN.SELECTION_LOCK, "hold"), \
+             patch.object(RUN, "selected", return_value=({"source": {}}, {}, {})), \
              patch.object(RUN.PREP.FS, "sha", return_value="a" * 64), \
              patch.object(RUN, "run", side_effect=failed_run), \
              patch.object(sys, "argv", ["pilot-run", "--run", "--selection", "/unused", "--expected-commit", "b" * 40]), \
@@ -92,6 +94,7 @@ class PreparedRunBoundary(unittest.TestCase):
             self.assertEqual(value["cleanup_storage_failure"], "storage_permission_denied")
             self.assertIn("may have occurred", value["effects"])
             self.assertEqual(value["stage"], "run_publication")
+            self.assertEqual(value["audit_retention"], RUN.AUDIT.LIMITS)
 
     def args(self, root):
         return SimpleNamespace(selection=root / "generations" / ("a" * 32) / "selection.json",
@@ -114,6 +117,71 @@ class PreparedRunBoundary(unittest.TestCase):
         paths = {"git_classifier": ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"}
         return args, selection, paths, profiles
 
+    def test_explicit_budget_plan_reads_only_owned_bytes_without_execution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            args, selection, paths, profiles = self.fixture(root)
+            budget = root / "budget.json"
+            budget.write_bytes(b'{"operator":"selection-only"}')
+            budget.chmod(0o600)
+            before = sorted(str(p) for p in root.rglob("*"))
+            with patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(sys, "argv", ["pilot-run", "--selection", str(args.selection),
+                     "--expected-commit", args.expected_commit, "--linux-budget", str(budget)]), \
+                 patch.object(RUN.subprocess, "run") as utility, \
+                 patch.object(RUN.subprocess, "Popen") as spawn, \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 0)
+                report = json.loads(output.getvalue())
+                self.assertEqual(report["resource_budget"]["status"], "selected-not-validated")
+                self.assertFalse(report["executed"])
+                utility.assert_not_called()
+                spawn.assert_not_called()
+            self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
+
+    def test_budget_input_rejects_symlink_shared_write_and_overflow(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            budget = root / "budget"
+            budget.write_bytes(b'{}')
+            budget.chmod(0o600)
+            self.assertEqual(RUN.budget_input(budget), b'{}')
+            link = root / "link"
+            link.symlink_to(budget)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(link)
+            budget.chmod(0o622)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(budget)
+            budget.chmod(0o600)
+            budget.write_bytes(b'x' * 16385)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(budget)
+
+    def test_budget_probe_has_no_provider_environment_and_refusal_never_starts_daemon(self):
+        provider = {key: "distinct-owned-canary" for key in ("ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE")}
+        with patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout=b'')) as call:
+            with self.assertRaisesRegex(RUN.Failure, "linux_budget_preflight_refused"):
+                RUN.budget_cli({"agentfw": Path("/trusted/agentfw")}, Path("/owned"),
+                    {"PATH": "/usr/bin:/bin", **provider}, "--config", Path("/owned/budget"), True)
+            self.assertEqual(call.call_args.kwargs["env"], {"PATH": "/usr/bin:/bin"})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            args, selection, paths, profiles = self.fixture(root)
+            args.linux_budget = root / "budget.json"
+            args.linux_budget.write_bytes(b'{}')
+            args.linux_budget.chmod(0o600)
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "environment", return_value={}), \
+                 patch.object(RUN, "budget_cli", side_effect=RUN.Failure("linux_budget_preflight_refused")), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaisesRegex(RUN.Failure, "linux_budget_preflight_refused"):
+                    RUN.run(args, {})
+                spawn.assert_not_called()
+            self.assertFalse(list(root.glob("soup-wall-run-*")))
+
     def test_default_command_does_not_spawn_or_create_state(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -127,9 +195,27 @@ class PreparedRunBoundary(unittest.TestCase):
                 self.assertEqual(RUN.main(), 0)
                 self.assertEqual(json.loads(output.getvalue())["status"], "plan")
                 self.assertFalse(json.loads(output.getvalue())["executed"])
+                self.assertEqual(json.loads(output.getvalue())["audit_retention"], RUN.AUDIT.LIMITS)
                 spawn.assert_not_called()
                 execute.assert_not_called()
             self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
+
+    @unittest.skipUnless(os.name == "posix", "lifetime lock requires POSIX")
+    def test_active_transition_refuses_run_before_selection_or_spawn(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args, _, _, _ = self.fixture(root)
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 RUN.SELECTION_LOCK.hold(root, exclusive=True), \
+                 patch.object(RUN, "selected") as selected, patch.object(RUN, "run") as launch, \
+                 patch.object(sys, "argv", ["pilot-run", "--run", "--selection", str(args.selection),
+                                            "--expected-commit", args.expected_commit]), \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 1)
+                self.assertEqual(json.loads(output.getvalue())["reason"],
+                                 "selected_generation_in_use_or_transitioning")
+                selected.assert_not_called()
+                launch.assert_not_called()
 
     def test_unsupported_platform_reports_a_finite_actionable_reason_without_spawn(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -194,10 +280,11 @@ class PreparedRunBoundary(unittest.TestCase):
             args.port = owner.getsockname()[1]
             before = sorted(str(p) for p in root.rglob("*"))
             with patch.object(RUN.PREP, "supported_platform"), \
-                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "selected", side_effect=AssertionError("slow generation recheck reached")) as recheck, \
                  patch.object(RUN.subprocess, "Popen") as spawn:
                 with self.assertRaisesRegex(RUN.Failure, "occupied_port_refused"):
                     RUN.run(args, {})
+                recheck.assert_not_called()
                 spawn.assert_not_called()
             self.assertEqual(owner.getsockname()[1], args.port)
             self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
