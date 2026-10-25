@@ -15,7 +15,7 @@ use crate::authority::Authority;
 use crate::egress::{hosts, is_allowed};
 use crate::event::{AgentEvent, EventKind, ToolDecl, Trust};
 use crate::facet::{facets, Facet};
-use crate::policy::{AgentDecision, AgentPolicySet, Signals, Verdict};
+use crate::policy::{AgentDecision, AgentPolicySet, PolicyTrace, Signals, Verdict};
 use crate::taint::{
     LimitError, SessionTaintUsage, TaintLimits, TaintMark, TaintTracker, TaintUsage,
     TrackingFailure,
@@ -42,6 +42,14 @@ pub struct Outcome {
     /// A spawn still needs trusted, stateful resolution before child authority exists.
     /// A projection of this intermediate result must not advertise Allow.
     pub authority_pending: bool,
+}
+
+/// Non-content facts observed during the same inspection as an Outcome.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InspectionTrace {
+    pub policy: PolicyTrace,
+    pub action_class: Option<ActionClass>,
+    pub touches_sensitive_path: bool,
 }
 
 impl Outcome {
@@ -312,7 +320,16 @@ impl AgentFirewall {
 
     /// Inspect one event and decide what to do about it.
     pub fn inspect(&mut self, ev: &AgentEvent) -> Outcome {
-        self.inspect_inner(ev, None, true)
+        self.inspect_inner(ev, None, true, None)
+    }
+
+    /// Observe the same legacy inspection without re-running detectors or rules.
+    /// Lifecycle-only events have no policy trace. This creates no new authority
+    /// beyond the behavior of `inspect`; callers must still constrain event kinds.
+    pub fn inspect_with_trace(&mut self, ev: &AgentEvent) -> (Outcome, Option<InspectionTrace>) {
+        let mut trace = None;
+        let outcome = self.inspect_inner(ev, None, true, Some(&mut trace));
+        (outcome, trace)
     }
 
     /// Inspect, resolve and commit an exact spawn proposal in one exclusive borrow.
@@ -384,12 +401,12 @@ impl AgentFirewall {
         egress: &[String],
         roles: NativeArgumentRoles,
     ) -> Outcome {
-        self.inspect_inner(ev, Some((baseline, egress, roles)), false)
+        self.inspect_inner(ev, Some((baseline, egress, roles)), false, None)
     }
 
     /// Inspect before release without tainting a session with withheld content.
     pub fn preview_native_result(&mut self, ev: &AgentEvent) -> Outcome {
-        self.inspect_inner(ev, None, false)
+        self.inspect_inner(ev, None, false, None)
     }
 
     /// Compatibility recorder for content already admitted by a legacy caller.
@@ -441,6 +458,7 @@ impl AgentFirewall {
         ev: &AgentEvent,
         native: Option<(ActionClass, &[String], NativeArgumentRoles)>,
         record_results: bool,
+        trace: Option<&mut Option<InspectionTrace>>,
     ) -> Outcome {
         // Lifecycle events only mutate state.
         match &ev.kind {
@@ -566,12 +584,20 @@ impl AgentFirewall {
         signals.provenance_incomplete = self.taint.is_incomplete(&ev.session);
 
         // 3. Policy decides, including the incomplete-history safety floor.
+        let (decision, policy_trace) = self.policy.evaluate_with_trace(&signals);
+        if let Some(trace) = trace {
+            *trace = Some(InspectionTrace {
+                policy: policy_trace,
+                action_class: signals.action_class,
+                touches_sensitive_path: signals.touches_sensitive_path,
+            });
+        }
         let AgentDecision {
             verdict,
             rule,
             message,
             fallback,
-        } = self.policy.evaluate(&signals);
+        } = decision;
 
         let authority_pending = proposed_authority.is_some() && verdict == Verdict::Escalate;
         // An unapproved spawn must not leave an effective child grant behind.
