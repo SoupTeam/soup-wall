@@ -1,0 +1,81 @@
+{
+  "cases": [
+    {
+      "case": "plan",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "df7341f66a65586d8fcc539a60766b2b32d5299aef535f88ddc6303e0b012ef4"
+    },
+    {
+      "case": "occupied-port",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "cbf4a5e9af3b0d5f72f9e87db251ebe53ae69a3891f579d061ca0dddc1cdbb9b"
+    },
+    {
+      "case": "stale-source",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "3c7659f3a6ff7f56d2dc72433b491bdf782b19ffd9f9ef8a276f3efc91b2330f"
+    },
+    {
+      "case": "changed-selection",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "15866ada0bd356558a661eb0fb7af09db767c140a74e612d32a864737db908b4"
+    },
+    {
+      "case": "provider-unavailable",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "dd69da3fb5e55ca00a56ee470dda2ef3baf7e6b2436e05bd8499a58679658c13"
+    }
+  ],
+  "emergency_stop": [],
+  "failure_observation": {
+    "bootstrap_counts": {},
+    "bootstrap_failure_stages": [],
+    "denied_exec_counts": {},
+    "entry_reason": "restricted_launcher_failed",
+    "entry_status": "failed",
+    "known_refusals": [
+      "Permission denied"
+    ],
+    "provider_request_count": 0
+  },
+  "format": "sou143-prepared-host-public/1",
+  "original_report_status": "failed",
+  "paid_api_calls": 0,
+  "private_report_sha256": "78caf6e24956b10bd4daf7e20e3be8487c6e85dd37cb7968153cdac271befd09",
+  "provider": "owned-scripted-loopback",
+  "qualifier_exit_code": 1,
+  "raw_environments_or_logs_exported": false,
+  "raw_process_metadata_exported": false,
+  "selected_sha256": {
+    "agentfw": "54c990ec8d367407363ee64cbb71e916499261e1247f76fad43140a7bc548349",
+    "bwrap": "3970ab274258223a8a42fca4181c449bcd1653acb6ed27ff249fa3db807696c2",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "7ce841b8068a448434d17a6214863048380856cf4058cf80980448394e30b05e",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "22ce08923328e6342282c8103d6dc4a87f593db444ef52895552ba9dba6b16eb",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "20b2f6083889dd0a81340a827436d27b95c504f0cc2f34ac63a2a92236f36119"
+  },
+  "source": {
+    "commit": "8bf63545b0c570559ac71c98f125ac05ae422dbf",
+    "files_sha256": "3f31913dbb8b018890d875d6b7f00d38e199fe8846c64ba133b7c61acaf0c6ee"
+  },
+  "source_commit": "8bf63545b0c570559ac71c98f125ac05ae422dbf",
+  "status": "failed",
+  "verification_errors": [
+    "emergency_stop_evidence_unproven",
+    "inventory_preservation_unproven",
+    "provider_classifier_unobserved",
+    "qualifier_not_completed_successfully"
+  ],
+  "workflow_run": 40165869955
+}

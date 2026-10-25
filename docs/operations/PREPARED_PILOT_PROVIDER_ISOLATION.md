@@ -25,13 +25,13 @@ The new routing is:
 | Readiness and stop CLI | Absent | Same private home and selected exact binary |
 | Native launcher | Absent from its environment | Anonymous sealed provider-input FD, consumed once before host exec |
 | Selected Claude host | Selected seven inputs only | Existing fixed restricted flags and private executable configuration |
-| MCP spawn utility | Empty overrides for the seven names | Fixed host environment; no provider values |
+| Host diagnostics and MCP spawn utility | Absent | Trusted child-environment guard, followed by finite `env -i` for MCP |
 | Collector | Absent | `env -i` followed by finite existing native/profile/classifier inputs |
 | Original filesystem/Git processes | Absent | Existing server sandbox environment clearing |
 | Classifier | Absent | Existing isolated adapter environment |
 
 The Python entry and native launcher are trusted transient input producers. The
-launcher must read the selected values to hand the selected inputs to the authenticated host bootstrap;
+launcher must read the selected values to construct the pinned host's initial environment;
 this is not a claim of secrecy against the operator or arbitrary same-UID ptrace.
 No credential broker, new token authority or ambient provider lookup is introduced.
 
