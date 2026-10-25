@@ -1,0 +1,223 @@
+{
+  "format": "sou124-expiry-followup-scheduling-correction/1",
+  "failed_ci_run": 40056104034,
+  "failed_source": "37143e3a8e3629252f9d7dcc2fe335e1043d1171",
+  "job": "Components / mcp-real-filesystem / required-linux-sandbox-and-real-host",
+  "failed_report_sha256": "d5fd3a64f23b49e964a318d42462d6e4476eb19fc163c6d3b8969830b9954bd8",
+  "failed_case": {
+    "profile": "git",
+    "case": "expire",
+    "sample_index": 0,
+    "configured": true,
+    "pending": true,
+    "approved": false,
+    "passed": false,
+    "broker_ttl_seconds": 20,
+    "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+    "configuration_sha256": "f25807d226ad123c6d9c4ff32043a4740623fa3dc812683f79d4a3c06615ba8e",
+    "stage": "before_decision_wire_check",
+    "binding_sha256": "0107798d4b3a09ca24416510623c49129ebe9107dfe53607de59a63ab1080059",
+    "pending_expires_at_ms": 1792811632851,
+    "pending_observed_at_ms": 1792811612855
+  },
+  "finite_failure_observations": [
+    {
+      "profile": "git",
+      "entry_returncode": null,
+      "offered_count": 2,
+      "provider_requests": 2,
+      "primary_present": true,
+      "primary_is_error": true,
+      "primary_diagnostic": "unclassified",
+      "stderr_diagnostic": "unclassified",
+      "asset_timings": [
+        {
+          "server": "git",
+          "stage": "runtime_and_libraries",
+          "elapsed_ms": 1811.798867
+        },
+        {
+          "server": "git",
+          "stage": "package_tree",
+          "elapsed_ms": 4389.693031
+        }
+      ],
+      "collector_failures": [],
+      "trace_sha256": "eeaacf91d77ce4dd2f401fa7de2863580ae12876ea12425aacbbe23184922302"
+    }
+  ],
+  "error": "useful_followup_pending_missing",
+  "cause": "Git expiry witness spent the useful follow-up wait on the deliberately unexpired primary TTL",
+  "correction": "observe the original pending expiry first, then begin the separate useful-call existing 20-second wait",
+  "unchanged_deadlines_seconds": {
+    "host": 90,
+    "call": 25,
+    "expiry_broker": 20,
+    "ordinary_broker": 30,
+    "followup_poll": 20
+  },
+  "original_expiry_attribution_and_all_effect_cleanup_assertions_preserved": true,
+  "rust_runtime_or_approve_measurement_branch_changed": false,
+  "controls": {
+    "focused_ask_tests": 36,
+    "full_python_run": 1229,
+    "full_python_passed": 1150,
+    "full_python_skipped": 79,
+    "failed": 0,
+    "full_python_log_sha256": "4924f625053e54f950d71623e464284a4f34d38edf34ae01df92adfc529144cf"
+  },
+  "native_followup": "all 14 lifecycle cases passed on f6963c6; later CI steps separately failed as recorded in witness-observer-consistency-correction.json",
+  "native_confirmation": {
+    "run_id": 40058255940,
+    "source": {
+      "commit": "f6963c69046c943df167e609fb15bfdd366c95a9",
+      "tree": "63f7ea04f585c5fef15ed28b7d5756e8d0872bf3",
+      "dirty": false
+    },
+    "source_after": {
+      "commit": "f6963c69046c943df167e609fb15bfdd366c95a9",
+      "tree": "63f7ea04f585c5fef15ed28b7d5756e8d0872bf3",
+      "dirty": false
+    },
+    "status": "pass",
+    "all_14_cases_passed": true,
+    "workspace_unchanged": true,
+    "qualification_sha256": "e6e0f93269f3cd96bf279e985be6a454107c4f5d8aaad70ce9e26b4e09d70dd4",
+    "cases": [
+      {
+        "profile": "git",
+        "case": "expire",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "refusal_after_original_expiry_ms": 57,
+        "primary_refusal_codes": [
+          "native_approval_timeout"
+        ],
+        "trace_sha256": "13b2b2897e57fd3b9b70f12eb105acdb681a6e39b453de4aed8b00c57ef81c71"
+      },
+      {
+        "profile": "git",
+        "case": "restart",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "git",
+        "case": "approve",
+        "passed": true,
+        "dispatched": 1,
+        "kernel_effects": 1,
+        "released": true,
+        "primary_refusal_codes": [],
+        "trace_sha256": "4dfc17efbd4dbe95c3f0feb601071db6eae3221d6e1fd55af890dd7763c31d62"
+      },
+      {
+        "profile": "git",
+        "case": "reject",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "primary_refusal_codes": [],
+        "trace_sha256": "88ae6ef451e8108ee1280b40ccd4164abc563668cb6629a9767d6bd9dc70b766"
+      },
+      {
+        "profile": "git",
+        "case": "cancel",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "git",
+        "case": "approved_cancel",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "git",
+        "case": "default",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "primary_refusal_codes": [],
+        "trace_sha256": "c117692e9434cc3a41e1da49659ddb16b31561d569aabaf098d02d5147f30cee"
+      },
+      {
+        "profile": "filesystem",
+        "case": "expire",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "refusal_after_original_expiry_ms": 45,
+        "primary_refusal_codes": [
+          "native_approval_timeout"
+        ],
+        "trace_sha256": "92208b00fc238bf60e2487c7442d45c6126cc6e1fd357de5309b208c88601aa3"
+      },
+      {
+        "profile": "filesystem",
+        "case": "restart",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "filesystem",
+        "case": "approve",
+        "passed": true,
+        "dispatched": 1,
+        "kernel_effects": 1,
+        "released": true,
+        "primary_refusal_codes": [],
+        "trace_sha256": "eedb77014577f5bf32d8914b95156ccacfac1618dee9ed74c3967ff224502264"
+      },
+      {
+        "profile": "filesystem",
+        "case": "reject",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "primary_refusal_codes": [],
+        "trace_sha256": "5c9e7fa8f7852abfce7f52ff84c6c969682dde190a6be1971d0e8cbe3317cfc8"
+      },
+      {
+        "profile": "filesystem",
+        "case": "cancel",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "filesystem",
+        "case": "approved_cancel",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false
+      },
+      {
+        "profile": "filesystem",
+        "case": "default",
+        "passed": true,
+        "dispatched": 0,
+        "kernel_effects": 0,
+        "released": false,
+        "primary_refusal_codes": [],
+        "trace_sha256": "2de0b24d367aa429bee2cc98bde56c921e85d0b623d9315c965f2936f561bd2e"
+      }
+    ]
+  }
+}

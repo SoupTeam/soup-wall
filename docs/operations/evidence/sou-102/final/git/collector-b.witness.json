@@ -1,0 +1,45 @@
+{
+  "kind": "git",
+  "trace_sha256": "440f074f3e5e904921a68f8deffc83dc57c311a931787d4a50a6dd951c766391",
+  "successful_target_syscalls": [
+    "1823  execve(\"/mcp-runtime/git\", [\"/mcp-runtime/git\", \"-c\", \"diff.mnemonicPrefix=false\", \"diff-tree\", \"d78d0ac3f251c445b17e41d1ac2145eb2eefffae\", \"--root\", \"-r\", \"--abbrev=40\", \"--full-index\", \"-M\", \"-p\", \"--no-ext-diff\", \"--no-color\"], 0x7f4c66520a80 /* 21 vars */) = 0"
+  ],
+  "effects": 1,
+  "raw_trace_exported": false,
+  "git_revision": "d78d0ac3f251c445b17e41d1ac2145eb2eefffae",
+  "pinned_git_commands": [
+    [
+      "/mcp-runtime/git",
+      "version"
+    ],
+    [
+      "/mcp-runtime/git",
+      "version"
+    ],
+    [
+      "/mcp-runtime/git",
+      "cat-file",
+      "--batch-check"
+    ],
+    [
+      "/mcp-runtime/git",
+      "cat-file",
+      "--batch"
+    ],
+    [
+      "/mcp-runtime/git",
+      "-c",
+      "diff.mnemonicPrefix=false",
+      "diff-tree",
+      "d78d0ac3f251c445b17e41d1ac2145eb2eefffae",
+      "--root",
+      "-r",
+      "--abbrev=40",
+      "--full-index",
+      "-M",
+      "-p",
+      "--no-ext-diff",
+      "--no-color"
+    ]
+  ]
+}

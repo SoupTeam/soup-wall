@@ -1,0 +1,84 @@
+{
+  "format": "sw-sou124-development/1",
+  "status": "incomplete",
+  "base_commit": "cdd9d36c65a592455e4f421268758adb6db744b8",
+  "implementation_commit": "77ec1a5ed5c2214cf641fb8d7ba86eab22c43a86",
+  "implementation_git_tree": "47e4c4d42c3fd62f78efa015430ba87543555128",
+  "source_files_sha256": {
+    "crates/agentfw/src/mcp/admission/real_server.rs": "61d6b1da99e8fc632325966a5abb2ee22e3957f8595aff2c0519ebfe18e85060",
+    "crates/agentfw/src/mcp/server_profile.rs": "c16f67ff140d05d1d9dd2e59d199fb4964d2da6f92df85a490611c8ade7c1b24",
+    "docs/operations/PILOT_ASK_LATENCY.md": "4bd03f65765490a4e83cf5d878176715031589fcf0d219c4718937c3dccce781",
+    "scripts/pilot_ask_latency.py": "d24067dfbc5f28138245afd65975461acde974c99543e677ad20ea1ee85a23eb",
+    "scripts/qualify-pilot-ask.py": "6ded1e39178404dc18fe5d77590881dd45161a9d9d2cc5a31bfe35743993041b",
+    "scripts/tests/test_pilot_ask_latency.py": "8efbfca43025c15841883764d7eb594d987d98f3d245a7ab4d1d3f4d81e6abd5"
+  },
+  "evidence_scope": "macOS development checks; not native Linux acceptance or performance evidence",
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "native_platform_probe": {
+    "status": "blocked",
+    "error_type": "ValueError",
+    "reason": "native_linux_x86_64_required",
+    "owned_processes_started": 0,
+    "native_linux_qualified": false
+  },
+  "rust_workspace": {
+    "command": "cargo test --offline --workspace --locked",
+    "canonical_tmpdir": true,
+    "separate_branch_build_directory": true,
+    "passed": 1656,
+    "failed": 0,
+    "ignored": 13,
+    "log_sha256": "017dc87bbbbf97cdcbf499c93d04ae9f5bb49cb001aa7159f5b1f596c24ec08d"
+  },
+  "python_suite": {
+    "python": "3.11",
+    "run": 1100,
+    "passed": 1038,
+    "failed": 0,
+    "skipped": 62,
+    "unsupported_control_names": [
+      "test_cancelled_build_stops_owned_descendant",
+      "test_timeout_stops_resistant_descendant_after_leader_exits",
+      "test_failed_and_timed_out_build_leave_bounded_private_logs"
+    ],
+    "unsupported_reason": "Unchanged Linux /proc process-group controls are unavailable on macOS; initial failures retained separately",
+    "test_source_modified_to_skip": false,
+    "log_sha256": "8a5454a1edc76fe8f5dfe2bb4cf49bf492e7d11f9760e80084f9c160cc857258"
+  },
+  "checks": {
+    "workspace_strict_clippy": "pass",
+    "cargo_fmt": "pass",
+    "diff_whitespace": "pass"
+  },
+  "paid_provider_calls": 0,
+  "live_model_effectiveness_measured": false,
+  "native_original_server_effect_witnesses_collected": false,
+  "raw_logs_exported": false,
+  "attribution": "Evidence-only commits do not transfer these observations to changed implementation or integrated source.",
+  "performance": {
+    "status": "performance_blocker",
+    "verified_reuse_implemented": false,
+    "required_per_profile_before_and_after": 20,
+    "baseline_filesystem_samples": 0,
+    "baseline_git_samples": 0,
+    "after_filesystem_samples": 0,
+    "after_git_samples": 0,
+    "p50_ms": null,
+    "p95_ms": null,
+    "target_p95_ms": 3000,
+    "target_met": false,
+    "timeout_increased": false
+  },
+  "retained_development_attempts": [
+    {
+      "artifact": "sou124-workspace-tests.log",
+      "status": "failed_default_redirected_tmp",
+      "summary": "546 passed, 11 failed, 1 ignored; /var symlink refusals",
+      "raw_log_sha256": "34ea1710a322377a1e773cb134ada1f01aee22184fe5131e284fcc4691d4b898",
+      "source_scope": "pre-final development diagnostic, not attributed to final implementation acceptance"
+    }
+  ]
+}

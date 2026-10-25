@@ -1,0 +1,130 @@
+{
+  "format": "sou124-terminal-cleanup-order-correction/1",
+  "baseline": "e17d73a192e2ddc08e5f87edf4d2d5c43af5bf22",
+  "failed_ci_run": 40070620829,
+  "failed_job": 120803080564,
+  "failed_qualification_sha256": "4c27f1a9def04e0e4feee1cd5d8739e5f29c2a3d0c6c8a845bdcea8752c02098",
+  "historical_failure": {
+    "error": "unexpected_launcher_exit_cleanup",
+    "passed": 9,
+    "failed": 1,
+    "incomplete": 4,
+    "failed_case": {
+      "profile": "filesystem",
+      "case": "approve",
+      "sample_index": 2,
+      "stage": "exact_decision",
+      "decision_submitted": "approve",
+      "passed": false,
+      "main_owned_cleanup_verified": true
+    },
+    "failing_operation": "independent sibling.finish after its explicit Reject",
+    "finite_observations": [
+      {
+        "profile": "filesystem",
+        "entry_returncode": 0,
+        "offered_count": 3,
+        "provider_requests": 3,
+        "primary_present": true,
+        "primary_is_error": false,
+        "primary_diagnostic": "unclassified",
+        "stderr_diagnostic": "unclassified",
+        "asset_timings": [
+          {
+            "server": "filesystem",
+            "stage": "runtime_and_libraries",
+            "elapsed_ms": 4260.154939999999
+          },
+          {
+            "server": "filesystem",
+            "stage": "package_tree",
+            "elapsed_ms": 1939.907744
+          },
+          {
+            "server": "filesystem",
+            "stage": "selected_profile",
+            "elapsed_ms": 0.40547700000000003
+          },
+          {
+            "server": "filesystem",
+            "stage": "runtime_and_libraries",
+            "elapsed_ms": 189.052901
+          },
+          {
+            "server": "filesystem",
+            "stage": "package_tree",
+            "elapsed_ms": 1327.270524
+          }
+        ],
+        "collector_failures": [],
+        "trace_sha256": "2b54ab98f7ca03f616ab42f8b6c5b4b9c9fe2e0dfb6883b2075c0825d9bbecbd"
+      },
+      {
+        "profile": "filesystem",
+        "entry_returncode": 1,
+        "offered_count": 3,
+        "provider_requests": 3,
+        "primary_present": true,
+        "primary_is_error": true,
+        "primary_diagnostic": "unclassified",
+        "stderr_diagnostic": "cleanup",
+        "asset_timings": [
+          {
+            "server": "filesystem",
+            "stage": "runtime_and_libraries",
+            "elapsed_ms": 4307.837634
+          },
+          {
+            "server": "filesystem",
+            "stage": "package_tree",
+            "elapsed_ms": 1929.016879
+          }
+        ],
+        "collector_failures": [],
+        "trace_sha256": "b4d5de415dd2d76eca141e9839f0a6832d13704a0caf280ce3f91a2113cc422a"
+      }
+    ],
+    "historical_lost_owner_boundary": "not retained; no claim that the original trace proves one specific missing owner acknowledgement"
+  },
+  "reproduced_defect": "cleanup_waiter returned success without any daemon/owner confirmation when no operator Stop marker existed, allowing immediate host-group TERM/KILL to race enrolled collector acknowledgements",
+  "correction": "terminal host cleanup revokes only the exact two signed run grants before waiting for existing owner acknowledgements; ordinary exit propagates a failed acknowledgement after physical group cleanup and reaping",
+  "preserved": {
+    "all_unconfirmed_cleanup_refuses": true,
+    "foreign_identity_refuses": true,
+    "leader_remains_unreaped_until_group_cleanup": true,
+    "no_synthetic_stop_receipt_for_normal_completion": true,
+    "no_effect_rollback_claim": true,
+    "owner_cleanup_budget_seconds": 6,
+    "final_retirement_budget_seconds": 7,
+    "host_seconds": 90,
+    "collector_approval_wait_seconds": 25,
+    "broker_ttl_seconds": [
+      20,
+      30
+    ]
+  },
+  "witnesses": {
+    "before_correction": "new ordinary-exit unavailable-observer test fails on original code",
+    "after_correction": "unavailable observer refuses; exact revocation precedes real loopback owner observation; unverified owner cannot complete; verified exact owner completes; foreign owner refuses; normal exit writes no operator Stop marker",
+    "python_diagnostics": "only selected-collector finite booleans and fixed error codes retained; owner metadata, raw errors and credentials are excluded"
+  },
+  "local_checks": {
+    "rust_workspace_passed": 1716,
+    "rust_workspace_failed": 0,
+    "rust_workspace_ignored": 13,
+    "python_run": 1245,
+    "python_passed": 1166,
+    "python_skipped": 79,
+    "python_failed": 0,
+    "strict_all_target_clippy": "passed, -D warnings",
+    "cargo_fmt": "passed"
+  },
+  "log_sha256": {
+    "ordinary-exit-before-correction.log": "53d4498a1e008df61c7c267ec4a6fab8cda27b3757f13526377a605d37629989",
+    "ordinary-exit-after-correction.log": "ae24f6844de4f910624a8a23628b4693c7a824960e2c62ac654a270589372a39",
+    "workspace-natural-cleanup-final.log": "7e3e41d7fdf236a7d7646bc611524d8a417fdcc3941e5593e2f221c69e5d64ec",
+    "python-natural-cleanup-final.log": "57081eab27bae84365f9855bb82c4f11cb8ab2745208ac15b6a1a3023f4a086a",
+    "clippy-natural-cleanup-final.log": "c8ca2a1f98091232d2b6eaabfc72622453f059550bd0e547c7c046dd4e017c9b"
+  },
+  "native_current_source": "required after correction; no blind retry and no passing result inferred from local tests"
+}

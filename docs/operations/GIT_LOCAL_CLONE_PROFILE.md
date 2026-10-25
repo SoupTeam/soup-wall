@@ -163,3 +163,16 @@ It then advances only its owned fixture to a conventional single-file HEAD,
 keeping the same config, attributes and staged/unstaged notes for the six-read
 qualification. No result bytes or policy rules are rewritten. General multi-file
 Git usability is not claimed; the detector issue requires separate coordination.
+# October 25 current-main refresh
+
+Refreshed the existing branch against accepted main `6c19914`. Conflict resolution
+preserves the separately qualified local-reference and shallow profiles alongside
+the ordinary-clone profile, the current workspace identity/ownership check, and
+the verified-input preparation path. The installer retains `static_git` together
+with offline preparation and the mutually exclusive local-reference/shallow
+options. CI retains evidence for all three profile families.
+
+The previous 73 successful checks and approval belong to `b4cf94d`; they do not
+qualify this refreshed source. Fresh current-head CI, native Linux evidence,
+independent review and admission are required before integration. The SOU-109
+multi-file result false refusals remain outside this profile change.

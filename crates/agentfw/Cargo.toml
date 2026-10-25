@@ -43,6 +43,9 @@ webpki-roots = "1"
 httparse = "1"
 futures-util = "0.3"
 sha2 = "0.10"
+# Already in the locked workspace: bounded loose Git object validation only.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+sha1_smol = "1"
 # Pinned-issuer Ed25519 verification; crate already exists in the locked workspace.
 aws-lc-rs = { version = "1", features = ["prebuilt-nasm"] }
 # Already present in the locked graph and license-reviewed in PROVENANCE.md

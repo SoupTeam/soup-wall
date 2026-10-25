@@ -1,0 +1,864 @@
+{
+  "format": "sw-installed-pilot-workload/1",
+  "version": 2,
+  "scope": "public-development-scripted-host",
+  "expectation_sources": [
+    "scripts/verify-sou62-real-mcp.py",
+    "scripts/verify-sou68-real-mcp.py",
+    "scripts/install-sou62-filesystem-profile.py",
+    "scripts/install-sou68-git-profile.py"
+  ],
+  "assets": {
+    "filesystem": {
+      "schemas": {
+        "read_file": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
+        "read_text_file": "d035cd0c9ce05f046ecb5eefa5c6c6c355c96b198cd00824c3a9e0dd91aa89b8",
+        "read_media_file": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+        "read_multiple_files": "725ce07791beba80842b7322c0bfece72ba66b4ff3c3dfecf74f3401ce9d125e",
+        "write_file": "ce17c85e8a5883552a11555f9b893de497fadab965a5c7935c0cb8f3c55b91d6",
+        "edit_file": "88459ef670b139a12a3e0335ae0a4584dd892f60f45f565b545e1004d7565dd5",
+        "create_directory": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+        "list_directory": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+        "list_directory_with_sizes": "8d6f5d6dcaa186f44c30e5d278419c2559f6032a3455fc3fdbe4865910b35941",
+        "directory_tree": "99ea8d9c9e9241d82937687caaa04b622eff094f2ba194cd7c8ee3e43dc6ed9c",
+        "move_file": "621218ed9bc38b6cde9c6dc003583fb5778e5076bb28e25634b9070b33264682",
+        "search_files": "5b5a1eaeb940a6cfdd01f018784754be5204da54959a26b19ee5d00231636cc1",
+        "get_file_info": "fc64d952de15bbe83e841a79d32385e4708e9758079b84dd233e485ce3c34720",
+        "list_allowed_directories": "7a014b717a77aac971ea0ab5c0ff47bb13e6cae7ef9442d9dedb15ce36381b15"
+      },
+      "manifest_canonical_sha256": "aa701b7cb58fdd4eed9f0cf0c2e1550b79740b0054b3ca85253ce276e7513b06"
+    },
+    "git": {
+      "schemas": {
+        "git_status": "e3eb0910a0b7d725877173b42aa54849c5a978932a2192e3f814a9d92794db25",
+        "git_diff_unstaged": "f6d9cece66ac042e727f712545825c152c5d6dc39c944dc99c3319b3464bd5db",
+        "git_diff_staged": "edcbb5d9ac0831c9d613d55e28fc6e5a446313ce413a7bb6fba7ba11d5cc6d5b",
+        "git_diff": "3028417740cd7f02a8ada0da7f65571b0a98309b3b308c5226ad40dbeeea2eb0",
+        "git_commit": "292f379542fc33ea01f62648f50aab4b07518bb7614f79895e9a77639043f3c3",
+        "git_add": "bcca48730b12740da64f7a0c898574eb9bb3aa7679dcf0bd8ac8b9889b6254fa",
+        "git_reset": "5e4fc873d15789835f724f59e69d268a2d3cb614605712363eb16549ce0c6563",
+        "git_log": "6a12081f35d8069ddca7d1e70de8c4181cbb0475098b23cb24b13f8ad385240e",
+        "git_create_branch": "a729d00b7ca12f742eace3e299d98df0290c382a2fa54033f487aaefa787b0ed",
+        "git_checkout": "516dc2e905ce6d79254be1035b338c26992f1c8e66a4e5d88d7b6a7485833969",
+        "git_show": "5ba0f464a65a0e4d67c6944e157bdf9fc35447b568ac17f11db31e7adc4716f4",
+        "git_branch": "57d04063c4a36858343773eb6928ffd7a2e52a4d95545a310845d8facdc0211c"
+      },
+      "manifest_canonical_sha256": "f062bbaa4dffb595d45d374c31c276d02a8ac8349e53b21e74f5fb7b36f667b2"
+    }
+  },
+  "engineering_budgets": {
+    "host_deadline_seconds": 150,
+    "case_deadline_seconds": 180,
+    "latency_threshold_approved": false,
+    "p95_overhead_ms_investigation_budget": 1000
+  },
+  "conditions": {
+    "host": "fresh process per variant and arm",
+    "os_cache": "uncontrolled, not claimed cold",
+    "order": "control then protected; order bias retained",
+    "steady_state": "calls after first batch within fresh host"
+  },
+  "cases": [
+    {
+      "id": "list-read-history",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "list_directory",
+            {
+              "path": "/workspace"
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "search-read-status",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "search_files",
+            {
+              "path": "/workspace",
+              "pattern": "notes.txt"
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/notes.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "batch-read-log",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_multiple_files",
+            {
+              "paths": [
+                "/workspace/guide.txt",
+                "/workspace/notes.txt"
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_log",
+            {
+              "max_count": 3
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "head-and-diff",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt",
+              "head": 1
+            }
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_diff",
+            {
+              "target": "HEAD",
+              "context_lines": 3
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "tail-and-show",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/notes.txt",
+              "tail": 2
+            }
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "sizes-and-status",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "list_directory_with_sizes",
+            {
+              "path": "/workspace",
+              "sortBy": "size"
+            }
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_status",
+            {}
+          ],
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "unstaged-followup",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "git",
+            "git_diff_unstaged",
+            {
+              "context_lines": 1
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/notes.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "staged-followup",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "git",
+            "git_diff_staged",
+            {
+              "context_lines": 1
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "log-one-read",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "git",
+            "git_log",
+            {
+              "max_count": 1
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_diff",
+            {
+              "target": "HEAD",
+              "context_lines": 3
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "parallel-reads",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/notes.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "search-exclusion",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "search_files",
+            {
+              "path": "/workspace",
+              "pattern": "*.txt",
+              "excludePatterns": [
+                "source.txt"
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "status-diff-show",
+      "kind": "benign",
+      "support": "supported",
+      "batches": [
+        [
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_diff",
+            {
+              "target": "HEAD",
+              "context_lines": 3
+            }
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ],
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ]
+        ]
+      ],
+      "expectation": "all original results succeed; matching normalized content and unchanged independent snapshots"
+    },
+    {
+      "id": "write-new",
+      "kind": "refusal",
+      "support": "profile-unsupported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "write_file",
+            {
+              "path": "/workspace/owned-new.txt",
+              "content": "owned development control"
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "refused_batch": 1,
+      "expectation": "control mutates owned files/index; protected explicitly refuses before execution and preserves snapshot; useful continuation"
+    },
+    {
+      "id": "write-existing",
+      "kind": "refusal",
+      "support": "profile-unsupported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "write_file",
+            {
+              "path": "/workspace/notes.txt",
+              "content": "owned replacement"
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "refused_batch": 1,
+      "expectation": "control mutates owned files/index; protected explicitly refuses before execution and preserves snapshot; useful continuation"
+    },
+    {
+      "id": "write-unicode",
+      "kind": "refusal",
+      "support": "profile-unsupported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "write_file",
+            {
+              "path": "/workspace/owned-unicode.txt",
+              "content": "café қазақша"
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "refused_batch": 1,
+      "expectation": "control mutates owned files/index; protected explicitly refuses before execution and preserves snapshot; useful continuation"
+    },
+    {
+      "id": "parallel-write",
+      "kind": "refusal",
+      "support": "profile-unsupported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "write_file",
+            {
+              "path": "/workspace/owned-a.txt",
+              "content": "a"
+            }
+          ],
+          [
+            "filesystem",
+            "write_file",
+            {
+              "path": "/workspace/owned-b.txt",
+              "content": "b"
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "refused_batch": 1,
+      "expectation": "control mutates owned files/index; protected explicitly refuses before execution and preserves snapshot; useful continuation"
+    },
+    {
+      "id": "edit-one",
+      "kind": "refusal",
+      "support": "profile-unsupported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "edit_file",
+            {
+              "path": "/workspace/notes.txt",
+              "edits": [
+                {
+                  "oldText": "working notes",
+                  "newText": "modified notes"
+                }
+              ],
+              "dryRun": false
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "refused_batch": 1,
+      "expectation": "control mutates owned files/index; protected explicitly refuses before execution and preserves snapshot; useful continuation"
+    },
+    {
+      "id": "edit-nested",
+      "kind": "refusal",
+      "support": "profile-unsupported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "edit_file",
+            {
+              "path": "/workspace/notes.txt",
+              "edits": [
+                {
+                  "oldText": "working notes",
+                  "newText": "changed notes"
+                },
+                {
+                  "oldText": "café",
+                  "newText": "coffee"
+                }
+              ]
+            }
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "refused_batch": 1,
+      "expectation": "control mutates owned files/index; protected explicitly refuses before execution and preserves snapshot; useful continuation"
+    },
+    {
+      "id": "reset-after-status",
+      "kind": "refusal",
+      "support": "profile-unsupported",
+      "batches": [
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_status",
+            {}
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_reset",
+            {}
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "refused_batch": 1,
+      "expectation": "control mutates owned files/index; protected explicitly refuses before execution and preserves snapshot; useful continuation"
+    },
+    {
+      "id": "reset-after-diff",
+      "kind": "refusal",
+      "support": "profile-unsupported",
+      "batches": [
+        [
+          [
+            "git",
+            "git_diff",
+            {
+              "target": "HEAD",
+              "context_lines": 3
+            }
+          ]
+        ],
+        [
+          [
+            "git",
+            "git_reset",
+            {}
+          ]
+        ],
+        [
+          [
+            "filesystem",
+            "read_text_file",
+            {
+              "path": "/workspace/guide.txt"
+            }
+          ],
+          [
+            "git",
+            "git_show",
+            {
+              "revision": "HEAD"
+            }
+          ]
+        ]
+      ],
+      "refused_batch": 1,
+      "expectation": "control mutates owned files/index; protected explicitly refuses before execution and preserves snapshot; useful continuation"
+    }
+  ],
+  "revision_note": "v1 retained: tail=1 selects the trailing empty line in the original server. v2 uses tail=2 to request the intended source text; required useful content and all outcomes remain unchanged."
+}

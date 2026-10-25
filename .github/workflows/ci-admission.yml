@@ -7,7 +7,8 @@ on:
   workflow_run:
     # The default-setup workflow is CodeQL; PR #<number> is a run title.
     workflows: [ci, CodeQL, 'PR #*']
-    types: [completed]
+    # A rerun invalidates an earlier green candidate before it completes.
+    types: [in_progress, completed]
 
 permissions:
   actions: read
@@ -16,9 +17,13 @@ permissions:
   pull-requests: read
   statuses: write
 
+# Serialize status writers for the same head. Keep every pending event: a
+# cancelled verifier could leave an earlier green status in place during a
+# rerun. Each queued verifier re-reads the current PR and run attempts.
 concurrency:
-  group: sou91-admission-${{ github.event.pull_request.number || github.event.workflow_run.head_sha }}
-  cancel-in-progress: true
+  group: sou91-admission-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   admission:
@@ -36,4 +41,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SOU91_SELECTIVE_CI: ${{ vars.SOU91_SELECTIVE_CI }}
-        run: python3 scripts/ci_admission.py --wait-seconds 0
+        run: python3 scripts/ci_admission.py --wait-seconds 12

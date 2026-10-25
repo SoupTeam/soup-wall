@@ -6,6 +6,28 @@ const CORE: &str = "[core]\nrepositoryformatversion = 0\nbare = false\nfilemode 
 const ORDINARY: &str = "[user]\nname = Owned Synthetic\nemail = owned@example.invalid\n[remote \"origin\"]\nurl = https://example.invalid/owned/repo.git\nfetch = +refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\nremote = origin\nmerge = refs/heads/main\n";
 
 #[test]
+fn refreshed_profile_dispatch_preserves_all_separate_git_variants() {
+    for format in [
+        super::git::FORMAT,
+        super::git::LOCAL_REFS_FORMAT,
+        super::git::SHALLOW_FORMAT,
+        FORMAT,
+    ] {
+        assert!(super::selected(Some(format)));
+        assert!(super::git_selected(format));
+        let manifest = super::original_manifest_for(format).unwrap();
+        assert_eq!(manifest, super::git::original_manifest());
+        assert!(super::classify_manifest_for(format, &manifest).is_ok());
+    }
+    assert!(!super::git_selected(super::FORMAT));
+    assert!(!super::git_selected("sw-mcp/git-unknown/1"));
+    assert!(!super::selected(Some("sw-mcp/git-unknown/1")));
+    // Local clone does not implicitly select either independently qualified view.
+    assert_ne!(FORMAT, super::git::LOCAL_REFS_FORMAT);
+    assert_ne!(FORMAT, super::git::SHALLOW_FORMAT);
+}
+
+#[test]
 fn ordinary_config_preserves_v1_refusal() {
     validate_config(format!("{CORE}{ORDINARY}").as_bytes()).unwrap();
     let root = tempfile::tempdir().unwrap();

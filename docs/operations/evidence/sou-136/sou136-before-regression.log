@@ -1,0 +1,18 @@
+
+running 1 test
+sou136_real_kernel_member_open_errno=3
+test mcp::linux_budget::linux::process_record_tests::sou136_regression_enumerated_exit_before_member_open ... FAILED
+
+failures:
+
+failures:
+    mcp::linux_budget::linux::process_record_tests::sou136_regression_enumerated_exit_before_member_open
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 671 filtered out; finished in 0.00s
+
+
+thread 'mcp::linux_budget::linux::process_record_tests::sou136_regression_enumerated_exit_before_member_open' (12645) panicked at crates/agentfw/src/mcp/linux_budget.rs:1221:13:
+assertion `left == right` failed: departed member still closes accepted budget path
+  left: Err("mcp_budget_membership_unverified")
+ right: Ok(())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

@@ -45,6 +45,46 @@ pub const GIT_ALLOWED_TOOLS: &[&str] = &[
     "git_show",
 ];
 
+/// Inspect selected roots using the same validators as the original profiles.
+/// No Git process, daemon, authority, workspace writes or configuration loading.
+#[derive(Args, Debug)]
+pub struct PilotWorkspacesArgs {
+    #[arg(long)]
+    pub workspace: PathBuf,
+    #[arg(long)]
+    pub git_workspace: PathBuf,
+}
+
+pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::MetadataExt;
+        for root in [&args.workspace, &args.git_workspace] {
+            ensure!(
+                crate::sandbox::validate_workspace_path(root)? == *root,
+                "canonical workspace required"
+            );
+            let metadata = fs::metadata(root)?;
+            ensure!(
+                metadata.uid() == unsafe { libc::geteuid() } && metadata.mode() & 0o022 == 0,
+                "owned workspace without shared write access required"
+            );
+        }
+        crate::mcp::server_profile::git::validate_repository(&args.git_workspace)
+            .context("unsupported Git layout; use a supported standalone repository; do not repair the project")?;
+        println!(
+            "{}",
+            serde_json::json!({"status":"supported-read-only", "executed":false})
+        );
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = args;
+        bail!("native Linux required for original pilot workspace validation")
+    }
+}
+
 /// Helper to generate random hex identifier without external uuid crate.
 fn random_hex_128() -> String {
     format!("{:032x}", rand::random::<u128>())
@@ -77,6 +117,10 @@ pub struct PilotLaunchArgs {
     /// Target workspace directory exposed to the pilot.
     #[arg(long)]
     pub workspace: PathBuf,
+
+    /// Separate Git root pinned by the installed Git profile; defaults to --workspace.
+    #[arg(long)]
+    pub git_workspace: Option<PathBuf>,
 
     /// Explicit installed daemon home directory containing native-token and config;
     /// defaults to ~/.agentfw or AGENTFW_HOME.
@@ -150,6 +194,7 @@ pub struct ValidatedConfig {
     pub claude_path: PathBuf,
     pub workspace_path: PathBuf,
     pub home_path: PathBuf,
+    pub git_workspace_path: PathBuf,
     pub fs_profile_path: PathBuf,
     pub git_profile_path: PathBuf,
     pub classifier_path: Option<PathBuf>,
@@ -278,6 +323,17 @@ impl PilotLaunchArgs {
             },
         };
 
+        let git_workspace_path = self
+            .git_workspace
+            .as_ref()
+            .unwrap_or(&workspace_path)
+            .canonicalize()
+            .context("canonicalize Git workspace")?;
+        ensure!(
+            git_workspace_path.is_dir(),
+            "selected Git workspace is not a directory"
+        );
+
         // 5. Optional classifier and policy
         let classifier_path = match &self.classifier {
             Some(p) => {
@@ -349,8 +405,12 @@ impl PilotLaunchArgs {
             &workspace_path,
             is_mock,
         )?;
-        let (git_runtime_cmd, resolved_git_profile) =
-            resolve_server_runtime(GIT_SERVER_ID, &git_profile_path, &workspace_path, is_mock)?;
+        let (git_runtime_cmd, resolved_git_profile) = resolve_server_runtime(
+            GIT_SERVER_ID,
+            &git_profile_path,
+            &git_workspace_path,
+            is_mock,
+        )?;
 
         let prompt = self
             .prompt
@@ -358,9 +418,15 @@ impl PilotLaunchArgs {
             .unwrap_or_else(|| "Run the owned pilot sequence.".to_string());
         let model = self.model.clone();
 
+        crate::pilot_host::validate(
+            &claude_path,
+            self.allow_command_fixtures || self.mock_daemon_token.is_some(),
+        )?;
+
         Ok(ValidatedConfig {
             claude_path,
             workspace_path,
+            git_workspace_path,
             home_path,
             fs_profile_path: resolved_fs_profile,
             git_profile_path: resolved_git_profile,
@@ -610,27 +676,36 @@ pub struct PrivateDirGuard {
 
 impl PrivateDirGuard {
     pub fn new(workspace: &Path) -> Result<Self> {
-        let temp_base = std::env::var_os("TMPDIR")
+        Self::for_workspaces(&[workspace])
+    }
+
+    fn for_workspaces(workspaces: &[&Path]) -> Result<Self> {
+        let parent = std::env::var_os("TMPDIR")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
-        let rand_suffix = random_hex_128();
-        let private_path = temp_base.join(format!("soup-wall-pilot-{}", rand_suffix));
+        Self::in_parent(workspaces, &parent)
+    }
 
-        // Ensure private dir is not inside workspace
-        let canonical_workspace = workspace.canonicalize()?;
-        ensure!(
-            !private_path.starts_with(&canonical_workspace),
-            "private per-run configuration directory must be outside the workspace"
-        );
-
-        fs::create_dir_all(&private_path)?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&private_path, fs::Permissions::from_mode(0o700))?;
+    fn in_parent(workspaces: &[&Path], parent: &Path) -> Result<Self> {
+        let parent = parent
+            .canonicalize()
+            .context("canonicalize private state parent")?;
+        let private_path = parent.join(format!("soup-wall-pilot-{}", random_hex_128()));
+        for workspace in workspaces {
+            ensure!(
+                !private_path.starts_with(workspace.canonicalize()?),
+                "private per-run configuration directory must be outside the workspace"
+            );
         }
-
+        let builder = fs::DirBuilder::new();
+        #[cfg(unix)]
+        let builder = {
+            use std::os::unix::fs::DirBuilderExt;
+            let mut builder = builder;
+            builder.mode(0o700);
+            builder
+        };
+        builder.create(&private_path)?;
         Ok(Self {
             path: private_path,
             disarmed: false,
@@ -893,22 +968,185 @@ pub fn verify_daemon_policy(config: &ValidatedConfig, _daemon_token: &str) -> Re
     Ok(())
 }
 
+// Keep the owned leader unreaped until its process group has been stopped.
+// try_wait() would release its PID before the delayed group KILL, permitting reuse.
+#[cfg(unix)]
+fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    let mut information = unsafe { std::mem::zeroed::<libc::siginfo_t>() };
+    let result = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            child.id(),
+            &mut information,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    if result < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::Interrupted {
+            return Ok(false);
+        }
+        return Err(error);
+    }
+    Ok(information.si_signo != 0)
+}
+
+#[cfg(not(unix))]
+fn owned_host_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    child.try_wait().map(|status| status.is_some())
+}
+
+#[cfg(target_os = "macos")]
+fn mac_group_has_running_processes(output: &str, group: u32) -> Result<bool> {
+    let mut observed = false;
+    for row in output.lines().filter(|line| !line.trim().is_empty()) {
+        let mut fields = row.split_ascii_whitespace();
+        let id: u32 = fields
+            .next()
+            .context("missing group observation")?
+            .parse()?;
+        let state = fields.next().context("missing group state")?;
+        ensure!(fields.next().is_none(), "invalid group observation");
+        observed = true;
+        if id == group && !state.starts_with('Z') {
+            return Ok(true);
+        }
+    }
+    ensure!(observed, "empty process group observation");
+    Ok(false)
+}
+
+#[cfg(target_os = "macos")]
+async fn mac_group_is_zombie_only(group: u32) -> Result<bool> {
+    use tokio::io::AsyncReadExt;
+    // Read-only observation of the pinned, unreaped leader's existing group.
+    // No observed PID is ever selected for a signal. Fixed system ps reports
+    // only group/state, never command arguments or user identifiers.
+    let mut command = tokio::process::Command::new("/bin/ps");
+    command
+        .args(["-axo", "pgid=,stat="])
+        .env_clear()
+        .env("LC_ALL", "C")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    let mut child = command.spawn().context("observe owned group")?;
+    let stdout = child.stdout.take().context("group observation pipe")?;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        let mut bytes = Vec::new();
+        stdout
+            .take(4 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .await?;
+        ensure!(
+            bytes.len() <= 4 * 1024 * 1024,
+            "group observation byte limit"
+        );
+        ensure!(child.wait().await?.success(), "group observation failed");
+        Ok::<_, anyhow::Error>(!mac_group_has_running_processes(
+            std::str::from_utf8(&bytes)?,
+            group,
+        )?)
+    })
+    .await
+    .context("group observation deadline")?
+}
+
+#[cfg(unix)]
+async fn signal_owned_group(pgid: u32, kind: i32) -> Result<()> {
+    if unsafe { libc::kill(-(pgid as i32), kind) } < 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            return Ok(());
+        }
+        #[cfg(target_os = "macos")]
+        if error.raw_os_error() == Some(libc::EPERM) && mac_group_is_zombie_only(pgid).await? {
+            // Seatbelt refuses a signal to an unreaped zombie. That process
+            // cannot execute; a live/unknown member still fails closed.
+            return Ok(());
+        }
+        anyhow::bail!("owned host process group termination unconfirmed: {error}");
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 #[allow(dead_code)]
-async fn terminate_process_group(pgid: u32, grace: Duration) {
-    let target = -(pgid as i32);
-    unsafe {
-        libc::kill(target, libc::SIGTERM);
-    }
+async fn terminate_process_group(pgid: u32, grace: Duration) -> Result<()> {
+    let term = signal_owned_group(pgid, libc::SIGTERM).await;
     tokio::time::sleep(grace).await;
-    unsafe {
-        libc::kill(target, libc::SIGKILL);
-    }
+    let kill = signal_owned_group(pgid, libc::SIGKILL).await;
+    term?;
+    kill?;
+    Ok(())
 }
 
 #[cfg(not(unix))]
 #[allow(dead_code)]
-async fn terminate_process_group(_pgid: u32, _grace: Duration) {}
+async fn terminate_process_group(_pgid: u32, _grace: Duration) -> Result<()> {
+    Ok(())
+}
+
+/// Observation only: never discover a PID to signal. The unreaped leader
+/// reserves this exact group identity throughout the kill/reap boundary.
+#[cfg(target_os = "linux")]
+fn host_group_has_children(group: u32) -> Result<bool> {
+    let mut count = 0usize;
+    for entry in fs::read_dir("/proc")? {
+        let entry = entry?;
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|s| s.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if pid == group {
+            continue;
+        }
+        count += 1;
+        ensure!(
+            count <= 32768,
+            "owned host cleanup process observation limit"
+        );
+        let stat = match fs::read_to_string(entry.path().join("stat")) {
+            Ok(stat) => stat,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error).context("owned host cleanup observation unavailable"),
+        };
+        let (_, fields) = stat
+            .rsplit_once(')')
+            .context("owned host cleanup process identity invalid")?;
+        let observed_group: u32 = fields
+            .split_whitespace()
+            .nth(2)
+            .context("owned host cleanup process identity incomplete")?
+            .parse()?;
+        if observed_group == group {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+async fn reap_owned_host(child: &mut std::process::Child) -> Result<std::process::ExitStatus> {
+    #[cfg(target_os = "linux")]
+    {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if owned_host_exited(child)? && !host_group_has_children(child.id())? {
+                break;
+            }
+            ensure!(
+                tokio::time::Instant::now() < deadline,
+                "pilot stop incomplete: owned host group still has unreaped processes"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+    child.wait().context("reap owned host after group cleanup")
+}
 
 /// Mint HMAC-signed scoped child authority grants bound to the live daemon instance.
 pub fn mint_grants(
@@ -1037,7 +1275,15 @@ pub fn write_per_process_mcp_config(
         let mut env_obj = serde_json::Map::new();
         env_obj.insert(
             "AGENTFW_WORKSPACE".to_string(),
-            serde_json::Value::String(config.workspace_path.display().to_string()),
+            serde_json::Value::String(
+                if server_id == GIT_SERVER_ID {
+                    &config.git_workspace_path
+                } else {
+                    &config.workspace_path
+                }
+                .display()
+                .to_string(),
+            ),
         );
         if !config.allow_command_fixtures && config.mock_daemon_token.is_none() {
             ensure!(
@@ -1125,15 +1371,12 @@ pub fn write_per_process_mcp_config(
             );
         }
 
-        if let Ok(py) = std::env::var("AGENTFW_CLASSIFIER_PYTHON") {
+        // The interpreter is part of the validated installed Git profile.
+        // An ambient project environment must not replace executable classifier authority.
+        if let Some(python) = config.git_runtime_cmd.first() {
             env_obj.insert(
                 "AGENTFW_CLASSIFIER_PYTHON".to_string(),
-                serde_json::Value::String(py),
-            );
-        } else if server_id == GIT_SERVER_ID && !runtime_cmd.is_empty() {
-            env_obj.insert(
-                "AGENTFW_CLASSIFIER_PYTHON".to_string(),
-                serde_json::Value::String(runtime_cmd[0].clone()),
+                serde_json::Value::String(python.clone()),
             );
         }
 
@@ -1197,7 +1440,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     if config.ask_wait_seconds > 0 {
         crate::pilot_approval::preflight(&config)?;
     }
-    let guard = PrivateDirGuard::new(&config.workspace_path)?;
+    let guard =
+        PrivateDirGuard::for_workspaces(&[&config.workspace_path, &config.git_workspace_path])?;
 
     // Discover live daemon instance or mock for testing
     let daemon_token = if let Some(ref mock) = config.mock_daemon_token {
@@ -1222,7 +1466,15 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .context("verify daemon active policy against selected policy")?;
 
     let grants = mint_grants(&config, now_ms, &instance_id)?;
-    let pilot_run = if config.ask_wait_seconds > 0 && !config.dry_run {
+    let pilot_run = if !config.dry_run
+        && cfg!(target_os = "linux")
+        && !config.allow_command_fixtures
+        && config.mock_daemon_token.is_none()
+        && config.mock_instance_id.is_none()
+        && config.classifier_path.is_some()
+        && config.policy_path.is_some()
+        && crate::pilot_approval::liveness_configured(&config.home_path)?
+    {
         Some(crate::pilot_approval::RunGuard::create(
             &config,
             &instance_id,
@@ -1327,7 +1579,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         }
     }
 
-    // Environment isolation
+    // Discard ambient executable settings before adding the fixed host flags.
+    crate::pilot_host::isolate(&mut cmd, &guard.path)?;
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL", "1")
@@ -1344,20 +1597,33 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         .env("CLAUDE_CODE_MAX_RETRIES", "0");
 
     if let Some(run) = &pilot_run {
-        eprintln!("Pilot Ask configured; run: {}", run.id());
-        eprintln!(
-            "Second terminal (same daemon home): agentfw pilot-approval --run {} list",
-            run.id()
-        );
+        if config.ask_wait_seconds > 0 {
+            eprintln!("Pilot Ask configured; run: {}", run.id());
+            eprintln!(
+                "Second terminal (same daemon home): agentfw pilot-approval --run {} list",
+                run.id()
+            );
+        }
+        eprintln!("Pilot owned run: {}; stop from another terminal: agentfw pilot-approval --home {} --run {} stop",
+            run.id(), config.home_path.display(), run.id());
     }
-    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
-    let child_pid = child.id();
-
-    // Supervise process with deadline, signal interception, and daemon heartbeat
+    // Install interception before creating the separate host process group.
+    // A TERM during runtime/signal initialization must never strand a live host.
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("create supervisor runtime")?;
+
+    #[cfg(unix)]
+    let (mut sigterm, mut sigint) = {
+        let _entered = rt.enter();
+        (
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?,
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,
+        )
+    };
+    let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
+    let child_pid = child.id();
 
     let timeout = config.timeout;
     let home_path = config.home_path.clone();
@@ -1365,64 +1631,89 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let initial_instance = instance_id.clone();
     let current_token = daemon_token.clone();
 
+    let mut host_stopped = false;
+    let mut intercepted_term = false;
+    let mut cleanup_waiter = pilot_run.as_ref().map(|run| run.cleanup_waiter());
     let exit_status = rt.block_on(async {
         let deadline = tokio::time::Instant::now() + timeout;
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
         interval.tick().await;
 
-        #[cfg(unix)]
-        let mut sigterm =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
-
         loop {
             // Check if child has exited
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return Ok(status);
+            match owned_host_exited(&mut child) {
+                Ok(true) => {
+                    // Every host exit must let enrolled owners acknowledge
+                    // namespace cleanup before group TERM/KILL. Keep the leader
+                    // unreaped so its process-group identity cannot be reused.
+                    let owner_confirmation = if let Some(waiter) = cleanup_waiter.take() {
+                        tokio::task::spawn_blocking(waiter)
+                            .await
+                            .context("selected-owner cleanup worker failed")
+                            .and_then(|result| result)
+                    } else {
+                        Ok(())
+                    };
+                    // A missing/failed acknowledgement never skips physical
+                    // cleanup, but cannot turn the terminal result into success.
+                    let group = terminate_process_group(child_pid, Duration::from_millis(50)).await;
+                    let result = reap_owned_host(&mut child).await;
+                    host_stopped = result.is_ok() && group.is_ok();
+                    group?;
+                    owner_confirmation?;
+                    return result;
                 }
-                Ok(None) => {}
-                Err(e) => {
-                    terminate_process_group(child_pid, Duration::from_millis(50)).await;
-                    return Err(anyhow::anyhow!("error waiting for child: {}", e));
+                Ok(false) => {}
+                Err(error) => {
+                    // Ownership could not be established; never signal a potentially reused PID.
+                    return Err(anyhow::anyhow!("cannot establish owned host exit state: {}", error));
                 }
             }
 
             tokio::select! {
                 _ = tokio::time::sleep_until(deadline) => {
-                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
                     }
-                    let _ = child.wait();
+                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
                     bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
                 }
-                _ = tokio::signal::ctrl_c() => {
-                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                _ = async {
+                    #[cfg(unix)]
+                    sigint.recv().await;
+                    #[cfg(not(unix))]
+                    let _ = tokio::signal::ctrl_c().await;
+                } => {
+                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
                     }
-                    let _ = child.wait();
+                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
                     bail!("pilot host interrupted by SIGINT");
                 }
                 _ = async {
                     #[cfg(unix)]
-                    if let Some(ref mut st) = sigterm {
-                        st.recv().await;
-                    } else {
-                        futures_util::future::pending::<()>().await;
-                    }
+                    sigterm.recv().await;
                     #[cfg(not(unix))]
                     futures_util::future::pending::<()>().await;
                 } => {
-                    terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                    intercepted_term = true;
+                    if let Some(waiter) = cleanup_waiter.take() {
+                        // A native revoke wakes the enrolled collectors first.
+                        // Give their existing owners time to acknowledge the
+                        // whole namespace before host-group termination.
+                        // finish() independently checks the actual observations.
+                        let _ = tokio::task::spawn_blocking(waiter).await;
+                    }
+                    let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
                     #[cfg(not(unix))]
                     {
                         let _ = child.kill();
                     }
-                    let _ = child.wait();
+                    host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
                     bail!("pilot host terminated by SIGTERM");
                 }
                 _ = interval.tick() => {
@@ -1430,12 +1721,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
                         match probe_daemon_liveness(&home_path, &current_token).await {
                             Ok(live_id) if live_id == initial_instance => {}
                             _ => {
-                                terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                                let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
                                 #[cfg(not(unix))]
                                 {
                                     let _ = child.kill();
                                 }
-                                let _ = child.wait();
+                                host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
                                 bail!("daemon instance lost or restarted during pilot session");
                             }
                         }
@@ -1444,17 +1735,30 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
             }
         }
     });
-    let cleanup = pilot_run.as_ref().map(|run| run.finish()).transpose();
-    let exit_status = exit_status?;
-    cleanup?;
-
-    let exit_code = exit_status.code().unwrap_or(1);
+    // Cancellation, timeout, daemon loss and a crashing host cannot become a
+    // successful stop merely because a concurrent caller published intent.
+    let stop_can_complete = intercepted_term
+        || exit_status
+            .as_ref()
+            .is_ok_and(std::process::ExitStatus::success);
+    let cleanup = pilot_run
+        .as_ref()
+        .map(|run| run.finish(host_stopped && stop_can_complete))
+        .transpose();
+    let authenticated_stop = cleanup? == Some(true);
+    let exit_code = terminal_exit_code(exit_status, intercepted_term, authenticated_stop)?;
     if !args.json {
-        eprintln!("Pilot session completed with exit code: {}", exit_code);
+        if authenticated_stop {
+            eprintln!("Pilot owned run stopped; already dispatched effects were not rolled back");
+        } else {
+            eprintln!("Pilot session completed with exit code: {}", exit_code);
+        }
     } else {
         let report = PilotLaunchReport {
             contract_version: "sw-pilot-launcher/1".into(),
-            status: if exit_code == 0 {
+            status: if authenticated_stop {
+                "stopped".into()
+            } else if exit_code == 0 {
                 "completed".into()
             } else {
                 "failed".into()
@@ -1483,9 +1787,86 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     Ok(())
 }
 
+fn terminal_exit_code(
+    status: Result<std::process::ExitStatus>,
+    intercepted_term: bool,
+    authenticated_stop: bool,
+) -> Result<i32> {
+    if intercepted_term && authenticated_stop {
+        return Ok(0);
+    }
+    let status = status?;
+    ensure!(
+        !authenticated_stop || status.success(),
+        "pilot stop incomplete: host did not complete normally"
+    );
+    Ok(status.code().unwrap_or(1))
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn mac_group_observation_refuses_live_unknown_or_malformed_members() {
+        assert!(!super::mac_group_has_running_processes("10 S\n20 Z+\n", 20).unwrap());
+        assert!(super::mac_group_has_running_processes("20 Z\n20 S\n", 20).unwrap());
+        assert!(super::mac_group_has_running_processes("20 ?\n", 20).unwrap());
+        for value in ["", "unreadable", "20 Z extra", "20"] {
+            assert!(super::mac_group_has_running_processes(value, 20).is_err());
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn mac_zombie_only_group_does_not_fake_a_signal_permission_failure() {
+        use std::os::unix::process::CommandExt;
+        let mut child = std::process::Command::new("/usr/bin/true")
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        for _ in 0..100 {
+            if super::owned_host_exited(&mut child).unwrap() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(super::owned_host_exited(&mut child).unwrap());
+        let result =
+            super::terminate_process_group(child.id(), std::time::Duration::from_millis(5)).await;
+        assert!(child.wait().unwrap().success());
+        result.unwrap();
+    }
     use super::*;
+
+    #[test]
+    #[cfg(unix)]
+    fn intentional_stop_requires_authenticated_terminal_disposition() {
+        use std::os::unix::process::ExitStatusExt;
+        let interrupted = || Err(anyhow::anyhow!("pilot host terminated by SIGTERM"));
+        assert_eq!(terminal_exit_code(interrupted(), true, true).unwrap(), 0);
+        assert!(terminal_exit_code(interrupted(), true, false).is_err());
+        // An authenticated receipt cannot turn cancellation, timeout or daemon
+        // loss into a successful terminal outcome.
+        assert!(terminal_exit_code(interrupted(), false, true).is_err());
+        assert!(terminal_exit_code(interrupted(), false, false).is_err());
+        assert!(
+            terminal_exit_code(Ok(std::process::ExitStatus::from_raw(9)), false, true).is_err()
+        );
+        assert_eq!(
+            terminal_exit_code(Ok(std::process::ExitStatus::from_raw(0)), false, true).unwrap(),
+            0
+        );
+        assert_eq!(
+            terminal_exit_code(
+                Ok(std::process::ExitStatus::from_raw(17 << 8)),
+                false,
+                false
+            )
+            .unwrap(),
+            17
+        );
+    }
 
     fn dummy_script(path: &Path) {
         fs::write(path, "#!/bin/sh\nexit 0\n").unwrap();
@@ -1496,10 +1877,48 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn private_state_parent_cannot_alias_either_selected_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let filesystem = root.path().join("filesystem");
+        let git = root.path().join("git");
+        fs::create_dir(&filesystem).unwrap();
+        fs::create_dir(&git).unwrap();
+        for (i, workspace) in [&filesystem, &git].iter().enumerate() {
+            let alias = root.path().join(format!("alias-{i}"));
+            std::os::unix::fs::symlink(workspace, &alias).unwrap();
+            assert!(PrivateDirGuard::in_parent(&[&filesystem, &git], &alias).is_err());
+            assert!(fs::read_dir(workspace).unwrap().next().is_none());
+        }
+        let guard = PrivateDirGuard::in_parent(&[&filesystem, &git], root.path()).unwrap();
+        let path = guard.path.clone();
+        drop(guard);
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn completed_host_remains_waitable_until_owned_group_cleanup() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 17"])
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !owned_host_exited(&mut child).unwrap() {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // A second observation must still see the same waitable child.
+        assert!(owned_host_exited(&mut child).unwrap());
+        assert_eq!(child.wait().unwrap().code(), Some(17));
+    }
+
     #[test]
     fn test_missing_claude_executable_fails() {
         let temp = tempfile::tempdir().unwrap();
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude: temp.path().join("nonexistent_claude"),
             workspace: temp.path().to_path_buf(),
             home: None,
@@ -1565,7 +1984,10 @@ mod tests {
         let test_token = crate::token::generate();
         let test_instance_id = crate::token::generate();
 
+        let git_workspace = temp.path().join("separate-git");
+        fs::create_dir(&git_workspace).unwrap();
         let args = PilotLaunchArgs {
+            git_workspace: Some(git_workspace.clone()),
             claude,
             workspace: workspace.clone(),
             home: Some(temp.path().to_path_buf()),
@@ -1631,6 +2053,15 @@ mod tests {
         let mcp_data: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&mcp_config).unwrap()).unwrap();
         let fs_env = &mcp_data["mcpServers"]["filesystem"]["env"];
+        assert_eq!(
+            mcp_data["mcpServers"]["git"]["env"]["AGENTFW_WORKSPACE"],
+            git_workspace.canonicalize().unwrap().display().to_string()
+        );
+        assert_eq!(fs_env["AGENTFW_CLASSIFIER_PYTHON"], "/usr/bin/python3");
+        assert_eq!(
+            mcp_data["mcpServers"]["git"]["env"]["AGENTFW_CLASSIFIER_PYTHON"],
+            "/usr/bin/python3"
+        );
         assert_eq!(fs_env["AGENTFW_HOST_SESSION"], "test-session-123");
         assert_eq!(fs_env["AGENTFW_NATIVE_LIVENESS"], "true");
         assert_eq!(
@@ -1655,6 +2086,7 @@ mod tests {
         fs::write(&git_profile, r#"{"tools":[{"name":"shared_tool"}]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1694,6 +2126,7 @@ mod tests {
         fs::write(&git_profile, r#"{"command":"/bin/echo","args":["world"]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1736,6 +2169,7 @@ mod tests {
         fs::create_dir_all(&git_dir).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,
@@ -1778,6 +2212,7 @@ mod tests {
         fs::write(&git_profile, r#"{"command":"/bin/echo","args":["world"]}"#).unwrap();
 
         let args = PilotLaunchArgs {
+            git_workspace: None,
             claude,
             workspace,
             home: None,

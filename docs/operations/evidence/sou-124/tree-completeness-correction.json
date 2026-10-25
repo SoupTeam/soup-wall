@@ -1,0 +1,25 @@
+{
+  "format": "sou124-tree-completeness-correction/1",
+  "parent": "ba9441c89df9d266836bea4b96d553cde835c24b",
+  "previous_native_source": "11377802ba4fa9868bf7502fc798fd0f3f06e7a4",
+  "previous_native_status": "80/80 passed, p95 filesystem1938.429574ms/git2914.5676ms; prior exact source retained separately",
+  "ci_findings": {
+    "new_stable": "fetch_update deprecated under -D warnings",
+    "fixtures": "unlink/recreate may reuse inode/timestamps; replacement now retains old inode via rename",
+    "missing_path": "tree helper now verifies captured cardinality, independent of metadata; full profile caller already compared complete tree digest"
+  },
+  "correction": "portable compare_exchange_weak; per-root captured cardinality plus existing per-path membership/content/identity checks; new equal-metadata removal negative control",
+  "rust_workspace": {
+    "passed": 1697,
+    "failed": 0,
+    "ignored": 13,
+    "platform": "macOS"
+  },
+  "clippy_all_targets_deny_warnings": "pass",
+  "fmt": "pass",
+  "logs_sha256": {
+    "workspace-tree-completeness.log": "1fc444fbe36f929dd4c4d7956803795ab7490dcb15293a91c8cee3066ce7452a",
+    "clippy-tree-completeness.log": "6554d9378e3a42f0a1c073ff846c0a8c5c0882de4855033ecd9d8c0788010a67"
+  },
+  "linux_current_source_and_performance": "pending; do not relabel previous1137780 report"
+}

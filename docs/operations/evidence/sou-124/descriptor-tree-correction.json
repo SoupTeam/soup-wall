@@ -1,0 +1,32 @@
+{
+  "changes": "Regular Linux package-tree leaves reuse their actual opened read descriptor for canonical identity and before/after metadata validation, while directory/symlink canonical identity remains checked before/after descent. All content/kernel-proof decisions share the existing digest path; metadata alone never authorizes SHA reuse. Standalone runtime/library checks remain independent.",
+  "checks": {
+    "cargo_fmt": "passed",
+    "diff_check": "passed",
+    "python_current_rebuilt_cli": {
+      "failed": 0,
+      "passed": 1134,
+      "run": 1213,
+      "skipped": 79
+    },
+    "rust_workspace_macos": {
+      "failed": 0,
+      "ignored": 13,
+      "passed": 1696
+    },
+    "strict_clippy": "passed"
+  },
+  "files_sha256": {
+    "crates/agentfw/src/mcp/server_profile.rs": "9a6771ed17917f5d588a21fd4432df2b0cbeeb61a0769f16baf31d049068eb83",
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "bed367377bafdbd55677856f577f6f7e43f91dba62be5a69875ab1a1fe9a0bef"
+  },
+  "format": "sw-sou124-descriptor-tree-correction/1",
+  "logs_sha256": {
+    "build-tree-descriptor.log": "ca66c3edac01b0bd76af5635e0019f0510637182cc2b944a4fb8ba75f2cd40b8",
+    "clippy-tree-descriptor.log": "8408649fc0be522a4aa8d1fe59b9963c7cecd28717764dc99c0abe83c0ea6bbf",
+    "python-tree-descriptor.log": "be78617a536643e67369653a79467e2cdbb039c6d312140ed01832d9aa05c2c9",
+    "workspace-tree-descriptor.log": "4e5ac1fd463000944b92457d5cae15ca3f9ca1f91fa7485d3595cff68b651308"
+  },
+  "native_status": "Fresh native required. Native-attempt4-preflight.json retains the prior unchanged 20-second pending witness failure, with runtime/library capture timing1466.78ms and package-tree stage still incomplete. No deadline or effect assertion is increased.",
+  "parent_commit": "77fae98e6a054e3d443dc9291b2b13d19119eeba"
+}

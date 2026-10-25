@@ -89,5 +89,30 @@ identities, failed/late logs and independent process cleanup are retained.
 Focused native tests separately cover changed identities/arguments, replay,
 authority loss and pruning; those are distinct evidence scopes.
 
+After a successful explicit CLI approval, the acceptance client observes the
+original response with its common 35-second read budget and records the budget
+and elapsed time. A missing response remains a named failure, without retrying
+the call or approval. This observation budget changes neither the production
+relay deadline, pending wait nor broker TTL; exact original bytes and once-only
+kernel execution are still required. Negative-case deadlines remain unchanged.
+
 The existing Ready filesystem job runs this bounded command for both families.
 No new per-push matrix is added. Draft fast checks cannot replace this command.
+
+## Debug/test verification cost
+
+The workspace optimizes the existing locked `sha2@0.10.9` dependency in the dev
+profile (also inherited by tests); the Agent and other workspace code retain
+their ordinary debug settings. Release profiles, dependency versions and feature
+selection are unchanged. Verified-input hashing uses a 64 KiB read buffer with
+the size-plus-one limiter **inside** the buffer, so prefetch cannot exceed that
+sentinel. Each capture still reads and hashes every selected byte from the same
+opened descriptor and retains the existing before/after identity, lease and
+immutable-proof checks. No pending record is published earlier in the trust
+sequence; no proof is transferred between requests.
+
+This addresses cold first-pending overhead in development binaries without
+raising the existing observation bound, approval TTL or resource limits. Keep
+the existing original filesystem/Git Ask acceptance and tamper, expiry, replay,
+reject, stop and zero-execution controls. Faster synthetic capture alone is not
+end-to-end Ask qualification.
