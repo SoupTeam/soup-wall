@@ -392,6 +392,39 @@ impl AgentFirewall {
         self.inspect_inner(ev, None, false)
     }
 
+    /// A dry run indicating whether complete-content review could resolve a
+    /// structural-only result refusal. It grants nothing and records no taint.
+    /// Existing Allow and independent refusal floors never require a reviewer.
+    pub fn native_result_needs_data_review(&mut self, ev: &AgentEvent) -> bool {
+        if !matches!(
+            ev.kind,
+            EventKind::ToolResult {
+                source: crate::event::Provenance::McpServer { .. },
+                ..
+            }
+        ) || self.preview_native_result(ev).verdict == Verdict::Allow
+        {
+            return false;
+        }
+        self.preview_native_result_after_data_review(ev).verdict == Verdict::Allow
+    }
+
+    /// Trusted native caller only: an owned, verified reviewer must have given
+    /// affirmative Data for every original channel in this exact delivery.
+    /// This is not a wire verdict, permission, model-error fallback or grant.
+    /// The daemon must revalidate the delivery and current authority/policy
+    /// after review. All independent detectors and policy floors still run.
+    pub fn preview_native_result_after_data_review(&mut self, ev: &AgentEvent) -> Outcome {
+        let reviewed = matches!(
+            ev.kind,
+            EventKind::ToolResult {
+                source: crate::event::Provenance::McpServer { .. },
+                ..
+            }
+        );
+        self.inspect_inner_content(ev, None, false, reviewed)
+    }
+
     /// Compatibility recorder for content already admitted by a legacy caller.
     /// Selected runtimes use `try_admit_native_result` before auditing release so
     /// a tracking refusal is observable and cannot silently become Allow.
@@ -442,6 +475,16 @@ impl AgentFirewall {
         native: Option<(ActionClass, &[String], NativeArgumentRoles)>,
         record_results: bool,
     ) -> Outcome {
+        self.inspect_inner_content(ev, native, record_results, false)
+    }
+
+    fn inspect_inner_content(
+        &mut self,
+        ev: &AgentEvent,
+        native: Option<(ActionClass, &[String], NativeArgumentRoles)>,
+        record_results: bool,
+        reviewed_result_data: bool,
+    ) -> Outcome {
         // Lifecycle events only mutate state.
         match &ev.kind {
             EventKind::SessionEnd => {
@@ -468,7 +511,12 @@ impl AgentFirewall {
                 soup_wall_core::Direction::Output => Context::output(text),
             };
             for det in &self.detectors {
-                for f in det.inspect(&ctx) {
+                let detected = if reviewed_result_data && *facet == Facet::ToolResult {
+                    det.inspect_reviewed_result_data(&ctx)
+                } else {
+                    det.inspect(&ctx)
+                };
+                for f in detected {
                     findings.push((*facet, f));
                 }
             }
