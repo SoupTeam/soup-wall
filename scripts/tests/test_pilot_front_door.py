@@ -25,6 +25,60 @@ spec.loader.exec_module(M)
 COMMIT = "a" * 40
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "native toolchain qualification uses Linux")
+class QualificationToolchain(unittest.TestCase):
+    def test_private_home_keeps_existing_default_toolchain(self):
+        spec = importlib.util.spec_from_file_location("qualified_front_door", ROOT / "scripts/qualify-pilot-front-door.py")
+        qualifier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(qualifier)
+        builder = qualifier.load("front_door_build_regression", "build-native-pilot-inputs.py")
+        with tempfile.TemporaryDirectory() as temporary:
+            operator = Path(temporary) / "operator"
+            isolated = Path(temporary) / "isolated"
+            operator.mkdir()
+            isolated.mkdir()
+            toolchain = operator / ".rustup/toolchains/1.94.1/bin"
+            toolchain.mkdir(parents=True)
+            for role in ("cargo", "rustc"):
+                path = toolchain / role
+                path.write_text("#!/bin/sh\nif [ \"$1\" = -vV ]; then echo 'host: x86_64-unknown-linux-gnu'; "
+                                "else echo '" + role + " 1.94.1 (owned fixture)'; fi\n")
+                path.chmod(0o700)
+            rustup = operator / "rustup"
+            rustup.write_text("#!/bin/sh\n[ \"$RUSTUP_AUTO_INSTALL\" = 0 ] || exit 9\n"
+                              "base=${RUSTUP_HOME:-$HOME/.rustup}\n"
+                              "p=$base/toolchains/$3/bin/$4\n[ -x \"$p\" ] || exit 1\nprintf '%s\\n' \"$p\"\n")
+            rustup.chmod(0o700)
+            def selected(name):
+                return str(rustup) if name == "rustup" else sys.executable
+            original = {"HOME": str(operator), "PATH": "/usr/bin:/bin", "CARGO_HOME": str(operator / ".cargo")}
+            with mock.patch.dict(os.environ, original, clear=True), mock.patch.object(Path, "home", return_value=operator):
+                env = qualifier.qualification_environment(isolated)
+            with mock.patch.object(builder.shutil, "which", side_effect=selected):
+                # Reproduce the failing CI environment: only HOME changed.
+                with mock.patch.dict(os.environ, {**original, "HOME": str(isolated)}, clear=True):
+                    _, missing = builder.selected_tools()
+                    self.assertTrue(any("cargo: install reviewed" in row for row in missing))
+                    self.assertTrue(any("rustc: install reviewed" in row for row in missing))
+                with mock.patch.dict(os.environ, env, clear=True):
+                    tools, missing = builder.selected_tools()
+                    self.assertEqual(missing, [])
+                    self.assertEqual(tools["cargo"], str(toolchain / "cargo"))
+                    self.assertEqual(tools["rustc"], str(toolchain / "rustc"))
+            self.assertEqual(env["HOME"], str(isolated))
+            self.assertFalse(list(isolated.iterdir()), "read-only inventory must not install a toolchain")
+
+    def test_explicit_build_roots_are_preserved(self):
+        spec = importlib.util.spec_from_file_location("explicit_front_door", ROOT / "scripts/qualify-pilot-front-door.py")
+        qualifier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(qualifier)
+        with mock.patch.dict(os.environ, {"RUSTUP_HOME": "/selected/rustup", "CARGO_HOME": "/selected/cargo"}, clear=True):
+            env = qualifier.qualification_environment(Path("/private/home"))
+        self.assertEqual(env["RUSTUP_HOME"], "/selected/rustup")
+        self.assertEqual(env["CARGO_HOME"], "/selected/cargo")
+        self.assertEqual(env["HOME"], "/private/home")
+
+
 def clean_source():
     return {"commit": COMMIT, "tree": "b" * 40, "dirty": False}
 

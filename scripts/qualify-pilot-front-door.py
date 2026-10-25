@@ -204,14 +204,7 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None):
     return row, model.results, outcome
 
 
-def qualify(args, report):
-    require(os.geteuid() != 0, "non_root_operator_required")
-    before = BASE.source()
-    require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
-    report["source_before"] = before
-    home = args.output / "home"
-    home.mkdir(mode=0o700)
-    user_config(home)
+def qualification_environment(home):
     # The operator's PATH and Rust selection reach only the accepted source-build
     # step (which pins its own toolchain); every runtime input is explicit.
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(home), "LANG": "C.UTF-8", "GIT_CONFIG_NOSYSTEM": "1",
@@ -223,6 +216,23 @@ def qualify(args, report):
                 "RUSTUP_TOOLCHAIN", "RUSTUP_HOME", "CARGO_HOME"):
         if key in os.environ:
             env[key] = os.environ[key]
+    # rustup defaults to $HOME/.rustup. Capture the operator's existing roots
+    # before isolating HOME, otherwise installed pinned tools appear missing.
+    # These build-only roots never enter the protected host environment.
+    env.setdefault("RUSTUP_HOME", str(Path.home() / ".rustup"))
+    env.setdefault("CARGO_HOME", str(Path.home() / ".cargo"))
+    return env
+
+
+def qualify(args, report):
+    require(os.geteuid() != 0, "non_root_operator_required")
+    before = BASE.source()
+    require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
+    report["source_before"] = before
+    home = args.output / "home"
+    home.mkdir(mode=0o700)
+    user_config(home)
+    env = qualification_environment(home)
     receiver = ISOLATION.Receiver()
     door = FrontDoor(args, env, home)
     selected = {name: getattr(args, name) for name in SELECTED_PROGRAMS if getattr(args, name) is not None}
