@@ -71,7 +71,7 @@ def collector(stack, log, protected):
 
 def byte_reads(stack, report):
     """Compare complete original JSON-RPC frames, including unchanged results/errors."""
-    before = BASE.snapshot(stack.workspace)
+    report["repository_states"] = {"before_unwrapped": BASE.snapshot(stack.workspace)}
     originals = {}
     with (stack.root / "unwrapped.log").open("wb") as log:
         client = collector(stack, log, False)
@@ -85,6 +85,15 @@ def byte_reads(stack, report):
             client.close()
             report["unwrapped_client"] = client.transcript()
     require(client.process_witness.final["all_stopped"], "unwrapped descendants remain")
+    # The reference server runs outside the read-only boundary. Retain its
+    # effects separately and take the protected baseline before protected launch.
+    before = BASE.snapshot(stack.workspace)
+    report["repository_states"]["after_unwrapped"] = before
+    unwrapped_before = report["repository_states"]["before_unwrapped"]
+    report["unwrapped_repository_changes"] = {
+        path: {"before": unwrapped_before.get(path), "after": before.get(path)}
+        for path in sorted(unwrapped_before.keys() | before.keys())
+        if unwrapped_before.get(path) != before.get(path)}
     report["reads"], report["read_admission_failures"] = [], []
     with (stack.root / "collector.log").open("wb") as log:
         client = collector(stack, log, True)
@@ -101,7 +110,9 @@ def byte_reads(stack, report):
             client.close()
             report["protected_client"] = client.transcript()
     require(client.process_witness.final["all_stopped"], "protected descendants remain")
-    require(BASE.snapshot(stack.workspace) == before, "actual original reads changed repository")
+    after = BASE.snapshot(stack.workspace)
+    report["repository_states"]["after_protected"] = after
+    require(after == before, "protected original reads changed repository")
     report["repository_unchanged"] = True
     report["transport_events"] = BASE.events(stack.root / "collector.log")
 
