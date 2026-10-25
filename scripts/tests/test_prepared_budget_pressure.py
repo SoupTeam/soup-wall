@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import subprocess
+import shutil
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -17,6 +19,31 @@ SPEC.loader.exec_module(P)
 
 
 class Pressure(unittest.TestCase):
+    @unittest.skipUnless(shutil.which('git'), 'Git is required for the fixture control')
+    def test_git_calibration_has_real_head_tracked_diff_and_restored_operator_bytes(self):
+        git=shutil.which('git')
+        with tempfile.TemporaryDirectory() as directory:
+            generation=Path(directory)
+            workspace=generation/'git-workspace';workspace.mkdir(mode=0o700)
+            profile=generation/'git-profile/profile.json';profile.parent.mkdir(mode=0o700)
+            profile.write_text(json.dumps({'workspace':str(workspace)}))
+            profiles={'git':{'profile':{'path':str(profile)}}}
+            subprocess.run([git,'init','-q',str(workspace)],check=True,capture_output=True,
+                env={'PATH':'/usr/bin:/bin','GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null'})
+            data=b'Owned prepared Git change.\n';(workspace/'tracked.txt').write_bytes(data)
+            with patch.object(P,'GIT_INDEX_FILES',6):
+                with self.assertRaisesRegex(ValueError,'pressure_requires_generated_workspace'):
+                    P.prepare_git_calibration({'prepared_workspaces':{}},profiles,git)
+                result=P.prepare_git_calibration({},profiles,git)
+                self.assertEqual(result['index_entries'],7)
+                self.assertTrue(result['tracked_head'] and result['config_unchanged'])
+                self.assertEqual((workspace/'tracked.txt').read_bytes(),data)
+                diff=subprocess.check_output([git,'-C',str(workspace),'diff','HEAD','--','tracked.txt'],
+                    env={'PATH':'/usr/bin:/bin','GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null'})
+                self.assertIn(data.strip(),diff)
+                with self.assertRaisesRegex(ValueError,'pressure_requires_unborn_git_fixture'):
+                    P.prepare_git_calibration({},profiles,git)
+
     def test_git_diagnostics_count_only_successful_pinned_images_without_argv(self):
         value=P.git_exec_counts([
             '11 execve("/mcp-runtime/git", ["/mcp-runtime/git", "status"], []) = 0',

@@ -134,6 +134,17 @@ controls, original kernel refusals, surviving useful peers, fresh recovery and
 empty owned roots. It explicitly requires separate baseline proof. Preserve
 both exact source/config/binary identities, and failed/incomplete attempts.
 
+The pressure phase prepares a fresh owned Git fixture with a real HEAD and
+30,000 identical small files in a supported eight-level index directory. This
+keeps normal status output small while exercising Git 2.51.2's own ordinary
+index-preload threads; it adds no worker executable, environment test switch,
+server patch or Git config setting. The existing eight MCP proposals and all
+resource limits remain unchanged. The memory case changes a genuinely tracked
+file, so `git_diff HEAD` can read its existing 40 MiB calibration input. Earlier
+unborn-HEAD / untracked-input attempts are retained as incomplete, never as
+observed resource refusals. Fixture setup refuses existing-project selections
+and repositories with an existing HEAD; it cannot rewrite a user repository.
+
 ## Focused native first slice
 
 The existing manual `sou79-resource-budgets.yml` workflow accepts

@@ -18,6 +18,55 @@ import time
 from prepared_budget_observer import BudgetObserver
 
 PRESSURE_BYTES = 40 * 1024 * 1024
+GIT_INDEX_FILES = 30_000
+
+
+def prepare_git_calibration(selection, profiles, git):
+    """Prepare only a fresh owned fixture, using ordinary Git and no test hooks.
+
+    A real HEAD makes git_diff read the large tracked file. A supported large
+    index exercises Git's own normal preload threads, even though the pinned
+    original Python server serializes its tool handlers.
+    """
+    if 'prepared_workspaces' in selection:
+        raise ValueError('pressure_requires_generated_workspace')
+    profile = Path(profiles['git']['profile']['path']).resolve(strict=True)
+    workspace = Path(json.loads(profile.read_bytes())['workspace']).resolve(strict=True)
+    if workspace != profile.parent.parent / 'git-workspace' or workspace.stat().st_uid != os.geteuid() \
+            or workspace.stat().st_mode & 0o077 or (workspace / '.git').is_symlink():
+        raise ValueError('pressure_requires_owned_git_fixture')
+    env = {'PATH':'/usr/bin:/bin','HOME':str(workspace.parent),'LANG':'C.UTF-8',
+        'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_SYSTEM':'/dev/null','GIT_CONFIG_GLOBAL':'/dev/null',
+        'GIT_OPTIONAL_LOCKS':'0','GIT_AUTHOR_NAME':'Owned calibration',
+        'GIT_AUTHOR_EMAIL':'owned@example.invalid','GIT_COMMITTER_NAME':'Owned calibration',
+        'GIT_COMMITTER_EMAIL':'owned@example.invalid',
+        'GIT_AUTHOR_DATE':'2000-01-01T00:00:00Z','GIT_COMMITTER_DATE':'2000-01-01T00:00:00Z'}
+    def command(*words, check=True):
+        return subprocess.run([str(git),*words],cwd=workspace,env=env,check=check,
+                              capture_output=True,timeout=30)
+    if command('rev-parse','--verify','HEAD',check=False).returncode != 128:
+        raise ValueError('pressure_requires_unborn_git_fixture')
+    config = (workspace / '.git/config').read_bytes()
+    tracked = workspace / 'tracked.txt'
+    original = tracked.read_bytes()
+    tracked.write_bytes(b'Owned committed Git baseline.\n')
+    relative = Path('sou142-index-calibration').joinpath(*(f'level-{i}' for i in range(8)))
+    directory = workspace / relative
+    directory.mkdir(mode=0o700,parents=True,exist_ok=False)
+    for index in range(GIT_INDEX_FILES):
+        path = directory / f'entry-{index:05d}'
+        with path.open('xb') as stream:
+            os.fchmod(stream.fileno(),0o600)
+            stream.write(b'Owned identical index calibration.\n')
+    command('add','--','tracked.txt','sou142-index-calibration')
+    command('commit','-q','-m','Owned SOU-142 index calibration')
+    entries = command('ls-files','-z').stdout
+    if len(entries)>4*1024*1024 or entries.count(b'\0') != GIT_INDEX_FILES+1 \
+            or (workspace / '.git/config').read_bytes() != config:
+        raise ValueError('pressure_git_fixture_unverified')
+    tracked.write_bytes(original)
+    return {'tracked_head':True,'index_entries':GIT_INDEX_FILES+1,'config_unchanged':True,
+            'test_workers_or_runtime_changes':False}
 
 
 def git_exec_counts(rows):

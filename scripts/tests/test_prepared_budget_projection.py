@@ -114,7 +114,9 @@ class Projection(unittest.TestCase):
         separate=copy.deepcopy(a)
         separate.update(phase='pressure', original_pressure=copy.deepcopy(value), source_read_only=True,
             reused_binaries_read_only=True, network='private-loopback-only', provider='owned-scripted-loopback',
-            paid_api_calls=0, actual_original_host_covered=False)
+            paid_api_calls=0, actual_original_host_covered=False,
+            git_calibration_fixture={'tracked_head':True,'index_entries':30001,
+                'config_unchanged':True,'test_workers_or_runtime_changes':False})
         public=P.project_pressure(separate,COMMIT,0)
         self.assertEqual(public['status'],'pressure-slice-passed',public)
         self.assertIs(public['baseline_required_separately'],True)
@@ -123,6 +125,8 @@ class Projection(unittest.TestCase):
         for change in (lambda v:v.update(phase='baseline'), lambda v:v.update(source_read_only=False),
                        lambda v:v.update(source_commit='c'*40), lambda v:v.update(owned_peer_budget_root_empty=False),
                        lambda v:v.update(original_pressure=None), lambda v:v.update(paid_api_calls=1),
+                       lambda v:v['git_calibration_fixture'].update(tracked_head=False),
+                       lambda v:v['git_calibration_fixture'].update(test_workers_or_runtime_changes=True),
                        lambda v:v.update(actual_original_host_covered=True),
                        lambda v:v['original_pressure']['attempts'].pop()):
             bad=copy.deepcopy(separate);change(bad)

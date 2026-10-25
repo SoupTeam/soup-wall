@@ -205,6 +205,13 @@ def project_pressure(attempt, expected, exit_code):
              'python', 'node', 'bwrap_source', 'git', 'claude'}, 'selected_identity_missing')
         result['selected_sha256'] = {key: digest(value) for key, value in selected.items()}
         result['selection_sha256'] = digest(attempt.get('selection_sha256'))
+        fixture = attempt.get('git_calibration_fixture')
+        need(type(fixture) is dict and fixture.get('tracked_head') is True
+             and type(fixture.get('index_entries')) is int and fixture['index_entries'] == 30001
+             and fixture.get('config_unchanged') is True
+             and fixture.get('test_workers_or_runtime_changes') is False, 'git_calibration_fixture_unverified')
+        result['git_calibration_fixture'] = {key:fixture[key] for key in
+            ('tracked_head','index_entries','config_unchanged','test_workers_or_runtime_changes')}
         result['original_pressure'] = pressure(attempt.get('original_pressure'), attempt)
         need(result['original_pressure']['status'] == 'passed', 'original_pressure_incomplete')
         result.update(status='pressure-slice-passed', owned_budget_root_empty=True,

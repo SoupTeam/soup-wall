@@ -310,6 +310,8 @@ def main():
         if args.phase != 'baseline':
             if args.phase == 'pressure':
                 qualifier.prepare_owned_workspaces(selected, profiles)
+            record['git_calibration_fixture'] = pressure.prepare_git_calibration(selected, profiles, paths['git'])
+            save()
             def checkpoint(value):
                 record['original_pressure'] = value
                 save()
