@@ -239,7 +239,9 @@ def observe(text, paths, values, normalize, rejected=False):
             leaked = {word.split('=', 1)[0] for word in environment
                       if any(value in word for value in values.values())}
             if leaked:
-                print(json.dumps({'event': 'provider_routing_refusal', 'role': role,
+                image_class = 'same-image-diagnostic' if executable == str(paths['claude']) else                     'system-git' if executable in ('/usr/bin/git','/bin/git') else                     'env-utility' if executable in ('/usr/bin/env','/bin/env') else                     'system-shell' if executable in ('/bin/sh','/usr/bin/sh','/bin/bash','/usr/bin/bash','/bin/dash','/usr/bin/dash') else                     'selected-fd' if executable.startswith('/proc/self/fd/') else 'other-helper'
+                print(json.dumps({'event': 'provider_routing_refusal', 'role': role, 'image_class':image_class,
+                    'reviewed_flags':[flag for flag in ('--version','--help','--restricted','-p','-c','-i') if flag in arguments],
                     'selected_keys': sorted(leaked.intersection(KEYS)),
                     'other_key_count': len(leaked.difference(KEYS))}), file=sys.stderr, flush=True)
             require(not any(value in word for value in values.values() for word in environment),
