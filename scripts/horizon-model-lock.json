@@ -1,0 +1,36 @@
+{
+  "repo": "Horizon-Labs/prompt-injection-guard-base",
+  "revision": "70b65c51c03f7d9b5d1f18726defee45f3936610",
+  "license": "apache-2.0",
+  "files": {
+    "README.md": {
+      "sha256": "c49195493b18f925843461029780c8eb8b61aa41e5529e5fc9048baa43f5d084",
+      "bytes": 24766
+    },
+    "config.json": {
+      "sha256": "34fbf08b5c26d800bb55d6f1de0d3a39c35eb8b5d4208c681361a20f93923f54",
+      "bytes": 2032
+    },
+    "tokenizer.json": {
+      "sha256": "47834a7dbbb0c4324fe9569fe47955241594a9ee539c9e478755d6fbc51e5f46",
+      "bytes": 34387555
+    },
+    "tokenizer_config.json": {
+      "sha256": "1d2f82c1341a79748e00efe82e67690f99d00b3c2a894f2b23128fd9d3519da3",
+      "bytes": 46440
+    },
+    "special_tokens_map.json": {
+      "sha256": "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351",
+      "bytes": 636
+    },
+    "onnx/model.onnx": {
+      "sha256": "5ae9f527897b1ffcb2b13440875769d0c28a25fb976b8b42465f0ad5b462b61b",
+      "bytes": 1230730152
+    }
+  },
+  "runtime": {
+    "onnxruntime": "1.23.2",
+    "tokenizers": "0.22.1",
+    "numpy": "2.3.4"
+  }
+}

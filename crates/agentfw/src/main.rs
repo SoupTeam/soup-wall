@@ -125,6 +125,13 @@ enum ClassifierPackageCmd {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Compute private runtime pins for the opt-in CPU result review (does not enable it).
+    ResultReviewPin {
+        #[arg(long)]
+        runtime_dir: PathBuf,
+        #[arg(long)]
+        assets_dir: PathBuf,
+    },
     /// Verify and resume an opt-in Linux audit segment store after a stopped writer.
     AuditRetentionRecover {
         /// Agent profile containing config.yaml.
@@ -455,6 +462,26 @@ fn main() -> anyhow::Result<()> {
     }
     let cli = Cli::parse();
     match cli.cmd {
+        Cmd::ResultReviewPin {
+            runtime_dir,
+            assets_dir,
+        } => {
+            #[cfg(target_os = "linux")]
+            {
+                let config =
+                    agentfw::result_data_review::installation_pin(runtime_dir, assets_dir)?;
+                println!(
+                    "{}",
+                    serde_yaml::to_string(&serde_json::json!({"result_data_review": config}))?
+                );
+                Ok(())
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = (runtime_dir, assets_dir);
+                anyhow::bail!("result data review is Linux-only")
+            }
+        }
         Cmd::AuditRetentionRecover { home } => {
             let home = home.unwrap_or(Config::home_path()?);
             let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
@@ -1349,6 +1376,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
                 let state = agentfw::native::NativeState::load(native, native_token)?
                     .with_policy_barrier(&home)?
                     .with_continuity(&home, &mut firewall)?;
+                let state = state.with_result_data_review(cfg.result_data_review.as_ref())?;
                 match &native.approval {
                     Some(approval) => {
                         let hook_token = agentfw::token::load_or_create(&home.join("token"))?;

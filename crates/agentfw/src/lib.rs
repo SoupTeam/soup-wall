@@ -39,6 +39,7 @@ mod private_file_windows;
 pub mod protection_status;
 pub mod provenance;
 pub mod replay;
+pub mod result_data_review;
 pub mod sandbox;
 pub mod self_test;
 #[cfg(target_os = "linux")]
@@ -101,6 +102,10 @@ pub fn app_with_diagnostics(
                 .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
         )
         .route("/native/v1/instance", get(native::instance))
+        .route(
+            "/native/v1/result-review",
+            get(native::result_review_status),
+        )
         .route(
             native::pilot_cleanup::ENDPOINT,
             post(native::pilot_cleanup::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),

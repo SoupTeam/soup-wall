@@ -552,6 +552,7 @@ pub struct NativeState {
     pub(crate) approval: Option<approval::ApprovalState>,
     test_time_offset_ms: std::sync::atomic::AtomicU64,
     pub(crate) policy_barrier: Option<crate::policy_transition::Barrier>,
+    result_data_review: Option<crate::result_data_review::Reviewer>,
 }
 
 /// Session negotiation cannot change between the compatibility check and swap.
@@ -705,6 +706,7 @@ impl NativeState {
             approval: None,
             test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
             policy_barrier: None,
+            result_data_review: None,
         })
     }
 
@@ -719,6 +721,17 @@ impl NativeState {
 
     pub fn with_policy_barrier(mut self, home: &std::path::Path) -> anyhow::Result<Self> {
         self.policy_barrier = Some(crate::policy_transition::Barrier::new(home)?);
+        Ok(self)
+    }
+
+    pub fn with_result_data_review(
+        mut self,
+        config: Option<&crate::result_data_review::Config>,
+    ) -> anyhow::Result<Self> {
+        self.result_data_review = config
+            .cloned()
+            .map(crate::result_data_review::Reviewer::start)
+            .transpose()?;
         Ok(self)
     }
 
@@ -1630,13 +1643,130 @@ pub async fn handler(
             StatusCode::BAD_REQUEST,
         );
     }
-    match inspect_bound(&st, native, request, identity.as_ref()) {
+    // Inference is outside both native and firewall locks. It cannot consume a
+    // receipt or authorize a call. All authority and current-policy checks run
+    // again after the await against the same immutable original request.
+    let permit = match &native.result_data_review {
+        Some(reviewer) if reviewer.ready() => {
+            match result_review_candidate(&st, native, &request, identity.as_ref()) {
+                Some(texts) => reviewer.review(texts).await,
+                None => None,
+            }
+        }
+        _ => None,
+    };
+    match inspect_bound_reviewed(&st, native, request, identity.as_ref(), permit.as_ref()) {
         Ok(response) => (
             StatusCode::OK,
             Json(serde_json::to_value(response).expect("native response serializes")),
         ),
         Err(code) => failure(code, StatusCode::CONFLICT),
     }
+}
+
+/// Authenticated readiness, distinct from daemon health and mere configuration.
+pub async fn result_review_status(
+    State(st): State<Shared>,
+    headers: HeaderMap,
+) -> (StatusCode, Json<Value>) {
+    let Some(native) = &st.native else {
+        return failure("native_disabled", StatusCode::SERVICE_UNAVAILABLE);
+    };
+    let auth = headers
+        .get("authorization")
+        .and_then(|s| s.to_str().ok())
+        .unwrap_or("");
+    if !crate::token::verify(&native.token, auth) {
+        return failure("native_unauthorized", StatusCode::UNAUTHORIZED);
+    }
+    (
+        StatusCode::OK,
+        Json(json!({
+            "configured": native.result_data_review.is_some(),
+            "ready": native.result_data_review.as_ref().is_some_and(|reviewer| reviewer.ready()),
+            "model_sha256": crate::result_data_review::MODEL_SHA256,
+            "experimental": true,
+        })),
+    )
+}
+
+fn selected_result_texts(tool: &Tool, request: &Request) -> Result<Vec<String>, &'static str> {
+    let content = request.content.as_deref().ok_or("native_content_missing")?;
+    let kind = request.result_kind.as_deref().unwrap_or("");
+    if tool
+        .mcp_result_profile
+        .as_deref()
+        .is_some_and(crate::mcp::server_profile::git_selected)
+    {
+        selected_mcp_host_text_profile(content, kind, false)
+    } else if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT) {
+        selected_mcp_host_text(content, kind)
+    } else {
+        mcp_host_text(content, kind)
+    }
+}
+
+/// Dry-run eligibility is conditional on a structural-only *current refusal*.
+/// Already-Allow results never acquire a new mandatory model dependency.
+fn result_review_candidate(
+    st: &Shared,
+    native: &NativeState,
+    request: &Request,
+    identity: Option<&liveness::CollectorIdentity>,
+) -> Option<Vec<String>> {
+    if !mcp_host_result(request) || request.result_kind.as_deref() != Some("value") {
+        return None;
+    }
+    let tool = native.registry.tools.iter().find(|tool| {
+        request.tool.as_deref() == Some(tool.name.as_str())
+            && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
+            && matches!(tool.result_provenance, ResultProvenance::Untrusted)
+    })?;
+    let texts = selected_result_texts(tool, request).ok()?;
+    if texts
+        .iter()
+        .any(|text| text.len() > st.config.max_record_bytes)
+    {
+        return None;
+    }
+    let state = native.sessions.lock().ok()?;
+    let session = state.entries.get(&request.session_id)?;
+    let now = native.monotonic_now();
+    let now_ms = wall_time_ms().ok()? + native.test_time_offset();
+    if session.is_dead(now, now_ms, &state) {
+        return None;
+    }
+    if let Some(identity) = identity {
+        identity.verify(native, session).ok()?;
+    }
+    let call = session.calls.get(request.call_id.as_deref()?)?;
+    if call.stage != Stage::Result
+        || call.expires <= now
+        || call.tool != tool.name
+        || call.contract_version != request.contract_version
+        || call.args_sha256 != args_hash(request.args.as_ref()?)
+    {
+        return None;
+    }
+    if let Some(expected) = &call.host_call_id {
+        let envelope: Value = serde_json::from_str(request.content.as_deref()?).ok()?;
+        if envelope.get("id") != Some(expected) {
+            return None;
+        }
+    }
+    let provenance = Provenance::McpServer {
+        name: session.server_id.clone()?,
+    };
+    let mut firewall = st.firewall.lock().ok()?;
+    let needed = texts.iter().any(|text| {
+        let ev = session.event(EventKind::ToolResult {
+            tool: tool.name.clone(),
+            content: text.clone(),
+            source: provenance.clone(),
+        });
+        firewall.native_result_needs_data_review(&ev)
+    });
+    needed.then_some(texts)
 }
 
 /// Reserve both required contexts before publishing an authenticated session.
@@ -1840,11 +1970,22 @@ fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Respon
     inspect_bound(st, native, request, None)
 }
 
+#[cfg(test)]
 fn inspect_bound(
     st: &Shared,
     native: &NativeState,
     request: Request,
     identity: Option<&liveness::CollectorIdentity>,
+) -> Result<Response, &'static str> {
+    inspect_bound_reviewed(st, native, request, identity, None)
+}
+
+fn inspect_bound_reviewed(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+    permit: Option<&crate::result_data_review::DataPermit>,
 ) -> Result<Response, &'static str> {
     if request.event == "session_start"
         && request.host_session.is_none()
@@ -2714,22 +2855,7 @@ fn inspect_bound(
             return Err("native_delivery");
         }
         if request.delivery.as_deref() == Some("mcp_host") {
-            if tool
-                .mcp_result_profile
-                .as_deref()
-                .is_some_and(crate::mcp::server_profile::git_selected)
-            {
-                selected_mcp_host_text_profile(
-                    content,
-                    request.result_kind.as_deref().unwrap_or(""),
-                    false,
-                )?
-            } else if tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT)
-            {
-                selected_mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
-            } else {
-                mcp_host_text(content, request.result_kind.as_deref().unwrap_or(""))?
-            }
+            selected_result_texts(tool, &request)?
         } else {
             vec![content.to_string()]
         }
@@ -2783,6 +2909,11 @@ fn inspect_bound(
     let mut representative = None;
     let mut observed_findings = BTreeMap::new();
     let mut max_block_risk = 0;
+    let complete_data = mcp_host_result(&request)
+        && request.result_kind.as_deref() == Some("value")
+        && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
+        && permit.is_some_and(|permit| permit.matches(&texts));
+    let mut review_used = false;
     for text in texts {
         session.seq += 1;
         let ev = session.event(EventKind::ToolResult {
@@ -2790,7 +2921,12 @@ fn inspect_bound(
             content: text,
             source: provenance.clone(),
         });
-        let outcome = firewall.preview_native_result(&ev);
+        let outcome = if complete_data && firewall.native_result_needs_data_review(&ev) {
+            review_used = true;
+            firewall.preview_native_result_after_data_review(&ev)
+        } else {
+            firewall.preview_native_result(&ev)
+        };
         max_block_risk = max_block_risk.max(outcome.risk_score);
         for (facet, finding) in &outcome.findings {
             let key = (finding.detector.clone(), finding.severity);
@@ -2894,6 +3030,11 @@ fn inspect_bound(
             outcome.provenance_incomplete = true;
         }
     }
+    if review_used {
+        response
+            .reason_codes
+            .push("native_result_data_review_base".into());
+    }
     audit(
         st,
         &request,
@@ -2981,6 +3122,16 @@ fn audit(
     if let Some(policy) = &response.managed_policy {
         record["managed_policy"] = json!(policy);
     }
+    if response
+        .reason_codes
+        .iter()
+        .any(|code| code == "native_result_data_review_base")
+    {
+        record["result_data_review"] = json!({
+            "model_sha256": crate::result_data_review::MODEL_SHA256,
+            "assessment": "data", "coverage_complete": true,
+        });
+    }
     if request.event == "call" {
         if let Some(tool) = st.native.as_ref().and_then(|native| {
             native.registry.tools.iter().find(|tool| {
@@ -3016,6 +3167,7 @@ fn audit(
 mod tests {
     use super::*;
     mod literal_arguments;
+    mod result_review_tests;
     use crate::{
         audit::AuditSink,
         handlers::{AppState, Sessions as HookSessions},

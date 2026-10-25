@@ -180,6 +180,9 @@ pub struct Config {
     /// Optional operator-installed native registry. Never provided by hook callers.
     #[serde(default)]
     pub native: Option<NativeCfg>,
+    /// Experimental complete-result CPU review. No automatic download or enablement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_data_review: Option<crate::result_data_review::Config>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -251,6 +254,7 @@ impl Default for Config {
             max_body_bytes: default_max_body_bytes(),
             judge: JudgeCfg::default(),
             native: None,
+            result_data_review: None,
         }
     }
 }
@@ -280,6 +284,13 @@ impl Config {
     /// Reject anything that would expose the daemon beyond this machine.
     pub(crate) fn validate(&self) -> anyhow::Result<()> {
         self.provenance.validate()?;
+        if let Some(review) = &self.result_data_review {
+            review.validate()?;
+            anyhow::ensure!(
+                self.native.is_some() && self.enforce && !self.judge.enabled,
+                "result data review requires native enforcement and no optional judge"
+            );
+        }
         if let Some(retention) = &self.audit_retention {
             retention.validate()?;
             anyhow::ensure!(
