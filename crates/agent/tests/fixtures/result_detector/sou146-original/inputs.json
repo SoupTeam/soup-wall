@@ -1,0 +1,16 @@
+[
+  {
+    "id": 20,
+    "frame_sha256": "3daf4efa6b31bc50294a38612e8ea3d24c8930c9104cab9c3bb453f2ba45bcbe",
+    "channels": [
+      "commit c8bc56ae3efc68049f4ba1131dfb30d3c13e18f3\nAuthor: SOU146 Synthetic <sou146@example.invalid>\nDate:   2026-10-25 04:47:21 +0000\n\n    Synthetic per-file second version\n\n--- .hidden.txt\n+++ .hidden.txt\n@@ -1 +1 @@\n-Synthetic per-file first version.\n+Synthetic per-file second version.\n\n--- docs/café.txt\n+++ docs/café.txt\n@@ -1 +1 @@\n-Synthetic per-file first version.\n+Synthetic per-file second version.\n\n--- docs/機能 notes.txt\n+++ docs/機能 notes.txt\n@@ -1 +1 @@\n-Synthetic per-file first version.\n+Synthetic per-file second version.\n\n--- notes.txt\n+++ notes.txt\n@@ -1 +1 @@\n-Synthetic per-file first version.\n+Synthetic per-file second version.\n"
+    ]
+  },
+  {
+    "id": 21,
+    "frame_sha256": "846e8e3a0a720526a6c9bd9ea7d9d5b420d44809631b9e8a7d57c11d283ec83e",
+    "channels": [
+      "Diff with a1e90c69c86298f5e4a408bb076288b2a5a63e02:\ndiff --git a/.hidden.txt b/.hidden.txt\nindex 8612bf3..4d71479 100644\n--- a/.hidden.txt\n+++ b/.hidden.txt\n@@ -1 +1 @@\n-Synthetic per-file first version.\n+Synthetic per-file second version.\ndiff --git \"a/docs/caf\\303\\251.txt\" \"b/docs/caf\\303\\251.txt\"\nindex 8612bf3..4d71479 100644\n--- \"a/docs/caf\\303\\251.txt\"\n+++ \"b/docs/caf\\303\\251.txt\"\n@@ -1 +1 @@\n-Synthetic per-file first version.\n+Synthetic per-file second version.\ndiff --git \"a/docs/\\346\\251\\237\\350\\203\\275 notes.txt\" \"b/docs/\\346\\251\\237\\350\\203\\275 notes.txt\"\nindex 8612bf3..4d71479 100644\n--- \"a/docs/\\346\\251\\237\\350\\203\\275 notes.txt\"\t\n+++ \"b/docs/\\346\\251\\237\\350\\203\\275 notes.txt\"\t\n@@ -1 +1 @@\n-Synthetic per-file first version.\n+Synthetic per-file second version.\ndiff --git a/notes.txt b/notes.txt\nindex 8612bf3..1fb05b4 100644\n--- a/notes.txt\n+++ b/notes.txt\n@@ -1 +1 @@\n-Synthetic per-file first version.\n+Synthetic working version."
+    ]
+  }
+]
