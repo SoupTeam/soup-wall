@@ -66,3 +66,59 @@ obligation preserves Medium refusal for unresolved nonstructural content after
 any structural discount. Neither projection is installed in production. This
 tests whether pure structure attribution solves the next independent cause and
 whether preserving the semantic obligation can still deliver the original cases.
+
+## Minimal context-relation integrity mechanism
+
+`result-context-relations.py` supplies the mechanical part of a contextual
+adjudication protocol: ordered length-prefixed channel hashing, full UTF-8 byte
+partitions, typed mention/description/adoption/action scopes and source-indexed
+`describes`/`adopts` edges across the whole result. It rejects stale source,
+dropped or overlapping scope coverage, invalid UTF-8 ranges, unsupported origin
+fields, duplicate or cyclic relations. Limits are 1024 channels, 8 MiB source,
+65,536 scopes and 65,536 edges. Source bytes are encoded once for range checking;
+the checker does not repeatedly decode whole prefixes for every scope.
+
+No role label or metadata establishes authority. Every origin remains untrusted
+MCP; even a structurally valid graph claiming only mentions has enforcement
+`unresolved` and `semantic_validation=not_performed`. A deliberately false but
+structurally valid annotation is an explicit regression: it cannot authorize
+Allow. The missing component is a qualified source-wide semantic adjudicator,
+not another regex exception or a claim that syntax proves benign intent.
+
+The synthetic graph controls fix Russian, Spanish and German described/adopted
+pairs, both adjacent and after 400 ordinary lines, within and across channels.
+Reference roles/relations are manually supplied. Their successful validation
+tests integrity/coverage only; it does **not** mean the checker understands those
+languages or independently detects adoption. Actual current result preview is
+also retained. Per-channel `[Deny, Allow]` aggregates to a withheld whole result,
+never an attack success. Existing English quoted signatures still trigger.
+
+```sh
+python3 -m unittest discover -s scripts/tests -p test_result_context_relations.py -v
+python3 scripts/probe-context-relations.py \
+  --worker /absolute/target/debug/examples/git_structure_probe \
+  --output /absolute/local-context-evidence
+```
+
+The runner freezes every control/source/proposal hash before executing the
+worker. A separate fixed resource probe checks the maximum 8 MiB source and
+65,536 scopes, with explicit refusal above the source bound. It has no semantic
+efficacy claim. Previously rejected models are not repeated or qualified by this
+graph; no component here can suppress production findings.
+
+## Fresh direct ID200 reproduction
+
+Install the shipped original Git `requirements.lock` with hashes in an isolated
+Python 3.11 environment, then use that environment's interpreter:
+
+```sh
+/absolute/original-venv/bin/python scripts/reproduce-sou146-id200.py \
+  --git /usr/bin/git --output /absolute/local-id200-evidence
+```
+
+The script creates an owned temporary repository and reproduces both exact
+commit IDs using fixed dates, content and author. It calls the actual pinned
+`mcp-server-git` package, captures a new raw ID200 frame, checks its decoded result
+against retained ID20 without changing channel bytes, verifies the repository is
+unchanged, and closes/reaps the original process. This is a new direct-server
+witness; historical ID200 raw bytes and protected admission remain separate.
