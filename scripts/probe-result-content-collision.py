@@ -12,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 import resource
+import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,6 +135,8 @@ def main(args):
     for request in requests:
         observations.append({'id': request['id'], 'main': run(args.main_worker, request),
                              'ledger_branch': run(args.ledger_worker, request)})
+    # Preserve raw debug observations even if a new comparison fails.
+    (args.output/'observations.json').write_text(json.dumps(observations, indent=2)+'\n')
     comparisons = []
     for i, pair in enumerate(pairs):
         benign, attack = observations[2*i:2*i+2]
@@ -141,11 +144,26 @@ def main(args):
         assert a['ledger']['complete'] and b['ledger']['complete']
         assert a['ledger'] == b['ledger'], 'hypothesis disproved: existing ledger distinguishes this pair'
         assert a['core_findings'] == b['core_findings'] and a['cross_findings'] == b['cross_findings']
-        assert a['outcomes'] == b['outcomes']
-        assert benign['main'] == attack['main']
+        def decisions(row):
+            return [(re.match(r'Outcome \{ verdict: (\w+), rule: (.*?), message:', o).groups(),
+                     re.search(r'risk_score: (\d+)', o).group(1)) for o in row['outcomes']]
+        for key in ('main', 'ledger_branch'):
+            assert benign[key]['core_findings'] == attack[key]['core_findings']
+            assert decisions(benign[key]) == decisions(attack[key])
+            if pair['name'] == 'git':
+                assert benign[key] == attack[key]
+            else:
+                # Full Outcome differs: replacement removes one incidental
+                # secret.generic high-entropy match in the structured channel.
+                # This is explicitly NOT global feature indistinguishability.
+                assert benign[key]['outcomes'][0] == attack[key]['outcomes'][0]
+                assert benign[key]['outcomes'][1].count('detector: "secret.generic"') == 1 + attack[key]['outcomes'][1].count('detector: "secret.generic"')
         assert all('verdict: Deny' in o for row in (benign,attack) for key in ('main','ledger_branch') for o in row[key]['outcomes'])
-        comparisons.append({'name':pair['name'], 'ledger_equal':True, 'main_observation_equal':True,
-                            'ledger_branch_observation_equal':True, 'whole_result_verdict':'Deny',
+        comparisons.append({'name':pair['name'], 'ledger_equal':True,
+                            'main_full_observation_equal':benign['main'] == attack['main'],
+                            'ledger_branch_full_observation_equal':a == b,
+                            'policy_decisions_and_risk_equal':True, 'whole_result_verdict':'Deny',
+                            'incidental_secret_generic_matches_removed':int(pair['name'] == 'fs'),
                             'full_channels_equal':False})
     report = {'production_authority':False, 'claim':'existing feature projection collision; full texts differ',
               'comparisons':comparisons, 'observations':observations}
