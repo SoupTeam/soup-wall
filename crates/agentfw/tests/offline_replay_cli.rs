@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Public owned synthetic CLI parity and independently calibrated effect witnesses.
+#![cfg(unix)]
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -374,11 +375,6 @@ fn effect_witnesses(root: &Path, home: &Path) -> Value {
         "target_fifo_calibrated":true,"command_marker_absent":true,"network_connections":0,"target_fifo_opens":0,
         "state_and_inputs_unchanged":true,"no_home_discovery":true,"host_sandbox":sandbox})
 }
-#[cfg(not(unix))]
-fn effect_witnesses(_: &Path, _: &Path) -> Value {
-    json!({"status":"unsupported_platform"})
-}
-
 #[cfg(target_os = "macos")]
 fn host_sandbox(home: &Path, input: &Path, policy: &Path) -> Value {
     let root = input.parent().unwrap();
@@ -612,6 +608,44 @@ fn cli_missing_context_unsafe_io_and_legacy_replay_stay_explicit() {
     cmd.arg("--output").arg(&export);
     assert_eq!(run(cmd).status.code(), Some(1));
     assert_eq!(fs::read(&export).unwrap(), original);
+    // A bounded failed regular-file write must remove only the newly created
+    // report inode. This exercises the native stat comparison on macOS/Linux.
+    let partial = root.join("partial-report.json");
+    let mut limited = invocation(&home, &input, &policy);
+    limited.arg("--output").arg(&partial);
+    {
+        use std::os::unix::process::CommandExt;
+        unsafe {
+            limited.pre_exec(|| {
+                let limit = libc::rlimit {
+                    rlim_cur: 32,
+                    rlim_max: 32,
+                };
+                if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                let mut action: libc::sigaction = std::mem::zeroed();
+                action.sa_sigaction = libc::SIG_IGN;
+                libc::sigemptyset(&mut action.sa_mask);
+                if libc::sigaction(libc::SIGXFSZ, &action, std::ptr::null_mut()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+    let failed = run(limited);
+    assert_eq!(failed.status.code(), Some(1));
+    assert!(failed.stdout.is_empty());
+    assert!(String::from_utf8(failed.stderr)
+        .unwrap()
+        .contains("offline_export_partial"));
+    assert!(!partial.exists(), "failed export retained a partial report");
+    assert_eq!(
+        fs::read(&export).unwrap(),
+        original,
+        "cleanup changed an existing report"
+    );
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;

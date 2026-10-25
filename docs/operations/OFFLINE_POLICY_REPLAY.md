@@ -183,6 +183,9 @@ and rejects metadata/length changes during a read. FIFO, device, directory and
 symlink inputs fail. Supply quiescent owned files. On macOS `/var` and `/tmp` may
 be symlinks; use their real `/private/var` or `/private/tmp` paths. A non-Unix CLI
 returns `offline_platform_unsupported`; Windows private export is not claimed.
+A dedicated non-Unix CLI regression requires that fixed refusal, empty stdout,
+no report or discovered home, and unchanged supplied files. Unix CLI parity tests
+run only where the private-file contract is supported.
 
 Export uses a pinned parent descriptor and exclusive no-follow creation with
 mode 0600. It verifies ownership, regular type and a single link, writes the
@@ -190,7 +193,11 @@ complete pre-bounded report and syncs it. Existing files and symlinks are never
 overwritten. On failure it removes only its own matching newly created inode when
 that identity can be verified. The parent must be owned and quiescent; concurrent
 renames by another writer are not a trusted report publication mechanism.
-Stdout uses complete-write and flush checks; a closed pipe fails explicitly.
+A bounded file-size failure regression verifies that a partially written new
+report is removed without changing an existing report. Cleanup compares the
+parent entry with the still-open created descriptor using native device/inode
+fields on each Unix platform. Stdout uses complete-write and flush checks; a
+closed pipe fails explicitly.
 
 ## Reproduce the exact-source synthetic qualification
 

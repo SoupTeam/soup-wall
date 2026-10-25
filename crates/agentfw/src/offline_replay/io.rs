@@ -177,6 +177,10 @@ mod unix {
         if write.is_err() {
             // Remove only this exact newly created inode, never a replacement.
             let mut current = std::mem::MaybeUninit::<libc::stat>::uninit();
+            let mut owned = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // Compare native stat fields from both pinned descriptors. dev_t
+            // differs by platform; no lossy or same-type conversion is needed.
+            let owned_observed = unsafe { libc::fstat(file.as_raw_fd(), owned.as_mut_ptr()) };
             let observed = unsafe {
                 libc::fstatat(
                     parent.directory.as_raw_fd(),
@@ -185,9 +189,10 @@ mod unix {
                     libc::AT_SYMLINK_NOFOLLOW,
                 )
             };
-            if observed == 0 {
+            if observed == 0 && owned_observed == 0 {
                 let current = unsafe { current.assume_init() };
-                if current.st_dev as u64 == created.dev() && current.st_ino == created.ino() {
+                let owned = unsafe { owned.assume_init() };
+                if current.st_dev == owned.st_dev && current.st_ino == owned.st_ino {
                     unsafe {
                         libc::unlinkat(parent.directory.as_raw_fd(), parent.name.as_ptr(), 0);
                     }
