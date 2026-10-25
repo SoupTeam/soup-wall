@@ -45,3 +45,15 @@ or changing shared CI. This is formatting feedback, not a compilation/test pass.
 Local documentation check: 277 Markdown files / 990 links / zero errors.
 The subsequent Draft result must be checked separately; Linux compilation and
 runtime witness blockers remain until explicitly executed.
+
+## Verified Draft result and source-binding control
+
+The existing [Draft CI rerun](https://github.com/SoupTeam/soup-wall/actions/runs/40207887190)
+passed at `9f257af` after the formatting correction. Draft checks include rustfmt;
+they do not compile/run this inspector or establish Ready admission.
+
+A subsequent focused driver control refuses dirty tracked source before claiming
+a commit, and the runtime report includes source tree and Linux kernel/architecture.
+Python controls now pass **8/8** with owned TEMP/TMP. Documentation remains
+277 files / 990 links / zero errors. Linux compilation, 14 Rust inspector tests,
+production-validator regressions and six syscall witnesses remain outstanding.

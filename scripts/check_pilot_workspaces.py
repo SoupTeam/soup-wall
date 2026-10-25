@@ -86,6 +86,8 @@ def snapshot(root):
 
 
 def source(repo):
+    require(subprocess.run(["git", "-C", str(repo), "diff", "--quiet", "HEAD", "--"],
+                           capture_output=True).returncode == 0, "dirty_source")
     return subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
 
 
@@ -169,6 +171,11 @@ def main(argv=None):
         repo = Path(__file__).resolve().parents[1]
         report["source_before"] = source(repo)
         require(report["source_before"] == args.expected_commit, "source_mismatch")
+        report["source_tree"] = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD^{tree}"], text=True).strip()
+        report["environment"] = {"system": os.uname().sysname,
+                                 "kernel_release": os.uname().release,
+                                 "architecture": os.uname().machine}
         report["binary_sha256"] = digest(binary.read_bytes())
         report["driver_sha256"] = digest(Path(__file__).read_bytes())
         with tempfile.TemporaryDirectory(prefix="sou144-synthetic-") as temporary:

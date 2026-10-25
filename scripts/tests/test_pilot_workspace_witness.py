@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("workspace_witness", Path(__file__).resolve().parents[1] / "check_pilot_workspaces.py")
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -64,6 +65,13 @@ class WitnessControls(unittest.TestCase):
             before = MODULE.snapshot(root)
             (root / "new").write_text("new")
             self.assertNotEqual(MODULE.snapshot(root), before)
+
+    def test_dirty_source_refuses_before_reporting_a_commit(self):
+        with patch.object(MODULE.subprocess, "run") as run, patch.object(MODULE.subprocess, "check_output") as lookup:
+            run.return_value.returncode = 1
+            with self.assertRaisesRegex(ValueError, "dirty_source"):
+                MODULE.source(Path("synthetic-checkout"))
+            lookup.assert_not_called()
 
 
 if __name__ == "__main__":
