@@ -47,6 +47,10 @@ pub struct SelectedInvocation {
     pub snapshot_sha256: String,
     pub definition_sha256: String,
     pub input_sha256: String,
+    /// Exact create-only observation, bound by the existing signed grant. It
+    /// never grants a built-in executor, arbitrary writes, overwrite or egress.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_create: Option<crate::mcp::server_profile::filesystem_create::CreateResource>,
 }
 
 impl SelectedInvocation {
@@ -56,12 +60,28 @@ impl SelectedInvocation {
                 super::selected_host_id(&self.host_call_id)
                     && super::identifier(&self.server_id)
                     && tool.mcp_result_profile.as_deref() == Some(self.profile.as_str())
-                    && tool.action_class == soup_wall_agent::ActionClass::ReadOnly
                     && tool.resource_policy.is_none()
                     && tool.workspace_profile.is_none()
                     && tool.egress.is_empty(),
                 "unsupported selected approval"
             );
+            match &self.original_create {
+                Some(resource) => {
+                    anyhow::ensure!(
+                        cfg!(target_os = "linux")
+                            && self.profile
+                                == crate::mcp::server_profile::filesystem_create::FORMAT
+                            && tool.name == "write_file"
+                            && tool.action_class == soup_wall_agent::ActionClass::SideEffecting,
+                        "unsupported selected create approval"
+                    );
+                    resource.validate(args)?;
+                }
+                None => anyhow::ensure!(
+                    tool.action_class == soup_wall_agent::ActionClass::ReadOnly,
+                    "selected mutation requires exact create resource"
+                ),
+            }
             for digest in [
                 &self.request_sha256,
                 &self.profile_sha256,
@@ -784,6 +804,9 @@ fn open_bound(
     }
     if let Some(context) = &request.selected_invocation {
         file["selected_invocation"] = json!(context);
+        if let Some(resource) = &context.original_create {
+            file["resource_details"] = json!(resource);
+        }
     }
     // Audit first and fail closed; the audit line never carries raw arguments.
     audit(
