@@ -24,6 +24,20 @@ SPEC.loader.exec_module(ASK)
 require = ASK.require
 
 
+def terminal_diagnostic(text, exit_code):
+    markers = {
+        "rejection_compact": '"state":"rejected"',
+        "rejection_spaced": '"state": "rejected"',
+        "decision_unavailable": "Decision outcome unavailable.",
+        "inspection_required": "Use inspect N, then approve or reject;",
+        "request_changed": "Request changed or expired.",
+        "list_changed": "List changed.",
+        "inspection_unavailable": "Inspection unavailable or over 16384 bytes.",
+    }
+    return {"tail_bytes": len(text), "exit_code": exit_code,
+            "markers": {name: marker in text for name, marker in markers.items()}}
+
+
 class Terminal:
     def __init__(self, pilot):
         import pty
@@ -33,6 +47,7 @@ class Terminal:
         settings[3] &= ~termios.ECHO
         termios.tcsetattr(slave, termios.TCSANOW, settings)
         self.master, self.text, self.cursor, self.closed = master, "", 0, False
+        self.failure = None
         command = [str(pilot.setup.binary), "pilot-approval", "--home", str(pilot.setup.home),
                    "--run", pilot.run_id, "watch", "--refresh-seconds", "1"]
         try:
@@ -58,7 +73,9 @@ class Terminal:
     def expect(self, marker, seconds=10):
         deadline = time.monotonic() + seconds
         while marker not in self.text[self.cursor:]:
-            require(time.monotonic() < deadline, "terminal_marker_timeout")
+            if time.monotonic() >= deadline:
+                self.failure = terminal_diagnostic(self.text[self.cursor:], self.process.poll())
+                raise ValueError("terminal_marker_timeout")
             if not self.read():
                 require(marker in self.text[self.cursor:], "terminal_closed_before_marker")
         end = self.text.index(marker, self.cursor) + len(marker)
@@ -143,7 +160,7 @@ class InboxPilot(ASK.Pilot):
             return super().operator(*words, success=success, without_home=without_home)
         if not self.guards_checked:
             self.check_exit_controls()
-        if self.watcher is None or self.watcher.process.poll() is not None:
+        if words[0] != "reject" and (self.watcher is None or self.watcher.process.poll() is not None):
             self.watcher = self.open()
         if words[0] == "inspect":
             rows = super().operator("list")
@@ -171,6 +188,12 @@ class InboxPilot(ASK.Pilot):
             self.observations.append({"profile": self.kind, "case": "concurrent_terminal_approval",
                                       "submitted": submitted, "passed": True})
         else:
+            if self.watcher is not None:
+                self.watcher.close()
+            self.watcher = self.open()
+            rows = super().operator("list")
+            number = next(i + 1 for i, row in enumerate(rows) if row["pending_id"] == words[1])
+            self.watcher.inspect(words[1], number)
             self.watcher.send("reject")
             self.watcher.expect('"state":"rejected"')
         self.observations.append({"profile": self.kind, "case": "terminal_" + words[0], "passed": True})
@@ -228,6 +251,7 @@ def main():
             try:
                 ASK.qualify(args, Path(private), report)
             finally:
+                report["terminal_diagnostics"] = [t.failure for t in InboxPilot.terminals if t.failure is not None]
                 for terminal in InboxPilot.terminals:
                     terminal.close()
                 report["terminal_controls"] = InboxPilot.observations
