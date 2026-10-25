@@ -137,6 +137,13 @@ print(json.dumps({{'late_link_contained':True,'useful_read':True}}))
             let (a, b) = tokio::join!(stdout.read_to_end(&mut out), stderr.read_to_end(&mut err));
             a.unwrap();
             b.unwrap();
+            // The outer owner stays alive after closing the sandbox's stdio.
+            // Request and verify its cleanup before waiting for that process,
+            // matching the established native sandbox probe lifecycle.
+            if let Some(budget) = budget.as_mut() {
+                budget.finish().await.unwrap();
+            }
+            owner.finish().await.unwrap();
             child.wait().await.unwrap()
         })
         .await;
