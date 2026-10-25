@@ -27,7 +27,8 @@
   ],
   "failed_attempts_retained": {
     "final-clippy": "test assertion unwrap_err required Debug on a successful Response; changed to exact Err pattern, no production guard change",
-    "selected-grants": "same compile-time test assertion; both failed attempts remain failed"
+    "selected-grants": "same compile-time test assertion; both failed attempts remain failed",
+    "workflow-yaml": "local optional PyYAML module unavailable; no dependency installed or source relaxed; system Psych safe parser used instead"
   },
   "attempts": [
     {
@@ -182,25 +183,134 @@
       "source_files_sha256": "614ae432e1233ac03743664d4f964f3f79094426c0e34f6fb177b4585d0720fc",
       "source_after_sha256": "614ae432e1233ac03743664d4f964f3f79094426c0e34f6fb177b4585d0720fc",
       "log_sha256": "8fc53fd2841d431ee54abb76f56f715f168b5a40506d0dbe9c40ca71a561fa23"
+    },
+    {
+      "label": "final-fmt",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 1.26,
+      "source_files_sha256": "3c1467a178562b40dd2a3c241370dda59dfd7499034a2a75a876a65749de668d",
+      "source_after_sha256": "3c1467a178562b40dd2a3c241370dda59dfd7499034a2a75a876a65749de668d",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "final-docs",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.39,
+      "source_files_sha256": "3c1467a178562b40dd2a3c241370dda59dfd7499034a2a75a876a65749de668d",
+      "source_after_sha256": "3c1467a178562b40dd2a3c241370dda59dfd7499034a2a75a876a65749de668d",
+      "log_sha256": "6a7e0b1f7eb991aa403d1ead2fa3f23bdd4f328868810c129a6629df98dbb515"
+    },
+    {
+      "label": "stage-adversaries-clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 6.45,
+      "source_files_sha256": "ed11fcb24c546f3d5cb5f4b4435c5d5a2ba41fe828a58295d244b1616e39c9fb",
+      "source_after_sha256": "ed11fcb24c546f3d5cb5f4b4435c5d5a2ba41fe828a58295d244b1616e39c9fb",
+      "log_sha256": "109165732e81da410d94fc903164b255be99e74e791baabd39775f8c266c9566"
+    },
+    {
+      "label": "original-create-unit",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 5.67,
+      "source_files_sha256": "ed11fcb24c546f3d5cb5f4b4435c5d5a2ba41fe828a58295d244b1616e39c9fb",
+      "source_after_sha256": "ed11fcb24c546f3d5cb5f4b4435c5d5a2ba41fe828a58295d244b1616e39c9fb",
+      "log_sha256": "1fc9d4f8aab775a204ab3f0ea2ce7fffd0e92aae0acf5ba1740be6aa544cc303"
+    },
+    {
+      "label": "stage-final-fmt",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 1.77,
+      "source_files_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "source_after_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "stage-final-clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 5.65,
+      "source_files_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "source_after_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "log_sha256": "a9042f7a3c69a36156077cfe3e0b85b3af7315ce45f71d9a8a6f5d114ae4012b"
+    },
+    {
+      "label": "ci-contracts",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.38,
+      "source_files_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "source_after_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "log_sha256": "af1fb96559b08643e04a1cb11359039da4b4467bba430006ea5c92d0cc733218"
+    },
+    {
+      "label": "filesystem-evidence",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.42,
+      "source_files_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "source_after_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "log_sha256": "1c850917b9a5c5c72b437a9a3f46917a1ceaeaa01b6fcd67b930c1c2623f4f6a"
+    },
+    {
+      "label": "workflow-yaml",
+      "status": "failed",
+      "exit_code": 1,
+      "elapsed_seconds": 0.2,
+      "source_files_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "source_after_sha256": "0dbdb3c9aa0ea63553ef9b989751290a016647e99e4e396d4d59bf2656fbe30f",
+      "log_sha256": "520780e9cfcf7e22eca40ca9874271079756a9efb51f992204985790ff117d2c"
+    },
+    {
+      "label": "workflow-yaml-ruby",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.21,
+      "source_files_sha256": "d075b8d8437d72a7432366274ebb975b01343c0a1cb394f5b9a588bb32a25ca2",
+      "source_after_sha256": "d075b8d8437d72a7432366274ebb975b01343c0a1cb394f5b9a588bb32a25ca2",
+      "log_sha256": "dd14e0a79fbc2025530fae11c5b5e445b59faf455b2f16ce2f879b5880de5b79"
+    },
+    {
+      "label": "stage-grading",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.38,
+      "source_files_sha256": "d075b8d8437d72a7432366274ebb975b01343c0a1cb394f5b9a588bb32a25ca2",
+      "source_after_sha256": "d075b8d8437d72a7432366274ebb975b01343c0a1cb394f5b9a588bb32a25ca2",
+      "log_sha256": "baf49b59538192f3e136ca0404cac516ecb8dd2fe5ba1416604056f3080fa49c"
+    },
+    {
+      "label": "stage-generated",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.15,
+      "source_files_sha256": "d075b8d8437d72a7432366274ebb975b01343c0a1cb394f5b9a588bb32a25ca2",
+      "source_after_sha256": "d075b8d8437d72a7432366274ebb975b01343c0a1cb394f5b9a588bb32a25ca2",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ],
   "file_sha256": {
-    ".github/workflows/ci-components.yml": "cf776cc03744040004311170895c2eef3dac9c717a4400631e28f831b16e88b4",
-    ".github/workflows/mcp-real-filesystem.yml": "713305e78f406d802612883dd77412079102274d22c6c88d7129e5a6aa7b59f4",
+    ".github/workflows/ci-components.yml": "14c281a40ae14278938c2fd8039244260e139c30f4a665fdc4fb232739cf0fbc",
+    ".github/workflows/mcp-real-filesystem.yml": "06ec9d8bb8c0eb8328e70a4f1740da9ca284e276a28c19e4eb748d0a61528cb3",
     "crates/agentfw/src/mcp/admission.rs": "63f2ad2b3543696cdd346fde9db97f05bb2943d19b52210b9310eb104ef89748",
     "crates/agentfw/src/mcp/admission/real_server.rs": "7f5e8bacb71a7cd1e19610c98100b6791feac4cca198e66f8a3b135fb6afe5a3",
     "crates/agentfw/src/mcp/admission/real_server/fault_tests.rs": "a595cdeef31bd4e4cc0f313734b4d811c164729f1079a941819d7f337fae961f",
-    "crates/agentfw/src/mcp/original_create.rs": "502c6d74d4c4a369e25ae804f1516068f7cd36613f622a2dbfcaf363a3fd9f8a",
+    "crates/agentfw/src/mcp/original_create.rs": "dd6d158902c9e95d8942e90ab89cac66123c100312b6fc63067769b1854455a7",
     "crates/agentfw/src/mcp/server_profile/filesystem_create.rs": "81d555de44515e971b7ab6a5ebf4c6e4771109fdc205092d64edff791950ce42",
     "crates/agentfw/src/native.rs": "dcbcbd320a7819936563cbb7dbd49e67858ac9fa5386a8b865cb8a4839df7018",
     "crates/agentfw/src/native/approval.rs": "1f09c9d2befeb407ba50ba98d0dcd615cdece67d1e16e54754769f1121657119",
     "crates/agentfw/src/native/approval/tests/selected_tests.rs": "8724fb6556113d086bf71089a7d9efa91f32150d4894e3f1cc5aeb0c02f0f0e3",
     "docs/operations/MCP_FILESYSTEM_CREATE_AUDIT.md": "f89e508d14e2e1007e7f895d2856ed26c62708462e17ed4e435127493c4f73be",
-    "docs/operations/MCP_FILESYSTEM_CREATE_ONLY.md": "329d03dd2d36292245f9b1d3b88c56da19e69c64048088edba55d104da58a67e",
+    "docs/operations/MCP_FILESYSTEM_CREATE_ONLY.md": "d5978c7bab14eb3b54d4433ed86286bd7462215d416f9b7df09004071da8fb66",
     "scripts/managed-native-transitions.py": "5cd037dc645e7e4761b70d40f5544568ef90da2846e9d4194f0d4b610deac12a",
     "scripts/tests/test_sou83_create_approval.py": "2ab20b547801cb48c5e60e1c219a052eac6ab1ccf8510129f7cf5ed7d50e7f6a",
     "scripts/verify-sou105-selected-approval.py": "3569b64a16953488a18e0ad5d21bc231bc3b64b6a82a15980d7f18c5c8b7e8f3",
-    "scripts/verify-sou83-create-approval.py": "69f7272ab77d0557c294c76ec92c2318988885e6aedc3f21b0999056ecc851c4"
+    "scripts/verify-sou83-create-approval.py": "69f7272ab77d0557c294c76ec92c2318988885e6aedc3f21b0999056ecc851c4",
+    "scripts/verify-sou62-real-mcp.py": "8ad6fd60ea0f9edcdf4b86f44e52bbb3f611d21f58c7dbc0df2d165cbb4860ec"
   },
   "failed_ci_attempts": [
     {
@@ -221,5 +331,6 @@
       "job_id": 121231590087,
       "failure": "same refusal witness plus existing private executable calibration failed with ETXTBSY; retained as failure, no product guard or argument-limit expectation changed"
     }
-  ]
+  ],
+  "native_staging_controls": "actual pinned original writes followed by test-only post-cleanup perturbation and production validator; execution pending focused Linux qualification"
 }

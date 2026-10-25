@@ -198,3 +198,15 @@ traces remain private because they contain child-authority argv. Signed managed
 SQLite/PostgreSQL qualification additionally exercises actual original Allow /
 Deny, a new same-policy deployment retiring a pending create, and a fresh exact
 Ask after activation. Unit tests alone do not qualify these real-process checks.
+
+
+The required real-original staging witness also re-runs the unchanged pinned
+writer under seven trusted output perturbations **after owned child cleanup**:
+extra artifact, wrong bytes, oversized file, external hardlink, symlink, FIFO and
+directory. The production output validator must refuse every case with zero
+visible publications. A task-local seam exists only in the library test binary;
+there is no environment switch or mutation hook in production. The same actual
+verified original output is anonymously staged then dropped, challenged by a
+competing target, and challenged by root replacement before publication. These
+controls test output verification/publication independently from upstream
+semantics; they do not claim that the original pinned server itself is malicious.

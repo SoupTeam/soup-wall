@@ -439,15 +439,60 @@ mod linux {
         owner_cleanup?;
         child_cleanup?;
         stderr_cleanup?;
+        #[cfg(test)]
+        let _adversary_owner = tests::perturb_completed_original_stage(&stage, &selected)?;
         let verified = validate_original_output(&stage, &selected, &reply)?;
         Ok((result, verified))
     }
 
     #[cfg(test)]
-    mod tests {
+    pub(super) mod tests {
         use super::*;
         use serde_json::json;
         use std::os::unix::fs::symlink;
+
+        // Unit-test binary only: a trusted adversary changes the real original
+        // server's output after its owned processes are conclusively stopped.
+        // This does not replace the producer or alter its installed assets.
+        tokio::task_local! { static STAGE_ADVERSARY: &'static str; }
+
+        pub(super) fn perturb_completed_original_stage(
+            stage: &OwnedStage,
+            selection: &CreateSelection,
+        ) -> anyhow::Result<Option<tempfile::TempDir>> {
+            let Ok(fault) = STAGE_ADVERSARY.try_with(|fault| *fault) else {
+                return Ok(None);
+            };
+            let target = stage.path().join(&selection.leaf);
+            match fault {
+                "extra" => fs::write(stage.path().join("unapproved-extra"), b"unapproved")?,
+                "wrong-bytes" => fs::write(&target, b"unapproved")?,
+                "oversize" => File::options().write(true).open(&target)?.set_len(4097)?,
+                "hardlink" => {
+                    let alias = tempfile::tempdir()?;
+                    fs::hard_link(&target, alias.path().join("alias"))?;
+                    // Keep the alias alive through the production validator.
+                    return Ok(Some(alias));
+                }
+                "symlink" | "fifo" | "directory" => {
+                    fs::remove_file(&target)?;
+                    match fault {
+                        "symlink" => symlink("unapproved-missing", &target)?,
+                        "directory" => fs::create_dir(&target)?,
+                        _ => {
+                            let path =
+                                std::ffi::CString::new(target.as_os_str().as_encoded_bytes())?;
+                            ensure!(
+                                unsafe { libc::mkfifo(path.as_ptr(), 0o600) } == 0,
+                                "owned FIFO control unavailable"
+                            );
+                        }
+                    }
+                }
+                _ => anyhow::bail!("unregistered original-stage control"),
+            }
+            Ok(None)
+        }
 
         fn selected(leaf: &str, content: &str) -> CreateSelection {
             crate::mcp::server_profile::filesystem_create::validate_request(
@@ -506,6 +551,78 @@ mod linux {
             assert!(!workspace.join("original.txt").exists());
             assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
             assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+
+            // These inputs are real completed ORIGINAL writes, subsequently
+            // perturbed by the owned witness. No synthetic producer is used.
+            for fault in [
+                "extra",
+                "wrong-bytes",
+                "oversize",
+                "hardlink",
+                "symlink",
+                "fifo",
+                "directory",
+            ] {
+                let refused = STAGE_ADVERSARY
+                    .scope(fault, super::run_original_upstream(&profile, &args))
+                    .await;
+                assert!(refused.is_err(), "original stage accepted {fault}");
+                assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+                assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
+                eprintln!(
+                    "{}",
+                    json!({"event":"sou83_completed_original_stage_refused",
+                    "case":fault,"visible_publications":0,"original_worker_completed":true})
+                );
+            }
+
+            let (_, fresh) = super::run_original_upstream(&profile, &args).await.unwrap();
+            let verified = fresh.expect("fresh original create must recover after stage refusals");
+            assert_eq!(verified.content, "upstream 🌍");
+            let pinned = crate::sandbox::PinnedWorkspace::open(&workspace).unwrap();
+            let staged = verified
+                .prepare_atomic_publication(&pinned)
+                .unwrap()
+                .stage()
+                .unwrap();
+            drop(staged);
+            assert_eq!(
+                fs::read_dir(&workspace).unwrap().count(),
+                0,
+                "dropping anonymous original output published it"
+            );
+            let staged = verified
+                .prepare_atomic_publication(&pinned)
+                .unwrap()
+                .stage()
+                .unwrap();
+            fs::write(workspace.join("original.txt"), b"competing inventory").unwrap();
+            assert!(
+                staged.publish().is_err(),
+                "original publication overwrote competing target"
+            );
+            assert_eq!(
+                fs::read(workspace.join("original.txt")).unwrap(),
+                b"competing inventory"
+            );
+            fs::remove_file(workspace.join("original.txt")).unwrap();
+            let staged = verified
+                .prepare_atomic_publication(&pinned)
+                .unwrap()
+                .stage()
+                .unwrap();
+            let moved = root.path().join("moved-original-workspace");
+            fs::rename(&workspace, &moved).unwrap();
+            fs::create_dir(&workspace).unwrap();
+            assert!(
+                staged.publish().is_err(),
+                "original output published after root replacement"
+            );
+            assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+            assert_eq!(fs::read_dir(&moved).unwrap().count(), 0);
+            fs::remove_dir(&workspace).unwrap();
+            fs::rename(&moved, &workspace).unwrap();
+            assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
 
             // These refusals happen *before* any upstream process is spawned.
             for denied in [
