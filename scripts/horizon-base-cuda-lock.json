@@ -1,0 +1,45 @@
+{
+  "repo": "Horizon-Labs/prompt-injection-guard-base",
+  "revision": "70b65c51c03f7d9b5d1f18726defee45f3936610",
+  "license": "apache-2.0",
+  "files": {
+    "README.md": {
+      "sha256": "c49195493b18f925843461029780c8eb8b61aa41e5529e5fc9048baa43f5d084",
+      "bytes": 24766
+    },
+    "config.json": {
+      "sha256": "34fbf08b5c26d800bb55d6f1de0d3a39c35eb8b5d4208c681361a20f93923f54",
+      "bytes": 2032
+    },
+    "tokenizer.json": {
+      "sha256": "47834a7dbbb0c4324fe9569fe47955241594a9ee539c9e478755d6fbc51e5f46",
+      "bytes": 34387555
+    },
+    "tokenizer_config.json": {
+      "sha256": "1d2f82c1341a79748e00efe82e67690f99d00b3c2a894f2b23128fd9d3519da3",
+      "bytes": 46440
+    },
+    "special_tokens_map.json": {
+      "sha256": "baec30ea10906f16adb8c18af7a34023002c1746542612b8b41c9f09e1351351",
+      "bytes": 636
+    },
+    "model.safetensors": {
+      "sha256": "d0c0f899f118481855cfe34ba718cf5e44613d266270721c380d54741626d405",
+      "bytes": 1230141424
+    }
+  },
+  "derived_artifact": {
+    "original_native_container_sha256": "d0c0f899f118481855cfe34ba718cf5e44613d266270721c380d54741626d405",
+    "container_hash_matches_original": true,
+    "source_onnx_sha256": "5ae9f527897b1ffcb2b13440875769d0c28a25fb976b8b42465f0ad5b462b61b",
+    "mapping_report_commit": "fa5b91e738644936ec8e378cd8e6aa1d81f527d6",
+    "mapping_report_sha256": "9895c640a2403b6773f30d2c3cbb5eb9637a40a263abd13c4e684923b54df493",
+    "prior_verified_mapping_sha256": "8aa8221b05ddf446612a17efcad54329b39ea6a91c762fff5018803ff8323f82",
+    "derivation_script_sha256": "9693b86e16a34b049948942351e10f22b98b1e7186b96dec70888c68acc6bc50",
+    "tensor_count": 138,
+    "tensor_parameter_count": 307531778,
+    "no_external_data": true,
+    "all_tensor_bytes_roundtrip_verified": true,
+    "inference_performed": false
+  }
+}
