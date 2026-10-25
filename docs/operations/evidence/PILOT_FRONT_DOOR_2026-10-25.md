@@ -9,7 +9,7 @@ Guide: [PILOT_FRONT_DOOR.md](../PILOT_FRONT_DOOR.md).
 | Platform | hosted Ubuntu 24.04.5 x86_64 container, kernel `6.18.44-fc-v153`; `platform.kind` = `linux` (not WSL2, not a physical host) |
 | User | non-root `tester` |
 | Base | main `49268d85` (descendant of `c1a6918`), the base of PR head `79af830` |
-| Source | review-fix commit of this change, tree `6add96a871f02772a42f20c9905e074a13f46670`, clean before and after (first run: tree `5b76054`, 8 cases passed) |
+| Source | policy-binding fix commit of this change, tree `ea28b98dcff275425f84b9285e412c5e18d6d191`, clean before and after (earlier runs: tree `5b76054` 8/8, tree `6add96a` 9/9) |
 | Claude Code 2.1.251 | `fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7` (locked package) |
 | Node 22.22.0 | `1bec56ef...` (official binary, supplied as `--node`/`--npm`) |
 | bubblewrap 0.13.1 | `f56b4f97...` |
@@ -19,7 +19,8 @@ This environment's network allowlist blocks `nodejs.org`, `www.kernel.org` and
 `static.rust-lang.org`. Therefore the local run supplied explicit inputs instead
 of the front door's own native and Agent build steps:
 
-- Agent executables were built from this source with the locally installed
+- Agent executables were built from this source (including the new
+  `protection-status --expect-policy-file` option) with the locally installed
   Rust 1.97.0, not the pinned 1.94.1 (`agentfw` `26172528...`,
   `agentfw-git-sandbox` `cb096d6b...`, sandbox tests `f19146df...`);
 - Git 2.51.2 was built with the pinned flags from the upstream `v2.51.2` tag
@@ -48,7 +49,7 @@ not live-model effectiveness or general product readiness.
 | prepare and reuse | `prepare --apply` on owned existing roots (a source tree with hostile project Claude settings, and a supported Git repository): `prepared-not-active`; `prepare --apply --prefix` alone: `reused`, same selection; projects unchanged |
 | second prefix | `prepare --apply` with generated demo roots: a different selection and workspaces from the same binaries and policy bytes |
 | status before run | `configured-not-running` |
-| useful run | exit 0, `completed`, cleanup `owned_processes_stopped_audit_retained`, 21 s; `read_text_file README.md` returned the file; `git_show HEAD` returned the owned commit; `write_file`, `git_reset` and a `Bash` send were refused; no created file, no receiver request, no hostile hook marker; status during the run: `observed-live` with the run ID for this prefix, while the second prefix reported `configured-not-running` with one unrelated owned run; all 44 owned descendants stopped |
+| useful run | exit 0, `completed`, cleanup `owned_processes_stopped_audit_retained`, 21 s; `read_text_file README.md` returned the file; `git_show HEAD` returned the owned commit; `write_file`, `git_reset` and a `Bash` send were refused; no created file, no receiver request, no hostile hook marker; status during the run: `observed-live` with the run ID for this prefix, while the second prefix reported `configured-not-running` with one unrelated owned run; all 35 owned descendants stopped |
 | status after run | `configured-not-running` |
 | stale record | refused `selection_not_current`, no selected program started, operator message printed |
 | changed selected policy | refused `selected_artifact_changed`, no selected program started, operator message printed |
@@ -60,7 +61,7 @@ selection file was unchanged.
 
 ## Deterministic tests
 
-`python3 -B -m unittest scripts/tests/test_pilot_front_door.py` (22 tests):
+`python3 -B -m unittest scripts/tests/test_pilot_front_door.py` (23 tests):
 prefix rules (absolute, canonical, outside checkout, project and home), both or
 neither root, record tampering (missing, other commit, not current, wrong mode,
 duplicate keys, other format), dirty checkout, fixed argument list without a
@@ -68,7 +69,8 @@ shell, exact non-zero status, signal death reproduced, TERM forwarded while
 SIGINT is left to the supervisor, unprepared run starts nothing; status is
 live only for a run bound to this selection (two prefixes, same binary with
 another policy, registry or workspace, changed policy bytes, dead or unreadable
-records are never live) and never prints tokens; the front door never executes
+records, and the same path, config, binary and registry with a different
+active policy digest are never live) and never prints tokens; the front door never executes
 a supplied host or an unverified npm; explicit `--apply`, sanitized failures,
 and no toolchain auto-install. CI helper tests
 and `check_docs` pass.
