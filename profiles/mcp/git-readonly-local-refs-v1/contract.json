@@ -1,0 +1,21 @@
+{
+  "format": "sw-mcp/git-readonly-local-refs/1",
+  "registry_id": "git-readonly-local-refs-v1",
+  "classifier": "git_readonly_local_refs_v1",
+  "max_reference_utf8_bytes": 255,
+  "max_suffix_components": 8,
+  "max_references": 64,
+  "max_tag_depth": 8,
+  "accepted": [
+    "refs/heads/main", "refs/heads/feature/nested", "refs/heads/café", "refs/heads/café",
+    "refs/heads/機能/読み取り", "refs/heads/emoji-🦀", "refs/heads/review@one+two",
+    "refs/tags/v1.2.3", "refs/tags/releases/annotated", "refs/tags/版/一"
+  ],
+  "rejected": [
+    "", "main", "--help", "HEAD~1", "HEAD:file", "HEAD@{0}", "refs/remotes/origin/main",
+    "refs/heads/", "refs/heads//main", "refs/heads/a..b", "refs/heads/.hidden", "refs/heads/a.",
+    "refs/heads/a.lock", "refs/heads/-option", "refs/heads/a^", "refs/heads/a~1", "refs/heads/a:b",
+    "refs/heads/a@{0}", "refs/heads/a*", "refs/heads/a?", "refs/heads/a[b", "refs/heads/a\\b",
+    "refs/heads/a b", "refs/heads/a\n", "refs/heads/a\u007f", "refs/heads/a\u00a0", "refs/heads/a\u202eb"
+  ]
+}

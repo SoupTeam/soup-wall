@@ -1,0 +1,79 @@
+{
+  "cases": [
+    {
+      "case": "plan",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "8ff9a71d86e3d4dc0837612ef2176f2ee50cca6418fd8a7d5832d39c0db2b4d6"
+    },
+    {
+      "case": "occupied-port",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "220b48753b40c5b101acb998e60cb2eed85bb433d8ba4f4eab19d6ae4a0dff83"
+    },
+    {
+      "case": "stale-source",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "3991d7c88eba3d3e4501ddd30e2be7503a5c2d911d9368b58b7bc37717774d29"
+    },
+    {
+      "case": "changed-selection",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "876b41930416921883659e690c28d4b0deab32e12b8b649acbefcbfa93119041"
+    },
+    {
+      "case": "provider-unavailable",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "4caab8a541c757fce1e52a924a6ef2eab61af787a2990153b1065de4f9e64844"
+    }
+  ],
+  "emergency_stop": [],
+  "failure_observation": {
+    "denied_exec_counts": {},
+    "entry_reason": "restricted_launcher_failed",
+    "entry_status": "failed",
+    "known_refusals": [
+      "Permission denied"
+    ],
+    "provider_request_count": 0
+  },
+  "format": "sou143-prepared-host-public/1",
+  "original_report_status": "failed",
+  "paid_api_calls": 0,
+  "private_report_sha256": "ff897911ede9a938f7e35645f3f367625edf0f45f49d61f7c91499e7a2771d09",
+  "provider": "owned-scripted-loopback",
+  "qualifier_exit_code": 1,
+  "raw_environments_or_logs_exported": false,
+  "raw_process_metadata_exported": false,
+  "selected_sha256": {
+    "agentfw": "c26c3b66b94cf1c6a959299fcc7f56aa7ae66b4a21f9126219d1e0f3d0659d07",
+    "bwrap": "3970ab274258223a8a42fca4181c449bcd1653acb6ed27ff249fa3db807696c2",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "7ce841b8068a448434d17a6214863048380856cf4058cf80980448394e30b05e",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "22ce08923328e6342282c8103d6dc4a87f593db444ef52895552ba9dba6b16eb",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "51e9addb90b3cc7b7ff31b22264df7fd3f3d14f9b3c6f7d1fbf2316928db93f6"
+  },
+  "source": {
+    "commit": "766e1649d255368a3ca5f665d758ba7dd350008d",
+    "files_sha256": "d19b1ff89b184a7b1271aa43c56eff589e3e41f565a283145401b5ba06e32916"
+  },
+  "source_commit": "766e1649d255368a3ca5f665d758ba7dd350008d",
+  "status": "failed",
+  "verification_errors": [
+    "emergency_stop_evidence_unproven",
+    "inventory_preservation_unproven",
+    "provider_classifier_unobserved",
+    "qualifier_not_completed_successfully"
+  ],
+  "workflow_run": 40139854789
+}

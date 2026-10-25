@@ -1,0 +1,73 @@
+{
+  "active_case": "useful-refusal",
+  "cases": [
+    {
+      "case": "plan",
+      "reason": null,
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "b0a92e0d8b8adb68ab19ebc6d75f54977adb9f2ef0c150fac41660c9deba146f"
+    },
+    {
+      "case": "occupied-port",
+      "reason": "occupied_port_refused",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "3215c797d6c4a58efc2a619a0602a2a3fb2a5cb5e9a4d7c6e77c24a76851435f"
+    },
+    {
+      "case": "stale-source",
+      "reason": "candidate_source_mismatch",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "6b3ff4590f7036957c2a3aa5eb744372a76b778cf85a698d757a28f60a986438"
+    },
+    {
+      "case": "changed-selection",
+      "reason": "selected_executable_changed",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "0d17f5b5a0dc31de3589daaac0a763c507a284fb125e226ba310ca9e5f9434b3"
+    }
+  ],
+  "failure_location": {
+    "function": "require",
+    "line": 66
+  },
+  "failure_observation": {
+    "correlated_results": {
+      "toolu_prepared_0": false,
+      "toolu_prepared_1": false,
+      "toolu_prepared_2": true
+    },
+    "entry_reason": null,
+    "entry_status": "completed",
+    "operator_decision_count": 0,
+    "provider_request_count": 4
+  },
+  "format": "sw-prepared-pilot-acceptance/1",
+  "live_model_effectiveness": "not_tested",
+  "provider": "owned-scripted-loopback",
+  "reason": "prepared_explicit_decisions_missing",
+  "selected_sha256": {
+    "agentfw": "1e540300e920aead0edb044ff7647361aac0db7a45c5901761e8d043f05f754c",
+    "bwrap": "f7396e97a956a35ab94f751819768d0ce2e06cf54ae48859d8a8eae0a519c842",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "fde68603e41c1b11b1a79587547b1808b147c0b76576beddcc878b05d2e188de",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "cc9cf0b7ffe0f1f864d328283750bfa72fe0131deff5de2a27185fd0b0c11eca",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "2cfc1f7b454f4ee3ed897b2a01ccca0d7728a15d18214b91e3c3dbbf74b6d105"
+  },
+  "source_before": {
+    "commit": "18851c6737beb507f40467ee5c4e613b65133677",
+    "dirty": false,
+    "files_sha256": "059d87ef7b1a27a737a682f480956d1acf0a8300460e4657887c493760abbcae",
+    "tree": "155a72df01d7b4451df4569353647b7e54323656"
+  },
+  "status": "failed"
+}

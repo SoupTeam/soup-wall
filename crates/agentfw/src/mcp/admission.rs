@@ -92,6 +92,15 @@ pub trait InvocationClassifier: Send + Sync {
     fn revision(&self) -> Option<&str> {
         None
     }
+    /// Whether protected calls must be preceded by `prepare` (pilot mode). Off by default.
+    fn requires_preparation(&self) -> bool {
+        false
+    }
+    /// Make the classifier ready before a protected call; no tool is called and nothing
+    /// is classified. Failure means the call must not reach the original server.
+    fn prepare(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
     fn classify(&self, invocation: &Invocation) -> anyhow::Result<Classification>;
 }
 
@@ -200,6 +209,12 @@ pub(crate) fn parse_classifier_reply(bytes: &[u8]) -> anyhow::Result<Classificat
     Ok(reply.classification)
 }
 
+/// `AGENTFW_CLASSIFIER_PREPARE=1` selects the prepared pilot path explicitly; anything
+/// else (including unset) keeps the existing lazy-start behavior.
+fn prepare_requested() -> bool {
+    std::env::var("AGENTFW_CLASSIFIER_PREPARE").is_ok_and(|value| value.trim() == "1")
+}
+
 /// Select a real classifier explicitly; test doubles remain debug-only.
 pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifier>>> {
     match std::env::var("AGENTFW_CLASSIFIER") {
@@ -246,9 +261,22 @@ pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifi
             );
             // Only the verified installed package; no path, no PATH lookup, no fallback.
             let home = crate::config::Config::home()?;
-            Ok(Some(Arc::new(
-                crate::classifier_runtime::worker::PackagedClassifier::from_home(&home)?,
-            )))
+            let classifier =
+                crate::classifier_runtime::worker::PackagedClassifier::from_home(&home)?;
+            // Explicit pilot opt-in: prepare the worker now, before any protected call is
+            // accepted. A failure ends startup with an actionable error and dispatches nothing.
+            if prepare_requested() {
+                let classifier = classifier.prepared();
+                let readiness = classifier.prepare_worker().context(
+                    "the classifier is not ready: its verified worker could not be prepared",
+                )?;
+                eprintln!(
+                    "{}",
+                    json!({"event":"mcp_classifier_ready","readiness":readiness})
+                );
+                return Ok(Some(Arc::new(classifier)));
+            }
+            Ok(Some(Arc::new(classifier)))
         }
         _ => bail!("unsupported classifier setting"),
     }
@@ -917,10 +945,65 @@ struct ClassificationAuthority {
     https_get: bool,
 }
 
+/// The native daemon refused a request for its size. The daemon checks these
+/// limits before it reads or changes any call state, so the same grant can
+/// still be completed with a small correlated error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DaemonSizeLimit(pub(crate) &'static str);
+
+impl DaemonSizeLimit {
+    fn from_refusal(status: reqwest::StatusCode, body: &[u8]) -> Option<Self> {
+        let code = serde_json::from_slice::<Value>(body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("error_code")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            });
+        match code.as_deref() {
+            Some("native_record_over_cap") => Some(Self("native_record_over_cap")),
+            Some("native_content_over_cap") => Some(Self("native_content_over_cap")),
+            Some("native_body_over_cap") => Some(Self("native_body_over_cap")),
+            // A route body limit answers 413 without a native receipt body.
+            _ if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE => {
+                Some(Self("native_body_over_cap"))
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn code(self) -> &'static str {
+        self.0
+    }
+
+    /// Fixed host-visible text; never derived from daemon or server bytes.
+    pub(crate) fn message(self) -> &'static str {
+        match self.0 {
+            "native_record_over_cap" => "MCP result withheld: the native daemon record limit (native_record_over_cap) refused its size; the original call may have executed",
+            "native_content_over_cap" => "MCP result withheld: the native daemon content limit (native_content_over_cap) refused its size; the original call may have executed",
+            _ => "MCP result withheld: the native daemon body limit (native_body_over_cap) refused its size; the original call may have executed",
+        }
+    }
+}
+
+impl std::fmt::Display for DaemonSizeLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MCP admission request rejected: native daemon size limit ({})",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for DaemonSizeLimit {}
+
 pub struct Collector<'a> {
     config: &'a AdmissionCfg,
     host_session: Option<String>,
     child_authority: Option<String>,
+    prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
     client: reqwest::Client,
     session: String,
     pub liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
@@ -944,6 +1027,7 @@ impl<'a> Collector<'a> {
             config,
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
+            prepared_budget: None,
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
@@ -1005,6 +1089,27 @@ impl<'a> Collector<'a> {
         let Some(classifier) = self.config.classifier.clone() else {
             return Ok(Ok(ClassifiedAssessment::allow()));
         };
+        // Pilot path: a lost or outdated worker is replaced before this call is classified.
+        // Preparation and classification share the one outer deadline, so a replacement
+        // never extends it. Not prepared means refused, never dispatched.
+        let began = std::time::Instant::now();
+        let prepared_path = classifier.requires_preparation();
+        if prepared_path {
+            let preparing = classifier.clone();
+            let outcome = tokio::time::timeout(
+                CLASSIFIER_TIMEOUT,
+                tokio::task::spawn_blocking(move || preparing.prepare()),
+            )
+            .await;
+            if !matches!(outcome, Ok(Ok(Ok(())))) {
+                eprintln!(
+                    "{}",
+                    json!({"event":"mcp_classifier_not_ready","host_call_id":host_call_id,
+                    "server_id":self.config.server_id,"tool":name})
+                );
+                return Ok(Err("classifier_not_ready"));
+            }
+        }
         let tool = snapshot
             .tools
             .get(name)
@@ -1041,7 +1146,12 @@ impl<'a> Collector<'a> {
         let task = tokio::task::spawn_blocking(move || classifier.classify(&input));
         // ponytail: a timed-out classifier thread is abandoned, not killed; an
         // out-of-process classifier would be needed to reclaim it.
-        let (result, mapped) = match tokio::time::timeout(CLASSIFIER_TIMEOUT, task).await {
+        let remaining = if prepared_path {
+            CLASSIFIER_TIMEOUT.saturating_sub(began.elapsed())
+        } else {
+            CLASSIFIER_TIMEOUT
+        };
+        let (result, mapped) = match tokio::time::timeout(remaining, task).await {
             Err(_) => (None, Err("classifier_timeout")),
             Ok(Err(_)) => (None, Err("classifier_crash")),
             Ok(Ok(Err(_))) => (None, Err("classifier_error")),
@@ -1142,6 +1252,9 @@ impl<'a> Collector<'a> {
                 "MCP admission response exceeds limit"
             );
             bytes.extend_from_slice(&chunk);
+        }
+        if let Some(limit) = DaemonSizeLimit::from_refusal(status, &bytes) {
+            return Err(limit.into());
         }
         if !status.is_success() {
             let status = status.as_u16();
@@ -3238,7 +3351,15 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
 }
 
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
+    run_with_budget(config, None).await
+}
+
+pub async fn run_with_budget(
+    config: AdmissionCfg,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+) -> anyhow::Result<()> {
     let mut collector = Collector::new(&config)?;
+    collector.prepared_budget = selected;
     let env_liveness_flag = std::env::var("AGENTFW_NATIVE_LIVENESS").ok().map(|v| {
         let v = v.trim().to_ascii_lowercase();
         v != "0" && v != "false" && v != "no" && v != "off"

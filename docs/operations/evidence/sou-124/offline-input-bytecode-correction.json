@@ -1,0 +1,30 @@
+{
+  "format": "sou124-offline-input-bytecode-correction/1",
+  "measured_runtime_and_harness_source": "6da8216b07bb936e2da5908fbae64726ffedcb3a",
+  "native_comparison_run": 40052146937,
+  "native_comparison_status": "passed",
+  "subsequent_workflow_step": "Run the first-use demo through the prepared original host",
+  "subsequent_workflow_failure": "profile_package_changed",
+  "cause": "isolated prepared Python pip download can create __pycache__ after package authentication",
+  "correction": "explicit -B with -I; authenticate the original package tree before and after download",
+  "runtime_or_measured_ask_harness_changed": false,
+  "offline_local_behavioral_control": {
+    "format": "sou124-isolated-pip-bytecode-control/1",
+    "status": "passed",
+    "original_isolated_download_added_bytecode_files": 300,
+    "environment_PYTHONDONTWRITEBYTECODE_was_ignored": true,
+    "corrected_isolated_B_download_tree_unchanged": true,
+    "offline_no_index": true,
+    "paid_api_calls": 0
+  },
+  "offline_control_setup_failure": "initial confined attempt omitted owned TMPDIR and failed before completing pip; repeated with an explicit owned TMPDIR",
+  "ci_workflow_controls": {
+    "run": 81,
+    "passed": 80,
+    "skipped": 1,
+    "failed": 0,
+    "log_sha256": "b7079ef8f1de845fe95b1db86e4894180a63c881bb147d226f1998e7a8882df7"
+  },
+  "current_full_ci": "required_after_this_correction",
+  "paid_api_calls": 0
+}

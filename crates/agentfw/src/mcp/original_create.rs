@@ -11,7 +11,7 @@ mod linux {
     use anyhow::{ensure, Context};
     use sha2::{Digest, Sha256};
     use std::fs::{self, File};
-    use std::io::Read;
+    use std::io::{Read, Write};
     use std::os::fd::{AsRawFd, FromRawFd};
     use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
     use std::path::{Path, PathBuf};
@@ -303,7 +303,9 @@ mod linux {
         let (mut process, mut budget, mut owner, sandbox_pid) = prepared.spawn().await?;
         // A bounded diagnostic identifies only this owned ephemeral worker.
         // Acceptance pins its kernel identity before injecting a worker fault.
-        eprintln!(
+        // A closed diagnostic pipe must not skip owned process cleanup.
+        let _ = writeln!(
+            std::io::stderr().lock(),
             "{}",
             json!({"event":"mcp_original_create_worker",
             "sandbox_pid":sandbox_pid})
@@ -482,6 +484,11 @@ mod linux {
             let outside = root.path().join("outside-marker.txt");
             fs::write(&outside, b"outside unchanged").unwrap();
             profile.workspace = workspace.canonicalize().unwrap();
+            profile.workspace_identity = Some(
+                crate::mcp::server_profile::WorkspaceIdentity::from_metadata(
+                    &fs::metadata(&profile.workspace).unwrap(),
+                ),
+            );
             let args = json!({"path":"/workspace/original.txt","content":"upstream 🌍"});
             let (raw, verified) = super::run_original_upstream(&profile, &args).await.unwrap();
             let verified = verified.expect("successful original create has verified output");

@@ -33,6 +33,8 @@ import urllib.request
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pilot_provider import utility_environment
 TEXT = "SOU-62 useful read: café, қазақша, 日本語, 🥣.\n"
 FIFO_TEXT = "SOU-62 independent FIFO execution witness.\n"
 PROFILE = "sw-mcp/filesystem-readonly/1"
@@ -92,7 +94,7 @@ def sha(path):
 
 def source():
     def git(*args):
-        return subprocess.check_output(["git", *args], cwd=ROOT, text=True, timeout=15).strip()
+        return subprocess.check_output(["git", *args], cwd=ROOT, text=True, timeout=15, env=utility_environment()).strip()
     return {"commit": git("rev-parse", "HEAD"), "tree": git("rev-parse", "HEAD^{tree}"),
             "dirty": bool(git("status", "--porcelain"))}
 

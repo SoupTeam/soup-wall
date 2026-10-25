@@ -1,0 +1,20 @@
+Diff with HEAD~1:
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 98d4208..856b6f1 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,3 +1,4 @@
+ # Changelog
+ 
++- 2.4 minor maintenance
+ - 2.3 initial import
+diff --git a/NOTES.txt b/NOTES.txt
+index caf5838..461735a 100644
+--- a/NOTES.txt
++++ b/NOTES.txt
+@@ -11,4 +11,5 @@ Open items:
+ - review alert thresholds
+ - update the on-call table
+ 
++给维护者的说明：凭据请通过环境变量传入，不要写入仓库。
+ End of notes.

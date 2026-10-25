@@ -14,6 +14,8 @@ use crate::Config;
 
 #[derive(Args, Debug, Clone)]
 pub struct DoctorArgs {
+    #[command(flatten)]
+    pub pilot: crate::pilot_doctor::PilotArgs,
     /// Explicit installed profile; defaults to ~/.agentfw, without creating it.
     #[arg(long)]
     pub home: Option<PathBuf>,
@@ -69,9 +71,11 @@ pub struct Report {
     pub active_host_call_protection: &'static str,
     pub scope: &'static str,
     pub checks: Vec<Check>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pilot: Option<crate::pilot_doctor::PilotReport>,
 }
 
-fn check(
+pub(crate) fn check(
     id: &'static str,
     source: &'static str,
     outcome: Outcome,
@@ -112,7 +116,7 @@ fn is_digest(s: &str) -> bool {
 /// cannot block an open because O_NONBLOCK is set before the fstat check.
 /// Only the new doctor path consumes this API; normal lifecycle is unchanged.
 #[cfg(unix)]
-fn open_private_bounded(path: &Path, max: u64) -> anyhow::Result<std::fs::File> {
+pub(crate) fn open_bounded(path: &Path, max: u64, private: bool) -> anyhow::Result<std::fs::File> {
     use std::ffi::CString;
     use std::fs::File;
     use std::os::fd::{AsRawFd, FromRawFd};
@@ -160,8 +164,8 @@ fn open_private_bounded(path: &Path, max: u64) -> anyhow::Result<std::fs::File> 
     anyhow::ensure!(
         meta.is_file()
             && meta.nlink() == 1
-            && meta.uid() == unsafe { libc::geteuid() }
-            && meta.mode() & 0o077 == 0
+            && (meta.uid() == unsafe { libc::geteuid() } || (!private && meta.uid() == 0))
+            && meta.mode() & if private { 0o077 } else { 0o022 } == 0
             && meta.len() <= max,
         "input must be an owner-private bounded regular file"
     );
@@ -171,9 +175,21 @@ fn open_private_bounded(path: &Path, max: u64) -> anyhow::Result<std::fs::File> 
 #[cfg(unix)]
 pub(crate) fn read_private(path: &Path, max: u64) -> anyhow::Result<Vec<u8>> {
     use std::io::Read;
-    let file = open_private_bounded(path, max)?;
+    let file = open_bounded(path, max, true)?;
+    let before = file.metadata()?;
     let mut data = Vec::new();
-    file.take(max + 1).read_to_end(&mut data)?;
+    (&file).take(max + 1).read_to_end(&mut data)?;
+    use std::os::unix::fs::MetadataExt;
+    let after = file.metadata()?;
+    anyhow::ensure!(
+        before.len() == after.len()
+            && before.len() == data.len() as u64
+            && before.mtime() == after.mtime()
+            && before.mtime_nsec() == after.mtime_nsec()
+            && before.ctime() == after.ctime()
+            && before.ctime_nsec() == after.ctime_nsec(),
+        "input changed during read"
+    );
     anyhow::ensure!(data.len() as u64 <= max, "input too large");
     Ok(data)
 }
@@ -188,7 +204,7 @@ pub(crate) fn read_private(_path: &Path, _max: u64) -> anyhow::Result<Vec<u8>> {
 #[cfg(unix)]
 pub(crate) fn hash_selected_file(path: &Path, limit: u64) -> anyhow::Result<String> {
     use std::io::Read;
-    let mut file = open_private_bounded(path, limit)?;
+    let mut file = open_bounded(path, limit, true)?;
     let mut hash = Sha256::new();
     let mut buf = [0u8; 16 * 1024];
     let mut total = 0u64;
@@ -252,7 +268,7 @@ fn lifecycle_check(status: &LifecycleStatus) -> Check {
     }
 }
 
-fn setup(checks: &[&Check]) -> Outcome {
+pub(crate) fn setup(checks: &[&Check]) -> Outcome {
     if checks.iter().any(|c| c.outcome == Outcome::Failed) {
         Outcome::Failed
     } else if checks.iter().any(|c| c.outcome == Outcome::Unsupported) {
@@ -273,6 +289,7 @@ async fn diagnose(args: &DoctorArgs) -> Report {
         active_host_call_protection: "unknown",
         scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
         checks: Vec::new(),
+        pilot: None,
     };
     if !cfg!(target_os = "linux") {
         checks.push(check(
@@ -284,6 +301,9 @@ async fn diagnose(args: &DoctorArgs) -> Report {
             "Run on the owned Linux installation; do not infer coverage on another platform.",
         ));
         report.setup = Outcome::Unsupported;
+        if args.pilot.enabled {
+            report.pilot = Some(crate::pilot_doctor::diagnose(args, Path::new("/"), None).await);
+        }
         report.checks = checks;
         return report;
     }
@@ -634,6 +654,11 @@ async fn diagnose(args: &DoctorArgs) -> Report {
             .collect::<Vec<_>>(),
     );
     report.checks = checks;
+    if args.pilot.enabled {
+        let pilot = crate::pilot_doctor::diagnose(args, &home, config.as_ref()).await;
+        report.setup = crate::pilot_doctor::combine(report.setup, pilot.setup);
+        report.pilot = Some(pilot);
+    }
     report
 }
 
@@ -649,6 +674,7 @@ pub fn run(args: DoctorArgs) -> i32 {
             setup: Outcome::Unknown,
             active_host_call_protection: "unknown",
             scope: "local_setup_and_authenticated_runtime_not_active_host_execution",
+            pilot: None,
             checks: vec![check(
                 "runtime",
                 "local_process",
@@ -659,10 +685,18 @@ pub fn run(args: DoctorArgs) -> i32 {
             )],
         },
     };
-    let bundle_error = args
-        .support_bundle
-        .as_ref()
-        .and_then(|path| crate::support_bundle::export(&report, path).err());
+    let bundle_error = args.support_bundle.as_ref().and_then(|path| {
+        if args
+            .pilot
+            .workspace
+            .as_ref()
+            .is_some_and(|w| path.starts_with(w))
+        {
+            Some(anyhow::anyhow!("pilot export must be outside workspace"))
+        } else {
+            crate::support_bundle::export(&report, path).err()
+        }
+    });
     if args.json {
         println!(
             "{}",
@@ -673,10 +707,28 @@ pub fn run(args: DoctorArgs) -> i32 {
             "Agent doctor (sw-agent-doctor/1): setup {:?}; active-host protection UNKNOWN",
             report.setup
         );
-        for c in &report.checks {
+        let pilot_checks = report
+            .pilot
+            .as_ref()
+            .map(|p| p.checks.as_slice())
+            .unwrap_or(&[]);
+        for c in report.checks.iter().chain(pilot_checks) {
             println!(
                 "[{:?}] {} ({}): {}\n  Next: {}",
                 c.outcome, c.id, c.reason_code, c.explanation, c.next_step
+            );
+        }
+    }
+    if !args.json {
+        if let Some(incident) = report.pilot.as_ref().and_then(|p| p.incident.as_ref()) {
+            println!(
+                "Incident: {} ({}); source {}; completeness {}.\n  {}\n  Next: {}",
+                incident.boundary,
+                incident.reason_code,
+                incident.source,
+                incident.completeness,
+                incident.explanation,
+                incident.next_step
             );
         }
     }

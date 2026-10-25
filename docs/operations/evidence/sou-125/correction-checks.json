@@ -1,0 +1,44 @@
+{
+  "changes": [
+    "Start both prepared entries before either readiness wait; unchanged host/call deadlines and all effect/cleanup assertions.",
+    "Handle macOS zombie-only group EPERM only after a bounded read-only inventory proves no live group member; Linux errors remain strict.",
+    "Ignore only concurrently removed Cargo intermediate files while sampling size; other errors remain fatal.",
+    "Capture closing source identity even on failed qualification."
+  ],
+  "checks": {
+    "cargo_fmt": "passed",
+    "diff_check": "passed",
+    "mac_group_regressions": 2,
+    "python": {
+      "failed": 0,
+      "passed": 1108,
+      "run": 1172,
+      "skipped": 64
+    },
+    "rust_workspace": {
+      "failed": 0,
+      "ignored": 13,
+      "passed": 1706
+    },
+    "strict_clippy": "passed"
+  },
+  "files_sha256": {
+    "crates/agentfw/src/pilot_launcher.rs": "8958c13e816461cd53813e63bca0581e322d15418929144d247dc1af2075a182",
+    "scripts/build-native-pilot-inputs.py": "b3d6a3fa5cd62d49ba20e2aa2aae8da68470e8a1e1074bc5d546dca95eba51f6",
+    "scripts/prepared_stop_witness.py": "2c1433140419ba1c873b99e831bd86db497e568cce79ac1bdd8e8101310479eb",
+    "scripts/qualify-prepared-pilot-run.py": "b3137cc6e929a354a718197d0011be3d9efa1f16451066a7014aba6093711fb9",
+    "scripts/tests/test_build_native_pilot_inputs.py": "bb9c77ccbc83030caca3c4624a2741d202c4cfe809d4db286decd196c03896d0",
+    "scripts/tests/test_prepared_stop_witness.py": "efa4d1676e37610fd714eef10bd98c35cff0fb7dc28ac346ce365c65817c3ec2"
+  },
+  "format": "sw-sou125-correction-checks/1",
+  "implementation_before_correction": "00ba0c5797fd5616ab7657a0244a54fe304c5e8a",
+  "isolation": "Read-only source snapshot; owned scratch/build cache; external network denied; loopback fixtures allowed; fixed signed ps exposes process group/state only.",
+  "logs_sha256": {
+    "clippy-macfix.log": "080d7970cb2ada7261b32661674ea3373ff6a0fccf657c9bd680d8f930dd9f8c",
+    "mac-group-controls.log": "06ebe0b41fef3284170c93c4ba62cddf33b1f7a76ed67229ea2186d334d44fc3",
+    "python-macfix.log": "d730e8e8238277b7eb282e1c289ba32b71dcf6bdd821c69f78672df7ccb22228",
+    "workspace-macfix.log": "89dd3780827a994e9358487d214f623cbcc519b5313ee3ddfd8c6442dd16f4c9"
+  },
+  "native_qualification": "Pending a fresh exact-source native run; native-attempt2.json retains the failed sequential-start witness without relabelling.",
+  "platform": "macOS arm64"
+}

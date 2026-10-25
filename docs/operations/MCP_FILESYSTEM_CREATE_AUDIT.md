@@ -1,5 +1,37 @@
 # SOU-83 requirements and review audit
 
+## October 25 integration continuation
+
+PR #196 was assigned to Nari-Ab for continuation. The reviewed create-only head
+`0f0031e35fae6ccf6dd9b5a4f6877b2ccc719203` is integrated with accepted main
+`eb6aa6a531cef67a0eac307404da981a5a600f07` without rewriting its history.
+The existing supported/refused scope is retained; Ask continuation and the
+remaining task-wide requirements are not relabeled complete.
+
+Conflict resolution preserves the newer bounded result-size refusals, pinned
+workspace identities, explicit read-only budget binding, finite provider
+environments and all selected Git profile families. The new regression prevents
+an Allow on a small replacement error from publishing an original create whose
+result was refused as oversized. It also checks the spent host ID and useful
+read continuation. Registry controls cover all accepted Git families while
+rejecting their tools in the separate create-only registry. Actual original
+staging acceptance additionally uses a pinned user-workspace identity.
+
+The first macOS workspace run also exposed a reproducible current-main
+readiness failure: Darwin rejects setting `SO_RCVTIMEO` on a Unix socket after
+its peer closes, even with a complete acknowledgement buffered. An independent
+owned-socket probe reproduced `EINVAL` while the bytes and EOF remained readable.
+Readiness now uses nonblocking reads and `poll` against the same authoritative
+host deadline and three-second startup cap. Exact acknowledgement and EOF are
+still mandatory; extra/partial bytes, missing EOF and expired budgets refuse.
+The former test failure is retained rather than relabeled successful.
+
+Local and new-source hosted evidence is recorded separately in
+`evidence/sou-83-acceptance/`. Earlier green reports qualify only their stated
+sources. The dated matrices below remain historical, including their then-open
+review states and incomplete observations. Full current-source CI, actual Linux
+original-server fault acceptance and renewed review are required for this merge.
+
 ## October 21 continuation
 
 The October 20 matrix below is a historical evidence snapshot. PR #196 remains

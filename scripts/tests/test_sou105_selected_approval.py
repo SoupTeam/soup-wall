@@ -2,9 +2,11 @@
 """Fault controls for independent kernel witness; no Linux execution claim."""
 import importlib.util
 import json
+import queue
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location("sou105", Path(__file__).resolve().parents[1] / "verify-sou105-selected-approval.py")
 M = importlib.util.module_from_spec(spec)
@@ -67,6 +69,38 @@ class OperatorInspect(unittest.TestCase):
         ]:
             with self.subTest(text=bad, identifier=identifier, digest=digest), self.assertRaises(ValueError):
                 M.inspected_output(bad, identifier, digest)
+
+class ApprovedResponseObservation(unittest.TestCase):
+    def test_post_decision_observation_preserves_original_bytes(self):
+        raw = b'{"jsonrpc":"2.0","id":50,"result":{"content":[]}}\n'
+        client = Mock()
+        client.receive.return_value = (json.loads(raw), raw)
+        evidence = {}
+        with patch.object(M.time, "monotonic", side_effect=[10, 22.5]):
+            self.assertEqual(M.approved_response(client, evidence), (json.loads(raw), raw))
+        client.receive.assert_called_once_with(timeout=35)
+        self.assertEqual(evidence, {"approved_response_budget_ms": 35000,
+                                    "approved_response_elapsed_ms": 12500.0})
+
+    def test_observation_timeout_fails_once_with_bounded_diagnostics(self):
+        client = Mock()
+        client.receive.side_effect = queue.Empty
+        evidence = {}
+        with patch.object(M.time, "monotonic", side_effect=[10, 45]):
+            with self.assertRaisesRegex(ValueError, "approved original response not observed within 35 seconds"):
+                M.approved_response(client, evidence)
+        client.receive.assert_called_once_with(timeout=35)
+        self.assertEqual(evidence["approved_response_elapsed_ms"], 35000)
+
+    def test_other_receive_failures_remain_failures(self):
+        client = Mock()
+        client.receive.side_effect = ValueError("closed before correlated response")
+        evidence = {}
+        with self.assertRaisesRegex(ValueError, "closed before correlated response"):
+            M.approved_response(client, evidence)
+        client.receive.assert_called_once_with(timeout=35)
+        self.assertIn("approved_response_elapsed_ms", evidence)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,8 +19,11 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pilot_provider import utility_environment
 ASSETS = ROOT / "profiles/mcp/filesystem-readonly-v1"
 FORMAT = "sw-mcp/filesystem-readonly/1"
 NODE_VERSION = "v22.22.0"
@@ -60,11 +63,11 @@ def tree_sha(root):
 
 def libraries(node):
     """Record individual ELF dependencies, including the original loader alias."""
-    result = subprocess.run(["ldd", str(node)], capture_output=True, text=True, check=True, timeout=15)
+    result = subprocess.run(["ldd", str(node)], capture_output=True, text=True, check=True, timeout=15, env=utility_environment())
     if "not found" in result.stdout:
         raise ValueError("Node has an unresolved ELF dependency")
     paths = set(re.findall(r"(?:=>\s*)?(/[^\s()]+)", result.stdout))
-    headers = subprocess.run(["readelf", "-l", str(node)], capture_output=True, text=True, check=True, timeout=15)
+    headers = subprocess.run(["readelf", "-l", str(node)], capture_output=True, text=True, check=True, timeout=15, env=utility_environment())
     interpreter = re.findall(r"Requesting program interpreter:\s*([^\]]+)", headers.stdout)
     if len(interpreter) != 1:
         raise ValueError("exact ELF interpreter is required")
@@ -105,9 +108,9 @@ def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline
         raise ValueError("a reviewed read-only workspace directory is required")
     if sha(node) != NODE_SHA256:
         raise ValueError("Node binary differs from the pinned official Linux x64 v22.22.0 runtime")
-    if subprocess.check_output([str(node), "--version"], text=True, timeout=10).strip() != NODE_VERSION:
+    if subprocess.check_output([str(node), "--version"], text=True, timeout=10, env=utility_environment()).strip() != NODE_VERSION:
         raise ValueError("Node version mismatch")
-    if "--ro-bind-fd" not in subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10):
+    if "--ro-bind-fd" not in subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10, env=utility_environment()):
         raise ValueError("bubblewrap with --ro-bind-fd is required; no unsafe fallback")
     identity = json.loads((ASSETS / "upstream-identity.json").read_text(encoding="utf-8"))
     if sha(ASSETS / "package-lock.json") != identity["packageLockSha256"]:
@@ -131,7 +134,7 @@ def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline
     package.mkdir(mode=0o700)
     for name in ("package.json", "package-lock.json"):
         shutil.copyfile(ASSETS / name, package / name)
-    environment = {key: value for key, value in os.environ.items() if key in {"PATH", "LANG"}}
+    environment = utility_environment()
     environment["PATH"] = str(node.parent) + os.pathsep + environment.get("PATH", "")
     cache = Path(npm_cache).resolve(strict=True) if npm_cache is not None else destination / "npm-cache"
     environment.update(HOME=str(destination), npm_config_cache=str(cache),
@@ -162,7 +165,7 @@ def install(destination, workspace, node, bwrap, npm, *, npm_cache=None, offline
         "node_version": NODE_VERSION, "upstream_notices": notices,
         "node_archive_url": "https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz",
         "node_archive_sha256": "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37",
-        "bwrap_version": subprocess.check_output([str(bwrap), "--version"], text=True, timeout=10).strip()})
+        "bwrap_version": subprocess.check_output([str(bwrap), "--version"], text=True, timeout=10, env=utility_environment()).strip()})
     return {"status": "installed", "directory": str(destination), "profile": str(destination / "profile.json"),
             "registry": str(destination / "registry.json"), "policy": str(destination / "policy.yaml"),
             "profile_sha256": sha(destination / "profile.json"), "registry_sha256": sha(destination / "registry.json")}

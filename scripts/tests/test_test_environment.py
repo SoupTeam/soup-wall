@@ -41,6 +41,8 @@ class FixtureReporting(unittest.TestCase):
         rules = (ENVIRONMENT.ROOT / "deploy/Dockerfile.test.dockerignore").read_text().splitlines()
         self.assertIn("!rule_baseline/", rules)
         self.assertIn("!rule_baseline/rule_baseline.py", rules)
+        self.assertIn("!rule_baseline/rev2/", rules)
+        self.assertIn("!rule_baseline/rev2/rule_baseline.py", rules)
         self.assertIn("!rule_baseline/runtime/", rules)
         self.assertIn("!rule_baseline/runtime/worker.py", rules)
         self.assertNotIn("!rule_baseline/**", rules)

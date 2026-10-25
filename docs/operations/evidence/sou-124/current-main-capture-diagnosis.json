@@ -1,0 +1,70 @@
+{
+  "format": "sou124-current-main-capture-diagnosis/1",
+  "integrated_main": "8485a5195d916aa6e7c1f04b6b3a94130937a2d2",
+  "main_changes": "Accepted existing-project workspace identity/validators and native witness preserved.",
+  "workflow_resolution": "Retain Ask baseline and existing_project_only inputs, both native dispatch paths and conjunction of their ordinary-qualification gates. Generated ci_components.py --check passes. No ordinary PR lane omitted.",
+  "unresolved_pending_failure": {
+    "source": "77b84177c50977f8bf699c777998570dd88348b6",
+    "run": 40076670007,
+    "case": "SOU105 filesystem/approve before pending",
+    "bound_seconds": 5,
+    "runtime_library_capture_ms": 3957.488061,
+    "package_capture_ms": 1563.550195,
+    "capture_sum_ms": 5521.038256,
+    "action": "Add capture-only finite phase-cost diagnosis for new current-source native qualification. No timeout, hash/proof gate or approval assertion changed.",
+    "performance_fix_claimed": false
+  },
+  "diagnostics": {
+    "event": "mcp_verified_inputs_capture_cost",
+    "fields": [
+      "hashed_files",
+      "hashed_bytes",
+      "digest_ms",
+      "proof_ms",
+      "hash_ms",
+      "identity_and_overhead_ms"
+    ],
+    "digest_scope": "Sum of captured digest calls reaching hashing, before proof-map insertion. Excludes directories, tree assembly, profile checks and final lease sweep; not total capture time.",
+    "proof_scope": "Verity measurement and lease-owner/acquisition, no byte-hash substitution.",
+    "hash_scope": "Full byte read/hash and finalization/hex, retaining original close-identity ordering.",
+    "resume": "No additional clock samples; counters are never used by authority/proof/admission decisions.",
+    "output": "One best-effort JSON event after successful capture; no raw paths, grants, arguments or tokens."
+  },
+  "local_checks": {
+    "development_host": "macOS, Homebrew Rust/Cargo1.99.0, Python3.11, read-only source/loopback-only Seatbelt",
+    "rust_workspace": {
+      "passed": 1718,
+      "failed": 0,
+      "ignored": 13
+    },
+    "final_capture_only_timing_controls": {
+      "passed": 7,
+      "failed": 0,
+      "scope": "After limiting diagnostic sampling to Capture and refining residual metric label; no proof predicates changed."
+    },
+    "supported_python": {
+      "run": 1280,
+      "passed": 1201,
+      "skipped": 79,
+      "failed": 0
+    },
+    "strict_all_target_clippy": "passed, -D warnings",
+    "fmt": "passed",
+    "docs": "Checked 253 Markdown files and 922 local links; 0 errors.",
+    "generated_components": "passed"
+  },
+  "log_sha256": {
+    "workspace-8485-cost-final.log": "48abca1e3a418bf652fb4a45b88d46fa77a96bb2037cffb05d5ffd2f16343d13",
+    "capture-cost-final-controls.log": "d1313e671b41ba86f541380f809fd16d9ed22e32caacc5bb57d1b3cd0fd03035",
+    "python-8485-integration.log": "dba3ce4c812b5dd7123e8fd219f81ba1e7d0e7e31bde09b27f09b098e5e1590a",
+    "clippy-8485-cost-final.log": "37462647a0c9bd16b92e2601b44ea06c3cb14a170d6a6779607cb7b9f1f05458",
+    "docs-8485-cost-final.log": "99dd8537a133ea5dbec7f24ae7af1b958fdcb7aa3643cb9cbb918197a93bbd1a"
+  },
+  "source_sha256": {
+    "crates/agentfw/src/mcp/server_profile.rs": "64c77eac86c16eb3fc09363a9919fd0f4d23800baf06a6e7f2f9a312aa154eb2",
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "94fb6aa785cfb8a19e8bb0a6bbc509591046c19535bda8ec9c0194755364ab71",
+    ".github/workflows/mcp-real-filesystem.yml": "4f91b262a11610e7a9a51763e37222aa31d4ca9b9211ea6d7a5c2ac4724f1c85",
+    ".github/workflows/ci-components.yml": "18f35c4f10b51b076375d3478372f43ba2ebe584740e4bdd683666bafa567891"
+  },
+  "native_readiness": "Pending current-source CI, native owners/Stop, complete Ask and single-use approval controls. Previous-source passing samples are not new-source acceptance."
+}

@@ -1,0 +1,51 @@
+{
+  "format": "sou124-witness-observer-consistency-correction/1",
+  "failed_ci_run": 40058255940,
+  "failed_source": "f6963c69046c943df167e609fb15bfdd366c95a9",
+  "selected_approval": {
+    "status": "failed",
+    "error": "pending approval state missed declared deadline",
+    "case": "filesystem approve",
+    "pending_witness_budget_seconds": 5,
+    "capture_runtime_and_libraries_ms": 4733.70266,
+    "capture_package_tree_ms": 4299.371333,
+    "report_sha256": "d81d0c0889b7e367a76877a2202a3c6d2c611613a08f15a15f25e34350f623d3"
+  },
+  "prepared_demo": {
+    "status": "failed",
+    "active_case": "ask",
+    "reason": "prepared_run_outcome_mismatch",
+    "finite_failure_observation": {
+      "correlated_results": {
+        "toolu_prepared_0": false,
+        "toolu_prepared_1": false,
+        "toolu_prepared_2": false
+      },
+      "entry_reason": "pilot_timeout",
+      "entry_status": "failed",
+      "operator_decision_count": 2,
+      "provider_request_count": 4
+    },
+    "report_sha256": "58415f91a4975545e924e784c39b0d95374b66beeb6c6fe3699de050021a5ed3"
+  },
+  "diagnosis": "ordinary ptrace interception of unselected metadata syscalls adds overhead beyond existing witness budgets; next native run must validate the correction",
+  "correction": "request seccomp-assisted strace in the selected-approval and prepared-run observers with identical selected syscall sets",
+  "trace_request": {
+    "mode": "seccomp-bpf",
+    "fallback_possible": true,
+    "selected_approval_syscalls": "openat,execve",
+    "prepared_run_syscalls": "execve,openat,write,writev",
+    "prepared_validation_syscalls": "execve"
+  },
+  "timeouts_and_effect_assertions_changed": false,
+  "rust_runtime_or_80_sample_comparison_path_changed": false,
+  "local_python": {
+    "run": 1229,
+    "passed": 1150,
+    "skipped": 79,
+    "failed": 0,
+    "log_sha256": "e3ffebfa7eba1e0792af8cc07e4db6eace999d9cfbaca2062c5c2fabd7626179"
+  },
+  "native_followup": "required_current_full_ci",
+  "paid_api_calls": 0
+}

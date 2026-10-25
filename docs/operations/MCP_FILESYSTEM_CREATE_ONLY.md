@@ -119,6 +119,27 @@ the demonstrated increment. Stage/unit tests alone do not establish those
 properties. See the [complete requirements/review audit](MCP_FILESYSTEM_CREATE_AUDIT.md)
 for sources, implementation evidence and remaining full-task requirements.
 
+### Integration with the current pilot
+
+The create-only profile remains separate from all selected read-only Git
+families, including local references, shallow history and ordinary local clones.
+The shared read-only registry can select those Git families; a create-only
+registry cannot acquire their peer tools. Explicit prepared-pilot budgets are
+not supported for this separate create profile and refuse before server startup,
+rather than silently leaving an ephemeral writer outside the selected budget.
+
+If the native daemon refuses an original result's size, the collector can spend
+the grant with a small correlated error and deliver that error. This replacement
+receipt does not authorize publication of the private staged output. The host
+ID remains spent and useful read continuation remains available. The Linux
+relay regression exercises this boundary through the actual receipt transport
+and publisher using a test-only staged producer.
+
+The ephemeral stage has its own pinned workspace identity; the user's original
+workspace pin still governs publication. Closed diagnostic output cannot skip
+owned cleanup. These integration controls require qualification on the updated
+source; historical native reports below do not qualify a later merge.
+
 ## Private operator installation (new, opt-in)
 
 Run `python3 scripts/install-sou83-filesystem-create-profile.py --destination /private/new-profile --workspace /private/owned-workspace --node /trusted/node --bwrap /trusted/bwrap` to preview; add `--run` to create a **new** 0700 installation. The script uses the accepted SOU-62 installer and exact pinned ORIGINAL package/runtime/notices, then writes owner-private `profile.json`, `registry.json` and a distinct `policy.yaml`. No existing read-only installation or Agent home is updated. For this opt-in profile, the exact selected original `write_file` is the sole supported side-effecting tool; all other original mutators remain unsupported. The new profile policy removes only the read-only install's general side-effecting deny; it keeps destructive/network/privilege/result-injection denial. Do not share this profile policy with any wider registry.

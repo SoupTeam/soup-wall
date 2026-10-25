@@ -1,0 +1,2 @@
+651220eda56f5c33b7acbb727018216ce717f43f596deb9d3de9cbd3d9f438e9  /home/runner/work/_temp/sou136-accepted-observer/crates/agentfw/src/mcp/linux_budget.rs
+12bf86c0cfb110b9f6f5b8634a35d988d87c612462a1d281470798c05e8fba84  scripts/fixtures/sou136-accepted-open-regression.patch

@@ -1,0 +1,102 @@
+{
+  "actual_prepare_and_main_exercised": true,
+  "attempts": [
+    {
+      "elapsed_seconds": 0.76,
+      "exit_code": 0,
+      "label": "review-installer-privacy-after",
+      "log_sha256": "7566548a5c65f2ba1f211181034d6bf79916c324caea6fb8ed51650d77693495",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "d19ea2092307936905f63d701575eba81c36c9a5865ad60b72f37b107a2173a8",
+      "source_after_sha256": "e8c4f07f49069b74df111e779f4a2d37b58cac76e9f0745cebb889ce1c43d0ec",
+      "source_files_sha256": "e8c4f07f49069b74df111e779f4a2d37b58cac76e9f0745cebb889ce1c43d0ec",
+      "source_read_only": true,
+      "status": "passed",
+      "writes": "isolated-scratch-only"
+    },
+    {
+      "elapsed_seconds": 0.87,
+      "exit_code": 0,
+      "label": "review-installer-privacy-clippy",
+      "log_sha256": "c54bca416b8a09e3c2018b0ada16771065b3b9b5469242539af42bc53077e2cf",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "16a76547a92d6fed158d068a2ae6e3cc1598b48aebc3b3776297b4844d1391a0",
+      "source_after_sha256": "e8c4f07f49069b74df111e779f4a2d37b58cac76e9f0745cebb889ce1c43d0ec",
+      "source_files_sha256": "e8c4f07f49069b74df111e779f4a2d37b58cac76e9f0745cebb889ce1c43d0ec",
+      "source_read_only": true,
+      "status": "passed",
+      "writes": "isolated-scratch-only"
+    },
+    {
+      "elapsed_seconds": 1.25,
+      "exit_code": 0,
+      "label": "review-installer-privacy-fmt",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "d4affa0e74e4e259d6cece564f2009de704284f8b8737783878e3d4b7f92b7c5",
+      "source_after_sha256": "e8c4f07f49069b74df111e779f4a2d37b58cac76e9f0745cebb889ce1c43d0ec",
+      "source_files_sha256": "e8c4f07f49069b74df111e779f4a2d37b58cac76e9f0745cebb889ce1c43d0ec",
+      "source_read_only": true,
+      "status": "passed",
+      "writes": "isolated-scratch-only"
+    },
+    {
+      "elapsed_seconds": 51.08,
+      "exit_code": 0,
+      "label": "review-installer-privacy-full-python",
+      "log_sha256": "d8ad1cb9a5b5061fce66ee836e1eb6a4d779009e0ba9071cd61a211c356b538d",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "a40171d7b30a6b52fac0844261c6cb0c70b1519d4e1b6ce534c049d882c28798",
+      "source_after_sha256": "e8c4f07f49069b74df111e779f4a2d37b58cac76e9f0745cebb889ce1c43d0ec",
+      "source_files_sha256": "e8c4f07f49069b74df111e779f4a2d37b58cac76e9f0745cebb889ce1c43d0ec",
+      "source_read_only": true,
+      "status": "passed",
+      "writes": "isolated-scratch-only"
+    }
+  ],
+  "files_sha256": {
+    "scripts/prepare-installed-pilot.py": "d4993abbd603a551610612f7ab07474c86999e2fa3f027b0e79b776c4fa47d26",
+    "scripts/tests/test_prepare_installed_pilot.py": "9d66157fc6f2cc96034b8a1c22dd74788bc0f47b8f775f32232746d8ed6626ac"
+  },
+  "final_shared_ci_admission": "not-run-TL-owned",
+  "focused_preparation_tests": 17,
+  "format": "sou142143-installer-failure-privacy/1",
+  "full_shared_acceptance": false,
+  "installer_log_read_for_error_formatting": false,
+  "installer_setup_mocked": true,
+  "issue": "SOU-143",
+  "log_fixture_bytes_over": 2097152,
+  "log_fixture_contains_invalid_utf8": true,
+  "log_reference": "relative-to-preparation-output-generated-generation",
+  "native_qualification_rerun": false,
+  "platform_skips_unavailable": 86,
+  "prior_implementation_red_witness": "SOU-142 shared preparation failure handler",
+  "privacy_regression_methods": 2,
+  "privacy_scenarios": [
+    "filesystem-exit-9",
+    "git-exit-9",
+    "filesystem-signal-15",
+    "git-signal-15",
+    "filesystem-log-read-guard",
+    "git-log-read-guard"
+  ],
+  "private_log_retained_mode": "0600",
+  "public_failure_fields": [
+    "status",
+    "reason",
+    "exit_code",
+    "private_log"
+  ],
+  "raw_logs_or_commands_exported": false,
+  "reason_codes": [
+    "filesystem_installer_failed",
+    "git_installer_failed"
+  ],
+  "reviewed_previous_head": "3830cab0727e580c4068a2a6d47966a38f5a3576",
+  "status": "local-controls-passed",
+  "supported_python_tests_run": 1453
+}
