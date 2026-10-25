@@ -19,6 +19,7 @@ RUN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUN)
 
 
+@patch.dict(os.environ, {"ANTHROPIC_API_KEY": "owned-provider-fixture"})
 class PreparedRunBoundary(unittest.TestCase):
     @unittest.skipUnless(sys.platform == "linux", "Linux owned file-descriptor fault control")
     def test_authority_sync_storage_failure_refuses_before_daemon_and_cleans_only_owned_state(self):
@@ -371,7 +372,8 @@ class PreparedRunBoundary(unittest.TestCase):
         for key in ("PYTHONPATH", "LD_PRELOAD", "CLAUDE_CONFIG_DIR", "AGENTFW_TOKEN"):
             self.assertNotIn(key, env)
         self.assertNotIn("untrusted", env["PATH"])
-        self.assertEqual(env["ANTHROPIC_API_KEY"], "owned-provider")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("ANTHROPIC_BASE_URL", env)
         # serve resolves HOME/.agentfw; AGENTFW_HOME alone is not its interface.
         self.assertEqual(env["AGENTFW_HOME"], str(Path(env["HOME"]) / ".agentfw"))
 

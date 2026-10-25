@@ -107,7 +107,7 @@ def main():
             raise RuntimeError('one_exact_native_library_test_binary_required')
         exact = tests[0]
         if a.issue == '143':
-            run('native-provider-unit', [exact, 'pilot_host::tests::', '--test-threads=1'])
+            run('native-provider-unit', [exact, 'pilot_host::', '--test-threads=1'])
         else:
             run('native-budget-unit', [exact, 'pilot_budget::tests::', '--test-threads=1'])
             run('native-owner-unit', [exact, 'mcp::linux_owner::linux::tests::', '--test-threads=1'])
