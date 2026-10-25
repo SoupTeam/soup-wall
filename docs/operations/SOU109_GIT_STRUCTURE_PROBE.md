@@ -57,3 +57,12 @@ does not qualify a native server, installer, active-session admission or effects
 An unsafe counterfactual is retained as a rejection, never installed to make
 benign controls green. Strong findings, hard Deny/Ask, taint and exact original
 payload integrity remain mandatory regardless of any future structural parsing.
+
+The second targeted phase adds three previously frozen public signature cases
+g05-a/g06-b/f05-a (`--public-inputs` points to the retained 58-input bundle).
+It separately evaluates the actual policy after removing heuristic findings,
+retaining all other findings and original risk. A second conservative diagnostic
+obligation preserves Medium refusal for unresolved nonstructural content after
+any structural discount. Neither projection is installed in production. This
+tests whether pure structure attribution solves the next independent cause and
+whether preserving the semantic obligation can still deliver the original cases.

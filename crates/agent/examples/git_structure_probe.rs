@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Counterfactual policy projection only. Never dispatches or releases a result.
 use serde_json::{json, Value};
-use soup_wall_agent::{AgentEvent, AgentFirewall, AgentPolicySet, EventKind, Provenance, Signals};
+use soup_wall_agent::{
+    AgentEvent, AgentFirewall, AgentPolicySet, EventKind, Facet, Provenance, Signals,
+};
 use soup_wall_core::{detectors::injection::EvidenceKind, Finding, InjectionDetector, Severity};
 use std::io::{self, Read};
 
@@ -16,6 +18,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cross = InjectionDetector::cross_block_signatures(&texts);
     let mut baselines = Vec::new();
     let mut projected = Vec::new();
+    let mut guarded = Vec::new();
+    let mut without_heuristic = Vec::new();
     let mut attribution = Vec::new();
     for (channel, text) in texts.iter().enumerate() {
         let mut firewall = AgentFirewall::new(policy.clone(), 1024);
@@ -35,6 +39,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         let original = firewall.preview_native_mcp_result_with_evidence(&ev, &cross);
         baselines.push(format!("{:?}", original.verdict));
+        let nonheuristic = original
+            .findings
+            .iter()
+            .filter(|(_, f)| {
+                !(f.detector == "injection"
+                    && f.label.starts_with("heuristic injection signals (score "))
+            })
+            .cloned()
+            .collect();
+        without_heuristic.push(format!(
+            "{:?}",
+            policy
+                .evaluate(&Signals {
+                    findings: nonheuristic,
+                    risk_score: original.risk_score,
+                    ..Default::default()
+                })
+                .verdict
+        ));
         let mut summary = ledger.channels[channel].heuristic.clone();
         let mut components = Vec::new();
         for e in ledger
@@ -99,6 +122,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ..Default::default()
         });
         projected.push(format!("{:?}", candidate.verdict));
+        let mut guarded_findings = findings.clone();
+        if parsed {
+            // Diagnostic obligation only: syntax has not classified prose as data.
+            guarded_findings.push((
+                Facet::ToolResult,
+                Finding::new(
+                    "injection",
+                    Severity::Medium,
+                    0.5,
+                    "unresolved nonstructural Git content; diagnostic obligation",
+                ),
+            ));
+        }
+        guarded.push(format!(
+            "{:?}",
+            policy
+                .evaluate(&Signals {
+                    findings: guarded_findings,
+                    risk_score: original.risk_score,
+                    ..Default::default()
+                })
+                .verdict
+        ));
         attribution.push(
             json!({"channel":channel,"before":ledger.channels[channel].heuristic,
             "after_weak_discount":summary,"before_score":ledger.channels[channel].heuristic.score(),
@@ -108,7 +154,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "{}",
         json!({"production_authority":false,"parsed":parsed,
-        "baseline_verdicts":baselines,"counterfactual_verdicts":projected,"attribution":attribution})
+        "baseline_verdicts":baselines,"counterfactual_verdicts":projected,
+        "residual_guard_verdicts":guarded,"without_heuristic_verdicts":without_heuristic,"attribution":attribution})
     );
     Ok(())
 }

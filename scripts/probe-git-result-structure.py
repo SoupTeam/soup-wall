@@ -145,19 +145,30 @@ def main(args):
         assert row['channels'] == [c['text'] for c in result['content'] if c['type'] == 'text']
     original = {r['id']: r['channels'][0] for r in rows}
     rows += controls(original[20], original[21])
+    if args.public_inputs:
+        public = json.loads(args.public_inputs.read_text(encoding='utf-8'))
+        for request, ref in zip(public['requests'], public['refs']):
+            if ref['origin'] in ('sou123/g05-a','sou123/g06-b','sou123/f05-a'):
+                assert request['request_id'] == ref['request_id'] and request['input_sha256'] == ref['input_sha256']
+                rows.append({'id':ref['origin'],'channels':request['input']['untrusted_text_channels']})
     requests = []
     policy = subprocess.check_output(['git','-C',str(ROOT),'show',
         '465c77c23b4ae0ff30fc063cee17062c8ac52f8b:profiles/pilot/linux-readonly-v1/policy.yaml']).decode()
+    fs_policy = subprocess.check_output(['git','-C',str(ROOT),'show',
+        '465c77c23b4ae0ff30fc063cee17062c8ac52f8b:profiles/mcp/filesystem-readonly-v1/policy.yaml']).decode()
     for r in rows:
         parsed = [parse(t) for t in r['channels']]
-        requests.append({'id': r['id'], 'channels': r['channels'], 'policy': policy,
+        requests.append({'id': r['id'], 'channels': r['channels'],
+                         'policy': fs_policy if str(r['id']).startswith('sou123/f') else policy,
                          'parsed': parsed, 'complete_parse': all(p is not None for p in parsed)})
     args.output.mkdir(parents=True, exist_ok=True)
     frozen = [{'id':r['id'], 'complete_parse':r['complete_parse'], 'parsed':r['parsed'],
+               'policy_sha256':hashlib.sha256(r['policy'].encode()).hexdigest(),
                'channels_sha256':[hashlib.sha256(t.encode()).hexdigest() for t in r['channels']]}
               for r in requests]
     (args.output/'manifest.json').write_text(json.dumps({'requests':frozen,
          'original_input_sha256':hashlib.sha256(args.inputs.read_bytes()).hexdigest(),
+         'public_source_sha256':hashlib.sha256(args.public_inputs.read_bytes()).hexdigest() if args.public_inputs else None,
          'raw_original_frames':{str(r['id']):r['frame_sha256'] for r in rows if isinstance(r['id'],int)},
          'parser_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
          'worker_sha256':hashlib.sha256(args.worker.read_bytes()).hexdigest(),
@@ -172,10 +183,13 @@ def main(args):
     (args.output/'report.json').write_text(json.dumps({'production_authority':False,
         'observations':observations},indent=2)+'\n')
     print(json.dumps([{'id':r['id'],'parsed':r['parsed'], 'baseline':r['baseline_verdicts'],
-                      'structural_discount':r['counterfactual_verdicts']} for r in observations],indent=2))
+                      'structural_discount':r['counterfactual_verdicts'],
+                      'residual_guard':r['residual_guard_verdicts'],
+                      'without_heuristic':r['without_heuristic_verdicts']} for r in observations],indent=2))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('inputs', 'worker', 'output'): parser.add_argument('--'+name, type=Path, required=True)
+    parser.add_argument('--public-inputs', type=Path)
     main(parser.parse_args())
