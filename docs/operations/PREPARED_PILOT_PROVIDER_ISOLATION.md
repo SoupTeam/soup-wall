@@ -131,36 +131,26 @@ independent process/protocol/log/artifact observations, and zero remaining owned
 processes. Its negative controls reject missing/contradictory evidence. Raw traces,
 private logs and process identities stay in disposable scratch.
 
-## Host helper execution boundary
+## Host helper search path
 
-The pinned Claude itself probes system Git during startup. Its trusted Bun
-preload is embedded in Agent and supplied as a fixed inline data URL through the
-launcher-controlled Bun startup environment. No code pathname can be replaced
-between validation and loading; the bootstrap code contains no provider values.
-The separate inherited code descriptor remains anonymous and sealed.
-The host initial exec receives no provider values. Ambient Bun/Node preload
-settings are discarded; a private empty Bun configuration and disabled env-file
-loading prevent project configuration from selecting additional code.
+The selected provider client receives a newly created empty private directory as
+its PATH. Ambient system/project Git helpers cannot be resolved by name. Its
+MCP command is the absolute `/usr/bin/env` and the selected collector, runtimes
+and classifier interpreter are already absolute. The collector constructs its
+own reviewed environment, including its separate fixed utility PATH, after
+removing all seven provider values. Explicit command fixtures retain their
+existing test-only utility PATH; they never qualify the pinned production host.
 
-Before Claude application code starts, the preload installs provider-free Node
-child_process and Bun spawn boundaries, including explicit child environments
-and Node's low-level asynchronous spawn. The unreviewed native Bun shell path
-refuses rather than becoming a credential-bearing fallback. MCP collectors retain
-the existing finite environment and original filesystem/Git sandbox boundaries.
+This is a finite environment boundary for the exact pinned client, not an
+arbitrary-code sandbox. The actual-host kernel witness still checks every
+successful helper exec, including absolute paths and same-image diagnostics.
+Only the single intended restricted client process may receive provider values;
+any unrelated process with one selected value refuses qualification. The
+independent owned provider must also observe its expected authentication.
 
-Only after these boundaries are installed does the preload request input over a
-private Unix datagram socket. The native parent requires kernel SCM_CREDENTIALS
-matching the exact spawned host PID and operator UID. It then supplies at most
-16 KiB of strict, selected JSON. The host closes both inherited descriptors,
-removes bootstrap metadata, and sets the seven provider inputs for its own client.
-An ignored/failed preload, forked sender or missing greeting receives no inputs;
-startup fails within the bounded handshake window and uses owned group cleanup.
-No provider JSON is stored on disk or passed in argv. This is the reviewed pinned
-host boundary, not a sandbox for arbitrary hostile JavaScript inside that host.
-
-The native qualifier independently checks successful exec environments and the
-kernel socketpair identity, parent send and same host PID's raw read/close counts, plus authenticated loopback
-requests. Public evidence contains no packet bytes, keys, paths or PIDs. It still
-requires useful original filesystem/Git operations, restart, stop and log/error
-redaction. The earlier execute-only Landlock experiment is retained as failed:
-its inherited mount restriction prevented original MCP namespace startup.
+The existing sealed anonymous prepared-entry carrier is consumed and closed by
+the native launcher before host execution. Native child authentication, strict
+MCP settings, private HOME/TMPDIR and cleanup retain their existing boundaries.
+No runtime preload, injected JavaScript, new credential broker or alternate
+host is used. Earlier Landlock and Bun-preload compatibility attempts remain
+retained as failed evidence rather than being counted as acceptance.

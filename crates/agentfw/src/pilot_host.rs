@@ -8,11 +8,6 @@ use std::process::Command;
 use anyhow::{ensure, Context, Result};
 use sha2::{Digest, Sha256};
 
-#[cfg(target_os = "linux")]
-mod provider_channel;
-#[cfg(target_os = "linux")]
-pub(crate) use provider_channel::Bootstrap;
-
 pub(crate) const CLAUDE_SHA256: &str =
     "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7";
 
@@ -140,8 +135,10 @@ fn configure(
 ) -> Result<()> {
     let home = private.join("host-home");
     let temporary = private.join("host-tmp");
+    let helper_path = private.join("host-path");
     fs::create_dir(&home)?;
     fs::create_dir(&temporary)?;
+    fs::create_dir(&helper_path)?;
     let settings = private.join("host-settings.json");
     fs::write(
         &settings,
@@ -150,7 +147,7 @@ fn configure(
     command
         .env_clear()
         .envs(provider)
-        .env("PATH", "/usr/bin:/bin")
+        .env("PATH", &helper_path)
         .env("HOME", &home)
         .env("TMPDIR", &temporary)
         .env("LANG", "C.UTF-8")
@@ -214,7 +211,7 @@ mod tests {
             .collect::<std::collections::BTreeMap<_, _>>();
         assert_eq!(
             env.get(std::ffi::OsStr::new("PATH")).unwrap().unwrap(),
-            "/usr/bin:/bin"
+            private.path().join("host-path").as_os_str()
         );
         for key in [
             "LD_PRELOAD",
@@ -226,6 +223,12 @@ mod tests {
         ] {
             assert!(!env.contains_key(std::ffi::OsStr::new(key)));
         }
+        assert_eq!(
+            fs::read_dir(private.path().join("host-path"))
+                .unwrap()
+                .count(),
+            0
+        );
         let args = command.get_args().collect::<Vec<_>>();
         assert_eq!(args[0], "--setting-sources");
         assert_eq!(args[1], "");
@@ -241,6 +244,29 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn private_host_path_refuses_ambient_git_without_spawning_a_helper() {
+        let private = tempfile::tempdir().unwrap();
+        let mut command = Command::new("/usr/bin/python3");
+        command.arg("-c").arg(
+            r#"
+import os,subprocess
+assert os.environ['ANTHROPIC_API_KEY']=='owned-host-only'
+try: subprocess.run(['git','--version'],check=True)
+except FileNotFoundError: pass
+else: raise AssertionError('ambient helper executed')
+"#,
+        );
+        configure(
+            &mut command,
+            private.path(),
+            vec![("ANTHROPIC_API_KEY".into(), "owned-host-only".into())],
+        )
+        .unwrap();
+        assert!(command.status().unwrap().success());
+    }
+
     #[test]
     fn arbitrary_executable_cannot_claim_pinned_host_isolation() {
         let root = tempfile::tempdir().unwrap();
@@ -248,7 +274,6 @@ mod tests {
         fs::write(&file, b"not pinned").unwrap();
         assert!(validate(&file, false).is_err());
     }
-
     #[cfg(target_os = "linux")]
     #[test]
     fn sealed_provider_carrier_is_consumed_and_never_accepts_extra_or_duplicate_authority() {

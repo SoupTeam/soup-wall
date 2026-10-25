@@ -183,29 +183,10 @@ def failure_stage(text, paths, normalize):
             else 'other-helper'
         key = role + ':' + error
         counts[key] = counts.get(key, 0) + 1
-    bootstrap = {key:0 for key in ('host_execs','host_metadata','ready_writes','input_reads','code_closed')}
-    clients = {}
-    for row in normalize(text)[0]:
-        m=re.match(r'^(\d+)\s+execve\((.*)\)\s*=\s*0$',row)
-        if m:
-            try: executable,args,environment=ast.literal_eval('('+m[2]+')')
-            except (ValueError,SyntaxError): continue
-            if executable==str(paths['claude']) and '--restricted' in args and '-p' in args:
-                bootstrap['host_execs']+=1
-                env=dict(item.split('=',1) for item in environment if '=' in item)
-                channel,code=env.get('AGENTFW_PROVIDER_CHANNEL',''),env.get('AGENTFW_PROVIDER_CODE','')
-                if channel.isdecimal() and code.isdecimal():
-                    clients[int(m[1])]=(int(channel),int(code));bootstrap['host_metadata']+=1
-        m=re.match(r'^(\d+)\s+(write|read|close)\((0x[0-9a-f]+|\d+),?',row)
-        if m and int(m[1]) in clients:
-            channel,code=clients[int(m[1])];fd=int(m[3],0)
-            if m[2]=='write' and fd==channel and 'sw-provider-ready/1' in row:bootstrap['ready_writes']+=1
-            if m[2]=='read' and fd==channel:bootstrap['input_reads']+=1
-            if m[2]=='close' and fd==code and re.search(r'= 0$',row):bootstrap['code_closed']+=1
     known = ('mcp_owner_startup_failed', 'mcp_owner_spawn_failed', 'mcp_owner_image_unavailable',
              'mcp_budget_membership_unverified', 'classifier_execution_failed', 'classifier_unavailable',
              'provider_host_exec_boundary_unavailable', 'provider_bootstrap_unavailable', 'Permission denied', 'Operation not permitted')
-    return {'bootstrap_counts':bootstrap, 'denied_exec_counts': counts, 'known_refusals': [value for value in known if value in text],
+    return {'denied_exec_counts': counts, 'known_refusals': [value for value in known if value in text],
             'bootstrap_failure_stages': [stage for stage in ('hooks', 'descriptors', 'ready', 'delivery', 'values')
                 if 'sw-provider-bootstrap-failed/' + stage in text]}
 
@@ -218,7 +199,7 @@ def observe(text, paths, values, normalize, rejected=False):
             'provider_incomplete_exec_observation')
     counts = {role: 0 for role in ('entry', 'host', 'daemon', 'launcher', 'collector',
                                   'diagnostic', 'original', 'classifier', 'other')}
-    hosts, launchers = {}, set()
+    host_pids = set()
     for row in rows:
         match = re.match(r'^(\d+)\s+execve\((.*)\)\s+=\s+0\s*$', row)
         if not match:
@@ -231,9 +212,11 @@ def observe(text, paths, values, normalize, rejected=False):
                 and isinstance(environment, list) and all(isinstance(item, str) for item in arguments + environment),
                 'provider_exec_environment_unproven')
         role = 'other'
-        if executable == str(paths['claude']) and '--restricted' in arguments and '-p' in arguments:
+        if executable == str(paths['claude']) and arguments[1:3] == ['--restricted', '-p']:
             role = 'host'
-        elif any(word.endswith('/scripts/pilot-run.py') for word in arguments):
+        elif executable == str(paths.get('entry_python', sys.executable)) and (
+                arguments[1:2] == [str(paths.get('entry_script', Path(__file__).resolve().parent / 'pilot-run.py'))]
+                or arguments[1:3] == ['-B', str(paths.get('entry_script', Path(__file__).resolve().parent / 'pilot-run.py'))]):
             role = 'entry'
         elif executable == str(paths['agentfw']) and len(arguments) > 1:
             role = {'serve': 'daemon', 'pilot-launch': 'launcher', 'mcp': 'collector',
@@ -243,24 +226,16 @@ def observe(text, paths, values, normalize, rejected=False):
         elif any('rule_baseline.py' in word for word in arguments):
             role = 'classifier'
         counts[role] += 1
-        if role == 'launcher':
-            launchers.add(int(match[1]))
         env = dict(item.split('=', 1) for item in environment if '=' in item)
         # Command lines never need a provider credential, even for the host.
         require(not any(value in word for value in values.values() for word in arguments),
                 'provider_value_in_argv')
-        if role == 'entry':
+        if role in ('entry', 'host'):
+            if role == 'host':
+                host_pids.add(int(match[1]))
             require(all(env.get(key) == value for key, value in values.items()),
                     'provider_intended_host_input_missing')
         else:
-            if role == 'host':
-                channel = env.get('AGENTFW_PROVIDER_CHANNEL', '')
-                code = env.get('AGENTFW_PROVIDER_CODE', '')
-                require(channel.isdecimal() and code.isdecimal() and int(channel) >= 3
-                        and int(code) >= 3 and channel != code
-                        and '--preload=data:text/javascript;base64,' in env.get('BUN_OPTIONS', '')
-                        and int(match[1]) not in hosts, 'provider_host_channel_unproven')
-                hosts[int(match[1])] = int(channel)
             leaked = {word.split('=', 1)[0] for word in environment
                       if any(value in word for value in values.values())}
             if leaked:
@@ -269,36 +244,7 @@ def observe(text, paths, values, normalize, rejected=False):
                     'other_key_count': len(leaked.difference(KEYS))}), file=sys.stderr, flush=True)
             require(not any(value in word for value in values.values() for word in environment),
                     'provider_value_in_unrelated_process')
-    pairs, sent, reads, closed = [], [], [], set()
-    for row in rows:
-        pair = re.match(r'^(\d+)\s+socketpair\(AF_UNIX, SOCK_DGRAM\|SOCK_CLOEXEC, 0, \[(\d+), (\d+)\]\)\s*=\s*0\s*$', row)
-        if pair and int(pair[1]) in launchers:
-            pairs.append(tuple(map(int, pair.groups())))
-        sending = re.match(r'^(\d+)\s+sendto\((\d+),\s*("(?:[^"\\]|\\.)*"),\s*(\d+),\s*(?:0|MSG_NOSIGNAL),\s*NULL,\s*0\)\s*=\s*(\d+)\s*$', row)
-        if sending and int(sending[1]) in launchers:
-            try:
-                raw = ast.literal_eval('b' + sending[3])
-                payload = json.loads(raw)
-            except (ValueError, SyntaxError, UnicodeError):
-                continue
-            if payload == values and len(raw) == int(sending[4]) == int(sending[5]):
-                sent.append((int(sending[1]), int(sending[2]), len(raw)))
-        # Raw read mode retains exact kernel counts without exporting unrelated
-        # file contents or expanding source/module reads into huge private logs.
-        reading = re.match(r'^(\d+)\s+read\((0x[0-9a-f]+|\d+),\s*0x[0-9a-f]+,\s*(?:0x[0-9a-f]+|\d+)\)\s*=\s*(0x[0-9a-f]+|\d+)\s*$', row)
-        if reading and int(reading[1]) not in closed and hosts.get(int(reading[1])) == int(reading[2], 0):
-            reads.append((int(reading[1]), int(reading[3], 0)))
-        closing = re.match(r'^(\d+)\s+close\((\d+)\)\s*=\s*0\s*$', row)
-        if closing and hosts.get(int(closing[1])) == int(closing[2]) and any(pid == int(closing[1]) for pid, _ in reads):
-            closed.add(int(closing[1]))
-    require(hosts and set(hosts) == closed, 'provider_host_delivery_unproven')
-    for pid, channel in hosts.items():
-        bound = [(launcher, parent) for launcher, parent, child in pairs if child == channel]
-        require(len(bound) == 1, 'provider_host_socket_binding_unproven')
-        launcher, parent = bound[0]
-        packets = [size for sender, descriptor, size in sent if (sender, descriptor) == (launcher, parent)]
-        received = [size for reader, size in reads if reader == pid]
-        require(len(packets) == 1 and received == packets, 'provider_host_delivery_unproven')
+    require(len(host_pids) == 1, 'provider_intended_host_process_unproven')
     # A first-request 401 can terminate Claude before it starts MCP discovery.
     # Still check every actual unrelated exec, and require the complete original
     # graph in every non-rejection run. No missing role is fabricated as seen.
@@ -307,8 +253,7 @@ def observe(text, paths, values, normalize, rejected=False):
     require(all(counts[role] > 0 for role in required),
             'provider_required_role_not_observed')
     return {'format': 'sw-provider-routing-witness/1', 'successful_exec_counts': counts,
-            'all_seven_inputs_in_intended_host': True, 'authenticated_host_ipc_observed': True,
-            'host_initial_exec_provider_values': 0, 'unrelated_provider_values': 0,
+            'all_seven_inputs_in_intended_host': True, 'intended_host_processes': len(host_pids), 'unrelated_provider_values': 0,
             'provider_values_in_argv': 0, 'raw_environment_exported': False,
             'observation_stage': 'first-request-authentication-refusal' if rejected else 'original-server-runtime'}
 

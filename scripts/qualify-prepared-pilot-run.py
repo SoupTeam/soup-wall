@@ -236,7 +236,7 @@ def qualify(args, private, report):
                         return [{"type": "tool_use", "id": identifier, "name": f"mcp__{server}__{tool}", "input": arguments}]
                 return [{"type": "text", "text": "Owned prepared run completed."}]
             model.next = next_step
-            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "raw=read", "-e", "trace=execve,openat,close,write,writev,socketpair,sendto,read",
+            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,close,write,writev",
                 "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]

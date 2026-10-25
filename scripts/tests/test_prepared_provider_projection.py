@@ -18,7 +18,7 @@ def observation(rejected=False, stopped=False):
     processes = [{'pid': 910000 + i, 'start_time_ticks': 900001 + i, 'parent_process': i == 0} for i in range(8)]
     value = {'provider_routing': {'successful_exec_counts': {key: 1 for key in P.ROLES},
         'observation_stage': 'first-request-authentication-refusal' if rejected else 'original-server-runtime',
-        'authenticated_host_ipc_observed': True, 'host_initial_exec_provider_values': 0,
+        'intended_host_processes': 1,
         'all_seven_inputs_in_intended_host': True, 'unrelated_provider_values': 0,
         'provider_values_in_argv': 0, 'raw_environment_exported': False},
         'provider_protocol': {'owned_loopback_requests': 2, 'expected_synthetic_authentication_seen': True,

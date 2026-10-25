@@ -1624,23 +1624,12 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         }
     }
 
-    let real_host = args.mock_daemon_token.is_none() && !args.allow_command_fixtures;
-    #[cfg(target_os = "linux")]
-    let bootstrap = if real_host {
-        crate::pilot_host::isolate(&mut cmd, &guard.path, Vec::new())?;
-        Some(crate::pilot_host::Bootstrap::configure(
-            &mut cmd,
-            provider,
-            &guard.path,
-        )?)
-    } else {
-        crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
-        None
-    };
-    #[cfg(not(target_os = "linux"))]
-    {
-        ensure!(!real_host, "provider_bootstrap_unsupported");
-        crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
+    crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
+    // Explicit command fixtures may use ordinary system utilities. The pinned
+    // production client has no executable search path; its MCP commands and
+    // selected collector/runtime paths are already absolute.
+    if args.allow_command_fixtures || args.mock_daemon_token.is_some() {
+        cmd.env("PATH", "/usr/bin:/bin");
     }
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
@@ -1685,9 +1674,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     };
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
     let child_pid = child.id();
-    drop(cmd);
-    #[cfg(target_os = "linux")]
-    let bootstrap_result = bootstrap.map(|value| value.deliver(child_pid)).transpose();
 
     let timeout = config.timeout;
     let home_path = config.home_path.clone();
@@ -1699,12 +1685,6 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let mut intercepted_term = false;
     let mut cleanup_waiter = pilot_run.as_ref().map(|run| run.cleanup_waiter());
     let exit_status = rt.block_on(async {
-        #[cfg(target_os = "linux")]
-        if bootstrap_result.is_err() {
-            let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
-            host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
-            bail!("provider_bootstrap_unavailable");
-        }
         let deadline = tokio::time::Instant::now() + timeout;
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
         interval.tick().await;

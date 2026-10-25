@@ -190,12 +190,12 @@ class IndependentExecEvidence(unittest.TestCase):
         import json
         sys.path.insert(0, str(ROOT / 'scripts'))
         import pilot_provider_witness as witness
-        paths = {'claude': Path('/owned/claude'), 'agentfw': Path('/owned/agentfw')}
+        paths = {'claude': Path('/owned/claude'), 'agentfw': Path('/owned/agentfw'),
+                 'entry_python':Path('/usr/bin/python3'), 'entry_script':Path('/owned/scripts/pilot-run.py')}
         values = {key: 'distinct-owned-' + str(index) for index, key in enumerate(PROVIDER.KEYS)}
         rows = []
         roles = [('/usr/bin/python3', ['python3', '/owned/scripts/pilot-run.py'], values),
-                 ('/owned/claude', ['claude', '--restricted', '-p', 'owned prompt'], {'AGENTFW_PROVIDER_CHANNEL':'23',
-                     'AGENTFW_PROVIDER_CODE':'24', 'BUN_OPTIONS':'--preload=data:text/javascript;base64,dHJ1c3RlZA=='})]
+                 ('/owned/claude', ['claude', '--restricted', '-p', 'owned prompt'], values)]
         roles += [('/owned/agentfw', ['agentfw', role], {})
                   for role in ('serve', 'pilot-launch', 'mcp', 'protection-status')]
         roles += [('/mcp-runtime/node', ['node', 'server.js'], {}),
@@ -203,20 +203,13 @@ class IndependentExecEvidence(unittest.TestCase):
         for index, (path, args, env) in enumerate(roles):
             rows.append(f'{index+10} execve({json.dumps(path)}, {json.dumps(args)}, '
                         + json.dumps([key+'='+value for key,value in env.items()]) + ') = 0')
-        delivery = f'13 sendto(22, {json.dumps(json.dumps(values))}, {len(json.dumps(values))}, MSG_NOSIGNAL, NULL, 0) = {len(json.dumps(values))}'
-        rows += ['13 socketpair(AF_UNIX, SOCK_DGRAM|SOCK_CLOEXEC, 0, [22, 23]) = 0', delivery,
-                 f'11 read(0x17, 0x123abc, 0x4001) = {hex(len(json.dumps(values)))}', '11 close(23) = 0']
         normalize = lambda text: (text.splitlines(), {})
         result = witness.observe('\n'.join(rows), paths, values, normalize)
         self.assertEqual(result['unrelated_provider_values'], 0)
-        # Descriptor reuse after the authenticated channel closes carries no IPC scope.
-        self.assertEqual(witness.observe('\n'.join(rows + ['11 read(0x17, 0x987abc, 0x4001) = 0x50']), paths, values, normalize)['unrelated_provider_values'], 0)
         self.assertEqual(result['successful_exec_counts']['classifier'], 1)
         self.assertFalse(any(value in json.dumps(result) for value in values.values()))
-        for missing in [rows[:-4], rows[:-2] + [rows[-2].replace('11 read', '99 read'), rows[-1]],
-                        rows[:-1]]:
-            with self.assertRaisesRegex(ValueError, 'provider_host_delivery_unproven'):
-                witness.observe('\n'.join(missing), paths, values, normalize)
+        argv_data = '26 execve("/owned/agentfw", ["agentfw", "protection-status", "/owned/scripts/pilot-run.py"], []) = 0'
+        self.assertEqual(witness.observe('\n'.join(rows+[argv_data]),paths,values,normalize)['successful_exec_counts']['entry'],1)
         helper = f'25 execve("/owned/claude", ["claude", "--helper"], []) = 0'
         self.assertEqual(witness.observe('\n'.join(rows + [helper]), paths, values, normalize)['successful_exec_counts']['other'], 1)
         with self.assertRaisesRegex(ValueError, 'provider_value_in_unrelated_process'):
@@ -225,15 +218,15 @@ class IndependentExecEvidence(unittest.TestCase):
         leaked[2] = leaked[2].replace('[]) = 0', json.dumps(['ANTHROPIC_API_KEY='+values['ANTHROPIC_API_KEY']])+') = 0')
         with self.assertRaisesRegex(ValueError, 'provider_value_in_unrelated_process'):
             witness.observe('\n'.join(leaked), paths, values, normalize)
-        with self.assertRaisesRegex(ValueError, 'provider_host_delivery_unproven'):
+        with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
             witness.observe('\n'.join(rows[:2]), paths, values, normalize)
-        early = rows[:4] + rows[5:6] + rows[-4:]
+        early = rows[:4] + rows[5:6]
         refusal = witness.observe('\n'.join(early), paths, values, normalize, rejected=True)
         self.assertEqual(refusal['successful_exec_counts']['original'], 0)
         self.assertEqual(refusal['observation_stage'], 'first-request-authentication-refusal')
         with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
             witness.observe('\n'.join(early), paths, values, normalize)
-        with self.assertRaisesRegex(ValueError, 'provider_host_delivery_unproven'):
+        with self.assertRaisesRegex(ValueError, 'provider_required_role_not_observed'):
             witness.observe('\n'.join(rows[:2]), paths, values, normalize, rejected=True)
         with self.assertRaisesRegex(ValueError, 'provider_incomplete_exec_observation'):
             witness.observe('', paths, values, lambda text: ([], {'12': 'execve(unfinished'}))
