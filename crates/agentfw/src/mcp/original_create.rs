@@ -633,6 +633,48 @@ mod linux {
         }
 
         #[test]
+        fn original_stage_rejects_fifo_directory_and_aliased_inode_without_blocking() {
+            let stage = OwnedStage::new().unwrap();
+            let requested = selected("approved.txt", "ok");
+            let target = stage.path().join("approved.txt");
+            let c_path = std::ffi::CString::new(target.as_os_str().as_encoded_bytes()).unwrap();
+            assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+            let began = std::time::Instant::now();
+            assert!(stage.verify(&requested).is_err());
+            assert!(
+                began.elapsed() < std::time::Duration::from_secs(1),
+                "FIFO inspection blocked waiting for a peer"
+            );
+            fs::remove_file(&target).unwrap();
+            fs::create_dir(&target).unwrap();
+            assert!(stage.verify(&requested).is_err());
+            fs::remove_dir(&target).unwrap();
+            original_file(&stage, "approved.txt", b"ok");
+            let outside = tempfile::tempdir().unwrap();
+            fs::hard_link(&target, outside.path().join("alias")).unwrap();
+            assert!(stage.verify(&requested).is_err());
+            assert_eq!(fs::read(outside.path().join("alias")).unwrap(), b"ok");
+            fs::remove_file(outside.path().join("alias")).unwrap();
+            let output = stage.verify(&requested).unwrap();
+            let workspace = tempfile::tempdir().unwrap();
+            let pinned = crate::sandbox::PinnedWorkspace::open(workspace.path()).unwrap();
+            let staged = output
+                .prepare_atomic_publication(&pinned)
+                .unwrap()
+                .stage()
+                .unwrap();
+            fs::write(workspace.path().join("approved.txt"), b"operator inventory").unwrap();
+            assert!(
+                staged.publish().is_err(),
+                "concurrent original create overwrote operator inventory"
+            );
+            assert_eq!(
+                fs::read(workspace.path().join("approved.txt")).unwrap(),
+                b"operator inventory"
+            );
+        }
+
+        #[test]
         fn stage_rejects_links_and_oversize_and_public_file_modes() {
             let stage = OwnedStage::new().unwrap();
             let requested = selected("approved.txt", "ok");

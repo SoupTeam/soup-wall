@@ -170,8 +170,10 @@ class Rig:
         else:
             self.workspace.mkdir(mode=0o700)
             (self.workspace / "notes.txt").write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
-            (self.workspace / self.target).write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
-            BASE.INSTALL.install(self.installed, self.workspace, args.node, args.bwrap, args.npm)
+            if kind != "create":
+                (self.workspace / self.target).write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
+            installer = BASE.SOU83_INSTALL if kind == "create" else BASE.INSTALL
+            installer.install(self.installed, self.workspace, args.node, args.bwrap, args.npm)
         command(args, self.env, "install")
         self.profile = json.loads((self.installed / "profile.json").read_text())
         self.registry = self.installed / "registry.json"
@@ -188,7 +190,8 @@ class Rig:
 
     def start(self, deny=False):
         sensitive = ", touches_sensitive_path: true" if self.kind == "filesystem" and not deny else ""
-        self.policy.write_text("agent_policies:\n  - name: sou105-reviewed-read\n    when: { action_class: read_only" + sensitive + " }\n    action: "
+        action = "side_effecting" if self.kind == "create" else "read_only"
+        self.policy.write_text("agent_policies:\n  - name: selected-reviewed-action\n    when: { action_class: " + action + sensitive + " }\n    action: "
                                + ("deny" if deny else "ask") + "\ndefault: allow\n")
         out = (self.root / f"daemon-{len(self.daemons)}.stdout.log").open("wb")
         err = (self.root / f"daemon-{len(self.daemons)}.stderr.log").open("wb")

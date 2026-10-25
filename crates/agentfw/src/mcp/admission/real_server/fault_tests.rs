@@ -233,7 +233,7 @@ async fn original_create_eof_after_inspection_or_staging_discards_output() {
 
 #[cfg(target_os = "linux")]
 #[tokio::test]
-async fn original_create_native_ask_cannot_use_selected_readonly_approval() {
+async fn original_create_ask_requires_authenticated_owner_not_readonly_approval() {
     let mut fixture = Harness::for_format(
         "create-daemon-ask",
         server_profile::filesystem_create::FORMAT,
@@ -245,7 +245,9 @@ async fn original_create_native_ask_cannot_use_selected_readonly_approval() {
     let response = fixture.host_reply().await;
     assert_eq!(response["id"], "write-ask");
     assert!(
-        response.to_string().contains("fixture_native_ask"),
+        response
+            .to_string()
+            .contains("native_approval_bound_owner_required"),
         "{response}"
     );
     assert!(!fixture
@@ -433,6 +435,7 @@ async fn selected_pending_approval_cancellation_rejection_and_timeout_close_exac
             snapshot_sha256: "c".repeat(64),
             definition_sha256: "d".repeat(64),
             input_sha256: "e".repeat(64),
+            original_create: None,
         };
         let pending = wait_approval(&collector, &call, "daemon", "schema", &context);
         let cancelling = async {
@@ -1698,4 +1701,41 @@ async fn path_refusals_name_their_boundary_without_dispatch_or_echo() {
         dispatched["params"]["arguments"]["path"],
         "/workspace/a:b.txt"
     );
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn original_create_approval_cannot_rescue_unknown_mixed_or_understated_classifier() {
+    for marker in ["unknown", "mixed", "understate", "duplicate", "invalid"] {
+        let mut fixture =
+            Harness::for_format("normal", server_profile::filesystem_create::FORMAT).await;
+        fixture.ready().await;
+        fixture
+            .host(
+                json!({"jsonrpc":"2.0","id":"unclassified-write","method":"tools/call",
+            "params":{"name":"write_file","arguments":{"path":"/workspace/refused.txt",
+                "content":format!("classifier-fault-{marker}")}}}),
+            )
+            .await;
+        assert!(
+            fixture.host_reply().await.get("error").is_some(),
+            "{marker}"
+        );
+        assert_eq!(
+            std::fs::read_dir(fixture.boundary_home.path().join("workspace"))
+                .unwrap()
+                .count(),
+            0
+        );
+        let requests = fixture.daemon.received_requests().await.unwrap();
+        assert!(
+            !requests.iter().any(|request| {
+                let value: Value = serde_json::from_slice(&request.body).unwrap();
+                request.url.path() == "/approval"
+                    || (value["event"] == "call" && value["tool"] == "write_file")
+            }),
+            "classification {marker} reached native write authority"
+        );
+        fixture.useful(json!("read-after-classifier-refusal")).await;
+    }
 }

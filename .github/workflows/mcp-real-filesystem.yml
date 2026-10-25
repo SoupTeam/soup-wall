@@ -300,6 +300,17 @@ jobs:
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou105-approval" 2>&1 | tee "$RUNNER_TEMP/sou105-approval.log"
+      - name: Required original create-only single-use Ask and refusal effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s scripts/tests -p test_sou83_create_approval.py -v
+          python3 -B scripts/verify-sou83-create-approval.py --run \
+            --agentfw "$PWD/target/debug/agentfw" --node "$RUNNER_TEMP/sou62-runtime/bin/node" \
+            --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" --git "$RUNNER_TEMP/sou100-git-source/git" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou83-approval" 2>&1 | tee "$RUNNER_TEMP/sou83-approval.log"
       - name: Publish bounded installed-pilot outcome
         if: always()
         shell: bash
@@ -391,6 +402,10 @@ jobs:
             ${{ runner.temp }}/filesystem-paths/report.json
             ${{ runner.temp }}/filesystem-paths/enforcing/collector.log
             ${{ runner.temp }}/filesystem-paths/enforcing/daemon.log
+            ${{ runner.temp }}/sou83-approval.log
+            ${{ runner.temp }}/sou83-approval/report.json
+            ${{ runner.temp }}/sou83-approval/**/*.log
+            ${{ runner.temp }}/sou83-approval/**/*.witness.json
             ${{ runner.temp }}/sou105-approval.log
             ${{ runner.temp }}/sou105-approval/report.json
             ${{ runner.temp }}/sou105-approval/**/*.log

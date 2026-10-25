@@ -1028,7 +1028,14 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             }
             if object.contains_key("selected_invocation") {
                 keys.insert("selected_invocation");
-                if request.selected_invocation.is_none() || request.approval_id.is_none() {
+                if request.selected_invocation.is_none()
+                    || (request.approval_id.is_none()
+                        && !request.selected_invocation.as_ref().is_some_and(|context| {
+                            context.profile == crate::mcp::server_profile::filesystem_create::FORMAT
+                                && context.original_create.is_some()
+                                && request.tool.as_deref() == Some("write_file")
+                        }))
+                {
                     return Err("native_invalid_fields");
                 }
             }
@@ -2495,6 +2502,34 @@ fn inspect_bound(
         } else {
             legacy_bound
         };
+        // Selected original creates retain typed target/content/root evidence
+        // for ordinary Allow as well as Ask. The context binds observations;
+        // the installed profile and policy still supply all authority.
+        let bound = if let Some(context) = &request.selected_invocation {
+            let valid = context.validate(tool, args).and_then(|()| {
+                if !selected_result
+                    || request.mcp_host_call_id.as_ref() != Some(&context.host_call_id)
+                    || session
+                        .server_id
+                        .as_deref()
+                        .is_some_and(|server| server != context.server_id)
+                    || (request.approval_id.is_some() && session.server_id.is_none())
+                {
+                    Err("native_approval_selected_binding_mismatch")
+                } else {
+                    Ok(())
+                }
+            });
+            if let Err(code) = valid {
+                if let (Some(approval), Some(id)) = (&native.approval, &request.approval_id) {
+                    approval.invalidate(id, &request.session_id, code);
+                }
+                return Err(code);
+            }
+            context.binding(&bound)
+        } else {
+            bound
+        };
         if let Some(approval_id) = &request.approval_id {
             // Exact single-use operator approval, rechecked against the policy
             // verdict computed just now. A hard Deny can never be rescued.
@@ -2529,7 +2564,7 @@ fn inspect_bound(
                     approval.invalidate(approval_id, &request.session_id, code);
                     return Err(code);
                 }
-                context.binding(&bound)
+                bound.clone()
             } else {
                 if request.selected_invocation.is_some() {
                     approval.invalidate(
@@ -3004,6 +3039,12 @@ fn audit(
         record["managed_policy"] = json!(policy);
     }
     if request.event == "call" {
+        if let Some(context) = &request.selected_invocation {
+            if let Some(resource) = &context.original_create {
+                record["resource_details"] = json!(resource);
+                record["selected_invocation_sha256"] = json!(canonical_digest(&json!(context)));
+            }
+        }
         if let Some(tool) = st.native.as_ref().and_then(|native| {
             native.registry.tools.iter().find(|tool| {
                 request.tool.as_deref() == Some(tool.name.as_str())

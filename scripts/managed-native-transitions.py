@@ -50,6 +50,8 @@ EXPECTED = {
     "tampered-bundle-keeps-last-accepted-policy", "outage-keeps-runtime-and-useful-work",
     "console-restart-preserves-deployments", "agent-restart-restores-cache-and-retires-old-session",
     "source-runtime-and-profile-identities-unchanged", "owned-resources-cleaned",
+    "original-create-managed-allow-deny-effects", "original-create-ask-new-sequence-retires-authority",
+    "original-create-fresh-ask-after-transition",
 }
 
 
@@ -66,8 +68,9 @@ def call_fs(identifier, path="notes.txt"):
 def policy(base, mode):
     if mode == "allow":
         return base
-    condition = "taint: [mcp], action_class: read_only" if mode == "taint" else "action_class: read_only"
-    action = "deny" if mode in ("deny", "taint") else "ask"
+    condition = ("action_class: side_effecting" if mode.startswith("create-") else
+                 ("taint: [mcp], action_class: read_only" if mode == "taint" else "action_class: read_only"))
+    action = "deny" if mode in ("deny", "taint", "create-deny") else "ask"
     rule = f"  - name: sou82-{mode}-read\n    when: {{ {condition} }}\n    action: {action}\n"
     require("agent_policies:\n" in base, "installed policy lacks its rules")
     return base.replace("agent_policies:\n", "agent_policies:\n" + rule, 1)
@@ -203,7 +206,7 @@ def run(args):
                     for path in ["shared-pending.fifo", "old-ask.fifo", *[f"active-{i}.fifo" for i in range(8)],
                                  *[f"queued-{i}.fifo" for i in range(8)]]:
                         os.mkfifo(workspace / path, 0o600)
-                    FS.INSTALL.install(installed, workspace, binaries["node"], binaries["bwrap"], args.npm)
+                    FS.SOU83_INSTALL.install(installed, workspace, binaries["node"], binaries["bwrap"], args.npm)
                 else:
                     GIT.prepare_repo(workspace, binaries["git"], env)
                     GIT.INSTALL.install(installed, workspace, binaries["git"], sha(binaries["git"]), binaries["bwrap"], binaries["git_launcher"])
@@ -220,11 +223,13 @@ def run(args):
                 subprocess.run([str(binaries["agentfw"]), "install"], env=env, capture_output=True, check=True, timeout=30)
                 FS.write(home / ".agentfw/config.yaml", {"port": a.port, "enforce": True, "max_record_bytes": 1048576,
                     "policy": str(installed / "policy.yaml"), "native": {"registry_path": str(installed / "registry.json"),
-                    "registry_sha256": a.registry_sha256, "approval": {"ttl_seconds": 120}}})
+                    "registry_sha256": a.registry_sha256, "approval": {"ttl_seconds": 120},
+                    "liveness": {"default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100}}})
                 a.env.update(SOUP_MANAGED_AGENT_CONSOLE=origin, SOUP_MANAGED_AGENT_TLS_CA_FILE=str(ca),
                     SOUP_MANAGED_AGENT_TOKEN=a.token, SOUP_MANAGED_AGENT_TENANT=tenant, SOUP_MANAGED_AGENT_ID=name,
                     SOUP_MANAGED_AGENT_KEY_ID="sou82-owned-issuer", SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX=issuer["public_key_hex"])
-                for mode in ("allow", "deny", "ask", "taint"):
+                for mode in (("allow", "deny", "ask", "taint", "create-ask", "create-deny")
+                             if name == "filesystem" else ("allow", "deny", "ask", "taint")):
                     body = policy((installed / "policy.yaml").read_text(), mode)
                     api("POST", a.base + "/revisions", {"revision": mode, "policy_yaml": body}, admin_headers, 201)
                     api("POST", a.base + f"/revisions/{mode}/approve", {}, admin_headers, 204)
@@ -243,18 +248,22 @@ def run(args):
                            {"Authorization": "Bearer " + a.native_token})
 
             host = str(uuid.uuid4())
-            def collector(a, label):
+            def collector(a, label, creating=False):
                 env = dict(a.env, AGENTFW_MCP_SERVER_PROFILE=str(a.install / "profile.json"),
                     AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_CLASSIFIER_PYTHON=sys.executable)
                 if a.name == "filesystem":
+                    collector_host = str(uuid.uuid4()) if creating else host
                     instance = native(a, "/native/v1/instance")
-                    proof = subprocess.check_output([str(a.binary), "child-authority", "mint", "--session", host,
+                    proof = subprocess.check_output([str(a.binary), "child-authority", "mint", "--session", collector_host,
                         "--server", label, "--agent-id", label, "--instance-id", instance["instance_id"],
-                        "--tools", "read_text_file", "--ttl-seconds", "300"], env=a.env, timeout=20, text=True).strip()
+                        "--tools", "read_text_file,write_file" if creating else "read_text_file", "--ttl-seconds", "300"], env=a.env, timeout=20, text=True).strip()
                     secret_values.append(proof)
-                    env.update(AGENTFW_HOST_SESSION=host, AGENTFW_CHILD_AUTHORITY=proof,
+                    env.update(AGENTFW_HOST_SESSION=collector_host, AGENTFW_CHILD_AUTHORITY=proof,
                                AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/rule_baseline.py"))
-                    command = [str(a.binary), "mcp", "--native-admission", "--id", label, "--", str(a.node),
+                    if creating:
+                        env.update(AGENTFW_NATIVE_LIVENESS="true", AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS="2")
+                    command = [str(a.binary), "mcp", "--native-admission", "--id", label,
+                               *(["--native-approval-wait-seconds", "25"] if creating else []), "--", str(a.node),
                                str(a.install / "package/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js"), "/workspace"]
                     cls = FS.Client
                 else:
@@ -443,6 +452,61 @@ def run(args):
             set_mode(mode_path, mode)
             active(git, seq)
             applied(git, seq)
+            # SOU-83: actual original write + signed managed epoch transitions.
+            # The Ask wait owns no release lock, so a new signed deployment can
+            # activate and retire its grant before any ephemeral writer starts.
+            seq = deploy(fs, "allow", rollback=True)
+            active(fs, seq); applied(fs, seq)
+            writer = collector(fs, "fs-original-writer", creating=True)
+            content = "SOU83 managed original exact bytes: café 🥣"
+            def write_call(identifier, leaf):
+                return FS.call(identifier, {"path": "/workspace/" + leaf, "content": content}, "write_file")
+            allowed = writer.exchange(write_call(800, "managed-allow.txt"))[0]
+            require(not FS.refused(allowed) and (fs.workspace / "managed-allow.txt").read_text() == content,
+                    "managed Allow did not publish actual original bytes")
+            seq = deploy(fs, "create-deny")
+            active(fs, seq); applied(fs, seq)
+            inventory = FS.snapshot(fs.workspace)
+            denied = writer.exchange(write_call(801, "managed-denied.txt"))[0]
+            require(FS.refused(denied) and FS.snapshot(fs.workspace) == inventory, "managed Deny published a target")
+            check(report, "original-create-managed-allow-deny-effects", {"allowed": allowed, "denied": denied,
+                  "allowed_sha256": sha(fs.workspace / "managed-allow.txt"), "denied_publications": 0, "deployment_sequence": seq})
+            seq = deploy(fs, "create-ask")
+            active(fs, seq); applied(fs, seq)
+            def operator(*words, success=True):
+                result = subprocess.run([str(fs.binary), "native-approval", *words], env=fs.env,
+                                        capture_output=True, text=True, timeout=10)
+                require((result.returncode == 0) == success, "owned create approval command outcome mismatch")
+                return result.stdout
+            def one_pending():
+                rows = json.loads(operator("list"))
+                return rows[0] if len(rows) == 1 else None
+            writer.send(write_call(802, "managed-stale.txt"))
+            old = wait("pending original-create Ask", one_pending, timeout=8)
+            require(FS.snapshot(fs.workspace) == inventory and len(FS.events(writer.log_path, "mcp_original_create_worker")) == 1,
+                    "Ask started original writer before approval")
+            seq = deploy(fs, "create-ask")  # same YAML, new signed deployment epoch
+            active(fs, seq); applied(fs, seq)
+            stale = writer.receive(timeout=10)[0]
+            operator("approve", old["pending_id"], "--binding", old["binding_sha256"], success=False)
+            require(stale.get("id") == 802 and FS.refused(stale) and FS.snapshot(fs.workspace) == inventory,
+                    "old create approval survived managed policy epoch")
+            check(report, "original-create-ask-new-sequence-retires-authority", {"response": stale,
+                  "pending_binding_sha256": old["binding_sha256"], "deployment_sequence": seq, "publications": 0})
+            writer.send(write_call(803, "managed-fresh.txt"))
+            fresh = wait("fresh original-create Ask", one_pending, timeout=8)
+            inspected = json.JSONDecoder().raw_decode(operator("inspect", fresh["pending_id"]))[0]
+            resource = inspected["resource_details"]
+            require(resource["target"] == "/workspace/managed-fresh.txt" and resource["must_be_absent"] is True
+                    and resource["content_sha256"] == hashlib.sha256(content.encode()).hexdigest(), "fresh resource binding changed")
+            operator("approve", fresh["pending_id"], "--binding", fresh["binding_sha256"])
+            fresh_reply = writer.receive(timeout=35)[0]
+            require(fresh_reply.get("id") == 803 and not FS.refused(fresh_reply)
+                    and (fs.workspace / "managed-fresh.txt").read_text() == content,
+                    "fresh managed original Ask could not publish")
+            require(FS.result_text(writer.exchange(call_fs(804))[0]) == FS.TEXT, "write continuation lost independent read")
+            check(report, "original-create-fresh-ask-after-transition", {"response": fresh_reply,
+                  "resource_details": resource, "deployment_sequence": seq, "sha256": sha(fs.workspace / "managed-fresh.txt")})
             for a in agents:
                 report["agents"][a.name]["deployments"] = [public_deployment(r) for r in deployments(a)]
                 installation = report["agents"][a.name]["installation"]

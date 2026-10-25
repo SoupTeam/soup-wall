@@ -1,0 +1,187 @@
+{
+  "format": "sou83-original-create-ask-local/1",
+  "base_commit": "1c2ab775375b09c6c4e88f383005b2c9562f5d4a",
+  "platform": "macos-arm64",
+  "source_read_only": true,
+  "writes": "isolated-scratch-only",
+  "network": "loopback-only",
+  "summary": {
+    "workspace_rust": {
+      "passed": 1794,
+      "ignored": 13
+    },
+    "python": {
+      "total": 1528,
+      "platform_skipped": 90
+    },
+    "benchmarks": {
+      "total": 66,
+      "explicit_skipped": 19
+    },
+    "linux_native": "pending-required-current-source-CI"
+  },
+  "limits": [
+    "macOS cannot establish original Linux execution or publication acceptance",
+    "six Linux-only Python lifecycle methods are unavailable in the external local harness; product CI unchanged",
+    "full workspace passed before the final test-only assertion correction; focused grants and final Clippy rechecked it"
+  ],
+  "failed_attempts_retained": {
+    "final-clippy": "test assertion unwrap_err required Debug on a successful Response; changed to exact Err pattern, no production guard change",
+    "selected-grants": "same compile-time test assertion; both failed attempts remain failed"
+  },
+  "attempts": [
+    {
+      "label": "focused-approval",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 101.21,
+      "source_files_sha256": "0da14ba135c9e0f59867aa2d479e800fc6f4d161d6805d11faa882d52b28de0b",
+      "source_after_sha256": "0da14ba135c9e0f59867aa2d479e800fc6f4d161d6805d11faa882d52b28de0b",
+      "log_sha256": "876bf61e83bc15a0a6f03b081b967c466e365d9fb27225dd8147ab604046b774"
+    },
+    {
+      "label": "focused-profile",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 9.07,
+      "source_files_sha256": "abdda49bdf6ce04aa1493e47f163124f6a0a755d7e194a560d3d3661ead4865f",
+      "source_after_sha256": "abdda49bdf6ce04aa1493e47f163124f6a0a755d7e194a560d3d3661ead4865f",
+      "log_sha256": "6e5d066d15bea74b666a3bfcd8d2088d63140dcb1f4065458169903f8efa1233"
+    },
+    {
+      "label": "python-witness",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.49,
+      "source_files_sha256": "f0f5bd1241b3c96dcf5aa33ca0de3e8baa177c7905bf2c992ad565d0527208f4",
+      "source_after_sha256": "f0f5bd1241b3c96dcf5aa33ca0de3e8baa177c7905bf2c992ad565d0527208f4",
+      "log_sha256": "5a70f587e4dc85b6127a96c7f3e534796f39007cfa8017ced9d93174fa9065b6"
+    },
+    {
+      "label": "clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 31.04,
+      "source_files_sha256": "c01857c96cdc94aff9cff4c9f0cec2baa2a79ad26b7cd208780f6153d361a907",
+      "source_after_sha256": "c01857c96cdc94aff9cff4c9f0cec2baa2a79ad26b7cd208780f6153d361a907",
+      "log_sha256": "74e5e786b0e8f6f2d6f62d803960bc5f680cbb28efb375d62b97d5921ce49290"
+    },
+    {
+      "label": "rust-workspace",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 294.99,
+      "source_files_sha256": "d1ea81a14bf900c05354ad6868f55497587d567a4520ed7e06dc38b887dce68b",
+      "source_after_sha256": "d1ea81a14bf900c05354ad6868f55497587d567a4520ed7e06dc38b887dce68b",
+      "log_sha256": "773f5ef0145bbfe46ea5e120b40fc1947bed94e0e66eb1646ea8e632863c71fd"
+    },
+    {
+      "label": "build-binaries",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 16.21,
+      "source_files_sha256": "97fefcbcef40ab67b330a789ee51d601f39ff7bcbee8e6b9339217293594d30c",
+      "source_after_sha256": "97fefcbcef40ab67b330a789ee51d601f39ff7bcbee8e6b9339217293594d30c",
+      "log_sha256": "2dc8cf2a06bb3a4ebaac06b7ef1e6bf712a0ed0672bb25f6cf60ad0802a2f6fc"
+    },
+    {
+      "label": "fmt",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 1.39,
+      "source_files_sha256": "97fefcbcef40ab67b330a789ee51d601f39ff7bcbee8e6b9339217293594d30c",
+      "source_after_sha256": "97fefcbcef40ab67b330a789ee51d601f39ff7bcbee8e6b9339217293594d30c",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "generated-ci",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.21,
+      "source_files_sha256": "97fefcbcef40ab67b330a789ee51d601f39ff7bcbee8e6b9339217293594d30c",
+      "source_after_sha256": "97fefcbcef40ab67b330a789ee51d601f39ff7bcbee8e6b9339217293594d30c",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "docs",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.39,
+      "source_files_sha256": "97fefcbcef40ab67b330a789ee51d601f39ff7bcbee8e6b9339217293594d30c",
+      "source_after_sha256": "97fefcbcef40ab67b330a789ee51d601f39ff7bcbee8e6b9339217293594d30c",
+      "log_sha256": "6a7e0b1f7eb991aa403d1ead2fa3f23bdd4f328868810c129a6629df98dbb515"
+    },
+    {
+      "label": "python-suite",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 54.79,
+      "source_files_sha256": "43aa85d989a652eb03441025aa7e11d7285fb2017800ab0cb2f4a4ee092c32ec",
+      "source_after_sha256": "43aa85d989a652eb03441025aa7e11d7285fb2017800ab0cb2f4a4ee092c32ec",
+      "log_sha256": "e260d2dd8503b81d32321da34d91bbad78316a765044ad89c0c65e41a0f8cb4a"
+    },
+    {
+      "label": "final-clippy",
+      "status": "failed",
+      "exit_code": 101,
+      "elapsed_seconds": 3.09,
+      "source_files_sha256": "43aa85d989a652eb03441025aa7e11d7285fb2017800ab0cb2f4a4ee092c32ec",
+      "source_after_sha256": "43aa85d989a652eb03441025aa7e11d7285fb2017800ab0cb2f4a4ee092c32ec",
+      "log_sha256": "6b12a708b3d4fb8e8332f249033dbd3929cb3133ec09b65753ca275c0891dd44"
+    },
+    {
+      "label": "selected-grants",
+      "status": "failed",
+      "exit_code": 101,
+      "elapsed_seconds": 3.82,
+      "source_files_sha256": "43aa85d989a652eb03441025aa7e11d7285fb2017800ab0cb2f4a4ee092c32ec",
+      "source_after_sha256": "43aa85d989a652eb03441025aa7e11d7285fb2017800ab0cb2f4a4ee092c32ec",
+      "log_sha256": "4d69bc9350bc468209b08d60b35c123dbafc2781ec9dfc1fa5fa4cf52bd00c71"
+    },
+    {
+      "label": "benchmarks",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 5.79,
+      "source_files_sha256": "43aa85d989a652eb03441025aa7e11d7285fb2017800ab0cb2f4a4ee092c32ec",
+      "source_after_sha256": "43aa85d989a652eb03441025aa7e11d7285fb2017800ab0cb2f4a4ee092c32ec",
+      "log_sha256": "d329aa2c668ff0c95dcd2703757e705e0f83f002505e72fffda98f78b9cbb482"
+    },
+    {
+      "label": "corrected-clippy",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 3.79,
+      "source_files_sha256": "0ce930de797c5a538b614b0c47209244bdb6cb920f37d57a89474b68bd21cf89",
+      "source_after_sha256": "0ce930de797c5a538b614b0c47209244bdb6cb920f37d57a89474b68bd21cf89",
+      "log_sha256": "54bbee9c1d39e92b568107ae2563a98757dc29c8668b7c8c6cfab129604881eb"
+    },
+    {
+      "label": "corrected-selected-grants",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 8.16,
+      "source_files_sha256": "0ce930de797c5a538b614b0c47209244bdb6cb920f37d57a89474b68bd21cf89",
+      "source_after_sha256": "0ce930de797c5a538b614b0c47209244bdb6cb920f37d57a89474b68bd21cf89",
+      "log_sha256": "a4ca4a473752d637e290eadf24ee4581c5942130d1adc74b9b42cd0bddfc1df2"
+    }
+  ],
+  "file_sha256": {
+    ".github/workflows/ci-components.yml": "cf776cc03744040004311170895c2eef3dac9c717a4400631e28f831b16e88b4",
+    ".github/workflows/mcp-real-filesystem.yml": "713305e78f406d802612883dd77412079102274d22c6c88d7129e5a6aa7b59f4",
+    "crates/agentfw/src/mcp/admission.rs": "63f2ad2b3543696cdd346fde9db97f05bb2943d19b52210b9310eb104ef89748",
+    "crates/agentfw/src/mcp/admission/real_server.rs": "7f5e8bacb71a7cd1e19610c98100b6791feac4cca198e66f8a3b135fb6afe5a3",
+    "crates/agentfw/src/mcp/admission/real_server/fault_tests.rs": "cd0aadfcc32f6559b7af81df4b1d1ed13895dde4d0329bb26bd98cbdade835f8",
+    "crates/agentfw/src/mcp/original_create.rs": "502c6d74d4c4a369e25ae804f1516068f7cd36613f622a2dbfcaf363a3fd9f8a",
+    "crates/agentfw/src/mcp/server_profile/filesystem_create.rs": "81d555de44515e971b7ab6a5ebf4c6e4771109fdc205092d64edff791950ce42",
+    "crates/agentfw/src/native.rs": "dcbcbd320a7819936563cbb7dbd49e67858ac9fa5386a8b865cb8a4839df7018",
+    "crates/agentfw/src/native/approval.rs": "1f09c9d2befeb407ba50ba98d0dcd615cdece67d1e16e54754769f1121657119",
+    "crates/agentfw/src/native/approval/tests/selected_tests.rs": "8724fb6556113d086bf71089a7d9efa91f32150d4894e3f1cc5aeb0c02f0f0e3",
+    "docs/operations/MCP_FILESYSTEM_CREATE_AUDIT.md": "f89e508d14e2e1007e7f895d2856ed26c62708462e17ed4e435127493c4f73be",
+    "docs/operations/MCP_FILESYSTEM_CREATE_ONLY.md": "329d03dd2d36292245f9b1d3b88c56da19e69c64048088edba55d104da58a67e",
+    "scripts/managed-native-transitions.py": "5cd037dc645e7e4761b70d40f5544568ef90da2846e9d4194f0d4b610deac12a",
+    "scripts/tests/test_sou83_create_approval.py": "2ab20b547801cb48c5e60e1c219a052eac6ab1ccf8510129f7cf5ed7d50e7f6a",
+    "scripts/verify-sou105-selected-approval.py": "3569b64a16953488a18e0ad5d21bc231bc3b64b6a82a15980d7f18c5c8b7e8f3",
+    "scripts/verify-sou83-create-approval.py": "69f7272ab77d0557c294c76ec92c2318988885e6aedc3f21b0999056ecc851c4"
+  }
+}
