@@ -53,15 +53,6 @@ class InstallerFailure(ValueError):
         self.private_log = private_log
 
 
-class InstallerFailure(ValueError):
-    """Finite public failure fields; installer output stays in its private log."""
-
-    def __init__(self, kind, exit_code, private_log):
-        super().__init__(kind + "_installer_failed")
-        self.exit_code = exit_code
-        self.private_log = private_log
-
-
 def require(condition, code):
     if not condition:
         raise ValueError(code)
