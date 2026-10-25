@@ -7,7 +7,13 @@ fn git(root: &Path, args: &[&str]) -> Vec<u8> {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_OPTIONAL_LOCKS", "0")
+        // Positive fixtures require quiescence; do not let Git spawn an
+        // implicit maintenance writer after an otherwise completed command.
         .args([
+            "-c",
+            "maintenance.auto=false",
+            "-c",
+            "gc.auto=0",
             "-c",
             "user.name=Owned Synthetic",
             "-c",
@@ -312,4 +318,18 @@ fn unreachable_unsafe_history_and_link_count_are_not_skipped() {
         .unwrap_err()
         .to_string()
         .contains("git_links_count"));
+}
+
+#[cfg(unix)]
+#[test]
+fn owned_fixture_remains_quiescent_across_repeated_original_git_inspections() {
+    let root = fixture();
+    let config = fs::read(root.path().join(".git/config")).unwrap();
+    let index = fs::read(root.path().join(".git/index")).unwrap();
+    for _ in 0..8 {
+        validate_repository(root.path()).unwrap();
+        validate(root.path()).unwrap();
+        assert_eq!(fs::read(root.path().join(".git/config")).unwrap(), config);
+        assert_eq!(fs::read(root.path().join(".git/index")).unwrap(), index);
+    }
 }
