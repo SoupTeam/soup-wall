@@ -251,18 +251,20 @@ def completed_inventory(run):
         bodies["audit/writer.lock"] = lock_raw
         allowed = {"manifest.json", "writer.lock"}
         previous = manifest["pruned_through"]
-        for segment in manifest["segments"]:
+        for index, segment in enumerate(manifest["segments"]):
             require(type(segment) is dict and set(segment) == {"id", "closed", "bytes", "sha256", "partial_tail"}
                     and type(segment["id"]) is int and segment["id"] == previous + 1
                     and type(segment["closed"]) is bool and type(segment["partial_tail"]) is bool
                     and type(segment["bytes"]) is int and 0 <= segment["bytes"] <= 65536,
                     "audit_manifest_invalid")
+            require(segment["closed"] or index == len(manifest["segments"]) - 1, "audit_manifest_invalid")
             name = f"segment-{segment['id']:020}.jsonl"
             body, info = audit.read(name)
             require((not segment["closed"] and segment["sha256"] is None and segment["partial_tail"] is False)
                     or (segment["closed"] and type(segment["sha256"]) is str
                         and SHA.fullmatch(segment["sha256"]) and sha(body) == segment["sha256"]
-                        and len(body) == segment["bytes"]), "audit_segment_corrupt")
+                        and len(body) == segment["bytes"]
+                        and (bool(body) and not body.endswith(b"\n")) == segment["partial_tail"]), "audit_segment_corrupt")
             inventory["audit/" + name] = {"identity": info, "bytes": len(body), "sha256": sha(body)}
             bodies["audit/" + name] = body
             allowed.add(name)

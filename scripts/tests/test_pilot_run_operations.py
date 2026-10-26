@@ -132,7 +132,8 @@ class RunOperations(unittest.TestCase):
 
     def test_active_stop_receipt_and_unknown_member_are_excluded(self):
         home, native, _ = self.active()
-        self.write(native / "stop.json", {"private": self.marker})
+        self.write(native / "stop.json", {"contract": "sw-pilot-stop/1", "run_sha256": S.sha((native / "run.json").read_bytes()),
+                   "status": "stopped", "signature": "s" * 43})
         before = self.snapshot()
         plan = self.plan()
         self.assertEqual(plan["runs"], [])
@@ -353,6 +354,66 @@ class RunOperations(unittest.TestCase):
         with self.assertRaises(S.Refusal):
             ARCHIVE.load_plan(path, plan["plan_sha256"])
         self.assertEqual(ARCHIVE.preview(self.state, ["one"], 86400)["runs"], [])
+
+    def test_read_only_recovery_verifies_journal_archive_and_remaining_members(self):
+        plan = self.archive()
+        original = ARCHIVE.remove_member
+        def interrupt(*args):
+            original(*args)
+            raise InterruptedError("controlled interruption")
+        with patch.object(ARCHIVE, "remove_member", side_effect=interrupt):
+            result = ARCHIVE.apply(plan, self.output)[0]
+        before = self.snapshot()
+        inspection = ARCHIVE.inspect_quarantine(plan, self.output, result["quarantine"])
+        self.assertEqual(inspection["outcome"], "partial")
+        self.assertTrue(inspection["archive_verified"])
+        self.assertGreater(inspection["remaining_files"], 0)
+        self.assertEqual(before, self.snapshot())
+        archive_path = self.output / ARCHIVE.archive_name(plan, plan["runs"][0])
+        self.write(archive_path, b"corrupt archive")
+        with self.assertRaises(S.Refusal):
+            ARCHIVE.inspect_quarantine(plan, self.output, result["quarantine"])
+        self.assertEqual(before, self.snapshot())
+
+    def test_writer_lock_and_changed_directory_generation_prevent_cleanup(self):
+        import fcntl
+        with (self.run / "audit/writer.lock").open("rb") as holder:
+            fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = self.plan()
+            self.assertEqual(result["runs"], [])
+            self.assertEqual(result["excluded"][0]["reason"], "active_audit_writer")
+        plan = self.archive()
+        saved = self.state / "original-run"
+        self.run.rename(saved); saved.rename(self.run)
+        with self.assertRaises(S.Refusal):
+            ARCHIVE.apply(plan, self.output)
+        self.assertTrue((self.run / "audit-run.json").exists())
+
+    def test_archive_batch_retains_completed_results_and_reports_unattempted_runs(self):
+        self.completed("two"); self.completed("three")
+        plan = self.plan(["one", "two", "three"])
+        original = ARCHIVE.build_archives
+        calls = 0
+        def fail_second(*args):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("controlled archive failure")
+            return original(*args)
+        before = self.snapshot()
+        with patch.object(ARCHIVE, "build_archives", side_effect=fail_second):
+            rows = ARCHIVE.archive_batch(plan, self.output)
+        self.assertEqual([row["outcome"] for row in rows], ["archived_source_retained", "retained", "not_attempted"])
+        self.assertEqual(before, self.snapshot())
+
+    def test_false_stop_record_is_unknown_and_proof_bytes_are_never_printed(self):
+        _, native, _ = self.active()
+        self.write(native / "stop.json", {"contract": "sw-pilot-stop/1", "run_sha256": "0" * 64,
+                   "status": "stopped", "signature": "s" * 43})
+        result = DISCOVERY.discover(self.state)
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["runs"][0]["reason"], "stop_record_invalid")
+        self.assertNotIn("s" * 43, json.dumps(result))
 
     def test_loopback_probe_fixtures_bind_instance_nonce_and_disable_proxy(self):
         home, native, manifest = self.active()

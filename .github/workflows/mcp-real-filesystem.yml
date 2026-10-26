@@ -517,6 +517,9 @@ jobs:
             git restore crates/agentfw/src/lib.rs crates/agentfw/src/main.rs crates/agentfw/src/pilot_observation.rs
             exit 1
           fi
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_run_operations.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_audit.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_ci_components.py -v
       - name: Retain formatting diagnosis
         if: failure() && github.event.inputs.prepared_operations_only == 'true'
         uses: actions/upload-artifact@v7
@@ -1237,8 +1240,6 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$OTHER_FLAGS" != *true* ]]
-          python3 -B -m unittest discover -s scripts/tests -p test_pilot_run_operations.py -v
-          python3 -B -m unittest discover -s scripts/tests -p test_pilot_audit.py -v
           "$SOU119_SANDBOX_TESTS" 'pilot_observation::tests::' --test-threads=1
           scratch="$RUNNER_TEMP/prepared-run-operations"
           foreign="$RUNNER_TEMP/prepared-run-foreign"

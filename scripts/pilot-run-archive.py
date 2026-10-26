@@ -275,6 +275,7 @@ def apply_one(parent, output, plan, row):
     quarantine_name = ".soup-wall-cleanup-" + secrets.token_hex(16)
     result = {"run_id": row["run_id"], "outcome": "retained", "archive_sha256": S.sha(body)}
     moved = False
+    removed = False
     try:
         # Detach only the exact selected run, without replacing another path.
         # Any interruption leaves a private, identifiable quarantine and archive.
@@ -315,6 +316,7 @@ def apply_one(parent, output, plan, row):
             validate_remaining(run, None, files, audit_present=False)
             archive_guard()
             os.rmdir("run", dir_fd=quarantine.fd)
+            removed = True
             os.fsync(quarantine.fd)
             S.require(set(quarantine.names(16)) == {"cleanup.json"}, "quarantine_changed")
             archive_guard()
@@ -327,7 +329,9 @@ def apply_one(parent, output, plan, row):
         result["outcome"] = "archived_and_removed"
     except (OSError, ValueError, KeyError, TypeError) as error:
         result["reason"] = str(error) if isinstance(error, S.Refusal) else "removal_unavailable"
-        result["outcome"] = "partial" if moved else "retained"
+        result["outcome"] = "unknown" if removed else "partial" if moved else "retained"
+        if removed:
+            result["source_state"] = "removal_durability_unverified"
         if not moved:
             result["quarantine"] = quarantine_name
             try:

@@ -31,14 +31,21 @@ fn project(input: Input, now: u64) -> Result<Value, &'static str> {
         || input.config.len() > 65536
         || input.policy.len() > 65536
         || input.daemon_pid < 2
-        || [&input.binary_sha256, &input.registry_sha256].iter().any(|s| {
-            s.len() != 64 || !s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-        })
+        || [&input.binary_sha256, &input.registry_sha256]
+            .iter()
+            .any(|s| {
+                s.len() != 64
+                    || !s
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
     {
         return Err("observation_input_invalid");
     }
     let config = Config::from_yaml(&input.config).map_err(|_| "observation_config_invalid")?;
-    let endpoint: std::net::SocketAddr = config.socket_address().parse()
+    let endpoint: std::net::SocketAddr = config
+        .socket_address()
+        .parse()
         .map_err(|_| "observation_endpoint_invalid")?;
     if !endpoint.ip().is_loopback() || input.snapshot.runtime.pid != input.daemon_pid {
         return Err("observation_identity_mismatch");
@@ -67,7 +74,9 @@ fn project(input: Input, now: u64) -> Result<Value, &'static str> {
 pub fn run() -> i32 {
     let mut raw = Vec::new();
     let result = (|| {
-        std::io::stdin().take(MAX_INPUT + 1).read_to_end(&mut raw)
+        std::io::stdin()
+            .take(MAX_INPUT + 1)
+            .read_to_end(&mut raw)
             .map_err(|_| "observation_input_unavailable")?;
         if raw.len() as u64 > MAX_INPUT {
             return Err("observation_input_limit");
@@ -77,11 +86,16 @@ pub fn run() -> i32 {
     })();
     let (value, code) = match result {
         Ok(value) => (value, 0),
-        Err(reason) => (json!({"format":"sw-prepared-pilot-observation/1", "state":"unavailable",
-            "reason":reason, "protection":"unknown", "execution_coverage":"unknown"}), 1),
+        Err(reason) => (
+            json!({"format":"sw-prepared-pilot-observation/1", "state":"unavailable",
+            "reason":reason, "protection":"unknown", "execution_coverage":"unknown"}),
+            1,
+        ),
     };
     let mut output = std::io::stdout().lock();
-    if writeln!(output, "{value}").is_err() { return 1; }
+    if writeln!(output, "{value}").is_err() {
+        return 1;
+    }
     code
 }
 
@@ -94,11 +108,33 @@ mod tests {
         let policy = "agent_policies: []\ndefault: allow\n";
         let parsed = soup_wall_agent::AgentPolicySet::from_yaml(policy).unwrap();
         let digest = format!("{:x}", Sha256::digest(serde_json::to_vec(&parsed).unwrap()));
-        let identities = ["legacy_http_hook", "mcp_manifest", "native_admission", "unbound_mcp_resource_executor",
-            "arbitrary_server_containment", "model_consumption", "bound_resource_executor"];
-        let reasons = ["legacy_http_hook_fail_open", "manifest_check_only_not_execution", "trusted_collector_required",
-            "resource_executor_unsupported", "no_arbitrary_server_containment", "model_consumption_unverified", "executor_runtime_unverified"];
-        let capabilities = ["supported", "supported", "supported", "unsupported", "unsupported", "unknown", "unknown"];
+        let identities = [
+            "legacy_http_hook",
+            "mcp_manifest",
+            "native_admission",
+            "unbound_mcp_resource_executor",
+            "arbitrary_server_containment",
+            "model_consumption",
+            "bound_resource_executor",
+        ];
+        let reasons = [
+            "legacy_http_hook_fail_open",
+            "manifest_check_only_not_execution",
+            "trusted_collector_required",
+            "resource_executor_unsupported",
+            "no_arbitrary_server_containment",
+            "model_consumption_unverified",
+            "executor_runtime_unverified",
+        ];
+        let capabilities = [
+            "supported",
+            "supported",
+            "supported",
+            "unsupported",
+            "unsupported",
+            "unknown",
+            "unknown",
+        ];
         serde_json::from_value(json!({"format":"sw-prepared-pilot-observation-input/1", "nonce":"a".repeat(32),
             "daemon_pid":42, "binary_sha256":"b".repeat(64), "registry_sha256":"c".repeat(64),
             "config":"bind: 127.0.0.1\nport: 9876\nenforce: true\n", "policy":policy,

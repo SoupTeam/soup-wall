@@ -274,7 +274,17 @@ def inspect(parent, name, probing, deadline):
                             S.require(re.fullmatch(r"[0-9a-f]{32}", native_name), "invalid_native_run")
                             with runs.child(native_name) as native:
                                 if "stop.json" in native.names(32):
+                                    stop = native.json("stop.json")
+                                    run_raw = native.read("run.json")[0]
+                                    S.require(type(stop) is dict and set(stop) == {"contract", "run_sha256", "status", "signature"}
+                                              and stop["contract"] == "sw-pilot-stop/1"
+                                              and stop["run_sha256"] == S.sha(run_raw)
+                                              and stop["status"] in ("requested", "revoked", "stopped")
+                                              and type(stop["signature"]) is str
+                                              and re.fullmatch(r"[A-Za-z0-9_-]{43}", stop["signature"]),
+                                              "stop_record_invalid")
                                     result.update(lifecycle="retained_stop_state", reason="stop_authority_preserved")
+                                    result["recorded_stop"] = {"status": stop["status"], "authentication": "not_checked"}
                 if probing and result["lifecycle"] != "retained_stop_state":
                     before = run.read("run.json")[0]
                     result["observation"] = probe(run, selected, S.strict(before), deadline)
