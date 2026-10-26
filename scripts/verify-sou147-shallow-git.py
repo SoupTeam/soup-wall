@@ -728,6 +728,16 @@ def run(args):
             inflight_substitution(stack, first, report, mapped=True)
             inflight_substitution(stack, first, report, mapped=True, restore=True)
             policy_controls(stack, config, first, report)
+            component = GIT.load("sou147_object_witness", "verify-sou156-git-object-witness.py")
+            component_args = argparse.Namespace(**{**vars(args), "profile": stack.profile,
+                                                   "output": output / "sou156-component"})
+            require(component.run(component_args, retained_controls={"source": before,
+                "sandbox_positive": report["sandbox_positive"], "helper_control": report["helper_control"],
+                "sandbox_log_sha256": sha(output / "sandbox-positive.log")}) == 0,
+                "same-image Git object witness component failed")
+            report["sou156_component"] = {"report": "sou156-component/report.json",
+                "sha256": sha(output / "sou156-component/report.json"), "status": "pass",
+                "scope": "component only; default-route refusal controls retained separately"}
             require(INSTALL.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"],
                     "original package bytes changed")
             BASE.DEMO.stop(stack.daemon)

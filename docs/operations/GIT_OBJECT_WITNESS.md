@@ -1,9 +1,11 @@
 # Local Git object witness component (SOU-156)
 
 Status: local component for review; **not a production attestation interface**.
-Daemon IPC/composition is disabled and no agreement with SOU-155 is claimed.
+Daemon IPC/composition is disabled. The SOU-155 owner agreed the integration
+boundary on October 26, 2026; that agreement is not an implemented integration
+or production acceptance.
 Base: accepted main
-`3c9cfb08c0f1498676dcc70de131bd2f324dd13b`. SOU-155 owns daemon launch, runtime
+`379f9f9a17ec7369acaa65455d26f745c36ab866`. SOU-155 owns daemon launch, runtime
 authentication, process/channel custody and the versioned IPC envelope. This
 component must not mint an alternative daemon authority or enable result relief.
 
@@ -72,7 +74,7 @@ Inherited caps are **128 objects, 16 MiB image, 256 KiB per loose object,
 peels**. No accepted cap is widened. Existing shallow/packed profile behavior
 stays intact; this first witness refuses any captured packed-object image.
 The local ledger allows 8 pending/completed slots and a 30-second lifetime.
-These are provisional component resource limits, not Ask/grant TTL or daemon
+These are agreed component resource limits, not Ask/grant TTL or daemon
 policy. No shell, network, helpers, filters, ambient PATH or Git subprocess is
 used for resolution. Original-server execution must retain the accepted
 `server_sandbox.rs` launcher, confinement and budgets; this component implements
@@ -129,6 +131,36 @@ until that integration is independently reviewed. Legacy/native/1 and unattested
 runtimes retain baseline inspection. No signature, policy, threshold, hard floor
 or SOU-109 structural parser changes belong here.
 
+## Agreed SOU-155 integration boundary
+
+The owner agreement is recorded in [the SOU-155 owner's PR comment](https://github.com/SoupTeam/soup-wall/pull/273#issuecomment-6413442028).
+SOU-155 owns the private affine dispatch-to-original-result capability and common
+one-use join. A future adapter borrows its opaque invocation context; it receives
+no public constructor, wire import, clone or authority-minting API. Current public
+local context values and random tickets do not implement that capability.
+
+The same private Snapshot, retained View, sealed descriptors, leases and generation
+must remain held and checked across pending Ask, execution and completion. Reserve
+a local slot only after successful native admission/Ask redemption and before
+writing the original request. The effective deadline is the earlier native Call
+or component deadline, without extending either lifetime. Cancellation, withdrawal,
+expiry, owner loss, restart and uncertain cleanup revoke/spend the invocation;
+restored bytes and reused process IDs cannot revive it.
+
+Bind the complete ordered result-channel set: each channel has a unique persistent
+identity, ordinal, kind, length and exact-byte digest. Include actual empty channels;
+identical bytes on distinct legitimate channels retain distinct identities.
+Omission, reorder, duplicate identity and substitution invalidate the join. Exact
+original MCP request and complete response lines include LF and the original ID.
+The ordinary raw SHA-256 execution digest remains distinct from this component's
+domain-separated digests. This module currently binds one complete MCP frame and
+does not implement the aggregate channel join.
+
+Missing optional proof retains baseline inspection; an invalid native Call or
+receipt refuses. The accepted shared 32 MiB scan-work budget, independent policy
+floors, incomplete-result Deny, spent-receipt behavior and bounded audit remain
+unchanged. The agreement grants no SOU-109 formatter relief.
+
 ## Required acceptance before any production integration
 
 - Commit, plain blob, commit-looking blob, tree, annotated tag and missing target
@@ -167,3 +199,49 @@ native Linux x86_64 with supported local filesystems and the accepted pinned
 Git/Python/bubblewrap profile. Missing prerequisites or unexecuted native tests
 remain NOT_RUN. No production runtime authentication, IPC integration or
 structural-text relief is enabled by passing local component tests.
+
+Native Linux run [40303823496](https://github.com/SoupTeam/soup-wall/actions/runs/40303823496)
+qualified the filesystem-observation fix at `811f5253fdd52840f142fbb5eb16a31e26100dd4`:
+44 Git-focused tests passed, with no failures or ignored tests. Existing SOU-147
+acceptance and calibrated default-route refusal controls also passed. Those
+results predate the same-Snapshot execution test below and do not qualify it.
+
+The new private test preparation choice exists only in Linux x86-64 libtest.
+Production preparation always selects the existing default SelectedView. The
+test captures its Snapshot from the same once-opened workspace descriptor used
+for the workspace mount, substitutes only the sealed `.git` overlay and uses the
+existing verified runtime, launcher, owner, filters, pins and optional budget.
+An owned original-runtime seed read supplies the commit-looking blob payload.
+Final commit/blob/tag/error reads use one retained image and unique original IDs;
+their exact wire lines are retained, while equal decoded result objects establish
+the ambiguity without replacing response bytes. Local cancellation, replay,
+pipelined concurrent calls and restored-source withdrawal have explicit cases.
+The source controls distinguish an in-flight request from a local wait before
+slot reservation/request write. The latter retains the Snapshot, mutates/restores
+the owned source, refuses `begin`, and retains transcript/count evidence that no
+new original tools/call request was written. Both are local component controls.
+
+After the accepted installer has created the profile, the source-bound command is:
+
+```sh
+python3 -B scripts/verify-sou156-git-object-witness.py --run \
+  --agentfw /absolute/exact-candidate/agentfw \
+  --sandbox-test-binary /absolute/exact-candidate/agentfw-libtest \
+  --git /absolute/pinned/git --git-sha256 FULL_SHA256 \
+  --bwrap /absolute/pinned/bwrap \
+  --git-launcher /absolute/exact-candidate/agentfw-git-sandbox \
+  --profile /absolute/accepted-install/profile.json \
+  --expected-commit FULL_CANDIDATE_SHA \
+  --output /absolute/owned/new-component-evidence
+```
+
+The driver requires exactly one executed native test and the complete ordered,
+unique passing case set. It checks transcript bounds, original ID correlation,
+claim/frame digest binding, retained image identity, owner cleanup, unchanged
+source and assets. Its SOU-147 caller preserves that driver's existing matrix and
+artifact retention. Existing outside-file/network/helper controls retain their
+default preparation route; they are not labelled as witness-override execution.
+Static equivalence of the new test preparation and that coverage require review.
+The new test's native execution remains **NOT_RUN** until a separately reviewed
+candidate is actually executed. It does not exercise authenticated Ask, the
+complete result-channel join or production authority.

@@ -26,6 +26,8 @@ use super::server_profile::ProfileConfig;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "git_local_clone_sandbox_tests.rs"]
 mod git_local_clone_tests;
+#[cfg(all(test, unix))]
+mod object_witness_native_tests;
 #[cfg(target_os = "linux")]
 use super::server_profile::{package_tree_sha256, SERVER_ENTRYPOINT};
 
@@ -63,6 +65,18 @@ pub(crate) struct PreparedServerSandbox {
     bwrap_fd: std::os::fd::RawFd,
     #[cfg(target_os = "linux")]
     owner_executable_fd: std::os::fd::RawFd,
+    #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+    object_witness: Option<TestObjectWitness>,
+}
+
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+struct TestObjectWitness(Arc<super::server_profile::git::object_witness::Snapshot>);
+
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+impl std::fmt::Debug for TestObjectWitness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestObjectWitness").finish_non_exhaustive()
+    }
 }
 
 impl PreparedServerSandbox {
@@ -689,6 +703,31 @@ fn prepare_linux_command(
     selected: Option<&super::linux_budget::BoundConfig>,
     writable_owned_stage: bool,
 ) -> anyhow::Result<PreparedServerSandbox> {
+    prepare_linux_command_view(
+        profile,
+        node_args,
+        selected,
+        writable_owned_stage,
+        GitViewChoice::Default,
+    )
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum GitViewChoice {
+    Default,
+    #[cfg(all(test, target_arch = "x86_64"))]
+    ObjectWitness,
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_linux_command_view(
+    profile: &ProfileConfig,
+    node_args: &[String],
+    selected: Option<&super::linux_budget::BoundConfig>,
+    writable_owned_stage: bool,
+    view_choice: GitViewChoice,
+) -> anyhow::Result<PreparedServerSandbox> {
     use std::os::fd::AsRawFd;
     use std::os::unix::process::CommandExt;
 
@@ -719,8 +758,26 @@ fn prepare_linux_command(
             super::server_profile::git::validate_repository(&root)?;
         }
     }
-    let git_view =
-        super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?;
+    let git_view = match view_choice {
+        GitViewChoice::Default => {
+            super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?
+        }
+        #[cfg(all(test, target_arch = "x86_64"))]
+        GitViewChoice::ObjectWitness => None,
+    };
+    #[cfg(all(test, target_arch = "x86_64"))]
+    let object_witness = match view_choice {
+        GitViewChoice::Default => None,
+        GitViewChoice::ObjectWitness => {
+            anyhow::ensure!(git_profile && !writable_owned_stage && !clone_profile);
+            Some(TestObjectWitness(
+                super::server_profile::git::object_witness::Snapshot::capture(
+                    &workspace_pin,
+                    &profile.format,
+                )?,
+            ))
+        }
+    };
     let (package_root, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
     {
@@ -851,6 +908,10 @@ fn prepare_linux_command(
     if let Some(view) = &git_view {
         view.mount(&mut command, &mut pins)?;
     }
+    #[cfg(all(test, target_arch = "x86_64"))]
+    if let Some(view) = &object_witness {
+        view.0.mount(&mut command, &mut pins)?;
+    }
     let seccomp = if writable_owned_stage {
         network_filter_mode(git_profile, true)?
     } else {
@@ -962,6 +1023,8 @@ fn prepare_linux_command(
         budget,
         bwrap_fd,
         owner_executable_fd,
+        #[cfg(all(test, target_arch = "x86_64"))]
+        object_witness,
     })
 }
 
