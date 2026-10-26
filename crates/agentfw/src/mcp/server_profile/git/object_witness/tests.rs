@@ -372,7 +372,7 @@ fn cancellation_expiry_invalid_result_and_withdrawal_do_not_poison_fresh_reads()
     match &snapshot.source {
         Source::Memory(live) => live.store(false, Ordering::SeqCst),
         #[cfg(target_os = "linux")]
-        Source::Native(_) => panic!("expected owned memory fixture"),
+        Source::Native(_) | Source::FileRevisions(_) => panic!("expected owned memory fixture"),
     }
     assert!(p.verify_local(&claim, &context(), &req, &result).is_err());
     assert!(p.begin(snapshot, &req).is_err());
