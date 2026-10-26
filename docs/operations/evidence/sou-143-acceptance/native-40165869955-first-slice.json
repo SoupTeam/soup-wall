@@ -1,0 +1,42 @@
+{
+  "binary_sha256": {
+    "agentfw": "54c990ec8d367407363ee64cbb71e916499261e1247f76fad43140a7bc548349",
+    "agentfw-git-sandbox": "22ce08923328e6342282c8103d6dc4a87f593db444ef52895552ba9dba6b16eb"
+  },
+  "format": "sou142143-native-first-slice/1",
+  "full_original_host_qualification": false,
+  "issue": "143",
+  "network": "private-loopback-only",
+  "source": "8bf63545b0c570559ac71c98f125ac05ae422dbf",
+  "source_read_only": true,
+  "status": "passed",
+  "steps": [
+    {
+      "exit_code": 0,
+      "label": "native-build",
+      "log_sha256": "4740323a285acc5b9c2acb05fc537f7442c7fc730ea7d1458134ffc01a3674bb",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-test-build",
+      "log_sha256": "b21a33eab1d3c45d75af67bbc62bd07490f1ed4b0ddc869454206dd128f505b3",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-provider-unit",
+      "log_sha256": "3f7037a80a2eec7c45d241be1366a93004fc1d3a2718b1995ed0d63da0df961d",
+      "status": "passed"
+    },
+    {
+      "exit_code": 0,
+      "label": "native-clippy",
+      "log_sha256": "a18f282c56971bbfd457f4ea5cf7a93cfc0050dc35802a97b7357a0bcf858f98",
+      "status": "passed"
+    }
+  ],
+  "toolchain": "1.94.1",
+  "workflow_run": 40165869955,
+  "writes": "isolated-scratch-and-owned-delegation-only"
+}

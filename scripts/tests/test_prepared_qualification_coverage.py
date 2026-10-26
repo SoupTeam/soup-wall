@@ -22,6 +22,7 @@ def enabled(body, **overrides):
         "github.event.inputs.existing_project_only": "",
         "github.event.inputs.audit_retention_only": "",
         "github.event.inputs.storage_recovery_only": "",
+        "github.event.inputs.operator_results_only": "",
     }
     values.update(overrides)
     condition = next(line.strip()[4:] for line in body.splitlines() if line.strip().startswith("if: "))
@@ -87,7 +88,8 @@ class PreparedQualificationCoverage(unittest.TestCase):
                     "github.event.inputs.audit_retention_only": "true",
                 }))
                 for selected in ("github.event.inputs.existing_project_only", "github.event.inputs.ask_latency_baseline_sha",
-                                 "github.event.inputs.storage_recovery_only"):
+                                 "github.event.inputs.storage_recovery_only",
+                                 "github.event.inputs.operator_results_only"):
                     context = {"github.event_name": "workflow_dispatch", selected: "true"}
                     self.assertFalse(enabled(full, **context))
                     self.assertFalse(enabled(audit, **context))

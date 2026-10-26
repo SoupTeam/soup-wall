@@ -24,6 +24,8 @@ import uuid
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from pilot_provider import utility_environment
 MAX_JSON = 65536
 NODE_ARCHIVE_SHA256 = "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
 NODE_URL = "https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz"
@@ -202,7 +204,7 @@ def extract_node(archive, destination):
 
 
 def check_native(path):
-    result = subprocess.run(["ldd", str(path)], text=True, capture_output=True, timeout=15)
+    result = subprocess.run(["ldd", str(path)], text=True, capture_output=True, timeout=15, env=utility_environment())
     require(result.returncode == 0 or "not a dynamic executable" in result.stdout + result.stderr,
             "native_dependency_probe_failed")
     require("not found" not in result.stdout + result.stderr, "native_dependency_missing")
@@ -323,9 +325,9 @@ def selected_paths(args, generation):
         require(os.access(paths[role], os.X_OK), f"{role}_not_executable")
         check_native(paths[role])
     require(FS.sha(paths["node"]) == FS.NODE_SHA256, "node_binary_digest_mismatch")
-    require(subprocess.check_output([str(paths["node"]), "--version"], text=True, timeout=10).strip()
+    require(subprocess.check_output([str(paths["node"]), "--version"], text=True, timeout=10, env=utility_environment()).strip()
             == FS.NODE_VERSION, "node_version_mismatch")
-    require("--ro-bind-fd" in subprocess.check_output([str(paths["bwrap"]), "--help"], text=True, timeout=10),
+    require("--ro-bind-fd" in subprocess.check_output([str(paths["bwrap"]), "--help"], text=True, timeout=10, env=utility_environment()),
             "bubblewrap_ro_bind_fd_required")
     for role in PILOT.ARTIFACT_ROLES:
         bounded_file(paths[role], 1024 * 1024)

@@ -33,6 +33,7 @@ pub use native::child_authority;
 pub(crate) mod macos_create;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub(crate) mod macos_read;
+pub mod offline_replay;
 pub mod preflight;
 #[cfg(windows)]
 mod private_file_windows;

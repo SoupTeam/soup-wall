@@ -43,9 +43,13 @@ PREP = load("pilot_run_preparation", "prepare-installed-pilot.py")
 GROUPS = load("pilot_run_groups", "prepare-native-pilot-prerequisites.py")
 SELECTION_LOCK = load("pilot_run_selection_lock", "pilot-selection-lock.py")
 AUDIT = load("pilot_run_audit", "pilot_audit.py")
+PROVIDER = load("pilot_run_provider", "pilot_provider.py")
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
+    'provider_unavailable',
+    'provider_input_invalid',
+    'provider_input_unsupported',
     'linux_budget_input_invalid',
     'linux_budget_preflight_refused',
     'linux_budget_observation_unverified',
@@ -173,11 +177,6 @@ def environment(paths, private):
            "HOME": str(private), "TMPDIR": str(private), "AGENTFW_HOME": str(private / ".agentfw"),
            "AGENTFW_CLASSIFIER_PYTHON": str(paths["python"]),
            "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OPTIONAL_LOCKS": "0"}
-    # Operator-selected provider transport only. Never copied into retained state/report.
-    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
-                "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"):
-        if key in os.environ:
-            env[key] = os.environ[key]
     return env
 
 
@@ -294,6 +293,8 @@ def confirmed_stop(home, launcher_pid, binary, env, cwd):
 
 def run(args, report):
     PREP.supported_platform()
+    provider = PROVIDER.selected(os.environ)
+    PROVIDER.require_access(provider)
     # Main has already validated the selection under the lifetime lock. Refuse
     # an occupied explicit port before the additional full generation recheck.
     # The later bind remains authoritative if the port changes meanwhile.
@@ -327,6 +328,7 @@ def run(args, report):
     audit_selected = False
     daemon = launcher = None
     streams = []
+    redactors = {}
     cancelled = False
     report.update(stage="private_setup", host_started=False)
     def cancel(_signum, _frame):
@@ -392,6 +394,7 @@ def run(args, report):
         os.fchmod(daemon_log.fileno(), 0o600)
         streams.append(daemon_log)
         report["stage"] = "daemon_start"
+        redactors[daemon_log] = PROVIDER.Redactor(provider)
         daemon = subprocess.Popen([str(paths["agentfw"]), "serve"], cwd=private, env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             start_new_session=True, preexec_fn=parent_death)
@@ -416,10 +419,14 @@ def run(args, report):
             log = (private / "host.private.log").open("xb")
             os.fchmod(log.fileno(), 0o600)
             streams.append(log)
+            redactors[log] = PROVIDER.Redactor(provider)
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
             report["stage"] = "host_start"
-            launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=parent_death)
+            with PROVIDER.carrier(provider) as provider_fd:
+                command.extend(["--provider-env-fd", str(provider_fd)])
+                launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
+                    pass_fds=(provider_fd,), preexec_fn=parent_death)
             report["host_started"] = True
             selector.register(launcher.stdout, selectors.EVENT_READ, (log, True))
             report["launcher_pid"] = launcher.pid
@@ -442,7 +449,7 @@ def run(args, report):
                         continue
                     count += len(raw)
                     require(count <= MAX_OUTPUT, "private_output_limit")
-                    key.data[0].write(raw)
+                    key.data[0].write(redactors[key.data[0]].feed(raw))
             # Let the existing launcher finish its own process-group/Ask cleanup first.
             result = os.waitid(os.P_PID, launcher.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
             require(result is not None and result.si_code == os.CLD_EXITED and result.si_status == 0,
@@ -476,6 +483,7 @@ def run(args, report):
                     process.stdout.close()
         for stream in streams:
             try:
+                stream.write(redactors[stream].feed(b'', final=True))
                 stream.close()
             except OSError as error:
                 errors.append("private_log")

@@ -139,6 +139,9 @@ pub struct PilotLaunchArgs {
     #[arg(long)]
     pub classifier: Option<PathBuf>,
 
+    /// Anonymous sealed provider-input descriptor supplied by the prepared entry.
+    #[arg(long, hide = true)]
+    pub provider_env_fd: Option<i32>,
     /// Explicit operator-owned Linux resource budget; absent means unbudgeted.
     #[arg(long)]
     pub linux_budget: Option<PathBuf>,
@@ -1446,7 +1449,31 @@ pub fn write_per_process_mcp_config(
             );
         }
 
-        s_obj.insert("env".to_string(), serde_json::Value::Object(env_obj));
+        env_obj.insert("PATH".into(), serde_json::json!("/usr/bin:/bin"));
+        env_obj.insert("LANG".into(), serde_json::json!("C.UTF-8"));
+        env_obj.insert("TMPDIR".into(), serde_json::json!(private_dir));
+        let mut isolated_args = vec![serde_json::json!("-i"), serde_json::json!("--")];
+        for (key, value) in &env_obj {
+            isolated_args.push(serde_json::json!(format!(
+                "{}={}",
+                key,
+                value
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("collector_environment_invalid"))?
+            )));
+        }
+        isolated_args.push(serde_json::json!(config.agent_bin_path));
+        isolated_args.extend(collector_args.iter().map(|value| serde_json::json!(value)));
+        s_obj.insert("command".into(), serde_json::json!("/usr/bin/env"));
+        s_obj.insert("args".into(), serde_json::Value::Array(isolated_args));
+        let cleared_provider = crate::pilot_host::PROVIDER_ENV
+            .iter()
+            .map(|key| ((*key).to_string(), serde_json::json!("")))
+            .collect();
+        s_obj.insert(
+            "env".to_string(),
+            serde_json::Value::Object(cleared_provider),
+        );
         mcp_servers.insert(server_id.clone(), serde_json::Value::Object(s_obj));
 
         // Sanitized plan for reporting (tokens redacted)
@@ -1497,12 +1524,29 @@ pub fn write_per_process_mcp_config(
 
 /// Execute the pilot launcher command with strict isolation and bounded supervision.
 pub fn run(args: PilotLaunchArgs) -> Result<()> {
+    // Consume supplied authority before validation/configuration can allocate
+    // another descriptor with the same number as a malformed input.
+    let provider = crate::pilot_host::provider_inputs(args.provider_env_fd)?;
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
 
     let config = args.validate()?;
+    if !config.dry_run {
+        // Only the intended host receives the explicitly selected provider inputs.
+        ensure!(
+            config.allow_command_fixtures
+                || config.mock_daemon_token.is_some()
+                || provider
+                    .iter()
+                    .any(|(key, value)| (key == "ANTHROPIC_API_KEY"
+                        || key == "ANTHROPIC_AUTH_TOKEN")
+                        && !value.is_empty()),
+            "provider_unavailable"
+        );
+    }
+
     if config.ask_wait_seconds > 0 {
         crate::pilot_approval::preflight(&config)?;
     }
@@ -1673,8 +1717,22 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
         }
     }
 
-    // Discard ambient executable settings before adding the fixed host flags.
-    crate::pilot_host::isolate(&mut cmd, &guard.path)?;
+    crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
+    // Explicit command fixtures may use ordinary system utilities. The pinned
+    // production client has no executable search path; its MCP commands and
+    // selected collector/runtime paths are already absolute.
+    if args.allow_command_fixtures || args.mock_daemon_token.is_some() {
+        cmd.env("PATH", "/usr/bin:/bin");
+    }
+    #[cfg(target_os = "linux")]
+    let child_environment = if !args.allow_command_fixtures && args.mock_daemon_token.is_none() {
+        Some(crate::pilot_host::ChildEnvironmentGuard::install(
+            &mut cmd,
+            &guard.path,
+        )?)
+    } else {
+        None
+    };
     cmd.env("CLAUDE_CONFIG_DIR", guard.path.join(".claude"))
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
         .env("CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL", "1")
@@ -1719,10 +1777,16 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     if let Some(budget) = &budget {
         budget.verify_root()?;
     }
+    let timeout = config.timeout;
+    let deadline = tokio::time::Instant::now() + timeout;
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
     let child_pid = child.id();
+    drop(cmd);
+    #[cfg(target_os = "linux")]
+    let child_environment_ready = child_environment
+        .map(|guard| guard.confirm_until(deadline.into_std()))
+        .transpose();
 
-    let timeout = config.timeout;
     let home_path = config.home_path.clone();
     let is_mock = config.mock_daemon_token.is_some();
     let initial_instance = instance_id.clone();
@@ -1732,11 +1796,32 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let mut intercepted_term = false;
     let mut cleanup_waiter = pilot_run.as_ref().map(|run| run.cleanup_waiter());
     let exit_status = rt.block_on(async {
-        let deadline = tokio::time::Instant::now() + timeout;
+        #[cfg(target_os = "linux")]
+        if child_environment_ready.is_err() {
+            let host_deadline_expired = tokio::time::Instant::now() >= deadline;
+            let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
+            host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+            if let Some(waiter) = cleanup_waiter.take() {
+                let _ = tokio::task::spawn_blocking(waiter).await;
+            }
+            if host_deadline_expired {
+                bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
+            }
+            bail!("provider_child_environment_unavailable");
+        }
         let mut interval = tokio::time::interval(Duration::from_millis(1000));
         interval.tick().await;
 
         loop {
+            if tokio::time::Instant::now() >= deadline {
+                let group = terminate_process_group(child_pid, Duration::from_millis(200)).await;
+                #[cfg(not(unix))]
+                {
+                    let _ = child.kill();
+                }
+                host_stopped = reap_owned_host(&mut child).await.is_ok() && group.is_ok();
+                bail!("pilot host execution exceeded declared timeout of {}s", timeout.as_secs());
+            }
             // Check if child has exited
             match owned_host_exited(&mut child) {
                 Ok(true) => {
@@ -2052,6 +2137,7 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
+            provider_env_fd: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2123,12 +2209,13 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: Some(test_token.clone()),
             mock_instance_id: Some(test_instance_id.clone()),
+            provider_env_fd: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
         };
 
-        let config = args.validate().expect("validation should succeed");
+        let mut config = args.validate().expect("validation should succeed");
         assert_eq!(config.host_session, "test-session-123");
         assert_eq!(config.fs_tools, vec!["read_text_file"]);
         assert_eq!(config.git_tools, vec!["git_status"]);
@@ -2158,6 +2245,23 @@ mod tests {
         let (mcp_config, plans) = write_per_process_mcp_config(&guard.path, &config, &grants, None)
             .expect("write config");
         assert!(mcp_config.exists());
+        let actual: serde_json::Value =
+            serde_json::from_slice(&fs::read(&mcp_config).unwrap()).unwrap();
+        for server in actual["mcpServers"].as_object().unwrap().values() {
+            assert_eq!(server["command"], "/usr/bin/env");
+            assert_eq!(server["args"][0], "-i");
+            assert_eq!(server["args"][1], "--");
+            for key in crate::pilot_host::PROVIDER_ENV {
+                assert_eq!(server["env"][key], "");
+            }
+            let words = server["args"].as_array().unwrap();
+            assert!(words
+                .iter()
+                .any(|word| word == config.agent_bin_path.to_str().unwrap()));
+            assert!(words.iter().any(|word| word
+                .as_str()
+                .is_some_and(|w| w.starts_with("AGENTFW_HOST_SESSION="))));
+        }
 
         // Verify tokens are redacted in plans
         assert!(plans["filesystem"].token_redacted);
@@ -2172,22 +2276,60 @@ mod tests {
         // Verify mcp.json contains environment variables
         let mcp_data: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&mcp_config).unwrap()).unwrap();
-        let fs_env = &mcp_data["mcpServers"]["filesystem"]["env"];
+        let env_for = |server: &str| {
+            mcp_data["mcpServers"][server]["args"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|word| word.as_str().and_then(|word| word.split_once('=')))
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .collect::<BTreeMap<_, _>>()
+        };
+        let fs_env = env_for("filesystem");
+        let git_env = env_for("git");
         assert_eq!(
-            mcp_data["mcpServers"]["git"]["env"]["AGENTFW_WORKSPACE"],
+            git_env["AGENTFW_WORKSPACE"],
             git_workspace.canonicalize().unwrap().display().to_string()
         );
         assert_eq!(fs_env["AGENTFW_CLASSIFIER_PYTHON"], "/usr/bin/python3");
-        assert_eq!(
-            mcp_data["mcpServers"]["git"]["env"]["AGENTFW_CLASSIFIER_PYTHON"],
-            "/usr/bin/python3"
-        );
+        assert_eq!(git_env["AGENTFW_CLASSIFIER_PYTHON"], "/usr/bin/python3");
         assert_eq!(fs_env["AGENTFW_HOST_SESSION"], "test-session-123");
         assert_eq!(fs_env["AGENTFW_NATIVE_LIVENESS"], "true");
         assert_eq!(
             fs_env["AGENTFW_WORKSPACE"],
             workspace.canonicalize().unwrap().display().to_string()
         );
+
+        // The credential scrubber must preserve explicitly selected budget
+        // authority in each collector's finite environment and launch arguments.
+        let budget_path = temp.path().join("selected-budget.json");
+        config.linux_budget = Some(budget_path.clone());
+        config.linux_budget_sha256 = Some("b".repeat(64));
+        let (budget_mcp, _) =
+            write_per_process_mcp_config(&guard.path, &config, &grants, None).unwrap();
+        let budget_mcp: serde_json::Value =
+            serde_json::from_slice(&fs::read(budget_mcp).unwrap()).unwrap();
+        for server in budget_mcp["mcpServers"].as_object().unwrap().values() {
+            assert_eq!(server["command"], "/usr/bin/env");
+            let words = server["args"].as_array().unwrap();
+            assert!(words.iter().any(|word| word
+                == &serde_json::json!(format!(
+                    "{}={}",
+                    crate::mcp::linux_budget::ENVIRONMENT,
+                    budget_path.display()
+                ))));
+            assert!(words.iter().any(|word| word
+                .as_str()
+                .is_some_and(|word| word.starts_with("AGENTFW_PILOT_BUDGET_BINDING="))));
+            assert!(words.iter().any(|word| word == "--pilot-budget-binding"));
+            assert!(words.iter().any(|word| word == "--pilot-budget-sha256"));
+            for key in crate::pilot_host::PROVIDER_ENV {
+                assert_eq!(server["env"][key], "");
+                assert!(!words.iter().any(|word| word
+                    .as_str()
+                    .is_some_and(|word| word.starts_with(&format!("{key}=")))));
+            }
+        }
     }
 
     #[test]
@@ -2224,6 +2366,7 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
+            provider_env_fd: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2266,6 +2409,7 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: None,
             mock_instance_id: None,
+            provider_env_fd: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2311,6 +2455,7 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: None,
             mock_instance_id: None,
+            provider_env_fd: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2356,6 +2501,7 @@ mod tests {
             model: "claude-sonnet-4-20250514".into(),
             mock_daemon_token: None,
             mock_instance_id: None,
+            provider_env_fd: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: true,

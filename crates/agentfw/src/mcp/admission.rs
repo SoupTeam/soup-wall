@@ -319,6 +319,10 @@ impl InvocationClassifier for FixtureTestDouble {
     fn source(&self) -> &'static str {
         "test-double/fixture-v1"
     }
+    fn revision(&self) -> Option<&str> {
+        // Identifies only this explicit synthetic classifier, not a real model.
+        Some("0092d562da04f992b185a8f57a3c3bd1e390b3a39d6730f8450b934f6ff24112")
+    }
     fn classify(&self, invocation: &Invocation) -> anyhow::Result<Classification> {
         let values: Vec<&str> = invocation
             .args
@@ -415,6 +419,8 @@ pub struct ClassifiedAssessment {
     pub ambiguous_or_unknown: bool,
     /// Selected read-only approval cannot rescue an empty or mixed assessment.
     pub known_read_only: bool,
+    /// Exact known write semantics; the installed create profile is still required.
+    pub known_create: bool,
 }
 
 impl ClassifiedAssessment {
@@ -423,6 +429,7 @@ impl ClassifiedAssessment {
             verdict: ProductionVerdict::Allow,
             ambiguous_or_unknown: false,
             known_read_only: true,
+            known_create: false,
         }
     }
 }
@@ -1187,6 +1194,7 @@ impl<'a> Collector<'a> {
                 verdict,
                 ambiguous_or_unknown,
                 known_read_only: !ambiguous_or_unknown && res.actions.as_slice() == ["read"],
+                known_create: !ambiguous_or_unknown && res.actions.as_slice() == ["write"],
             })
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
@@ -1256,12 +1264,34 @@ impl<'a> Collector<'a> {
         if let Some(limit) = DaemonSizeLimit::from_refusal(status, &bytes) {
             return Err(limit.into());
         }
-        ensure!(
-            status.is_success(),
-            "MCP admission request rejected: status {}, body: {}",
-            status,
-            String::from_utf8_lossy(&bytes)
-        );
+        if !status.is_success() {
+            let status = status.as_u16();
+            // Log only the daemon's stable, low-entropy failure code.
+            // Never echo request arguments, tokens or a raw response body.
+            let body = &bytes;
+            let reason = if body.len() <= 1024 {
+                serde_json::from_slice::<Value>(body)
+                    .ok()
+                    .and_then(|reply| {
+                        reply
+                            .get("error_code")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .filter(|code| {
+                        code.len() <= 96
+                            && code
+                                .bytes()
+                                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+                    })
+            } else {
+                None
+            };
+            anyhow::bail!(
+                "MCP admission request rejected: status={status} code={}",
+                reason.as_deref().unwrap_or("unavailable")
+            );
+        }
         let Strict(reply) =
             serde_json::from_slice(&bytes).context("malformed MCP admission receipt")?;
         Ok(reply)

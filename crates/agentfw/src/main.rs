@@ -142,11 +142,13 @@ enum Cmd {
     Doctor(agentfw::doctor::DoctorArgs),
     /// Query authenticated runtime diagnostics; unknown protection exits 2.
     ProtectionStatus(agentfw::protection_status::QueryArgs),
-    /// Summarize an audit log: what would this policy have done?
+    /// Summarize recorded verdicts, or explicitly simulate supplied offline events.
     Replay {
         /// Path to the audit log (defaults to ~/.agentfw/audit.jsonl).
         #[arg(long)]
         log: Option<PathBuf>,
+        #[command(flatten)]
+        offline: agentfw::offline_replay::OfflineArgs,
     },
     /// Print the settings.json hook block and setup instructions.
     Install,
@@ -496,7 +498,10 @@ fn main() -> anyhow::Result<()> {
                 .build()?
                 .block_on(serve(Config::home()?, None))
         }
-        Cmd::Replay { log } => {
+        Cmd::Replay { log, offline } => {
+            if offline.offline {
+                std::process::exit(agentfw::offline_replay::run_cli(&offline));
+            }
             let home = Config::home()?;
             let path = log.unwrap_or_else(|| home.join("audit.jsonl"));
             let body = std::fs::read_to_string(&path)?;
@@ -760,6 +765,9 @@ fn main() -> anyhow::Result<()> {
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
         Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
         Cmd::PilotWorkspaces(args) => agentfw::pilot_launcher::inspect_workspaces(args),
+        Cmd::PilotApproval(args) if args.output.is_some() => {
+            std::process::exit(agentfw::pilot_approval::operator_json(args));
+        }
         Cmd::PilotBudget(args) => agentfw::pilot_budget::inspect(args),
         Cmd::PilotApproval(args) => agentfw::pilot_approval::operator(args),
         Cmd::McpProfile { home, command } => {

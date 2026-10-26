@@ -19,11 +19,13 @@ pub use action::{
 };
 pub use authority::{Authority, Escalation};
 pub use egress::{hosts, is_allowed};
-pub use engine::{AgentFirewall, Outcome, DEFAULT_TAINT_CAP};
+pub use engine::{AgentFirewall, InspectionTrace, Outcome, DEFAULT_TAINT_CAP};
 pub use event::{AgentEvent, AgentId, EventKind, Provenance, SessionId, ToolDecl, Trust};
 pub use facet::{facets, Facet};
 pub use fingerprint::{fingerprints, overlap};
-pub use policy::{AgentDecision, AgentPolicySet, Signals, TaintSource, Verdict};
+pub use policy::{
+    AgentDecision, AgentPolicySet, PolicyTrace, SafetyFloor, Signals, TaintSource, Verdict,
+};
 pub use taint::{
     LimitError, ProvenanceSnapshot, SessionProvenanceSnapshot, SessionTaintUsage, TaintLimits,
     TaintMark, TaintTracker, TaintUsage, TrackingFailure,
