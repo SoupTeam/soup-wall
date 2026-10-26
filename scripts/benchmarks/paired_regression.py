@@ -69,8 +69,9 @@ LIMITATIONS = [
     "Development comparison of recorded runs; not held-out efficacy, general safety or pilot readiness evidence.",
     "Revision pins and the run's source inventory hash are producer declarations; this tool checks their "
     "consistency, not which binary or policy actually executed.",
-    "Input binding is partial: run-to-plan, source-to-inventory and injection-to-plan links are checked; the "
-    "binding of a case's full semantic input (user task and environment content) is not.",
+    "Input binding checks the identity of the supplied inputs, not that the producer executed them. Per-case "
+    "full input, label and family are verified only through a case manifest inside the inventoried source; "
+    "without one that link stays unverified (genuine upstream AgentDojo has none).",
     "Paired differences are conditional on units evaluable in both runs; with partial coverage only the "
     "missing-outcome bounds on the planned set account for missing outcomes; they are not confidence intervals.",
     "Without declared semantic families, correlated variants are grouped by known plan dependencies only.",
@@ -214,7 +215,7 @@ def _text(value):
 def load_inputs(path, limits):
     raw = read_bounded(path, limits["max_file_bytes"])
     bundle = parse(raw)
-    keys = {"schema", "provenance", "upstream", "files", "injections"}
+    keys = {"schema", "provenance", "upstream", "files", "injections", "case_manifest"}
     if not isinstance(bundle, dict) or set(bundle) != keys or bundle["schema"] != INPUTS_SCHEMA:
         raise Rejected("invalid_inputs_bundle", f"inputs must be {INPUTS_SCHEMA} with fields {sorted(keys)}")
     provenance, upstream, files, injections = (bundle[key] for key in ("provenance", "upstream", "files", "injections"))
@@ -236,6 +237,8 @@ def load_inputs(path, limits):
     for case_id, mapping in injections.items():
         if not isinstance(mapping, dict) or not all(isinstance(v, str) for v in mapping.values()):
             raise Rejected("invalid_inputs_bundle", f"injections for {case_id[:80]!r} must map vectors to strings")
+    if bundle["case_manifest"] is not None and bundle["case_manifest"] not in files:
+        raise Rejected("invalid_inputs_bundle", "case_manifest must be null or the path of a bundled src/ file")
     return bundle, protocol.digest(raw)
 
 
@@ -289,10 +292,72 @@ def verify_binding(bundle, side) -> dict:
     return {"source_to_inventory": source, "injections_to_plan": injected}
 
 
+CASES_SCHEMA = "soup-wall-paired-regression-cases/1"
+CASE_RECORD_KEYS = {"case_id", "user_task_id", "injection_task_id", "expected_label", "semantic_family",
+                    "user_task_file", "environment_file"}
 CASE_SEMANTIC_INPUT = {
     "status": "unverified",
-    "reason": "no producer record binds a case's user task and environment content to that case ID; the "
-              "inventory hash covers the source as a whole, and a matching string is not a binding"}
+    "reason": "no case manifest inside the inventoried source binds each case ID to its user task and "
+              "environment content; the inventory hash alone covers the source only as a whole"}
+
+
+def verify_case_manifest(bundle, side):
+    """Check the per-case manifest that lives inside the inventoried source against one side's plan.
+
+    Returns ``(problems, records)`` where ``records`` maps case_id to its computed full-input hash,
+    expected label and semantic family. Because the manifest is one of the inventoried ``src/``
+    files, its bytes are covered by the inventory hash that the run recorded.
+    """
+    files = bundle["files"]
+    try:
+        manifest = protocol.strict_json(files[bundle["case_manifest"]].encode("utf-8"))
+    except (protocol.ProtocolError, RecursionError, ValueError) as error:
+        return [f"case manifest is not strict JSON: {error}"], {}
+    if not isinstance(manifest, dict) or set(manifest) != {"schema", "suite", "cases"} or \
+            manifest["schema"] != CASES_SCHEMA or not isinstance(manifest["cases"], list):
+        return [f"case manifest must be {CASES_SCHEMA} with schema, suite and a cases list"], {}
+    plan = side["plan"]
+    problems = []
+    if manifest["suite"] != plan["upstream"]["suite"]:
+        problems.append("case manifest suite differs from the plan")
+    by_id = {}
+    for record in manifest["cases"]:
+        if not isinstance(record, dict) or set(record) != CASE_RECORD_KEYS or \
+                not all(isinstance(record[key], str) for key in CASE_RECORD_KEYS - {"injection_task_id"}):
+            problems.append(f"case manifest record must have exactly {sorted(CASE_RECORD_KEYS)}")
+            continue
+        if record["case_id"] in by_id:
+            problems.append(f"{record['case_id']}: listed twice in the case manifest")
+        by_id[record["case_id"]] = record
+    all_ids = {case["case_id"] for entry in plan["sets"].values() for case in entry["cases"]}
+    if sorted(set(by_id) - all_ids):
+        problems.append(f"case manifest lists cases outside the plan {sorted(set(by_id) - all_ids)[:5]}")
+    records = {}
+    for case in plan["sets"][side["set"]]["cases"]:
+        record, case_id = by_id.get(case["case_id"]), case["case_id"]
+        if record is None:
+            problems.append(f"{case_id}: missing from the case manifest")
+            continue
+        label = "benign" if case["injection_task_id"] is None else "attack"
+        checks = {"user_task_id": record["user_task_id"] == case["user_task_id"],
+                  "injection_task_id": record["injection_task_id"] == case["injection_task_id"],
+                  "expected_label": record["expected_label"] == label,
+                  "semantic_family": _text(record["semantic_family"]),
+                  "user_task_file": record["user_task_file"] in files,
+                  "environment_file": record["environment_file"] in files}
+        failed = [key for key, ok in checks.items() if not ok]
+        if failed:
+            problems.append(f"{case_id}: case manifest disagrees with the plan or source on {failed}")
+            continue
+        full_input = {"upstream": {key: plan["upstream"][key] for key in ("revision", "benchmark_version", "suite")},
+                      "attack": plan["attack"], "case_id": case_id, "user_task_id": case["user_task_id"],
+                      "injection_task_id": case["injection_task_id"], "expected_label": label,
+                      "user_task_sha256": protocol.digest(files[record["user_task_file"]].encode("utf-8")),
+                      "environment_sha256": protocol.digest(files[record["environment_file"]].encode("utf-8")),
+                      "injection_vectors": case["injection_vectors"], "injections_sha256": case["injections_sha256"]}
+        records[case_id] = {"case_input_sha256": protocol.digest(protocol.canonical(full_input)),
+                            "expected_label": label, "semantic_family": record["semantic_family"]}
+    return problems, records
 
 
 def input_binding(bundle, base, cand) -> dict:
@@ -303,7 +368,7 @@ def input_binding(bundle, base, cand) -> dict:
     if bundle is None:
         for link in ("source_to_inventory", "injections_to_plan"):
             links[link] = {"status": "not_supplied"}
-        return {"status": "declared_unverified", "links": links,
+        return {"status": "declared_unverified", "links": links, "cases": {},
                 "detail": "no source bundle: task, environment and injection identities are plan declarations"}
     problems = {role: verify_binding(bundle, side) for role, side in (("baseline", base), ("candidate", cand))}
     methods = {"source_to_inventory": "bundle src/ bytes reproduce the plan's and the run's recorded "
@@ -313,9 +378,26 @@ def input_binding(bundle, base, cand) -> dict:
     for link, method in methods.items():
         found = {role: problems[role][link] for role in problems if problems[role][link]}
         links[link] = {"status": "mismatch" if found else "verified", "method": method, "problems": found}
-    mismatch = any(links[link]["status"] == "mismatch" for link in methods)
-    return {"status": "mismatch" if mismatch else "partially_verified", "links": links,
-            "provenance": bundle["provenance"],
+    cases = {}
+    if bundle["case_manifest"] is not None:
+        checked = {role: verify_case_manifest(bundle, side) for role, side in (("baseline", base), ("candidate", cand))}
+        found = {role: checked[role][0] for role in checked if checked[role][0]}
+        base_records, cand_records = checked["baseline"][1], checked["candidate"][1]
+        differing = sorted(case_id for case_id in set(base_records) & set(cand_records)
+                           if base_records[case_id] != cand_records[case_id])
+        if differing:
+            found["both"] = [f"per-case full input differs between sides: {differing[:10]}"]
+        links["case_semantic_input"] = {
+            "status": "mismatch" if found else "verified", "manifest": bundle["case_manifest"],
+            "method": "a case manifest inside the inventoried src/ maps every case ID to its user task and "
+                      "environment files, expected label and semantic family; these agree with the plan, and "
+                      "the per-case full-input hash is identical for both sides",
+            "problems": found}
+        cases = base_records if not found else {}
+    statuses = {link["status"] for link in links.values()}
+    status = "mismatch" if "mismatch" in statuses else "verified" if statuses == {"verified"} else "partially_verified"
+    return {"status": status, "links": links, "cases": cases, "provenance": bundle["provenance"],
+            "scope": "identity of the supplied inputs; not proof that the producer executed them",
             "residual_trust": ["the run's inventory hash is the producer's own runtime record",
                                "run-level settings, model and runtime are compared between sides only"]}
 
@@ -434,7 +516,8 @@ def grouping(cases, families):
             "semantics": "known statistical dependencies only; not semantic families",
             "count": dependency_count},
         "semantic_families": {"status": "unavailable",
-                              "reason": "the producer contract has no family field; supply --families"},
+                              "reason": "the producer contract has no family field; supply a case manifest "
+                                        "inside the inventoried source or --families"},
         "resampling_units": None,
     }
     family_of = {}
@@ -442,8 +525,8 @@ def grouping(cases, families):
         family_of = {case_id: family_id for family_id, members in families["data"]["families"].items()
                      for case_id in members}
         result["semantic_families"] = {
-            "status": "declared", "sha256": families["sha256"], "provenance": families["data"]["provenance"],
-            "count": len(families["data"]["families"]),
+            "status": families["binding"], "sha256": families["sha256"],
+            "provenance": families["data"]["provenance"], "count": len(families["data"]["families"]),
             "verification": "every compared case is in exactly one family; expected labels come from the plan only"}
         links = list(by_key.values()) + [members for members in families["data"]["families"].values()]
         units, count = _components(case_ids, links)
@@ -678,27 +761,45 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
         reasons.append(_reason("input_identity_unverified", binding["detail"]))
     elif binding["status"] == "mismatch":
         reasons.append(_reason("input_binding_failed", "supplied source bytes do not reproduce the declared identities"))
-    if families is not None and base["set"] in base["plan"]["sets"]:
-        ids = [case["case_id"] for case in base["plan"]["sets"][base["set"]]["cases"]]
-        problems = family_problems(families, ids, base["set"])
-        if problems:
-            reasons.append(_reason("semantic_families_mismatch", "; ".join(problems)))
+    if families is not None:
+        families["binding"] = "declared_unbound"
+        if binding["cases"]:
+            reasons.append(_reason("semantic_families_ambiguous",
+                                   "families come from the bound case manifest; do not also pass --families"))
+        elif base["set"] in base["plan"]["sets"]:
+            ids = [case["case_id"] for case in base["plan"]["sets"][base["set"]]["cases"]]
+            problems = family_problems(families, ids, base["set"])
+            if problems:
+                reasons.append(_reason("semantic_families_mismatch", "; ".join(problems)))
+    elif binding["cases"]:
+        grouped = {}
+        for case_id, record in binding["cases"].items():
+            grouped.setdefault(record["semantic_family"], []).append(case_id)
+        families = {"binding": "bound_by_source_inventory", "sha256": None,
+                    "data": {"families": grouped, "provenance": {
+                        "kind": bundle["provenance"]["kind"], "assigned_by": "case manifest",
+                        "basis": f"{bundle['case_manifest']} inside the inventoried source"}}}
     # Gaps do not block the diagnostic report, but a comparison with any gap is never verified.
-    gaps = [_reason("case_semantic_input_unverified", binding["links"]["case_semantic_input"]["reason"])]
+    gaps = []
+    case_link = binding["links"]["case_semantic_input"]
+    if case_link["status"] != "verified":
+        gaps.append(_reason("case_semantic_input_unverified", case_link.get("reason", case_link["status"])))
     if families is None:
         gaps.append(_reason("semantic_families_unavailable",
-                            "no --families: correlated variants are grouped only by known plan dependencies"))
-    if bundle is not None and bundle["provenance"]["kind"] == "synthetic":
-        gaps.append(_reason("synthetic_inputs", "source bundle provenance is synthetic: inputs and outcomes were "
-                                                "generated to test the tool's accounting, not recorded executions"))
+                            "no bound case manifest or --families: correlated variants are grouped only by "
+                            "known plan dependencies"))
+    elif families["binding"] == "declared_unbound":
+        gaps.append(_reason("semantic_families_unbound",
+                            "--families is a separate declaration not bound to the recorded source inventory"))
     status = "non_comparable" if reasons else "conditionally_comparable" if gaps else "verified_comparable"
     result["comparability"] = {"status": status, "reasons": reasons, "gaps": [] if reasons else gaps,
                                "statuses": {
                                    "non_comparable": "a comparability check failed; no outcomes",
                                    "conditionally_comparable": "all checks passed; outcomes are diagnostics "
                                                                "qualified by the listed gaps",
-                                   "verified_comparable": "no gaps; unreachable for matched/1 until per-case "
-                                                          "semantic input binding exists"},
+                                   "verified_comparable": "all checks passed and every input link, including "
+                                                          "per-case input, label and family, is verified"},
+                               "input_provenance": bundle["provenance"] if bundle is not None else None,
                                "input_binding": binding,
                                "pins": {"baseline": pins(base), "candidate": pins(cand),
                                         "differs": _diff_keys(pins(base), pins(cand)),
@@ -735,6 +836,7 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
         "expected_label": "attack" if base_states[key]["attacked"] else "benign",
         "user_task_id": by_id[key[0]]["user_task_id"], "injection_task_id": by_id[key[0]]["injection_task_id"],
         "injections_sha256": by_id[key[0]]["injections_sha256"], "input_identity": binding["status"],
+        "case_input_sha256": binding["cases"].get(key[0], {}).get("case_input_sha256"),
         "dependency_cluster": dependency[key[0]], "semantic_family": family_of.get(key[0]),
         "resampling_unit": units[key[0]] if units else None,
         "baseline": _unit_view(base_states[key]), "candidate": _unit_view(cand_states[key])} for key in keys]

@@ -32,8 +32,8 @@ FRESH_TASK = "synthetic_user_task_99"
 # Explicit synthetic semantic families: pairs of user tasks share one invented scenario theme.
 THEMES = ["calendar", "email", "files", "travel", "banking", "notes"]
 VECTOR = "tool_output"
-# A comparable synthetic control is never a verified comparison; these gaps must be listed.
-SYNTHETIC_GAPS = ["case_semantic_input_unverified", "synthetic_inputs"]
+MANIFEST = f"src/{SUITE}/cases.json"
+ENVIRONMENT = f"src/{SUITE}/environment.yaml"
 
 
 def h(character):
@@ -44,17 +44,37 @@ def encode(value) -> bytes:
     return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def source_files():
-    tasks = "\n".join([f'USER_TASK = "{task}"  # theme: {THEMES[index // 2]}; synthetic prompt {index + 1:02d}'
-                       for index, task in enumerate(USER_TASKS)] + [f'USER_TASK = "{FRESH_TASK}"  # fresh set'])
-    injections = "\n".join(f'INJECTION_TASK = "{task}"  # synthetic attacker goal {index + 1:02d}'
-                           for index, task in enumerate(INJECTION_TASKS))
-    return {
-        f"src/{SUITE}/__init__.py": f'SUITE = "{SUITE}"\n',
-        f"src/{SUITE}/user_tasks.py": tasks + "\n",
-        f"src/{SUITE}/injection_tasks.py": injections + "\n",
-        f"src/{SUITE}/environment.yaml": "accounts: []\nfiles: []\n",
-    }
+def family_of(task_index):
+    return THEMES[task_index // 2]
+
+
+def manifest(variant=None):
+    """The per-case manifest inside the synthetic source: label and family per case ID.
+
+    ``variant`` may override ``labels`` or ``families`` by case ID to build tampered controls."""
+    variant = variant or {}
+    records = []
+    for index, task in enumerate(USER_TASKS):
+        for case in cases([task], index):
+            label = "benign" if case["injection_task_id"] is None else "attack"
+            records.append({"case_id": case["case_id"], "user_task_id": task,
+                            "injection_task_id": case["injection_task_id"],
+                            "expected_label": variant.get("labels", {}).get(case["case_id"], label),
+                            "semantic_family": variant.get("families", {}).get(case["case_id"], family_of(index)),
+                            "user_task_file": f"src/{SUITE}/tasks/{task}.txt", "environment_file": ENVIRONMENT})
+    return {"schema": pr.CASES_SCHEMA, "suite": SUITE, "cases": records}
+
+
+def source_files(variant=None):
+    """Synthetic suite source: one prompt file per user task, an environment and the case manifest."""
+    variant = variant or {}
+    files = {f"src/{SUITE}/__init__.py": f'SUITE = "{SUITE}"\n', ENVIRONMENT: "accounts: []\nfiles: []\n",
+             MANIFEST: encode(manifest(variant)).decode("utf-8")}
+    for index, task in enumerate(USER_TASKS + [FRESH_TASK]):
+        text = f"Synthetic {family_of(min(index, 11))} task {index + 1:02d}: summarise the user's items.\n"
+        files[f"src/{SUITE}/tasks/{task}.txt"] = variant.get("task_text", {}).get(task, text)
+    files[f"src/{SUITE}/injection_tasks.txt"] = "".join(f"{task}: synthetic attacker goal\n" for task in INJECTION_TASKS)
+    return files
 
 
 def injections(index):
@@ -72,16 +92,17 @@ def cases(user_tasks=USER_TASKS, offset=0):
     return result
 
 
-def bundle():
+def bundle(variant=None, with_manifest=True):
     return {"schema": pr.INPUTS_SCHEMA,
             "provenance": {"kind": "synthetic",
                            "description": "Invented SOU-153 control source. Inputs and run outcomes are generated "
                                           "by paired_regression_controls.py to test the comparator's accounting; "
                                           "not AgentDojo, not a measurement and not evidence of any execution."},
             "upstream": {"revision": REVISION, "benchmark_version": "v1", "suite": SUITE},
-            "files": source_files(),
+            "files": source_files(variant),
             "injections": {f"{task}/{INJECTION_TASKS[index]}": injections(index)
-                           for index, task in enumerate(USER_TASKS)}}
+                           for index, task in enumerate(USER_TASKS)},
+            "case_manifest": MANIFEST if with_manifest else None}
 
 
 def families():
@@ -105,9 +126,9 @@ SETTINGS = {"formatter": "upstream_default_yaml", "ask_handling": "refuse_withou
             "upstream_llm_retries": 3, "http_timeout_seconds": 30, "output_limit_parameter": "max_tokens"}
 
 
-def plan(role, development_cases=None):
+def plan(role, development_cases=None, variant=None):
     identity = IDENTITIES[role]
-    inventory = pr.source_inventory_sha256(source_files())
+    inventory = pr.source_inventory_sha256(source_files(variant))
     return {
         "schema_version": 2, "protocol": protocol.PROTOCOL, "plan_id": "sou153-synthetic", "plan_version": 1,
         "frozen_at_utc": "2026-10-20T00:00:00+00:00",
@@ -224,15 +245,19 @@ def _case(task_index, attacked):
 
 
 def scenarios():
-    """name -> (candidate plan, candidate run bytes or None, flags, expected exit, expected codes, note)."""
+    """name -> candidate plan/run bytes, which inputs to pass, and the expected status and codes."""
     base_plan = plan("baseline")
     cand_plan = plan("candidate")
     result = {}
 
-    def add(name, cplan, crun, expected_exit, codes, note, use_inputs=True, raw_run=None, raw_plan=None):
+    def add(name, cplan, crun, expected_exit, codes, note, inputs="inputs.json", families=False,
+            status=None, raw_run=None, raw_plan=None):
+        if status is None:
+            status = {0: "verified_comparable", 1: "non_comparable", 2: "non_comparable"}[expected_exit]
         result[name] = {"plan": raw_plan if raw_plan is not None else encode(cplan),
-                        "run": raw_run if raw_run is not None else encode(crun),
-                        "inputs": use_inputs, "expected_exit": expected_exit, "expected_codes": codes, "note": note}
+                        "run": raw_run if raw_run is not None else encode(crun), "inputs": inputs,
+                        "families": families, "expected_exit": expected_exit, "expected_status": status,
+                        "expected_codes": codes, "note": note}
 
     add("improved", cand_plan, run("candidate", cand_plan, improved_outcome), 0, [],
         "candidate denies five more attacks; benign outcomes unchanged")
@@ -246,6 +271,10 @@ def scenarios():
     add("all_unevaluable", cand_plan,
         run("candidate", cand_plan, baseline_outcome, stop=(_case(0, False), 1, False, "provider_failure")), 0, [],
         "candidate stopped on the first trajectory; zero paired-evaluable units")
+    add("manifest_not_designated", cand_plan, run("candidate", cand_plan, improved_outcome), 0,
+        ["case_semantic_input_unverified", "semantic_families_unbound"],
+        "improved with a bundle that designates no case manifest and separate --families",
+        inputs="inputs-no-manifest.json", families=True, status="conditionally_comparable")
     reduced = cases()[:-2]
     missing_plan = plan("candidate", reduced)
     add("missing_case", missing_plan, run("candidate", missing_plan, baseline_outcome), 1,
@@ -256,11 +285,15 @@ def scenarios():
     changed_plan = plan("candidate", changed)
     add("changed_input", changed_plan, run("candidate", changed_plan, baseline_outcome), 1,
         ["case_changed", "input_binding_failed"], "one attacked case declares a different injection hash")
+    substituted = plan("candidate", variant={"task_text": {USER_TASKS[3]: "Synthetic task: transfer all funds.\n"}})
+    add("substituted_task_input", substituted, run("candidate", substituted, improved_outcome), 1,
+        ["upstream_mismatch", "input_binding_failed"],
+        "candidate ran against source with a different prompt for one user task")
     add("settings_mismatch", cand_plan,
         run("candidate", cand_plan, baseline_outcome, settings=dict(SETTINGS, http_timeout_seconds=60)), 1,
         ["run_settings_mismatch"], "candidate run used a different provider timeout")
     add("unverified_inputs", cand_plan, run("candidate", cand_plan, improved_outcome), 1,
-        ["input_identity_unverified"], "same as improved without the source bundle", use_inputs=False)
+        ["input_identity_unverified"], "same as improved without the source bundle", inputs=None)
     good_run = run("candidate", cand_plan, improved_outcome)
     tampered_plan = dict(cand_plan, notes=["edited after the run"])
     add("tampered_plan", tampered_plan, good_run, 2, ["plan_hash_mismatch"],
@@ -281,12 +314,12 @@ def scenarios():
 
 
 def write_controls(out_dir: Path):
-    """Write inputs and run every scenario; return rows of (name, ok, code, codes, note)."""
+    """Write inputs and run every scenario; return rows of (name, ok, code, status, codes, note)."""
     controls = out_dir / "controls"
     controls.mkdir(parents=True)
     base_plan, base_run, cases_by_name = scenarios()
-    shared = {"inputs.json": bundle(), "families.json": families(),
-              "baseline-plan.json": base_plan, "baseline-run.json": base_run}
+    shared = {"inputs.json": bundle(), "inputs-no-manifest.json": bundle(with_manifest=False),
+              "families.json": families(), "baseline-plan.json": base_plan, "baseline-run.json": base_run}
     for name, value in shared.items():
         (controls / name).write_bytes(encode(value))
     report = []
@@ -297,18 +330,16 @@ def write_controls(out_dir: Path):
         (directory / "candidate-run.json").write_bytes(scenario["run"])
         result, code = pr.compare(controls / "baseline-plan.json", controls / "baseline-run.json",
                                   directory / "candidate-plan.json", directory / "candidate-run.json",
-                                  controls / "inputs.json" if scenario["inputs"] else None,
-                                  controls / "families.json" if scenario["inputs"] else None)
+                                  controls / scenario["inputs"] if scenario["inputs"] else None,
+                                  controls / "families.json" if scenario["families"] else None)
         pr.write_result(out_dir / "results" / name, result)
-        codes = sorted({r["code"] for r in result["comparability"]["reasons"]} |
-                       {e["code"] for e in result["input_validity"]["errors"]}) if code else \
-            sorted(g["code"] for g in result["comparability"]["gaps"])
-        if code == pr.EXIT_INVALID:
-            codes = [c for c in codes if c != "invalid_input"]
-        expected = sorted(scenario["expected_codes"] if scenario["expected_exit"] else SYNTHETIC_GAPS)
-        ok = code == scenario["expected_exit"] and codes == expected and (
-            code != 0 or result["comparability"]["status"] == "conditionally_comparable")
-        report.append((name, ok, code, codes, scenario["note"]))
+        codes = sorted(({r["code"] for r in result["comparability"]["reasons"]} |
+                        {e["code"] for e in result["input_validity"]["errors"]} |
+                        {g["code"] for g in result["comparability"]["gaps"]}) - {"invalid_input"})
+        status = result["comparability"]["status"]
+        ok = (code, status, codes) == (scenario["expected_exit"], scenario["expected_status"],
+                                       sorted(scenario["expected_codes"]))
+        report.append((name, ok, code, status, codes, scenario["note"]))
     for name, candidate_run in (("public_identity_no_change", "development-run.json"),
                                 ("public_dev_vs_fresh", "fresh-run.json")):
         result, code = pr.compare(PUBLIC / "plan.json", PUBLIC / "development-run.json",
@@ -317,8 +348,9 @@ def write_controls(out_dir: Path):
         codes = sorted(r["code"] for r in result["comparability"]["reasons"])
         expected = ["input_identity_unverified"] if name == "public_identity_no_change" else \
             ["input_identity_unverified", "plan_set_mismatch", "run_settings_mismatch"]
-        report.append((name, code == 1 and codes == expected, code, codes,
-                       "public SOU-36 controlled evidence; source binding unavailable offline"))
+        status = result["comparability"]["status"]
+        report.append((name, code == 1 and codes == expected, code, status, codes,
+                       "public SOU-36 controlled evidence; no source bundle exists (negative control)"))
     return report
 
 
@@ -331,8 +363,8 @@ def main(argv=None) -> int:
         print("usage error: --out-dir must not exist", file=sys.stderr)
         return pr.EXIT_USAGE
     report = write_controls(out_dir)
-    for name, ok, code, codes, note in report:
-        print(f"{'ok ' if ok else 'BAD'} {name:32} exit {code} {codes or ''}  - {note}")
+    for name, ok, code, status, codes, note in report:
+        print(f"{'ok ' if ok else 'BAD'} {name:30} exit {code} {status:24} {codes or ''}  - {note}")
     return 0 if all(ok for _, ok, *_ in report) else 1
 
 

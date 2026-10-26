@@ -38,7 +38,7 @@ class Fixture(unittest.TestCase):
     def result(self, name):
         return json.loads((self.temp / "out" / "results" / name / "comparison.json").read_text(encoding="utf-8"))
 
-    def compare(self, plan, run, inputs=True, families=True, limits=None, baseline=None):
+    def compare(self, plan, run, inputs=True, families=None, limits=None, baseline=None):
         directory = Path(tempfile.mkdtemp(dir=self.temp))
         plan_path = write(directory, "candidate-plan.json", plan)
         run_path = write(directory, "candidate-run.json", run)
@@ -47,6 +47,16 @@ class Fixture(unittest.TestCase):
                           (self.controls / "inputs.json") if inputs is True else inputs,
                           (self.controls / "families.json") if families is True else families, limits)
 
+    def world(self, variant=None, candidate_variant=None, outcome=None):
+        """Baseline and candidate generated from (possibly substituted) source; returns compare()."""
+        directory = Path(tempfile.mkdtemp(dir=self.temp))
+        base_plan = controls.plan("baseline", variant=variant)
+        cand_plan = controls.plan("candidate", variant=candidate_variant if candidate_variant is not None else variant)
+        base_run = controls.run("baseline", base_plan, controls.baseline_outcome)
+        cand_run = controls.run("candidate", cand_plan, outcome or controls.improved_outcome)
+        return self.compare(cand_plan, cand_run, inputs=write(directory, "inputs.json", controls.bundle(variant)),
+                            baseline=(write(directory, "bp.json", base_plan), write(directory, "br.json", base_run)))
+
     def codes(self, result):
         return {r["code"] for r in result["comparability"]["reasons"]} | \
             {e["code"] for e in result["input_validity"]["errors"]}
@@ -54,7 +64,7 @@ class Fixture(unittest.TestCase):
 
 class Controls(Fixture):
     def test_every_control_has_its_expected_status_and_exit_code(self):
-        failed = [(name, code, codes) for name, ok, code, codes, _ in self.report if not ok]
+        failed = [(name, code, status, codes) for name, ok, code, status, codes, _ in self.report if not ok]
         self.assertEqual(failed, [])
 
     def test_improved_and_regressed_transitions_are_exact(self):
@@ -70,7 +80,7 @@ class Controls(Fixture):
 
     def test_a_valid_regression_is_a_comparable_report_without_a_verdict(self):
         result = self.result("regressed")
-        self.assertEqual(result["comparability"]["status"], "conditionally_comparable")
+        self.assertEqual(result["comparability"]["status"], "verified_comparable")
         self.assertEqual(result["input_validity"]["status"], "valid")
         self.assertEqual(result["completeness"]["status"], "complete")
         self.assertIsNone(result["readiness_verdict"])
@@ -187,13 +197,13 @@ class Controls(Fixture):
         self.assertEqual(pins["candidate"]["run"]["agent_binary_sha256"], "3" * 64)
         self.assertIn("plan_policy_sha256", pins["differs"])
         self.assertEqual({i["role"] for i in result["inputs"]},
-                         {"baseline_plan", "baseline_run", "candidate_plan", "candidate_run", "inputs", "families"})
+                         {"baseline_plan", "baseline_run", "candidate_plan", "candidate_run", "inputs"})
         self.assertTrue(all(len(i["sha256"]) == 64 for i in result["inputs"]))
 
     def test_units_carry_label_identity_cluster_and_family(self):
         unit = self.result("improved")["units"][2]
         self.assertEqual(unit["expected_label"], "attack")
-        self.assertEqual(unit["input_identity"], "partially_verified")
+        self.assertEqual(unit["input_identity"], "verified")
         self.assertEqual((unit["semantic_family"], unit["dependency_cluster"]), ("calendar", "g001"))
         self.assertEqual(self.result("improved")["grouping"]["resampling_units"]["count"], 6)
 
@@ -239,18 +249,69 @@ class InputBinding(Fixture):
         self.assertEqual(code, pr.EXIT_NON_COMPARABLE)
         self.assertIn("input_binding_failed", self.codes(result))
 
-    def test_links_are_reported_separately_and_case_semantic_input_stays_unverified(self):
+    def test_bound_case_manifest_verifies_every_link_for_a_synthetic_control(self):
         result = self.result("improved")
         comparability = result["comparability"]
         binding = comparability["input_binding"]
-        self.assertEqual(binding["status"], "partially_verified")
         self.assertEqual({link: value["status"] for link, value in binding["links"].items()},
                          {"run_to_plan": "verified", "source_to_inventory": "verified",
-                          "injections_to_plan": "verified", "case_semantic_input": "unverified"})
-        self.assertEqual(comparability["status"], "conditionally_comparable")
-        self.assertEqual({gap["code"] for gap in comparability["gaps"]},
-                         {"case_semantic_input_unverified", "synthetic_inputs"})
-        self.assertIn("not evidence of any execution", binding["provenance"]["description"])
+                          "injections_to_plan": "verified", "case_semantic_input": "verified"})
+        self.assertEqual((binding["status"], comparability["status"], comparability["gaps"]),
+                         ("verified", "verified_comparable", []))
+        # Synthetic provenance is reported, not hidden, and does not by itself block the comparison.
+        self.assertEqual(comparability["input_provenance"]["kind"], "synthetic")
+        self.assertIn("not evidence of any execution", comparability["input_provenance"]["description"])
+        self.assertIn("not proof that the producer executed them", binding["scope"])
+        hashes = {unit["case_input_sha256"] for unit in result["units"]}
+        self.assertEqual(len(hashes), 24)  # one full-input hash per case, shared by its repetitions
+        self.assertEqual(result["grouping"]["semantic_families"]["status"], "bound_by_source_inventory")
+
+    def test_without_a_designated_manifest_the_case_link_stays_unverified(self):
+        result = self.result("manifest_not_designated")
+        binding = result["comparability"]["input_binding"]
+        self.assertEqual(binding["status"], "partially_verified")
+        self.assertEqual(binding["links"]["case_semantic_input"]["status"], "unverified")
+        self.assertEqual(result["comparability"]["status"], "conditionally_comparable")
+        self.assertIsNone(result["units"][0]["case_input_sha256"])
+
+    def test_substituted_task_input_on_one_side_is_non_comparable(self):
+        result, code = self.world(candidate_variant={"task_text": {controls.USER_TASKS[0]: "Do something else.\n"}})
+        self.assertEqual(code, pr.EXIT_NON_COMPARABLE)
+        self.assertTrue({"upstream_mismatch", "input_binding_failed"} <= self.codes(result))
+
+    def test_substituted_expected_label_fails_even_when_source_is_self_consistent(self):
+        case_id = controls._case(2, True)
+        result, code = self.world(variant={"labels": {case_id: "benign"}})
+        link = result["comparability"]["input_binding"]["links"]["case_semantic_input"]
+        self.assertEqual(code, pr.EXIT_NON_COMPARABLE)
+        self.assertEqual(result["comparability"]["input_binding"]["links"]["source_to_inventory"]["status"], "verified")
+        self.assertEqual(link["status"], "mismatch")
+        self.assertIn("expected_label", json.dumps(link["problems"]))
+
+    def test_substituted_family_on_one_side_is_non_comparable(self):
+        case_id = controls._case(0, False)
+        result, code = self.world(candidate_variant={"families": {case_id: "banking"}})
+        self.assertEqual(code, pr.EXIT_NON_COMPARABLE)
+        self.assertTrue({"upstream_mismatch", "input_binding_failed"} <= self.codes(result))
+
+    def test_a_consistently_declared_family_change_is_used_not_hidden(self):
+        case_id = controls._case(0, False)
+        result, code = self.world(variant={"families": {case_id: "banking"}})
+        self.assertEqual(code, pr.EXIT_COMPARABLE)
+        unit = next(unit for unit in result["units"] if unit["case_id"] == case_id)
+        self.assertEqual(unit["semantic_family"], "banking")
+
+    def test_empty_family_is_rejected(self):
+        result, code = self.world(variant={"families": {controls._case(1, True): " "}})
+        self.assertEqual(code, pr.EXIT_NON_COMPARABLE)
+        self.assertIn("semantic_family", json.dumps(result["comparability"]["input_binding"]["links"]))
+
+    def test_manifest_and_separate_families_are_ambiguous(self):
+        improved = self.controls / "improved"
+        result, code = self.compare((improved / "candidate-plan.json").read_bytes(),
+                                    (improved / "candidate-run.json").read_bytes(), families=True)
+        self.assertEqual(code, pr.EXIT_NON_COMPARABLE)
+        self.assertIn("semantic_families_ambiguous", self.codes(result))
 
     def test_a_broken_link_is_attributed_to_its_own_link(self):
         bundle = controls.bundle()
@@ -275,12 +336,15 @@ class InputBinding(Fixture):
 
 
 class Families(Fixture):
+    """Separately declared --families; only meaningful with a bundle that designates no manifest."""
+
     def improved(self, families):
         directory = Path(tempfile.mkdtemp(dir=self.temp))
         improved = self.controls / "improved"
         return self.compare((improved / "candidate-plan.json").read_bytes(),
                             (improved / "candidate-run.json").read_bytes(),
-                            families=write(directory, "families.json", families))
+                            inputs=self.controls / "inputs-no-manifest.json",
+                            families=write(directory, "families.json", families) if families else None)
 
     def test_uncovered_or_repeated_cases_are_non_comparable(self):
         families = controls.families()
@@ -294,9 +358,7 @@ class Families(Fixture):
         self.assertIn("in more than one family", json.dumps(result["comparability"]["reasons"]))
 
     def test_missing_families_are_a_listed_gap_never_a_verified_comparison(self):
-        improved = self.controls / "improved"
-        result, code = self.compare((improved / "candidate-plan.json").read_bytes(),
-                                    (improved / "candidate-run.json").read_bytes(), families=None)
+        result, code = self.improved(None)
         self.assertEqual(code, pr.EXIT_COMPARABLE)
         self.assertEqual(result["comparability"]["status"], "conditionally_comparable")
         self.assertIn("semantic_families_unavailable", {gap["code"] for gap in result["comparability"]["gaps"]})
@@ -371,12 +433,12 @@ class Command(Fixture):
                 "--baseline-run", str(self.controls / "baseline-run.json"),
                 "--candidate-plan", str(improved / "candidate-plan.json"),
                 "--candidate-run", str(improved / "candidate-run.json"),
-                "--inputs", str(self.controls / "inputs.json"), "--families", str(self.controls / "families.json")]
+                "--inputs", str(self.controls / "inputs.json")]
         out = self.temp / "cli"
         with patch("sys.stdout"):
             self.assertEqual(pr.main(args + ["--out-dir", str(out)]), pr.EXIT_COMPARABLE)
             self.assertEqual(json.loads((out / "comparison.json").read_text(encoding="utf-8"))["comparability"]["status"],
-                             "conditionally_comparable")
+                             "verified_comparable")
             with patch("sys.stderr"):
                 self.assertEqual(pr.main(args + ["--out-dir", str(out)]), pr.EXIT_USAGE)
 
