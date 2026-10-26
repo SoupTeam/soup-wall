@@ -45,6 +45,27 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "d750d58fde53d9eed0c79b1c1c8d62fae4216ae2",
+      "run": 40302279883,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "failed_stage": "runtime-driver-preconditions",
+      "cause": "driver-regex-required-public-format-but-binding-format-is-private",
+      "runtime_execution_observed": false,
+      "artifacts": [
+        {
+          "id": 12641231687,
+          "sha256": "0f24adb20f40861a0187c4fc9e31a83c89e39f36ab9c32b272c3f94d1b0bdd6a"
+        },
+        {
+          "id": 12641880051,
+          "sha256": "2d70b5d530a564dc8ffef4178a63176cdb114d3e2311908451429ad3560c1c91"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }

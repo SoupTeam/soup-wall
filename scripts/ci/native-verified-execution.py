@@ -13,6 +13,17 @@ def require(value,code):
 def load(source,name,relative):
  spec=importlib.util.spec_from_file_location(name,source/relative);module=importlib.util.module_from_spec(spec);sys.modules[name]=module;spec.loader.exec_module(module);return module
 
+def selected_budget(binary,config,env):
+ process=subprocess.run([binary,'pilot-budget','--config',str(config)],env=env,
+     stdin=subprocess.DEVNULL,capture_output=True,timeout=10)
+ require(process.returncode==0 and len(process.stdout)<=16384,'budget_selection_failed')
+ selected=json.loads(process.stdout)
+ require(selected.get('format')=='sw-prepared-pilot-budget/1'
+     and selected.get('status')=='selected-not-active'
+     and selected.get('protected_children_started') is False
+     and selected.get('scope')=='per-original-server-process-tree','budget_selection_invalid')
+ return selected
+
 def main():
  p=argparse.ArgumentParser();
  for name in ('source','scratch','inputs','build'):p.add_argument('--'+name,type=Path,required=True)
@@ -61,12 +72,10 @@ def main():
   budget={'format':'sw-mcp/linux-cgroup-budget/1','delegationRoot':str(delegated),'memoryMaxBytes':512*1024*1024,
           'pidsMax':64,'cpuQuotaMicros':100000,'wallMillis':120000}
   (budget_dir/'linux-budget.json').write_text(json.dumps(budget));m=delegated.stat()
-  binding={'format':'sw-pilot-linux-budget/1','host_session':host,'budget_sha256':digest(budget),'config':str(budget_dir/'linux-budget.json'),
+  selection=selected_budget(binary,budget_dir/'linux-budget.json',env)
+  require(selection['budget_sha256']==digest(budget),'budget_identity_changed')
+  binding={'format':selection['format'],'host_session':host,'budget_sha256':selection['budget_sha256'],'config':str(budget_dir/'linux-budget.json'),
       'root':{'device':m.st_dev,'inode':m.st_ino},'records':str(records)}
-  # Check the actual shipped binding contract; never guess a version into a run.
-  import re
-  contract=re.search(r'pub const FORMAT: &str = "([^"]+)"', (source/'crates/agentfw/src/pilot_budget.rs').read_text())
-  require(contract is not None,'budget_contract_missing');binding['format']=contract[1]
   binding_path=budget_dir/'binding.json';binding_path.write_text(json.dumps(binding))
   catalogue={'format':'sw-mcp/original-execution-catalogue/1','server_id':'filesystem','profile':profile,
       'classifier':{'script':str(source/'rule_baseline/rule_baseline.py'),'script_sha256':sha(source/'rule_baseline/rule_baseline.py'),
@@ -235,6 +244,7 @@ def main():
   report['cases'].append({'case':'exact-original-ask-approved-once','status':'passed','approval_replay_refused':True})
   stop(daemon);daemon=None
   require(not any(path.is_dir() for path in delegated.iterdir()),'owned_cleanup_incomplete')
+  report['execution_records']=[row['execution'] for row in audits() if row.get('event')=='native_result' and row.get('execution')]
   report.update(status='passed',acceptance_pass=True,original_results=sum(bool(row.get('execution')) for row in audits()),
       binary_sha256=sha(binary),source_read_only=True,network='private-loopback-only',writes='isolated-scratch-and-owned-delegation-only')
   save();return 0

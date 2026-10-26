@@ -135,6 +135,7 @@ jobs:
           mkdir -m 700 "$host"
           printf 'SOU155_HOST=%s\n' "$host" >> "$GITHUB_ENV"
           unit="sou155-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          status=0
           sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
             --property="User=$(id -un)" --property="Group=$(id -gn)" \
             --property=PrivateNetwork=yes --property=NoNewPrivileges=yes \
@@ -149,7 +150,12 @@ jobs:
             /usr/bin/env -i PATH=/usr/bin:/bin HOME="$host" TMPDIR="$host" \
             "$pythonLocation/bin/python3" -B scripts/ci/native-verified-execution.py \
             --source "$GITHUB_WORKSPACE" --scratch "$host" --inputs "$SOU155_INPUTS" \
-            --build "$SOU155_SCRATCH" --expected-commit "$SOU155_COMMIT" --unit="$unit.service"
+            --build "$SOU155_SCRATCH" --expected-commit "$SOU155_COMMIT" --unit="$unit.service" || status=$?
+          # Inspect finite evidence only after the isolated candidate unit exits.
+          # A successful exit or self-reported status alone cannot pass the lane.
+          python3 -B scripts/ci/project-verified-execution.py \
+            --report "$host/native-execution.json" --build "$SOU155_SCRATCH/native-build.json" \
+            --expected-commit "$SOU155_COMMIT" --exit-code "$status" --output "$host/acceptance.json"
       - name: Remove only the owned SOU155 runtime unit
         if: always() && github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
         shell: bash
@@ -166,6 +172,7 @@ jobs:
           path: |
             ${{ runner.temp }}/sou155-public-inputs/setup.json
             ${{ runner.temp }}/sou155-native-runtime/native-execution.json
+            ${{ runner.temp }}/sou155-native-runtime/acceptance.json
           if-no-files-found: error
           retention-days: 30
 
