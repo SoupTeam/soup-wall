@@ -28,4 +28,5 @@ pub mod server_sandbox;
 #[cfg(unix)]
 mod stdio;
 pub mod store;
+pub(crate) mod verified_git;
 pub(crate) mod windows_budget;
