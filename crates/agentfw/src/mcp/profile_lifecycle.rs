@@ -804,6 +804,7 @@ impl ProfileManager {
         let liveness = cfg.native.as_ref().and_then(|n| n.liveness.clone());
 
         cfg.native = Some(NativeCfg {
+            git_execution: None,
             registry_path,
             registry_sha256: registry_sha256.to_string(),
             approval,
