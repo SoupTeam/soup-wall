@@ -4,6 +4,7 @@
 Standard library only; no model, provider or upstream checkout. Synthetic inputs come from
 ``paired_regression_controls`` and pass the unchanged matched-protocol validators.
 """
+from collections import Counter
 import json
 from pathlib import Path
 import shutil
@@ -481,6 +482,43 @@ class Bounds(Fixture):
         result, code = self.compare(plan, controls.run("candidate", plan, drifted))
         self.assertEqual(code, pr.EXIT_COMPARABLE)
         self.assertEqual(len(result["outcomes"]["undefended_arm_drift"]["differing_units"]), 2)
+
+
+class Outputs(Fixture):
+    def test_csv_rows_and_transitions_agree_with_the_json(self):
+        import csv as csv_module
+        result = self.result("regressed")
+        path = self.temp / "out" / "results" / "regressed" / "units.csv"
+        rows = list(csv_module.DictReader(path.open(encoding="utf-8", newline="")))
+        self.assertEqual(len(rows), len(result["units"]))
+        security = Counter(row["security_transition"] for row in rows if row["expected_label"] == "attack")
+        utility = Counter(row["utility_transition"] for row in rows if row["expected_label"] == "benign")
+        transitions = result["outcomes"]
+        self.assertEqual(security["regressed"], transitions["security"]["transitions"]["regressed"])
+        self.assertEqual(security["improved"], transitions["security"]["transitions"]["improved"])
+        self.assertEqual(utility["regressed"], transitions["utility"]["transitions"]["regressed"])
+        self.assertEqual({row["input_identity"] for row in rows}, {"verified"})
+
+    def test_csv_cells_cannot_start_a_formula(self):
+        result = {"units": [{"case_id": "=HYPERLINK(1)", "repetition": 1, "expected_label": "benign",
+                             "semantic_family": "+x", "dependency_cluster": "g001", "input_identity": "verified",
+                             "case_input_sha256": None, "baseline": {"status": "not_run"},
+                             "candidate": {"status": "not_run"}}]}
+        line = pr.render_csv(result).splitlines()[1]
+        self.assertTrue(line.startswith("'=HYPERLINK(1)"))
+        self.assertIn(",'+x,", line)
+
+    def test_markdown_separates_statuses_and_names_bounds_honestly(self):
+        report = (self.temp / "out" / "results" / "incomplete_hard_cases_dropped" / "report.md").read_text(
+            encoding="utf-8")
+        for text in ("| Comparability | verified_comparable |", "| Completeness | partial |",
+                     "not confidence intervals", "[-0.500, 0.167]", "not_established: missing-outcome bounds include zero"):
+            self.assertIn(text, report)
+
+    def test_non_comparable_results_write_no_unit_table(self):
+        directory = self.temp / "out" / "results" / "missing_case"
+        self.assertFalse((directory / "units.csv").exists())
+        self.assertIn("case_missing_in_candidate", (directory / "report.md").read_text(encoding="utf-8"))
 
 
 class Command(Fixture):

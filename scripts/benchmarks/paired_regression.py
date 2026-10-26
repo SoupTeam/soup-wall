@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import csv
+import io
 import json
 import os
 from pathlib import Path
@@ -925,12 +927,119 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     return result, EXIT_COMPARABLE
 
 
-def write_result(out_dir: Path, result) -> Path:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    destination = out_dir / "comparison.json"
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=out_dir, delete=False, suffix=".tmp") as handle:
-        handle.write(json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False) + "\n")
+CSV_SIDE = ("status", "utility", "injection_success", "deny", "approval_required", "reason")
+CSV_FIELDS = (["case_id", "repetition", "expected_label", "semantic_family", "dependency_cluster", "input_identity",
+               "case_input_sha256"] + [f"{role}_{field}" for role in ("baseline", "candidate") for field in CSV_SIDE]
+              + ["security_transition", "utility_transition"])
+
+
+def _cell(value) -> str:
+    text = "" if value is None else str(value)
+    # Case IDs come from inputs; keep spreadsheet applications from evaluating them as formulas.
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
+def _transition(base, cand, field, better_true):
+    if base["status"] != "evaluable" or cand["status"] != "evaluable":
+        return "not_paired"
+    before, after = base[field], cand[field]
+    if before == after:
+        return "unchanged"
+    return "improved" if after == better_true else "regressed"
+
+
+def render_csv(result) -> str:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(CSV_FIELDS)
+    for unit in result["units"] or []:
+        base, cand = unit["baseline"], unit["candidate"]
+        attacked = unit["expected_label"] == "attack"
+        row = [unit[key] for key in CSV_FIELDS[:7]]
+        row += [side.get(field) for side in (base, cand) for field in CSV_SIDE]
+        row += [_transition(base, cand, "injection_success", False) if attacked else "",
+                "" if attacked else _transition(base, cand, "utility", True)]
+        writer.writerow([_cell(value) for value in row])
+    return buffer.getvalue()
+
+
+def _fmt_rate(rate):
+    return "n/a (0)" if rate["rate"] is None else f"{rate['k']}/{rate['n']} = {rate['rate']:.3f}"
+
+
+def _fmt_bounds(bounds):
+    return "n/a" if not bounds else f"[{bounds[0]:.3f}, {bounds[1]:.3f}]"
+
+
+def render_markdown(result) -> str:
+    comparability = result["comparability"]
+    lines = ["# Paired development regression", "",
+             "Development comparison of recorded runs. Not held-out efficacy, general safety or readiness evidence.", "",
+             "| Question | Status |", "|---|---|",
+             f"| Execution | {result['execution']['status']} |",
+             f"| Input validity | {result['input_validity']['status']} |",
+             f"| Comparability | {comparability['status']} |",
+             f"| Completeness | {result['completeness']['status']} |",
+             f"| Unknown outcomes | {result['unknown']['availability']} |", ""]
+    for title, items in (("Reasons (non-comparable)", comparability.get("reasons", [])),
+                         ("Gaps", comparability.get("gaps", [])),
+                         ("Input errors", result["input_validity"]["errors"])):
+        if items:
+            lines += [f"## {title}", ""] + [f"- `{item['code']}`: {item['detail']}" for item in items] + [""]
+    binding = comparability.get("input_binding")
+    if binding:
+        lines += ["## Input binding", "", f"Overall: **{binding['status']}**. {binding.get('scope', '')}", "",
+                  "| Link | Status |", "|---|---|"]
+        lines += [f"| {name} | {link['status']} |" for name, link in binding["links"].items()] + [""]
+    for role in ("baseline", "candidate"):
+        if role in result["completeness"]:
+            lines += [f"## Completeness: {role}", "", "| Domain | Planned | Attempted | Evaluable | Unknown | "
+                      "Incomplete | Not run |", "|---|---|---|---|---|---|---|"]
+            lines += [f"| {domain} | " + " | ".join(str(values[key]) for key in
+                                                   ("planned", "attempted", "evaluable", "unknown", "incomplete",
+                                                    "not_run")) + " |"
+                      for domain, values in result["completeness"][role].items()] + [""]
+    if result["outcomes"]:
+        lines += ["## Outcomes (enforced trajectories)", "",
+                  "Missing-outcome bounds use the fixed planned set with every missing outcome set to 0 or 1; they are "
+                  "not confidence intervals. Paired differences use the complete-case intersection, a different subset.",
+                  "", "| Metric | Planned / paired | Baseline | Candidate | Improved / regressed | Paired difference | "
+                  "Difference bounds | Overall change |", "|---|---|---|---|---|---|---|---|"]
+        for name in ("security", "utility", "utility_under_attack", "benign_interruption"):
+            metric = result["outcomes"][name]
+            paired, bounds = metric["paired_conditional"], metric["missing_outcome_difference_bounds"]
+            transitions = metric["transitions"]
+            lines.append(
+                f"| {metric['metric']} ({metric['better']} is better) | {metric['denominators']['planned']} / "
+                f"{paired['n']} | {_fmt_rate(metric['baseline']['own_evaluable'])} | "
+                f"{_fmt_rate(metric['candidate']['own_evaluable'])} | {transitions['improved']} / "
+                f"{transitions['regressed']} | {'n/a' if paired['difference'] is None else paired['difference']} | "
+                f"{_fmt_bounds([bounds['lower'], bounds['upper']] if 'lower' in bounds else None)} | "
+                f"{metric['overall_change']} |")
+        lines.append("")
+    lines += ["## Not computed", "", f"- Uncertainty: {result['uncertainty']['status']}",
+              f"- Latency: {result['latency']['status']}", "", "## Limitations", ""]
+    lines += [f"- {item}" for item in result["limitations"]]
+    return "\n".join(lines) + "\n"
+
+
+def _write(out_dir: Path, name: str, text: str) -> Path:
+    destination = out_dir / name
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=out_dir, delete=False, suffix=".tmp",
+                                     newline="") as handle:
+        handle.write(text)
     os.replace(handle.name, destination)
+    return destination
+
+
+def write_result(out_dir: Path, result) -> Path:
+    """Write comparison.json, report.md and, for a comparable result, units.csv."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    destination = _write(out_dir, "comparison.json",
+                         json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False) + "\n")
+    _write(out_dir, "report.md", render_markdown(result))
+    if result["units"]:
+        _write(out_dir, "units.csv", render_csv(result))
     return destination
 
 
