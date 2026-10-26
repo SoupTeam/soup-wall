@@ -66,6 +66,27 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "fdb82103409315e7840575c9a174100e561441bc",
+      "run": 40306976101,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "failed_stage": "runtime-driver-preconditions",
+      "cause": "driver-read-native-token-before-configured-serve-created-it",
+      "runtime_execution_observed": false,
+      "artifacts": [
+        {
+          "id": 12643102885,
+          "sha256": "204be731b0e67ed14078073c15e7c78f178fd65541f1f15ba8e2af5884ebf149"
+        },
+        {
+          "id": 12643367394,
+          "sha256": "b51661572b546f42edfc90031cbb1e2aa9a8cb15b1bf6726f85a26de9d64fac2"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }

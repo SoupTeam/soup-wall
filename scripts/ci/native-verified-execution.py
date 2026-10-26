@@ -82,6 +82,7 @@ def main():
           'python':str(Path(sys.executable).resolve()),'python_sha256':sha(Path(sys.executable).resolve())},
       'approval_wait_seconds':10,'budget':{'binding':str(binding_path),'budget_sha256':digest(budget)}}
   catalogue_path=out/'catalogue.json';catalogue_path.write_text(json.dumps(catalogue))
+  report['phase']='private-home-setup';save()
   process=subprocess.run([binary,'install'],env=env,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=30)
   require(process.returncode==0,'private_home_setup_failed')
   home=out/'home/.agentfw';port=base.DEMO.free_port()
@@ -89,7 +90,7 @@ def main():
       'native':{'registry_path':str(installed/'registry.json'),'registry_sha256':sha(installed/'registry.json'),
         'approval':{'ttl_seconds':30},'liveness':{'default_lease_seconds':10,'max_lease_seconds':30,'maintenance_interval_ms':100},
         'execution':{'catalogue_path':str(catalogue_path),'catalogue_sha256':sha(catalogue_path)}}}
-  (home/'config.yaml').write_text(json.dumps(config));native_key=(home/'native-token').read_text().strip()
+  (home/'config.yaml').write_text(json.dumps(config))
   def start(label):
    stream=(out/(label+'.private.log')).open('xb');logs.append(stream)
    process=subprocess.Popen([binary,'serve'],env=env,stdin=subprocess.DEVNULL,stdout=stream,stderr=stream)
@@ -132,7 +133,10 @@ def main():
   def audits():
    return [json.loads(line) for line in (home/'audit.jsonl').read_text().splitlines() if line.strip()]
   report['phase']='daemon-positive';save()
-  daemon=start('daemon-positive');service=http('/native/v1/instance')['execution_service']
+  daemon=start('daemon-positive')
+  # Native credentials are created by the first configured serve, not install.
+  native_key=(home/'native-token').read_text().strip()
+  service=http('/native/v1/instance')['execution_service']
   report['phase']='original-transport';save()
   selected=client('original-positive')
   invocation={'jsonrpc':'2.0','id':'read-1','method':'tools/call','params':{'name':'read_text_file','arguments':{'path':'/workspace/notes.txt'}}}
@@ -259,6 +263,10 @@ def main():
       binary_sha256=sha(binary),source_read_only=True,network='private-loopback-only',writes='isolated-scratch-and-owned-delegation-only')
   save();return 0
  except BaseException as error:
+  trace=error.__traceback__
+  while trace and trace.tb_next:trace=trace.tb_next
+  if trace:
+   report['failure_location']={'function':trace.tb_frame.f_code.co_name,'line':trace.tb_lineno}
   report.update(status='failed',reason=str(error) if isinstance(error,RuntimeError) else type(error).__name__);save();return 1
  finally:
   for selected in clients:
