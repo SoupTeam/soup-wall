@@ -439,15 +439,69 @@ mod linux {
         owner_cleanup?;
         child_cleanup?;
         stderr_cleanup?;
+        #[cfg(test)]
+        let _adversary_owner = tests::perturb_completed_original_stage(&stage, &selected)?;
         let verified = validate_original_output(&stage, &selected, &reply)?;
         Ok((result, verified))
     }
 
     #[cfg(test)]
-    mod tests {
+    pub(super) mod tests {
         use super::*;
         use serde_json::json;
         use std::os::unix::fs::symlink;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        // Unit-test binary only: a trusted adversary changes the real original
+        // server's output after its owned processes are conclusively stopped.
+        // This does not replace the producer or alter its installed assets.
+        tokio::task_local! { static STAGE_ADVERSARY: (&'static str, Arc<AtomicBool>); }
+
+        pub(super) fn perturb_completed_original_stage(
+            stage: &OwnedStage,
+            selection: &CreateSelection,
+        ) -> anyhow::Result<Option<tempfile::TempDir>> {
+            let Ok((fault, observed)) =
+                STAGE_ADVERSARY.try_with(|(fault, observed)| (*fault, observed.clone()))
+            else {
+                return Ok(None);
+            };
+            // An earlier startup/cleanup error must never count as a successful
+            // negative witness. Require valid actual upstream bytes first.
+            stage.verify(selection)?;
+            let target = stage.path().join(&selection.leaf);
+            match fault {
+                "extra" => fs::write(stage.path().join("unapproved-extra"), b"unapproved")?,
+                "wrong-bytes" => fs::write(&target, b"unapproved")?,
+                "oversize" => File::options().write(true).open(&target)?.set_len(4097)?,
+                "hardlink" => {
+                    let alias = tempfile::tempdir()?;
+                    fs::hard_link(&target, alias.path().join("alias"))?;
+                    // Keep the alias alive through the production validator.
+                    observed.store(true, Ordering::SeqCst);
+                    return Ok(Some(alias));
+                }
+                "symlink" | "fifo" | "directory" => {
+                    fs::remove_file(&target)?;
+                    match fault {
+                        "symlink" => symlink("unapproved-missing", &target)?,
+                        "directory" => fs::create_dir(&target)?,
+                        _ => {
+                            let path =
+                                std::ffi::CString::new(target.as_os_str().as_encoded_bytes())?;
+                            ensure!(
+                                unsafe { libc::mkfifo(path.as_ptr(), 0o600) } == 0,
+                                "owned FIFO control unavailable"
+                            );
+                        }
+                    }
+                }
+                _ => anyhow::bail!("unregistered original-stage control"),
+            }
+            observed.store(true, Ordering::SeqCst);
+            Ok(None)
+        }
 
         fn selected(leaf: &str, content: &str) -> CreateSelection {
             crate::mcp::server_profile::filesystem_create::validate_request(
@@ -506,6 +560,89 @@ mod linux {
             assert!(!workspace.join("original.txt").exists());
             assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
             assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+
+            // These inputs are real completed ORIGINAL writes, subsequently
+            // perturbed by the owned witness. No synthetic producer is used.
+            for fault in [
+                "extra",
+                "wrong-bytes",
+                "oversize",
+                "hardlink",
+                "symlink",
+                "fifo",
+                "directory",
+            ] {
+                let observed = Arc::new(AtomicBool::new(false));
+                let refused = STAGE_ADVERSARY
+                    .scope(
+                        (fault, observed.clone()),
+                        super::run_original_upstream(&profile, &args),
+                    )
+                    .await;
+                assert!(
+                    observed.load(Ordering::SeqCst),
+                    "{fault} never reached verified completed-original output"
+                );
+                assert!(refused.is_err(), "original stage accepted {fault}");
+                assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+                assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
+                eprintln!(
+                    "{}",
+                    json!({"event":"sou83_completed_original_stage_refused",
+                    "case":fault,"visible_publications":0,"original_worker_completed":true})
+                );
+            }
+
+            let pinned = crate::sandbox::PinnedWorkspace::open(&workspace).unwrap();
+            for boundary in ["drop", "competing-target", "root-replacement"] {
+                // Publication preparation consumes its output capability. Each
+                // boundary gets a fresh real original invocation, never a clone.
+                let (_, fresh) = super::run_original_upstream(&profile, &args).await.unwrap();
+                let verified =
+                    fresh.expect("fresh original create must recover after stage refusals");
+                assert_eq!(verified.content, "upstream 🌍");
+                let staged = verified
+                    .prepare_atomic_publication(&pinned)
+                    .unwrap()
+                    .stage()
+                    .unwrap();
+                match boundary {
+                    "drop" => drop(staged),
+                    "competing-target" => {
+                        fs::write(workspace.join("original.txt"), b"competing inventory").unwrap();
+                        assert!(
+                            staged.publish().is_err(),
+                            "original publication overwrote competing target"
+                        );
+                        assert_eq!(
+                            fs::read(workspace.join("original.txt")).unwrap(),
+                            b"competing inventory"
+                        );
+                        fs::remove_file(workspace.join("original.txt")).unwrap();
+                    }
+                    "root-replacement" => {
+                        let moved = root.path().join("moved-original-workspace");
+                        fs::rename(&workspace, &moved).unwrap();
+                        fs::create_dir(&workspace).unwrap();
+                        assert!(
+                            staged.publish().is_err(),
+                            "original output published after root replacement"
+                        );
+                        assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+                        assert_eq!(fs::read_dir(&moved).unwrap().count(), 0);
+                        fs::remove_dir(&workspace).unwrap();
+                        fs::rename(&moved, &workspace).unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+                assert_eq!(fs::read_dir(&workspace).unwrap().count(), 0);
+                assert_eq!(fs::read(&outside).unwrap(), b"outside unchanged");
+                eprintln!(
+                    "{}",
+                    json!({"event":"sou83_original_publication_boundary_refused",
+                    "case":boundary,"visible_publications":0,"original_worker_completed":true})
+                );
+            }
 
             // These refusals happen *before* any upstream process is spawned.
             for denied in [
@@ -630,6 +767,48 @@ mod linux {
             fs::remove_file(stage.path().join("extra.txt")).unwrap();
             original_file(&stage, "allowed.txt", b"tampered");
             assert!(stage.verify(&expected).is_err());
+        }
+
+        #[test]
+        fn original_stage_rejects_fifo_directory_and_aliased_inode_without_blocking() {
+            let stage = OwnedStage::new().unwrap();
+            let requested = selected("approved.txt", "ok");
+            let target = stage.path().join("approved.txt");
+            let c_path = std::ffi::CString::new(target.as_os_str().as_encoded_bytes()).unwrap();
+            assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+            let began = std::time::Instant::now();
+            assert!(stage.verify(&requested).is_err());
+            assert!(
+                began.elapsed() < std::time::Duration::from_secs(1),
+                "FIFO inspection blocked waiting for a peer"
+            );
+            fs::remove_file(&target).unwrap();
+            fs::create_dir(&target).unwrap();
+            assert!(stage.verify(&requested).is_err());
+            fs::remove_dir(&target).unwrap();
+            original_file(&stage, "approved.txt", b"ok");
+            let outside = tempfile::tempdir().unwrap();
+            fs::hard_link(&target, outside.path().join("alias")).unwrap();
+            assert!(stage.verify(&requested).is_err());
+            assert_eq!(fs::read(outside.path().join("alias")).unwrap(), b"ok");
+            fs::remove_file(outside.path().join("alias")).unwrap();
+            let output = stage.verify(&requested).unwrap();
+            let workspace = tempfile::tempdir().unwrap();
+            let pinned = crate::sandbox::PinnedWorkspace::open(workspace.path()).unwrap();
+            let staged = output
+                .prepare_atomic_publication(&pinned)
+                .unwrap()
+                .stage()
+                .unwrap();
+            fs::write(workspace.path().join("approved.txt"), b"operator inventory").unwrap();
+            assert!(
+                staged.publish().is_err(),
+                "concurrent original create overwrote operator inventory"
+            );
+            assert_eq!(
+                fs::read(workspace.path().join("approved.txt")).unwrap(),
+                b"operator inventory"
+            );
         }
 
         #[test]

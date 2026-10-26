@@ -72,15 +72,18 @@ fn legacy_failure_keeps_empty_stdout_and_nonzero_exit() {
 fn closed_output_does_not_report_success_or_raw_error() {
     use std::process::Stdio;
     let home = tempfile::tempdir().unwrap();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_agentfw"))
+    // Close the reader before spawn: closing ChildStdout afterwards races a
+    // fast child's successful write and tests scheduling instead of EPIPE.
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let child = Command::new(env!("CARGO_BIN_EXE_agentfw"))
         .args(["pilot-approval", "--run", &"a".repeat(32), "--home"])
         .arg(home.path())
         .args(["--output", "json-v1", "list"])
-        .stdout(Stdio::piped())
+        .stdout(Stdio::from(writer))
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    drop(child.stdout.take());
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.status.code(), Some(6));
     assert!(output.stderr.is_empty());

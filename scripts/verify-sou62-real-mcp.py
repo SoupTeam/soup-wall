@@ -1295,14 +1295,27 @@ def run(args):
                 original_raw = (failure.stdout or b"") + (failure.stderr or b"")
                 original_exit = -1
             (output / "sou83-original-create-positive.log").write_bytes(original_raw[:1024 * 1024])
-            original_positive = original_exit == 0 and re.search(
+            stage_controls = []
+            for line in original_raw.splitlines():
+                try:
+                    value = json.loads(line)
+                    if value.get("event") == "sou83_completed_original_stage_refused":
+                        stage_controls.append(value)
+                except (ValueError, UnicodeError):
+                    pass
+            required_stages = ("extra", "wrong-bytes", "oversize", "hardlink", "symlink", "fifo", "directory")
+            original_positive = (original_exit == 0 and re.search(
                 rb"1 passed; 0 failed", original_raw) is not None
+                and [row.get("case") for row in stage_controls] == list(required_stages)
+                and all(row.get("visible_publications") == 0 and row.get("original_worker_completed") is True
+                        for row in stage_controls))
             report["sou83_original_create_positive"] = {
                 "status": "pass" if original_positive else "fail",
                 "exit_code": original_exit,
                 "log_sha256": sha(output / "sou83-original-create-positive.log"),
                 "original_server_executed": original_positive,
                 "real_workspace_unchanged_prepublication": original_positive,
+                "completed_original_stage_controls": stage_controls,
             }
             require(original_positive,
                     "SOU-83 original server staging witness failed: "
