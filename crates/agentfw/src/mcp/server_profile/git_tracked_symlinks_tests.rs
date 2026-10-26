@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::git_tracked_symlinks::*;
+#[cfg(unix)]
 use std::{fs, path::Path, process::Command};
 
+#[cfg(unix)]
 fn git(root: &Path, args: &[&str]) -> Vec<u8> {
     let output = Command::new("git")
         .env("GIT_CONFIG_NOSYSTEM", "1")
@@ -48,6 +50,7 @@ fn fixture() -> tempfile::TempDir {
     root
 }
 
+#[cfg(unix)]
 fn validate(root: &Path) -> anyhow::Result<()> {
     validate_invocation(root, |args, limit| {
         let bytes = git(root, args);
