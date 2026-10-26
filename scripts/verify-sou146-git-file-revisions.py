@@ -197,8 +197,11 @@ def execution_config(config, profile):
 
 def healthy_lease(stack, client, report, label):
     epoch = LEASE.enrolled_epoch(LEASE.audit_rows(stack.audit), client.liveness_session_id, LEASE.HEALTHY_LEASE_SECONDS)
-    report.setdefault("healthy_leases", []).append({"case": label, "requested_seconds": LEASE.HEALTHY_LEASE_SECONDS,
-        "granted_seconds": LEASE.HEALTHY_LEASE_SECONDS, "epoch_sha256": hashlib.sha256(epoch.encode()).hexdigest()})
+    row = {"case": label, "session_id": client.liveness_session_id,
+        "requested_seconds": LEASE.HEALTHY_LEASE_SECONDS, "granted_seconds": LEASE.HEALTHY_LEASE_SECONDS,
+        "epoch_sha256": hashlib.sha256(epoch.encode()).hexdigest()}
+    report.setdefault("healthy_leases", []).append(row)
+    return row
 
 
 def pinned_execution_profile(installed, workspace):
@@ -232,6 +235,103 @@ def require_execution(stack, before, tool):
     return {"route": "daemon_owned_original_pipe", "profile": json.loads(stack.profile.read_text())["format"],
             "profile_sha256": sha(stack.profile), "reservation_count": 1, "owned_original_workers": workers,
             "completion_proof": "private completed/released frame checked against direct original bytes"}
+
+
+def denial_batches(first, poison):
+    """Fixed coverage, independent sessions; never retry an expired authority."""
+    denials = [(tool, {key: ref}, "syntax") for ref in INVALID
+               for tool, key in (("git_show", "revision"), ("git_diff", "target"))]
+    denials += [("git_show", {"revision": ref}, "target") for ref in
+        ("HEAD:missing.txt", first + ":missing.txt", poison + ":notes.txt", "0" * 40 + ":notes.txt", "HEAD:docs")]
+    denials += [("git_checkout", {"branch_name": "main"}, "mutation"),
+               ("git_create_branch", {"branch_name": "forbidden"}, "mutation"),
+               ("git_add", {"files": ["notes.txt"]}, "mutation")]
+    cases = [(identifier, *case) for identifier, case in enumerate(denials, 100)]
+    require(len(cases) == 64, "fixed refusal coverage changed")
+    return [cases[start:start + 16] for start in range(0, len(cases), 16)]
+
+
+def batch_worker_cleanup(stack, previous):
+    observer = stack.daemon_witnesses[-1][2]
+    observer.sample()
+    rows = [row for key, row in list(observer.observed.items()) if key not in previous and not row["parent_process"]]
+    deadline = time.monotonic() + 5
+    while True:
+        alive = [row for row in rows if observer.identity(row["pid"]) == row["start_time_ticks"]]
+        if not alive or time.monotonic() >= deadline:
+            break
+        time.sleep(0.02)
+    return {"observed": rows, "all_stopped": not alive and not observer.incomplete,
+            "remaining": alive, "observation_complete": not observer.incomplete}
+
+
+def refusal_batches(stack, first, report, expected_text):
+    report["refusal_batches"] = []
+    sessions = {row["session_id"] for row in report.get("healthy_leases", [])}
+    epochs = {row["epoch_sha256"] for row in report.get("healthy_leases", [])}
+    for number, cases in enumerate(denial_batches(first, stack.poison), 1):
+        label = f"refusal-batch-{number:02d}"
+        folder = stack.root / label
+        folder.mkdir(mode=0o700)
+        path = folder / "collector.log"
+        row = {"case": label, "planned_ids": [case[0] for case in cases], "completed_pairs": [],
+               "refusals": [], "passed": False, "profile_sha256": sha(stack.profile),
+               "child_authority_requested_seconds": 120, "scope": "one independent authenticated collector; same-client continuation after each refusal"}
+        report["refusal_batches"].append(row)
+        before = BASE.snapshot(stack.workspace)
+        started = time.monotonic()
+        observer = stack.daemon_witnesses[-1][2]
+        observer.sample()
+        previous = {key for key, _ in list(observer.observed.items())}
+        with path.open("wb") as log:
+            client = collector(stack, log)
+            processes = DaemonProcessWitness(client.process.pid)
+            witness = GIT.RepositoryWitness(stack.workspace)
+            try:
+                client.initialize()
+                row["lease"] = healthy_lease(stack, client, report, label)
+                require(row["lease"]["session_id"] not in sessions and row["lease"]["epoch_sha256"] not in epochs,
+                        "independent refusal batch reused a session or epoch")
+                sessions.add(row["lease"]["session_id"])
+                epochs.add(row["lease"]["epoch_sha256"])
+                for identifier, tool, args, category in cases:
+                    witness.drain()
+                    response, _ = client.exchange(GIT.call(identifier, tool, args))
+                    require(BASE.refused(response), "unsupported original call was not refused")
+                    require(witness.drain() == 0, "refused call opened repository")
+                    require(not any(r.get("host_call_id") == identifier and r.get("state") == "inflight"
+                                    for r in BASE.events(path)), "refused call dispatched")
+                    if category == "target":
+                        require(response.get("error", {}).get("code") == -32602 and
+                                "Git" in response["error"]["message"], "unattributable target refusal")
+                    refusal = {"id": identifier, "category": category, "session": label,
+                        "response": response, "repository_opens": 0, "execution_dispatched": False}
+                    row["refusals"].append(refusal)
+                    report["refusals"].append(refusal)
+                    followup, _ = client.exchange(GIT.call(identifier + 1000, "git_show", {"revision": REFS[0]}))
+                    require(GIT.text(followup) == expected_text, "same-client useful continuation changed")
+                    row["completed_pairs"].append({"refusal_id": identifier, "continuation_id": identifier + 1000})
+            finally:
+                try:
+                    LEASE.safe_close(client)
+                finally:
+                    witness.close()
+                    row["protected_client"] = client.transcript()
+                    row["collector_cleanup"] = processes.finish()
+                    row["worker_cleanup"] = batch_worker_cleanup(stack, previous)
+                    row["diagnostics"] = GIT.protected_diagnostics(row, folder)
+                    row["elapsed_seconds"] = round(time.monotonic() - started, 3)
+                    row["repository_unchanged"] = BASE.snapshot(stack.workspace) == before
+            cleanup = row["collector_cleanup"]
+            workers = row["worker_cleanup"]
+            require(client.process.returncode == 0 and not client.forced_cleanup
+                    and cleanup["all_stopped"] and cleanup["observation_complete"]
+                    and any(item.get("original_git_server") and not item["parent_process"] for item in cleanup["observed"])
+                    and workers["all_stopped"] and workers["observation_complete"]
+                    and any(item.get("original_git_server") for item in workers["observed"])
+                    and row["repository_unchanged"],
+                    "refusal batch original-process cleanup unverified")
+            row["passed"] = True
 
 
 def exact_reads(stack, first, report):
@@ -290,36 +390,18 @@ def exact_reads(stack, first, report):
                     "unsafe executed original output escaped result inspection")
             GIT.text(client.exchange(GIT.call(81, "git_show", {"revision": REFS[0]}))[0])
             report["result_injection_withheld"] = True
-            denials = [(tool, {key: ref}, "syntax") for ref in INVALID
-                       for tool, key in (("git_show", "revision"), ("git_diff", "target"))]
-            denials += [(tool, {key: ref}, "target") for ref in
-                ("HEAD:missing.txt", first + ":missing.txt", stack.poison + ":notes.txt", "0" * 40 + ":notes.txt", "HEAD:docs")
-                for tool, key in (("git_show", "revision"),)]
-            denials += [("git_checkout", {"branch_name": "main"}, "mutation"),
-                       ("git_create_branch", {"branch_name": "forbidden"}, "mutation"),
-                       ("git_add", {"files": ["notes.txt"]}, "mutation")]
-            for identifier, (tool, args, category) in enumerate(denials, 100):
-                witness.drain()
-                response, _ = client.exchange(GIT.call(identifier, tool, args))
-                require(BASE.refused(response), "unsupported original call was not refused")
-                require(witness.drain() == 0, "refused call opened repository")
-                require(not any(r.get("host_call_id") == identifier and r.get("state") == "inflight"
-                                for r in BASE.events(path)), "refused call dispatched")
-                if category == "target":
-                    require(response.get("error", {}).get("code") == -32602 and
-                            "Git" in response["error"]["message"], "unattributable target refusal")
-                report["refusals"].append({"id": identifier, "category": category,
-                    "response": response, "repository_opens": 0, "execution_dispatched": False})
-                followup, _ = client.exchange(GIT.call(identifier + 1000, "git_show", {"revision": REFS[0]}))
-                GIT.text(followup)
             require(BASE.snapshot(stack.workspace) == before, "protected reads/refusals changed repository")
-            report["repository_unchanged"] = True
+            report["positive_repository_unchanged"] = True
         finally:
             client.close()
             witness.close()
             report["protected_client"] = client.transcript()
     require(client.process.returncode == 0 and not client.forced_cleanup and
             client.process_witness.final.get("all_stopped") is True, "protected process cleanup unverified")
+    report["protected_client_scope"] = "twelve positive original frames and result-injection control only; refusal batches are separate processes"
+    refusal_batches(stack, first, report, GIT.text(json.loads(originals[10])))
+    require(BASE.snapshot(stack.workspace) == before, "refusal batches changed repository")
+    report["repository_unchanged"] = True
 
 
 def legacy_refusal(stack, report):
@@ -971,7 +1053,18 @@ def run(args):
                 report["daemon_cleanup"].append({"label": label, "exit_code": process.returncode, "process": observed})
                 if not observed["all_stopped"]:
                     report["status"], report["error"] = "fail", "owned daemon process cleanup unverified"
-        report["protected_diagnostics"] = GIT.protected_diagnostics(report, output)
+        if "source_after" not in report:
+            try:
+                report["source_after"] = BASE.source()
+            except Exception as error:
+                report["source_after_error"] = type(error).__name__
+                report["status"] = "fail"
+        if "source_after" in report:
+            report["source_after_matches_before"] = report["source_after"] == before
+            if not report["source_after_matches_before"]:
+                report["final_source_error"], report["status"] = "candidate source changed", "fail"
+        report["protected_diagnostics"] = GIT.protected_diagnostics(dict(report, refusals=[]), output)
+        report["protected_diagnostics"]["scope"] = "positive reads/output control only; see independently scoped refusal_batches diagnostics"
         write(output / "report.json", report)
     print(json.dumps({"status": report["status"], "error": report.get("error"), "report": str(output / "report.json"),
         "per_file_qualification": report.get("per_file_qualification"), "failed_benign_controls": report.get("failed_benign_controls", []),

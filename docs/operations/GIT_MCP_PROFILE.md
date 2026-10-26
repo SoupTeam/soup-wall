@@ -403,3 +403,14 @@ session must return the original bytes; the expired session is never revived.
 failed/incomplete: all twelve FILE frames and BASE ID200 matched the originals,
 but its qualifier rejected the combined guard before the fresh-session and Ask
 controls. Those controls require a new complete qualification run.
+
+[Run #188](https://github.com/SoupTeam/soup-wall/actions/runs/40371827297) also
+remains failed/incomplete. Its twelve positive frames passed, but the combined
+long session reached the unchanged 120-second child-authority deadline before
+all 64 refusal/continuation pairs finished. The new short-lease and Ask controls
+were not reached. Qualification now uses a separate positive-read session and
+four preplanned independent sessions of sixteen refusal/continuation pairs.
+Each pair retains its useful continuation on the same client, with separate
+raw transcripts, verified ten-second leases and complete observed collector and
+new daemon-worker cleanup. No expired session is retried or revived, and the
+120-second child authority, liveness and worker/approval bounds are unchanged.
