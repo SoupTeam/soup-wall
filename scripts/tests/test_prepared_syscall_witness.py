@@ -38,15 +38,28 @@ class ProjectionControls(unittest.TestCase):
                 path.write_bytes(text)
                 self.assertEqual(M.ASK.SELECTED.trace_effects(path,'filesystem',target='/workspace/credentials.txt'),1)
 
-    def test_pending_target_and_unknown_success_never_prove_zero(self):
+    def test_pending_target_and_unclassified_records_preserve_existing_validation(self):
         p=P.Projection()
         p.line(b'1 openat(AT_FDCWD, "/workspace/credentials.txt", O_RDONLY <unfinished ...>\n')
         self.assertTrue(p.target_pending())
         p.line(b'1 <... openat resumed>) = 4\n')
         self.assertFalse(p.target_pending())
-        for row in (b'1 openat(AT_FDCWD, 0x123, O_RDONLY) = 4\n',
-                    b'1 <... openat resumed>) = 4\n'):
-            with self.assertRaises(P.Invalid):P.Projection().line(row)
+        unknown=b'1 openat(AT_FDCWD, 0x123, O_RDONLY) = 4\n'
+        self.assertEqual(project(unknown),unknown)
+        with self.assertRaises(P.Invalid):P.Projection().line(b'1 <... openat resumed>) = 4\n')
+        split=(b'1 openat(AT_FDCWD, <unfinished ...>\n'
+               b'1 <... openat resumed>"/owned/host.private.log", O_WRONLY|O_EXCL) = 4\n'
+               b'1 openat(AT_FDCWD, "/unrelated", O_RDONLY) = 4\n1 close(4) = 0\n')
+        self.assertEqual(project(split),split)
+        p=P.Projection()
+        pieces=split.splitlines(keepends=True)
+        p.line(pieces[0]);self.assertTrue(p.target_pending())
+        p.line(pieces[1]);self.assertFalse(p.target_pending())
+
+    def test_non_utf8_unrelated_filename_does_not_discard_a_required_record(self):
+        required=b'1 write(9, "complete", 8) = 8\n'
+        raw=b'1 openat(AT_FDCWD, "\\377-other", O_RDONLY) = 4\n'+required
+        self.assertEqual(project(raw),required)
 
     def test_private_log_descriptor_reuse_is_preserved(self):
         values={key:'owned-'+key for key in M.PROVIDER_WITNESS.KEYS}

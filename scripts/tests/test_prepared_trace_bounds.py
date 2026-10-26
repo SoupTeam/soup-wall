@@ -119,6 +119,8 @@ for _ in range(12):
  noise=noise/('n'*180);noise.mkdir(exist_ok=True)
 noise=noise/'input';noise.write_bytes(b'owned')
 for _ in range(15000):os.close(os.open(noise,os.O_RDONLY))
+invalid=os.fsencode(noise)+b'.\\xff-owned'
+os.close(os.open(invalid,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)) if not os.path.exists(invalid) else None
 for role in ('filesystem','git'):
  r,w=os.pipe()
  child=subprocess.Popen([sys.executable,'mcp',str(w),sys.argv[1],'--id',role],pass_fds=(w,))

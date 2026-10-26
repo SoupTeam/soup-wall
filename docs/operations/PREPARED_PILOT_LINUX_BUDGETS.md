@@ -157,7 +157,10 @@ opens and all open/close records that can affect the existing private-log
 descriptor witness are retained, including implicit descriptor reuse.
 Only decoded unrelated file metadata is omitted. Unfinished metadata is
 retained at EOF so the existing strict final validators still refuse an
-incomplete supervisor witness. Unknown successful metadata fails closed.
+incomplete supervisor witness. Unclassified records are retained unchanged;
+a split unclassified record keeps that process's remaining metadata in full
+instead of guessing its descriptor state. The existing strict validators
+still decide whether the required witness is complete.
 Input digest/counts and projection counts are recorded, without raw stream
 export. This selects witness predicates before storage; it does not read a
 tail, rotate away effects or raise the retained bound.

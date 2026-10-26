@@ -3,8 +3,8 @@
 
 Keep every exec/write/writev/process record, exact synthetic target opens and
 all metadata which can affect the existing private-log descriptor witness.
-Only proven unrelated openat/close records are omitted. Unknown successful
-metadata is an error, never a reason to assume no execution.
+Only proven unrelated openat/close records are omitted. Unknown metadata is
+retained unchanged for the existing strict validators, never assumed absent.
 """
 import ast
 import hashlib
@@ -26,6 +26,8 @@ class Invalid(ValueError):
 class Projection:
     def __init__(self):
         self.handles, self.pending = set(), {}
+        self.opaque = set()
+        self.opaque_pending = set()
         self.pending_bytes = 0
         self.omitted = {'openat': 0, 'close': 0}
 
@@ -47,7 +49,9 @@ class Projection:
                 return False, False, False, None
             raise Invalid('private_trace_metadata_unknown')
         try:
-            path = ast.literal_eval('b' + match[1].decode('ascii')).decode('utf-8')
+            # Match the existing private-log observer's strace string semantics,
+            # including literal UTF-8 and byte escapes in unrelated filenames.
+            path = ast.literal_eval(match[1].decode('utf-8'))
         except (ValueError, SyntaxError, UnicodeError):
             raise Invalid('private_trace_metadata_unknown') from None
         target, log = path in TARGETS, path.endswith(LOGS)
@@ -64,6 +68,14 @@ class Projection:
         return keep, target, log, fd
 
     def line(self, row):
+        identity = re.match(rb'^\s*(\d+)\s+', row)
+        if identity and int(identity[1]) in self.opaque:
+            pid = int(identity[1])
+            if re.match(rb'^\s*\d+\s+<\.\.\. (?:openat|close) resumed>', row):
+                self.opaque_pending.discard(pid)
+            if re.match(rb'^\s*\d+\s+(?:openat|close)\(', row) and row.rstrip().endswith(b'<unfinished ...>'):
+                self.opaque_pending.add(pid)
+            return row
         start = re.match(rb'^\s*(\d+)\s+(openat|close)\(', row)
         resumed = re.match(rb'^\s*(\d+)\s+<\.\.\. (openat|close) resumed>(.*)', row)
         if resumed:
@@ -94,7 +106,21 @@ class Projection:
             raise Invalid('private_trace_metadata_overlap')
         rest = row[start.start(2):].rstrip()
         unfinished = rest.endswith(b'<unfinished ...>')
-        keep, target, log, fd = self.decision(pid, name, rest, not unfinished)
+        try:
+            keep, target, log, fd = self.decision(pid, name, rest, not unfinished)
+        except Invalid as error:
+            if str(error) != 'private_trace_metadata_unknown':
+                raise
+            if unfinished:
+                # A split unclassified record may later alter a log binding.
+                # Keep this PID's remaining metadata in full rather than guess
+                # its FD state. Complete unclassified records cannot establish
+                # a binding which the existing quoted-path parser understands.
+                self.opaque.add(pid)
+                self.opaque_pending.add(pid)
+                if len(self.opaque) > 4096:
+                    raise Invalid('private_trace_scope_limit')
+            return row
         if unfinished:
             if len(self.pending) >= 4096:
                 raise Invalid('private_trace_metadata_overlap')
@@ -112,7 +138,7 @@ class Projection:
         return row if keep else b''
 
     def target_pending(self):
-        return any(row[2] for row in self.pending.values())
+        return bool(self.opaque_pending) or any(row[2] for row in self.pending.values())
 
     def remainder(self):
         # A never-resumed record is not proven irrelevant to completeness.
@@ -238,4 +264,5 @@ class Capture:
         return {'format': 'prepared-effect-and-wire/1', 'input_bytes': self.input_bytes,
                 'input_sha256': self.digest.hexdigest(), 'retained_bytes': self.output_bytes,
                 'retained_limit': LIMIT, 'omitted_non_witness_metadata': dict(self.projection.omitted),
+                'unclassified_metadata_processes': len(self.projection.opaque),
                 'complete': self.closed and self.error is None, 'raw_stream_exported': False}
