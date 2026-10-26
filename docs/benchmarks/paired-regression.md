@@ -2,9 +2,9 @@
 
 > **Status: checkpoint, not complete.** Implemented: the input contract, comparability, per-case
 > input binding, completeness, paired transitions, missing-outcome bounds, declared unknown
-> outcomes, CSV/Markdown output, controls and a reproducible
-> [evidence bundle](evidence/sou153/README.md). Pending: family-aware uncertainty and latency
-> distributions; see [remaining work](#remaining-work).
+> outcomes, descriptive latency, CSV/Markdown output, controls and a reproducible
+> [evidence bundle](evidence/sou153/README.md). Pending: family-aware uncertainty; see
+> [remaining work](#remaining-work).
 > Phase 4 stays open.
 
 [`paired_regression.py`](../../scripts/benchmarks/paired_regression.py) compares two
@@ -258,6 +258,40 @@ For each named unit:
 
 The overlay is always listed as a gap, because the producer did not report it.
 
+## Latency
+
+`latency` describes the enforced trajectories' producer-recorded `task_elapsed_ms` (task) and
+`elapsed_ms` (end to end).
+
+**Per side.** For each side and for all, attacked and benign units, the report gives
+`n`, `min`, `median`, `p95` and `max`, computed with `agentdojo_protocol.distribution`:
+
+- the median is the middle value, or the mean of the two middle values when `n` is even;
+- `p95` is the nearest rank, the value at rank ⌈0.95 · n⌉ of the sorted sample.
+
+**Measurement versus outcome.** A recorded enforced trajectory carries its durations
+whether its evaluator outcome is known (`measured_with_evaluator_outcome`) or declared
+unknown (`measured_with_unknown_outcome`). An unknown outcome does not invalidate the
+recorded time.
+
+**Missing durations.** Stopped units (`stopped_duration_unavailable`) and `not_run` units
+have no duration:
+
+- the producer records none for a stopped attempt;
+- they are counted, never imputed or set to zero, and never presented as measured
+  censored durations;
+- timeouts stay `count: null` (`undistinguished`).
+
+**Paired.** Only for a comparable result: `candidate − baseline` distributions over the
+matched verified units measured on both sides. `paired_measured` is this latency
+denominator. It can differ from `paired_evaluable`, for example when outcomes are unknown.
+The fields `measured_baseline_only`, `measured_candidate_only` and `coverage_differs` show
+coverage changes.
+
+**No speed claim.** `change` is always `not_stated`: no uncertainty is computed, and when
+coverage differs, the per-side distributions describe different unit sets. Latency is not
+a gate.
+
 ## Grouping
 
 - **Dependency clusters.** Connected components of cases that share a `user_task_id`, an
@@ -301,8 +335,6 @@ consistently on both sides.
 - **Uncertainty.** Family-aware uncertainty over resampling units (planned: paired cluster
   bootstrap with a fixed seed), with its estimand, data-checked weights, an explicitly
   justified sufficiency rule and its limitations.
-- **Latency.** Latency distributions and paired latency differences next to stopped,
-  unknown and not-run counts.
 - **Public data.** No public run has a source bundle or case manifest, so no public
   comparison is verified and no public semantic families are declared.
 - **Unknown outcomes.** These rely on the declared annotation contract. No existing

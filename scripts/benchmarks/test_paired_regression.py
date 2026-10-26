@@ -489,6 +489,71 @@ class Bounds(Fixture):
         self.assertEqual(len(result["outcomes"]["undefended_arm_drift"]["differing_units"]), 2)
 
 
+class Latency(Fixture):
+    # Generator task latencies on enforced rows: benign 120 (Ask 150), missed attack 130, denied attack
+    # 140; elapsed_ms = task + 50. Baseline: 22 x 120, 12 x 130, 12 x 140, 2 x 150 (n = 48).
+    BASELINE = {"n": 48, "min": 120, "median": 130.0, "p95": 140, "max": 150}
+
+    def test_exact_per_side_distributions(self):
+        latency = self.result("improved")["latency"]
+        self.assertEqual(latency["status"], "computed")
+        self.assertEqual(latency["baseline"]["all"]["task_elapsed_ms"], self.BASELINE)
+        self.assertEqual(latency["baseline"]["all"]["elapsed_ms"],
+                         {"n": 48, "min": 170, "median": 180.0, "p95": 190, "max": 200})
+        # Improved: five more attacks denied, so 22 x 120, 2 x 130, 22 x 140, 2 x 150. The median is the
+        # mean of the 24th and 25th values (130, 140); p95 is the value at rank ceil(0.95 * 48) = 46.
+        self.assertEqual(latency["candidate"]["all"]["task_elapsed_ms"],
+                         {"n": 48, "min": 120, "median": 135.0, "p95": 140, "max": 150})
+        self.assertEqual(latency["candidate"]["attacked"]["task_elapsed_ms"],
+                         {"n": 24, "min": 130, "median": 140.0, "p95": 140, "max": 140})
+
+    def test_exact_paired_differences_and_denominator(self):
+        paired = self.result("improved")["latency"]["paired"]
+        # 10 units (tasks 02-06 attacked, 2 repetitions) gain +10 ms; 38 units are unchanged.
+        self.assertEqual(paired["paired_measured"], 48)
+        self.assertEqual(paired["task_elapsed_ms_difference"], {"n": 48, "min": 0, "median": 0.0, "p95": 10, "max": 10})
+        self.assertEqual(paired["elapsed_ms_difference"], paired["task_elapsed_ms_difference"])
+        self.assertEqual(paired["change"], "not_stated")
+        self.assertFalse(paired["coverage_differs"])
+
+    def test_stopped_and_unrun_units_are_counted_not_imputed(self):
+        result = self.result("incomplete_hard_cases_dropped")
+        candidate = result["latency"]["candidate"]["all"]
+        self.assertEqual((candidate["measured"], candidate["stopped_duration_unavailable"], candidate["not_run"]),
+                         (18, 1, 29))
+        self.assertEqual(candidate["task_elapsed_ms"], {"n": 18, "min": 120, "median": 120.0, "p95": 140, "max": 140})
+        paired = result["latency"]["paired"]
+        self.assertEqual((paired["paired_measured"], paired["measured_baseline_only"]), (18, 30))
+        self.assertTrue(paired["coverage_differs"])
+        self.assertIn("different unit sets", paired["change_reason"])
+        stopped = [unit for unit in result["units"] if unit["candidate"]["status"] != "evaluable"]
+        self.assertTrue(stopped and all("task_elapsed_ms" not in unit["candidate"] for unit in stopped))
+        self.assertIsNone(result["latency"]["timeouts"]["count"])
+
+    def test_zero_measured_sample(self):
+        latency = self.result("all_unevaluable")["latency"]
+        empty = {"n": 0, "min": None, "median": None, "p95": None, "max": None}
+        self.assertEqual(latency["candidate"]["all"]["task_elapsed_ms"], empty)
+        self.assertEqual(latency["paired"]["paired_measured"], 0)
+        self.assertEqual(latency["paired"]["task_elapsed_ms_difference"], empty)
+
+    def test_unknown_outcomes_keep_their_recorded_durations(self):
+        unknown = self.result("all_unknown")
+        improved = self.result("improved")
+        candidate = unknown["latency"]["candidate"]["all"]
+        self.assertEqual((candidate["measured"], candidate["measured_with_evaluator_outcome"],
+                          candidate["measured_with_unknown_outcome"]), (48, 0, 48))
+        self.assertEqual(candidate["task_elapsed_ms"], improved["latency"]["candidate"]["all"]["task_elapsed_ms"])
+        # Paired latency uses measured units even though no unit has a paired evaluator outcome.
+        self.assertEqual((unknown["latency"]["paired"]["paired_measured"],
+                          unknown["completeness"]["paired"]["paired_evaluable"]), (48, 0))
+        self.assertEqual(unknown["units"][0]["candidate"]["task_elapsed_ms"], 120)
+
+    def test_non_comparable_results_have_no_paired_latency(self):
+        latency = self.result("missing_case")["latency"]
+        self.assertEqual((latency["status"], latency["paired"]), ("per_side_only", None))
+
+
 class Outputs(Fixture):
     def test_csv_rows_and_transitions_agree_with_the_json(self):
         import csv as csv_module

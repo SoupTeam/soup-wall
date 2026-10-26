@@ -1,7 +1,7 @@
 # SOU-153 checkpoint evidence
 
 Offline evidence for the [paired development regression comparator](../../paired-regression.md).
-**SOU-153 is not complete:** uncertainty and latency are pending (see [remaining](#remaining)).
+**SOU-153 is not complete:** family-aware uncertainty is pending (see [remaining](#remaining)).
 No model, provider, evaluator, upstream checkout or private data was used.
 
 ## Reproduce
@@ -106,10 +106,26 @@ producer emits it.
 - Timeouts cannot be distinguished in matched/1, so every report shows them as
   `not available (undistinguished)` rather than zero.
 
+### Latency (descriptive)
+
+Each result reports enforced `task_elapsed_ms` and `elapsed_ms` per side (n, min, median,
+nearest-rank p95, max). Paired candidate − baseline differences use only units measured on
+both sides, and `paired_measured` is their denominator. No speed-up or slow-down is stated
+(`change: not_stated`).
+
+| Control | Candidate measured / planned | Stopped (duration unavailable) / not run | Paired measured | Paired task difference median / p95 (ms) |
+|---|---|---|---|---|
+| `improved` | 48 / 48 | 0 / 0 | 48 | 0 / 10 |
+| `regressed` | 48 / 48 | 0 / 0 | 48 | 0 / 30 |
+| `incomplete_hard_cases_dropped` | 18 / 48 | 1 / 29 | 18 (coverage differs) | 0 / 10 |
+| `all_unknown` | 48 / 48, all with unknown outcome | 0 / 0 | 48 (paired evaluable: 0) | 0 / 10 |
+
+Unknown evaluator outcomes keep their recorded durations. Stopped and not-run units have no
+duration and are never imputed or treated as censored measurements. The synthetic
+durations are generator constants, not measurements.
+
 ## Remaining
 
 - Family-aware uncertainty for the paired differences: estimand, resampling unit, weights
   checked on the data, fixed seed, a justified sufficiency rule and its limitations.
-- Latency distributions and paired latency differences next to stopped, unknown and
-  not-run counts.
 - A decision on whether the unknown annotation contract satisfies the requirement.

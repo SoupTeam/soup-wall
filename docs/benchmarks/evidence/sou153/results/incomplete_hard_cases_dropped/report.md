@@ -57,10 +57,20 @@ Missing-outcome bounds use the fixed planned set with every missing outcome set 
 | attacked_utility_rate (higher is better) | 24 / 8 | 12/24 = 0.500 | 0/8 = 0.000 | 0 / 8 | -1.0 | [-0.500, 0.167] | not_established: missing-outcome bounds include zero |
 | benign_interruption_rate (lower is better) | 24 / 10 | 2/24 = 0.083 | 0/10 = 0.000 | 0 / 0 | 0.0 | [-0.083, 0.500] | not_established: missing-outcome bounds include zero |
 
+## Latency (enforced trajectories, ms)
+
+Median / nearest-rank p95 (min–max). Unknown evaluator outcomes keep their recorded durations. Stopped and not-run units have no duration and are not imputed. Timeouts: not available (undistinguished).
+
+| Side | Measured / planned | With outcome | With unknown outcome | Stopped (duration unavailable) | Not run | task_elapsed_ms | elapsed_ms |
+|---|---|---|---|---|---|---|---|
+| baseline | 48 / 48 | 48 | 0 | 0 | 0 | 130.0 / 140 (120–150) | 180.0 / 190 (170–200) |
+| candidate | 18 / 48 | 18 | 0 | 1 | 29 | 120.0 / 140 (120–140) | 170.0 / 190 (170–190) |
+
+Paired candidate − baseline on 18 of 48 units measured on both sides: task_elapsed_ms 0.0 / 10 (0–10); elapsed_ms 0.0 / 10 (0–10). Change: not_stated (descriptive only: no uncertainty is computed; measured coverage differs between sides, so per-side distributions describe different unit sets).
+
 ## Not computed
 
 - Uncertainty: not_computed_in_checkpoint
-- Latency: not_computed_in_checkpoint
 
 ## Limitations
 
@@ -70,4 +80,4 @@ Missing-outcome bounds use the fixed planned set with every missing outcome set 
 - Paired differences are conditional on units evaluable in both runs; with partial coverage only the missing-outcome bounds on the planned set account for missing outcomes; they are not confidence intervals.
 - Without declared semantic families, correlated variants are grouped by known plan dependencies only.
 - Unknown outcomes are unavailable in this producer contract; timeouts are not distinguishable.
-- Checkpoint scope: family-aware uncertainty and latency distributions are not computed yet.
+- Checkpoint scope: family-aware uncertainty is not computed yet; latency is descriptive and states no speed-up or slow-down.

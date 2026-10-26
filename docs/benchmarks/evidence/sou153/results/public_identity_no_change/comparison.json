@@ -218,7 +218,159 @@
     "reason": "matched/1 rows carry Boolean evaluator outputs only; the producer reports no unknown outcome. Ask (approval_required) is reported separately and is not unknown."
   },
   "latency": {
-    "status": "not_computed_in_checkpoint"
+    "status": "per_side_only",
+    "method": {
+      "arm": "enforced trajectories",
+      "fields": {
+        "task_elapsed_ms": "producer-recorded task latency",
+        "elapsed_ms": "producer-recorded end-to-end trajectory latency"
+      },
+      "statistics": "agentdojo_protocol.distribution: n, min, max; median = middle value, or the mean of the two middle values when n is even; p95 = nearest rank, the value at rank ceil(0.95 * n) of the sorted sample",
+      "measured": "a recorded enforced trajectory carries its durations whether its evaluator outcome is known or declared unknown; an unknown evaluator outcome does not invalidate the recorded duration",
+      "not_measured": "stopped units have no recorded duration (the producer reports none for the stopped attempt) and not-run units have none; they are counted, never imputed and never treated as censored measurements"
+    },
+    "timeouts": {
+      "count": null,
+      "availability": "undistinguished",
+      "reason": "the producer wraps provider transport errors, including timeouts, in AdapterError with reason provider_failure; reason and error_type are kept verbatim per stopped unit"
+    },
+    "baseline": {
+      "all": {
+        "planned": 4,
+        "measured": 4,
+        "measured_with_evaluator_outcome": 4,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 4,
+          "min": 141,
+          "median": 147.0,
+          "p95": 164,
+          "max": 164
+        },
+        "elapsed_ms": {
+          "n": 4,
+          "min": 322,
+          "median": 334.5,
+          "p95": 347,
+          "max": 347
+        }
+      },
+      "attacked": {
+        "planned": 2,
+        "measured": 2,
+        "measured_with_evaluator_outcome": 2,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 2,
+          "min": 141,
+          "median": 152.5,
+          "p95": 164,
+          "max": 164
+        },
+        "elapsed_ms": {
+          "n": 2,
+          "min": 322,
+          "median": 334.5,
+          "p95": 347,
+          "max": 347
+        }
+      },
+      "benign": {
+        "planned": 2,
+        "measured": 2,
+        "measured_with_evaluator_outcome": 2,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 2,
+          "min": 143,
+          "median": 147.0,
+          "p95": 151,
+          "max": 151
+        },
+        "elapsed_ms": {
+          "n": 2,
+          "min": 326,
+          "median": 334.5,
+          "p95": 343,
+          "max": 343
+        }
+      }
+    },
+    "candidate": {
+      "all": {
+        "planned": 4,
+        "measured": 4,
+        "measured_with_evaluator_outcome": 4,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 4,
+          "min": 141,
+          "median": 147.0,
+          "p95": 164,
+          "max": 164
+        },
+        "elapsed_ms": {
+          "n": 4,
+          "min": 322,
+          "median": 334.5,
+          "p95": 347,
+          "max": 347
+        }
+      },
+      "attacked": {
+        "planned": 2,
+        "measured": 2,
+        "measured_with_evaluator_outcome": 2,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 2,
+          "min": 141,
+          "median": 152.5,
+          "p95": 164,
+          "max": 164
+        },
+        "elapsed_ms": {
+          "n": 2,
+          "min": 322,
+          "median": 334.5,
+          "p95": 347,
+          "max": 347
+        }
+      },
+      "benign": {
+        "planned": 2,
+        "measured": 2,
+        "measured_with_evaluator_outcome": 2,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 2,
+          "min": 143,
+          "median": 147.0,
+          "p95": 151,
+          "max": 151
+        },
+        "elapsed_ms": {
+          "n": 2,
+          "min": 326,
+          "median": 334.5,
+          "p95": 343,
+          "max": 343
+        }
+      }
+    },
+    "paired": null
   },
   "uncertainty": {
     "status": "not_computed_in_checkpoint"
@@ -231,6 +383,6 @@
     "Paired differences are conditional on units evaluable in both runs; with partial coverage only the missing-outcome bounds on the planned set account for missing outcomes; they are not confidence intervals.",
     "Without declared semantic families, correlated variants are grouped by known plan dependencies only.",
     "Unknown outcomes are unavailable in this producer contract; timeouts are not distinguishable.",
-    "Checkpoint scope: family-aware uncertainty and latency distributions are not computed yet."
+    "Checkpoint scope: family-aware uncertainty is not computed yet; latency is descriptive and states no speed-up or slow-down."
   ]
 }

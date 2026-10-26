@@ -79,7 +79,8 @@ LIMITATIONS = [
     "missing-outcome bounds on the planned set account for missing outcomes; they are not confidence intervals.",
     "Without declared semantic families, correlated variants are grouped by known plan dependencies only.",
     "Unknown outcomes are unavailable in this producer contract; timeouts are not distinguishable.",
-    "Checkpoint scope: family-aware uncertainty and latency distributions are not computed yet.",
+    "Checkpoint scope: family-aware uncertainty is not computed yet; latency is descriptive and states no "
+    "speed-up or slow-down.",
 ]
 
 
@@ -648,6 +649,63 @@ def denominators(states):
     return result
 
 
+LATENCY_FIELDS = ("task_elapsed_ms", "elapsed_ms")
+LATENCY_METHOD = {
+    "arm": "enforced trajectories",
+    "fields": {"task_elapsed_ms": "producer-recorded task latency",
+               "elapsed_ms": "producer-recorded end-to-end trajectory latency"},
+    "statistics": "agentdojo_protocol.distribution: n, min, max; median = middle value, or the mean of the two "
+                  "middle values when n is even; p95 = nearest rank, the value at rank ceil(0.95 * n) of the "
+                  "sorted sample",
+    "measured": "a recorded enforced trajectory carries its durations whether its evaluator outcome is known or "
+                "declared unknown; an unknown evaluator outcome does not invalidate the recorded duration",
+    "not_measured": "stopped units have no recorded duration (the producer reports none for the stopped attempt) "
+                    "and not-run units have none; they are counted, never imputed and never treated as censored "
+                    "measurements",
+}
+
+
+def _measured(state):
+    return state.get("row") or state.get("decision_row")
+
+
+def latency_side(states):
+    result = {}
+    for domain, keep in (("all", lambda s: True), ("attacked", lambda s: s["attacked"]),
+                         ("benign", lambda s: not s["attacked"])):
+        selected = [s for s in states.values() if keep(s)]
+        measured = [_measured(s) for s in selected if _measured(s) is not None]
+        count = Counter(s["status"] for s in selected)
+        result[domain] = {
+            "planned": len(selected), "measured": len(measured),
+            "measured_with_evaluator_outcome": count["evaluable"], "measured_with_unknown_outcome": count["unknown"],
+            "stopped_duration_unavailable": count["incomplete"], "not_run": count["not_run"],
+            **{field: protocol.distribution([row[field] for row in measured]) for field in LATENCY_FIELDS}}
+    return result
+
+
+def latency_paired(base_states, cand_states):
+    keys = [key for key in base_states
+            if _measured(base_states[key]) is not None and _measured(cand_states[key]) is not None]
+    base_measured = {key for key, s in base_states.items() if _measured(s) is not None}
+    cand_measured = {key for key, s in cand_states.items() if _measured(s) is not None}
+    return {
+        "subset": "matched verified units with a recorded enforced duration on both sides (evaluator outcome "
+                  "known or unknown)",
+        "planned": len(base_states), "paired_measured": len(keys),
+        "measured_baseline_only": len(base_measured - cand_measured),
+        "measured_candidate_only": len(cand_measured - base_measured),
+        **{f"{field}_difference": protocol.distribution(
+            [_measured(cand_states[k])[field] - _measured(base_states[k])[field] for k in keys])
+           for field in LATENCY_FIELDS},
+        "coverage_differs": base_measured != cand_measured,
+        "change": "not_stated",
+        "change_reason": "descriptive only: no uncertainty is computed"
+                         + ("; measured coverage differs between sides, so per-side distributions describe "
+                            "different unit sets" if base_measured != cand_measured else ""),
+    }
+
+
 def unknown_summary(states_by_role, overlays):
     if not any(overlays.values()):
         return dict(UNKNOWN)
@@ -796,6 +854,8 @@ def _unit_view(state):
         row = state["decision_row"]
         view.update(reason=state["reason"], evaluator_outcomes="withheld", deny=row["deny"],
                     approval_required=row["approval_required"])
+    if _measured(state) is not None:
+        view.update({field: _measured(state)[field] for field in LATENCY_FIELDS})
     return view
 
 
@@ -895,6 +955,9 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
                                         "note": "pins are producer declarations checked for run/plan consistency"}}
     per_side = {"baseline": denominators(base_states), "candidate": denominators(cand_states)}
     result["unknown"] = unknown_summary({"baseline": base_states, "candidate": cand_states}, overlays)
+    result["latency"] = {"status": "per_side_only", "method": LATENCY_METHOD, "timeouts": dict(TIMEOUTS),
+                         "baseline": latency_side(base_states), "candidate": latency_side(cand_states),
+                         "paired": None}
     result["completeness"] = {
         "status": "per_side_only",
         "definitions": {
@@ -922,6 +985,7 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     by_id = {case["case_id"]: case for case in cases}
     result["outcomes"] = outcomes(base_states, cand_states)
     result["outcomes"]["unknown"] = result["unknown"]
+    result["latency"].update(status="computed", paired=latency_paired(base_states, cand_states))
     result["units"] = [{
         "case_id": key[0], "repetition": key[1],
         "expected_label": "attack" if base_states[key]["attacked"] else "benign",
@@ -934,7 +998,8 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     return result, EXIT_COMPARABLE
 
 
-CSV_SIDE = ("status", "utility", "injection_success", "deny", "approval_required", "reason")
+CSV_SIDE = ("status", "utility", "injection_success", "deny", "approval_required", "task_elapsed_ms",
+            "elapsed_ms", "reason")
 CSV_FIELDS = (["case_id", "repetition", "expected_label", "semantic_family", "dependency_cluster", "input_identity",
                "case_input_sha256"] + [f"{role}_{field}" for role in ("baseline", "candidate") for field in CSV_SIDE]
               + ["security_transition", "utility_transition"])
@@ -1036,8 +1101,32 @@ def render_markdown(result) -> str:
                 f"{_fmt_bounds([bounds['lower'], bounds['upper']] if 'lower' in bounds else None)} | "
                 f"{metric['overall_change']} |")
         lines.append("")
-    lines += ["## Not computed", "", f"- Uncertainty: {result['uncertainty']['status']}",
-              f"- Latency: {result['latency']['status']}", "", "## Limitations", ""]
+    latency = result["latency"]
+    if latency.get("baseline"):
+        def dist(values):
+            return "n/a (0 measured)" if values["n"] == 0 else \
+                f"{values['median']} / {values['p95']} ({values['min']}–{values['max']})"
+        lines += ["## Latency (enforced trajectories, ms)", "",
+                  "Median / nearest-rank p95 (min–max). Unknown evaluator outcomes keep their recorded durations. "
+                  "Stopped and not-run units have no duration and are not imputed. Timeouts: "
+                  f"{'not available' if latency['timeouts']['count'] is None else latency['timeouts']['count']} "
+                  f"({latency['timeouts']['availability']}).", "",
+                  "| Side | Measured / planned | With outcome | With unknown outcome | Stopped (duration unavailable) "
+                  "| Not run | task_elapsed_ms | elapsed_ms |", "|---|---|---|---|---|---|---|---|"]
+        for role in ("baseline", "candidate"):
+            values = latency[role]["all"]
+            lines.append(f"| {role} | {values['measured']} / {values['planned']} | "
+                         f"{values['measured_with_evaluator_outcome']} | {values['measured_with_unknown_outcome']} | "
+                         f"{values['stopped_duration_unavailable']} | {values['not_run']} | "
+                         f"{dist(values['task_elapsed_ms'])} | {dist(values['elapsed_ms'])} |")
+        paired = latency.get("paired")
+        if paired:
+            lines += ["", f"Paired candidate − baseline on {paired['paired_measured']} of {paired['planned']} units "
+                          f"measured on both sides: task_elapsed_ms {dist(paired['task_elapsed_ms_difference'])}; "
+                          f"elapsed_ms {dist(paired['elapsed_ms_difference'])}. Change: {paired['change']} "
+                          f"({paired['change_reason']})."]
+        lines.append("")
+    lines += ["## Not computed", "", f"- Uncertainty: {result['uncertainty']['status']}", "", "## Limitations", ""]
     lines += [f"- {item}" for item in result["limitations"]]
     return "\n".join(lines) + "\n"
 

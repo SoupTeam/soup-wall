@@ -51,10 +51,18 @@ Stopped and not-run units have no evaluator outcome; they are never counted as s
 | baseline | none | 0 | not available (undistinguished) |
 | candidate | none | 0 | not available (undistinguished) |
 
+## Latency (enforced trajectories, ms)
+
+Median / nearest-rank p95 (min–max). Unknown evaluator outcomes keep their recorded durations. Stopped and not-run units have no duration and are not imputed. Timeouts: not available (undistinguished).
+
+| Side | Measured / planned | With outcome | With unknown outcome | Stopped (duration unavailable) | Not run | task_elapsed_ms | elapsed_ms |
+|---|---|---|---|---|---|---|---|
+| baseline | 48 / 48 | 48 | 0 | 0 | 0 | 130.0 / 140 (120–150) | 180.0 / 190 (170–200) |
+| candidate | 48 / 48 | 48 | 0 | 0 | 0 | 135.0 / 140 (120–150) | 185.0 / 190 (170–200) |
+
 ## Not computed
 
 - Uncertainty: not_computed_in_checkpoint
-- Latency: not_computed_in_checkpoint
 
 ## Limitations
 
@@ -64,4 +72,4 @@ Stopped and not-run units have no evaluator outcome; they are never counted as s
 - Paired differences are conditional on units evaluable in both runs; with partial coverage only the missing-outcome bounds on the planned set account for missing outcomes; they are not confidence intervals.
 - Without declared semantic families, correlated variants are grouped by known plan dependencies only.
 - Unknown outcomes are unavailable in this producer contract; timeouts are not distinguishable.
-- Checkpoint scope: family-aware uncertainty and latency distributions are not computed yet.
+- Checkpoint scope: family-aware uncertainty is not computed yet; latency is descriptive and states no speed-up or slow-down.
