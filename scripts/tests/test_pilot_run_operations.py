@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -270,6 +271,67 @@ class RunOperations(unittest.TestCase):
         with self.assertRaises((OSError, S.Refusal)):
             ARCHIVE.apply(plan, self.output)
         self.assertEqual(before, self.snapshot())
+
+    def test_current_archive_file_fsync_failure_preserves_every_source_member(self):
+        plan = self.archive()
+        filename = self.output / ARCHIVE.archive_name(plan, plan["runs"][0])
+        body = filename.read_bytes()
+        filename.rename(self.output / "previous-archive.zip")
+        self.write(filename, body)
+        selected = filename.stat().st_ino
+        before = self.snapshot()
+        actual, synced = ARCHIVE.os.fsync, []
+        def fail_archive(fd):
+            info = os.fstat(fd)
+            if info.st_ino == selected and stat.S_ISREG(info.st_mode):
+                synced.append(selected)
+                raise OSError("controlled archive-file sync failure")
+            return actual(fd)
+        with patch.object(ARCHIVE.os, "fsync", side_effect=fail_archive):
+            result = ARCHIVE.apply(plan, self.output)[0]
+        self.assertEqual(synced, [selected])
+        self.assertEqual(result["outcome"], "retained")
+        self.assertEqual(before, self.snapshot())
+
+    def test_identical_archive_replacement_during_sync_refuses_source_removal(self):
+        plan = self.archive()
+        filename = self.output / ARCHIVE.archive_name(plan, plan["runs"][0])
+        body, selected = filename.read_bytes(), filename.stat().st_ino
+        before = self.snapshot()
+        actual, replaced = ARCHIVE.os.fsync, []
+        def replace_archive(fd):
+            info = os.fstat(fd)
+            if info.st_ino == selected and stat.S_ISREG(info.st_mode) and not replaced:
+                filename.rename(self.output / "held-archive.zip")
+                self.write(filename, body)
+                replaced.append(filename.stat().st_ino)
+            return actual(fd)
+        with patch.object(ARCHIVE.os, "fsync", side_effect=replace_archive):
+            result = ARCHIVE.apply(plan, self.output)[0]
+        self.assertTrue(replaced)
+        self.assertNotEqual(replaced[0], selected)
+        self.assertEqual(result["outcome"], "retained")
+        self.assertEqual(result["reason"], "archive_changed_during_apply")
+        self.assertEqual(before, self.snapshot())
+
+    def test_current_archive_is_synced_before_first_source_detachment(self):
+        plan = self.archive()
+        filename = self.output / ARCHIVE.archive_name(plan, plan["runs"][0])
+        selected = filename.stat().st_ino
+        actual_sync, actual_rename = ARCHIVE.os.fsync, ARCHIVE.rename_exclusive
+        synced = []
+        def observe_sync(fd):
+            info = os.fstat(fd)
+            if info.st_ino == selected and stat.S_ISREG(info.st_mode):
+                synced.append(selected)
+            return actual_sync(fd)
+        def observe_detachment(*args):
+            self.assertTrue(synced, "source detached before current archive file fsync")
+            return actual_rename(*args)
+        with patch.object(ARCHIVE.os, "fsync", side_effect=observe_sync), \
+             patch.object(ARCHIVE, "rename_exclusive", side_effect=observe_detachment):
+            result = ARCHIVE.apply(plan, self.output)[0]
+        self.assertEqual(result["outcome"], "archived_and_removed")
 
     def test_rename_replacement_and_unexpected_member_refuse_and_keep_unrelated(self):
         plan = self.archive()

@@ -7,7 +7,7 @@ Interrupted apply retains the verified archive and reports partial/unknown state
 """
 import argparse
 import ctypes
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import io
 import json
 import os
@@ -269,14 +269,42 @@ never be mistaken for the selected inode after the last inventory check.
         os.close(source_fd)
 
 
+@contextmanager
+def durable_archive(output, plan, row):
+    """Pin and sync the current verified archive, not a prior publication inode."""
+    filename = archive_name(plan, row)
+    body, selected = output.read(filename, MAX_ARCHIVE)
+    fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+                 dir_fd=output.fd)
+    try:
+        S.require(S.identity(os.fstat(fd)) == selected, "archive_changed_during_apply")
+        verify_archive(body, plan, row)
+
+        def check():
+            current, identity = output.read(filename, MAX_ARCHIVE)
+            S.require(identity == selected == S.identity(os.fstat(fd)) and current == body,
+                      "archive_changed_during_apply")
+
+        def guard():
+            check()
+            os.fsync(fd)
+            os.fsync(output.fd)
+            check()
+
+        guard()
+        yield body, guard
+    finally:
+        os.close(fd)
+
+
 def apply_one(parent, output, plan, row):
-    # The archive is verified AND made durable before any source-state action.
-    body = output.read(archive_name(plan, row), MAX_ARCHIVE)[0]
-    verify_archive(body, plan, row)
-    os.fsync(output.fd)
+    with durable_archive(output, plan, row) as (body, verify_durable_archive):
+        return _apply_one(parent, output, plan, row, body, verify_durable_archive)
+
+
+def _apply_one(parent, output, plan, row, body, verify_durable_archive):
     def archive_guard():
-        S.require(output.read(archive_name(plan, row), MAX_ARCHIVE)[0] == body, "archive_changed_during_apply")
-        os.fsync(output.fd)
+        verify_durable_archive()
         if moved:
             parent.check()
             try:

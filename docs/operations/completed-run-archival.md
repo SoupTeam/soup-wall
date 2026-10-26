@@ -63,6 +63,10 @@ python3 -B scripts/pilot-run-archive.py apply \
 ```
 
 Apply verifies all selected archives and current inventories before starting.
+Before detaching a source run, apply holds a no-follow descriptor for the current
+verified archive, fsyncs that file and its directory, and rechecks its identity.
+Even a byte-identical archive replacement during apply refuses further removal;
+a file-sync failure before detachment preserves the source run.
 It rechecks each run, exclusively detaches the selected directory into an owned
 private `.soup-wall-cleanup-…` quarantine in the selected parent, and revalidates
 the detached inventory. Reappearance of the original run name refuses further
