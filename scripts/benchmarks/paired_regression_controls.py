@@ -349,6 +349,16 @@ def scenarios():
         "improved outcomes with one family per user task: 12 resampling units", world=fine_world)
     add("regressed_fine_families", fine_cand, run("candidate", fine_cand, regressed_outcome), 0, [],
         "regressed outcomes with one family per user task: 12 resampling units", world=fine_world)
+    fine_declared = {}
+    for case_id, family in FINE_FAMILIES["families"].items():
+        fine_declared.setdefault(family, []).append(case_id)
+    unbound_world = dict(fine_world, **{"inputs-no-manifest.json": encode(bundle(FINE_FAMILIES, with_manifest=False)),
+                                        "families.json": encode(dict(families(), families=fine_declared))})
+    add("fine_families_unbound", fine_cand, run("candidate", fine_cand, improved_outcome), 0,
+        ["case_semantic_input_unverified", "semantic_families_unbound"],
+        "improved_fine_families with unverified case inputs and the 12 families only declared by --families: "
+        "the interval excludes zero, but no change is established", inputs="inputs-no-manifest.json",
+        families=True, status="conditionally_comparable", world=unbound_world)
     return base_plan, run("baseline", base_plan, baseline_outcome), result
 
 
@@ -377,7 +387,7 @@ def write_controls(out_dir: Path):
         result, code = pr.compare(base / "baseline-plan.json", base / "baseline-run.json",
                                   directory / "candidate-plan.json", directory / "candidate-run.json",
                                   base / scenario["inputs"] if scenario["inputs"] else None,
-                                  controls / "families.json" if scenario["families"] else None,
+                                  base / "families.json" if scenario["families"] else None,
                                   candidate_unknowns=directory / "candidate-unknowns.json"
                                   if scenario["unknowns"] is not None else None)
         pr.write_result(out_dir / "results" / name, result)

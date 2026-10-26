@@ -686,6 +686,39 @@ class Uncertainty(Fixture):
         self.assertEqual((values["informative_clusters"], values["effective_clusters"]), (12, round(51 ** 2 / 1611, 3)))
         self.assertEqual((values["status"], values["interval95"]), ("insufficient_clusters", None))
 
+    def test_effective_cluster_minimum_uses_the_unrounded_value(self):
+        # Sizes [100] * 9 + [101]: 1001^2 / (9 * 100^2 + 101^2) = 9.99991018..., which rounds to 10.0.
+        value = lambda row: row["utility"]
+        pairs, clusters = self.pairs([[(False, True)] * 100] * 9 + [[(False, True)] * 101])
+        below = pr.family_uncertainty(pairs, value, "higher", clusters)
+        self.assertLess(1001 ** 2 / 100_201, pr.MIN_EFFECTIVE_CLUSTERS)
+        self.assertEqual((below["effective_clusters"], below["status"], below["interval95"]),
+                         (10.0, "insufficient_clusters", None))
+        self.assertIn(repr(1001 ** 2 / 100_201), below["reason"])
+        # Exactly at the minimum (ten equal clusters) an interval is reported.
+        pairs, clusters = self.pairs([[(False, True)] * 100] * 10)
+        at = pr.family_uncertainty(pairs, value, "higher", clusters)
+        self.assertEqual((at["effective_clusters"], at["status"]), (10.0, "computed"))
+
+    def test_conditional_comparability_never_establishes_a_change(self):
+        # Same outcomes and 12 families as improved_fine_families, but the families are only declared by
+        # --families and per-case inputs are unverified. The interval is kept and excludes zero, yet the
+        # change is not established; with the source-bound 6 families no interval exists at all.
+        result = self.result("fine_families_unbound")
+        self.assertEqual(result["comparability"]["status"], "conditionally_comparable")
+        verified = self.result("improved_fine_families")["outcomes"]
+        for name, direction in (("security", "improved"), ("utility_under_attack", "regressed")):
+            with self.subTest(metric=name):
+                metric = result["outcomes"][name]
+                self.assertEqual(metric["family_uncertainty"], verified[name]["family_uncertainty"])
+                self.assertEqual(metric["diagnostic_change"], verified[name]["overall_change"])
+                self.assertTrue(metric["diagnostic_change"].startswith(direction))
+                self.assertEqual(metric["overall_change"],
+                                 "not_established: comparability is conditionally_comparable "
+                                 "(gaps: case_semantic_input_unverified, semantic_families_unbound)")
+        self.assertNotIn("diagnostic_change", result["outcomes"]["utility"])
+        self.assertNotIn("diagnostic_change", verified["security"])
+
     def test_bootstrap_is_seeded_and_ranks_are_exact(self):
         totals = [(2, -2, 2, 0)] * 5 + [(2, 0, 0, 0)] * 7
         self.assertEqual(pr.cluster_bootstrap(totals), pr.cluster_bootstrap(totals))

@@ -221,7 +221,12 @@ the first that applies is reported:
 | `not_established: family-cluster uncertainty <status>` | No interval: `families_unavailable`, `zero_denominator` or `insufficient_clusters` |
 | `not_established: family-cluster 95% interval includes zero` | The interval includes zero, including a degenerate `[0, 0]` |
 | `not_established: missing-outcome bounds and family-cluster interval differ in sign` | Partial coverage, with both excluding zero on opposite sides |
-| `improved: …` or `regressed: …` | The interval excludes zero and, with missing outcomes, so do the bounds, on the same side |
+| `not_established: comparability is conditionally_comparable (gaps: …)` | The checks above would establish a change, but the comparison has gaps. That change is kept as `diagnostic_change`. |
+| `improved: …` or `regressed: …` | `verified_comparable`, and the interval excludes zero. With missing outcomes, the bounds must also exclude zero, on the same side. |
+
+A change is established only for a `verified_comparable` result. With unbound `--families`,
+a declaration that splits cases into finer families could otherwise reach the cluster
+minimum on unverified grounds. The estimate and interval are still reported.
 
 Security and useful-behaviour metrics are never merged (`overall_direction` is null). No
 readiness verdict is given, and the plan's acceptance limits are not evaluated.
@@ -346,7 +351,7 @@ independent evidence, so it is not used.
 | Interval | 95% percentile: nearest-rank values at ranks ⌈0.025·B⌉ and ⌈0.975·B⌉ of the sorted replicates |
 | Seed and replicates | Seed 153 (`BOOTSTRAP_SEED`), B = 2000 (`BOOTSTRAP_REPLICATES`). Fixed before any data were seen. |
 | Random numbers | `random.Random(153).random()`, whose sequence Python guarantees for an integer seed. Index = ⌊random() · G⌋. Units are taken in ID order, and the generator is reseeded for each metric. |
-| Sufficiency | An interval is reported only with at least 10 effective clusters (`MIN_EFFECTIVE_CLUSTERS`): G_eff = (Σ n_g)² / Σ n_g² over informative units. Unequal sizes lower it, so one dominant family cannot pass as many. |
+| Sufficiency | An interval is reported only with at least 10 effective clusters (`MIN_EFFECTIVE_CLUSTERS`): G_eff = (Σ n_g)² / Σ n_g² over informative units. Unequal sizes lower it, so one dominant family cannot pass as many. The exact value is compared with the minimum; `effective_clusters` is rounded to three decimals for display only. |
 
 **Statuses.** Each metric reports one of these:
 
@@ -403,6 +408,7 @@ generated to test the comparator's accounting, and the provenance says so.
 | incomplete_hard_cases_dropped | `verified_comparable`, partial; conditional −1.0 while bounds include zero |
 | all_unevaluable | `verified_comparable`, zero paired-evaluable units, all rates null |
 | manifest_not_designated | `conditionally_comparable`; gaps `case_semantic_input_unverified`, `semantic_families_unbound` |
+| fine_families_unbound | `conditionally_comparable`, same gaps; the 12 families only declared by `--families`. The interval excludes zero, but `overall_change` is `not_established` (negative control). |
 | all_unknown | `conditionally_comparable`; every candidate outcome unknown, 0 evaluable, bounds [0, 1] |
 | missing_case, changed_input, substituted_task_input, settings_mismatch, unverified_inputs | exit 1 with the matching reasons |
 | unknowns_wrong_run, tampered_plan, tampered_row, duplicate_case_id, incompatible_contract, non_finite, overflowing_number | exit 2 with the matching codes |

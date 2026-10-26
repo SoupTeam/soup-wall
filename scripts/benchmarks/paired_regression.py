@@ -834,8 +834,10 @@ def family_uncertainty(pairs_by_key, value, better, clusters):
         totals[2] += transition["improved"]
         totals[3] += transition["regressed"]
     sizes = [totals[0] for totals in per_cluster.values()]
-    effective = round(n * n / sum(size * size for size in sizes), 3) if n else 0.0
-    result = {"paired_evaluable": n, "informative_clusters": len(per_cluster), "effective_clusters": effective,
+    # The sufficiency rule compares the exact value; only the reported figure is rounded.
+    effective = n * n / sum(size * size for size in sizes) if n else 0.0
+    shown = round(effective, 3)
+    result = {"paired_evaluable": n, "informative_clusters": len(per_cluster), "effective_clusters": shown,
               "cluster_paired_units": protocol.distribution(sizes)}
     if n == 0:
         return dict(result, status="zero_denominator", interval95=None,
@@ -845,8 +847,10 @@ def family_uncertainty(pairs_by_key, value, better, clusters):
                 "regressed_share": round(sum(t[3] for t in per_cluster.values()) / n, 6)}
     result["estimate"] = estimate
     if effective < MIN_EFFECTIVE_CLUSTERS:
+        # Just below the minimum the rounded figure can equal it; state the exact value there.
+        stated = shown if shown < MIN_EFFECTIVE_CLUSTERS else repr(effective)
         return dict(result, status="insufficient_clusters", interval95=None,
-                    reason=f"{effective} effective clusters is below the minimum of {MIN_EFFECTIVE_CLUSTERS}; "
+                    reason=f"{stated} effective clusters is below the minimum of {MIN_EFFECTIVE_CLUSTERS}; "
                            f"the {n} paired units are correlated variants of too few independent families")
     interval = cluster_bootstrap([per_cluster[cluster] for cluster in sorted(per_cluster)])
     low, high = interval["difference"]
@@ -1126,6 +1130,16 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     result["outcomes"] = outcomes(base_states, cand_states, clusters)
     result["outcomes"]["unknown"] = result["unknown"]
     metric_names = ("security", "utility", "utility_under_attack", "benign_interruption")
+    if status != "verified_comparable":
+        # A comparison with gaps (unverified inputs, unbound families, annotated unknowns) is diagnostic
+        # only: an established change would rest on unverified links, e.g. a declaration that splits
+        # families finely enough to reach the cluster minimum. The estimate and interval are kept.
+        for name in metric_names:
+            metric = result["outcomes"][name]
+            if not metric["overall_change"].startswith("not_established"):
+                metric["diagnostic_change"] = metric["overall_change"]
+                metric["overall_change"] = (f"not_established: comparability is {status} "
+                                            f"(gaps: {', '.join(gap['code'] for gap in gaps)})")
     result["uncertainty"] = {
         "status": "computed" if clusters else "not_computed",
         "reason": None if clusters else "semantic families unavailable: no bound case manifest or --families",
