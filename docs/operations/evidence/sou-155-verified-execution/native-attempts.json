@@ -12,6 +12,18 @@
       "artifact": 12639722045,
       "artifact_sha256": "fd8b308962ad655d75a27850a2d1a3e9c29d92c2bbec2fa0a59e9ad3b6ba3745",
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "02463a9bb10f7bf75cc1ac97960ee5d45ed2a9f0",
+      "run": 40300286692,
+      "status": "failed",
+      "production_build": "passed",
+      "failed_stage": "native-closure-unit",
+      "cause": "five-linux-test-calls-used-old-internal-function-signature",
+      "runtime_execution_observed": false,
+      "artifact": 12639873100,
+      "artifact_sha256": "ec17b933fc2a56a658b5629013d8dde99a2886b8369ba5d00c383284ec84771d",
+      "zip_crc_verified": true
     }
   ]
 }

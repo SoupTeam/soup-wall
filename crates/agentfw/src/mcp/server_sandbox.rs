@@ -1083,7 +1083,7 @@ mod tests {
         std::fs::rename(&root, temporary.path().join("original")).unwrap();
         std::fs::create_dir(&root).unwrap();
         // Fails on the opened workspace fd, before any other assets or process.
-        let error = prepare_linux_command(&profile, &[], None, false)
+        let error = prepare_linux_command(&profile, &[], None, false, true, None)
             .err()
             .unwrap();
         assert!(error
@@ -1276,7 +1276,7 @@ print(json.dumps(result))
             normal_scheduler = libc::SCHED_OTHER,
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
-        let mut prepared = prepare_linux_command(&profile, &args, None, false).unwrap();
+        let mut prepared = prepare_linux_command(&profile, &args, None, false, true, None).unwrap();
         // Add an owned FIFO after repository validation to prove that read-only
         // mounts alone are insufficient, and that Landlock still blocks IPC.
         let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
@@ -1626,7 +1626,8 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}),probe({{path:'/workspace/eg
             port = address.port()
         );
         let mut prepared =
-            prepare_linux_command(&profile, &["-e".into(), script], None, true).unwrap();
+            prepare_linux_command(&profile, &["-e".into(), script], None, true, true, None)
+                .unwrap();
         prepared
             .command
             .env("SOU83_INHERITED_SECRET", "must-not-reach-stage");
@@ -1817,8 +1818,15 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
 "#,
             port = address.port()
         );
-        let mut prepared =
-            prepare_linux_command(&profile, &["-e".to_owned(), script], None, false).unwrap();
+        let mut prepared = prepare_linux_command(
+            &profile,
+            &["-e".to_owned(), script],
+            None,
+            false,
+            true,
+            None,
+        )
+        .unwrap();
         prepared
             .command
             .env("SOU62_INHERITED_SECRET", "must-not-reach-server");
