@@ -185,6 +185,9 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeCfg {
+    /// Explicit daemon-owned Git execution. Missing = legacy result inspection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_execution: Option<NativeGitExecutionCfg>,
     pub registry_path: PathBuf,
     pub registry_sha256: String,
     /// Opt-in single-use operator approval for native Ask calls. Absent = refusal.
@@ -193,6 +196,15 @@ pub struct NativeCfg {
     /// Opt-in authenticated session liveness and bounded maintenance (SOU-89).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub liveness: Option<NativeLivenessCfg>,
+}
+
+/// Operator-selected execution root. No request can choose these assets.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeGitExecutionCfg {
+    pub profile_path: PathBuf,
+    pub profile_sha256: String,
+    pub server_id: String,
 }
 
 /// Bounded pending-approval lifecycle for native MCP Ask calls (SOU-48).
@@ -297,6 +309,12 @@ impl Config {
                     && crate::native::is_digest(&native.registry_sha256),
                 "native registry requires an absolute operator path and lowercase SHA-256"
             );
+            if let Some(git) = &native.git_execution {
+                anyhow::ensure!(cfg!(target_os = "linux") && native.liveness.is_some()
+                    && git.profile_path.is_absolute() && crate::native::is_digest(&git.profile_sha256)
+                    && crate::native::identifier(&git.server_id),
+                    "daemon Git execution requires Linux, authenticated liveness and pinned operator assets");
+            }
             if let Some(approval) = &native.approval {
                 anyhow::ensure!(
                     (1..=300).contains(&approval.ttl_seconds),

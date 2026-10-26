@@ -145,6 +145,7 @@ pub(crate) struct View {
     available: BTreeSet<String>,
     directories: BTreeSet<PathBuf>,
     images: Vec<(PathBuf, File)>,
+    object_witness: bool,
 }
 
 fn owned(metadata: &std::fs::Metadata) -> anyhow::Result<()> {
@@ -182,6 +183,34 @@ fn child(parent: &File, name: &str, directory: bool) -> anyhow::Result<File> {
         "Git shallow metadata type unsupported"
     );
     Ok(file)
+}
+
+#[cfg(test)]
+std::thread_local! {
+    // Synchronous owned-fixture barrier on this test thread only. No runtime
+    // flag, environment variable or production caller can install this hook.
+    static AFTER_OBJECT_WITNESS_GIT_OPEN: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+fn object_witness_directory(workspace: &File) -> anyhow::Result<(File, Withdrawal)> {
+    let mut source = Withdrawal::new()?;
+    // Observation must precede the first dependent directory-entry lookup.
+    // A later watch cannot report a substitution which already happened.
+    source.watch(workspace)?;
+    let git = child(workspace, ".git", true)?;
+    #[cfg(test)]
+    {
+        let action = AFTER_OBJECT_WITNESS_GIT_OPEN.with(|slot| slot.borrow_mut().take());
+        if let Some(action) = action {
+            action();
+        }
+    }
+    ensure!(
+        source.valid(),
+        "Git object witness workspace changed during lookup"
+    );
+    Ok((git, source))
 }
 
 fn entries(directory: &File) -> anyhow::Result<Vec<String>> {
@@ -407,8 +436,24 @@ impl Capture {
 
 impl View {
     pub(crate) fn capture(workspace: &File) -> anyhow::Result<Arc<Self>> {
+        Self::capture_inner(workspace, false)
+    }
+
+    /// Additive component capture. Existing selected-profile behavior is
+    /// unchanged; this snapshot also withdraws on workspace entry changes.
+    pub(crate) fn capture_object_witness(workspace: &File) -> anyhow::Result<Arc<Self>> {
+        Self::capture_inner(workspace, true)
+    }
+
+    fn capture_inner(workspace: &File, object_witness: bool) -> anyhow::Result<Arc<Self>> {
         owned(&workspace.metadata()?)?;
-        let git = child(workspace, ".git", true)?;
+        let (git, observed) = if object_witness {
+            let (git, source) = object_witness_directory(workspace)?;
+            (git, Some(source))
+        } else {
+            // Preserve legacy capture's lookup/observation order and scope.
+            (child(workspace, ".git", true)?, None)
+        };
         let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
         ensure!(
             unsafe { libc::fstatfs(git.as_raw_fd(), filesystem.as_mut_ptr()) } == 0,
@@ -421,7 +466,10 @@ impl View {
             ),
             "Git shallow filesystem unsupported"
         );
-        let mut source = Withdrawal::new()?;
+        let mut source = match observed {
+            Some(source) => source,
+            None => Withdrawal::new()?,
+        };
         source.watch(&git)?;
         // A pending lock is an unsupported/racy state, never a retry that
         // silently acquires authority over a different reference image.
@@ -604,7 +652,52 @@ impl View {
             source: Mutex::new(capture.source),
             directories: capture.directories,
             images: capture.images,
+            object_witness,
         }))
+    }
+
+    pub(crate) fn object_witness_valid(&self) -> anyhow::Result<()> {
+        ensure!(self.object_witness, "Git object witness capture required");
+        ensure!(
+            self.source.lock().is_ok_and(|mut source| source.valid()),
+            "Git object witness source withdrawn"
+        );
+        Ok(())
+    }
+
+    /// Read the very same sealed descriptors which `mount` consumes. Never
+    /// reopen source paths or infer kind from the cache's Unsupported variant.
+    pub(crate) fn object_witness_images(&self) -> anyhow::Result<BTreeMap<String, Vec<u8>>> {
+        use std::os::unix::fs::FileExt;
+        self.object_witness_valid()?;
+        let mut result = BTreeMap::new();
+        let mut total = 0usize;
+        for (path, file) in &self.images {
+            let seals = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GET_SEALS) };
+            let required =
+                libc::F_SEAL_WRITE | libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL;
+            ensure!(
+                seals >= 0 && seals & required == required,
+                "Git object image is not sealed"
+            );
+            let size = usize::try_from(file.metadata()?.len())?;
+            total = total
+                .checked_add(size)
+                .context("Git object image overflow")?;
+            ensure!(total <= MAX_IMAGE_BYTES, "Git object image bound");
+            let mut bytes = vec![0; size];
+            file.read_exact_at(&mut bytes, 0)?;
+            let relative = path
+                .strip_prefix("/workspace/")?
+                .to_str()
+                .context("Git image path encoding")?;
+            ensure!(
+                result.insert(relative.to_owned(), bytes).is_none(),
+                "duplicate Git image"
+            );
+        }
+        self.object_witness_valid()?;
+        Ok(result)
     }
 
     pub(crate) fn validate_call(&self, tool: &str, args: &Value) -> anyhow::Result<()> {
@@ -699,6 +792,71 @@ mod tests {
         std::fs::write(git.join("refs/tags/lightweight"), format!("{id}\n")).unwrap();
         std::fs::write(git.join("shallow"), format!("{id}\n")).unwrap();
         (root, id)
+    }
+
+    #[test]
+    fn object_witness_observes_workspace_before_git_lookup() {
+        let (root, _) = fixture();
+        let (replacement, _) = fixture();
+        let workspace = File::open(root.path()).unwrap();
+        let selected = root.path().join(".git");
+        let retained = root.path().join("owned-retained-directory");
+        let incoming = replacement.path().join(".git");
+
+        // Calibrate the old observation order with only owned directories:
+        // the held directory and the current entry differ, but watches added
+        // after the exchange have no retrospective event to consume.
+        let held = child(&workspace, ".git", true).unwrap();
+        std::fs::rename(&selected, &retained).unwrap();
+        std::fs::rename(&incoming, &selected).unwrap();
+        let mut late = Withdrawal::new().unwrap();
+        late.watch(&workspace).unwrap();
+        late.watch(&held).unwrap();
+        assert_ne!(
+            held.metadata().unwrap().ino(),
+            child(&workspace, ".git", true)
+                .unwrap()
+                .metadata()
+                .unwrap()
+                .ino()
+        );
+        assert!(
+            late.valid(),
+            "late observation cannot cover a prior entry exchange"
+        );
+        drop(late);
+        drop(held);
+        std::fs::rename(&selected, &incoming).unwrap();
+        std::fs::rename(&retained, &selected).unwrap();
+
+        // Repeat at the exact old gap in the real object-witness capture.
+        // Hook installation is private to this test thread and consumed once.
+        let selected_copy = selected.clone();
+        let retained_copy = retained.clone();
+        let incoming_copy = incoming.clone();
+        AFTER_OBJECT_WITNESS_GIT_OPEN.with(|slot| {
+            assert!(slot.borrow().is_none());
+            *slot.borrow_mut() = Some(Box::new(move || {
+                std::fs::rename(selected_copy, retained_copy).unwrap();
+                std::fs::rename(incoming_copy, selected).unwrap();
+            }));
+        });
+        let captured = View::capture_object_witness(&workspace);
+        assert!(AFTER_OBJECT_WITNESS_GIT_OPEN.with(|slot| slot.borrow().is_none()));
+        assert!(captured.is_err());
+        assert!(captured
+            .unwrap_err()
+            .to_string()
+            .contains("workspace changed during lookup"));
+
+        let selected = root.path().join(".git");
+        std::fs::rename(&selected, &incoming).unwrap();
+        std::fs::rename(&retained, &selected).unwrap();
+        let fresh = View::capture_object_witness(&workspace).unwrap();
+        fresh.object_witness_valid().unwrap();
+        fresh
+            .validate_call("git_show", &serde_json::json!({"revision":"HEAD"}))
+            .unwrap();
     }
 
     struct Mapping {

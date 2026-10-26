@@ -102,6 +102,10 @@ pub fn app_with_diagnostics(
             post(native::liveness::handler)
                 .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
         )
+        .route(
+            native::verified_git::ENDPOINT,
+            post(native::verified_git::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
         .route("/native/v1/instance", get(native::instance))
         .route(
             native::pilot_cleanup::ENDPOINT,
