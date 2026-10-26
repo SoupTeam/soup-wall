@@ -52,6 +52,11 @@ def reason(error):
     return value if re.fullmatch(r"[a-z][a-z0-9_]{0,100}", value) else "demo_failed"
 
 
+def qualification_args(args):
+    return argparse.Namespace(**vars(args), ask_wait_seconds=0, timeout_seconds=60,
+                              port=0, transition_target=None)
+
+
 def run(args, report):
     spec = importlib.util.spec_from_file_location("pilot_demo_driver", ROOT / "scripts/qualify-prepared-pilot-run.py")
     driver = importlib.util.module_from_spec(spec)
@@ -65,8 +70,7 @@ def run(args, report):
         raise ValueError("demo_output_parent_must_be_canonical")
     if not args.strace.is_absolute() or not args.strace.is_file() or not os.access(args.strace, os.X_OK):
         raise ValueError("demo_strace_executable_required")
-    check = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
-                               ask_wait_seconds=0, timeout_seconds=60, port=0)
+    check = qualification_args(args)
     selection, _, profiles = driver.RUN.selected(check)
     if "prepared_workspaces" in selection:
         raise ValueError("generated_demo_requires_demo_selection_use_pilot_run_for_existing_project")
@@ -82,7 +86,7 @@ def run(args, report):
     started = time.monotonic()
     try:
         with tempfile.TemporaryDirectory(prefix="soup-wall-demo-") as temporary:
-            driver.qualify(args, Path(temporary), report)
+            driver.qualify(check, Path(temporary), report)
     except Exception as error:
         report.update(status="failed", reason=reason(error))
     finally:

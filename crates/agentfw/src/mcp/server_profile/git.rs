@@ -22,6 +22,9 @@ pub enum ReadExtension {
     LocalReferences,
     FileRevisions,
 }
+/// Independently testable local object facts; no daemon attestation or relief.
+#[cfg(any(target_os = "linux", test))]
+pub mod object_witness;
 
 pub const FORMAT: &str = "sw-mcp/git-readonly/1";
 /// Explicitly selected local-reference contract; the original v1 stays narrow.
