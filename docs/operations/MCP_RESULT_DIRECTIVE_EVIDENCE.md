@@ -7,8 +7,8 @@ SOU-109 remains open. Unattested results retain the existing baseline inspection
 ## Boundary and original bytes
 
 Native inspection selects the additional evidence only for an untrusted result
-delivered to an MCP host. Each original decoded text channel still receives all
-existing detectors. Generic parent/model/context deliveries and ordinary input
+delivered to an MCP host. Completed inspection still runs every existing detector
+on each original decoded text channel. Generic parent/model/context deliveries and ordinary input
 inspection retain their existing behavior. Result validation, receipt consumption,
 resource limits, provenance retention and audit-before-release are unchanged.
 
@@ -44,6 +44,29 @@ Native audit retains static reasons and exact original block byte coordinates.
 A joined offset is never advertised as an offset within one original block.
 All distinct directive source spans remain visible; raw result text is not added
 to the audit.
+
+## Finite response-wide evidence
+
+The complete positive-evidence collector shares one budget across original
+channels and both ordered projections: at most 1 MiB decoded input, 257 channels
+(256 content blocks plus structured content), 256 findings, 64 KiB conservatively
+charged audit-reason storage and 32 MiB charged scan work. All counters are checked
+before admitting another finding. Signature matches and directive candidates are
+streamed; a large vector is not materialized before applying the limits.
+
+Each block receives only policy representatives grouped by detector/severity with
+maximum confidence, matching the existing policy conditions and score deduplication.
+Cross-channel evidence participates on every block, including a secret in a later
+block; its full bounded original-coordinate map is appended to the audit once.
+The evidence object checks exact original block bytes when selecting its policy
+projection. This is content correlation, never a formatter/runtime attestation.
+
+Exhaustion gives an explicit incomplete-evidence Deny, spends the current result
+receipt and withholds the result without tainting the session with undelivered
+text. It does not silently truncate or treat a suffix as clean. The native audit
+records incomplete inspection; the development adapter reports it as not inspected,
+so the reporter cannot count a technical refusal as a caught attack. Existing
+transport, record, process/resource and time limits remain unchanged.
 
 ## Reproduction and limits
 
