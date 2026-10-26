@@ -192,6 +192,14 @@ def execution_config(config, profile):
         "profile_path": str(profile), "profile_sha256": sha(profile), "server_id": "sou146-git"}})
 
 
+def pinned_execution_profile(installed, workspace):
+    """Qualification-only copy; installer defaults and metadata stay intact."""
+    profile = json.loads(installed.read_text())
+    observed = workspace.stat()
+    profile["workspaceIdentity"] = {"device": observed.st_dev, "inode": observed.st_ino, "uid": observed.st_uid}
+    return profile
+
+
 def execution_reservations(stack):
     return BASE.events(stack.audit, "native_git_execution_reserved")
 
@@ -824,6 +832,12 @@ def run(args):
             first, second, poison = prepare_repo(workspace, args.git, env)
             INSTALL.install(install, workspace, args.git, args.git_sha256, args.bwrap, args.git_launcher, file_revisions=True)
             report["installation"] = json.loads((install / "installation.json").read_text())
+            execution_profile = private / "execution-profile.json"
+            selected = pinned_execution_profile(install / "profile.json", workspace)
+            write(execution_profile, selected)
+            write(output / "execution-profile.json", selected)
+            report["execution_profile"] = {"sha256": sha(execution_profile), "profile": selected,
+                "installed_profile_sha256": sha(install / "profile.json"), "qualification_copy": True}
             subprocess.run([str(args.agentfw), "install"], env=env, capture_output=True, check=True, timeout=30)
             port = BASE.DEMO.free_port()
             config = {"port": port, "enforce": True, "max_record_bytes": 1048576,
@@ -833,7 +847,7 @@ def run(args):
                     "default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100}}}
             write(home / ".agentfw/config.yaml", config)
             stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace,
-                install=install, profile=install / "profile.json", env=env, daemon=None, port=port,
+                install=install, profile=execution_profile, env=env, daemon=None, port=port,
                 poison=poison, daemon_witnesses=[], audit=output / "native-audit.jsonl")
             positive = subprocess.run([str(args.sandbox_test_binary), "selected_git_sandbox_isolates_real_python_and_git", "--ignored", "--nocapture"],
                 env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(stack.profile), SOU86_TEST_AGENTFW=str(args.agentfw.resolve())),
@@ -875,7 +889,8 @@ def run(args):
                     report.setdefault("worker_libtest_cleanup", {})[label] = cleanup
                 (output / (label + ".log")).write_bytes(out + err)
                 require(process.returncode == 0 and marker.encode() in out
-                        and b"1 passed; 0 failed" in out and cleanup["all_stopped"],
+                        and b"1 passed; 0 failed" in out and cleanup["all_stopped"]
+                        and any(row.get("original_git_server") and not row["parent_process"] for row in cleanup["observed"]),
                         "actual original worker qualification failed: " + label)
             report["worker_after_original_write"] = {"passed": True, "source_restored": True,
                 "completion_created": False, "barrier": "private cfg(test) immediately after actual original tools/call write+flush",
@@ -888,6 +903,9 @@ def run(args):
             legacy_profile = json.loads(stack.profile.read_text())
             legacy_profile["format"] = INSTALL.FORMAT
             write(legacy / "profile.json", legacy_profile)
+            write(output / "baseline-execution-profile.json", legacy_profile)
+            report["baseline_execution_profile"] = {"sha256": sha(legacy / "profile.json"), "profile": legacy_profile,
+                "qualification_copy": True, "purpose": "explicit BASE ID200 control"}
             write(legacy / "registry.json", INSTALL.registry(json.loads((INSTALL.ASSETS / "upstream-tools-list.json").read_text())))
             legacy_config = execution_config(dict(config, native={**config["native"],
                 "registry_path": str(legacy / "registry.json"), "registry_sha256": sha(legacy / "registry.json")}), legacy / "profile.json")
@@ -895,7 +913,7 @@ def run(args):
             daemon = start_daemon(stack, legacy_config, "legacy")
             legacy_refusal(stack, report)
             BASE.DEMO.stop(daemon)
-            stack.profile = install / "profile.json"
+            stack.profile = execution_profile
             daemon = start_daemon(stack, config, "startup-guards")
             helper_control(stack, report)
             GIT.startup_refusals(stack, report)
