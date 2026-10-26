@@ -3079,6 +3079,8 @@ fn audit(
 mod tests {
     use super::*;
     mod literal_arguments;
+    mod result_parser;
+    mod result_parser_boundary;
     use crate::{
         audit::AuditSink,
         handlers::{AppState, Sessions as HookSessions},
