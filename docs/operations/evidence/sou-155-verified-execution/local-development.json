@@ -523,6 +523,71 @@
       "elapsed_seconds": 18.16,
       "source_after_sha256": "f1e34467d361ff77be1dbd850f7cc9022e87455629adcb848ac69c77e793346b",
       "log_sha256": "183b879b7d56e5fea53f488752d9b38cfc5cb1245221069ef50d94bc0ef3b788"
+    },
+    {
+      "label": "native-bootstrap-contract",
+      "source_files_sha256": "219c4ceac5b29d8f39e25338010a777154c2d14fb211daf5458de2d0fb6326fd",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.25,
+      "source_after_sha256": "219c4ceac5b29d8f39e25338010a777154c2d14fb211daf5458de2d0fb6326fd",
+      "log_sha256": "6aebb6e995232b731f487b3767e70075221e57c5f5ea262b0267643c428d8d1f"
+    },
+    {
+      "label": "authenticated-overflow-and-safe-projection",
+      "source_files_sha256": "700467c8bc7abbf0537f358d6cd423c6db1aa566cab5ff250f6c42d4500244aa",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "failed",
+      "exit_code": 101,
+      "elapsed_seconds": 12.95,
+      "source_after_sha256": "700467c8bc7abbf0537f358d6cd423c6db1aa566cab5ff250f6c42d4500244aa",
+      "log_sha256": "cb6dcd3cb964e47d5cd9483e5e404987a88bebd37ce2ec138670c1540fd320fc"
+    },
+    {
+      "label": "complete-overflow-and-parent-bounds",
+      "source_files_sha256": "d65264cb81580b7ee88654c2e48bd4086eb9d54a01b40e9df3c79d0d12b3b3c8",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 15.02,
+      "source_after_sha256": "d65264cb81580b7ee88654c2e48bd4086eb9d54a01b40e9df3c79d0d12b3b3c8",
+      "log_sha256": "ec961c9d68dfa11db444ff3cee1b425178265b27af04437b7ff46996bb16ca0e"
+    },
+    {
+      "label": "finite-launch-diagnostics-and-runtime-floors",
+      "source_files_sha256": "0bf03c327b84604a0727df68d2058c8ed66f15ca6c3f4ead1ba5792f4223a6c7",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 19.73,
+      "source_after_sha256": "0bf03c327b84604a0727df68d2058c8ed66f15ca6c3f4ead1ba5792f4223a6c7",
+      "log_sha256": "ee6f74c23f94b44fab8533f6b5b38654adfc583b14ee03c8d542dcb67e415548"
+    },
+    {
+      "label": "authenticated-refusal-diagnostics",
+      "source_files_sha256": "177b4492143355c6a1be2624952ef394db02fbec84b826998943952bcdef4bdf",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 17.93,
+      "source_after_sha256": "177b4492143355c6a1be2624952ef394db02fbec84b826998943952bcdef4bdf",
+      "log_sha256": "f89ca1d4842c1cfb76f97a278d9ab7da228e334b0debca3b4e542315dd636078"
     }
   ]
 }

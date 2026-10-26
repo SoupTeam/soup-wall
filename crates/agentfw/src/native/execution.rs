@@ -23,6 +23,52 @@ pub const FORMAT: &str = "sw-mcp/verified-original-execution/1";
 pub const ENDPOINT: &str = "/native/execution/v1";
 const CATALOGUE_FORMAT: &str = "sw-mcp/original-execution-catalogue/1";
 
+/// Only static identifiers can cross the diagnostic boundary. In particular,
+/// an HTTP error chain can contain credentials or upstream-controlled text.
+fn failure_code(error: &anyhow::Error) -> &'static str {
+    const CODES: &[&str] = &[
+        "mcp_owner_launch_invalid",
+        "mcp_owner_sealed_closure_invalid",
+        "mcp_owner_budget_adoption_unverified",
+        "mcp_owner_budget_transfer_failed",
+        "mcp_owner_cleanup_unverified",
+        "mcp_owner_control_closed",
+        "mcp_owner_control_failed",
+        "mcp_owner_control_invalid",
+        "mcp_owner_descriptor_invalid",
+        "mcp_owner_namespace_identity_invalid",
+        "mcp_owner_original_spawn_failed",
+        "mcp_owner_parent_lost",
+        "mcp_owner_liveness_unverified",
+        "mcp_owner_launch_unavailable",
+        "mcp_owner_parent_identity_invalid",
+        "mcp_owner_process_identity_invalid",
+        "mcp_owner_sandbox_spawn_failed",
+        "mcp_owner_spawn_failed",
+        "mcp_owner_startup_failed",
+        "mcp_owner_startup_identity_invalid",
+        "mcp_budget_mount_observation_failed",
+        "mcp_budget_hugetlb_mount_unsupported",
+        "mcp_budget_delegation_unavailable",
+        "pilot_budget_selection_changed",
+        "pilot_budget_binding_invalid",
+        "native_child_authority_invalid",
+        "native_child_authority_expired",
+        "native_child_authority_escalation",
+        "native_mcp_terminated",
+        "verified_execution_process_unverified",
+        "verified_execution_profile_changed",
+        "verified_execution_withdrawn",
+    ];
+    for cause in error.chain() {
+        let message = cause.to_string();
+        if let Some(code) = CODES.iter().find(|code| message == **code) {
+            return code;
+        }
+    }
+    "verified_execution_session_failed"
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {

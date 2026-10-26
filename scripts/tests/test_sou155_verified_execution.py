@@ -4,6 +4,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -24,9 +25,9 @@ SOURCE = 'a' * 40
 
 def complete():
     metadata = []
-    for index in range(9):
+    for index in range(13):
         row = {name: 'b' * 64 for name in GATE.META if name.endswith('_sha256')}
-        generation = 0 if index < 7 else index - 6
+        generation = 0 if index < 11 else index - 10
         row.update(contract='sw-mcp/verified-original-execution/1',
                    daemon_instance_id=str(generation), native_call_id=str(index),
                    invocation_sha256=f'{index + 1:064x}',
@@ -40,6 +41,9 @@ def complete():
     by_name['actual-original-cancel-with-useful-followup'].update(
         original_reader_seen=True, cancelled_result_released=False, effects_rolled_back=False)
     by_name['exact-original-ask-approved-once']['approval_replay_refused'] = True
+    for name in ('strong-body-refusal-with-useful-followup','bounded-evidence-overflow-with-useful-followup'):
+        by_name[name].update(refused=True, useful_followup=True)
+    by_name['bounded-evidence-overflow-with-useful-followup']['incomplete_deny'] = True
     for name in ('executable-replacement-before-capture',
                  'identical-schema-alternate-formatter-with-new-tree-hash'):
         by_name[name]['endpoint_started'] = False
@@ -48,7 +52,7 @@ def complete():
                   source_read_only=True, network='private-loopback-only',
                   writes='isolated-scratch-and-owned-delegation-only',
                   binary_sha256='c' * 64, cleanup_verified=True, owned_root_empty_final=True,
-                  cases=cases, execution_records=metadata, original_results=9)
+                  cases=cases, execution_records=metadata, original_results=13)
     build = dict(source_commit=SOURCE, status='passed', runtime_qualification=False,
                  binary_sha256='c' * 64, steps=[dict(label=name, status='passed', exit_code=0)
                  for name in ('native-build', 'native-closure-unit', 'native-execution-unit',
@@ -57,6 +61,19 @@ def complete():
 
 
 class NativeEvidence(unittest.TestCase):
+    def test_candidate_report_read_is_bounded_and_refuses_ambiguous_or_linked_input(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = root / 'report.json'
+            for raw in (b'{"status":"failed","status":"passed"}', b'{"number":NaN}', b' ' * 131073):
+                report.write_bytes(raw)
+                with self.assertRaises(ValueError):
+                    GATE.read(report)
+            link = root / 'linked.json'
+            link.symlink_to(report)
+            with self.assertRaises(OSError):
+                GATE.read(link)
+
     def test_complete_finite_projection(self):
         report, build = complete()
         self.assertTrue(GATE.project(report, build, SOURCE, 0)['acceptance_pass'])

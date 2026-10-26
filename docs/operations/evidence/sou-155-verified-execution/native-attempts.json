@@ -87,6 +87,29 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "a6e564cf04414ef2acfbc19d38c762ce2bc5e217",
+      "run": 40308057599,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "daemon_healthy": true,
+      "failed_stage": "original-transport-initialization",
+      "cause": "unclassified-client-transport-refusal-needs-bounded-diagnostics",
+      "original_result_observed": false,
+      "runtime_execution_observed": "unverified",
+      "artifacts": [
+        {
+          "id": 12643636955,
+          "sha256": "095a1a8a7ab618a5685507ccf94995f9fbaf7c711b0440fe1619c4cea61a0ac3"
+        },
+        {
+          "id": 12643199868,
+          "sha256": "e1d9bbbceb24cebf73273f036e543c45effdbf1f94ea2d1e073a37f249bc29ad"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }

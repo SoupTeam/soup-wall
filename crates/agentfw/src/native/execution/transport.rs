@@ -26,6 +26,12 @@ pub struct Preamble {
 }
 
 fn refusal(status: StatusCode, reason: &'static str) -> Response {
+    if status != StatusCode::UNAUTHORIZED && reason != "native_disabled" {
+        eprintln!(
+            "{}",
+            json!({"event":"verified_execution_refused","failure_code":reason})
+        );
+    }
     (
         status,
         axum::Json(json!({"contract":FORMAT,"error_code":reason,"complete":false})),
@@ -220,6 +226,7 @@ pub async fn handler(State(st): State<Shared>, headers: HeaderMap, body: Body) -
     let (done_tx, done_rx) = oneshot::channel();
     let profile = service.catalogue.profile.clone();
     tokio::spawn(async move {
+        let observed = context.clone();
         let result = crate::mcp::admission::run_daemon_streams(
             config,
             profile,
@@ -234,6 +241,15 @@ pub async fn handler(State(st): State<Shared>, headers: HeaderMap, body: Body) -
             context,
         )
         .await;
+        if let Err(error) = &result {
+            eprintln!(
+                "{}",
+                json!({"event":"verified_execution_session_failed",
+                "failure_code":failure_code(error),
+                "launch_stage":observed.stage.load(Ordering::Acquire),
+                "original_generation_bound":observed.process.get().is_some()})
+            );
+        }
         let _ = cancel_tx.send(true);
         let _ = input_task.await;
         drop(host_permit);
