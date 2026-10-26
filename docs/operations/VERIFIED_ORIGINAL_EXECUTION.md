@@ -1,10 +1,10 @@
 # Daemon-owned original execution binding (SOU-155)
 
 Development implementation on accepted base
-`3c9cfb08c0f1498676dcc70de131bd2f324dd13b`. Native qualification is still pending;
+`379f9f9a17ec7369acaa65455d26f745c36ab866`. Native qualification is still pending;
 this document does not claim merge readiness. The remaining SOU-142 outside-owner
-SIGKILL handoff is retained separately in PR #272, including its reproduced orphan
-and explicit `production_cleanup_verified=false` outcome.
+SIGKILL delivery was transferred to @waattoo on October 26 and is not a SOU-155
+dependency. Its separate diagnostic handoff remains in PR #272.
 
 ## Trust and scope
 
@@ -177,6 +177,23 @@ kind (`blob`, `tree`, `commit`, `tag`), object ID and snapshot digest. SOU-156 o
 its independently reviewed producer and semantics. This PR issues no such witness;
 `domain_witness` is always absent/null. A future witness cannot substitute a
 result or confer generic content trust.
+
+The SOU-155-side interface response to SOU-156 is recorded in the
+[execution join agreement](SOU155_SOU156_EXECUTION_JOIN.md). The reserved diagnostic
+shape above is not the final Git producer API. Production Git composition remains
+disabled until the retained snapshot, requested/effective typed objects and common
+private invocation are integrated and qualified together.
+
+The current filesystem path accepts one strict complete original MCP frame and
+inspects every content block, followed by structured content, without dropping
+empty blocks or deduplicating equal text. Exact raw-frame custody binds their
+identities, order, multiplicity and bytes together. Unknown envelope/result fields
+are refused; this path accepts no additional result channel outside that frame.
+A future multi-channel consumer must bind its complete ordered unique channel set
+to the same one-use capability before using any optional attribution. Metadata or
+a selected formatter text is insufficient. The current accepted inspection floor
+and shared 32 MiB scan-work budget remain unchanged; exhausted evidence is an
+incomplete refusal with a spent Call, rather than a partial successful inspection.
 
 ## Qualification and migration
 

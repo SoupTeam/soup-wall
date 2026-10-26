@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """Actual original FS/daemon/forwarder witnesses in an owned native Linux unit."""
-import argparse,hashlib,importlib.util,json,os,platform,shutil,signal,socket,stat,subprocess,sys,time,urllib.error,urllib.request,uuid,errno
+import argparse,hashlib,importlib.util,json,os,platform,re,shutil,signal,socket,stat,subprocess,sys,time,urllib.error,urllib.request,uuid,errno
 from pathlib import Path
 
 
@@ -93,7 +93,17 @@ def main():
   def start(label):
    stream=(out/(label+'.private.log')).open('xb');logs.append(stream)
    process=subprocess.Popen([binary,'serve'],env=env,stdin=subprocess.DEVNULL,stdout=stream,stderr=stream)
-   require(base.DEMO.wait_healthy(port,process),'daemon_startup_failed');return process
+   if not base.DEMO.wait_healthy(port,process):
+    stream.flush()
+    with (out/(label+'.private.log')).open('rb') as reader:
+     reader.seek(max(0,os.fstat(reader.fileno()).st_size-8192));tail=reader.read(8192)
+    # Stable reviewed error identifiers only; never retain raw logs or tokens.
+    allowed=set()
+    for name in ('crates/agentfw/src/native/execution.rs','crates/agentfw/src/mcp/verified_closure.rs','crates/agentfw/src/pilot_budget.rs'):
+     allowed.update(re.findall(r'"((?:verified_execution_|pilot_budget_)[a-z_]{1,80})"',(source/name).read_text()))
+    report['daemon_error_codes']=sorted(code for code in allowed if code.encode() in tail)[:16]
+    save();raise RuntimeError('daemon_startup_failed')
+   return process
   def stop(process):
    process.terminate()
    try:process.wait(timeout=8)
