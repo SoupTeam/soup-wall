@@ -394,7 +394,34 @@ def qualify(args, private, report, save):
                     require(process.poll() is None, "operations_race_exited_before_barrier")
                     found = [p for p in state.glob(".soup-wall-cleanup-*")
                              if p.name not in previous and (p / "cleanup.json").exists()]
-                    return found[0] if len(found) == 1 and (kind != "member" or (found[0] / "run").is_dir()) else None
+                    if len(found) != 1:
+                        return None
+                    if kind == "member":
+                        # The detached run exists before its post-rename checks.
+                        # Wait for the actual delayed member rename, with the
+                        # selected source inode held open, before replacing it.
+                        member = found[0] / "run/audit/manifest.json"
+                        if not member.is_file():
+                            return None
+                        selected = member.stat()
+                        syscall = {"x86_64": "316", "aarch64": "276"}.get(os.uname().machine)
+                        require(syscall is not None, "operations_race_architecture_unavailable")
+                        children = Path(f"/proc/{process.pid}/task/{process.pid}/children").read_text().split()
+                        held = False
+                        for child in children:
+                            try:
+                                proc = Path("/proc") / child
+                                if (proc / "syscall").read_text().split()[0] != syscall:
+                                    continue
+                                for fd in (proc / "fd").iterdir():
+                                    info = fd.stat()
+                                    if (info.st_dev, info.st_ino) == (selected.st_dev, selected.st_ino):
+                                        held = True
+                            except (OSError, IndexError):
+                                continue
+                        if not held:
+                            return None
+                    return found[0]
                 quarantine = Q.until(barrier, "operations_race_barrier_missing", seconds=15)
                 if kind == "member":
                     source_member = quarantine / "run/audit/manifest.json"
@@ -427,7 +454,8 @@ def qualify(args, private, report, save):
                     saved.rename(subject.home.parent)
                 require("DELAYED" in trace.read_text(), "operations_syscall_delay_unobserved")
                 passed(kind + "-concurrent-race-refused", original_retained=True, replacement_retained=True,
-                       syscall_delay_observed=True, trace_sha256=S.sha(trace.read_bytes()))
+                       syscall_delay_observed=True, held_member_syscall_barrier=kind == "member",
+                       trace_sha256=S.sha(trace.read_bytes()))
             finally:
                 if process.poll() is None:
                     process.kill(); process.communicate()
