@@ -4,11 +4,22 @@ This directory holds the retained evidence for the series tool in
 `scripts/qualify-ask-series.py`. Nothing here was edited by hand except where
 stated. Native results and WSL2 results are separate and are never pooled.
 
-## Native Linux (`native_linux`), exact source
+## Scope of this evidence
+
+These results are historical evidence for the exact commit named below and for nothing
+else. The branch was merged with newer main afterwards, which changes executable code
+(for example the admission, native approval and original-create code and the SOU-105
+acceptance script). Later functional CI results are not performance qualification.
+The measurement files are kept unchanged, and the reviewed tool was fixed after this
+run (see "Review follow-up"). A new qualification on the final reviewed source is
+required before any claim about that source.
+
+## Native Linux (`native_linux`), measured commit
 
 - Source: commit `12f3f2bff98d77693a19c541f9a0a2ef8e708b89`, tree
-  `82046c012a4a8b93d74cea33f1e45cd8fae83130`, clean working tree. Commits added after
-  it on this branch only add this evidence and the note; they do not change code.
+  `82046c012a4a8b93d74cea33f1e45cd8fae83130`, clean working tree. Only the series
+  tooling, workflow and documentation of this PR differed from main `a5c6172` at that commit. The branch head has
+  moved on since (see above), so this is not evidence for the current head.
 - Machine: GitHub-hosted `ubuntu-24.04` runner (4 CPUs, about 16 GiB RAM, kernel
   `6.17.0-1022-azure`), workflow run 40249648823 (workflow `mcp-real-filesystem.yml`
   with `native_preparation_only=true`, `ask_series=cold,warm,cold,warm`).
@@ -27,7 +38,8 @@ Runs (each ran about 9 minutes; the whole dispatch took 1 h 4 min):
 | 3 | cold | yes | 556.3 |
 | 4 | warm | yes | 557.1 |
 
-Pooled per kind (two runs each, 40 trials per profile), milliseconds:
+Pooled per kind (two runs each, 40 trials per profile), milliseconds. "cold" here means
+post-cache-drop, setup-rewarmed (see above):
 
 | Kind | Profile | Trials (ok/planned) | Continuation p50 / p95 / worst (ms) | First-pending asset verification p50 / p95 / worst (ms) | p95 target 3000 ms |
 |---|---|---|---|---|---|
@@ -55,10 +67,13 @@ Notes on reading these numbers:
   start, so it is a lower bound of the operator-visible wait. The worst value seen was
   1466 ms. The 5-second pending bound is enforced and reported by the SOU-105
   acceptance, not by this series.
-- Cold and warm runs came out almost the same. The page-cache drop was shown in both
-  cold runs (cached memory fell from 6297160 kB to 313280 kB, and from 1039988 kB to
-  315004 kB), so the cold label is earned. Why it made no visible latency difference
-  here was not investigated; package_tree hashing dominates in both.
+- Cold and warm runs came out almost the same. The page-cache drop before the run was
+  shown in both `cold` runs (cached memory fell from 6297160 kB to 313280 kB, and from
+  1039988 kB to 315004 kB). It is a pre-run condition only: the qualifier prepares the
+  original launch afterwards and re-reads the inputs before any timed approval, and the
+  cache is not dropped between trials. So the `cold` rows below are post-cache-drop,
+  setup-rewarmed measurements, not 40 cold Ask samples. Package_tree hashing dominates
+  in both kinds.
 - `immutable_files` was 0 in every trial, with 52 (filesystem) or 144 (git) leased
   files and 4037 or 5673 rehashed files per approval. So no fs-verity reuse was
   observed on this runner. Whether the kernel, file system or profile files lack
@@ -98,6 +113,17 @@ machine, including failed ones:
   plausible but unproven cause. On this machine git `package_tree` takes about 4.3 s
   (p50), close to the 5 s pending bound, so the margin is thin. No claim is made that
   this is a regression or that it is not.
+
+## Review follow-up
+
+The review of this PR found that the first version of the tool could report a complete,
+passing series from a run whose subprocess had failed or whose report did not validate
+for the current source. The tool now requires successful execution plus validation,
+keeps every other attempt visible with its own totals, and states that the `cold` kind
+is a pre-run cache drop only. Negative regression tests cover a valid-looking report
+left by a failed subprocess and an unvalidated run. The 160 trials above were produced by
+the earlier version of the tool and are kept as they were; all four runs there exited
+successfully and validated, so the gating change does not alter them.
 
 ## Limits
 

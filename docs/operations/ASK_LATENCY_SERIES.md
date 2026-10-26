@@ -38,13 +38,27 @@ never dropped.
 - `cold`: `sync` followed by `drop_caches` immediately before the run. The drop must
   be shown by a measurable page-cache shrink. If it cannot be shown the run is
   labeled `cold_unavailable`, stays in the report, and is excluded from the cold pool.
+  This is a pre-run condition only. The qualifier then prepares the original launch
+  (hashes and copies the selected binaries, installs and hashes both profiles) and
+  reads the same pages again before any timed approval, and no cache drop happens
+  between trials. So the trials of a `cold` run are not claimed to be cold Ask
+  samples. Pooled results call this kind `post_cache_drop_setup_rewarmed` and report
+  the first trial per profile (`initial_trial_ms`) apart from the repetitions
+  (`repeat_trials_ms`). A genuinely cold per-trial barrier is not implemented.
 - `warm`: started right after the previous run, with no cache drop.
 - A plan starts with `cold`, has at most six runs, and is declared up front, for
   example `cold,warm,cold,warm`. Every attempt (also failed or timed-out) is kept in
-  `runs/NN-kind/run.json`. The series is `complete` only when every planned run
-  produced a validated report with all planned trials successful; otherwise it is
-  `incomplete` and the command exits non-zero. A missed 3000 ms target is reported
-  under `performance_blockers`; add `--fail-on-blocker` to make it fail the command.
+  `runs/NN-kind/run.json`.
+- A run qualifies only when its subprocess exited successfully (`exit_code` 0, no
+  `failure`) and its report validated against the current source and selected inputs.
+  A report left behind by a failed subprocess is kept for inspection but never
+  qualifies. Pooled distributions use qualified runs only; every other attempt of the
+  kind stays in `unqualified_runs` with its own totals, and `summary.json` carries an
+  `attempts` ledger.
+- The series is `complete` only when every planned run qualified with all planned
+  trials successful; otherwise it is `incomplete` and the command exits non-zero. A
+  missed 3000 ms target is reported under `performance_blockers`; add
+  `--fail-on-blocker` to make it fail the command.
 
 ## Running on native Ubuntu
 

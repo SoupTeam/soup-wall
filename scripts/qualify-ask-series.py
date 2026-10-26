@@ -335,21 +335,56 @@ def run_summary(qualification, samples, events):
     return out
 
 
-def pool(runs, samples):
+def disqualification(run):
+    """Why a run may not qualify the series; None when the subprocess succeeded and its report matched this source."""
+    if run.get('exit_code', 0) != 0 or run.get('failure'):
+        return 'execution_failed'
+    if run.get('validation_error'):
+        return 'report_not_valid_for_this_source'
+    if run.get('validated') is not True:
+        return 'report_not_validated'
+    return None
+
+
+def split_trials(run, profile):
+    trials = [t for t in run['summary']['trials'][profile]['continuation_ms_by_trial']
+              if t['passed'] and isinstance(t['decision_to_result_ms'], (int, float))]
+    return ([t['decision_to_result_ms'] for t in trials if t.get('sample_index') == 0],
+            [t['decision_to_result_ms'] for t in trials if t.get('sample_index') != 0],
+            [t['decision_to_result_ms'] for t in trials])
+
+
+def pool(runs, samples, qualified_only=True):
+    """Aggregate per declared kind. Only qualified runs feed the distributions; every other attempt of the kind
+    stays visible in unqualified_runs with its own denominators, so nothing is silently dropped."""
     pooled = {}
     for kind in ('cold', 'warm'):
         chosen = [r for r in runs if r.get('effective_kind') == kind and 'latency' in r.get('summary', {})]
-        entry = {'runs_counted': [r['index'] for r in chosen],
-                 'diagnostics': diagnostic_distributions([s for r in chosen for s in r['summary'].get('diagnostic_samples', [])])}
+        counted = [r for r in chosen if not qualified_only or disqualification(r) is None]
+        left = [r for r in chosen if r not in counted]
+        entry = {'runs_counted': [r['index'] for r in counted],
+                 'label': 'post_cache_drop_setup_rewarmed' if kind == 'cold' else 'warm',
+                 'diagnostics': diagnostic_distributions([s for r in counted for s in r['summary'].get('diagnostic_samples', [])]),
+                 'unqualified_runs': [{'index': r['index'], 'reason': disqualification(r) or 'not_validated'} for r in left],
+                 'all_attempts_qualified': not left}
         for profile in PROFILES:
-            values, planned, ok, failed, incomplete = [], 0, 0, 0, 0
-            for r in chosen:
+            values, initial, repeats, planned, ok, failed, incomplete = [], [], [], 0, 0, 0, 0
+            for r in counted:
                 m = r['summary']['latency'][profile]
                 planned += m['planned']; ok += m['successful']; failed += m['failed']; incomplete += m['incomplete']
-                values += [t['decision_to_result_ms'] for t in r['summary']['trials'][profile]['continuation_ms_by_trial']
-                           if t['passed'] and isinstance(t['decision_to_result_ms'], (int, float))]
+                first, rest, every = split_trials(r, profile)
+                initial += [{'run': r['index'], 'ms': v} for v in first]
+                repeats += rest
+                values += every
+            other = {'planned': 0, 'successful': 0, 'failed': 0, 'incomplete': 0}
+            for r in left:
+                m = r['summary']['latency'][profile]
+                for key in other:
+                    other[key] += m[key]
             entry[profile] = {'planned': planned, 'successful': ok, 'failed': failed, 'incomplete': incomplete,
                               'continuation_ms': distribution(values), 'target_ms': 3000,
+                              'initial_trial_ms': initial, 'repeat_trials_ms': distribution(repeats),
+                              'unqualified_totals': other,
                               'p95_target_met': bool(values) and nearest_rank(values, .95) <= 3000 and failed == incomplete == 0}
         pooled[kind] = entry
     return pooled
@@ -359,13 +394,20 @@ def series_status(plan, runs, samples):
     if len(runs) != len(plan):
         return 'incomplete'
     for declared, run in zip(plan, runs):
-        if run.get('effective_kind') != declared or run.get('validated') is not True:
+        if run.get('effective_kind') != declared or disqualification(run) is not None:
             return 'incomplete'
         latency = run.get('summary', {}).get('latency')
         if not latency or any(latency[p]['successful'] != samples or latency[p]['failed'] or latency[p]['incomplete']
                               for p in PROFILES):
             return 'incomplete'
     return 'complete'
+
+
+def attempt_ledger(plan, runs):
+    return {'planned_runs': len(plan), 'recorded_runs': len(runs),
+            'qualified_runs': [r['index'] for r in runs if disqualification(r) is None],
+            'unqualified_runs': [{'index': r['index'], 'kind': r.get('effective_kind'),
+                                  'reason': disqualification(r) or 'not_validated'} for r in runs if disqualification(r) is not None]}
 
 
 def write_json(path, value):
@@ -403,7 +445,12 @@ def execute(args):
     manifest = {'format': FORMAT, 'declared_at': now(), 'plan': plan, 'samples_per_profile': args.samples,
                 'platform_kind': kind, 'kernel': platform.release(), 'machine': platform.machine(),
                 'source': source_before, 'selected_sha256': selected, 'require_verified_reuse': args.require_verified_reuse,
-                'cold_definition': 'page cache dropped with sync + drop_caches immediately before the run; unqualified when the drop cannot be shown',
+                'cold_definition': 'page cache dropped with sync + drop_caches immediately before the run, unqualified when the drop cannot be shown. '
+                                   'This is a pre-run condition only: the qualifier then prepares the original launch (hashes and copies the selected '
+                                   'binaries, installs and hashes both profiles) and reads the same pages again before any timed approval, so no '
+                                   'individual Ask trial is claimed cold. The first trial per profile is reported apart from the repetitions.',
+                'cold_scope': 'pre_run_cache_drop_only',
+                'cold_ask_trials_claimed': False,
                 'warm_definition': 'run started right after the previous complete run, no cache drop',
                 'wsl_note': 'results are labeled by platform_kind and never stand in for native Linux' if kind != 'native_linux' else None,
                 'metric': 'operator_attempt_to_correlated_original_result_monotonic', 'target_ms': 3000}
@@ -419,6 +466,7 @@ def execute(args):
         if declared == 'cold':
             cache = drop_caches()
             record['cache_drop'] = cache
+            record['cold_scope'] = 'pre_run_cache_drop_only_setup_rewarmed'
             if not cache['performed']:
                 record['effective_kind'] = 'cold_unavailable'
         record['conditions_before'] = conditions()
@@ -454,12 +502,16 @@ def execute(args):
                 qualification = cmp.json_file(report)
             except (ValueError, OSError) as error:
                 record['failure'] = 'qualification_unreadable_' + type(error).__name__
+        executed_ok = record['exit_code'] == 0 and not record['failure']
         if qualification is not None:
-            try:
-                cmp.validate_report(qualification, source_before, selected, args.samples, args.require_verified_reuse)
-                record['validated'] = True
-            except (ValueError, KeyError, TypeError) as error:
-                record['validation_error'] = str(error)[:160]
+            if not executed_ok:
+                record['validation_error'] = 'report_left_by_failed_execution_not_trusted'
+            else:
+                try:
+                    cmp.validate_report(qualification, source_before, selected, args.samples, args.require_verified_reuse)
+                    record['validated'] = True
+                except (ValueError, KeyError, TypeError) as error:
+                    record['validation_error'] = str(error)[:160]
             record['summary'] = run_summary(qualification, args.samples, read_events(events_path))
         else:
             record['summary'] = {'stages': stage_distributions(read_events(events_path))}
@@ -474,6 +526,7 @@ def execute(args):
     status = series_status(plan, runs, args.samples)
     summary = {'format': FORMAT, 'status': status, 'platform_kind': kind, 'plan': plan, 'runs_recorded': len(runs),
                'samples_per_profile': args.samples, 'source': source_before, 'pooled': pool(runs, args.samples),
+               'attempts': attempt_ledger(plan, runs),
                'runs': [{k: v for k, v in r.items() if k != 'summary'} | {'summary': r.get('summary')} for r in runs],
                'performance_blockers': [{'run': r['index'], 'kind': r['effective_kind'], 'profile': p, 'p95_ms': r['summary']['latency'][p]['p95_ms']}
                                        for r in runs if 'latency' in r.get('summary', {})
@@ -501,7 +554,7 @@ def summarize_existing(args):
             record['conditions_before_text'] = env_file.read_text(errors='replace').splitlines()
         rows.append(record)
     out = {'format': FORMAT + '-retroactive', 'platform_kind': args.platform_kind, 'samples_per_profile': args.samples,
-           'note': args.note, 'pooled': pool(rows, args.samples), 'runs': rows}
+           'note': args.note, 'unvalidated': True, 'pooled': pool(rows, args.samples, qualified_only=False), 'runs': rows}
     write_json(args.output, out)
     print(json.dumps({'runs': len(rows)}))
     return 0

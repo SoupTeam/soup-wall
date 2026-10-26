@@ -133,8 +133,8 @@ class Diagnostics(unittest.TestCase):
 
     def test_pool_aggregates_diagnostics_only_for_effective_kinds(self):
         summary = SERIES.run_summary({'status': 'pass', 'cases': self.cases()}, 20, [])
-        runs = [{'index': 1, 'effective_kind': 'cold', 'summary': summary},
-                {'index': 2, 'effective_kind': 'cold_unavailable', 'summary': summary}]
+        runs = [{'index': 1, 'effective_kind': 'cold', 'validated': True, 'summary': summary},
+                {'index': 2, 'effective_kind': 'cold_unavailable', 'validated': True, 'summary': summary}]
         pooled = SERIES.pool(runs, 20)
         self.assertEqual(pooled['cold']['diagnostics']['git']['trials_with_diagnostics'], 20)
         self.assertEqual(pooled['warm']['diagnostics'], {})
@@ -168,9 +168,9 @@ class Summaries(unittest.TestCase):
 
     def test_pool_counts_only_effective_kinds(self):
         good = SERIES.run_summary(qualification([2000] * 20, [2300] * 20), 20, [])
-        runs = [{'index': 1, 'effective_kind': 'cold', 'summary': good},
-                {'index': 2, 'effective_kind': 'cold_unavailable', 'summary': good},
-                {'index': 3, 'effective_kind': 'warm', 'summary': good}]
+        runs = [{'index': 1, 'effective_kind': 'cold', 'validated': True, 'summary': good},
+                {'index': 2, 'effective_kind': 'cold_unavailable', 'validated': True, 'summary': good},
+                {'index': 3, 'effective_kind': 'warm', 'validated': True, 'summary': good}]
         pooled = SERIES.pool(runs, 20)
         self.assertEqual(pooled['cold']['runs_counted'], [1])
         self.assertEqual(pooled['warm']['git']['planned'], 20)
@@ -184,9 +184,48 @@ class Summaries(unittest.TestCase):
         self.assertEqual(SERIES.series_status(['cold'], [dict(ok, validated=False)], 20), 'incomplete')
         self.assertEqual(SERIES.series_status(['cold', 'warm'], [ok], 20), 'incomplete')
 
+    def test_series_status_requires_successful_execution_not_only_a_valid_report(self):
+        good = SERIES.run_summary(qualification([2000] * 20, [2300] * 20), 20, [])
+        ok = {'effective_kind': 'cold', 'validated': True, 'exit_code': 0, 'failure': None, 'summary': good}
+        self.assertEqual(SERIES.series_status(['cold'], [ok], 20), 'complete')
+        failed = dict(ok, exit_code=17, failure='owned_harness_failed_after_report')
+        self.assertEqual(SERIES.series_status(['cold'], [failed], 20), 'incomplete')
+        self.assertEqual(SERIES.series_status(['cold'], [dict(ok, failure='timeout')], 20), 'incomplete')
+        self.assertEqual(SERIES.series_status(['cold'], [dict(ok, validation_error='qualification_source_mismatch')], 20),
+                         'incomplete')
+
+    def test_pool_gates_on_validation_and_keeps_unqualified_attempts_visible(self):
+        good = SERIES.run_summary(qualification([2000] * 20, [2300] * 20), 20, [])
+        slow = SERIES.run_summary(qualification([2000] * 20, [2300] * 14 + [4500] * 6), 20, [])
+        valid = {'index': 1, 'effective_kind': 'cold', 'validated': True, 'exit_code': 0, 'failure': None, 'summary': good}
+        stale = {'index': 2, 'effective_kind': 'cold', 'validated': False, 'validation_error': 'qualification_source_mismatch',
+                 'exit_code': 0, 'failure': None, 'summary': good}
+        failed = {'index': 3, 'effective_kind': 'cold', 'validated': True, 'exit_code': 17,
+                  'failure': 'owned_harness_failed_after_report', 'summary': slow}
+        pooled = SERIES.pool([valid, stale, failed], 20)['cold']
+        self.assertEqual(pooled['runs_counted'], [1])
+        self.assertEqual(pooled['git']['planned'], 20)
+        self.assertEqual(pooled['git']['continuation_ms']['n'], 20)
+        self.assertEqual(pooled['git']['unqualified_totals'], {'planned': 40, 'successful': 40, 'failed': 0, 'incomplete': 0})
+        self.assertEqual([r['reason'] for r in pooled['unqualified_runs']],
+                         ['report_not_valid_for_this_source', 'execution_failed'])
+        self.assertFalse(pooled['all_attempts_qualified'])
+        only_stale = SERIES.pool([stale], 20)['cold']
+        self.assertFalse(only_stale['git']['p95_target_met'])
+        self.assertEqual(only_stale['git']['continuation_ms']['n'], 0)
+
+    def test_first_trial_is_reported_apart_from_repetitions_and_cold_is_not_claimed(self):
+        good = SERIES.run_summary(qualification([2000] * 20, [5000] + [2300] * 19), 20, [])
+        run = {'index': 1, 'effective_kind': 'cold', 'validated': True, 'exit_code': 0, 'failure': None, 'summary': good}
+        git = SERIES.pool([run], 20)['cold']['git']
+        self.assertEqual(git['initial_trial_ms'], [{'run': 1, 'ms': 5000}])
+        self.assertEqual(git['repeat_trials_ms']['n'], 19)
+        self.assertEqual(git['repeat_trials_ms']['worst'], 2300)
+        self.assertEqual(SERIES.pool([run], 20)['cold']['label'], 'post_cache_drop_setup_rewarmed')
+
 
 class Orchestration(unittest.TestCase):
-    def run_series(self, plan, drop_ok=True, fail_second=False):
+    def run_series(self, plan, drop_ok=True, fail_second=False, fail_after_report=False):
         calls = []
 
         class Failure(Exception):
@@ -204,6 +243,8 @@ class Orchestration(unittest.TestCase):
             if fail_second and len(calls) == 2:
                 raise Failure('series_2_timeout', None)
             (out / 'qualification.json').write_text(json.dumps(qualification([2000] * 20, [2400] * 20)))
+            if fail_after_report and len(calls) == 2:
+                raise Failure('owned_harness_failed_after_report', 17)
 
         def stage_event():
             return stage('git', 'package_tree', 1500)
@@ -247,6 +288,10 @@ class Orchestration(unittest.TestCase):
         code, summary, manifest, _ = self.run_series('cold,warm')
         self.assertEqual((code, summary['status']), (0, 'complete'))
         self.assertEqual(manifest['plan'], ['cold', 'warm'])
+        self.assertFalse(manifest['cold_ask_trials_claimed'])
+        self.assertEqual(manifest['cold_scope'], 'pre_run_cache_drop_only')
+        self.assertEqual(summary['runs'][0]['cold_scope'], 'pre_run_cache_drop_only_setup_rewarmed')
+        self.assertEqual(summary['attempts']['qualified_runs'], [1, 2])
         self.assertEqual(summary['pooled']['warm']['runs_counted'], [2])
         stages = summary['runs'][0]['summary']['stages']
         self.assertEqual(stages['events_seen'][SERIES.STAGE_EVENT], 1)
@@ -262,6 +307,19 @@ class Orchestration(unittest.TestCase):
         self.assertEqual((code, summary['status']), (1, 'incomplete'))
         self.assertEqual(len(summary['runs']), 2)
         self.assertIn('timeout', summary['runs'][1]['failure'])
+
+    def test_report_left_by_a_failed_subprocess_never_qualifies(self):
+        code, summary, _, _ = self.run_series('cold,warm', fail_after_report=True)
+        self.assertEqual((code, summary['status']), (1, 'incomplete'))
+        second = summary['runs'][1]
+        self.assertEqual((second['exit_code'], second['failure']), (17, 'owned_harness_failed_after_report'))
+        self.assertFalse(second['validated'])
+        self.assertEqual(second['validation_error'], 'report_left_by_failed_execution_not_trusted')
+        self.assertIn('latency', second['summary'])
+        self.assertEqual(summary['pooled']['warm']['runs_counted'], [])
+        self.assertEqual(summary['pooled']['warm']['unqualified_runs'][0]['reason'], 'execution_failed')
+        self.assertEqual(summary['pooled']['warm']['git']['unqualified_totals']['successful'], 20)
+        self.assertEqual(summary['attempts']['unqualified_runs'], [{'index': 2, 'kind': 'warm', 'reason': 'execution_failed'}])
 
 
 if __name__ == '__main__':
