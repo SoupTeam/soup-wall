@@ -1,8 +1,8 @@
-# Prepared-run discovery checkpoint
+# Prepared-run discovery
 
 The standalone Linux command reads an explicitly selected state parent. It
 does not create state, repair settings, start a daemon/host/helper, or contact a
-provider. This is a draft checkpoint, not completed native Ubuntu qualification.
+provider. Recorded state remains distinct from authenticated observed state.
 
 ```sh
 python3 -B scripts/pilot-runs.py --state-parent /absolute/selected/state
@@ -33,11 +33,20 @@ Nonce and instance mismatches, unavailable processes, and edited records are
 unavailable, never healthy. Tokens, native authority material, host session IDs,
 raw results and private logs are not printed.
 
-The checkpoint projects authenticated daemon identity and mode only. Full
-accepted diagnostic configuration/path-coverage validation remains pending.
-Consequently **protection and execution coverage always remain `unknown`**,
-including after a successful probe. An authenticated observation proves neither
-model consumption nor execution, human approval, or live-model efficacy.
+The explicitly probed launcher's held executable runs the read-only
+`pilot-observation` validator with bounded config, selected policy and response
+bytes on stdin. It receives no token, home path selection, or provider settings.
+The validator reuses the accepted Rust diagnostic contract and parsed policy and
+configuration digests. Its seven path capability/coverage results are projected
+without activity IDs or private response fields. This diagnostic child has the
+same shared deadline as the network queries; it never starts a daemon or server.
+Older selected binaries without this validator return unavailable.
+
+**Protection and execution coverage remain `unknown`**, including after a
+successful probe, according to the accepted contract. An authenticated
+observation proves neither model consumption nor execution, human approval, or
+live-model efficacy. Recorded source/selection labels remain owner-editable;
+observed binary, config and parsed policy hashes are reported separately.
 
 Defaults cap enumeration at 512 entries, results at 32 candidates, individual
 metadata at 64 KiB, and output at 256 KiB. `--scan-limit` accepts 1–4096;

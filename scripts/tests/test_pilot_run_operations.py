@@ -59,6 +59,7 @@ class RunOperations(unittest.TestCase):
         raw = S.encoded({"at_ms": 1760000000000, "event": "native_call", "tool": self.marker,
                          "verdict": "deny", "raw": self.marker}) + b"\n"
         self.write(run / "audit/segment-00000000000000000001.jsonl", raw)
+        self.write(run / "audit/writer.lock", b"")
         self.write(run / "audit/manifest.json", {"version": 1,
                    "limits": {k: v for k, v in S.AUDIT.LIMITS.items() if k != "version"},
                    "generation": 1, "next_id": 2, "pruned_through": 0, "pending_prune": None,
@@ -227,7 +228,7 @@ class RunOperations(unittest.TestCase):
         self.assertEqual(before, self.snapshot())
         filename.unlink()
         filename.symlink_to(self.unrelated)
-        with self.assertRaises(OSError):
+        with self.assertRaises((OSError, S.Refusal)):
             ARCHIVE.apply(plan, self.output)
         self.assertEqual(before, self.snapshot())
 
@@ -365,7 +366,7 @@ class RunOperations(unittest.TestCase):
                 else:
                     body = {"contract_version": "sw-protection-status/1", "nonce": self.headers.get("x-agentfw-status-nonce"),
                             "captured_at_ms": int(time.time() * 1000), "mode": "enforcing",
-                            "runtime": {"pid": 42, "binary_sha256": owner.receipt["binary_sha256"]},
+                            "runtime": {"pid": os.getpid(), "binary_sha256": owner.receipt["binary_sha256"]},
                             "registry": {"sha256": owner.receipt["registry_sha256"]}, "policy": {"sha256": "f" * 64}}
                 payload = S.encoded(body)
                 self.send_response(200); self.send_header("Content-Length", str(len(payload))); self.end_headers()
@@ -375,19 +376,29 @@ class RunOperations(unittest.TestCase):
         self.addCleanup(lambda: (server.shutdown(), server.server_close(), thread.join(timeout=2)))
         port = server.server_port
         self.write(self.run / "run.json", {"format": "sw-prepared-pilot-run/1", "home": str(home),
-            "supervisor_pid": 10, "launcher_pid": manifest["launcher_pid"], "daemon_pid": 42, "port": port})
-        config = {"bind": "127.0.0.1", "port": port, "enforce": True, "policy": "/never-opened",
+            "supervisor_pid": 10, "launcher_pid": manifest["launcher_pid"], "daemon_pid": os.getpid(), "port": port})
+        policy = self.root / "policy.yaml"
+        self.write(policy, b"agent_policies: []\ndefault: allow\n")
+        self.receipt["policy_sha256"] = S.sha(policy.read_bytes())
+        self.write(self.run / "audit-run.json", self.receipt)
+        config = {"bind": "127.0.0.1", "port": port, "enforce": True, "policy": str(policy),
             "native": {"registry_sha256": self.receipt["registry_sha256"], "registry_path": str(home / "registry.json")},
             "audit_retention": {}}
         self.write(home / "config.yaml", config)
-        manifest["files"] = [{"path": str(home / "config.yaml"), "sha256": S.sha(S.encoded(config))}] + [{}] * 4
+        manifest["files"] = [{"path": str(home / "config.yaml"), "sha256": S.sha(S.encoded(config))},
+                             {"path": str(policy), "sha256": S.sha(policy.read_bytes())}] + [{}] * 3
         self.write(native / "run.json", manifest)
         self.write(home / "native-token", b"native_private_key_12345678")
         self.write(home / "token", b"status_private_key_12345678")
         before = self.snapshot()
-        # Only the launcher proof is mocked: these are HTTP/parser controls,
-        # never evidence of a real prepared launcher or original MCP execution.
-        with patch.object(DISCOVERY, "sealed_launcher"), patch.dict(os.environ, {"HTTP_PROXY": "http://127.0.0.1:1"}):
+        # The launcher proof and offline Rust projection are mocked here. Native
+        # qualification and Rust regressions separately exercise those contracts.
+        def sealed(*_args, pin=False):
+            return os.open(sys.executable, os.O_RDONLY) if pin else None
+        projection = {"state": "authenticated_daemon_observed", "protection": "unknown"}
+        with patch.object(DISCOVERY, "sealed_launcher", side_effect=sealed), \
+             patch.object(DISCOVERY, "diagnostic_projection", return_value=projection), \
+             patch.dict(os.environ, {"HTTP_PROXY": "http://127.0.0.1:1"}):
             self.instance = "owned-instance"
             result = DISCOVERY.discover(self.state, probing=True)
             observed = result["runs"][0]["observation"]

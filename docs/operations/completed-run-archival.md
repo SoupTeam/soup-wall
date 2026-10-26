@@ -1,4 +1,4 @@
-# Completed prepared-run archival checkpoint
+# Completed prepared-run archival
 
 This draft Linux entry point owns only completed runtime audit state. It does
 not remove prepared binaries/generations, stop processes, rotate live audit
@@ -22,6 +22,12 @@ Inspect `runs`, `excluded`, and `plan_sha256`. Only the exact
 `audit`, `audit-run.json`, `audit-finished.json` layout is eligible. Active,
 incomplete, linked, foreign, replaced or unexpected state is excluded; stop
 receipts, credentials and remaining runtime authority always prevent eligibility.
+The accepted empty `audit/writer.lock` file is included in the inventory and
+private archive. Preview checks its existing advisory lock without creating or
+rewriting the file. Archive and apply hold its exclusive nonblocking lock for
+the entire operation; a live audit writer refuses cleanup. Directory generations
+and individual file identities/bytes bind a preview, including rename-away-and-
+back changes before apply.
 Preview never searches or recursively traverses unrelated directories.
 
 Create an explicit private archive using the preview's digest:
@@ -72,6 +78,23 @@ Partial is not rollback. A repeated apply against missing state fails; absence
 is not proof that this command removed it. Previously successful run outcomes
 must be considered independently if a later run refuses.
 
+Every removal quarantine receives a private, fsynced `cleanup.json` journal
+before the source is detached. After a crash or interruption, inspect it using
+the same plan and digest (inspection accepts an expired plan):
+
+```sh
+python3 -B scripts/pilot-run-archive.py inspect \
+  --plan /absolute/private-archives/plan.json --confirm EXACT_PLAN_SHA256 \
+  --archive-directory /absolute/private-archives \
+  --quarantine .soup-wall-cleanup-EXACT_32_HEX_SUFFIX
+```
+
+Inspection is read-only and verifies the journal, complete archive, and remaining
+member identities/hashes. It reports retained/partial/unknown state and finite
+counts. Missing members never prove completion; unexpected/replaced members
+remain unknown. The archive and all remaining state stay in place. SIGINT and
+SIGTERM produce finite failure/partial outcomes; SIGKILL recovery uses the journal.
+
 Do not automatically remove a quarantine or copy its remaining contents back.
 Preserve it and the verified archive for inspection. Resume/interruption recovery
 is deliberately conservative at this checkpoint; there is no automatic purge
@@ -82,6 +105,8 @@ Archive exits 0 only after verification. Apply exits 0 only when all eligible
 selected runs were removed; partial/retained outcomes exit 2. Invalid plans,
 unavailable archives or changed preflight selections exit 1. An excluded run is
 always reported separately and is never silently removed.
+An inspect command exits 0 for a verified read-only inspection; its `outcome`
+still distinguishes retained, partial and unknown and never asserts removal.
 
 The local fixture regressions and CLI demonstration are intermediate evidence.
 Full native Ubuntu genuine completed-run qualification, hostile concurrent race

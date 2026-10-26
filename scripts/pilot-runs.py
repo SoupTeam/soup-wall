@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import secrets
 import stat
+import subprocess
 import sys
 import time
 import socket
@@ -51,7 +52,7 @@ def process_start(pid):
     return int(fields[19])
 
 
-def sealed_launcher(raw, manifest, selected, deadline):
+def sealed_launcher(raw, manifest, selected, deadline, pin=False):
     """Read the accepted launcher's sealed memfd, not PID/name liveness alone."""
     pid = manifest["launcher_pid"]
     S.require(type(manifest["launcher_start"]) is int
@@ -86,7 +87,58 @@ def sealed_launcher(raw, manifest, selected, deadline):
             S.require(count <= 512 * 1024 * 1024, "binary_unverified")
             digest.update(block)
         S.require(digest.hexdigest() == selected["binary_sha256"], "binary_identity_mismatch")
-    S.require(process_start(pid) == manifest["launcher_start"], "stale_launcher")
+        pinned = os.dup(executable.fileno()) if pin else None
+    try:
+        S.require(process_start(pid) == manifest["launcher_start"], "stale_launcher")
+        return pinned
+    except BaseException:
+        if pinned is not None:
+            os.close(pinned)
+        raise
+
+
+def diagnostic_projection(executable, config_raw, policy_raw, status, nonce, record, selected, deadline):
+    """The pinned Agent validates its own accepted diagnostic contract offline.
+
+    No token is passed to the child. Config and policy are verified held bytes,
+    not mutable home paths. Only this owned diagnostic child may be terminated.
+    """
+    envelope = {"format": "sw-prepared-pilot-observation-input/1", "nonce": nonce,
+                "daemon_pid": record["daemon_pid"], "binary_sha256": selected["binary_sha256"],
+                "registry_sha256": selected["registry_sha256"], "config": config_raw.decode("utf-8"),
+                "policy": policy_raw.decode("utf-8"), "snapshot": status}
+    body = S.encoded(envelope)
+    S.require(len(body) <= 256 * 1024, "diagnostic_input_limit")
+    deadline_check(deadline)
+    process = subprocess.Popen([f"/proc/self/fd/{executable}", "pilot-observation"],
+        pass_fds=(executable,), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        cwd="/", env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"})
+    try:
+        try:
+            stdout, _ = process.communicate(body, timeout=min(5, max(.001, deadline - time.monotonic())))
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise S.Refusal("diagnostic_validation_timeout") from None
+        S.require(process.returncode == 0 and len(stdout) <= 16384, "diagnostic_validation_unavailable")
+        value = S.strict(stdout)
+        S.require(type(value) is dict and set(value) == {"format", "state", "reason", "mode", "policy_sha256",
+                  "registry_sha256", "config_sha256", "binary_sha256", "protection", "execution_coverage", "paths"}
+                  and value["format"] == "sw-prepared-pilot-observation/1"
+                  and value["state"] == "authenticated_daemon_observed"
+                  and value["reason"] == "current_instance_ready_not_execution"
+                  and value["protection"] == value["execution_coverage"] == "unknown"
+                  and value["mode"] in ("enforcing", "shadow")
+                  and value["binary_sha256"] == selected["binary_sha256"]
+                  and value["registry_sha256"] == selected["registry_sha256"]
+                  and type(value["paths"]) is list and len(value["paths"]) == 7,
+                  "diagnostic_projection_invalid")
+        deadline_check(deadline)
+        return value
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=2)
 
 
 def request(port, token, path, deadline, limit, nonce=None):
@@ -170,31 +222,33 @@ def probe(run, selected, record, deadline):
                 S.require(type(files) is list and len(files) == 5
                           and files[0] == {"path": str(home.path / "config.yaml"), "sha256": S.sha(config_raw)},
                           "sealed_endpoint_selection_mismatch")
-                sealed_launcher(raw, manifest, selected, deadline)
-                live = request(record["port"], token(home, "native-token"), "/native/v1/instance", deadline, 2 * 1024 * 1024)
-                S.require(type(live) is dict and live.get("instance_id") == manifest["instance_id"]
-                          and live.get("registry_sha256") == selected["registry_sha256"], "stale_daemon_instance")
-                nonce = secrets.token_urlsafe(24)
-                status = request(record["port"], token(home, "token"), "/diagnostics/v1/protection",
-                                 deadline, 32768, nonce)
-                # This checkpoint projects only observed identity and mode. Full
-                # accepted diagnostic path coverage is deliberately not inferred.
-                now = int(time.time() * 1000)
-                S.require(type(status) is dict and status.get("contract_version") == "sw-protection-status/1"
-                          and status.get("nonce") == nonce and type(status.get("captured_at_ms")) is int
-                          and now - 10000 <= status["captured_at_ms"] <= now + 1000
-                          and status.get("mode") in ("enforcing", "shadow")
-                          and status["runtime"]["pid"] == record["daemon_pid"]
-                          and status["runtime"]["binary_sha256"] == selected["binary_sha256"]
-                          and status["registry"]["sha256"] == selected["registry_sha256"]
-                          and S.SHA.fullmatch(status["policy"]["sha256"]), "diagnostic_identity_mismatch")
-                S.require(home.read("config.yaml")[0] == config_raw and native.read("run.json")[0] == raw,
-                          "record_changed")
-                sealed_launcher(raw, manifest, selected, deadline)
-                return {"state": "authenticated_daemon_observed", "reason": "sealed_launcher_and_daemon_observed",
-                        "mode": status["mode"], "policy_sha256": status["policy"]["sha256"],
-                        "protection": "unknown", "execution_coverage": "unknown",
-                        "coverage_reason": "full_diagnostic_projection_pending"}
+                S.require(type(config.get("policy")) is str, "selected_policy_unverified")
+                policy_path = Path(config["policy"])
+                with S.Directory(policy_path.parent) as policy_directory:
+                    policy_raw, policy_identity = policy_directory.read(policy_path.name)
+                    S.require(sum(row == {"path": str(policy_path), "sha256": S.sha(policy_raw)} for row in files) == 1
+                              and S.sha(policy_raw) == selected["policy_sha256"], "selected_policy_unverified")
+                    executable = sealed_launcher(raw, manifest, selected, deadline, pin=True)
+                    try:
+                        daemon_start = process_start(record["daemon_pid"])
+                        daemon_exe = os.stat(f"/proc/{record['daemon_pid']}/exe")
+                        S.require(S.same_object(daemon_exe)[:2] == S.same_object(os.fstat(executable))[:2],
+                                  "foreign_daemon_process")
+                        live = request(record["port"], token(home, "native-token"), "/native/v1/instance", deadline, 2 * 1024 * 1024)
+                        S.require(type(live) is dict and live.get("instance_id") == manifest["instance_id"]
+                                  and live.get("registry_sha256") == selected["registry_sha256"], "stale_daemon_instance")
+                        nonce = secrets.token_urlsafe(24)
+                        status = request(record["port"], token(home, "token"), "/diagnostics/v1/protection",
+                                         deadline, 32768, nonce)
+                        value = diagnostic_projection(executable, config_raw, policy_raw, status, nonce, record, selected, deadline)
+                        S.require(home.read("config.yaml")[0] == config_raw and native.read("run.json")[0] == raw
+                                  and policy_directory.read(policy_path.name) == (policy_raw, policy_identity)
+                                  and process_start(record["daemon_pid"]) == daemon_start, "record_changed")
+                        sealed_launcher(raw, manifest, selected, deadline)
+                        return value
+                    finally:
+                        if executable is not None:
+                            os.close(executable)
 
 
 def inspect(parent, name, probing, deadline):

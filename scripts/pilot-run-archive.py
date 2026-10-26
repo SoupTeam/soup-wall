@@ -7,11 +7,13 @@ Interrupted apply retains the verified archive and reports partial/unknown state
 """
 import argparse
 import ctypes
+from contextlib import ExitStack
 import io
 import json
 import os
 from pathlib import Path
 import secrets
+import signal
 import sys
 import tempfile
 import time
@@ -42,7 +44,7 @@ def preview(path, ids, minimum_age_seconds=0):
             name = "soup-wall-run-" + selected_id
             S.run_id(name)
             try:
-                with parent.child(name) as run:
+                with parent.child(name) as run, S.audit_writer_lock(run):
                     selected, inventory, _ = S.completed_inventory(run)
                     finished_stat = inventory["files"]["audit-finished.json"]["identity"]
                     S.require(finished_stat[6] <= (time.time() - minimum_age_seconds) * 1e9,
@@ -58,7 +60,7 @@ def preview(path, ids, minimum_age_seconds=0):
     return plan
 
 
-def load_plan(path, confirmation):
+def load_plan(path, confirmation, fresh=True):
     with S.Directory(path.parent) as directory:
         plan = directory.json(path.name, MAX_PLAN)
     S.require(type(plan) is dict and set(plan) == {"format", "created_at_ms", "state_parent", "parent_identity",
@@ -67,8 +69,9 @@ def load_plan(path, confirmation):
     body = {k: v for k, v in plan.items() if k != "plan_sha256"}
     S.require(type(confirmation) is str and S.SHA.fullmatch(confirmation)
               and confirmation == plan["plan_sha256"] == S.sha(S.encoded(body)), "plan_confirmation_mismatch")
-    S.require(type(plan["created_at_ms"]) is int
-              and 0 <= int(time.time() * 1000) - plan["created_at_ms"] <= PLAN_SECONDS * 1000, "plan_expired")
+    S.require(type(plan["created_at_ms"]) is int, "invalid_plan")
+    if fresh:
+        S.require(0 <= int(time.time() * 1000) - plan["created_at_ms"] <= PLAN_SECONDS * 1000, "plan_expired")
     S.require(type(plan["runs"]) is list and 1 <= len(plan["runs"]) <= MAX_RUNS, "no_eligible_runs")
     ids = [row["run_id"] for row in plan["runs"]]
     S.require(len(set(ids)) == len(ids), "invalid_plan")
@@ -169,7 +172,7 @@ def archive_name(plan, row):
     return "run-" + row["run_id"] + "-" + plan["plan_sha256"] + ".zip"
 
 
-def build_archives(plan, destination):
+def _build_archives_locked(plan, destination):
     result = []
     with checked_parent(plan) as parent, S.Directory(destination) as output:
         for row in plan["runs"]:
@@ -201,6 +204,14 @@ def build_archives(plan, destination):
             result.append({"run_id": row["run_id"], "outcome": "archived_source_retained",
                            "archive": filename, "archive_sha256": S.sha(existing)})
     return result
+
+
+def build_archives(plan, destination):
+    with checked_parent(plan) as parent, ExitStack() as held:
+        for row in plan["runs"]:
+            run = held.enter_context(parent.child("soup-wall-run-" + row["run_id"]))
+            held.enter_context(S.audit_writer_lock(run))
+        return _build_archives_locked(plan, destination)
 
 
 def rename_exclusive(source_fd, source, destination_fd, destination):
@@ -271,6 +282,8 @@ def apply_one(parent, output, plan, row):
         with parent.child(quarantine_name) as quarantine, parent.child(name) as run:
             S.require(run.object == row["inventory"]["run"], "plan_changed")
             current(parent, row)
+            publish(quarantine, "cleanup.json", S.encoded({"format": "sw-prepared-pilot-cleanup-journal/1",
+                "plan_sha256": plan["plan_sha256"], "row": row}))
             archive_guard()
             rename_exclusive(parent.fd, name, quarantine.fd, "run")
             moved = True
@@ -281,6 +294,8 @@ def apply_one(parent, output, plan, row):
             # named descriptor checks now address the detached selected object.
             run.parent, run.name = quarantine, "run"
             selected, inventory, _ = S.completed_inventory(run)
+            S.require(inventory["run_generation"][:7] == row["inventory"]["run_generation"][:7], "plan_changed")
+            inventory["run_generation"] = row["inventory"]["run_generation"]
             S.require(selected == row["receipt"] and inventory == row["inventory"], "plan_changed")
             files = dict(inventory["files"])
             with run.child("audit") as audit:
@@ -301,6 +316,10 @@ def apply_one(parent, output, plan, row):
             archive_guard()
             os.rmdir("run", dir_fd=quarantine.fd)
             os.fsync(quarantine.fd)
+            S.require(set(quarantine.names(16)) == {"cleanup.json"}, "quarantine_changed")
+            archive_guard()
+            os.unlink("cleanup.json", dir_fd=quarantine.fd)
+            os.fsync(quarantine.fd)
         os.rmdir(quarantine_name, dir_fd=parent.fd)
         os.fsync(parent.fd)
         archive_guard()
@@ -310,6 +329,7 @@ def apply_one(parent, output, plan, row):
         result["reason"] = str(error) if isinstance(error, S.Refusal) else "removal_unavailable"
         result["outcome"] = "partial" if moved else "retained"
         if not moved:
+            result["quarantine"] = quarantine_name
             try:
                 os.rmdir(quarantine_name, dir_fd=parent.fd)
                 os.fsync(parent.fd)
@@ -318,7 +338,7 @@ def apply_one(parent, output, plan, row):
     return result
 
 
-def apply(plan, destination):
+def _apply_locked(plan, destination):
     results = []
     with checked_parent(plan) as parent, S.Directory(destination) as output:
         # Validate all archives and selections before beginning the first run.
@@ -333,8 +353,92 @@ def apply(plan, destination):
                           "reason": str(error) if isinstance(error, S.Refusal) else "apply_preflight_unavailable"}
             results.append(result)
             if result["outcome"] != "archived_and_removed":
+                results.extend({"run_id": rest["run_id"], "outcome": "not_attempted", "reason": "prior_run_incomplete"}
+                               for rest in plan["runs"][len(results):])
                 break
     return results
+
+
+def apply(plan, destination):
+    with checked_parent(plan) as parent, ExitStack() as held:
+        for row in plan["runs"]:
+            run = held.enter_context(parent.child("soup-wall-run-" + row["run_id"]))
+            held.enter_context(S.audit_writer_lock(run))
+        return _apply_locked(plan, destination)
+
+
+def inspect_quarantine(plan, destination, name):
+    """Read-only recovery: never infer completion from absence or resume deletion."""
+    import re
+    S.require(re.fullmatch(r"\.soup-wall-cleanup-[0-9a-f]{32}", name), "invalid_quarantine")
+    with checked_parent(plan) as parent, S.Directory(destination) as output, parent.child(name) as quarantine:
+        journal = quarantine.json("cleanup.json", MAX_PLAN)
+        S.require(type(journal) is dict and set(journal) == {"format", "plan_sha256", "row"}
+                  and journal["format"] == "sw-prepared-pilot-cleanup-journal/1"
+                  and journal["plan_sha256"] == plan["plan_sha256"]
+                  and journal["row"] in plan["runs"], "quarantine_journal_invalid")
+        row = journal["row"]
+        verify_archive(output.read(archive_name(plan, row), MAX_ARCHIVE)[0], plan, row)
+        result = {"run_id": row["run_id"], "quarantine": name, "archive_verified": True,
+                  "outcome": "unknown", "reason": "completion_not_committed", "remaining_files": 0,
+                  "unverified_members": 0, "recovery": "retain_for_manual_review"}
+        names = quarantine.names(32)
+        root_name = "soup-wall-run-" + row["run_id"]
+        try:
+            current(parent, row)
+            if set(names) == {"cleanup.json"}:
+                result.update(outcome="retained", reason="source_intact_before_detachment")
+                return result
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        expected = row["inventory"]["files"]
+        known = set()
+        def member(directory, filename, selected_key=None):
+            body, held = directory.read(filename)
+            matches = [key for key, value in expected.items() if held[:7] == value["identity"][:7]
+                       and len(body) == value["bytes"] and S.sha(body) == value["sha256"]]
+            if len(matches) != 1 or matches[0] in known or selected_key is not None and matches[0] != selected_key:
+                result["unverified_members"] += 1
+            else:
+                known.add(matches[0])
+            result["remaining_files"] += 1
+        for entry in names:
+            if entry == "cleanup.json":
+                continue
+            if entry == "run":
+                with quarantine.child(entry) as run:
+                    S.require(run.object == row["inventory"]["run"], "quarantine_run_replaced")
+                    for root_member in run.names(16):
+                        if root_member == "audit":
+                            with run.child("audit") as audit:
+                                S.require(audit.object == row["inventory"]["audit"], "quarantine_audit_replaced")
+                                for audit_member in audit.names(8):
+                                    member(audit, audit_member, "audit/" + audit_member)
+                        else:
+                            member(run, root_member, root_member)
+            elif re.fullmatch(r"member-[0-9a-f]{32}", entry):
+                member(quarantine, entry)
+            else:
+                result["unverified_members"] += 1
+        if "run" in names or result["remaining_files"]:
+            result.update(outcome="partial" if not result["unverified_members"] else "unknown",
+                          reason="verified_archive_and_remaining_state" if not result["unverified_members"] else "unexpected_remaining_state")
+        quarantine.check()
+        return result
+
+
+def archive_batch(plan, destination):
+    rows = []
+    for row in plan["runs"]:
+        try:
+            rows.extend(build_archives(dict(plan, runs=[row]), destination))
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            rows.append({"run_id": row["run_id"], "outcome": "retained", "archive_state": "unknown",
+                         "reason": str(error) if isinstance(error, S.Refusal) else "archive_unavailable"})
+            rows.extend({"run_id": rest["run_id"], "outcome": "not_attempted", "reason": "prior_run_incomplete"}
+                        for rest in plan["runs"][len(rows):])
+            break
+    return rows
 
 
 def main(argv=None):
@@ -344,24 +448,33 @@ def main(argv=None):
     p.add_argument("--state-parent", type=Path, required=True)
     p.add_argument("--run-id", action="append", required=True)
     p.add_argument("--minimum-age-seconds", type=int, default=0)
-    for action in ("archive", "apply"):
+    for action in ("archive", "apply", "inspect"):
         p = sub.add_parser(action)
         p.add_argument("--plan", type=Path, required=True)
         p.add_argument("--confirm", required=True)
         p.add_argument("--archive-directory", type=Path, required=True)
+        if action == "inspect":
+            p.add_argument("--quarantine", required=True)
     args = parser.parse_args(argv)
+    def interrupted(_signum, _frame):
+        raise InterruptedError("operator_interrupted")
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, interrupted)
     try:
         if args.action == "preview":
             result = preview(args.state_parent, args.run_id, args.minimum_age_seconds)
             code = 0 if not result["excluded"] else 2
         else:
             S.platform()
-            plan = load_plan(args.plan, args.confirm)
-            rows = build_archives(plan, args.archive_directory) if args.action == "archive" else apply(plan, args.archive_directory)
-            complete = (len(rows) == len(plan["runs"]) and all(row["outcome"] == "archived_and_removed" for row in rows))
+            plan = load_plan(args.plan, args.confirm, fresh=args.action != "inspect")
+            rows = (archive_batch(plan, args.archive_directory) if args.action == "archive" else
+                    [inspect_quarantine(plan, args.archive_directory, args.quarantine)] if args.action == "inspect" else
+                    apply(plan, args.archive_directory))
+            expected = "archived_source_retained" if args.action == "archive" else "archived_and_removed"
+            complete = len(rows) == len(plan["runs"]) and all(row["outcome"] == expected for row in rows)
             result = {"format": OUTCOME, "action": args.action, "runs": rows, "excluded": plan["excluded"],
-                      "complete": complete if args.action == "apply" else True}
-            code = 0 if result["complete"] else 2
+                      "complete": complete}
+            code = 0 if complete or args.action == "inspect" else 2
     except S.Refusal as error:
         result, code = {"format": OUTCOME, "action": args.action, "complete": False, "reason": str(error)}, 1
     except (OSError, ValueError, KeyError, TypeError, OverflowError):

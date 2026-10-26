@@ -5,6 +5,7 @@ Local receipts are evidence selections, never authentication or execution proof.
 No reader creates files, changes permissions, starts processes or follows links.
 """
 import hashlib
+from contextlib import contextmanager
 import importlib.util
 import json
 import os
@@ -12,6 +13,9 @@ from pathlib import Path
 import re
 import stat
 import sys
+
+if sys.platform.startswith("linux"):
+    import fcntl
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,6 +138,11 @@ class Directory:
     def read(self, name, limit=MAX_RECORD):
         safe_component(name)
         self.check()
+        named_before = os.stat(name, dir_fd=self.fd, follow_symlinks=False)
+        require(stat.S_ISREG(named_before.st_mode) and named_before.st_uid == os.getuid()
+                and stat.S_IMODE(named_before.st_mode) == 0o600 and named_before.st_nlink == 1,
+                "private_regular_file_required")
+        require(named_before.st_size <= limit, "record_size_limit")
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.fd)
         try:
             before = os.fstat(fd)
@@ -194,8 +203,28 @@ def finished(run, selected):
             and value["owned_processes_stopped"] is True, "finished_record_invalid")
 
 
+@contextmanager
+def audit_writer_lock(run):
+    """Use the accepted writer.lock inode; never create or rewrite a lock file."""
+    with run.child("audit") as audit:
+        raw, selected = audit.read("writer.lock", 0)
+        require(raw == b"", "audit_writer_lock_invalid")
+        fd = os.open("writer.lock", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=audit.fd)
+        try:
+            require(identity(os.fstat(fd)) == selected, "audit_writer_lock_changed")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise Refusal("active_audit_writer") from None
+            require(audit.read("writer.lock", 0)[1] == selected, "audit_writer_lock_changed")
+            yield
+        finally:
+            os.close(fd)
+
+
 def completed_inventory(run):
     """Only the accepted three-member audit-only layout can ever be removed."""
+    run_generation = identity(os.fstat(run.fd))
     require(set(run.names(32)) == {"audit", "audit-run.json", "audit-finished.json"},
             "active_or_retained_state")
     selected = receipt(run)
@@ -206,6 +235,7 @@ def completed_inventory(run):
         inventory[name] = {"identity": info, "bytes": len(body), "sha256": sha(body)}
         bodies[name] = body
     with run.child("audit") as audit:
+        audit_generation = identity(os.fstat(audit.fd))
         manifest = audit.json("manifest.json")
         require(type(manifest) is dict and set(manifest) == {"version", "limits", "generation", "next_id",
                 "pruned_through", "pending_prune", "segments"} and type(manifest["version"]) is int
@@ -216,7 +246,10 @@ def completed_inventory(run):
                 and type(manifest["pruned_through"]) is int and 0 <= manifest["pruned_through"] < 2**53
                 and type(manifest["next_id"]) is int and manifest["next_id"] < 2**53
                 and manifest["pending_prune"] is None, "audit_manifest_invalid")
-        allowed = {"manifest.json"}
+        lock_raw, lock_identity = audit.read("writer.lock", 0)
+        inventory["audit/writer.lock"] = {"identity": lock_identity, "bytes": 0, "sha256": sha(lock_raw)}
+        bodies["audit/writer.lock"] = lock_raw
+        allowed = {"manifest.json", "writer.lock"}
         previous = manifest["pruned_through"]
         for segment in manifest["segments"]:
             require(type(segment) is dict and set(segment) == {"id", "closed", "bytes", "sha256", "partial_tail"}
@@ -240,6 +273,9 @@ def completed_inventory(run):
         require(strict(body) == manifest, "record_changed")
         inventory["audit/manifest.json"] = {"identity": info, "bytes": len(body), "sha256": sha(body)}
         bodies["audit/manifest.json"] = body
+        require(identity(os.fstat(audit.fd)) == audit_generation, "audit_generation_changed")
     require(sum(row["bytes"] for row in inventory.values()) <= AUDIT.LIMITS["total_disk_bytes"], "audit_size_limit")
     run.check()
-    return selected, {"run": run.object, "audit": audit.object, "files": inventory}, bodies
+    require(identity(os.fstat(run.fd)) == run_generation, "run_generation_changed")
+    return selected, {"run": run.object, "audit": audit.object, "run_generation": run_generation,
+                      "audit_generation": audit_generation, "files": inventory}, bodies

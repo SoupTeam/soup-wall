@@ -142,6 +142,8 @@ enum Cmd {
     Doctor(agentfw::doctor::DoctorArgs),
     /// Query authenticated runtime diagnostics; unknown protection exits 2.
     ProtectionStatus(agentfw::protection_status::QueryArgs),
+    /// Validate a bounded prepared-run diagnostic envelope on stdin; no network or state writes.
+    PilotObservation,
     /// Summarize recorded verdicts, or explicitly simulate supplied offline events.
     Replay {
         /// Path to the audit log (defaults to ~/.agentfw/audit.jsonl).
@@ -480,6 +482,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::ProtectionStatus(args) => {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
+        Cmd::PilotObservation => std::process::exit(agentfw::pilot_observation::run()),
         Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
         #[cfg(windows)]
         Cmd::OnboardWindows { command } => {
