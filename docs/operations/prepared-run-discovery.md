@@ -66,12 +66,13 @@ Exit 0 means a complete selected inventory, **not protection**. Exit 2 means
 incomplete discovery or an unavailable candidate. Exit 1 means invalid input or
 an unavailable parent. Unknown entries are counted without disclosing their names.
 
-The focused regression and CLI demonstration use disposable Linux fixtures.
-They do not replace the remaining native Ubuntu evidence: two simultaneous real
-prepared runs, original pinned servers, daemon loss/restart, and unchanged state
-and provider routing.
+The [native qualification report](evidence/prepared-run-operations/README.md)
+records two simultaneous real prepared runs, pinned original servers,
+completed/stopped state, daemon loss/restart, accepted diagnostic projection,
+unchanged settings and zero provider requests from discovery. Focused fixture
+checks remain separate evidence.
 
-Reproduce the checkpoint against a clean committed source tree, using an existing
+Reproduce the fixture checks against a clean committed source tree, using an existing
 private Linux directory for the report:
 
 ```sh

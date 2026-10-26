@@ -1,0 +1,391 @@
+{
+  "artifact_id": 12646993612,
+  "artifact_sha256": "292fba6e52db6f5f98f8ef70c77d30418689b81307d1f7c1a8734eda2bdc83de",
+  "cleanup": {
+    "unit_exit_code": 0,
+    "unit_removed": true
+  },
+  "independent_verification": {
+    "all_required_flags_checked": true,
+    "archive_digest_checked": true,
+    "exact_actions_head": "2cf3ea9fd2629c83cfbd350342f8627666fd5b19",
+    "required_native_cases": 26
+  },
+  "report": {
+    "cases": [
+      {
+        "case": "two-simultaneous-recorded-runs",
+        "count": 2,
+        "no_effects": true,
+        "status": "passed",
+        "trace_sha256": "7ffca804b4b3ad7ba3954d03c9938123a2e33b9055c07abd1f6da013e093e9c8"
+      },
+      {
+        "accepted_diagnostic_projection": true,
+        "case": "two-authenticated-original-runs",
+        "count": 2,
+        "probe_provider_requests": 0,
+        "settings_unchanged": true,
+        "status": "passed",
+        "trace_sha256": "720a332047f3db5c0602e663254819e86f61c54e57a9f2e64b3c470ec7391ca4"
+      },
+      {
+        "case": "active-run-removal-refused",
+        "excluded": 2,
+        "status": "passed"
+      },
+      {
+        "case": "foreign-process-refused",
+        "status": "passed",
+        "unrelated_survived": true
+      },
+      {
+        "case": "daemon-loss",
+        "entry_status": "failed",
+        "observed_roles": {
+          "collector": 2,
+          "host": 1,
+          "owner": 2,
+          "pid1": 2
+        },
+        "owned_processes_stopped": true,
+        "status": "passed",
+        "trace_sha256": "34d23a504fd2f1e48d23009ad28f5fa2ed082903588139ccc625dd5fbe2fa607"
+      },
+      {
+        "case": "genuine-original-completed-state",
+        "entry_status": "completed",
+        "filesystem_kernel_reads": 1,
+        "git_status_dispatches": 1,
+        "observed_roles": {
+          "collector": 2,
+          "host": 1,
+          "owner": 2,
+          "pid1": 2
+        },
+        "owned_processes_stopped": true,
+        "peer_useful_after_daemon_loss": true,
+        "status": "passed",
+        "trace_sha256": "f4acedd158c61d4419e04610cee5fbde4eea1f23b79c83094a43f9dd276cf892"
+      },
+      {
+        "case": "restart-and-retained-stop",
+        "entry_status": "stopped",
+        "fresh_instance": true,
+        "observed_roles": {
+          "collector": 2,
+          "host": 1,
+          "owner": 2,
+          "pid1": 2
+        },
+        "owned_processes_stopped": true,
+        "repeated_stop_verified": true,
+        "status": "passed",
+        "trace_sha256": "a273922be753ac496c74778e4d624025ed5102e179f105d33cc5b1954ddd6bc6"
+      },
+      {
+        "case": "held-native-audit-writer-refused",
+        "source_retained": true,
+        "status": "passed"
+      },
+      {
+        "case": "completed-audit-only-discovery",
+        "state_unchanged": true,
+        "status": "passed"
+      },
+      {
+        "case": "scan-limit-explicit",
+        "status": "passed"
+      },
+      {
+        "case": "malformed-record-refused",
+        "state_unchanged": true,
+        "status": "passed"
+      },
+      {
+        "case": "oversized-record-refused",
+        "state_unchanged": true,
+        "status": "passed"
+      },
+      {
+        "case": "corrupt-refused",
+        "source_retained": true,
+        "status": "passed"
+      },
+      {
+        "case": "oversized-audit-refused",
+        "source_retained": true,
+        "status": "passed"
+      },
+      {
+        "case": "symlink-candidate-refused",
+        "status": "passed",
+        "target_unchanged": true
+      },
+      {
+        "case": "native-foreign-ownership-refused",
+        "emulated": false,
+        "status": "passed",
+        "unchanged": true
+      },
+      {
+        "case": "changed-plan-refused",
+        "source_retained": true,
+        "status": "passed"
+      },
+      {
+        "case": "archive-write-and-publication-faults",
+        "faults": [
+          "ENOSPC",
+          "EIO"
+        ],
+        "source_retained": true,
+        "status": "passed"
+      },
+      {
+        "case": "corrupt-archive-refused",
+        "source_retained": true,
+        "status": "passed"
+      },
+      {
+        "archive_sha256": "826c68315c95ea9d5d37f2d71d53ff3f9c8fe093659af3fb01df76242cab0722",
+        "case": "verified-private-archive",
+        "exact_member_hashes": true,
+        "failed_write_preserved": true,
+        "source_retained": true,
+        "status": "passed"
+      },
+      {
+        "archive_verified": true,
+        "case": "interrupted-deletion-recovery",
+        "no_automatic_repair": true,
+        "remaining_files": 4,
+        "repeated_apply_not_success": true,
+        "status": "passed"
+      },
+      {
+        "case": "rename-concurrent-race-refused",
+        "held_member_syscall_barrier": false,
+        "original_retained": true,
+        "replacement_retained": true,
+        "status": "passed",
+        "syscall_delay_observed": true,
+        "trace_sha256": "0b892adc87e0082a62e7c73a3b12448e54fd37c8eaacd438ef01d538d9956421"
+      },
+      {
+        "case": "symlink-concurrent-race-refused",
+        "held_member_syscall_barrier": false,
+        "original_retained": true,
+        "replacement_retained": true,
+        "status": "passed",
+        "syscall_delay_observed": true,
+        "trace_sha256": "07c0a344985ec7334903d8b59bffbc5b88e636f4b56d076a8085cabe9ce28f25"
+      },
+      {
+        "case": "member-concurrent-race-refused",
+        "held_member_syscall_barrier": true,
+        "original_retained": true,
+        "replacement_retained": true,
+        "status": "passed",
+        "syscall_delay_observed": true,
+        "trace_sha256": "bd86aa39b328ed55b52b73a90b4001dc8898d8fcce9aac8416605df886d2d782"
+      },
+      {
+        "case": "successful-original-completed-state",
+        "entry_status": "completed",
+        "filesystem_kernel_reads": 1,
+        "git_status_dispatches": 1,
+        "observed_roles": {
+          "collector": 2,
+          "host": 1,
+          "owner": 2,
+          "pid1": 2
+        },
+        "owned_processes_stopped": true,
+        "status": "passed",
+        "trace_sha256": "d85010fc7a2870c6df77addfd3b620e17246c8df9e77002e2ee5cb95ff979f03"
+      },
+      {
+        "case": "exact-removal-and-repeat-refusal",
+        "removed_only_selected": true,
+        "retained_stop_state": true,
+        "status": "passed"
+      }
+    ],
+    "environment": {
+      "kernel": "6.17.0-1022-azure",
+      "non_root": true,
+      "private_loopback": true,
+      "ubuntu": "24.04"
+    },
+    "format": "sw-prepared-run-native-qualification/1",
+    "native_acceptance": true,
+    "paid_provider_calls": 0,
+    "probe_observations": [
+      {
+        "exit_code": 0,
+        "phase": "simultaneous-list",
+        "runs": [
+          {
+            "lifecycle": "active_or_interrupted",
+            "reason": "explicit_probe_required",
+            "record_reason": "live_state_requires_probe",
+            "state": "not_probed"
+          },
+          {
+            "lifecycle": "active_or_interrupted",
+            "reason": "explicit_probe_required",
+            "record_reason": "live_state_requires_probe",
+            "state": "not_probed"
+          }
+        ]
+      },
+      {
+        "exit_code": 0,
+        "phase": "simultaneous-probe",
+        "runs": [
+          {
+            "lifecycle": "active_or_interrupted",
+            "reason": "current_instance_ready_not_execution",
+            "record_reason": "live_state_requires_probe",
+            "state": "authenticated_daemon_observed"
+          },
+          {
+            "lifecycle": "active_or_interrupted",
+            "reason": "current_instance_ready_not_execution",
+            "record_reason": "live_state_requires_probe",
+            "state": "authenticated_daemon_observed"
+          }
+        ]
+      },
+      {
+        "exit_code": 2,
+        "phase": "foreign-process",
+        "runs": [
+          {
+            "lifecycle": "unknown",
+            "reason": "stale_or_edited_run",
+            "record_reason": "stale_or_edited_run",
+            "state": "unavailable"
+          }
+        ]
+      },
+      {
+        "exit_code": 2,
+        "phase": "daemon-loss-probe",
+        "runs": [
+          {
+            "lifecycle": "unknown",
+            "reason": "ambiguous_launcher",
+            "record_reason": "ambiguous_launcher",
+            "state": "unavailable"
+          }
+        ]
+      },
+      {
+        "exit_code": 0,
+        "phase": "fresh-instance",
+        "runs": [
+          {
+            "lifecycle": "active_or_interrupted",
+            "reason": "current_instance_ready_not_execution",
+            "record_reason": "live_state_requires_probe",
+            "state": "authenticated_daemon_observed"
+          }
+        ]
+      },
+      {
+        "exit_code": 0,
+        "phase": "retained-stop",
+        "runs": [
+          {
+            "lifecycle": "retained_stop_state",
+            "reason": "explicit_probe_required",
+            "record_reason": "stop_authority_preserved",
+            "state": "not_probed"
+          }
+        ]
+      },
+      {
+        "exit_code": 0,
+        "phase": "completed-list",
+        "runs": [
+          {
+            "lifecycle": "completed_audit_only",
+            "reason": "no_live_authority_retained",
+            "record_reason": "recorded_completion",
+            "state": "not_applicable"
+          }
+        ]
+      },
+      {
+        "exit_code": 2,
+        "phase": "malformed-record",
+        "runs": [
+          {
+            "lifecycle": "unknown",
+            "reason": "invalid_record",
+            "record_reason": "invalid_record",
+            "state": "unavailable"
+          }
+        ]
+      },
+      {
+        "exit_code": 2,
+        "phase": "oversized-record",
+        "runs": [
+          {
+            "lifecycle": "unknown",
+            "reason": "record_size_limit",
+            "record_reason": "record_size_limit",
+            "state": "unavailable"
+          }
+        ]
+      },
+      {
+        "exit_code": 2,
+        "phase": "linked-candidate",
+        "runs": [
+          {
+            "lifecycle": "unknown",
+            "reason": "state_or_probe_unavailable",
+            "record_reason": "state_or_probe_unavailable",
+            "state": "unavailable"
+          }
+        ]
+      }
+    ],
+    "provider": "owned-scripted-loopback",
+    "selected_assets_unchanged": true,
+    "selected_sha256": {
+      "agentfw": "95603b636e3b6cf0445f1f575b1d22ee85de72149848d22e4cb09e57bd86ce97",
+      "bwrap": "7870adff519f5d40284ce826bdf82c439dc5b8b55780e63d89e14e6ff6533ffb",
+      "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "git": "0a9fa3ce3bcbe7c84931bd35860bd40d5873df99db2dc941855a187c523941e3",
+      "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+      "git_launcher": "12194d42904d06fe62b180da075333797581ffaa8927e12fe4f6445537332b6a",
+      "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+      "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+      "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+      "sandbox_tests": "cf48f57994a18588b916b0b780f86a275576cd093e1737725e8b13ee064f65dd"
+    },
+    "source_after": {
+      "commit": "2cf3ea9fd2629c83cfbd350342f8627666fd5b19",
+      "dirty": false,
+      "files_sha256": "d468e47dab8616a732032295a121c99ef9476ff2ba7febbd13d90e6e46814932",
+      "tree": "d8774ec892963c371dbec49582de39cd8c158412"
+    },
+    "source_before": {
+      "commit": "2cf3ea9fd2629c83cfbd350342f8627666fd5b19",
+      "dirty": false,
+      "files_sha256": "d468e47dab8616a732032295a121c99ef9476ff2ba7febbd13d90e6e46814932",
+      "tree": "d8774ec892963c371dbec49582de39cd8c158412"
+    },
+    "status": "passed",
+    "unrelated_process_and_file_preserved": true,
+    "workspaces_unchanged": true
+  },
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/40315581525"
+}
