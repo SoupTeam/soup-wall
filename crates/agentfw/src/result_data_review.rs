@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Experimental, operator-pinned complete-result semantic review.
+//! Native/1 currently rejects configuration and ignores permits: runtime-to-Call
+//! provenance is missing. This module is retained as an isolated prototype.
 //!
 //! This is not a wire permission. A private permit binds every original decoded
 //! channel, including duplicate/empty channels and their order. It only enables

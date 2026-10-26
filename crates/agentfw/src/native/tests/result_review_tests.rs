@@ -52,43 +52,31 @@ fn structural() -> Vec<String> {
 }
 
 #[test]
-fn a_complete_private_permit_resolves_only_the_structural_refusal() {
+fn a_complete_private_permit_cannot_lower_native_baseline() {
     for reviewed in [false, true] {
         let dir = tempfile::tempdir().unwrap();
         let st = setup(dir.path());
         let native = st.native.as_ref().unwrap();
         let texts = structural();
         let request = completion(&st, &texts);
-        assert_eq!(
-            result_review_candidate(&st, native, &request, None),
-            Some(texts.clone())
-        );
+        assert_eq!(result_review_candidate(&st, native, &request, None), None);
         let original = request.content.clone().unwrap();
         let permit = crate::result_data_review::test_permit(&texts);
         let response =
             inspect_bound_reviewed(&st, native, request, None, reviewed.then_some(&permit))
                 .unwrap();
-        assert_eq!(response.release, reviewed);
+        assert!(!response.release);
         assert_eq!(response.content_sha256, Some(hash(original.as_bytes())));
         assert!(native.sessions.lock().unwrap().entries["review"]
             .calls
             .is_empty());
-        if reviewed {
-            assert!(response
-                .reason_codes
-                .iter()
-                .any(|code| code == "native_result_data_review_base"));
-            let epoch = native.sessions.lock().unwrap().entries["review"]
-                .epoch
-                .clone();
-            assert!(
-                st.firewall.lock().unwrap().taint_len(&epoch) > 0,
-                "original evidence still retained"
-            );
-            assert!(std::fs::read_to_string(dir.path().join("audit.jsonl"))
-                .unwrap()
-                .contains(crate::result_data_review::MODEL_SHA256));
-        }
+        assert!(!response
+            .reason_codes
+            .iter()
+            .any(|code| code == "native_result_data_review_base"));
+        assert!(!std::fs::read_to_string(dir.path().join("audit.jsonl"))
+            .unwrap()
+            .contains("result_data_review"));
     }
 }
 
@@ -156,4 +144,20 @@ fn ordinary_allow_and_hard_signatures_do_not_request_model_review() {
             result_review_candidate(&st, st.native.as_ref().unwrap(), &request, None).is_none()
         );
     }
+}
+
+#[test]
+fn native_rejects_reviewer_configuration_before_any_worker_start() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut st = fixture(dir.path());
+    let native = Arc::get_mut(&mut st).unwrap().native.take().unwrap();
+    let native = native.with_result_data_review(None).unwrap();
+    let config = crate::result_data_review::Config {
+        runtime_dir: dir.path().join("nonexistent-runtime"),
+        interpreter_sha256: "0".repeat(64),
+        runtime_sha256: "0".repeat(64),
+        assets_dir: dir.path().join("nonexistent-assets"),
+    };
+    let error = native.with_result_data_review(Some(&config)).err().unwrap();
+    assert!(error.to_string().contains("runtime-to-Call binding"));
 }

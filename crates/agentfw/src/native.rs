@@ -27,6 +27,7 @@ pub mod pilot_cleanup;
 pub mod pilot_stop;
 pub mod resource;
 pub mod resource_approval;
+#[cfg(test)]
 mod result_evidence;
 pub mod workspace;
 
@@ -729,10 +730,11 @@ impl NativeState {
         mut self,
         config: Option<&crate::result_data_review::Config>,
     ) -> anyhow::Result<Self> {
-        self.result_data_review = config
-            .cloned()
-            .map(crate::result_data_review::Reviewer::start)
-            .transpose()?;
+        anyhow::ensure!(
+            config.is_none(),
+            "native/1 result-data relief requires authenticated runtime-to-Call binding"
+        );
+        self.result_data_review = None;
         Ok(self)
     }
 
@@ -1644,25 +1646,15 @@ pub async fn handler(
             StatusCode::BAD_REQUEST,
         );
     }
-    // Inference is outside both native and firewall locks. It cannot consume a
-    // receipt or authorize a call. All authority and current-policy checks run
-    // again after the await against the same immutable original request.
+    // Baseline-only: neither a model assessment nor a static profile proves
+    // which executable produced this Call's result. Do not invoke a reviewer.
     let review_started = Instant::now();
-    let permit = match &native.result_data_review {
-        Some(reviewer) if reviewer.ready() => {
-            match result_review_candidate(&st, native, &request, identity.as_ref()) {
-                Some(texts) => reviewer.review(texts).await,
-                None => None,
-            }
-        }
-        _ => None,
-    };
     match inspect_bound_at(
         &st,
         native,
         request,
         identity.as_ref(),
-        permit.as_ref(),
+        None,
         review_started,
     ) {
         Ok(response) => (
@@ -1715,72 +1707,15 @@ fn selected_result_texts(tool: &Tool, request: &Request) -> Result<Vec<String>, 
     }
 }
 
-/// Dry-run eligibility is conditional on a structural-only *current refusal*.
-/// Already-Allow results never acquire a new mandatory model dependency.
+/// Baseline-only until daemon-owned runtime provenance is bound to Call.
+#[cfg(test)]
 fn result_review_candidate(
-    st: &Shared,
-    native: &NativeState,
-    request: &Request,
-    identity: Option<&liveness::CollectorIdentity>,
+    _st: &Shared,
+    _native: &NativeState,
+    _request: &Request,
+    _identity: Option<&liveness::CollectorIdentity>,
 ) -> Option<Vec<String>> {
-    if !mcp_host_result(request) || request.result_kind.as_deref() != Some("value") {
-        return None;
-    }
-    let tool = native.registry.tools.iter().find(|tool| {
-        request.tool.as_deref() == Some(tool.name.as_str())
-            && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
-            && matches!(tool.result_provenance, ResultProvenance::Untrusted)
-    })?;
-    // This formatter now has a positive, daemon-derived attribution contract.
-    // Ambiguity/failure must keep baseline, never fall through to an ML permit.
-    if result_evidence::target(tool) {
-        return None;
-    }
-    let texts = selected_result_texts(tool, request).ok()?;
-    if texts
-        .iter()
-        .any(|text| text.len() > st.config.max_record_bytes)
-    {
-        return None;
-    }
-    let state = native.sessions.lock().ok()?;
-    let session = state.entries.get(&request.session_id)?;
-    let now = native.monotonic_now();
-    let now_ms = wall_time_ms().ok()? + native.test_time_offset();
-    if session.is_dead(now, now_ms, &state) {
-        return None;
-    }
-    if let Some(identity) = identity {
-        identity.verify(native, session).ok()?;
-    }
-    let call = session.calls.get(request.call_id.as_deref()?)?;
-    if call.stage != Stage::Result
-        || call.expires <= now
-        || call.tool != tool.name
-        || call.contract_version != request.contract_version
-        || call.args_sha256 != args_hash(request.args.as_ref()?)
-    {
-        return None;
-    }
-    if let Some(expected) = &call.host_call_id {
-        let envelope: Value = serde_json::from_str(request.content.as_deref()?).ok()?;
-        if envelope.get("id") != Some(expected) {
-            return None;
-        }
-    }
-    let provenance = Provenance::McpServer {
-        name: session.server_id.clone()?,
-    };
-    let mut firewall = st.firewall.lock().ok()?;
-    let needed = texts.iter().any(|text| {
-        let ev = session.event(EventKind::ToolResult {
-            tool: tool.name.clone(),
-            content: text.clone(),
-            source: provenance.clone(),
-        });
-        firewall.native_result_needs_data_review(&ev)
-    });
-    needed.then_some(texts)
+    None
 }
 
 /// Reserve both required contexts before publishing an authenticated session.
@@ -2010,7 +1945,7 @@ fn inspect_bound_at(
     native: &NativeState,
     request: Request,
     identity: Option<&liveness::CollectorIdentity>,
-    permit: Option<&crate::result_data_review::DataPermit>,
+    _permit: Option<&crate::result_data_review::DataPermit>,
     started: Instant,
 ) -> Result<Response, &'static str> {
     if request.event == "session_start"
@@ -2934,15 +2869,10 @@ fn inspect_bound_at(
     let mut representative = None;
     let mut observed_findings = BTreeMap::new();
     let mut max_block_risk = 0;
-    let complete_data = mcp_host_result(&request)
-        && request.result_kind.as_deref() == Some("value")
-        && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
-        && permit.is_some_and(|permit| permit.matches(&texts));
-    let attributed_target = result_evidence::target(tool);
-    let attribution = result_evidence::ResultEvidence::derive(tool, &request, &call, &texts);
-    let attributed_spans = attribution
-        .as_ref()
-        .and_then(|e| e.spans(tool, &request, &call, &texts));
+    // No active-runtime provenance currently crosses collector -> daemon.
+    // A registry/profile declaration is NOT a verified formatter origin.
+    // The parser proof remains test-only until an authenticated launch binding
+    // supplies that missing edge. No production formatter bytes are subtracted.
     let mcp_evidence =
         mcp_host_result(&request) && matches!(tool.result_provenance, ResultProvenance::Untrusted);
     let positive = if mcp_evidence {
@@ -2950,24 +2880,16 @@ fn inspect_bound_at(
     } else {
         Vec::new()
     };
-    let mut review_used = false;
-    for (block_index, text) in texts.into_iter().enumerate() {
+    for text in texts {
         session.seq += 1;
         let ev = session.event(EventKind::ToolResult {
             tool: name.into(),
             content: text,
             source: provenance.clone(),
         });
-        let outcome = if attributed_target {
-            firewall.preview_native_attributed_result(
-                &ev,
-                attributed_spans.map_or(&[], |all| all[block_index].as_slice()),
-                &positive,
-            )
-        } else if complete_data && firewall.native_result_needs_data_review(&ev) {
-            review_used = true;
-            firewall.preview_native_result_after_data_review_with_positive(&ev, &positive)
-        } else if mcp_evidence {
+        let outcome = if mcp_evidence {
+            // Empty attribution preserves every baseline weak signal. Positive
+            // evidence may only strengthen the original result assessment.
             firewall.preview_native_attributed_result(&ev, &[], &positive)
         } else {
             firewall.preview_native_result(&ev)
@@ -3075,16 +2997,6 @@ fn inspect_bound_at(
             outcome.provenance_incomplete = true;
         }
     }
-    if review_used {
-        response
-            .reason_codes
-            .push("native_result_data_review_base".into());
-    }
-    if attributed_spans.is_some() {
-        response
-            .reason_codes
-            .push("native_fixed_formatter_attribution".into());
-    }
     audit(
         st,
         &request,
@@ -3171,26 +3083,6 @@ fn audit(
         "content_sha256": response.content_sha256, "reason_codes": response.reason_codes});
     if let Some(policy) = &response.managed_policy {
         record["managed_policy"] = json!(policy);
-    }
-    if response
-        .reason_codes
-        .iter()
-        .any(|code| code == "native_fixed_formatter_attribution")
-    {
-        record["result_evidence"] = json!({"format":"sw-result-format-evidence/1",
-            "formatter_entrypoint_sha256": result_evidence::FORMATTER,
-            "scope":"fixed formatter separators only; not body trust or permission",
-            "coverage_complete":true});
-    }
-    if response
-        .reason_codes
-        .iter()
-        .any(|code| code == "native_result_data_review_base")
-    {
-        record["result_data_review"] = json!({
-            "model_sha256": crate::result_data_review::MODEL_SHA256,
-            "assessment": "data", "coverage_complete": true,
-        });
     }
     if request.event == "call" {
         if let Some(tool) = st.native.as_ref().and_then(|native| {

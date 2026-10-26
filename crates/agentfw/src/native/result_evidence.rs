@@ -1,21 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Private source attribution, not a wire permission or model Data verdict.
+//! Test-only parser prototype. Static hashes do not prove active formatter origin.
 use super::*;
+#[cfg(test)]
 use std::ops::Range;
 
+#[cfg(test)]
 pub(super) const FORMATTER: &str =
     "729dc8511e779e5cd6640851a74b25283e3af1ca3a7106722f993e864a1d9935";
+#[cfg(test)]
 const MAX_TEXT: usize = 1024 * 1024;
 
-pub(super) fn target(tool: &Tool) -> bool {
-    (tool.name == "read_multiple_files"
-        && tool.mcp_result_profile.as_deref() == Some(crate::mcp::server_profile::FORMAT))
-        // Git's untyped flattened git_show can also be a raw blob. Until an
-        // object-kind/snapshot witness exists, keep baseline, not an ML bypass.
-        || (tool.name == "git_show" && tool.mcp_result_profile.as_deref().is_some_and(crate::mcp::server_profile::git_selected))
-}
-
 #[derive(Clone, Debug)]
+#[cfg(test)]
 struct Record {
     path: Range<usize>,
     header_fixed: Range<usize>,
@@ -24,6 +20,7 @@ struct Record {
 }
 
 /// No Deserialize, public fields, external constructor, or caller assertion.
+#[cfg(test)]
 pub(super) struct ResultEvidence {
     scope: String,
     channels: String,
@@ -31,6 +28,7 @@ pub(super) struct ResultEvidence {
     _records: Vec<Vec<Record>>,
 }
 
+#[cfg(test)]
 fn scope(tool: &Tool, request: &Request, call: &Call) -> Option<String> {
     if !mcp_host_result(request)
         || request.result_kind.as_deref() != Some("value")
@@ -90,6 +88,7 @@ fn scope(tool: &Tool, request: &Request, call: &Call) -> Option<String> {
 /// `${path}:\n${body}\n`, joined by `\n---\n`. Each next boundary must
 /// occur exactly once in the COMPLETE channel, in admitted path order.
 /// Repeated paths, errors and fake headers in bodies cannot grant attribution.
+#[cfg(test)]
 fn partition(text: &str, paths: &[&str]) -> Option<(Vec<Range<usize>>, Vec<Record>)> {
     if text.len() > MAX_TEXT
         || paths.is_empty()
@@ -161,6 +160,7 @@ fn partition(text: &str, paths: &[&str]) -> Option<(Vec<Range<usize>>, Vec<Recor
     Some((separators, records))
 }
 
+#[cfg(test)]
 impl ResultEvidence {
     pub(super) fn derive(
         tool: &Tool,

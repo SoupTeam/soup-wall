@@ -1,18 +1,33 @@
-# Native formatter evidence (Draft slice)
+# Result parser prototype: baseline-only Draft
 
-This change corrects weak separator attribution for the pinned original filesystem
-`read_multiple_files` formatter. It is not a benign-content classification, a wire
-permission, or completion of SOU-109. No model is required. Policy YAML, signatures,
-thresholds, resource authority, result receipts, taint retention and audit-before-release
-remain in force. The inherited experimental reviewer stays default off. It cannot
-rescue failed attribution for this formatter or the unresolved Git `git_show` path.
+SOU-109 remains open. This Draft does not enable filesystem or Git relief in
+native/1. The filesystem parser and its scoped evidence object compile only under
+`cfg(test)`. Production supplies no attributed spans, retains every original weak
+signal and does not invoke the experimental model reviewer. Configuring a reviewer
+is rejected; even a complete test-only DataPermit cannot lower native/1 baseline.
+Positive signature/directive evidence can strengthen an assessment. Policy YAML,
+signatures, thresholds, authority, receipts, original evidence retention and
+successful audit-before-release remain required.
 
-`native::result_evidence::ResultEvidence` has private fields, no deserializer, and no
-wire representation. The daemon derives it only after existing authenticated native
-session, current receipt, invocation binding and policy checks. It binds formatter
-entrypoint identity, profile/schema, contract/registry/session/call, admitted arguments,
-the exact raw frame digest and all ordered original channels. Callers, hooks and MCP
-servers cannot submit offsets or `trusted` flags. Such unknown wire fields are refused.
+## Missing trust edge
+
+A static entrypoint SHA/profile/schema identifies reviewed source, not the process
+that produced a result. Collector liveness authenticates instance/epoch/owner;
+child grants cover server/tools/resources. Neither authenticates the launched
+executable to the native Session/Call. The sandbox checks package/runtime files
+when launching, but no authenticated runtime witness reaches native result
+inspection. A collector can therefore submit plausible equal formatter channels
+under a correct registry/profile/schema and a current receipt without proving that
+formatter ran. The regression
+`matching_profile_from_unverified_other_runtime_cannot_claim_formatter_origin`
+keeps that result denied. The earlier relief implementation failed this control.
+
+Relevant boundaries are `native/liveness.rs`, `native/child_authority.rs`,
+`mcp/admission.rs`, `mcp/admission/real_server.rs`, and `mcp/server_sandbox.rs`.
+Private fields, no deserializer and scope hashes prevent wire forgery of a parser
+object; they do not supply the missing runtime provenance.
+
+## Parser component contract (test-only)
 
 The successful pinned Node formatter emits `${path}:\n${body}\n` records joined by
 `\n---\n`, and duplicates the complete string in the two original result channels.
@@ -33,32 +48,58 @@ existing general result visitor, independently of attribution. Original per-chan
 ordered concat/newline and complete historical-envelope signature paths remain.
 Absence of any positive finding is not the attribution proof and creates no grant.
 
-Audit identifies fixed-formatter attribution with the formatter identity; existing
-frame/call/registry hashes retain the delivery binding. Release still depends on
-current policy, retained full original evidence, and successful audit.
+No formatter attribution or model-data audit marker is emitted by production.
+A direct component preview with parser offsets is a parser experiment, not a
+native release or real-server qualification.
 
-## Verification and remaining scope
+## External execution/IPC acceptance contract
 
-Focused tests cover UTF-8 offsets and full coverage, fake/nested headers, body
-delimiter overlap, wrong/reused bindings and args, omitted/extra/mismatched channels,
-unknown formatter/schema, forged wire claims, non-native provenance, cross-channel
-signatures/directives, policy changes, signature/body floors, and taint retention.
-Even a test-only negative model permit cannot rescue an ambiguous formatter result.
+The parent-owned follow-up must provide a daemon-owned verified launch binding;
+this Draft adds no launcher or authority service. Before any relief can be enabled:
 
-The frozen dev set contains the same nine previously declared public-record / owned
-matched controls, with their original labels and channel bytes. Four PMF argument
-sets are checked by the unchanged classifier; 201/256 remain unsupported at the
-existing 200-leaf bound. Those two are not utility successes. Git original channel
-bytes use the selected Git profile with explicitly declared component-only call
-arguments because original Git invocation arguments are not in that snapshot.
-r0029 uses a generic native receipt. This is component replay, not live Git/host
-qualification. No Git utility success may be inferred from it.
+- Verify executable/runtime/package identity at the actual launch, with immutable
+  file handles or equivalent protection against replacement between check and exec.
+- Authenticate that launch identity through the collector IPC to the native
+  session, registry/profile/schema and exact admitted Call/arguments. Bind the
+  returned original frame and ordered channels to that same execution and receipt.
+- Reject absent, stale, replayed, crossed-call/session/runtime or mismatched
+  witnesses. Collector-supplied strings and static hashes alone are insufficient.
+- Preserve current policy, all original body/path bytes, positive findings,
+  receipt consumption, evidence capacity and audit-before-release. Unknown origin,
+  parser ambiguity, budget exhaustion and failed evidence retention keep baseline.
+- Demonstrate the actual verified launch -> IPC -> Call -> result path and matched
+  attack controls, including another executable producing identical output.
+  Unit parser success is not acceptance of that path.
 
-Run once into a new output directory:
+Git additionally needs the object-kind/resolved-id/snapshot evidence below.
+The follow-up must be separately reviewed before removing this baseline-only gate.
+
+## Verification and frozen dev replay
+
+Tests cover UTF-8 offsets/full coverage; fake, repeated and nested headers;
+body delimiter overlap; wrong/reused bindings and arguments; channel mismatch;
+unknown identity/schema; forged wire claims; non-native provenance; cross-channel
+signatures/directives; current policy; and evidence capacity. Native controls
+retain refusals with or without a matching test-only model permit.
+
+The frozen dev set preserves all nine earlier declared public-record/owned cases,
+labels and original channels. The unchanged classifier marks PMF201/256 unsupported
+at its existing 200-leaf bound. Git channels use declared component-only call
+arguments because the snapshot lacks original invocation arguments; r0029 uses a
+generic native receipt. This is component replay, not live Git/host qualification.
+The final run uses the existing daemon evidence capacity (10,000 entries), not the
+earlier fixture's artificial 1,024-entry limit. Neither unsupported case is a
+utility success. No model is called, and no input is relabelled after a result.
+
+Run once into a fresh directory:
 
 ```sh
 python3 scripts/run-sou109-structural-dev.py --output /tmp/sou109-dev-new
 ```
+
+Final run metadata and the preserved earlier failed origin control are in the
+adjacent evidence directory. The earlier pre-gate run is historical evidence only;
+its apparent filesystem release did not establish verified runtime origin.
 
 ### Explicit Git gap
 

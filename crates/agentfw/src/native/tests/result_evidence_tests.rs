@@ -6,6 +6,10 @@ const FS_POLICY: &str =
 const GIT_POLICY: &str = include_str!("../../../../../profiles/mcp/git-readonly-v1/policy.yaml");
 
 fn setup(dir: &std::path::Path, selected: bool, git_policy: bool) -> Shared {
+    setup_with_cap(dir, selected, git_policy, 1024)
+}
+
+fn setup_with_cap(dir: &std::path::Path, selected: bool, git_policy: bool, cap: usize) -> Shared {
     let mut st = fixture(dir);
     if selected {
         let manifest = crate::mcp::server_profile::original_manifest();
@@ -22,7 +26,7 @@ fn setup(dir: &std::path::Path, selected: bool, git_policy: bool) -> Shared {
     Arc::get_mut(&mut st).unwrap().firewall = Mutex::new(AgentFirewall::new(
         soup_wall_agent::AgentPolicySet::from_yaml(if git_policy { GIT_POLICY } else { FS_POLICY })
             .unwrap(),
-        1024,
+        cap,
     ));
     start(&st, "format");
     st.native
@@ -56,6 +60,10 @@ fn pending(st: &Shared, args: Value, frame: &str) -> Request {
 }
 
 fn setup_git(dir: &std::path::Path, name: &str) -> Shared {
+    setup_git_with_cap(dir, name, 1024)
+}
+
+fn setup_git_with_cap(dir: &std::path::Path, name: &str, cap: usize) -> Shared {
     let mut st = fixture(dir);
     let manifest = crate::mcp::server_profile::git::original_manifest();
     let def = manifest["tools"]
@@ -69,7 +77,7 @@ fn setup_git(dir: &std::path::Path, name: &str) -> Shared {
         Some(NativeState::from_bytes(&bytes, &hash(&bytes), "native-unit-key".into()).unwrap());
     Arc::get_mut(&mut st).unwrap().firewall = Mutex::new(AgentFirewall::new(
         soup_wall_agent::AgentPolicySet::from_yaml(GIT_POLICY).unwrap(),
-        1024,
+        cap,
     ));
     start(&st, "format");
     st.native
@@ -119,7 +127,7 @@ fn fs_frame(paths: &[String], bodies: &[String]) -> String {
     json!({"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":text}],"structuredContent":{"content":text}}}).to_string()
 }
 #[test]
-fn fixed_separators_only_can_resolve_refusal_and_original_taint_is_retained() {
+fn parser_preview_excludes_only_fixed_separators_but_native_without_origin_keeps_baseline() {
     for body in [
         "ordinary document",
         "body\n---\n",
@@ -134,16 +142,48 @@ fn fixed_separators_only_can_resolve_refusal_and_original_taint_is_retained() {
         let frame = fs_frame(&paths, &vec![body.into(); 50]);
         let req = pending(&st, json!({"paths":paths}), &frame);
         assert!(result_review_candidate(&st, st.native.as_ref().unwrap(), &req, None).is_none());
+        let native = st.native.as_ref().unwrap();
+        let texts = selected_result_texts(&native.registry.tools[0], &req).unwrap();
+        let (call, ev) = {
+            let state = native.sessions.lock().unwrap();
+            let session = &state.entries["format"];
+            (
+                session.calls[req.call_id.as_ref().unwrap()].clone(),
+                session.event(EventKind::ToolResult {
+                    tool: "read_multiple_files".into(),
+                    content: texts[0].clone(),
+                    source: Provenance::McpServer {
+                        name: "parser-only-test".into(),
+                    },
+                }),
+            )
+        };
+        let parsed =
+            result_evidence::ResultEvidence::derive(&native.registry.tools[0], &req, &call, &texts)
+                .unwrap();
+        let spans = parsed
+            .spans(&native.registry.tools[0], &req, &call, &texts)
+            .unwrap();
+        let positive = soup_wall_core::InjectionDetector::ordered_result_evidence(&texts);
+        let preview = st
+            .firewall
+            .lock()
+            .unwrap()
+            .preview_native_attributed_result(&ev, &spans[0], &positive);
+        assert_eq!(
+            preview.verdict == soup_wall_agent::Verdict::Allow,
+            body == "ordinary document"
+        );
         let reply = inspect(&st, st.native.as_ref().unwrap(), req).unwrap();
-        assert_eq!(reply.release, body == "ordinary document", "{body}");
+        assert!(
+            !reply.release,
+            "no active runtime provenance exists even for {body}"
+        );
         assert_eq!(reply.content_sha256, Some(hash(frame.as_bytes())));
         let native = st.native.as_ref().unwrap();
         let state = native.sessions.lock().unwrap();
         let session = &state.entries["format"];
         assert!(session.calls.is_empty());
-        if reply.release {
-            assert!(st.firewall.lock().unwrap().taint_len(&session.epoch) > 0);
-        }
     }
 }
 #[test]
@@ -222,6 +262,63 @@ fn substituted_args_or_receipt_have_no_relief() {
 }
 
 #[test]
+fn parser_preview_never_bypasses_existing_taint_capacity() {
+    for cap in [1024, soup_wall_agent::DEFAULT_TAINT_CAP] {
+        let dir = tempfile::tempdir().unwrap();
+        let st = setup_with_cap(dir.path(), true, false, cap);
+        let paths = (0..200)
+            .map(|i| format!("/workspace/src/file_{i:03}.txt"))
+            .collect::<Vec<_>>();
+        let frame = fs_frame(&paths, &vec!["SOU-97\n".into(); 200]);
+        let req = pending(&st, json!({"paths":paths}), &frame);
+        let native = st.native.as_ref().unwrap();
+        let texts = selected_result_texts(&native.registry.tools[0], &req).unwrap();
+        let epoch = native.sessions.lock().unwrap().entries["format"]
+            .epoch
+            .clone();
+        let mut fw = st.firewall.lock().unwrap();
+        let mut retained = true;
+        for (i, text) in texts.iter().enumerate() {
+            let ev = AgentEvent {
+                session: epoch.clone(),
+                agent: "main".into(),
+                parent: None,
+                seq: i as u64 + 1,
+                at_ms: 0,
+                kind: EventKind::ToolResult {
+                    tool: "read_multiple_files".into(),
+                    content: text.clone(),
+                    source: Provenance::McpServer {
+                        name: "parser-only-test".into(),
+                    },
+                },
+            };
+            retained &= fw.try_admit_native_result(&ev).is_ok();
+        }
+        assert_eq!(retained, cap == soup_wall_agent::DEFAULT_TAINT_CAP);
+    }
+}
+
+#[test]
+fn matching_profile_from_unverified_other_runtime_cannot_claim_formatter_origin() {
+    // This session has the correct operator registry, tool/schema/profile and
+    // a genuine current receipt, but NO observed/pinned runtime was launched.
+    // A different MCP implementation can send these same plausible channels.
+    let dir = tempfile::tempdir().unwrap();
+    let st = setup_with_cap(dir.path(), true, false, soup_wall_agent::DEFAULT_TAINT_CAP);
+    let paths = (0..50)
+        .map(|i| format!("/workspace/src/file_{i:03}.txt"))
+        .collect::<Vec<_>>();
+    let frame = fs_frame(&paths, &vec!["ordinary".into(); 50]);
+    let req = pending(&st, json!({"paths":paths}), &frame);
+    let reply = inspect(&st, st.native.as_ref().unwrap(), req).unwrap();
+    assert!(
+        !reply.release,
+        "static registry/profile declarations are not authenticated active formatter provenance"
+    );
+}
+
+#[test]
 #[ignore = "explicit one-shot frozen public dev replay; no model or external server"]
 fn public_dev_replay() {
     let path = std::env::var("SOU109_STRUCTURAL_DEV_INPUT").expect("frozen input path required");
@@ -238,9 +335,18 @@ fn public_dev_replay() {
         let selected = case["mode"] == "selected_filesystem";
         let dir = tempfile::tempdir().unwrap();
         let st = if case["mode"] == "selected_git_component" {
-            setup_git(dir.path(), case["tool"].as_str().unwrap())
+            setup_git_with_cap(
+                dir.path(),
+                case["tool"].as_str().unwrap(),
+                soup_wall_agent::DEFAULT_TAINT_CAP,
+            )
         } else {
-            setup(dir.path(), selected, false)
+            setup_with_cap(
+                dir.path(),
+                selected,
+                false,
+                soup_wall_agent::DEFAULT_TAINT_CAP,
+            )
         };
         let frame = case["frame"].as_str().unwrap();
         let req = pending(&st, case["args"].clone(), frame);
@@ -252,7 +358,7 @@ fn public_dev_replay() {
         }
         rows.push(json!({"id":id,"expected":case["expected"],"mode":case["mode"],"status":"evaluated","release":reply.release,"verdict":reply.verdict,"frame_sha256":hash(frame.as_bytes()),"source":case["source"],"reason_codes":reply.reason_codes}));
     }
-    let report = json!({"input_sha256":hash(&input),"cases":rows,"model_calls":0,"scope":"component replay with selected FS/Git profiles; original FS args/frames, original Git channel bytes with declared component-only call args, r0029 generic native receipt; not live runtime qualification"});
+    let report = json!({"input_sha256":hash(&input),"cases":rows,"model_calls":0,"taint_capacity":soup_wall_agent::DEFAULT_TAINT_CAP,"taint_capacity_source":"unchanged daemon DEFAULT_TAINT_CAP","scope":"component replay with selected FS/Git profiles; original FS args/frames, original Git channel bytes with declared component-only call args, r0029 generic native receipt; not live runtime qualification"});
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
