@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """Actual original FS/daemon/forwarder witnesses in an owned native Linux unit."""
-import argparse,hashlib,importlib.util,json,os,platform,shutil,signal,socket,stat,subprocess,sys,time,urllib.error,urllib.request,uuid
+import argparse,hashlib,importlib.util,json,os,platform,shutil,signal,socket,stat,subprocess,sys,time,urllib.error,urllib.request,uuid,errno
 from pathlib import Path
 
 
@@ -18,11 +18,12 @@ def main():
  for name in ('source','scratch','inputs','build'):p.add_argument('--'+name,type=Path,required=True)
  p.add_argument('--expected-commit',required=True);p.add_argument('--unit',required=True);a=p.parse_args();os.umask(0o077)
  source,out,inputs,build=[path.resolve(strict=True) for path in (a.source,a.scratch,a.inputs,a.build)]
- report={'format':'sou155-native-execution/1','status':'incomplete','source_commit':a.expected_commit,
+ report={'format':'sou155-native-execution/1','phase':'preconditions','status':'incomplete','source_commit':a.expected_commit,
          'model_calls':0,'cases':[],'acceptance_pass':False};destination=out/'native-execution.json'
  def save():destination.write_text(json.dumps(report,indent=2)+'\n')
  save();daemon=None;clients=[];logs=[];delegated=None
  try:
+  require(sys.version_info>=(3,11),'python_3_11_or_newer_required')
   require(platform.system()=='Linux' and platform.machine()=='x86_64' and os.geteuid()!=0,'ordinary_native_linux_required')
   require({name for _,name in socket.if_nameindex()}=={'lo'},'private_loopback_required')
   require(all(os.statvfs(path).f_flag & os.ST_RDONLY for path in (source,build,inputs)),'read_only_inputs_required')
@@ -38,6 +39,7 @@ def main():
   env={'PATH':str(node.parent)+':/usr/bin:/bin','HOME':str(out/'home'),'TMPDIR':str(out/'tmp'),'LANG':'C.UTF-8',
        'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null','PYTHONDONTWRITEBYTECODE':'1'}
   os.environ.clear();os.environ.update(env)
+  report['phase']='offline-original-profile';save()
   base=load(source,'sou155_native_base','scripts/verify-sou62-real-mcp.py')
   install=load(source,'sou155_original_install','scripts/install-sou62-filesystem-profile.py')
   workspace=out/'workspace';text='Ordinary original filesystem note.\n';(workspace/'notes.txt').write_text(text)
@@ -98,10 +100,11 @@ def main():
        '--instance-id',instance['instance_id'],'--tools','read_text_file,read_file','--ttl-seconds','300'],env=env,
        stdin=subprocess.DEVNULL,capture_output=True,timeout=10)
    require(process.returncode==0,'authority_mint_failed');return process.stdout.decode().strip()
-  def client(label,token=None):
+  def client(label,token=None,initialize=True):
    stream=(out/(label+'.private.log')).open('xb');logs.append(stream)
    selected=base.Client([str(binary),'mcp-verified','--id','filesystem'],dict(env,AGENTFW_HOST_SESSION=host,
        AGENTFW_CHILD_AUTHORITY=token or proof(label)),workspace,stream,label);clients.append(selected)
+   if not initialize:return selected
    result=selected.initialize();original=json.loads((source/'profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json').read_text())
    require(result['result']==original['result'],'original_manifest_changed');return selected
   def close(selected):
@@ -109,7 +112,9 @@ def main():
    require(not any(p.is_dir() for p in delegated.iterdir()) and not (delegated/'cgroup.procs').read_text().strip(),'residual_budget_inventory')
   def audits():
    return [json.loads(line) for line in (home/'audit.jsonl').read_text().splitlines() if line.strip()]
+  report['phase']='daemon-positive';save()
   daemon=start('daemon-positive');service=http('/native/v1/instance')['execution_service']
+  report['phase']='original-transport';save()
   selected=client('original-positive')
   invocation={'jsonrpc':'2.0','id':'read-1','method':'tools/call','params':{'name':'read_text_file','arguments':{'path':'/workspace/notes.txt'}}}
   reply,raw=selected.exchange(invocation);require(reply.get('result',{}).get('structuredContent',{}).get('content')==text,'useful_original_read_failed')
@@ -138,8 +143,44 @@ def main():
   require('error' in reply or reply.get('result',{}).get('isError') is True,'write_refusal_missing')
   require(base.snapshot(workspace)==baseline,'denied_effect_observed')
   report['cases'].append({'case':'deny-zero-workspace-effect','status':'passed'})
+  # A wire copy cannot create an affine original result or redeem its metadata.
+  forged={'contract_version':'native/1','registry_sha256':config['native']['registry_sha256'],
+      'session_id':'forged-source','event':'result','execution':evidence}
+  try:http('/native/v1',forged)
+  except urllib.error.HTTPError as error:require(error.code==400,'forged_result_wrong_refusal')
+  else:raise RuntimeError('copied_metadata_accepted')
+  report['cases'].append({'case':'copied-source-metadata-wire-forgery','status':'passed'})
+  # Observe a real original FIFO reader, cancel its admitted call, then release
+  # the fixture reader. No claim of rollback or non-execution after dispatch.
+  cancelled={'jsonrpc':'2.0','id':'cancel-source','method':'tools/call','params':{
+      'name':'read_text_file','arguments':{'path':'/workspace/denied.fifo'}}}
+  selected.send(cancelled);writer=None;limit=time.monotonic()+8
+  while writer is None and time.monotonic()<limit:
+   try:writer=os.open(workspace/'denied.fifo',os.O_WRONLY|os.O_NONBLOCK|os.O_CLOEXEC)
+   except OSError as error:
+    if error.errno!=errno.ENXIO:raise
+    time.sleep(0.02)
+  require(writer is not None,'original_fifo_reader_not_observed')
+  selected.send({'jsonrpc':'2.0','method':'notifications/cancelled','params':{'requestId':'cancel-source'}})
+  cancelled_reply,_=selected.receive();require(cancelled_reply.get('id')=='cancel-source'
+      and cancelled_reply.get('error',{}).get('code')==-32800,'cancelled_result_released')
+  os.write(writer,b'ordinary cancelled fixture data');os.close(writer)
+  invocation['id']='after-cancel';reply,_=selected.exchange(invocation)
+  require(reply.get('result',{}).get('structuredContent',{}).get('content')==text,'post_cancel_useful_read_failed')
+  report['cases'].append({'case':'actual-original-cancel-with-useful-followup','status':'passed',
+      'original_reader_seen':True,'cancelled_result_released':False,'effects_rolled_back':False})
+  replay_token=proof('spent-collector-token')
   close(selected)
+  spent=client('token-first-use',replay_token);close(spent)
+  replay=client('token-replay',replay_token,initialize=False)
+  try:replay.initialize()
+  except (ValueError,RuntimeError):pass
+  else:raise RuntimeError('retired_child_authority_replayed')
+  require(replay.close()!=0 and not replay.forced_cleanup,'token_replay_not_closed')
+  require(not any(path.is_dir() for path in delegated.iterdir()),'replay_left_owned_inventory')
+  report['cases'].append({'case':'retired-child-authority-replay','status':'passed','original_started':False})
   report['cleanup_verified']=True;report['service']=service;report['budget_sha256']=digest(budget);save()
+  report['phase']='substitution-controls';save()
   stop(daemon);daemon=None
   # Restart with replaced executable must fail before a daemon endpoint is ready.
   stream=(out/'daemon-substituted.private.log').open('xb');logs.append(stream)
@@ -158,6 +199,41 @@ def main():
   require(code!=0,'alternate_formatter_attested')
   report['cases'].append({'case':'identical-schema-alternate-formatter-with-new-tree-hash','status':'passed','endpoint_started':False})
   entry.write_bytes(original_entry)
+  catalogue['profile']['packageTreeSha256']=install.tree_sha(installed/'package')
+  catalogue_path.write_text(json.dumps(catalogue));config['native']['execution']['catalogue_sha256']=sha(catalogue_path)
+  # After daemon restart, an old instance's claim remains unusable.
+  (home/'config.yaml').write_text(json.dumps(config));daemon=start('daemon-restarted')
+  replay=client('restart-replay',replay_token,initialize=False)
+  try:replay.initialize()
+  except (ValueError,RuntimeError):pass
+  else:raise RuntimeError('old_instance_authority_replayed')
+  require(replay.close()!=0 and not replay.forced_cleanup,'restart_replay_not_closed')
+  fresh=client('restart-useful');invocation['id']='restart-read';reply,_=fresh.exchange(invocation)
+  require(reply.get('result',{}).get('structuredContent',{}).get('content')==text,'restart_useful_read_failed');close(fresh)
+  report['cases'].append({'case':'daemon-restart-old-authority-refused-new-read-useful','status':'passed'})
+  stop(daemon);daemon=None
+  # An explicit scenario policy exercises the unchanged operator Ask boundary.
+  # It is a separate owned fixture and never changes product/default policy.
+  report['phase']='original-ask';save()
+  ask_policy=out/'ask-policy.yaml';ask_policy.write_text((installed/'policy.yaml').read_text().replace('agent_policies:', 'agent_policies:\n  - name: original-read-needs-operator\n    when: { action_class: read_only }\n    action: ask',1))
+  config['policy']=str(ask_policy);(home/'config.yaml').write_text(json.dumps(config));daemon=start('daemon-ask')
+  ask=client('ask-approval');invocation['id']='approved-read';ask.send(invocation)
+  pending=[];limit=time.monotonic()+6
+  while not pending and time.monotonic()<limit:
+   listed=subprocess.run([binary,'native-approval','list'],env=env,stdin=subprocess.DEVNULL,capture_output=True,timeout=3)
+   require(listed.returncode==0,'approval_list_failed');pending=json.loads(listed.stdout)
+   if not pending:time.sleep(0.05)
+  require(len(pending)==1 and pending[0]['tool']=='read_text_file','exact_ask_pending_missing')
+  approved=subprocess.run([binary,'native-approval','approve',pending[0]['pending_id'],'--binding',pending[0]['binding_sha256']],
+      env=env,stdin=subprocess.DEVNULL,capture_output=True,timeout=3)
+  require(approved.returncode==0,'exact_ask_approval_failed')
+  reply,_=ask.receive();require(reply.get('id')=='approved-read' and reply.get('result',{}).get('structuredContent',{}).get('content')==text,
+      'approved_original_read_not_released')
+  replay_approval=subprocess.run([binary,'native-approval','approve',pending[0]['pending_id'],'--binding',pending[0]['binding_sha256']],
+      env=env,stdin=subprocess.DEVNULL,capture_output=True,timeout=3)
+  require(replay_approval.returncode!=0,'approval_was_reusable');close(ask)
+  report['cases'].append({'case':'exact-original-ask-approved-once','status':'passed','approval_replay_refused':True})
+  stop(daemon);daemon=None
   require(not any(path.is_dir() for path in delegated.iterdir()),'owned_cleanup_incomplete')
   report.update(status='passed',acceptance_pass=True,original_results=sum(bool(row.get('execution')) for row in audits()),
       binary_sha256=sha(binary),source_read_only=True,network='private-loopback-only',writes='isolated-scratch-and-owned-delegation-only')

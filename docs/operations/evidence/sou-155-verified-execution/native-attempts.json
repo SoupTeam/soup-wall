@@ -24,6 +24,27 @@
       "artifact": 12639873100,
       "artifact_sha256": "ec17b933fc2a56a658b5629013d8dde99a2886b8369ba5d00c383284ec84771d",
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "59e1efa88b2f5f388c9218dc5446453cf5e42ced",
+      "run": 40301227443,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "failed_stage": "runtime-driver-preconditions",
+      "cause": "system-python-3.10-lacks-hashlib-file-digest",
+      "runtime_execution_observed": false,
+      "artifacts": [
+        {
+          "id": 12641050989,
+          "sha256": "a2fef0bcf3782f76848a1f3a2591b9d9bd5f48e2426abbb2fe206e5e162d38e3"
+        },
+        {
+          "id": 12640094379,
+          "sha256": "47f2ca021bdf1f5f717397c4a57de61ee49a3e1ae46d80566c7d70aaeae49497"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }

@@ -147,7 +147,7 @@ jobs:
             --property=CPUQuota=200% --property=RuntimeMaxSec=15min --property=KillMode=control-group \
             --property=LimitNOFILE=65536 --working-directory="$GITHUB_WORKSPACE" \
             /usr/bin/env -i PATH=/usr/bin:/bin HOME="$host" TMPDIR="$host" \
-            python3 -B scripts/ci/native-verified-execution.py \
+            "$pythonLocation/bin/python3" -B scripts/ci/native-verified-execution.py \
             --source "$GITHUB_WORKSPACE" --scratch "$host" --inputs "$SOU155_INPUTS" \
             --build "$SOU155_SCRATCH" --expected-commit "$SOU155_COMMIT" --unit="$unit.service"
       - name: Remove only the owned SOU155 runtime unit
