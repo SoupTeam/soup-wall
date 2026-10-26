@@ -277,6 +277,14 @@ def apply_one(parent, output, plan, row):
     def archive_guard():
         S.require(output.read(archive_name(plan, row), MAX_ARCHIVE)[0] == body, "archive_changed_during_apply")
         os.fsync(output.fd)
+        if moved:
+            parent.check()
+            try:
+                os.stat(name, dir_fd=parent.fd, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                raise S.Refusal("run_name_reappeared")
     current(parent, row)
     name = "soup-wall-run-" + row["run_id"]
     quarantine_name = ".soup-wall-cleanup-" + secrets.token_hex(16)

@@ -315,6 +315,22 @@ class RunOperations(unittest.TestCase):
         self.assertEqual(result["outcome"], "partial")
         self.assertEqual((self.state / result["quarantine"] / "run/new-activity").read_text(), self.marker)
 
+    def test_new_generation_at_original_name_refuses_further_removal(self):
+        plan = self.archive()
+        before = self.snapshot(self.run)
+        original = ARCHIVE.rename_exclusive
+        def reappear(*args):
+            original(*args)
+            if not self.run.exists():
+                self.run.mkdir(mode=0o700)
+                self.write(self.run / "foreign.txt", self.marker.encode())
+        with patch.object(ARCHIVE, "rename_exclusive", side_effect=reappear):
+            result = ARCHIVE.apply(plan, self.output)[0]
+        self.assertEqual(result["outcome"], "partial")
+        self.assertEqual(result["reason"], "run_name_reappeared")
+        self.assertEqual((self.run / "foreign.txt").read_text(), self.marker)
+        self.assertEqual(self.snapshot(self.state / result["quarantine"] / "run"), before)
+
     def test_file_replacement_after_last_source_check_is_preserved_before_unlink(self):
         plan = self.archive()
         original = ARCHIVE.validate_remaining
