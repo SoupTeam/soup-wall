@@ -145,6 +145,7 @@ pub(crate) struct View {
     available: BTreeSet<String>,
     directories: BTreeSet<PathBuf>,
     images: Vec<(PathBuf, File)>,
+    object_witness: bool,
 }
 
 fn owned(metadata: &std::fs::Metadata) -> anyhow::Result<()> {
@@ -407,6 +408,16 @@ impl Capture {
 
 impl View {
     pub(crate) fn capture(workspace: &File) -> anyhow::Result<Arc<Self>> {
+        Self::capture_inner(workspace, false)
+    }
+
+    /// Additive component capture. Existing selected-profile behavior is
+    /// unchanged; this snapshot also withdraws on workspace entry changes.
+    pub(crate) fn capture_object_witness(workspace: &File) -> anyhow::Result<Arc<Self>> {
+        Self::capture_inner(workspace, true)
+    }
+
+    fn capture_inner(workspace: &File, object_witness: bool) -> anyhow::Result<Arc<Self>> {
         owned(&workspace.metadata()?)?;
         let git = child(workspace, ".git", true)?;
         let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
@@ -422,6 +433,9 @@ impl View {
             "Git shallow filesystem unsupported"
         );
         let mut source = Withdrawal::new()?;
+        if object_witness {
+            source.watch(workspace)?;
+        }
         source.watch(&git)?;
         // A pending lock is an unsupported/racy state, never a retry that
         // silently acquires authority over a different reference image.
@@ -604,7 +618,52 @@ impl View {
             source: Mutex::new(capture.source),
             directories: capture.directories,
             images: capture.images,
+            object_witness,
         }))
+    }
+
+    pub(crate) fn object_witness_valid(&self) -> anyhow::Result<()> {
+        ensure!(self.object_witness, "Git object witness capture required");
+        ensure!(
+            self.source.lock().is_ok_and(|mut source| source.valid()),
+            "Git object witness source withdrawn"
+        );
+        Ok(())
+    }
+
+    /// Read the very same sealed descriptors which `mount` consumes. Never
+    /// reopen source paths or infer kind from the cache's Unsupported variant.
+    pub(crate) fn object_witness_images(&self) -> anyhow::Result<BTreeMap<String, Vec<u8>>> {
+        use std::os::unix::fs::FileExt;
+        self.object_witness_valid()?;
+        let mut result = BTreeMap::new();
+        let mut total = 0usize;
+        for (path, file) in &self.images {
+            let seals = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GET_SEALS) };
+            let required =
+                libc::F_SEAL_WRITE | libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL;
+            ensure!(
+                seals >= 0 && seals & required == required,
+                "Git object image is not sealed"
+            );
+            let size = usize::try_from(file.metadata()?.len())?;
+            total = total
+                .checked_add(size)
+                .context("Git object image overflow")?;
+            ensure!(total <= MAX_IMAGE_BYTES, "Git object image bound");
+            let mut bytes = vec![0; size];
+            file.read_exact_at(&mut bytes, 0)?;
+            let relative = path
+                .strip_prefix("/workspace/")?
+                .to_str()
+                .context("Git image path encoding")?;
+            ensure!(
+                result.insert(relative.to_owned(), bytes).is_none(),
+                "duplicate Git image"
+            );
+        }
+        self.object_witness_valid()?;
+        Ok(result)
     }
 
     pub(crate) fn validate_call(&self, tool: &str, args: &Value) -> anyhow::Result<()> {
