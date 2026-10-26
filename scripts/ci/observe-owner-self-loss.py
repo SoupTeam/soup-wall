@@ -208,8 +208,9 @@ def observe(args):
     owner, prepared, pinned = None, None, None
     helper, owner_generation, helper_exit, owner_exit = None, None, None, None
     killed, owner_execs, unexpected_execs = False, 0, 0
-    private_log = args.output.with_suffix('.private.log')
+    private_log = args.output.with_suffix('.collector.private.log')
     previous_alarm = None
+    log = None
     try:
         log = os.open(private_log, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
         helper = os.fork()
@@ -227,7 +228,7 @@ def observe(args):
                     'SOU142_TEST_COLLECTOR_STAGE': 'owner-self-loss'})
             except BaseException:
                 os._exit(125)
-        os.close(log)
+        os.close(log); log = None
         live.add(helper); pidfds[helper] = os.pidfd_open(helper)
         deadline = time.monotonic() + 20
         need(signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0), 'standalone_observer_required')
@@ -328,6 +329,8 @@ def observe(args):
         report['reason'] = str(error) if isinstance(error, Incomplete) else 'native_observation_incomplete'
         if isinstance(error, OSError): report['errno'] = error.errno
     finally:
+        if log is not None:
+            os.close(log)
         if previous_alarm is not None:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, previous_alarm)
@@ -378,7 +381,10 @@ def main():
                           'acceptance_pass': False, 'target': 'outside-owner-before-descriptor-handback'}))
         return 0
     os.umask(0o077)
-    need(not args.output.exists(), 'new_output_required')
+    if args.output.exists():
+        print(json.dumps({'format': FORMAT, 'status': 'incomplete', 'acceptance_pass': False,
+                          'reason': 'new_output_required', 'production_cleanup_verified': False}))
+        return 1
     try:
         result = observe(args)
     except BaseException as error:

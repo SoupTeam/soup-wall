@@ -21,4 +21,12 @@ Two failed local Python attempts remain failed: initial CLI lookup was not linke
 to the scratch target, then four newly accepted Linux `/proc` status controls
 were unavailable on macOS. The CLI lookup and external platform accounting were
 corrected; no production code, expected status, deadline or limit was weakened.
-Later observer-only changes require focused revalidation before commit.
+The first native attempt, run `40282553955` on `2d6dad6`, passed the Linux
+build/unit/strict-Clippy/adoption slice, but failed before the fault observation:
+an enclosing attempt filename was shadowed by a per-case destination. A second
+collision between runner and collector private log names was found during review.
+The case loop is now isolated from the attempt serializer and collector logs have
+their own names. Regressions exercise the actual case runner/checkpoint flow and
+actual observer setup through exclusive log creation, stopping before any fork.
+The failed run remains in [the native attempt ledger](native-attempts.json), with
+independently verified ZIP SHA-256 and CRC. It is not an owner-loss result.

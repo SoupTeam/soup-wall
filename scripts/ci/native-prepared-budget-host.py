@@ -90,6 +90,32 @@ def owner_observation(log, test):
     return observations[0]
 
 
+def owner_loss_controls(src, out, paths, identity, budget, profiles, commit, run, checkpoint, verify_empty):
+    """Keep case destinations out of the enclosing attempt serializer's scope."""
+    observations = []
+    for server in ('filesystem', 'git'):
+        verify_empty()
+        case_report = out / ('owner-self-loss-' + server + '.json')
+        run('owner-self-loss-' + server, [sys.executable, '-B',
+            src / 'scripts/ci/observe-owner-self-loss.py', '--run', '--source', src,
+            '--agentfw', paths['agentfw'], '--test-binary', paths['sandbox_tests'],
+            '--agentfw-sha256', identity['binaries']['agentfw'],
+            '--test-sha256', identity['binaries']['sandbox_tests'],
+            '--expected-commit', commit,
+            '--profile', profiles[server]['profile']['path'], '--budget', budget,
+            '--output', case_report], 35)
+        observation = bounded_json(case_report)
+        require(observation.get('status') == 'blocked'
+                and observation.get('acceptance_pass') is False
+                and observation.get('production_cleanup_verified') is False
+                and observation.get('observer_cleanup_verified') is True,
+                'owner_self_loss_diagnostic_unverified')
+        observations.append(dict(observation, server=server))
+        verify_empty()
+        checkpoint(observations)
+    return observations
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', action='store_true')
@@ -248,26 +274,11 @@ def main():
             expected_commit=args.expected_commit, ask_wait_seconds=0, timeout_seconds=60, port=0))
         if args.phase == 'owner-loss':
             record['owner_self_loss'] = []
-            for server in ('filesystem', 'git'):
-                empty_root(delegated)
-                destination = out / ('owner-self-loss-' + server + '.json')
-                run('owner-self-loss-' + server, [sys.executable, '-B',
-                    src / 'scripts/ci/observe-owner-self-loss.py', '--run', '--source', src,
-                    '--agentfw', paths['agentfw'], '--test-binary', paths['sandbox_tests'],
-                    '--agentfw-sha256', identity['binaries']['agentfw'],
-                    '--test-sha256', identity['binaries']['sandbox_tests'],
-                    '--expected-commit', args.expected_commit,
-                    '--profile', profiles[server]['profile']['path'], '--budget', budget,
-                    '--output', destination], 35)
-                observation = bounded_json(destination)
-                require(observation.get('status') == 'blocked'
-                        and observation.get('acceptance_pass') is False
-                        and observation.get('production_cleanup_verified') is False
-                        and observation.get('observer_cleanup_verified') is True,
-                        'owner_self_loss_diagnostic_unverified')
-                record['owner_self_loss'].append(dict(observation, server=server))
-                empty_root(delegated)
+            def checkpoint_owner_loss(observations):
+                record['owner_self_loss'] = list(observations)
                 save()
+            owner_loss_controls(src, out, paths, identity, budget, profiles, args.expected_commit,
+                run, checkpoint_owner_loss, lambda: empty_root(delegated))
         if args.phase not in ('pressure', 'owner-loss'):
             for server in ('filesystem', 'git'):
                 for label, test, stage, leaf_created in OWNER_TESTS:
