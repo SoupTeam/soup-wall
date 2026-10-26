@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Mutation controls for finite evidence. These fixtures are not runtime proof."""
+import ast
 import copy
 import importlib.util
 import json
@@ -38,6 +39,8 @@ def fixture():
         row = {'case': name, 'status': 'passed', 'trace_sha256': SHA}
         if name not in P.HOST:
             row['selected_execution'] = 0
+            if name == 'provider-unavailable':
+                row['reason'] = 'provider_unavailable'
         else:
             success = name in ('useful-refusal', 'ask', 'default')
             row.update(outcome='completed' if success else 'failed', cleanup='owned_processes_stopped_audit_retained',
@@ -60,7 +63,7 @@ def fixture():
         raw['cases'].append(row)
     stops = []
     for name in ('two-prepared-runs', 'interrupted-stop', 'daemon-loss-stop', 'unconfirmed-namespace-stop'):
-        row = copy.deepcopy(raw['cases'][4])
+        row = copy.deepcopy(next(row for row in raw['cases'] if row['case'] == 'useful-refusal'))
         row.update(case=name, future_dispatches=0)
         if name == 'two-prepared-runs':
             row = {'case': name, 'status': 'passed', 'future_dispatches': 0,
@@ -74,6 +77,77 @@ def fixture():
 
 
 class Projection(unittest.TestCase):
+    def test_case_inventory_matches_actual_default_producer(self):
+        source = ast.parse((ROOT / 'scripts/qualify-prepared-pilot-run.py').read_text())
+        qualify = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == 'qualify')
+        preflight = next(node for node in ast.walk(qualify) if isinstance(node, ast.For)
+                         and isinstance(node.target, ast.Name) and node.target.id == 'control')
+        runtime = next(node for node in ast.walk(qualify) if isinstance(node, ast.Assign)
+                       and any(isinstance(target, ast.Name) and target.id == 'cases' for target in node.targets))
+        self.assertEqual(P.CASES, ast.literal_eval(preflight.iter) + ast.literal_eval(runtime.value))
+        self.assertEqual(len(P.CASES), 12)
+        self.assertEqual(len(P.HOST), 7)
+
+    def test_provider_preflight_is_mandatory_and_cannot_claim_execution(self):
+        a, r = fixture()
+        self.assertEqual(P.project(a, r, COMMIT, 0)['status'], 'partial-slice-passed')
+        for mutation in ('missing', 'duplicate', 'execution', 'reason'):
+            with self.subTest(mutation=mutation):
+                altered = copy.deepcopy(r)
+                row = next(row for row in altered['cases'] if row['case'] == 'provider-unavailable')
+                if mutation == 'missing':
+                    altered['cases'].remove(row)
+                elif mutation == 'duplicate':
+                    altered['cases'].insert(4, copy.deepcopy(row))
+                elif mutation == 'execution':
+                    row['selected_execution'] = 1
+                else:
+                    row['reason'] = 'owned_secret_never_export'
+                result = P.project(a, altered, COMMIT, 0)
+                self.assertEqual(result['status'], 'failed')
+                self.assertNotIn('owned_secret_never_export', json.dumps(result))
+
+    def test_owner_loss_is_an_explicit_unsupported_negative_control(self):
+        attempt, _ = fixture()
+        attempt.update(phase='owner-loss', status='owner-loss-unsupported-fail-closed',
+            source_read_only=True, reused_binaries_read_only=True,
+            network='private-loopback-only', provider='owned-scripted-loopback',
+            paid_api_calls=0, actual_original_host_covered=False,
+            full_sou142_qualification=False, remaining_gaps=list(P.GAPS))
+        attempt['owner_controls'] = [
+            {'server': server, 'status': 'unsupported-fail-closed',
+             'stage': 'owner-loss-before-descriptor-handback', 'leaf_created': True,
+             'original_started': False, 'owned_members': 0,
+             'owner_held_leaf_descriptor': True,
+             'collector_had_no_leaf_descriptor': True,
+             'production_cleanup_verified': False, 'witness_cleanup_attempted': True,
+             'inventory_restored': True, 'budget_sha256': SHA,
+             'binary_sha256': SHA, 'owner_binary_sha256': SHA}
+            for server in ('filesystem', 'git')]
+        observed = P.project_owner_loss(attempt, COMMIT, 0)
+        self.assertEqual(observed['status'], 'unsupported-fail-closed-observed')
+        self.assertIs(observed['acceptance_pass'], False)
+        self.assertIs(observed['full_sou142_qualification'], False)
+        self.assertIn('owner-loss-before-descriptor-handback', observed['remaining_gaps'])
+        for mutate in (
+            lambda x: x['owner_controls'].pop(),
+            lambda x: x['owner_controls'][0].update(original_started=True),
+            lambda x: x['owner_controls'][0].update(production_cleanup_verified=True),
+            lambda x: x['owner_controls'][0].update(witness_cleanup_attempted=False),
+            lambda x: x['owner_controls'][0].update(owned_members=1),
+            lambda x: x['owner_controls'][0].update(owner_held_leaf_descriptor=False),
+            lambda x: x['owner_controls'][0].update(collector_had_no_leaf_descriptor=False),
+            lambda x: x['owner_controls'][0].update(owner_binary_sha256='c' * 64),
+            lambda x: x.update(owned_budget_root_empty=False),
+            lambda x: x.update(full_sou142_qualification=True),
+            lambda x: x.update(remaining_gaps=[]),
+            lambda x: x.update(source_commit='c' * 40),
+        ):
+            invalid = copy.deepcopy(attempt)
+            mutate(invalid)
+            self.assertEqual(P.project_owner_loss(invalid, COMMIT, 0)['status'], 'failed')
+        self.assertEqual(P.project_owner_loss(attempt, COMMIT, 1)['status'], 'failed')
+
     def test_slice_never_becomes_full_acceptance_or_exports_private_observations(self):
         a, r = fixture()
         result = P.project(a, r, COMMIT, 0)
@@ -88,7 +162,7 @@ class Projection(unittest.TestCase):
     def test_pressure_requires_original_kernel_refusal_and_fresh_peer_recovery(self):
         a, raw = fixture()
         rows = []
-        normal_budget = raw['cases'][4]['resource_budget']
+        normal_budget = next(row for row in raw['cases'] if row['case'] == 'useful-refusal')['resource_budget']
         for server in ('filesystem', 'git'):
             for kind in ('memory', 'pids', 'wall'):
                 rows.append({'server':server, 'resource':kind, 'status':'passed',
@@ -154,13 +228,13 @@ class Projection(unittest.TestCase):
             lambda x, y: x['owner_controls'][0].update(witness_cleanup_attempted=True),
             lambda x, y: x['owner_controls'][1].update(owner_binary_sha256='c' * 64),
             lambda x, y: y['cases'].pop(),
-            lambda x, y: y['cases'][4]['resource_budget'].update(budget_sha256='c' * 64),
-            lambda x, y: y['cases'][4]['resource_budget']['observations'].pop(),
-            lambda x, y: y['cases'][4]['resource_budget']['observations'][1].update(server_id='filesystem'),
-            lambda x, y: y['cases'][4]['process_cleanup']['remaining'].append({'pid': 999}),
-            lambda x, y: y['cases'][4].update(exact_once_kernel_read=False),
-            lambda x, y: y['cases'][4].update(kernel_git_status_count=0),
-            lambda x, y: y['cases'][5].update(explicit_harness_decisions=0),
+            lambda x, y: next(row for row in y['cases'] if row['case'] == 'useful-refusal')['resource_budget'].update(budget_sha256='c' * 64),
+            lambda x, y: next(row for row in y['cases'] if row['case'] == 'useful-refusal')['resource_budget']['observations'].pop(),
+            lambda x, y: next(row for row in y['cases'] if row['case'] == 'useful-refusal')['resource_budget']['observations'][1].update(server_id='filesystem'),
+            lambda x, y: next(row for row in y['cases'] if row['case'] == 'useful-refusal')['process_cleanup']['remaining'].append({'pid': 999}),
+            lambda x, y: next(row for row in y['cases'] if row['case'] == 'useful-refusal').update(exact_once_kernel_read=False),
+            lambda x, y: next(row for row in y['cases'] if row['case'] == 'useful-refusal').update(kernel_git_status_count=0),
+            lambda x, y: next(row for row in y['cases'] if row['case'] == 'ask').update(explicit_harness_decisions=0),
             lambda x, y: y['selected_sha256'].update(agentfw='c' * 64),
             lambda x, y: x.update(owned_peer_budget_root_empty=False),
             lambda x, y: y['emergency_stop']['cases'][0].update(peer_useful_after_stop=False),

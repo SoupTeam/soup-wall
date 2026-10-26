@@ -69,7 +69,10 @@ rechecked while allowing the preparer's normal read-only completion freeze.
 
 Rechecks run before native downloads, extraction and builds; Cargo stages and
 artifact copying; installed input preparation and each profile installer; and
-selection publication. They require the reserve to remain available. They do not
+selection publication. Native prerequisite and Agent source preparation also
+recheck after acquiring their shared preparation lock, before reuse or creation
+of a new generation: waiting does not reserve capacity. Rechecks require the
+reserve to remain available. They do not
 charge the whole initial budget again after it has been partly spent, or predict
 remaining work. A successful check cannot guarantee future capacity. Existing
 ENOSPC, permission, interruption and atomic-publication handling remains in force.

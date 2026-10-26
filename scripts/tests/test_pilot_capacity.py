@@ -1,5 +1,5 @@
 import importlib.util
-from contextlib import redirect_stdout
+from contextlib import ExitStack, contextmanager, redirect_stdout
 import io
 import ctypes
 import errno
@@ -337,6 +337,56 @@ class PreparedEvidence(unittest.TestCase):
 
 
 class CapacityCLI(unittest.TestCase):
+    def test_lost_reserve_while_waiting_refuses_before_generation(self):
+        for name, stage in (("prepare-native-pilot-prerequisites.py", "native"),
+                            ("build-native-pilot-inputs.py", "source")):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as directory:
+                spec = importlib.util.spec_from_file_location("capacity_coordination_" + stage, ROOT / "scripts" / name)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                root, locked = Path(directory), {"acquired": False}
+                output = root / "prepared"
+                archive = root / "owned-archive"
+                archive.write_bytes(b"owned fixture")
+                args = SimpleNamespace(output=output, guard_capacity=True,
+                    capacity_build_bytes=4096, capacity_cache_bytes=4096,
+                    capacity_temp_bytes=4096, capacity_reserve_bytes=1024,
+                    wait_seconds=1, expected_commit="a" * 40, prepare=True,
+                    rebuild=False, allow_download=False, git_archive=archive,
+                    bwrap_archive=archive)
+
+                def observe(*_args, **_kwargs):
+                    # Model another owner consuming the reserve during the wait.
+                    status, reason = ("insufficient", "low_space") if locked["acquired"] else (
+                        "sufficient", "declared_budget_available")
+                    return capacity.record(status, reason), []
+
+                @contextmanager
+                def hold(*_args, **_kwargs):
+                    locked["acquired"] = True
+                    yield SimpleNamespace(waited_seconds=0.1, contended=True)
+
+                with ExitStack() as stack:
+                    stack.enter_context(patch.object(capacity, "inspect", side_effect=observe))
+                    stack.enter_context(patch.object(module.coordination, "hold", side_effect=hold))
+                    stack.enter_context(patch.object(module, "source_identity", return_value="a" * 40))
+                    if stage == "source":
+                        stack.enter_context(patch.object(module, "inventory", return_value={"missing": [], "tools": {}}))
+                        stack.enter_context(patch.object(module, "tool_identity", return_value={}))
+                    else:
+                        stack.enter_context(patch.object(module, "platform_missing", return_value=[]))
+                        stack.enter_context(patch.object(module, "tool_inventory", return_value=({}, [])))
+                        stack.enter_context(patch.object(module, "execution_inputs", return_value={}))
+                    with capacity.checked(stage, args), self.assertRaises(capacity.Refusal) as caught:
+                        if stage == "source":
+                            module.run_build(root, output, args.expected_commit, wait_seconds=1)
+                        else:
+                            module.prepare(args)
+                    self.assertEqual(caught.exception.report["reason"], "low_space")
+                    self.assertTrue(locked["acquired"])
+                    self.assertFalse((output / "generations").exists())
+                    self.assertFalse((output / "current.json").exists())
+
     def test_guarded_refusals_never_enter_preparers_or_write_failure_records(self):
         for name, flag, operation in (("prepare-native-pilot-prerequisites.py", "--prepare", "prepare"),
                 ("build-native-pilot-inputs.py", "--build", "run_build"),
