@@ -1,0 +1,21 @@
+{
+  "provenance": "Owned exact original-server v3 fixture; copied unchanged object/metadata inputs and original response bytes, not a formatter implementation. Local package ambiguity evidence only.",
+  "package": "mcp-server-git==2026.10.10",
+  "wheel_sha256": "5bd3dc5736d67ab01b664363055001b2ce84e945c17af98875e5e04b5823d335",
+  "v3_report_sha256": "d5971ae19d2d33dc14ae7a45b084bbfa147be3293a7bcb3ed74b7d355a3dcbd7",
+  "commit_oid": "0d5ba95b2621ffc0eb8042f594328638170a36c2",
+  "blob_oid": "76ceba9ad5f763da3700c2df2e8cda7c8898d625",
+  "images_base64": {
+    ".git/HEAD": "cmVmOiByZWZzL2hlYWRzL21haW4K",
+    ".git/config": "W2NvcmVdCglyZXBvc2l0b3J5Zm9ybWF0dmVyc2lvbiA9IDAKCWZpbGVtb2RlID0gdHJ1ZQoJYmFyZSA9IGZhbHNlCglsb2dhbGxyZWZ1cGRhdGVzID0gdHJ1ZQoJaWdub3JlY2FzZSA9IHRydWUKCXByZWNvbXBvc2V1bmljb2RlID0gdHJ1ZQo=",
+    ".git/index": "RElSQwAAAAIAAAABat7wfScCES1q3vB9JwIRLQEAABEBIERlAACBpAAAAfUAAAAUAAAAJQrqbPaLPh8QOTj51Xo5aHrilzNxAAlub3Rlcy50eHQAVFJFRQAAABkAMSAwCjDWnBaMi/pvYTyIKy7Uz4yWk926UUYJHOW0/uZodbr046zlWDZ3NxU=",
+    ".git/objects/0a/ea6cf68b3e1f103938f9d57a39687ae2973371": "eAFLyslPUjA2Z/Avz0tNUSiuzCvJSC3JTFbIT8pKTS7Rzc7MS1FIy6woKS1K1eMCAGmbD+s=",
+    ".git/objects/0d/5ba95b2621ffc0eb8042f594328638170a36c2": "eAGljUsKwjAUAF3nFG8vSD42TUDEG3RRPEDy8kIDbSJt6uf2FgUv4CxnMYNlmlIFyZtdnYlA8aAtCm3Q+Oh01EKhMdJLCkeMBq22KgTvmFvrUGbou6toNPSvXAeqCeG0lHUzF3q66TbSIeW7G1M4g2ittK00nMOebzD8rCv9FWHdI1OA5ff/VtkbN4ZDBQ==",
+    ".git/objects/30/d69c168c8bfa6f613c882b2ed4cf8c9693ddba": "eAErKUpNVTA2ZzA0MDAzMVHIyy9JLdYrqShh4HqV863bTl7A0uLn1SrLjKpH040LAUwBEIA=",
+    ".git/objects/76/ceba9ad5f763da3700c2df2e8cda7c8898d625": "eAFdjs1KxDAUhV3fp7j7mM5N2sZOEYngfhaDD5C/MtE0kWk61re3KLjwcFbng49jU7EoO3HnyjzHiuR7a469lUqKaXIU7ECdnPpj18pBtYN4INMqJ+F5rZdyHfF8ehW9wvNXrpdQo8PHpaz7osNm5o8UmphvJkX/BC+mhhERJUnFBXGpkGj8KTLaA7BTPH3m4HH58/0eA+Cc48GH2yGvKQFjDHOpYWnqVkFr5HRPyARqDey/oti34Cp/j9njFLe6XkMD3zA4SVg=",
+    ".git/objects/a0/478997127e0292f02d2c501447f7923e5ec850": "eAFLyslPUjA0Y/Avz0tNUShKLFdIAorocQEAX8IHhQ==",
+    ".git/refs/heads/main": "MGQ1YmE5NWIyNjIxZmZjMGViODA0MmY1OTQzMjg2MzgxNzBhMzZjMgo="
+  },
+  "original_response_base64": "eyJqc29ucnBjIjoiMi4wIiwiaWQiOjEwLCJyZXN1bHQiOnsiY29udGVudCI6W3sidHlwZSI6InRleHQiLCJ0ZXh0IjoiY29tbWl0IDBkNWJhOTViMjYyMWZmYzBlYjgwNDJmNTk0MzI4NjM4MTcwYTM2YzJcbkF1dGhvcjogU09VMTU2IFN5bnRoZXRpYyA8c291MTU2QGV4YW1wbGUuaW52YWxpZD5cbkRhdGU6ICAgMjAyNi0xMC0yNiAwMDowMDowMCArMDAwMFxuXG4gICAgT3duZWQgc3ludGhldGljIGNvbW1pdFxuXG4tLS0gL2Rldi9udWxsXG4rKysgbm90ZXMudHh0XG5AQCAtMCwwICsxIEBAXG4rT3duZWQgc3ludGhldGljIG9iamVjdC1raW5kIGZpeHR1cmUuXG4ifV0sImlzRXJyb3IiOmZhbHNlfX0K",
+  "original_response_sha256": "9956278f7a1abd1cbbbaf02420ca66b588eded168428ba63ae95d8c39be9384e"
+}

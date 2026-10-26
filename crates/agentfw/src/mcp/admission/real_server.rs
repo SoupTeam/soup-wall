@@ -326,10 +326,13 @@ async fn admit(
     if assessment.verdict == ProductionVerdict::Deny {
         return Ok(refusal("classifier_deny"));
     }
-    // Selected read-only Ask continuation must not disable the independently
-    // selected create-only Allow path, or acquire approval authority for it.
-    if !assessment.known_read_only && !(creating && assessment.verdict == ProductionVerdict::Allow)
-    {
+    // Only the exact installed create-only profile may continue a classified
+    // mutation. Unknown read-only semantics remain unsupported for approvals.
+    if !(if creating {
+        assessment.known_create
+    } else {
+        assessment.known_read_only
+    }) {
         return Ok(refusal(if collector.config.approval.is_some() {
             "classifier_unknown_approval_unsupported"
         } else {
@@ -339,6 +342,36 @@ async fn admit(
     let mut boundary = collector.policy_boundary().await?;
     let mut fields = json!({"tool":call.tool,"args":call.args,
         "schema_sha256":installed.schema_sha256,"mcp_host_call_id":call.id});
+    let create_context = if creating {
+        #[cfg(target_os = "linux")]
+        {
+            let Some(workspace) = call.pinned_workspace.as_deref() else {
+                return Ok(refusal("native_approval_create_resource_unavailable"));
+            };
+            let resource = match server_profile::filesystem_create::CreateResource::capture(
+                workspace, &call.args,
+            ) {
+                Ok(resource) => resource,
+                Err(_) => return Ok(refusal("native_approval_create_resource_changed")),
+            };
+            Some(selected_invocation(
+                collector,
+                &snapshot,
+                call,
+                profile,
+                Some(resource),
+            )?)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            None
+        }
+    } else {
+        None
+    };
+    if let Some(context) = &create_context {
+        fields["selected_invocation"] = json!(context);
+    }
     let mut receipt = if assessment.verdict == ProductionVerdict::Ask {
         None
     } else {
@@ -356,13 +389,6 @@ async fn admit(
     };
     let mut continuation = None;
     if let Some(source) = source {
-        if creating {
-            return Ok(if let Some(reply) = receipt {
-                Decision::Refused(withheld(&call.id, "invocation", &reply["reason_codes"]))
-            } else {
-                refusal("classifier_ask")
-            });
-        }
         // No transition gate is held across a human wait. Acquire a fresh
         // boundary, rerun classification and redeem under the current policy.
         drop(boundary.take());
@@ -373,44 +399,14 @@ async fn admit(
                 refusal("classifier_ask")
             });
         }
-        let Some(classifier) = &collector.config.classifier else {
-            return Ok(refusal("native_approval_classifier_identity_required"));
-        };
-        let Some(classifier_digest) = classifier
-            .revision()
-            .filter(|digest| crate::native::is_digest(digest))
-        else {
-            return Ok(refusal("native_approval_classifier_identity_required"));
-        };
         // This increment requires the accepted host/agent capability and live
         // collector owner. Plain legacy sessions keep their correlated refusal.
         if collector.host_session.is_none() || collector.liveness.is_none() {
             return Ok(refusal("native_approval_bound_owner_required"));
         }
-        let definition = snapshot
-            .tools
-            .get(&call.tool)
-            .context("selected definition missing")?;
-        let context = crate::native::approval::SelectedInvocation {
-            host_call_id: call.id.clone(),
-            request_sha256: call.request_sha256.clone(),
-            server_id: collector.config.server_id.clone(),
-            profile: call.profile.clone(),
-            profile_sha256: sha(canonical(&serde_json::to_value(profile)?)
-                .to_string()
-                .as_bytes()),
-            classifier_sha256: classifier_digest.to_owned(),
-            snapshot_sha256: snapshot.sha256.clone(),
-            definition_sha256: definition.definition_sha256.clone(),
-            input_sha256: super::prediction_identity(
-                &collector.config.server_id,
-                &snapshot,
-                definition,
-                &call.tool,
-                &call.args,
-                classifier.source(),
-                classifier.revision(),
-            ),
+        let context = match create_context {
+            Some(context) => context,
+            None => selected_invocation(collector, &snapshot, call, profile, None)?,
         };
         // Bind same-FD verified input observations before publishing a pending
         // request. Only kernel-enforced immutable bytes may be reused later.
@@ -432,6 +428,19 @@ async fn admit(
                     .await;
             timing.record(call, "profile_and_assets", matches!(&verified, Ok(Ok(()))));
             verified??;
+            #[cfg(target_os = "linux")]
+            if let Some(expected) = &context.original_create {
+                let workspace = call
+                    .pinned_workspace
+                    .as_deref()
+                    .context("selected create root missing")?;
+                ensure!(
+                    &server_profile::filesystem_create::CreateResource::capture(
+                        workspace, &call.args
+                    )? == expected,
+                    "selected create resource changed during approval"
+                );
+            }
             boundary = collector.policy_boundary().await?;
             timing.record(call, "policy_boundary", true);
             let reassessed = collector
@@ -443,7 +452,8 @@ async fn admit(
                     installed.action_class,
                     ClassificationAuthority {
                         egress_declared: false,
-                        create_file_profile: None,
+                        create_file_profile: creating
+                            .then_some(server_profile::filesystem_create::FORMAT),
                         https_get: false,
                     },
                 )
@@ -451,9 +461,11 @@ async fn admit(
             timing.record(call, "classifier", matches!(&reassessed, Ok(Ok(_))));
             let reassessed = reassessed?;
             ensure!(
-                reassessed.is_ok_and(
-                    |value| value.known_read_only && value.verdict != ProductionVerdict::Deny
-                ),
+                reassessed.is_ok_and(|value| (if creating {
+                    value.known_create
+                } else {
+                    value.known_read_only
+                }) && value.verdict != ProductionVerdict::Deny),
                 "selected approval reclassification refused"
             );
             ensure!(
@@ -496,6 +508,52 @@ async fn admit(
         boundary,
         continuation,
     }))
+}
+
+/// Freeze observations for the existing signed grant and call binding. Runtime,
+/// package, schema and classifier revisions remain part of this same identity.
+fn selected_invocation(
+    collector: &Collector<'_>,
+    snapshot: &Snapshot,
+    call: &Call,
+    profile: &server_profile::ProfileConfig,
+    original_create: Option<server_profile::filesystem_create::CreateResource>,
+) -> anyhow::Result<crate::native::approval::SelectedInvocation> {
+    let classifier = collector
+        .config
+        .classifier
+        .as_ref()
+        .context("selected classifier missing")?;
+    let classifier_digest = classifier
+        .revision()
+        .filter(|digest| crate::native::is_digest(digest))
+        .context("selected classifier revision missing")?;
+    let definition = snapshot
+        .tools
+        .get(&call.tool)
+        .context("selected definition missing")?;
+    Ok(crate::native::approval::SelectedInvocation {
+        host_call_id: call.id.clone(),
+        request_sha256: call.request_sha256.clone(),
+        server_id: collector.config.server_id.clone(),
+        profile: call.profile.clone(),
+        profile_sha256: sha(canonical(&serde_json::to_value(profile)?)
+            .to_string()
+            .as_bytes()),
+        classifier_sha256: classifier_digest.to_owned(),
+        snapshot_sha256: snapshot.sha256.clone(),
+        definition_sha256: definition.definition_sha256.clone(),
+        input_sha256: super::prediction_identity(
+            &collector.config.server_id,
+            snapshot,
+            definition,
+            &call.tool,
+            &call.args,
+            classifier.source(),
+            classifier.revision(),
+        ),
+        original_create,
+    })
 }
 
 /// One bounded admission worker, independent of host input and useful peers.
@@ -628,6 +686,50 @@ async fn inspect(
         #[cfg(target_os = "linux")]
         authorized: authorized && _original_inspected,
         _boundary: boundary,
+    }))
+}
+
+async fn execute_in_daemon(
+    collector: &Collector<'_>,
+    call: &Call,
+    mut grant: Grant,
+    profile: &server_profile::ProfileConfig,
+) -> anyhow::Result<Option<Release>> {
+    let reply = collector
+        .execute_original_git(&grant.call_id, &grant.binding, profile)
+        .await?;
+    ensure!(
+        reply["completed"] == true,
+        "original daemon execution incomplete"
+    );
+    let receipt = &reply["receipt"];
+    let authorized = receipt["release"] == true;
+    let raw = if authorized {
+        let raw = reply["frame"]
+            .as_str()
+            .context("original daemon frame missing")?;
+        let decoded = parse(raw.as_bytes())?;
+        ensure!(decoded["id"] == call.id, "original daemon host ID mismatch");
+        let profiles = server_profile::classify_manifest_for(
+            &profile.format,
+            &server_profile::original_manifest_for(&profile.format)?,
+        )?;
+        profiles
+            .get(&call.tool)
+            .context("original daemon tool missing")?
+            .validate_result(&decoded)?;
+        raw.as_bytes().to_vec()
+    } else {
+        withheld(&call.id, "result", &receipt["reason_codes"])
+    };
+    if let Some(timing) = &mut grant.continuation {
+        timing.record(call, "daemon_original_result", authorized);
+    }
+    Ok(Some(Release {
+        raw,
+        #[cfg(target_os = "linux")]
+        authorized,
+        _boundary: grant.boundary.take(),
     }))
 }
 
@@ -799,6 +901,17 @@ where
     T: AsyncWrite + Unpin,
 {
     let format = profile.format.as_str();
+    let daemon_git = collector
+        .config
+        .native
+        .git_execution_selected(&collector.config.server_id, profile)?;
+    ensure!(
+        !daemon_git
+            || (server_profile::git_selected(format)
+                && collector.prepared_budget.is_none()
+                && collector.liveness.is_some()),
+        "daemon Git execution requires selected Git, liveness and an independent execution budget"
+    );
     let mut initialized = false;
     let mut notified = false;
     let mut ready = false;
@@ -1278,6 +1391,19 @@ where
                                             WorkEvent::Created(worker_key,
                                                 retain_create_slot(lease,
                                                     produce_original_create(&runner, &args)).await)
+                                        }));
+                                        continue;
+                                    }
+                                    if daemon_git && matches!(call.tool.as_str(), "git_show" | "git_diff") {
+                                        // Do NOT also dispatch the tools/call to the collector's server.
+                                        // The daemon consumes the admission and owns the one actual result pipe.
+                                        let input = detached(call);
+                                        let worker_key = key.clone();
+                                        call.dispatched = true;
+                                        call.phase = Phase::Inspecting;
+                                        workers.push(Box::pin(async move {
+                                            WorkEvent::Inspected(worker_key,
+                                                execute_in_daemon(collector, &input, grant, profile).await)
                                         }));
                                         continue;
                                     }
@@ -1998,6 +2124,18 @@ pub(super) async fn run(
         .context("install selected collector termination handler")?;
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
     let selected_budget = collector.prepared_budget.as_ref();
+    if collector
+        .config
+        .native
+        .git_execution_selected(&collector.config.server_id, profile)?
+    {
+        ensure!(
+            server_profile::git_selected(&profile.format)
+                && selected_budget.is_none()
+                && collector.liveness.is_some(),
+            "daemon Git execution does not support prepared budget selection"
+        );
+    }
     ensure!(
         selected_budget.is_none() || profile.format != server_profile::filesystem_create::FORMAT,
         "prepared budgets do not support the original-create profile"

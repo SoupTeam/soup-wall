@@ -61,15 +61,29 @@ static SIGNATURES: LazyLock<Vec<Signature>> = LazyLock::new(|| {
 /// Scan `text` for signature matches, returning one `Finding` per match with its byte span.
 pub(crate) fn scan(text: &str) -> Vec<Finding> {
     let mut out = Vec::new();
+    visit(text, |finding| {
+        out.push(finding);
+        Ok::<_, std::convert::Infallible>(())
+    })
+    .unwrap();
+    out
+}
+
+/// Stream findings so bounded response collectors can stop before allocating
+/// the next finding vector. The ordinary detector keeps identical scan output.
+pub(super) fn visit<E>(
+    text: &str,
+    mut emit: impl FnMut(Finding) -> Result<(), E>,
+) -> Result<(), E> {
     for sig in SIGNATURES.iter() {
         for m in sig.re.find_iter(text) {
-            out.push(
+            emit(
                 Finding::new("injection", sig.severity, 0.9, sig.label)
                     .with_span(m.start()..m.end()),
-            );
+            )?;
         }
     }
-    out
+    Ok(())
 }
 
 #[cfg(test)]
