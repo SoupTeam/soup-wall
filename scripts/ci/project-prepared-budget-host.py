@@ -10,9 +10,9 @@ import json
 from pathlib import Path
 import re
 
-CASES = ('plan', 'occupied-port', 'stale-source', 'changed-selection',
+CASES = ('plan', 'occupied-port', 'stale-source', 'changed-selection', 'provider-unavailable',
          'useful-refusal', 'ask', 'default', 'cancel', 'daemon-loss', 'host-crash', 'timeout')
-HOST = CASES[4:]
+HOST = CASES[5:]
 COUNTERS = frozenset(('memory_current_bytes', 'memory_peak_bytes', 'memory_oom', 'memory_oom_kill',
     'pids_current', 'pids_peak', 'pids_peak_kernel', 'pids_max_events', 'cpu_usage_micros',
     'cpu_periods', 'cpu_throttled_periods'))
@@ -388,6 +388,8 @@ def project(attempt, raw, expected, exit_code):
             else:
                 need(type(row.get('selected_execution')) is int and row['selected_execution'] == 0,
                      'preflight_execution_observed')
+                if name == 'provider-unavailable':
+                    need(row.get('reason') == 'provider_unavailable', 'provider_preflight_refusal_unverified')
                 result['selected_execution'] = 0
             output['cases'].append(result)
         section = raw.get('emergency_stop', {})

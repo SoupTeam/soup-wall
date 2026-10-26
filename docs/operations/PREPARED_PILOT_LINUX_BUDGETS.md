@@ -134,6 +134,13 @@ controls, original kernel refusals, surviving useful peers, fresh recovery and
 empty owned roots. It explicitly requires separate baseline proof. Preserve
 both exact source/config/binary identities, and failed/incomplete attempts.
 
+The baseline parent projection requires the complete current default producer
+inventory: five preflight controls (including missing provider access), seven
+actual-host lifecycle cases, and four emergency-stop cases. Missing, duplicated
+or reordered cases refuse qualification. The missing-provider preflight must
+report `provider_unavailable` with zero selected execution; it is not an
+authenticated provider or original-server runtime observation.
+
 `prepared_budget_phase: owner-loss` is a separate **negative boundary control**.
 It sends SIGKILL to the outside cleanup owner after that owner creates a budget
 leaf and before descriptor handback. The controller pins the exact leaf inode,

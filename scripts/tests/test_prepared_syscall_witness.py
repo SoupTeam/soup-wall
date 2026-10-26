@@ -3,7 +3,7 @@
 import importlib.util
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sys
 import tempfile
 import threading
@@ -73,7 +73,7 @@ class ProjectionControls(unittest.TestCase):
              b'1 write(4, "owned-ANTHROPIC_API_KEY", 23) = 23\n')
         proofs=[]
         for text in (raw,project(raw)):
-            proofs.append(M.PROVIDER_WITNESS.private_log_writes(text.decode(),Path('/owned/run'),1,values,M.LAUNCH.normalized_syscalls))
+            proofs.append(M.PROVIDER_WITNESS.private_log_writes(text.decode(),PurePosixPath('/owned/run'),1,values,M.LAUNCH.normalized_syscalls))
         self.assertEqual(proofs[0],proofs[1])
         self.assertIn(b'/unrelated',project(raw))
         self.assertNotIn(b'/different',project(raw))
@@ -86,7 +86,7 @@ class ProjectionControls(unittest.TestCase):
         values={key:'owned-'+key for key in M.PROVIDER_WITNESS.KEYS}
         for text in (raw,project(raw)):
             with self.assertRaises(ValueError):
-                M.PROVIDER_WITNESS.private_log_writes(text.decode(),Path('/owned/run'),1,values,M.LAUNCH.normalized_syscalls)
+                M.PROVIDER_WITNESS.private_log_writes(text.decode(),PurePosixPath('/owned/run'),1,values,M.LAUNCH.normalized_syscalls)
 
     def test_unfinished_unrelated_supervisor_metadata_still_refuses_final_proof(self):
         raw=(b'1 openat(AT_FDCWD, "/owned/run/host.private.log", O_WRONLY|O_CREAT|O_EXCL, 0600) = 4\n'
@@ -96,7 +96,7 @@ class ProjectionControls(unittest.TestCase):
         values={key:'owned-'+key for key in M.PROVIDER_WITNESS.KEYS}
         for text in (raw,project(raw)):
             with self.assertRaisesRegex(ValueError,'provider_private_log_write_unproven'):
-                M.PROVIDER_WITNESS.private_log_writes(text.decode(),Path('/owned/run'),1,values,M.LAUNCH.normalized_syscalls)
+                M.PROVIDER_WITNESS.private_log_writes(text.decode(),PurePosixPath('/owned/run'),1,values,M.LAUNCH.normalized_syscalls)
 
 
 @unittest.skipUnless(sys.platform=='linux','private FIFO collector is Linux-only')
@@ -156,7 +156,7 @@ class CaptureControls(unittest.TestCase):
                     # held. A gate which merely reads the old file sees zero.
                     os.write(writer,wire(101,'tools/call',args))
                     with self.assertRaisesRegex(ValueError,'^prepared_dispatch_before_approval$'):
-                        M.no_original_dispatch(capture.path,Path('/owned/agentfw'),'read_text_file',digest,capture)
+                        M.no_original_dispatch(capture.path,PurePosixPath('/owned/agentfw'),'read_text_file',digest,capture)
             finally:
                 os.close(writer)
                 capture.finish()

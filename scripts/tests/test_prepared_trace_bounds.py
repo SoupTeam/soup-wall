@@ -3,7 +3,7 @@
 import importlib.util
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
 import sys
@@ -38,10 +38,10 @@ class BoundedTrace(unittest.TestCase):
 
     def observe(self, text):
         self.path.write_text(text)
-        return M.no_original_dispatch(self.path, Path('/owned/agentfw'), 'read_text_file', self.digest)
+        return M.no_original_dispatch(self.path, PurePosixPath('/owned/agentfw'), 'read_text_file', self.digest)
 
     def test_only_complete_calibrated_zero_allows_decision(self):
-        self.assertIsNone(M.no_original_dispatch(self.path,Path('/owned/agentfw'),'read_text_file',self.digest))
+        self.assertIsNone(M.no_original_dispatch(self.path,PurePosixPath('/owned/agentfw'),'read_text_file',self.digest))
         self.assertIsNone(self.observe(''))
         self.assertIsNone(self.observe(discovery().rstrip('\n')))
         self.assertTrue(self.observe(discovery()))
@@ -68,7 +68,7 @@ class BoundedTrace(unittest.TestCase):
             stream.truncate(M.ASK.SELECTED.TRACE_LIMIT+1)
         with patch.object(os,'fdopen',wraps=os.fdopen) as opened:
             with self.assertRaisesRegex(ValueError,'^private_trace_limit$'):
-                M.no_original_dispatch(self.path,Path('/owned/agentfw'),'read_text_file',self.digest)
+                M.no_original_dispatch(self.path,PurePosixPath('/owned/agentfw'),'read_text_file',self.digest)
         self.assertEqual(opened.call_count,1)
         with self.assertRaisesRegex(ValueError,'^private_trace_limit$'):
             M.ASK.SELECTED.trace_effects(self.path,'filesystem')
@@ -93,7 +93,7 @@ class BoundedTrace(unittest.TestCase):
     def test_invalid_encoding_is_finite_and_not_an_incomplete_zero(self):
         self.path.write_bytes(b'PRIVATE_OWNED_CANARY\xff\n')
         with self.assertRaisesRegex(ValueError,'^private_trace_encoding$'):
-            M.no_original_dispatch(self.path,Path('/owned/agentfw'),'read_text_file',self.digest)
+            M.no_original_dispatch(self.path,PurePosixPath('/owned/agentfw'),'read_text_file',self.digest)
 
 
 STRACE = os.environ.get('SOU_TEST_STRACE') or shutil.which('strace')
@@ -113,7 +113,7 @@ for method in ('tools/list','tools/call'):
             (root/'driver.py').write_text('''import os,subprocess,sys
 with open('bulk','wb') as f:
  for _ in range(12):f.write(bytes(range(256))*4096)
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 noise=Path.cwd()
 for _ in range(12):
  noise=noise/('n'*180);noise.mkdir(exist_ok=True)
