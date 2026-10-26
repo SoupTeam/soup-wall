@@ -392,6 +392,7 @@ enum Stage {
 
 #[derive(Clone)]
 struct Call {
+    #[cfg(target_os = "linux")]
     execution_args: Option<Value>,
     managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
     host_call_id: Option<Value>,
@@ -2696,6 +2697,7 @@ fn inspect_bound_with_execution(
             session.calls.insert(
                 id.clone(),
                 Call {
+                    #[cfg(target_os = "linux")]
                     execution_args: native
                         .git_execution
                         .as_ref()

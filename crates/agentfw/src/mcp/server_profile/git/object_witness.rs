@@ -311,10 +311,12 @@ impl Snapshot {
     }
 
     /// Recheck sticky source withdrawal while the execution result is held.
+    #[cfg(target_os = "linux")]
     pub(crate) fn validate(&self) -> anyhow::Result<()> {
         self.valid()
     }
 
+    #[cfg(target_os = "linux")]
     pub(crate) fn show_target(&self, revision: &str) -> anyhow::Result<ShowTarget> {
         self.valid()?;
         let target = self.repository.resolve(revision)?;
