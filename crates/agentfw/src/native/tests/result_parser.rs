@@ -7,6 +7,29 @@ use std::ops::Range;
 pub(super) const FORMATTER: &str =
     "729dc8511e779e5cd6640851a74b25283e3af1ca3a7106722f993e864a1d9935";
 const MAX_TEXT: usize = 1024 * 1024;
+// Same reply-wide ceiling as accepted main's positive-evidence collector.
+// This experiment is test-only: a future consumer must share remaining work
+// with that collector, never instantiate another production 32 MiB allowance.
+const MAX_REPLY_SCAN_WORK: usize = 32 * 1024 * 1024;
+#[derive(Default)]
+struct ReplyScanBudget {
+    charged: usize,
+    exhausted: bool,
+}
+impl ReplyScanBudget {
+    fn charge(&mut self, bytes: usize) -> Option<()> {
+        if self.exhausted {
+            return None;
+        }
+        let next = self.charged.checked_add(bytes);
+        if next.is_none_or(|n| n > MAX_REPLY_SCAN_WORK) {
+            self.exhausted = true;
+            return None;
+        }
+        self.charged = next?;
+        Some(())
+    }
+}
 
 #[derive(Clone, Debug)]
 struct Record {
@@ -84,7 +107,11 @@ fn scope(tool: &Tool, request: &Request, call: &Call) -> Option<String> {
 /// occur exactly once in the COMPLETE channel, in admitted path order.
 /// Repeated paths, errors and fake headers in bodies reject the candidate.
 /// A successful parse never grants attribution or release in production.
-fn partition(text: &str, paths: &[&str]) -> Option<(Vec<Range<usize>>, Vec<Record>)> {
+fn partition(
+    text: &str,
+    paths: &[&str],
+    budget: &mut ReplyScanBudget,
+) -> Option<(Vec<Range<usize>>, Vec<Record>)> {
     if text.len() > MAX_TEXT
         || paths.is_empty()
         || paths.len() > 256
@@ -94,11 +121,10 @@ fn partition(text: &str, paths: &[&str]) -> Option<(Vec<Range<usize>>, Vec<Recor
     {
         return None;
     }
-    // Charge both full scans per path before doing any work. Across the two
-    // channels attribution searches at most 64 MiB, irrespective of payload.
-    if text.len().checked_mul(paths.len().checked_mul(2)?)? > 32 * 1024 * 1024 {
-        return None;
-    }
+    // Reserve both full-text searches per path before any search. The SAME
+    // counter covers all original channels, including the duplicate channel;
+    // equal values do not make scanning or byte coverage free.
+    budget.charge(text.len().checked_mul(paths.len().checked_mul(2)?)?)?;
     let mut headers = vec![0];
     let mut boundaries = Vec::new();
     // Bounded by at most 256 * MAX_TEXT bytes searched, no recursive/backtracking
@@ -182,8 +208,9 @@ impl ParserCandidate {
             .collect::<Option<Vec<_>>>()?;
         let mut separators = Vec::new();
         let mut records = Vec::new();
+        let mut budget = ReplyScanBudget::default();
         for channel in channels {
-            let (s, r) = partition(channel, &paths)?;
+            let (s, r) = partition(channel, &paths, &mut budget)?;
             separators.push(s);
             records.push(r);
         }
@@ -212,6 +239,12 @@ impl ParserCandidate {
 
 mod tests {
     use super::*;
+
+    // A direct one-channel test starts a fresh reply. Candidate derivation must
+    // instead carry the same counter through both original channels.
+    fn partition(text: &str, paths: &[&str]) -> Option<(Vec<Range<usize>>, Vec<Record>)> {
+        super::partition(text, paths, &mut ReplyScanBudget::default())
+    }
 
     fn fixture(count: usize, body: &str) -> (Tool, Request, Call, Vec<String>) {
         let paths = (0..count)
@@ -300,6 +333,38 @@ mod tests {
         assert!(ParserCandidate::derive(&unknown, &request, &call, &channels).is_none());
         call.host_call_id = Some(json!(551));
         assert!(ParserCandidate::derive(&tool, &request, &call, &channels).is_none());
+    }
+
+    #[test]
+    fn two_original_channels_cannot_each_spend_a_whole_reply_scan_budget() {
+        let (tool, request, call, channels) = fixture(64, &"x".repeat(2300));
+        let paths = request.args.as_ref().unwrap()["paths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p.as_str().unwrap())
+            .collect::<Vec<_>>();
+        let per_channel = channels[0].len() * paths.len() * 2;
+        assert!(per_channel <= MAX_REPLY_SCAN_WORK);
+        assert!(per_channel * 2 > MAX_REPLY_SCAN_WORK);
+        assert!(partition(&channels[0], &paths).is_some());
+        assert!(partition(&channels[1], &paths).is_some());
+        let mut shared = ReplyScanBudget::default();
+        assert!(super::partition(&channels[0], &paths, &mut shared).is_some());
+        assert_eq!(shared.charged, per_channel);
+        assert!(super::partition(&channels[1], &paths, &mut shared).is_none());
+        assert!(shared.exhausted);
+        assert_eq!(
+            shared.charged, per_channel,
+            "failed reservation admits no work"
+        );
+        assert!(ParserCandidate::derive(&tool, &request, &call, &channels).is_none());
+        // The counter can also reserve prior positive-evidence work in a future
+        // test consumer: neither another stage nor channel may reset it.
+        let mut reserved = ReplyScanBudget::default();
+        reserved.charge(MAX_REPLY_SCAN_WORK).unwrap();
+        assert!(super::partition(&channels[0], &paths, &mut reserved).is_none());
+        assert!(reserved.exhausted);
     }
 
     #[test]

@@ -1,18 +1,22 @@
 # SOU-109: isolated parser and future evidence boundary
 
-This Draft starts at accepted main
-`3c9cfb08c0f1498676dcc70de131bd2f324dd13b` (#268). It supersedes #271's
-implementation proposal without importing that branch's experimental ancestry.
+This Draft originally started at `3c9cfb08c0f1498676dcc70de131bd2f324dd13b`
+(#268) and now merges accepted main
+`379f9f9a17ec7369acaa65455d26f745c36ab866` (#275), preserving branch history.
+It supersedes #271's implementation proposal without importing that branch's
+experimental model-review ancestry.
 The old branch `codex/sou109-structural-evidence` at
 `9cc4cb77ce1bb66effc934018dc3b401675ea01b` and its evidence remain intact.
 
-Production behavior is unchanged from that main. The only edit to existing Rust
+Production behavior is unchanged relative to accepted main `379f9f9a`, including
+#275's tightening and bounded positive evidence. It is not unchanged relative to
+the older `3c9cfb08`. The only edit to existing Rust
 is two module declarations inside `native::tests`, already gated by `cfg(test)`.
 The parser and boundary controls live below that test module. There is no model
 reviewer/config/permit, detector or agent API, trusted-span input, result relief
 wiring, runtime launcher or Git object authority in this diff. In particular the
-old result-data-review prototype and general result-directive extension are not
-ported. No policy/signature/threshold/label/timeout changes are included.
+old result-data-review prototype is not ported. General result-directive evidence
+is inherited from accepted main #275; it is not a parser relief path. No policy/signature/threshold/label/timeout changes are included.
 
 ## What the parser establishes
 
@@ -26,9 +30,16 @@ never promoted to authority, even when they resemble headers or instructions.
 
 Unknown profile/schema, changed call/frame/argument scope, incomplete/mismatched
 channels, repeated paths/headers, ambiguous ordering, oversized input and exhausted
-scan budget reject the candidate. Limits remain 1 MiB/channel, 256 paths and
-32 MiB charged full-text searches per channel (64 MiB over two channels).
-These are parser experiment bounds, not changes to production admission limits.
+scan budget reject the candidate. Parser bounds are 1 MiB/channel, 256 paths and
+one 32 MiB charged full-text-search budget for the complete reply, shared by both
+original channels. The counter reserves searches before running them; identical
+channels are not deduplicated or given separate allowances. A focused test proves
+that channels which each fit separately cannot together spend more than 32 MiB.
+These are test-only experiment bounds, not changes to production admission limits.
+A future consumer must share remaining work with #275's positive collector within
+one production 32 MiB reply allowance; it must not stack two independent budgets.
+The experiment's `Option` candidate and budget-exhaustion marker do not implement
+the future typed production failure/audit interface.
 
 Scope hashes cover static formatter identity, contract, registry, session, Call,
 tool/schema, call binding, argument digest, raw frame and ordered channels.
@@ -56,7 +67,7 @@ the existing strict native request parser. The untouched ordinary two-file resul
 still receives the existing baseline Allow. Baseline-only means no lowering an
 existing finding or verdict, not a new blanket refusal for ordinary content.
 
-The remaining five parser tests cover Unicode/full partition, ambiguous/repeated
+The six parser tests cover Unicode/full partition, ambiguous/repeated
 headers, wrong order/path, errors/bounds, wire claims and mutated scope/channel
 inputs. These are component controls, not the full public dev corpus, model
 accuracy, runtime binding acceptance or original-host utility qualification.
@@ -64,10 +75,12 @@ No new full-corpus efficacy claim is made. SOU-109 stays open.
 
 ## Contract to consume future SOU-155 / SOU-156 evidence
 
-SOU-155 (@Nari_Ab, after the remaining SOU-142 boundary) owns verified Linux launch
-and authenticated runtime/Call/result IPC binding. SOU-156 (@konung3) owns original
-Git resolved-object-kind/sealed-view evidence. Their assigned contract is due
-October 27 at 12:00 and delivery October 28 at 12:00. This Draft neither waits for
+SOU-155 (Nariman / @Nari_Ab) owns verified Linux launch and authenticated
+runtime/Call/result IPC binding and can start immediately. Waattoo owns the
+remaining SOU-142 outside-cleanup-owner-loss work; SOU-155 does not wait for it.
+SOU-156 (Olzhas / @konung3) owns original Git resolved-object-kind/sealed-view
+evidence. Their assigned contract is due October 27 at 12:00 and delivery
+October 28 at 12:00. This Draft neither waits for
 nor duplicates those implementations. The contract below specifies required
 properties, not a new wire schema or a collector-supplied trust flag.
 
@@ -80,11 +93,23 @@ properties, not a new wire schema or a collector-supplied trust flag.
 | Git selector resolved to verified object kind/id in the same sealed view used for the returned result | SOU-156 plus SOU-155 binding | Preserve baseline for unknown kind/view and commit-shaped blobs |
 | Full original evidence retention, current policy and successful audit before any release | Existing native boundary | Preserve original refusal/fail closed on admission or audit failure |
 
-A future separately reviewed consumer must verify the daemon-owned evidence,
-join it to the parser's exact scope and original bytes, and only then consider
-attribution. It must preserve body/path findings, signatures, existing policy
-floors and receipt semantics. Missing/failed evidence selects the current baseline;
-a model assessment or lack of positive findings cannot substitute for the join.
+SOU-155 owns the private one-use common join capability consumed by SOU-156.
+It is not the collector ingress token and cannot be supplied as a trust flag.
+The future consumer must verify that capability and join execution evidence,
+Git evidence where needed, parser scope and every ordered original result byte.
+
+TL integration decision: no generic override of a raw verdict. Attribution may
+discharge only weak formatter contributions with proved exact origin/coordinates
+and an exclusive causal role in the injection refusal. Independent secret, PII,
+taint, signature, directive, path/body findings, Ask/judge floors and opaque policy
+cases preserve baseline. Ordinary #275 preview/floors stay unchanged. This Draft
+does not implement that causal-discharge decision or promise semantic quote or
+signature false-refusal fixes.
+
+Optional proof absent selects baseline; invalid native Call/receipt refuses;
+exhausted shared work/evidence budget gives incomplete Deny/not-inspected, never
+a clean miss or a caught-attack score. Parser ambiguity grants no attribution.
+Full original retention and durable audit-before-release remain required.
 
 Acceptance must exercise the actual verified launch -> IPC -> native Call ->
 result path. Include another executable producing identical output, replaced
@@ -102,7 +127,15 @@ cargo test -p agentfw --lib --no-default-features native::tests
 cargo check -p agentfw --lib --no-default-features
 ```
 
-The focused subset is `native::tests::result_parser` (five parser and three native
+The focused subset is `native::tests::result_parser` (six parser and three native
 boundary tests). Exact source/diff, compiler identity and final check logs accompany
-the handoff. Production inspection still calls the unmodified
-`firewall.preview_native_result(&ev)` from accepted main.
+the handoff. Production inspection uses accepted main's bounded
+`mcp_result_evidence` and `preview_native_mcp_result` for untrusted MCP-host results;
+its other deliveries retain their existing preview path. No parser offsets or
+candidate authority are connected to either production path.
+
+Remaining consumer interfaces are intentionally unresolved here: the private
+capability/expiry/consumption schema and exact frame/channel custody from SOU-155;
+the same-capability object-kind/OID/sealed-view witness from SOU-156; and a typed
+shared-budget/causal-discharge integration that preserves every independent floor.
+All require separate implementation and acceptance before production relief.
