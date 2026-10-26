@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """Offline read-only Linux compiler and kernel controls; NOT runtime acceptance."""
-import argparse,hashlib,json,os,platform,re,subprocess,time
+import argparse,hashlib,json,os,platform,re,subprocess,time,sys
 from pathlib import Path
 
 
@@ -40,7 +40,14 @@ def main():
             log=scratch/(label+'.private.log');start=time.monotonic()
             with log.open('wb') as stream:
                 result=subprocess.run([str(a.cargo),*words],cwd=source,env=env,stdout=stream,stderr=subprocess.STDOUT,timeout=1200)
-            raw=log.read_bytes();step.update(exit_code=result.returncode,elapsed_seconds=round(time.monotonic()-start,2),log_sha256=hashlib.sha256(raw).hexdigest())
+            raw=log.read_bytes();step.update(exit_code=result.returncode,elapsed_seconds=round(time.monotonic()-start,2),log_sha256=hashlib.sha256(raw).hexdigest(),status='failed' if result.returncode else 'passed')
+            if result.returncode:
+                # Only bounded compiler/test control diagnostics, no application
+                # request, result, environment or credential-bearing logs.
+                lines=raw.decode('utf-8',errors='replace').splitlines()
+                hints=[line[:400] for line in lines if re.match(r'^(?:error(?:\[|:)|warning:|test [a-zA-Z0-9_:]+ \.{3} FAILED|thread |assertion |  left:| right:|failures:|test result:)',line)]
+                record['diagnostics']=hints[-32:];print(json.dumps({'stage':label,'diagnostics':hints[-32:]}),file=sys.stderr)
+                save()
             assert result.returncode==0,label+'_failed'
             if witness:assert re.search(witness,raw.decode(errors='replace')),label+'_empty'
             step['status']='passed';save()

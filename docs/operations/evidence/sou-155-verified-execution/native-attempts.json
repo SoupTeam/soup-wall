@@ -1,0 +1,17 @@
+{
+  "format": "sou155-native-attempts/1",
+  "acceptance_pass": false,
+  "attempts": [
+    {
+      "source_commit": "88e0a1ec5a4a0fa8ebf64e2a09b2056f7285672b",
+      "run": 40299292213,
+      "status": "failed",
+      "production_build": "passed",
+      "failed_stage": "native-closure-unit",
+      "runtime_execution_observed": false,
+      "artifact": 12639722045,
+      "artifact_sha256": "fd8b308962ad655d75a27850a2d1a3e9c29d92c2bbec2fa0a59e9ad3b6ba3745",
+      "zip_crc_verified": true
+    }
+  ]
+}

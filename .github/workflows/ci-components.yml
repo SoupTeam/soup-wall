@@ -3295,11 +3295,64 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Prepare pinned public SOU155 inputs without candidate execution
+        if: github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          inputs="$RUNNER_TEMP/sou155-public-inputs"
+          mkdir -m 700 "$inputs"
+          printf 'SOU155_INPUTS=%s\n' "$inputs" >> "$GITHUB_ENV"
+          python3 -B scripts/ci/verified-original-inputs.py --source "$GITHUB_WORKSPACE" \
+            --output "$inputs" --expected-commit "$SOU155_COMMIT"
+      - name: Actual original SOU155 daemon process and result custody
+        if: github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$RUNNER_TEMP/sou155-native-runtime"
+          mkdir -m 700 "$host"
+          printf 'SOU155_HOST=%s\n' "$host" >> "$GITHUB_ENV"
+          unit="sou155-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property=PrivateNetwork=yes --property=NoNewPrivileges=yes \
+            --property='Delegate=cpu memory pids' \
+            --property="ReadWritePaths=/sys/fs/cgroup/system.slice/$unit.service" \
+            --property=ProtectSystem=strict \
+            --property="ReadOnlyPaths=$GITHUB_WORKSPACE $SOU155_SCRATCH $SOU155_INPUTS /sys/fs/cgroup" \
+            --property="ReadWritePaths=$host" \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 --property=TasksMax=256 \
+            --property=CPUQuota=200% --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --property=LimitNOFILE=65536 --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env -i PATH=/usr/bin:/bin HOME="$host" TMPDIR="$host" \
+            python3 -B scripts/ci/native-verified-execution.py \
+            --source "$GITHUB_WORKSPACE" --scratch "$host" --inputs "$SOU155_INPUTS" \
+            --build "$SOU155_SCRATCH" --expected-commit "$SOU155_COMMIT" --unit="$unit.service"
+      - name: Remove only the owned SOU155 runtime unit
+        if: always() && github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou155-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.service"
+          sudo systemctl stop "$unit" || true
+          test ! -d "/sys/fs/cgroup/system.slice/$unit"
+      - name: Retain finite SOU155 native runtime evidence
+        if: always() && github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou155-native-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou155-public-inputs/setup.json
+            ${{ runner.temp }}/sou155-native-runtime/native-execution.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Require an explicit reviewed prepared focus for host qualification
         if: github.event.inputs.prepared_host == 'true'
         env:
           PREPARED_FOCUS: ${{ github.event.inputs.prepared_focus }}
-        run: test "$PREPARED_FOCUS" = 142 || test "$PREPARED_FOCUS" = 143
+        run: test "$PREPARED_FOCUS" = 142 || test "$PREPARED_FOCUS" = 143 || test "$PREPARED_FOCUS" = 155
       - uses: Swatinem/rust-cache@v2
         if: github.event.inputs.prepared_focus == '' || github.event.inputs.prepared_focus == 'off'
       - name: Build pinned Node and unprivileged bubblewrap prerequisites
