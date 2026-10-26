@@ -29,11 +29,49 @@ def load(name, filename):
 
 
 RUN = load("sou116_entry", "pilot-run.py")
+SWITCH = load("sou133_transition", "switch-prepared-pilot.py")
 LAUNCH = load("sou116_launch", "qualify-pilot-launcher.py")
 ASK = load("sou116_ask", "qualify-pilot-ask.py")
 STORE = load("sou132_store", "sou84_owned_acceptance.py")
 STOP = load("sou125_prepared_stop", "prepared_stop_witness.py")
+PROVIDER_WITNESS = load("sou143_provider_witness", "pilot_provider_witness.py")
+CAPTURE = load("sou_prepared_syscall_witness", "prepared_syscall_witness.py")
 BASE, require = LAUNCH.BASE, LAUNCH.require
+
+# Bound unrelated bulk-copy write strings in the prepared entry's trace.
+# Original wire/log observers still require complete successful syscall bytes;
+# a truncated relevant write is an inconclusive/failed witness, never zero.
+TRACE_STRING_BYTES = 16 * 1024
+LIVE_INCOMPLETE = frozenset(("two_actual_collector_execs_required", "original_discovery_not_observed",
+    "unfinished_collector_syscall", "incomplete_original_wire_frame", "missing_observer_syscall_prefix"))
+
+
+def read_trace_text(path):
+    try:
+        return ASK.SELECTED.read_private_trace(path).decode("utf-8", errors="strict")
+    except UnicodeError:
+        raise ValueError("private_trace_encoding") from None
+
+
+def no_original_dispatch(path, binary, tool, fingerprint, capture=None):
+    """Retry only incomplete live records; overflow/invalid proof fails now."""
+    if capture is not None and not capture.sync():
+        return None
+    try:
+        raw = read_trace_text(path)
+    except FileNotFoundError:
+        return None
+    if not raw.endswith("\n"):
+        return None
+    try:
+        observed = LAUNCH.collector_dispatches(raw, binary, strict=False)
+    except ValueError as error:
+        if str(error) in LIVE_INCOMPLETE:
+            return None
+        raise
+    require(not any(call["tool"] == tool and call["args_sha256"] == fingerprint
+                    for call in observed["calls"]), "prepared_dispatch_before_approval")
+    return True
 
 
 def until(check, label, seconds=30):
@@ -58,13 +96,7 @@ def validation_timeout(args):
     return value
 
 
-def qualify(args, private, report):
-    control_seconds = validation_timeout(args)
-    before = RUN.PREP.PILOT.source()
-    require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
-    config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
-        ask_wait_seconds=0, timeout_seconds=60, port=0)
-    selection, paths, profiles = RUN.selected(config)
+def prepare_owned_workspaces(selection, profiles):
     require("prepared_workspaces" not in selection, "generated_qualification_refuses_existing_project")
     fs = Path(profiles["filesystem"]["profile"]["path"]).parent.parent / "filesystem-workspace"
     git = Path(profiles["git"]["profile"]["path"]).parent.parent / "git-workspace"
@@ -74,6 +106,21 @@ def qualify(args, private, report):
     (fs / "followup.txt").write_text("Owned prepared continuation.\n")
     (fs / "credentials.txt").write_text("Owned synthetic sensitive path control.\n")
     (git / "tracked.txt").write_text("Owned prepared Git change.\n")
+    return fs, git, notes
+
+
+def qualify(args, private, report):
+    control_seconds = validation_timeout(args)
+    before = RUN.PREP.PILOT.source()
+    require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
+    config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
+        ask_wait_seconds=0, timeout_seconds=60, port=0)
+    selection, paths, profiles = RUN.selected(config)
+    transition_plan = None
+    if args.transition_target:
+        transition_plan = SWITCH.plan(args.selection.parent.parent.parent, args.transition_target,
+                                      ROOT, ROOT)[3]
+    fs, git, notes = prepare_owned_workspaces(selection, profiles)
     env = {"PATH": "/usr/bin:/bin", "HOME": str(private), "LANG": "C.UTF-8"}
     workspace_before = {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}
     selected_before = {role: BASE.sha(path) for role, path in paths.items()}
@@ -83,12 +130,12 @@ def qualify(args, private, report):
                                  start_new_session=True, env=env, cwd=private)
     report.update(source_before=before, selected_sha256=selected_before, cases=[],
                   trace_requested={"mode": "seccomp-bpf", "fallback_possible": True,
-                                   "run_syscalls": "execve,openat,write,writev",
+                                   "run_syscalls": "execve,openat,close,write,writev",
                                    "validation_syscalls": "execve"})
     try:
         # These are actual entry-point invocations, with kernel-observed zero
         # selected daemon/host execution. Unit mocks are not their evidence.
-        for control in ("plan", "occupied-port", "stale-source", "changed-selection"):
+        for control in ("plan", "occupied-port", "stale-source", "changed-selection", "provider-unavailable"):
             report["active_case"] = control
             root = private / control
             root.mkdir(mode=0o700)
@@ -108,17 +155,24 @@ def qualify(args, private, report):
                     changed = json.loads(original)
                     changed["files"]["agentfw"]["sha256"] = "0" * 64
                     args.selection.write_text(json.dumps(changed))
+                control_env = dict(env)
+                if control != "provider-unavailable":
+                    control_env.update(ANTHROPIC_API_KEY="owned-preflight-only",
+                                       ANTHROPIC_BASE_URL="http://127.0.0.1:9")
                 result = subprocess.run([str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "4096", "-e", "trace=execve",
-                    "-o", str(trace), *words], cwd=private, env=env, capture_output=True, timeout=control_seconds)
+                    "-o", str(trace), *words], cwd=private, env=control_env, capture_output=True, timeout=control_seconds)
                 value = json.loads(result.stdout)
                 require((result.returncode == 0) == (control == "plan") and value["executed"] is False,
                         "refusal_or_plan_executed")
-                rows = trace.read_text()
+                rows = read_trace_text(trace)
                 require(all("execve(" + json.dumps(str(paths[role])) + "," not in rows
                             for role in ("agentfw", "claude")), "refused_entry_started_selected_runtime")
                 require(not list(root.glob("soup-wall-run-*")), "refusal_created_runtime_state")
                 if control == "occupied-port":
+                    require(value.get("reason") == "occupied_port_refused", "occupied_port_refusal_not_exercised")
                     require(owner.fileno() >= 0, "foreign_listener_changed")
+                elif control == "provider-unavailable":
+                    require(value.get("reason") == "provider_unavailable", "provider_missing_access_not_refused")
                 report["cases"].append({"case": control, "status": "passed", "selected_execution": 0,
                                         "reason": value.get("reason"), "trace_sha256": BASE.sha(trace)})
             finally:
@@ -129,6 +183,8 @@ def qualify(args, private, report):
         audit_only = getattr(args, "audit_retention_only", False)
         if audit_only:
             cases = ("audit-rotation", "audit-unavailable", "useful-refusal")
+        if getattr(args, "verify_provider_isolation", False):
+            cases = ("provider-reject",) + cases  # The next useful run proves a fresh post-rejection restart.
         for case in cases:
             report["active_case"] = case
             root = private / case
@@ -226,17 +282,26 @@ def qualify(args, private, report):
                         return [{"type": "tool_use", "id": identifier, "name": f"mcp__{server}__{tool}", "input": arguments}]
                 return [{"type": "text", "text": "Owned prepared run completed."}]
             model.next = next_step
-            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,write,writev",
-                "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
+            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", str(TRACE_STRING_BYTES), "-e", "trace=execve,openat,close,write,writev,clone,clone3,vfork,fork",
+                "-o", str((root / "trace.private").with_suffix('.fifo')), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]
             if case == "ask":
                 command += ["--ask-wait-seconds", "25"]
+            if getattr(args, "linux_budget", None) is not None:
+                command += ["--linux-budget", str(args.linux_budget)]
             run_env = dict(env, ANTHROPIC_BASE_URL=model.url, ANTHROPIC_API_KEY="owned-loopback-only",
                 HTTP_PROXY="http://127.0.0.1:9", HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
-            process = witness = record = None
+            provider_values = protocol = None
+            if getattr(args, "verify_provider_isolation", False):
+                provider_values = PROVIDER_WITNESS.inputs(model.url, root)
+                run_env.update(provider_values)
+                command.insert(1, "-v")
+                protocol = PROVIDER_WITNESS.ProtocolEvidence(model, provider_values, reject=case == "provider-reject")
+            process = witness = record = capture = None
             decisions = []
             try:
+                capture = CAPTURE.Capture(root / 'trace.private')
                 with (root / "stdout.private").open("wb") as out, (root / "stderr.private").open("wb") as err:
                     process = subprocess.Popen(command, cwd=private, env=run_env, stdout=out, stderr=err,
                                                start_new_session=True)
@@ -251,6 +316,16 @@ def qualify(args, private, report):
                         if process.poll() is not None:
                             raise ValueError("prepared_entry_exited_before_host")
                     record = until(identify, "prepared_run_not_published", seconds=90)
+                    if case == "cancel" and transition_plan is not None:
+                        require(process.poll() is None, "active_transition_control_not_running")
+                        blocked = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/switch-prepared-pilot.py"),
+                            "--output", str(args.selection.parent.parent.parent), "--target", args.transition_target,
+                            "--previous-source", str(ROOT), "--target-source", str(ROOT), "--apply",
+                            "--confirm", transition_plan["plan_sha256"]], cwd=private, env=env,
+                            capture_output=True, timeout=20)
+                        require(blocked.returncode == 2 and json.loads(blocked.stdout).get("reason") ==
+                                "selected_generation_in_use_or_transitioning", "active_transition_not_refused")
+                        report["active_transition_refused"] = True
                     home = Path(record["home"])
                     if case in ("audit-rotation", "audit-unavailable"):
                         audit_token = (home / "native-token").read_text().strip()
@@ -262,35 +337,27 @@ def qualify(args, private, report):
                         while process.poll() is None and time.monotonic() < deadline:
                             for manifest in (home / "pilot-runs").glob("*/run.json"):
                                 prefix = [str(paths["agentfw"]), "pilot-approval", "--home", str(home), "--run", manifest.parent.name]
-                                listing = subprocess.run([*prefix, "list"], capture_output=True, env=run_env, timeout=10)
+                                listing = subprocess.run([*prefix, "list"], capture_output=True, env=env, timeout=10)
                                 if listing.returncode != 0:
                                     continue  # Launcher may be completing owned retirement.
                                 for waiting in json.loads(listing.stdout):
                                     require(waiting["pending_id"] not in decisions, "pending_reissued_after_approval")
                                     shown = subprocess.run([*prefix, "inspect", waiting["pending_id"]],
-                                        capture_output=True, env=run_env, timeout=10)
+                                        capture_output=True, env=env, timeout=10)
                                     require(shown.returncode == 0, "prepared_exact_inspection_failed")
                                     exact = json.loads(shown.stdout)
                                     require((waiting["server"], waiting["tool"], exact["args"]) in proposals,
                                             "prepared_inspection_not_selected_call")
                                     fingerprint = BASE.hashlib.sha256(json.dumps(exact["args"], sort_keys=True,
                                         separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
-                                    def no_original_dispatch():
-                                        try:
-                                            raw = (root / "trace.private").read_text()
-                                            require(len(raw) <= 32 * 1024 * 1024, "private_trace_limit")
-                                            observed = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
-                                        except ValueError:
-                                            return None  # Partial live syscalls do not prove zero.
-                                        return not any(call["tool"] == waiting["tool"] and
-                                            call["args_sha256"] == fingerprint for call in observed["calls"])
-                                    require(until(no_original_dispatch, "prepared_dispatch_before_approval", seconds=2),
+                                    require(until(lambda: no_original_dispatch(root / "trace.private", paths["agentfw"],
+                                                  waiting["tool"], fingerprint, capture), "prepared_witness_incomplete", seconds=2),
                                             "prepared_dispatch_before_approval")
                                     if exact["args"].get("path") == "/workspace/credentials.txt":
                                         require(ASK.SELECTED.trace_effects(root / "trace.private", "filesystem",
                                             target="/workspace/credentials.txt") == 0, "prepared_ask_effect_before_approval")
                                     result = subprocess.run([*prefix, "approve", waiting["pending_id"],
-                                        "--binding", waiting["binding_sha256"]], capture_output=True, env=run_env, timeout=10)
+                                        "--binding", waiting["binding_sha256"]], capture_output=True, env=env, timeout=10)
                                     require(result.returncode == 0, "prepared_operator_decision_failed")
                                     decisions.append(waiting["pending_id"])
                             time.sleep(.1)
@@ -323,19 +390,20 @@ def qualify(args, private, report):
                             require(BASE.ProcessWitness.identity(pid) == start, "prepared_owned_host_identity_changed")
                             os.kill(pid, signal.SIGKILL)
                     process.wait(timeout=220 if case == "audit-rotation" else 100)
+                capture.finish()
                 rows = (root / "stdout.private").read_text().splitlines()
                 outcome = json.loads(rows[-1])
                 success = case in ("useful-refusal", "ask", "default", "audit-rotation")
                 require((process.returncode == 0) == success, "prepared_run_outcome_mismatch")
                 if not success:
-                    expected = {"cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
+                    expected = {"provider-reject": {"restricted_launcher_failed"}, "cancel": {"pilot_cancelled"}, "daemon-loss": {"owned_daemon_lost"},
                                 "host-crash": {"restricted_launcher_failed"},
                                 "audit-unavailable": {"restricted_launcher_failed"},
                                 "timeout": {"restricted_launcher_failed", "pilot_timeout"}}
                     require(outcome.get("reason") in expected[case], "prepared_wrong_failure_reason")
                     require(outcome["status"] == "failed", "prepared_false_terminal_success")
                 require(any('execve(' + json.dumps(str(paths["claude"])) + ',' in row and row.endswith(" = 0")
-                            for row in LAUNCH.normalized_syscalls((root / "trace.private").read_text())[0]),
+                            for row in LAUNCH.normalized_syscalls(read_trace_text(root / "trace.private"))[0]),
                         "actual_pinned_host_execution_not_observed")
                 cleanup = witness.finish()
                 require(cleanup["all_stopped"], "prepared_owned_process_survived")
@@ -365,13 +433,39 @@ def qualify(args, private, report):
                           "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                           "audit_export": audit_export, "audit_summary_sha256": BASE.sha(root / "audit-summary.json")
                           if (root / "audit-summary.json").exists() else None,
-                          "trace_sha256": BASE.sha(root / "trace.private")}
+                          "trace_sha256": BASE.sha(root / "trace.private"), "trace_capture": capture.summary()}
                 if case == "audit-rotation":
                     require(audit_observed and "intentional_retention" in audit_export["notices"],
                             "prepared_audit_loss_not_exported")
                     result["audit_rotation"] = audit_observed
                 elif case == "audit-unavailable":
                     result["audit_failure"] = audit_observed
+
+                if provider_values is not None:
+                    trace_text = read_trace_text(root / "trace.private")
+                    result["provider_routing"] = PROVIDER_WITNESS.observe(
+                        trace_text, paths, provider_values, LAUNCH.normalized_syscalls,
+                        rejected=case == "provider-reject")
+                    if case == 'timeout':
+                        result['provider_timeout_refusal'] = PROVIDER_WITNESS.launcher_timeout(
+                            trace_text, paths['agentfw'], LAUNCH.normalized_syscalls, 3)
+                    result["provider_protocol"] = protocol.finish(before_request_timeout=case == 'timeout'
+                        and result['provider_timeout_refusal']['observed'] is True)
+                    result["provider_private_logs"] = PROVIDER_WITNESS.private_log_writes(
+                        trace_text, Path(record["home"]).parent, record["supervisor_pid"], provider_values,
+                        LAUNCH.normalized_syscalls, rejection=case == "provider-reject")
+                    result["provider_retained_artifacts"] = PROVIDER_WITNESS.retained_artifacts(root, provider_values)
+                if getattr(args, "linux_budget", None) is not None:
+                    budget = outcome.get("resource_budget", {})
+                    require(budget.get("format") == "sw-prepared-pilot-budget/1"
+                            and budget.get("observed_children", 0) >= 2,
+                            "prepared_budget_children_not_observed")
+                    if success:
+                        require(budget.get("status") == "closed-enforced"
+                                and budget.get("failed_children") == 0
+                                and budget.get("unresolved_children") == 0,
+                                "prepared_budget_not_verified")
+                    result["resource_budget"] = budget
                 if success or case == "audit-unavailable":
                     require(len(model.results) == len(proposals), "prepared_correlated_results_missing")
                     useful_result(model.results, "toolu_prepared_0", notes.splitlines()[0])
@@ -387,13 +481,13 @@ def qualify(args, private, report):
                         require("tracked.txt" in json.dumps(model.results["toolu_prepared_1"]), "prepared_git_bytes_missing")
                         require(model.results["toolu_prepared_2"]["is_error"] is True, "prepared_mutator_not_refused")
                         git_execs = []
-                        for row in LAUNCH.normalized_syscalls((root / "trace.private").read_text())[0]:
+                        for row in LAUNCH.normalized_syscalls(read_trace_text(root / "trace.private"))[0]:
                             match = RUN.re.search(r'execve\("/mcp-runtime/git", (\[.*\]), .*\) += 0$', row)
                             if match and "status" in json.loads(match.group(1)):
                                 git_execs.append(row)
                         require(len(git_execs) == 1, "prepared_kernel_git_status_witness_missing")
                         result["kernel_git_status_count"] = len(git_execs)
-                    observation = LAUNCH.collector_dispatches((root / "trace.private").read_text(), paths["agentfw"], strict=False)
+                    observation = LAUNCH.collector_dispatches(read_trace_text(root / "trace.private"), paths["agentfw"], strict=False)
                     counts = [sum(call["tool"] == tool and call["args_sha256"] == BASE.hashlib.sha256(
                         json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
                         for call in observation["calls"]) for _, tool, arguments in proposals]
@@ -417,8 +511,17 @@ def qualify(args, private, report):
                 except (OSError, ValueError, IndexError):
                     observation["entry_report"] = "not_published"
                 report["failure_observation"] = observation
+                if capture is not None:
+                    observation['trace_capture'] = capture.summary()
+                if provider_values is not None and (root / 'trace.private').exists():
+                    observation['provider_failure_stage'] = PROVIDER_WITNESS.failure_stage(
+                        read_trace_text(root / 'trace.private'), paths, LAUNCH.normalized_syscalls)
+                    if case == 'timeout':
+                        observation['provider_timeout_refusal'] = PROVIDER_WITNESS.launcher_timeout(
+                            read_trace_text(root / 'trace.private'), paths['agentfw'], LAUNCH.normalized_syscalls, 3)
                 raise
             finally:
+                preserving_failure = sys.exc_info()[0] is not None
                 # strace is only an observer: terminating it does not cancel the
                 # orchestrator. Signal the independently identified owned entry.
                 if record is not None and process is not None and process.poll() is None:
@@ -443,8 +546,19 @@ def qualify(args, private, report):
                     process.kill()
                     process.wait(timeout=10)
                 model.close()
+                if capture is not None:
+                    try:
+                        capture.finish()
+                    except CAPTURE.Invalid as error:
+                        report['trace_capture_failure'] = str(error)
+                        if not preserving_failure:
+                            raise
         if not audit_only:
             STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
+        if getattr(args, "verify_provider_isolation", False):
+            require(sum(case.get("provider_routing", {}).get("successful_exec_counts", {}).get("classifier", 0)
+                        for case in report["cases"]) > 0, "provider_classifier_not_observed")
+
         require(workspace_before == {"filesystem": BASE.snapshot(fs), "git": BASE.snapshot(git)}, "prepared_workspace_changed")
         require(selected_before == {role: BASE.sha(path) for role, path in paths.items()}, "prepared_selected_assets_changed")
         require(sentinel.read_text() == "must survive" and unrelated.poll() is None, "unrelated_state_changed")
@@ -460,9 +574,14 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
+    parser.add_argument("--verify-provider-isolation", action="store_true")
+    parser.add_argument("--linux-budget", type=Path)
+    parser.add_argument("--linux-budget-peer", type=Path,
+                        help="Independent explicit budget root for the concurrent stop peer")
     parser.add_argument("--validation-timeout-seconds", type=int, default=30)
     parser.add_argument("--audit-retention-only", action="store_true", help="Focus on SOU-132 rotation/export, failed-sink refusal and fresh useful continuation")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--transition-target", help="optional real active-run switch refusal control")
     args = parser.parse_args()
     args.output.mkdir(mode=0o700)
     report = {"format": "sw-prepared-pilot-acceptance/1", "status": "failed", "cases": [],
@@ -472,9 +591,12 @@ def main():
             qualify(args, Path(temporary), report)
     except Exception as error:
         value = str(error)
-        frame = traceback.extract_tb(error.__traceback__)[-1]
+        frames = traceback.extract_tb(error.__traceback__)
+        frame = frames[-1]
+        caller = frames[-2] if len(frames) > 1 else frame
         report.update(status="failed", reason=value if RUN.re.fullmatch(r"[a-z0-9_]{1,100}", value) else "qualification_failure",
-                      failure_location={"function": frame.name, "line": frame.lineno})
+                      failure_location={"function": frame.name, "line": frame.lineno},
+                      failure_caller={"function": caller.name, "line": caller.lineno, "file": Path(caller.filename).name})
     if "source_before" in report:
         try:
             report["source_after"] = RUN.PREP.PILOT.source()
@@ -483,7 +605,8 @@ def main():
         except (OSError, ValueError, subprocess.SubprocessError):
             report.update(status="failed", reason="closing_source_identity_unavailable")
     (args.output / "report.json").write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
-    print(json.dumps({"status": report["status"], "reason": report.get("reason"), "cases": len(report["cases"])}))
+    print(json.dumps({"status": report["status"], "reason": report.get("reason"), "cases": len(report["cases"]),
+                      "trace_capture": report.get('failure_observation', {}).get('trace_capture')}))
     return 0 if report["status"] == "passed" else 1
 
 

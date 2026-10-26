@@ -96,6 +96,13 @@ files remain. Do not edit a prepared generation to repair it. Reuse checks the
 completion marker and all selected assets again. If the source commit changes,
 build and select that exact candidate and use a new qualification output.
 
+If an installer exits unsuccessfully, preparation returns CLI exit code 2 and
+JSON with `status: "failed"`, `reason: "filesystem_installer_failed"` or
+`"git_installer_failed"`, its integer `exit_code` (negative for a signal), and
+`private_log` relative to the operator's `--output` directory. Installer output
+is never read to format this error. The log remains `0600` inside the private
+generation for local diagnosis; its contents are not part of the public result.
+
 Only native Ubuntu 24.04 x86_64 is supported here. WSL, macOS and Windows are
 not qualified by a native Ubuntu run. The registered
 [real-filesystem workflow](../../.github/workflows/mcp-real-filesystem.yml)
@@ -132,3 +139,8 @@ requires every selected job. A passing provisioning probe is not pilot
 qualification: the full enforcing-daemon/original-server qualifier must also pass.
 Do not disable AppArmor, remove network isolation, or treat prepared assets as an
 active pilot when either control fails.
+
+For later changes between two fully prepared generations, use the separate
+[prepared selection and rollback guide](PREPARED_PILOT_SWITCH.md). It validates
+each generation and coordinates with new pilot launches; preparation success
+still does not mean the runtime is active.

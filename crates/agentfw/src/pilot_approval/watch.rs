@@ -258,6 +258,7 @@ pub(super) fn run(run_id: String, home: Option<PathBuf>, refresh_seconds: u64) -
     let args = |action| OperatorArgs {
         run: run_id.clone(),
         home: Some(home.clone()),
+        output: None,
         action,
     };
     let fetch = || -> Result<Vec<Value>> {
@@ -569,6 +570,7 @@ mod tests {
             OperatorArgs {
                 run,
                 home: Some(root.path().to_owned()),
+                output: None,
                 action: OperatorAction::List,
             },
             &mut output,

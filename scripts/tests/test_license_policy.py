@@ -443,6 +443,27 @@ decision = "unresolved"
         rows, _ = mod.inventory_rust(self.metadata(), lock, self.policy, self.root)
         self.assertNotEqual(rows[-1]["decision"], "exception")
 
+    def test_data_license_exception_stays_exactly_pinned_after_tls_update(self):
+        for name, version, allowed in [("webpki-roots", "1.0.10", True),
+                                       ("webpki-roots", "1.0.9", False),
+                                       ("webpki-roots", "1.0.11", False),
+                                       ("unreviewed-roots", "1.0.10", False)]:
+            with self.subTest(name=name, version=version):
+                package = pkg(name, version, "CDLA-Permissive-2.0", self.registry, root=self.root)
+                self.packages = [self.workspace, self.vendor, package]
+                self.policy["package_exceptions"] = [{
+                    "name": name, "version": version, "source": self.registry,
+                    "license": "CDLA-Permissive-2.0", "selected_license": "CDLA-Permissive-2.0",
+                    "cargo_lock_checksum": "a" * 64,
+                    "reason": "Exact reviewed data license notice for a pinned registry archive",
+                    "notice_path": "vendor/kryptering/LICENSE",
+                    "notice_sha256": mod.sha256(self.root / "vendor/kryptering/LICENSE")}]
+                self.write_lock()
+                rows, _ = mod.inventory_rust(self.metadata(),
+                    tomllib.loads((self.root / "Cargo.lock").read_text()), self.policy, self.root)
+                selected = next(row for row in rows if row["name"] == name)
+                self.assertEqual(selected["decision"] == "exception", allowed)
+
     def test_exceptions_not_global_slash_or_data_license_allowlist(self):
         self.assertEqual(mod.judge_spdx("MIT/Apache-2.0", self.policy)[0], "unknown")
         self.assertEqual(mod.judge_spdx("CDLA-Permissive-2.0", self.policy)[0], "disallowed")

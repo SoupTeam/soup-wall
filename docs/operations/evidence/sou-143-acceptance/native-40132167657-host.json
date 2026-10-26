@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "case": "plan",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "6726e3007b83c0b76d3dfc4877f158cb95856d84c7f6ab874ff3ce490bc3517e"
+    },
+    {
+      "case": "occupied-port",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "6f3fbdbd52e164f84b2a78b10ef31532e4788834c8a2ad0e4e3d7ac45ac679e1"
+    },
+    {
+      "case": "stale-source",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "f3d436e7ae82eb4373bdfb9b0e9e1c7bccd93d0770945af3489d0ad69a16bedb"
+    },
+    {
+      "case": "changed-selection",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "160c711cdd011ede2200ec1820bb560decf95c87662bc5f1158c0cbf649d4614"
+    },
+    {
+      "case": "provider-unavailable",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "57d2c7d9ac2dbf25d50a5b5f02ba638eb51443c42bc03ee649a145d6a8c92483"
+    }
+  ],
+  "emergency_stop": [],
+  "format": "sou143-prepared-host-public/1",
+  "original_report_status": "failed",
+  "paid_api_calls": 0,
+  "private_report_sha256": "0a73fb1f32abcc0a4207d794d6fcc08d2d97e1489af303f3b27f627d93d991b5",
+  "provider": "owned-scripted-loopback",
+  "qualifier_exit_code": 1,
+  "raw_environments_or_logs_exported": false,
+  "raw_process_metadata_exported": false,
+  "selected_sha256": {
+    "agentfw": "fdc141a9cda13b395953b546eb0c89a3b6aeff8197a9c3af6fc3629752c7df74",
+    "bwrap": "3970ab274258223a8a42fca4181c449bcd1653acb6ed27ff249fa3db807696c2",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "7ce841b8068a448434d17a6214863048380856cf4058cf80980448394e30b05e",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "22ce08923328e6342282c8103d6dc4a87f593db444ef52895552ba9dba6b16eb",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "c63fcc248c0872e0c2867b17705e8bbdf96b834f859ef2b0357b0856e62a63d2"
+  },
+  "source": {
+    "commit": "d7882d05d5e5b5e985b60ceedeb09066d8013a85",
+    "files_sha256": "7233c2959b88d1998cda41a22549f4c7e1123e22a17aca49c8752edf527c7eb8"
+  },
+  "source_commit": "d7882d05d5e5b5e985b60ceedeb09066d8013a85",
+  "status": "failed",
+  "verification_errors": [
+    "emergency_stop_evidence_unproven",
+    "inventory_preservation_unproven",
+    "provider_classifier_unobserved",
+    "qualifier_not_completed_successfully"
+  ],
+  "workflow_run": 40132167657
+}

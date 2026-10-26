@@ -1,0 +1,106 @@
+{
+  "cases": [
+    {
+      "case": "plan",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "c13b7cee76534be494984fe02dff525fa1d408f0a5f2968efdccb5fdb94eaee8"
+    },
+    {
+      "case": "occupied-port",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "dac0c1b5a7f3161b0c74c265829fb7c28fb914c704b481f5749c9d499552c95f"
+    },
+    {
+      "case": "stale-source",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "b0a96f6b10f2ed23900772be182d5425158fccbb68dbe1ba56682535b504af41"
+    },
+    {
+      "case": "changed-selection",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "c597aad8ad0e87caa2b61dcfe7eb2e548126d4765a22a5446473373b5b31e416"
+    },
+    {
+      "case": "provider-unavailable",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "17b30f30e0313d654379ee55ff9d070b2c11db10bd5c8428216582aed58416e4"
+    },
+    {
+      "case": "provider-reject",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 33,
+        "observed_process_count": 34,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "observation_stage": "first-request-authentication-refusal",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": true,
+        "private_log_bytes_checked": 4046,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 8523,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 4,
+          "launcher": 1,
+          "original": 0,
+          "other": 36
+        },
+        "successful_private_log_writes": 2,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "3fe41103e0097f6bb250c3553d29542d5062714f5fbffc0aefedda833350dda2"
+    }
+  ],
+  "emergency_stop": [],
+  "format": "sou143-prepared-host-public/1",
+  "original_report_status": "failed",
+  "paid_api_calls": 0,
+  "private_report_sha256": "69746085f57b76b9c9863c5815d8064c6e23a47f34b42f729c2595d6de3c3161",
+  "provider": "owned-scripted-loopback",
+  "qualifier_exit_code": 1,
+  "raw_environments_or_logs_exported": false,
+  "raw_process_metadata_exported": false,
+  "selected_sha256": {
+    "agentfw": "56e719a005036bc4216569069766bbb3fc8a4d26d9b02aacf66ce456b9ae8841",
+    "bwrap": "3970ab274258223a8a42fca4181c449bcd1653acb6ed27ff249fa3db807696c2",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "7ce841b8068a448434d17a6214863048380856cf4058cf80980448394e30b05e",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "22ce08923328e6342282c8103d6dc4a87f593db444ef52895552ba9dba6b16eb",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "8c9e24e63e46e2e2a1786ed10b0996cd650febc175085cbbed91fa56e0e30353"
+  },
+  "source": {
+    "commit": "aa17f571652ff797872e95892eb99ed0a3f024cb",
+    "files_sha256": "85039b5d129e0f3d0552cfa7017668f624bbce3236015f7d4cb228e10481fd5c"
+  },
+  "source_commit": "aa17f571652ff797872e95892eb99ed0a3f024cb",
+  "status": "failed",
+  "verification_errors": [
+    "emergency_stop_evidence_unproven",
+    "inventory_preservation_unproven",
+    "qualifier_not_completed_successfully"
+  ],
+  "workflow_run": 40137328083
+}

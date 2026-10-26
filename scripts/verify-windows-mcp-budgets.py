@@ -126,6 +126,7 @@ class Windows:
             "OpenProcess": ([W.DWORD, W.BOOL, W.DWORD], W.HANDLE),
             "WaitForSingleObject": ([W.HANDLE, W.DWORD], W.DWORD),
             "GetProcessTimes": ([W.HANDLE] + [ctypes.POINTER(W.FILETIME)] * 4, W.BOOL),
+            "GetSystemTimeAsFileTime": ([ctypes.POINTER(W.FILETIME)], None),
             "CreateToolhelp32Snapshot": ([W.DWORD, W.DWORD], W.HANDLE),
             "Process32FirstW": ([W.HANDLE, ctypes.POINTER(ProcessEntry)], W.BOOL),
             "Process32NextW": ([W.HANDLE, ctypes.POINTER(ProcessEntry)], W.BOOL),
@@ -154,6 +155,11 @@ class Windows:
         require(self.k.GetProcessTimes(handle, *(ctypes.byref(v) for v in values)),
                 "process_time_witness_" + str(ctypes.get_last_error()))
         return [v.dwLowDateTime + (v.dwHighDateTime << 32) for v in values]
+
+    def now_100ns(self):
+        value = W.FILETIME()
+        self.k.GetSystemTimeAsFileTime(ctypes.byref(value))
+        return value.dwLowDateTime + (value.dwHighDateTime << 32)
 
     def snapshot(self):
         handle = self.k.CreateToolhelp32Snapshot(2, 0)
@@ -298,32 +304,73 @@ class Witness:
         self.peak_alive, self.peak_private, self.error = 0, 0, None
         self.peak_child_private = 0
         self.stop = threading.Event()
-        self.sample()
+        handle = self.api.k.OpenProcess(0x1000 | 0x10 | 0x100000, False, process.pid)
+        require(handle, "collector_process_witness")
+        try:
+            created, _, _, _ = self.api.times(handle)
+            self.remember(process.pid, created, handle)
+        except Exception:
+            self.api.k.CloseHandle(handle)
+            raise
+        try:
+            self.sample()
+        except Exception:
+            for pinned in self.handles.values():
+                self.api.k.CloseHandle(pinned)
+            raise
         self.thread = threading.Thread(target=self.loop, daemon=True)
         self.thread.start()
 
+    def remember(self, pid, created, handle):
+        # Bound proven process generations, never an unverified PID closure.
+        # Retain exited handles for independent cleanup/CPU evidence.
+        require(len(self.handles) < 64, "owned_process_count_bound")
+        identity = (pid, created)
+        self.handles[identity] = handle
+        self.rows[identity] = {"pid": pid, "created_100ns": created, "peak_private_bytes": 0,
+                               "cpu_user_100ns": 0, "cpu_kernel_100ns": 0}
+
     def sample(self):
-        known = {self.process.pid} | set(self.handles)
-        snapshot = self.api.snapshot()
-        for _ in range(32):
-            expanded = known | {pid for pid, parent in snapshot if parent in known}
-            if expanded == known:
-                break
-            known = expanded
-        require(len(known) <= 64, "owned_process_count_bound")
-        for pid in known:
-            if pid not in self.handles:
-                handle = self.api.k.OpenProcess(0x1000 | 0x10 | 0x100000, False, pid)
-                if not handle:
-                    continue  # Short-lived rows cannot provide positive evidence.
-                created, _, _, _ = self.api.times(handle)
-                self.handles[pid] = handle
-                self.rows[pid] = {"pid": pid, "created_100ns": created, "peak_private_bytes": 0,
-                                  "cpu_user_100ns": 0, "cpu_kernel_100ns": 0}
+        # Toolhelp parent IDs can refer to a long-dead process whose PID has
+        # since been reused by this collector. Pin candidate handles and check
+        # birth/lifetime ordering BEFORE attributing descendants or the bound.
+        # A PID reused after the snapshot must wait for a fresh snapshot.
+        captured = self.api.now_100ns()
+        children = {}
+        for pid, parent in self.api.snapshot():
+            children.setdefault(parent, []).append(pid)
+        frontier = list(self.handles)
+        while frontier:
+            following = []
+            for identity in frontier:
+                parent_created, parent_exited, _, _ = self.api.times(self.handles[identity])
+                require(parent_created == identity[1], "process_identity_changed")
+                for pid in children.get(identity[0], []):
+                    handle = self.api.k.OpenProcess(0x1000 | 0x10 | 0x100000, False, pid)
+                    if not handle:
+                        continue  # An unpinned row is never positive evidence.
+                    try:
+                        created, _, _, _ = self.api.times(handle)
+                        child = (pid, created)
+                        # Refresh exit time: the parent can exit (and its PID
+                        # become stale in Toolhelp) while a candidate is opened.
+                        parent_created, parent_exited, _, _ = self.api.times(self.handles[identity])
+                        require(parent_created == identity[1], "process_identity_changed")
+                        if (child in self.handles or created > captured or created < parent_created
+                                or (parent_exited and created > parent_exited)):
+                            continue
+                        self.remember(pid, created, handle)
+                        following.append(child)
+                        handle = None  # The observer now owns this pinned handle.
+                    finally:
+                        if handle is not None:
+                            self.api.k.CloseHandle(handle)
+            frontier = following
         alive, private, child_private = 0, 0, 0
-        for pid, handle in self.handles.items():
+        for identity, handle in self.handles.items():
+            pid, _ = identity
             created, _, kernel, user = self.api.times(handle)
-            row = self.rows[pid]
+            row = self.rows[identity]
             require(created == row["created_100ns"], "process_identity_changed")
             row.update(cpu_user_100ns=user, cpu_kernel_100ns=kernel)
             row["stopped"] = self.api.k.WaitForSingleObject(handle, 0) == 0
@@ -606,8 +653,8 @@ class Client:
             self.process.kill()
             self.process.wait(5)
         deadline = time.monotonic() + 4
-        while any(self.rig.api.k.WaitForSingleObject(handle, 0) != 0 for pid, handle in self.witness.handles.items()
-                  if pid != self.process.pid) and time.monotonic() < deadline:
+        while any(self.rig.api.k.WaitForSingleObject(handle, 0) != 0 for identity, handle in list(self.witness.handles.items())
+                  if identity[0] != self.process.pid) and time.monotonic() < deadline:
             time.sleep(.01)
         proof = self.witness.finish()
         stdout, stderr = self.out.finish(), self.err.finish()

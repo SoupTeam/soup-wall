@@ -1,0 +1,11 @@
+{
+  "format": "sw-mcp/git-local-clone-readonly/1",
+  "accepted_base": "8aa0482145ef2e5d70d3ab7edec32c935bb64cae",
+  "files": {
+    "profiles/pilot/linux-readonly-v1/policy.yaml": "8a8a8f7e7147a977f9d268091152bfd424fe6e61531a313c66eae1bc1fa46f5a",
+    "rule_baseline/git_readonly_v1/rule_baseline.py": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "profiles/mcp/git-readonly-v1/upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
+    "profiles/mcp/git-readonly-v1/upstream-identity.json": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4",
+    "profiles/mcp/git-readonly-v1/requirements.lock": "a2cfeda583ce58ab092610ee5b8902ef2f6ab1c97dabebf7eb67bcc512f5f1e5"
+  }
+}
