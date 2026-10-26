@@ -193,6 +193,40 @@ pub(super) fn child() -> Result<()> {
         }),
     )?;
     let ready = PathBuf::from(ready);
+    if std::env::var("SOU142_TEST_COLLECTOR_STAGE").as_deref() == Ok("owner-self-loss") {
+        // The external controller follows this helper's actual Agent owner and
+        // kills it at sendmsg entry, BEFORE descriptor custody is transferred.
+        // No production owner seam or environment switch is introduced.
+        return tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async {
+                match prepared.spawn().await {
+                    Ok((mut child, _, mut owner, _)) => {
+                        let _ = owner.finish().await;
+                        if tokio::time::timeout(Duration::from_secs(3), child.wait())
+                            .await
+                            .is_err()
+                        {
+                            let _ = child.start_kill();
+                            let _ =
+                                tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
+                        }
+                        anyhow::bail!("owner_self_loss_original_unexpectedly_started");
+                    }
+                    Err(error) => ensure!(
+                        error.to_string() == "mcp_owner_startup_failed",
+                        "owner_self_loss_unexpected_refusal"
+                    ),
+                }
+                println!(
+                    "{}",
+                    json!({"format":"sou142-owner-self-loss-collector/1",
+                        "spawn_refused":true,"original_started":false})
+                );
+                Ok(())
+            });
+    }
     if std::env::var("SOU142_TEST_COLLECTOR_STAGE").as_deref() == Ok("handoff") {
         // The candidate Agent image runs its ordinary owner code; the barrier
         // exists only in this libtest collector before its adoption ACK.

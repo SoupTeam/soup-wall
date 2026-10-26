@@ -74,6 +74,61 @@ def fixture():
 
 
 class Projection(unittest.TestCase):
+    def owner_loss(self):
+        attempt, _ = fixture()
+        attempt.update(phase='owner-loss', status='owner-self-loss-diagnostic-completed',
+            source_read_only=True, reused_binaries_read_only=True, network='private-loopback-only',
+            paid_api_calls=0, actual_original_host_covered=False, owner_self_loss=[])
+        for server in ('filesystem', 'git'):
+            attempt['owner_self_loss'].append({'server': server, 'format': 'sou142-owner-self-loss/1',
+                'source_commit': COMMIT, 'status': 'blocked', 'acceptance_pass': False,
+                'reason': 'owner_self_loss_orphan_reproduced', 'owner_signal': 'SIGKILL',
+                'observed_stage': 'descriptor_sendmsg_entry', 'descriptors_delivered': False,
+                'descriptor_count': 8, 'owner_generation_verified': True, 'collector_refused': True,
+                'original_started': False, 'owned_members': 0, 'residual_owned_leaf': True,
+                'production_cleanup_verified': False, 'observer_cleanup_attempted': True,
+                'observer_cleanup_verified': True, 'all_traced_processes_stopped': True,
+                'runtime_or_policy_modified': False, 'agentfw_sha256': SHA,
+                'test_binary_sha256': SHA, 'budget_sha256': SHA, 'profile_sha256': SHA,
+                'private_log_sha256': SHA, 'private_path': '/private/never-export', 'pid': 123456})
+        return attempt
+
+    def test_owner_self_loss_diagnostic_stays_blocked_and_private(self):
+        result = P.project_owner_loss(self.owner_loss(), COMMIT, 0)
+        self.assertEqual(result['status'], 'blocked-diagnostic-verified', result)
+        self.assertIs(result['acceptance_pass'], False)
+        self.assertIs(result['full_sou142_qualification'], False)
+        self.assertIs(result['production_cleanup_verified'], False)
+        self.assertIn('owner-loss-before-descriptor-handback', result['remaining_gaps'])
+        self.assertEqual(len(result['cases']), 2)
+        for private in ('never-export', '123456', 'private_path'):
+            self.assertNotIn(private, json.dumps(result))
+
+    def test_observer_cleanup_or_collector_loss_never_qualifies_owner_self_loss(self):
+        mutations = [
+            lambda a: a.update(source_commit='c' * 40),
+            lambda a: a.update(phase='baseline'),
+            lambda a: a['owner_self_loss'].pop(),
+            lambda a: a['owner_self_loss'][0].update(observed_stage='prepared-handback-before-adoption-ack'),
+            lambda a: a['owner_self_loss'][0].update(status='pass', acceptance_pass=True),
+            lambda a: a['owner_self_loss'][0].update(production_cleanup_verified=True),
+            lambda a: a['owner_self_loss'][0].update(descriptors_delivered=True),
+            lambda a: a['owner_self_loss'][0].update(owner_generation_verified=False),
+            lambda a: a['owner_self_loss'][0].update(original_started=None),
+            lambda a: a['owner_self_loss'][0].update(owned_members=False),
+            lambda a: a['owner_self_loss'][0].update(all_traced_processes_stopped=False),
+            lambda a: a['owner_self_loss'][0].update(agentfw_sha256='c' * 64),
+            lambda a: a['owner_self_loss'][0].update(observer_cleanup_verified=False),
+            lambda a: a.update(source_read_only=False),
+        ]
+        for mutate in mutations:
+            attempt = self.owner_loss(); mutate(attempt)
+            with self.subTest(mutation=mutate):
+                self.assertNotEqual(P.project_owner_loss(attempt, COMMIT, 0)['status'],
+                                    'blocked-diagnostic-verified')
+        self.assertNotEqual(P.project_owner_loss(self.owner_loss(), COMMIT, 1)['status'],
+                            'blocked-diagnostic-verified')
+
     def test_slice_never_becomes_full_acceptance_or_exports_private_observations(self):
         a, r = fixture()
         result = P.project(a, r, COMMIT, 0)
