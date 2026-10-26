@@ -74,6 +74,11 @@ not silently add either engine, require a root daemon or change delegation.
 ## Evidence status
 
 Development source is based on accepted main
-`3c9cfb08c0f1498676dcc70de131bd2f324dd13b`. Native execution and exact-source retained
-results are pending. Packet/projection unit tests validate the observer, not the
-Linux failure itself. Failed and incomplete attempts must remain retained.
+`3c9cfb08c0f1498676dcc70de131bd2f324dd13b`. Native source
+`39415fb717ad22b50701100aeebc96927e0b9690` reproduces the orphan for both actual
+filesystem and Git profiles in run `40285176569`. The independently checked
+[retained result](evidence/sou-142-owner-self-loss/native-observation.json) is
+`blocked-diagnostic-verified`; production cleanup and full acceptance remain false.
+Linux build/unit/adoption controls and strict Clippy passed. This completes the
+requested diagnostic handoff and identifies the remaining creation-custody decision.
+Failed and incomplete attempts remain retained.

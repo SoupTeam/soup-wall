@@ -1,7 +1,9 @@
 # SOU-142 owner-self-loss handoff evidence
 
-Native diagnostic status: **pending**. No new native fault result, production
-cleanup success, full SOU-142 acceptance or shared admission is claimed.
+Native diagnostic status: **blocked-diagnostic-verified** on exact source
+`39415fb717ad22b50701100aeebc96927e0b9690`, run `40285176569`. Both actual
+original-profile cases reproduce the owner-self-loss orphan. This is a completed
+handoff, not production cleanup success, full SOU-142 acceptance or shared admission.
 
 The [control and boundary](../../PREPARED_BUDGET_OWNER_SELF_LOSS.md) describe the
 actual-owner SIGKILL before SCM_RIGHTS handback, distinct from the accepted four
@@ -30,3 +32,11 @@ their own names. Regressions exercise the actual case runner/checkpoint flow and
 actual observer setup through exclusive log creation, stopping before any fork.
 The failed run remains in [the native attempt ledger](native-attempts.json), with
 independently verified ZIP SHA-256 and CRC. It is not an owner-loss result.
+
+The [retained native observation](native-observation.json) verifies SIGKILL of the
+actual outside owner at descriptor sendmsg entry: eight descriptors prepared, none
+delivered, collector startup refused, zero original execution/members and a retained
+empty owned leaf for both filesystem and Git. All traced processes stopped. Only
+the independently pinned fixture was removed by the observer; production cleanup
+remains false. Archive SHA-256/CRC, exact source and build/runtime digest agreement
+were checked independently. The wider creation-custody decision remains open.
