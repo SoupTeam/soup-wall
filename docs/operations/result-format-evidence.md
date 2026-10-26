@@ -52,7 +52,35 @@ No formatter attribution or model-data audit marker is emitted by production.
 A direct component preview with parser offsets is a parser experiment, not a
 native release or real-server qualification.
 
+## Relief wiring removed or isolated
+
+Compared with the earlier ac32bec prototype, the final Draft:
+
+- Gates the entire native `result_evidence` module under `cfg(test)`; production
+  cannot derive or consume its parser certificate.
+- Removes `ResultEvidence::derive`, nonempty `attributed_spans` and formatter
+  relief selection from native result inspection. Every production MCP result
+  receives empty attribution plus additive positive evidence only.
+- Removes the `complete_data` / `review_used` path and the call to
+  `preview_native_result_after_data_review_with_positive` from native/1.
+  A matching test-only permit is ignored.
+- Removes reviewer invocation from the handler and worker startup from native
+  configuration; `with_result_data_review(Some(...))` fails before startup.
+- Removes native formatter-attribution and model-data relief reason/audit markers.
+
+Core/agent attribution-preview APIs remain component prototype primitives; they
+are not a production origin authority. Reconnecting them or changing the empty
+spans requires a separate reviewed change after independent binding acceptance.
+Commit-shaped Git blobs retain baseline through the same production path.
+
 ## External execution/IPC acceptance contract
+
+Assigned follow-ups (recorded by the parent in SOU-109): SOU-155, @Nari_Ab,
+provides daemon-owned verified Linux launch and runtime/Call/result binding over
+IPC after the remaining SOU-142 boundary; SOU-156, @konung3, provides the original
+Git resolved-object-kind/sealed-view witness. Their contract is due October 27 at
+12:00 and delivery October 28 at 12:00, per the assignment. This Draft does not
+wait for or duplicate either implementation.
 
 The parent-owned follow-up must provide a daemon-owned verified launch binding;
 this Draft adds no launcher or authority service. Before any relief can be enabled:
@@ -70,6 +98,12 @@ this Draft adds no launcher or authority service. Before any relief can be enabl
 - Demonstrate the actual verified launch -> IPC -> Call -> result path and matched
   attack controls, including another executable producing identical output.
   Unit parser success is not acceptance of that path.
+
+The future consumer must join daemon-verified execution evidence with the parser's
+exact registry/session/Call/arguments/frame/ordered-channel scope. Neither a wire
+`trusted` flag, a model permit, an entrypoint hash nor parser offsets can construct
+that execution authority. Witness verification must precede selecting any
+nonempty attribution; a failed join selects the unchanged baseline.
 
 Git additionally needs the object-kind/resolved-id/snapshot evidence below.
 The follow-up must be separately reviewed before removing this baseline-only gate.

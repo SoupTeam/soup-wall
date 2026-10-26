@@ -1,8 +1,8 @@
 # Run evidence and limits
 
 Final code evaluated: d18da37aaace7a73b4e8488fd3280d26d27185dc, atop
-7bbe9a5e1fed3e0555b6dc0782486fe5beb7aa66. Subsequent evidence-only commit
-stores these files; it does not change the evaluated code.
+7bbe9a5e1fed3e0555b6dc0782486fe5beb7aa66. Subsequent evidence/documentation-only commits
+store these files and the handoff; they do not change the evaluated code.
 
 `baseline-only-*` is the final frozen replay: 9 cases, 7 evaluated, 3/3 attacks
 refused, 0/4 supported benign cases released; PMF201/256 remain unsupported.
@@ -27,3 +27,10 @@ The original nine inputs, labels, fixed policies/signatures/classifier were not
 changed after observing results. Git calls remain component-only reconstructions.
 The external execution/IPC acceptance contract is in result-format-evidence.md;
 this slice does not implement or authorize a competing launch service.
+
+Handoff ownership: SOU-155 @Nari_Ab (after SOU-142) owns Linux verified launch /
+runtime-Call-result IPC binding. SOU-156 @konung3 owns the Git resolved-object-kind /
+sealed-view witness. Assigned contract: October 27, 12:00; delivery: October 28,
+12:00. Neither implementation is part of this Draft. All production paths remain
+baseline-only until independent acceptance, including commit-shaped Git blobs.
+The operation document lists each removed/isolated relief hook explicitly.
