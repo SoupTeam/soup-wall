@@ -848,6 +848,19 @@
       "elapsed_seconds": 203.28,
       "source_after_sha256": "6b7909bc7532a4296e762b38218b8a135223bd4c6788db89d0fc542d8dcc4ef2",
       "log_sha256": "f2edfa8a96b7a5acd68f3f5fe7fbbfc4aa6b0b01f8e074cab9792850c0367677"
+    },
+    {
+      "label": "main469-git-test-callers",
+      "source_files_sha256": "0b45419117229b5ed2d1b3f3794bd41051ccc43316ebafa3dc1932238f6926e3",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 15.74,
+      "source_after_sha256": "0b45419117229b5ed2d1b3f3794bd41051ccc43316ebafa3dc1932238f6926e3",
+      "log_sha256": "b8eca26eec6eaa9825c94f876968c8e347b6a6b9b1bc18923b3b774967f967f8"
     }
   ],
   "native_qualified_source": "9d2429d4437b9ea5511825b18094f9674f8e84c6",

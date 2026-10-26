@@ -301,6 +301,22 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "45dda69f2bad1268b9c27b2d5aa21f0bdbda40ac",
+      "run": 40336754532,
+      "status": "failed",
+      "failed_stage": "native-closure-unit",
+      "cause": "two-new-main-Linux-only-test-callers-missing-explicit-optional-FS-evidence",
+      "native_product_build": "passed",
+      "runtime_qualification": false,
+      "artifacts": [
+        {
+          "id": 12658250246,
+          "sha256": "230e0becaedac477dda0df5c0a8d448570ef6b1d88329aba8774fe3edb79cf73"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }
