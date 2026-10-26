@@ -83,10 +83,16 @@ healthy two-second execution for either profile or establish a complete cause.
 This qualifier retains that limitation and separately tests a granted two-second
 lease: pause only the pinned owned collector, match its exact session/epoch
 `native_session_expired` audit, require zero execution/new original results and
-terminal uncertainty, and independently verify cleanup. The namespace owner's
-1500 ms guard is separate evidence. A new ten-second session must return the
-original bytes. Production defaults, five-second calls, approval TTLs and
-resource/policy guards remain unchanged.
+actual host EOF, and independently verify cleanup. Terminal grading accepts
+confirmed owner cleanup with `native_liveness_uncertain`, or the exact combined
+native-expiry/1500 ms namespace-owner guard with `pilot_cleanup_unconfirmed`.
+The latter requires matching owner instance/process start identities, the exact
+`mcp_owner_liveness_expired` reason and complete independent descendant
+observation. Its production cleanup receipt remains unconfirmed; this branch
+does not prove isolated native-denial behavior. Other errors refuse, and owner
+termination alone is not native-expiry evidence. A new ten-second session must
+return the original bytes. Production defaults, five-second calls, approval TTLs
+and resource/policy guards remain unchanged.
 
 ## Acceptance
 

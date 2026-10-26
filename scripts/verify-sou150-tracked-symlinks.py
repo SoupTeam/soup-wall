@@ -488,7 +488,7 @@ def run(args):
                 LEASE.qualify_short_lease(make_client=lambda log, seconds: collector(stack, log, True, lease_seconds=seconds),
                     make_call=lambda identifier: V1.call(identifier, "git_show", {"revision": "HEAD"}),
                     audit=stack.audit, log_path=output / "short-lease-expiry.log", witness_factory=DaemonProcessWitness,
-                    expected_sha256=report["original_read_sha256"]["git_show"], report=report)
+                    expected_sha256=report["original_read_sha256"]["git_show"], expected_profile=INSTALL.FORMAT, report=report)
                 late_changes(stack, report)
             require(INSTALL.SHARED.V1.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"], "original package changed")
             require(sha(config["policy"]) == selection["policy_sha256"], "policy changed")
