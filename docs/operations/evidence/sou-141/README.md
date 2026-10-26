@@ -11,8 +11,8 @@ else. The branch was merged with newer main afterwards, which changes executable
 (for example the admission, native approval and original-create code and the SOU-105
 acceptance script). Later functional CI results are not performance qualification.
 The measurement files are kept unchanged, and the reviewed tool was fixed after this
-run (see "Review follow-up"). A new qualification on the final reviewed source is
-required before any claim about that source.
+run (see "Review follow-up"). The final qualification on the reviewed source
+is the section "Final exact-source series (`4b99b6e`)" below.
 
 ## Native Linux (`native_linux`), measured commit
 
@@ -80,6 +80,63 @@ Notes on reading these numbers:
   verity was not investigated.
 - The runner was shared: load average 1.4 to 2.8 and CPU pressure around 5 to 7 percent
   during runs (`conditions_before` and `conditions_after` in each run record).
+
+## Final exact-source series (`4b99b6e`)
+
+Run after the review fixes and after refreshing the branch from main `46921f8`, with the
+fixed tool (successful execution plus validation required, cold kind labeled as a pre-run
+cache drop only).
+
+- Source: commit `4b99b6efee6bfd3e603b207d841015d179962977`, tree
+  `5db4a81ee8e65e389663c974abb690d5fb34ed6a`, clean working tree. Files:
+  `native-final-ask-series-manifest.json` and `native-final-ask-series-summary.json`.
+- Machine: GitHub-hosted `ubuntu-24.04` runner, kernel `6.17.0-1022-azure`, workflow run
+  40346352153, plan `cold,warm,cold,warm`, 20 approvals per profile per run,
+  `--require-verified-reuse`.
+- Status `complete`, `performance_blockers: []`, `attempts.qualified_runs: [1, 2, 3, 4]`,
+  no unqualified attempt. 160 of 160 trials succeeded.
+- The two `cold` runs are post-cache-drop, setup-rewarmed measurements (cached memory fell
+  from 5446144 kB to 313792 kB and from 1042564 kB to 315332 kB before the run). They are
+  not cold Ask samples: the setup re-reads the inputs and the cache is not dropped between
+  trials.
+
+| Run | Kind | Qualified | Wall seconds |
+|---|---|---|---|
+| 1 | cold | yes (exit 0, validated) | 622.2 |
+| 2 | warm | yes (exit 0, validated) | 613.4 |
+| 3 | cold | yes (exit 0, validated) | 614.7 |
+| 4 | warm | yes (exit 0, validated) | 613.4 |
+
+Pooled per kind (two runs each, 40 trials per profile), milliseconds:
+
+| Kind | Profile | Trials (ok/planned) | Continuation p50 / p95 / worst (ms) | First trial per run (ms) | Repetitions p50 / p95 / worst (ms) | First-pending asset verification p50 / p95 / worst (ms) | p95 target 3000 ms |
+|---|---|---|---|---|---|---|---|
+| post-drop, setup-rewarmed | filesystem | 40/40 | 1199 / 1265 / 1298 | 1235, 1265 | 1199 / 1267 / 1298 | 1233 / 1319 / 1330 | met |
+| post-drop, setup-rewarmed | git | 40/40 | 1580 / 1679 / 1692 | 1546, 1670 | 1580 / 1682 / 1692 | 1503 / 1561 / 1611 | met |
+| warm | filesystem | 40/40 | 1206 / 1257 / 1270 | 1186, 1201 | 1206 / 1268 / 1270 | 1246 / 1306 / 1315 | met |
+| warm | git | 40/40 | 1594 / 1635 / 1665 | 1591, 1542 | 1598 / 1640 / 1665 | 1501 / 1543 / 1553 | met |
+
+Stage distributions (p50 / p95 / worst, milliseconds):
+
+| Kind | Profile | package_tree pass 1 | package_tree pass 2 | runtime_and_libraries pass 1 | approval stages after observation (total) |
+|---|---|---|---|---|---|
+| post-drop, setup-rewarmed | filesystem | 1123 / 1201 / 1208 | 922 / 940 / 950 | 119 / 131 / 142 | 1125 / 1157 / 1172 |
+| post-drop, setup-rewarmed | git | 1435 / 1489 / 1543 | 1267 / 1310 / 1378 | 67 / 71 / 72 | 1508 / 1575 / 1624 |
+| warm | filesystem | 1129 / 1191 / 1198 | 925 / 945 / 950 | 118 / 133 / 140 | 1126 / 1146 / 1152 |
+| warm | git | 1433 / 1474 / 1485 | 1271 / 1303 / 1323 | 66 / 70 / 72 | 1518 / 1572 / 1593 |
+
+Notes:
+
+- Every run stayed well inside the 3000 ms p95 target. The worst trial was 1692 ms
+  (git). The worst first-pending lower bound was 1611 ms against the 5 s pending bound.
+- The numbers are slower than the earlier series on `12f3f2b` (git continuation p95 about
+  1.64 to 1.68 s against 1.41 s, filesystem about 1.26 s against 1.05 s). Different
+  runner instance and a different source (main moved). The cause was not investigated and
+  is not attributed to either.
+- The first trial per profile is not slower than the repetitions here, and the post-drop
+  and warm kinds are again almost the same.
+- Again no fs-verity reuse was observed: `immutable_files` was 0 in every trial, with 52
+  (filesystem) or 144 (git) leased files per approval. Limits are as for the earlier series.
 
 ## WSL2 (`wsl2`)
 
