@@ -136,7 +136,10 @@ fn run_operator_scope_cannot_claim_another_session_or_epoch() {
 
 fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
     let mut env = env(Some(60));
-    let name = if format == crate::mcp::server_profile::FORMAT {
+    let creating = format == crate::mcp::server_profile::filesystem_create::FORMAT;
+    let name = if creating {
+        "write_file"
+    } else if format == crate::mcp::server_profile::FORMAT {
         "read_text_file"
     } else {
         "git_show"
@@ -149,8 +152,8 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
         .find(|v| v["name"] == name)
         .unwrap();
     let schema = canonical_digest(&definition["inputSchema"]);
-    let bytes = json!({"contract_version":CONTRACT,"registry_id":"selected-approval-unit","tools":[{
-        "name":name,"schema_sha256":schema,"action_class":"read_only","result_provenance":"untrusted",
+    let bytes = json!({"contract_version":CONTRACT,"registry_id":if creating {"filesystem-create-only-v1"} else {"selected-approval-unit"},"tools":[{
+        "name":name,"schema_sha256":schema,"action_class":if creating {"side_effecting"} else {"read_only"},"result_provenance":"untrusted",
         "egress":[],"mcp_result_profile":format}]}).to_string();
     let native = NativeState::from_bytes(
         bytes.as_bytes(),
@@ -163,9 +166,11 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
     let st = Arc::get_mut(&mut env.st).unwrap();
     st.native = Some(native);
     st.firewall = Mutex::new(AgentFirewall::new(AgentPolicySet::from_yaml(
-        "agent_policies:\n  - name: selected-read-ask\n    when: { action_class: read_only }\n    action: ask\ndefault: allow\n"
+        &format!("agent_policies:\n  - name: selected-ask\n    when: {{ action_class: {} }}\n    action: ask\ndefault: allow\n", if creating {"side_effecting"} else {"read_only"})
     ).unwrap(), DEFAULT_TAINT_CAP));
-    let args = if name == "read_text_file" {
+    let args = if creating {
+        json!({"path":"/workspace/approved.txt","content":"approved café 🥣"})
+    } else if name == "read_text_file" {
         json!({"path":"/workspace/notes.txt"})
     } else if format == crate::mcp::server_profile::git::LOCAL_REFS_FORMAT {
         json!({"repo_path":"/workspace","revision":"refs/heads/feature/機能"})
@@ -182,6 +187,19 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
         snapshot_sha256: "d".repeat(64),
         definition_sha256: canonical_digest(definition),
         input_sha256: "e".repeat(64),
+        original_create: creating.then(|| {
+            crate::mcp::server_profile::filesystem_create::CreateResource {
+                contract_version:
+                    crate::mcp::server_profile::filesystem_create::CreateResource::CONTRACT.into(),
+                workspace: env.home().to_path_buf(),
+                device: 1,
+                inode: 2,
+                target: args["path"].as_str().unwrap().into(),
+                content_sha256: hash(args["content"].as_str().unwrap().as_bytes()),
+                content_bytes: args["content"].as_str().unwrap().len(),
+                must_be_absent: true,
+            }
+        }),
     };
     start(&env, "selected-owner", &[name.into()]);
     (env, name.into(), args, schema, context)
@@ -285,11 +303,13 @@ async fn selected_status_cancel_require_the_private_owner_even_when_header_is_ab
     }
 }
 
-const FORMATS: [&str; 4] = [
+const FORMATS: &[&str] = &[
     crate::mcp::server_profile::FORMAT,
     crate::mcp::server_profile::git::FORMAT,
     crate::mcp::server_profile::git::LOCAL_REFS_FORMAT,
     crate::mcp::server_profile::git::SHALLOW_FORMAT,
+    #[cfg(target_os = "linux")]
+    crate::mcp::server_profile::filesystem_create::FORMAT,
 ];
 
 #[test]
@@ -483,7 +503,9 @@ fn selected_changed_arguments_expiry_and_hard_deny_cannot_redeem() {
             env.approve(&pending);
             let mut presented = args.clone();
             if control == "args" {
-                if name == "read_text_file" {
+                if name == "write_file" {
+                    presented["content"] = json!("unapproved");
+                } else if name == "read_text_file" {
                     presented["path"] = json!("/workspace/other.txt");
                 } else {
                     presented["revision"] = json!("a".repeat(40));
@@ -505,19 +527,37 @@ fn selected_changed_arguments_expiry_and_hard_deny_cannot_redeem() {
                     DEFAULT_TAINT_CAP,
                 );
             }
-            assert!(
-                !call_selected(
-                    &env,
-                    "selected-owner",
-                    &name,
-                    &presented,
-                    &schema,
-                    &context,
-                    &id(&pending)
-                )
-                .unwrap()
-                .release
+            let refused = call_selected(
+                &env,
+                "selected-owner",
+                &name,
+                &presented,
+                &schema,
+                &context,
+                &id(&pending),
             );
+            if name == "write_file" && control == "args" {
+                assert!(matches!(
+                    refused,
+                    Err("native_approval_selected_unsupported")
+                ));
+                // A malformed typed content claim terminally retires the grant.
+                assert!(
+                    !call_selected(
+                        &env,
+                        "selected-owner",
+                        &name,
+                        &args,
+                        &schema,
+                        &context,
+                        &id(&pending)
+                    )
+                    .unwrap()
+                    .release
+                );
+            } else {
+                assert!(!refused.unwrap().release);
+            }
             assert!(
                 env.native().sessions.lock().unwrap().entries["selected-owner"]
                     .calls
@@ -598,4 +638,88 @@ fn failed_operator_decision_publication_discards_only_its_grant() {
             .unwrap()
             .release
     );
+}
+
+#[test]
+fn readonly_selected_binding_serialization_has_no_new_create_field() {
+    let (_, _, _, _, context) = fixture(crate::mcp::server_profile::FORMAT);
+    assert!(serde_json::to_value(context)
+        .unwrap()
+        .get("original_create")
+        .is_none());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn original_create_approval_resource_change_is_terminal_and_retained_without_content() {
+    for (field, value) in [
+        ("workspace", json!("/tmp/different-root")),
+        ("device", json!(42)),
+        ("inode", json!(99)),
+        ("target", json!("/workspace/unapproved.txt")),
+        ("content_sha256", json!("0".repeat(64))),
+        ("content_bytes", json!(0)),
+        ("must_be_absent", json!(false)),
+    ] {
+        let (env, name, args, schema, context) =
+            fixture(crate::mcp::server_profile::filesystem_create::FORMAT);
+        let pending = open_selected(&env, &name, &args, &schema, &context).unwrap();
+        let record = operator_inspect(env.home(), &id(&pending)).unwrap();
+        assert_eq!(record["resource_details"], json!(context.original_create));
+        assert!(record["resource_details"].get("content").is_none());
+        env.approve(&pending);
+        let mut changed = json!(context);
+        changed["original_create"][field] = value;
+        let changed: SelectedInvocation = serde_json::from_value(changed).unwrap();
+        let refused = call_selected(
+            &env,
+            "selected-owner",
+            &name,
+            &args,
+            &schema,
+            &changed,
+            &id(&pending),
+        );
+        assert!(refused.is_err() || !refused.unwrap().release, "{field}");
+        assert!(
+            !call_selected(
+                &env,
+                "selected-owner",
+                &name,
+                &args,
+                &schema,
+                &context,
+                &id(&pending)
+            )
+            .unwrap()
+            .release
+        );
+        assert!(
+            env.native().sessions.lock().unwrap().entries["selected-owner"]
+                .calls
+                .is_empty()
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn original_create_requires_its_resource_and_cannot_use_readonly_context() {
+    let (env, name, args, schema, context) =
+        fixture(crate::mcp::server_profile::filesystem_create::FORMAT);
+    let mut missing = context.clone();
+    missing.original_create = None;
+    assert!(open_selected(&env, &name, &args, &schema, &missing).is_err());
+    let (readonly, read_name, read_args, read_schema, mut read_context) =
+        fixture(crate::mcp::server_profile::FORMAT);
+    read_context.original_create = context.original_create;
+    assert!(open_selected(
+        &readonly,
+        &read_name,
+        &read_args,
+        &read_schema,
+        &read_context
+    )
+    .is_err());
+    assert!(operator_list(env.home()).is_empty());
 }

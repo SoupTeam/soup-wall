@@ -13,8 +13,10 @@ UTF-8 bytes, with no aliases, parents, extra fields, overwrites or append.
 At most one create can be queued/running at once. The tool's native registry
 entry must explicitly declare `side_effecting`, the exact versioned profile,
 untrusted result provenance and no egress. Read-only tools keep read-only
-authority. No classifier means fail closed; classifier Ask, Deny, unknown
-semantics and unsafe/missing native receipts do **not** publish files.
+authority. No classifier means fail closed. Unknown, mixed or understated write
+semantics, Deny and unsafe/missing native receipts do **not** publish files.
+An exact known write can resume a native policy Ask only with the explicitly
+enabled single-use approval described below.
 
 The exclusive create slot also covers a cancelled producer's bounded cleanup
 and an anonymous staging worker whose async waiter has ended. Spending a
@@ -111,13 +113,12 @@ fresh sandbox/owner startup and durable atomic publication; the unwrapped
 sample uses a warm original server. These small observations do not measure
 throughput or tail latency. Read the current-source report for actual numbers.
 
-Ask remains unsupported and fails closed. The daemon-loss witness is not a
-claim of exhaustive worker/process-crash coverage, and read continuation is
-not proof of a fresh successful write after every possible failure. Create-specific
-policy-epoch transitions and exhaustive crash/egress injection remain outside
-the demonstrated increment. Stage/unit tests alone do not establish those
-properties. See the [complete requirements/review audit](MCP_FILESYSTEM_CREATE_AUDIT.md)
-for sources, implementation evidence and remaining full-task requirements.
+The bounded create profile does not claim arbitrary-server isolation, exhaustive
+crash/egress injection, throughput or tail latency. Tests at specific lifecycle
+boundaries demonstrate those boundaries only. See the
+[requirements/review audit](MCP_FILESYSTEM_CREATE_AUDIT.md) and the
+[separate Ask acceptance ledger](evidence/sou-83-ask-acceptance/README.md)
+for current-source qualification and historical limits.
 
 ### Integration with the current pilot
 
@@ -144,10 +145,75 @@ source; historical native reports below do not qualify a later merge.
 
 Run `python3 scripts/install-sou83-filesystem-create-profile.py --destination /private/new-profile --workspace /private/owned-workspace --node /trusted/node --bwrap /trusted/bwrap` to preview; add `--run` to create a **new** 0700 installation. The script uses the accepted SOU-62 installer and exact pinned ORIGINAL package/runtime/notices, then writes owner-private `profile.json`, `registry.json` and a distinct `policy.yaml`. No existing read-only installation or Agent home is updated. For this opt-in profile, the exact selected original `write_file` is the sole supported side-effecting tool; all other original mutators remain unsupported. The new profile policy removes only the read-only install's general side-effecting deny; it keeps destructive/network/privilege/result-injection denial. Do not share this profile policy with any wider registry.
 
-Binding the installed profile to an authenticated client/native daemon still requires operator review of the new registry/policy hashes and matching source; the installer does not activate any server automatically. Ask cannot be resumed by this profile.
+Binding the installed profile to an authenticated client/native daemon still requires operator review of the new registry/policy hashes and matching source; the installer does not activate any server automatically. Ask continuation requires the separate explicit approval opt-in below.
 
 The pinned ORIGINAL server may create an ordinary `0644` file via its default Node umask. This file remains inaccessible to other users under the private `0700` staging root. After child cleanup, the inspector validates a single matching owner-held regular inode, rejects special/execute bits, and normalizes its permissions to `0600` through the pinned descriptor before comparing its approved content. No untrusted file is released or published before that check.
 
 ### Create-specific fault evidence (required for release)
 
-The protected real original-filesystem acceptance now exercises a cancelled post-native-Allow `Phase::Creating` call, an independently stopped native daemon during a second `Phase::Creating` call, and a reused already-spent host ID. Each negative case checks that no target was published and that a healthy same-session or restarted-session read still succeeds. Separately, `native_endpoint` now exercises the actual selected original `write_file` native call/result authority, refuses the second identical result (and a tampered replay), and confirms a new distinct call may proceed. These tests are not a replacement for the standard policy-epoch, egress and Ask qualification. Ask remains explicitly unsupported and fails closed.
+The protected real original-filesystem acceptance now exercises a cancelled post-native-Allow `Phase::Creating` call, an independently stopped native daemon during a second `Phase::Creating` call, and a reused already-spent host ID. Each negative case checks that no target was published and that a healthy same-session or restarted-session read still succeeds. Separately, `native_endpoint` now exercises the actual selected original `write_file` native call/result authority, refuses the second identical result (and a tampered replay), and confirms a new distinct call may proceed. These tests are not a replacement for the standard policy-epoch, egress and Ask qualification. The separate original-create Ask qualification below must also pass.
+
+
+## Single-use original-create Ask (separate SOU-83 follow-up)
+
+The native approval broker can resume the exact original `write_file` after an
+operator inspects and approves one pending call. Enable native approvals in the
+new owned daemon home, use an authenticated `--host-session`/`--child-authority`
+collector with native liveness, and opt in through the existing
+`--native-approval-wait-seconds` flag. See [native approval configuration and
+operator commands](NATIVE_ASK_APPROVAL.md). The classifier must positively identify
+only `write`; empty, unknown, ambiguous, understated and mixed predictions remain
+refused. Native hard Deny cannot be approved. No approval opt-in keeps the normal
+correlated Ask refusal.
+
+Pending `selected_invocation.original_create` and `resource_details` contain
+`sw-mcp/original-create-resource/1`: canonical workspace path, device/inode,
+virtual target, exact UTF-8 byte count and content SHA-256, and
+`must_be_absent: true`. The existing signed binding also covers session/epoch,
+host ID and raw request hash, registry/schema, snapshot, selected profile,
+runtime/package pins and classifier revision. This is observation evidence for
+the constrained original-server pipeline, not a `resource_admission` grant for
+built-in executors. Ordinary selected Allow calls retain the same typed resource
+in their native binding and audit. Resource evidence contains no raw content.
+Read-only invocation serialization and grant/key domains are unchanged.
+
+The collector releases its managed-policy lock during the human wait, retains
+its exclusive create slot, and starts no ephemeral original writer or staging
+operation. After approval it revalidates selected files, root identity, absent
+target, classifier, cancellation/deadline and the current native policy before
+redeeming once. The broker's TTL, collector wait, existing 30-second call deadline
+and owner lease all remain authoritative. It then uses the same fresh private
+original server, inspected result and atomic no-clobber publication boundary as
+Allow. Rejection, expiry, cancellation, lost owner, daemon restart, drift, root
+replacement and a competing target cannot publish. The approval never clears
+host taint or authorizes another host ID, target, content or policy epoch.
+
+`verify-sou83-create-approval.py` is required alongside original filesystem/Git
+acceptance: three unwrapped calibrations; actual approved create and fresh
+create/read continuation; spent-ID refusal; terminal/drift/fault
+controls, absent opt-in and hard Deny. It verifies actual file bytes, mode,
+link count and whole-workspace snapshots, and requires zero writer starts and
+zero private stages before approval or after a refused outcome. Raw syscall
+traces remain private because they contain child-authority argv. Signed managed
+SQLite/PostgreSQL qualification additionally exercises actual original Allow /
+Deny, a new same-policy deployment retiring a pending create, and a fresh exact
+Ask after activation. Unit tests alone do not qualify these real-process checks.
+
+
+The required real-original staging witness also re-runs the unchanged pinned
+writer under seven trusted output perturbations **after owned child cleanup**:
+extra artifact, wrong bytes, oversized file, external hardlink, symlink, FIFO and
+directory. The production output validator must refuse every case with zero
+visible publications. A task-local seam exists only in the library test binary;
+there is no environment switch or mutation hook in production. Each publication boundary receives fresh verified output from a separate actual
+original invocation: anonymous staging then drop, a competing target, and root
+replacement before publication. The output capability is consumed once. These
+controls test output verification/publication independently from upstream
+semantics; they do not claim that the original pinned server itself is malicious.
+
+
+For a focused Draft check, dispatch the existing `mcp-real-filesystem.yml` with
+`original_create_only=true` on the exact branch. It builds the pinned Linux
+runtime, runs real staging/authority tests and the complete create Ask driver.
+The ordinary PR/Ready workflow keeps all filesystem, Git, actual-host and
+native Ubuntu qualification; a focused manual result cannot replace admission.
