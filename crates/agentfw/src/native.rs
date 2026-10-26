@@ -2843,10 +2843,37 @@ fn inspect_bound(
     let inspect_mcp_result = request.event == "result"
         && request.delivery.as_deref() == Some("mcp_host")
         && matches!(tool.result_provenance, ResultProvenance::Untrusted);
-    let cross_block = if inspect_mcp_result {
-        soup_wall_core::InjectionDetector::cross_block_signatures(&texts)
+    let mcp_evidence = if inspect_mcp_result {
+        match soup_wall_core::InjectionDetector::mcp_result_evidence(
+            &texts.iter().map(String::as_str).collect::<Vec<_>>(),
+        ) {
+            Ok(evidence) => Some(evidence),
+            Err(limit) => {
+                // The Call was removed before result validation. No partial
+                // findings, skipped suffix, taint or raw spans can be released.
+                session.seq += 1;
+                response.verdict = "deny";
+                response.release = false;
+                response.reason_codes = vec![
+                    "native_mcp_result_evidence_incomplete".into(),
+                    format!("native_mcp_result_evidence_limit_{}", limit.code()),
+                ];
+                let mut refusal = Outcome::allow();
+                refusal.verdict = Verdict::Deny;
+                refusal.rule = Some("native_mcp_result_evidence_incomplete".into());
+                audit(
+                    st,
+                    &request,
+                    session,
+                    &response,
+                    Some(&refusal),
+                    started.elapsed().as_micros(),
+                )?;
+                return Ok(response);
+            }
+        }
     } else {
-        Vec::new()
+        None
     };
     for (block_index, text) in texts.into_iter().enumerate() {
         session.seq += 1;
@@ -2855,30 +2882,14 @@ fn inspect_bound(
             content: text,
             source: provenance.clone(),
         });
-        // Gate the entire MCP-specific preview, not just cross-block evidence:
-        // it also discovers addressed directives in each original block.
-        let mut outcome = if inspect_mcp_result {
-            firewall.preview_native_mcp_result_with_evidence(&ev, &cross_block)
+        let outcome = if let Some(evidence) = &mcp_evidence {
+            firewall.preview_native_mcp_result(&ev, evidence, block_index)
         } else {
             firewall.preview_native_result(&ev)
         };
-        for (_, finding) in &mut outcome.findings {
-            if finding.label.starts_with("MCP result ") && finding.span.is_some() {
-                finding
-                    .label
-                    .push_str(&format!("; original block {block_index}"));
-            }
-        }
         max_block_risk = max_block_risk.max(outcome.risk_score);
         for (facet, finding) in &outcome.findings {
-            let cross_reason = if finding.label.contains("; cross-block lexical evidence;")
-                || finding.label.starts_with("MCP result ")
-            {
-                format!("{}; {:?}", finding.label, finding.span)
-            } else {
-                String::new()
-            };
-            let key = (finding.detector.clone(), finding.severity, cross_reason);
+            let key = (finding.detector.clone(), finding.severity);
             let entry = observed_findings
                 .entry(key)
                 .or_insert_with(|| (*facet, finding.clone()));
@@ -2902,6 +2913,14 @@ fn inspect_bound(
         // evidence is additive; hash/delimiter heuristic scores are never
         // accumulated across unrelated original blocks.
         outcome.findings = observed_findings.into_values().collect();
+        if let Some(evidence) = mcp_evidence {
+            outcome.findings.extend(
+                evidence
+                    .into_audit()
+                    .into_iter()
+                    .map(|f| (soup_wall_agent::Facet::ToolResult, f)),
+            );
+        }
         outcome.risk_score = max_block_risk;
     }
     response.verdict = verdict_label(strongest);
@@ -3085,6 +3104,13 @@ fn audit(
             record["mcp_result_directive_evidence"] = json!(directives);
         }
     }
+    if response
+        .reason_codes
+        .iter()
+        .any(|code| code == "native_mcp_result_evidence_incomplete")
+    {
+        record["mcp_result_evidence"] = json!({"complete":false,"reason":"finite evidence budget exhausted","limits":{"findings":256,"audit_reason_bytes":65536,"charged_scan_bytes":33554432,"decoded_input_bytes":1048576}});
+    }
     if let Some(policy) = &response.managed_policy {
         record["managed_policy"] = json!(policy);
     }
@@ -3129,6 +3155,7 @@ fn audit(
 mod tests {
     use super::*;
     mod literal_arguments;
+    mod result_evidence_bounds;
     use crate::{
         audit::AuditSink,
         handlers::{AppState, Sessions as HookSessions},

@@ -36,9 +36,19 @@ static SUPERSESSION: LazyLock<Regex> = LazyLock::new(|| {
     .expect("result instruction supersession")
 });
 
-pub(super) fn scan(text: &str) -> Vec<Finding> {
-    let mut findings = Vec::new();
+pub(super) fn visit(
+    text: &str,
+    budget: &mut super::result_evidence::Budget,
+    mut emit: impl FnMut(
+        &mut super::result_evidence::Budget,
+        Finding,
+    ) -> Result<(), super::result_evidence::EvidenceLimit>,
+) -> Result<(), super::result_evidence::EvidenceLimit> {
+    // Full TARGET/SUPERSESSION passes plus bounded local ADDRESS/EFFECT searches.
+    // ADDRESS has <=96 Unicode characters; 512 bytes conservatively covers it.
+    budget.work(text.len().saturating_mul(2))?;
     for target in TARGET.find_iter(text) {
+        budget.work(512)?;
         let Some(address) = ADDRESS.find(&text[target.end()..]) else {
             continue;
         };
@@ -52,21 +62,38 @@ pub(super) fn scan(text: &str) -> Vec<Finding> {
         if body > end {
             continue;
         }
+        budget.work(end - body)?;
         if let Some(effect) = EFFECT.find(&text[body..end]) {
-            findings.push(Finding::new(
+            emit(budget, Finding::new(
                 "injection", Severity::Medium, 0.65,
                 "MCP result addresses an agent and requests a possible action; contextual attribution unresolved",
-            ).with_span(target.start()..body + effect.end()));
+            ).with_span(target.start()..body + effect.end()))?;
         }
     }
     // A direct second-person authority claim does not require a literal
     // assistant name. Its absence never discounts other evidence.
     for claim in SUPERSESSION.find_iter(text) {
-        findings.push(Finding::new(
+        emit(budget, Finding::new(
             "injection", Severity::Medium, 0.65,
             "MCP result claims replacement of the recipient's instructions; contextual attribution unresolved",
-        ).with_span(claim.range()));
+        ).with_span(claim.range()))?;
     }
+    Ok(())
+}
+
+#[cfg(test)]
+fn scan(text: &str) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    visit(
+        text,
+        &mut super::result_evidence::Budget::default(),
+        |budget, finding| {
+            budget.finding(&finding)?;
+            findings.push(finding);
+            Ok(())
+        },
+    )
+    .unwrap();
     findings
 }
 
