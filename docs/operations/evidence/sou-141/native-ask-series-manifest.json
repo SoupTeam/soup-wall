@@ -1,0 +1,36 @@
+{
+  "cold_definition": "page cache dropped with sync + drop_caches immediately before the run; unqualified when the drop cannot be shown",
+  "declared_at": "2026-10-26T00:37:34Z",
+  "format": "sw-ask-series/1",
+  "kernel": "6.17.0-1022-azure",
+  "machine": "x86_64",
+  "metric": "operator_attempt_to_correlated_original_result_monotonic",
+  "plan": [
+    "cold",
+    "warm",
+    "cold",
+    "warm"
+  ],
+  "platform_kind": "native_linux",
+  "require_verified_reuse": true,
+  "samples_per_profile": 20,
+  "selected_sha256": {
+    "agentfw": "f42d55d483f30b18d5d3aaed1d9c05aa34f18be2274b30b0f8183f55673f5dc6",
+    "bwrap": "b321f9e81b7bad66e8527465952f77a5e2672a6b3dcbde758e40937d9c178315",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "git": "7cf55287b8bc438adf1f8a66a81bc473aea7dba4a0b001bbfce07d0d55948245",
+    "git_launcher": "560cb087f158d63cb4da62e7034debd4bd8cc79609bbde5dd42ea18f9fcb087a",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+  },
+  "source": {
+    "commit": "12f3f2bff98d77693a19c541f9a0a2ef8e708b89",
+    "dirty": false,
+    "files_sha256": "3e3851f8e95a5f5cac273f6141158199d2c5dc8f0e34a9445af9435562c5ec14",
+    "tree": "82046c012a4a8b93d74cea33f1e45cd8fae83130"
+  },
+  "target_ms": 3000,
+  "warm_definition": "run started right after the previous complete run, no cache drop",
+  "wsl_note": null
+}
