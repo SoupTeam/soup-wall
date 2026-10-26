@@ -414,6 +414,11 @@ def input_binding(bundle, base, cand) -> dict:
     if bundle["case_manifest"] is not None:
         checked = {role: verify_case_manifest(bundle, side) for role, side in (("baseline", base), ("candidate", cand))}
         found = {role: checked[role][0] for role in checked if checked[role][0]}
+        # The manifest is bound to a run only through that run's reproduced source inventory.
+        for role in checked:
+            if problems[role]["source_to_inventory"]:
+                found.setdefault(role, []).append("source inventory not reproduced for this side, so the case "
+                                                  "manifest is not bound to its run")
         base_records, cand_records = checked["baseline"][1], checked["candidate"][1]
         differing = sorted(case_id for case_id in set(base_records) & set(cand_records)
                            if base_records[case_id] != cand_records[case_id])
@@ -1001,6 +1006,18 @@ def render_markdown(result) -> str:
                                                    ("planned", "attempted", "evaluable", "unknown", "incomplete",
                                                     "not_run")) + " |"
                       for domain, values in result["completeness"][role].items()] + [""]
+    failures = result["completeness"].get("failures")
+    if failures:
+        lines += ["## Stopped, not-run and timeout", "",
+                  "Stopped and not-run units have no evaluator outcome; they are never counted as successes.", "",
+                  "| Side | Stopped units by producer reason | Not run | Timeouts |", "|---|---|---|---|"]
+        for role, values in failures.items():
+            reasons = ", ".join(f"{reason}: {count}" for reason, count in values["by_reason"].items()) or "none"
+            timeouts = values["timeouts"]
+            lines.append(f"| {role} | {reasons} | {values['not_run_units']} | "
+                         f"{'not available' if timeouts['count'] is None else timeouts['count']} "
+                         f"({timeouts['availability']}) |")
+        lines.append("")
     if result["outcomes"]:
         lines += ["## Outcomes (enforced trajectories)", "",
                   "Missing-outcome bounds use the fixed planned set with every missing outcome set to 0 or 1; they are "

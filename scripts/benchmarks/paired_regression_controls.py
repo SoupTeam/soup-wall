@@ -8,8 +8,11 @@ outcomes demonstrate the comparator's accounting; they are not measurements of a
 
 usage:
   python scripts/benchmarks/paired_regression_controls.py --out-dir FRESH_DIR
-Writes the controls, runs every scenario and exits 1 if any status or exit code differs from
-the expectation recorded here.
+      writes every control, runs it and exits 1 if any status or code differs from its expectation;
+  python scripts/benchmarks/paired_regression_controls.py --write-evidence FRESH_DIR
+      writes the evidence bundle (committed as docs/benchmarks/evidence/sou153);
+  python scripts/benchmarks/paired_regression_controls.py --check-evidence [DIR]
+      regenerates the bundle offline and compares every generated file byte for byte.
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ import copy
 import json
 from pathlib import Path
 import sys
+import tempfile
 
 import agentdojo_protocol as protocol
 import paired_regression as pr
@@ -376,14 +380,101 @@ def write_controls(out_dir: Path):
     return report
 
 
+EVIDENCE = REPO / "docs/benchmarks/evidence/sou153"
+EVIDENCE_SCENARIOS = ("improved", "regressed", "incomplete_hard_cases_dropped", "all_unknown",
+                      "substituted_task_input")
+HAND_WRITTEN = {"README.md"}
+
+
+def write_evidence(out_dir: Path) -> list[str]:
+    """Write the committed evidence bundle; return problems (an empty list means every status matched).
+
+    Inputs shared by several controls are written once. The public example is referenced in place
+    (``docs/benchmarks/evidence/sou36/controlled``), not copied. Outputs carry file names, never
+    absolute paths, and no wall-clock time.
+    """
+    inputs = out_dir / "inputs"
+    inputs.mkdir(parents=True)
+    base_plan, base_run, by_name = scenarios()
+    shared_plan = encode(plan("candidate"))
+    for name, value in (("inputs.json", encode(bundle())), ("baseline-plan.json", encode(base_plan)),
+                        ("baseline-run.json", encode(base_run)), ("candidate-plan.json", shared_plan)):
+        (inputs / name).write_bytes(value)
+    problems = []
+    written = {shared_plan: inputs / "candidate-plan.json"}
+
+    def store(directory, name, value):
+        # Identical inputs are stored once; a later control reuses the earlier file.
+        if value not in written:
+            directory.mkdir(exist_ok=True)
+            written[value] = directory / name
+            written[value].write_bytes(value)
+        return written[value]
+
+    for name in EVIDENCE_SCENARIOS:
+        scenario = by_name[name]
+        directory = inputs / name
+        plan_path = store(directory, "candidate-plan.json", scenario["plan"])
+        run_path = store(directory, "candidate-run.json", scenario["run"])
+        unknowns = store(directory, "candidate-unknowns.json", scenario["unknowns"]) \
+            if scenario["unknowns"] is not None else None
+        result, code = pr.compare(inputs / "baseline-plan.json", inputs / "baseline-run.json", plan_path,
+                                  run_path, inputs / "inputs.json", candidate_unknowns=unknowns)
+        if (code, result["comparability"]["status"]) != (scenario["expected_exit"], scenario["expected_status"]):
+            problems.append(f"{name}: exit {code} {result['comparability']['status']}")
+        pr.write_result(out_dir / "results" / name, result)
+    result, code = pr.compare(PUBLIC / "plan.json", PUBLIC / "development-run.json",
+                              PUBLIC / "plan.json", PUBLIC / "development-run.json")
+    if code != pr.EXIT_NON_COMPARABLE:
+        problems.append(f"public_identity_no_change: exit {code}")
+    pr.write_result(out_dir / "results" / "public_identity_no_change", result)
+    files = sorted(path for path in out_dir.rglob("*") if path.is_file())
+    sums = "".join(f"{protocol.digest(path.read_bytes())}  {path.relative_to(out_dir).as_posix()}\n" for path in files)
+    (out_dir / "SHA256SUMS").write_text(sums, encoding="utf-8", newline="\n")
+    return problems
+
+
+def generated_files(directory: Path) -> dict:
+    return {path.relative_to(directory).as_posix(): path.read_bytes() for path in sorted(directory.rglob("*"))
+            if path.is_file() and path.relative_to(directory).as_posix() not in HAND_WRITTEN}
+
+
+def check_evidence(directory: Path) -> list[str]:
+    """Regenerate the bundle in a temporary directory and compare every generated file byte for byte."""
+    with tempfile.TemporaryDirectory() as temporary:
+        fresh = Path(temporary) / "sou153"
+        problems = write_evidence(fresh)
+        expected, actual = generated_files(fresh), generated_files(directory)
+    for name in sorted(set(expected) | set(actual)):
+        if name not in actual:
+            problems.append(f"missing from the bundle: {name}")
+        elif name not in expected:
+            problems.append(f"not produced by regeneration: {name}")
+        elif expected[name] != actual[name]:
+            problems.append(f"differs from regeneration: {name}")
+    return problems
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--out-dir", required=True, help="new directory for controls and results")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--out-dir", help="new directory for every control and its results")
+    mode.add_argument("--write-evidence", help="new directory for the committed evidence bundle")
+    mode.add_argument("--check-evidence", nargs="?", const=str(EVIDENCE),
+                      help="regenerate the evidence bundle and compare it byte for byte (default: committed bundle)")
     args = parser.parse_args(argv)
-    out_dir = Path(args.out_dir)
+    if args.check_evidence:
+        problems = check_evidence(Path(args.check_evidence))
+        print("\n".join(problems) or f"evidence bundle reproduces byte for byte: {args.check_evidence}")
+        return 1 if problems else 0
+    out_dir = Path(args.out_dir or args.write_evidence)
     if out_dir.exists():
-        print("usage error: --out-dir must not exist", file=sys.stderr)
+        print("usage error: the output directory must not exist", file=sys.stderr)
         return pr.EXIT_USAGE
+    if args.write_evidence:
+        problems = write_evidence(out_dir)
+        print("\n".join(problems) or f"wrote evidence bundle {out_dir}")
+        return 1 if problems else 0
     report = write_controls(out_dir)
     for name, ok, code, status, codes, note in report:
         print(f"{'ok ' if ok else 'BAD'} {name:30} exit {code} {status:24} {codes or ''}  - {note}")

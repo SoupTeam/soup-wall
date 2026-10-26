@@ -2,8 +2,9 @@
 
 > **Status: checkpoint, not complete.** Implemented: the input contract, comparability, per-case
 > input binding, completeness, paired transitions, missing-outcome bounds, declared unknown
-> outcomes, CSV/Markdown output and controls. Pending: family-aware uncertainty, latency
-> distributions and a committed evidence bundle; see [remaining work](#remaining-work).
+> outcomes, CSV/Markdown output, controls and a reproducible
+> [evidence bundle](evidence/sou153/README.md). Pending: family-aware uncertainty and latency
+> distributions; see [remaining work](#remaining-work).
 > Phase 4 stays open.
 
 [`paired_regression.py`](../../scripts/benchmarks/paired_regression.py) compares two
@@ -40,10 +41,12 @@ The command writes these files and prints a one-line status:
 | 2 | Invalid or rejected inputs; no outcomes |
 | 3 | Usage error, for example a non-empty output directory |
 
-To reproduce every control:
+To reproduce every control, or to check the committed
+[checkpoint evidence bundle](evidence/sou153/README.md) byte for byte:
 
 ```powershell
 python scripts/benchmarks/paired_regression_controls.py --out-dir <new-directory>
+python scripts/benchmarks/paired_regression_controls.py --check-evidence
 python -m unittest discover -s scripts/benchmarks -p 'test_paired_regression.py' -v
 ```
 
@@ -300,7 +303,6 @@ consistently on both sides.
   justified sufficiency rule and its limitations.
 - **Latency.** Latency distributions and paired latency differences next to stopped,
   unknown and not-run counts.
-- **Evidence bundle.** A committed evidence bundle with a byte-for-byte reproduction check.
 - **Public data.** No public run has a source bundle or case manifest, so no public
   comparison is verified and no public semantic families are declared.
 - **Unknown outcomes.** These rely on the declared annotation contract. No existing

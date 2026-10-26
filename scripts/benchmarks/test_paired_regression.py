@@ -280,6 +280,11 @@ class InputBinding(Fixture):
         result, code = self.world(candidate_variant={"task_text": {controls.USER_TASKS[0]: "Do something else.\n"}})
         self.assertEqual(code, pr.EXIT_NON_COMPARABLE)
         self.assertTrue({"upstream_mismatch", "input_binding_failed"} <= self.codes(result))
+        links = result["comparability"]["input_binding"]["links"]
+        # A manifest is only bound to a run whose source inventory it reproduces.
+        self.assertEqual((links["source_to_inventory"]["status"], links["case_semantic_input"]["status"]),
+                         ("mismatch", "mismatch"))
+        self.assertIn("candidate", links["case_semantic_input"]["problems"])
 
     def test_substituted_expected_label_fails_even_when_source_is_self_consistent(self):
         case_id = controls._case(2, True)
@@ -519,6 +524,84 @@ class Outputs(Fixture):
         directory = self.temp / "out" / "results" / "missing_case"
         self.assertFalse((directory / "units.csv").exists())
         self.assertIn("case_missing_in_candidate", (directory / "report.md").read_text(encoding="utf-8"))
+
+
+class EvidenceBundle(unittest.TestCase):
+    """The committed docs/benchmarks/evidence/sou153 bundle."""
+
+    def results(self):
+        for directory in sorted((controls.EVIDENCE / "results").iterdir()):
+            result = json.loads((directory / "comparison.json").read_text(encoding="utf-8"))
+            report = (directory / "report.md").read_text(encoding="utf-8")
+            yield directory, result, report
+
+    def test_committed_bundle_reproduces_byte_for_byte(self):
+        self.assertEqual(controls.check_evidence(controls.EVIDENCE), [])
+
+    def test_checksums_cover_every_generated_file(self):
+        listed = {line.split("  ", 1)[1] for line in
+                  (controls.EVIDENCE / "SHA256SUMS").read_text(encoding="utf-8").splitlines()}
+        self.assertEqual(listed, set(controls.generated_files(controls.EVIDENCE)) - {"SHA256SUMS"})
+
+    def test_markdown_states_the_json_statuses_and_denominators(self):
+        for directory, result, report in self.results():
+            with self.subTest(result=directory.name):
+                for label, value in (("Input validity", result["input_validity"]["status"]),
+                                     ("Comparability", result["comparability"]["status"]),
+                                     ("Completeness", result["completeness"]["status"]),
+                                     ("Unknown outcomes", result["unknown"]["availability"])):
+                    self.assertIn(f"| {label} | {value} |", report)
+                for role in ("baseline", "candidate"):
+                    for domain, values in result["completeness"].get(role, {}).items():
+                        row = f"| {domain} | " + " | ".join(str(values[key]) for key in (
+                            "planned", "attempted", "evaluable", "unknown", "incomplete", "not_run")) + " |"
+                        self.assertIn(row, report)
+                for metric in (result["outcomes"] or {}).values():
+                    if isinstance(metric, dict) and "denominators" in metric:
+                        self.assertIn(f"| {metric['metric']} ({metric['better']} is better) | "
+                                      f"{metric['denominators']['planned']} / {metric['paired_conditional']['n']} |",
+                                      report)
+
+    def test_csv_matches_json_and_never_shows_missing_outcomes_as_results(self):
+        import csv as csv_module
+        for directory, result, _ in self.results():
+            path = directory / "units.csv"
+            if not result["units"]:
+                self.assertFalse(path.exists())
+                continue
+            with self.subTest(result=directory.name):
+                rows = list(csv_module.DictReader(path.open(encoding="utf-8", newline="")))
+                self.assertEqual(len(rows), len(result["units"]))
+                for row, unit in zip(rows, result["units"]):
+                    for role in ("baseline", "candidate"):
+                        self.assertEqual(row[f"{role}_status"], unit[role]["status"])
+                        if unit[role]["status"] != "evaluable":
+                            self.assertEqual((row[f"{role}_utility"], row[f"{role}_injection_success"]), ("", ""))
+                    if "evaluable" not in (unit["baseline"]["status"], unit["candidate"]["status"]) or \
+                            unit["baseline"]["status"] != unit["candidate"]["status"]:
+                        transition = row["security_transition"] or row["utility_transition"]
+                        self.assertEqual(transition, "not_paired")
+                for name, field in (("security", "security_transition"), ("utility", "utility_transition")):
+                    counts = Counter(row[field] for row in rows)
+                    transitions = result["outcomes"][name]["transitions"]
+                    self.assertEqual((counts["improved"], counts["regressed"]),
+                                     (transitions["improved"], transitions["regressed"]))
+
+    def test_evidence_statuses_and_timeouts(self):
+        statuses = {directory.name: (result["comparability"]["status"], result["completeness"]["status"])
+                    for directory, result, _ in self.results()}
+        self.assertEqual(statuses, {
+            "all_unknown": ("conditionally_comparable", "partial"),
+            "improved": ("verified_comparable", "complete"),
+            "incomplete_hard_cases_dropped": ("verified_comparable", "partial"),
+            "public_identity_no_change": ("non_comparable", "per_side_only"),
+            "regressed": ("verified_comparable", "complete"),
+            "substituted_task_input": ("non_comparable", "per_side_only")})
+        for directory, result, report in self.results():
+            for values in result["completeness"].get("failures", {}).values():
+                self.assertIsNone(values["timeouts"]["count"])
+            if result["completeness"].get("failures"):
+                self.assertIn("not available (undistinguished)", report)
 
 
 class Command(Fixture):
