@@ -17,6 +17,7 @@ pub(crate) mod linux_budget;
 pub mod linux_owner;
 pub mod manifest;
 mod native_child;
+mod original_create;
 pub mod profile_author;
 pub mod profile_lifecycle;
 pub mod profile_upgrade;
@@ -27,4 +28,5 @@ pub mod server_sandbox;
 #[cfg(unix)]
 mod stdio;
 pub mod store;
+pub(crate) mod verified_git;
 pub(crate) mod windows_budget;

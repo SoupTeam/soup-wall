@@ -1,0 +1,130 @@
+{
+  "actual_prepare_and_main_exercised": true,
+  "attempts": [
+    {
+      "elapsed_seconds": 0.08,
+      "exit_code": 71,
+      "label": "review-installer-privacy-before",
+      "log_sha256": "d34a4e4359a4dc36526cf5b363da32f7b7594a3a09eea17cbdfd6425b052d93e",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "a26e40f18037dcc342c5f15f91e65d261af4ea91219f3cc7877f32f3f210c012",
+      "source_after_sha256": "dbedbd19c38466350e0dd92c02a959074a093c178c7c18ff226e25e30324207b",
+      "source_files_sha256": "dbedbd19c38466350e0dd92c02a959074a093c178c7c18ff226e25e30324207b",
+      "source_read_only": true,
+      "status": "failed",
+      "writes": "isolated-scratch-only"
+    },
+    {
+      "elapsed_seconds": 0.46,
+      "exit_code": 1,
+      "label": "review-installer-privacy-before",
+      "log_sha256": "cf767f5d822d6f685acd03bfd5a93642bbe067de36822ea1de9f498690103010",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "bafe4f80a6a65b5a941911475a74e14431e93e4ffcbea0fcd06f975395643c70",
+      "source_after_sha256": "dbedbd19c38466350e0dd92c02a959074a093c178c7c18ff226e25e30324207b",
+      "source_files_sha256": "dbedbd19c38466350e0dd92c02a959074a093c178c7c18ff226e25e30324207b",
+      "source_read_only": true,
+      "status": "failed",
+      "writes": "isolated-scratch-only"
+    },
+    {
+      "elapsed_seconds": 0.69,
+      "exit_code": 0,
+      "label": "review-installer-privacy-after",
+      "log_sha256": "69b4a3ab89e5ff007cd83f346030fba3d4ca81dcd683805ae77435eeedfc8c86",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "33bbaf4ff1ed5be29a171db65399ebc6078314111e6c47ef9019ba94536ed7e1",
+      "source_after_sha256": "846bff70c1e9ae667a746b5694dda8147509e96ce812151a6242ad3bc6eded65",
+      "source_files_sha256": "846bff70c1e9ae667a746b5694dda8147509e96ce812151a6242ad3bc6eded65",
+      "source_read_only": true,
+      "status": "passed",
+      "writes": "isolated-scratch-only"
+    },
+    {
+      "elapsed_seconds": 50.65,
+      "exit_code": 0,
+      "label": "review-installer-privacy-full-python",
+      "log_sha256": "0d6d351a526121ab4b801f3e07bbdba84b0d1864691945a4e5aad468933c11e4",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "29c1293f77bc9206be3ecd03e09fad14cb99fd1dd76a6b6bb4d1247a316dda57",
+      "source_after_sha256": "846bff70c1e9ae667a746b5694dda8147509e96ce812151a6242ad3bc6eded65",
+      "source_files_sha256": "846bff70c1e9ae667a746b5694dda8147509e96ce812151a6242ad3bc6eded65",
+      "source_read_only": true,
+      "status": "passed",
+      "writes": "isolated-scratch-only"
+    },
+    {
+      "elapsed_seconds": 0.42,
+      "exit_code": 0,
+      "label": "review-installer-privacy-clippy",
+      "log_sha256": "2461b00c8697c4189b2de92ca6fb05b5d72273c78a0a47b1ce4e83ccca077b70",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "d1aa066f13ca97a7a8fb202d0497f1783674d87fce5f750b66ee272f0ed5c8fe",
+      "source_after_sha256": "846bff70c1e9ae667a746b5694dda8147509e96ce812151a6242ad3bc6eded65",
+      "source_files_sha256": "846bff70c1e9ae667a746b5694dda8147509e96ce812151a6242ad3bc6eded65",
+      "source_read_only": true,
+      "status": "passed",
+      "writes": "isolated-scratch-only"
+    },
+    {
+      "elapsed_seconds": 1.19,
+      "exit_code": 0,
+      "label": "review-installer-privacy-fmt",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "record_sha256": "128ddbeef5c653e75201435fd67ab145fdfcce5d09f49cf24822a2a59d8cffc8",
+      "source_after_sha256": "846bff70c1e9ae667a746b5694dda8147509e96ce812151a6242ad3bc6eded65",
+      "source_files_sha256": "846bff70c1e9ae667a746b5694dda8147509e96ce812151a6242ad3bc6eded65",
+      "source_read_only": true,
+      "status": "passed",
+      "writes": "isolated-scratch-only"
+    }
+  ],
+  "files_sha256": {
+    "scripts/prepare-installed-pilot.py": "365fa1c704ff4e49df447ef8977c4d5255a838c9404243e6f25dd08145963f2c",
+    "scripts/tests/test_prepare_installed_pilot.py": "9d66157fc6f2cc96034b8a1c22dd74788bc0f47b8f775f32232746d8ed6626ac"
+  },
+  "final_shared_ci_admission": "not-run-TL-owned",
+  "focused_preparation_tests": 17,
+  "format": "sou142143-installer-failure-privacy/1",
+  "full_shared_acceptance": false,
+  "installer_log_read_for_error_formatting": false,
+  "installer_setup_mocked": true,
+  "issue": "SOU-142",
+  "log_fixture_bytes_over": 2097152,
+  "log_fixture_contains_invalid_utf8": true,
+  "log_reference": "relative-to-preparation-output-generated-generation",
+  "native_qualification_rerun": false,
+  "platform_skips_unavailable": 85,
+  "prior_implementation_red_witness": "SOU-142 shared preparation failure handler",
+  "privacy_regression_methods": 2,
+  "privacy_scenarios": [
+    "filesystem-exit-9",
+    "git-exit-9",
+    "filesystem-signal-15",
+    "git-signal-15",
+    "filesystem-log-read-guard",
+    "git-log-read-guard"
+  ],
+  "private_log_retained_mode": "0600",
+  "public_failure_fields": [
+    "status",
+    "reason",
+    "exit_code",
+    "private_log"
+  ],
+  "raw_logs_or_commands_exported": false,
+  "reason_codes": [
+    "filesystem_installer_failed",
+    "git_installer_failed"
+  ],
+  "reviewed_previous_head": "e5b39db73128fe6574c0d7a6d29b0b8c9a50cce7",
+  "status": "local-controls-passed",
+  "supported_python_tests_run": 1453
+}

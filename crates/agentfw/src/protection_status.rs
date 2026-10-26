@@ -568,6 +568,14 @@ pub struct QueryArgs {
     pub expect_instance: Option<String>,
     #[arg(long)]
     pub expect_policy_sha256: Option<String>,
+    /// Expect the active policy to be this selected policy file, compared by
+    /// the same parsed `agent-policy-json/1` digest the daemon reports.
+    #[arg(long)]
+    pub expect_policy_file: Option<std::path::PathBuf>,
+    /// Print only the `agent-policy-json/1` digest of `--expect-policy-file`
+    /// and exit; no daemon, home or token is read.
+    #[arg(long, requires = "expect_policy_file")]
+    pub selected_policy_digest: bool,
     #[arg(long)]
     pub expect_registry_sha256: Option<String>,
     #[arg(long)]
@@ -607,7 +615,29 @@ fn read_limited(path: &std::path::Path, limit: u64) -> std::io::Result<Vec<u8>> 
     Ok(bytes)
 }
 
+/// The digest a daemon reports for this policy file once loaded: the accepted
+/// parser, then the versioned `agent-policy-json/1` serialization.
+fn selected_policy_digest(path: &std::path::Path) -> Result<String, &'static str> {
+    let bytes = read_limited(path, 1024 * 1024).map_err(|_| "status_policy_file_unavailable")?;
+    let text = std::str::from_utf8(&bytes).map_err(|_| "status_policy_file_invalid")?;
+    let policy = soup_wall_agent::AgentPolicySet::from_yaml(text)
+        .map_err(|_| "status_policy_file_invalid")?;
+    Ok(digest(&policy))
+}
+
 fn cli_query(args: &QueryArgs) -> Result<Snapshot, &'static str> {
+    // Resolve the selected policy identity first; nothing is contacted on error.
+    let mut policy_sha256 = args.expect_policy_sha256.clone();
+    if let Some(path) = &args.expect_policy_file {
+        let selected = selected_policy_digest(path)?;
+        if policy_sha256
+            .as_ref()
+            .is_some_and(|given| *given != selected)
+        {
+            return Err("status_policy_expectation_conflict");
+        }
+        policy_sha256 = Some(selected);
+    }
     let home = args
         .home
         .clone()
@@ -632,7 +662,7 @@ fn cli_query(args: &QueryArgs) -> Result<Snapshot, &'static str> {
     }
     let expected = Expectations {
         instance: args.expect_instance.clone(),
-        policy_sha256: args.expect_policy_sha256.clone(),
+        policy_sha256,
         registry_sha256: args.expect_registry_sha256.clone(),
         binary_sha256: args.expect_binary_sha256.clone(),
         config_sha256: Some(config_digest(&config)),
@@ -650,6 +680,25 @@ fn cli_query(args: &QueryArgs) -> Result<Snapshot, &'static str> {
 }
 
 pub fn run_cli(args: QueryArgs) -> i32 {
+    if args.selected_policy_digest {
+        let digest = match args.expect_policy_file.as_deref() {
+            Some(path) => selected_policy_digest(path),
+            None => Err("status_policy_file_unavailable"),
+        };
+        return match digest {
+            Ok(sha256) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"digest_format":"agent-policy-json/1","sha256":sha256})
+                );
+                0
+            }
+            Err(code) => {
+                println!("{}", serde_json::json!({"error_code":code}));
+                1
+            }
+        };
+    }
     match cli_query(&args) {
         Ok(value) => {
             let wrong_mode = args.require_enforce && value.mode != Mode::Enforcing;
@@ -672,5 +721,64 @@ pub fn run_cli(args: QueryArgs) -> i32 {
             );
             1
         }
+    }
+}
+
+#[cfg(test)]
+mod expected_policy_tests {
+    use super::*;
+
+    #[test]
+    fn selected_policy_file_uses_the_reported_parsed_digest_not_file_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("policy.yaml");
+        let yaml = "agent_policies:\n  - name: deny-write\n    when: { action_class: side_effecting }\n    action: deny\ndefault: allow\n";
+        std::fs::write(&path, yaml).unwrap();
+        let loaded = soup_wall_agent::AgentPolicySet::from_yaml(yaml).unwrap();
+        let digest_from_file = selected_policy_digest(&path).unwrap();
+        // The daemon reports digest(policy) for the set it loaded.
+        assert_eq!(digest_from_file, digest(&loaded));
+        assert_ne!(
+            digest_from_file,
+            format!("{:x}", Sha256::digest(yaml.as_bytes()))
+        );
+        // Same meaning, different bytes: same identity.
+        std::fs::write(&path, format!("# comment\n{yaml}")).unwrap();
+        assert_eq!(selected_policy_digest(&path).unwrap(), digest(&loaded));
+        // A different policy is a different identity.
+        std::fs::write(&path, "agent_policies: []\ndefault: allow\n").unwrap();
+        assert_ne!(selected_policy_digest(&path).unwrap(), digest(&loaded));
+        std::fs::write(&path, "not: [valid").unwrap();
+        assert_eq!(
+            selected_policy_digest(&path),
+            Err("status_policy_file_invalid")
+        );
+        assert_eq!(
+            selected_policy_digest(&dir.path().join("missing.yaml")),
+            Err("status_policy_file_unavailable")
+        );
+    }
+
+    #[test]
+    fn explicit_policy_expectation_must_agree_with_the_selected_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("policy.yaml");
+        std::fs::write(&path, "default: allow\n").unwrap();
+        let args = QueryArgs {
+            home: Some(dir.path().join("absent-home")),
+            query_only: true,
+            require_enforce: true,
+            expect_instance: None,
+            expect_policy_sha256: Some("1".repeat(64)),
+            expect_policy_file: Some(path),
+            selected_policy_digest: false,
+            expect_registry_sha256: None,
+            expect_binary_sha256: None,
+            timeout_seconds: 1,
+        };
+        assert_eq!(
+            cli_query(&args).err(),
+            Some("status_policy_expectation_conflict")
+        );
     }
 }

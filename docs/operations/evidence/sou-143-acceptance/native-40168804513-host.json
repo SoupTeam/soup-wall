@@ -1,0 +1,612 @@
+{
+  "cases": [
+    {
+      "case": "plan",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "36a37a340db93a1f4794e29c9f6e8e06bb67ae887bf745aa73587496eebc11a2"
+    },
+    {
+      "case": "occupied-port",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "0bcef571235fd6c05a7b11ca401ca34f9017cc2fa92d7676fedbd0c675fc03ed"
+    },
+    {
+      "case": "stale-source",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "9fee519fdba259971462f83af1cf330f7b7efd1dbf2036279083b7ca14a9aa45"
+    },
+    {
+      "case": "changed-selection",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "b03f8e7627feb7c06f4c779b155fe373d74b52a1c20f2453c3ca37c9a2f0518b"
+    },
+    {
+      "case": "provider-unavailable",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "ae737af59b3afa62d44c1f2c291b5f485d58ce92a73bc59fd294226bdcbbae9d"
+    },
+    {
+      "case": "provider-reject",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 38,
+        "observed_process_count": 39,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "first-request-authentication-refusal",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": true,
+        "private_log_bytes_checked": 9772,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 10278,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 5,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "cf34b1c607845497bd847a0cbf9e5d1800336d3297dfc17b548a055b2e7c0e0a"
+    },
+    {
+      "case": "useful-refusal",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 40,
+        "observed_process_count": 41,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 4,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 14173,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 14164,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 4,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 4,
+          "other": 44
+        },
+        "successful_private_log_writes": 6,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "7e747ea3dc6e2d81b130bb325115a3ecca871be3aa289af45d6d95dc73e71acd"
+    },
+    {
+      "case": "ask",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 44,
+        "observed_process_count": 45,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 4,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 14587,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 24064,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 7,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 6,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "2b16e874f4722ef5a4342dd27a4bfbba51304fef43a616ea7e78a192200a3755"
+    },
+    {
+      "case": "default",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 36,
+        "observed_process_count": 37,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 3,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 12458,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 13265,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 4,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 5,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "10cfa230b561d6b3dbf28b8984de908e5faa5273a3d8424dceac393958d9cf1e"
+    },
+    {
+      "case": "cancel",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 40,
+        "observed_process_count": 41,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 2589,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 10231,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 2,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "c6177c77f6f99f64b60a60126df1f481a9ea99fa071efde83598d53381cb223b"
+    },
+    {
+      "case": "daemon-loss",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 38,
+        "observed_process_count": 39,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 2594,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 9069,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 2,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "8e45f1debfe3a80233d0d6f2cde1a591a93d7d6be204f3a8682be64548c03d8b"
+    },
+    {
+      "case": "host-crash",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 38,
+        "observed_process_count": 39,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 7600,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 10258,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 4,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "90975e5612e8079cdc8eaa63a22744c7503dc4175a0a54d5447eb0afc3d205f8"
+    },
+    {
+      "case": "timeout",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 40,
+        "observed_process_count": 41,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": false,
+        "deadline_before_first_request_observed": true,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 0,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 511,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 9035,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 1,
+          "other": 44
+        },
+        "successful_private_log_writes": 2,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "690a7ed561af12440e70ed71c74d86ed8ebbedd2ab577e7e4fa239b53a106f23"
+    }
+  ],
+  "emergency_stop": [
+    {
+      "case": "two-prepared-runs",
+      "forgery_controls_passed": 5,
+      "future_dispatches": 0,
+      "future_kernel_reads": 0,
+      "peer": {
+        "observed_owned_role_counts": {
+          "collector": 2,
+          "host": 1,
+          "owner": 2,
+          "pid1": 2
+        },
+        "process_cleanup": {
+          "all_stopped": true,
+          "descendant_count": 54,
+          "observed_process_count": 55,
+          "remaining_count": 0
+        },
+        "provider": {
+          "all_selected_values_and_json_forms_absent": true,
+          "all_seven_inputs_in_intended_host": true,
+          "authenticated_owned_request_observed": true,
+          "deadline_before_first_request_observed": false,
+          "intended_host_processes": 1,
+          "observation_stage": "original-server-runtime",
+          "owned_loopback_requests": 3,
+          "owned_rejection_redaction_observed": false,
+          "private_log_bytes_checked": 12957,
+          "provider_values_in_argv": 0,
+          "raw_environment_log_and_artifact_contents_exported": false,
+          "retained_bytes_checked": 20725,
+          "retained_entries_checked": 10,
+          "successful_exec_counts": {
+            "classifier": 4,
+            "collector": 2,
+            "daemon": 1,
+            "diagnostic": 1,
+            "entry": 1,
+            "host": 1,
+            "launcher": 1,
+            "original": 4,
+            "other": 44
+          },
+          "successful_private_log_writes": 5,
+          "unrelated_provider_values": 0
+        },
+        "trace_sha256": "4a4caa7a888f240436a889d9372720648349d998dfb789846f84c198826808c0"
+      },
+      "peer_original_dispatches_after_stop": 2,
+      "peer_useful_after_stop": true,
+      "selected": {
+        "observed_owned_role_counts": {
+          "collector": 2,
+          "host": 1,
+          "owner": 2,
+          "pid1": 2
+        },
+        "process_cleanup": {
+          "all_stopped": true,
+          "descendant_count": 55,
+          "observed_process_count": 56,
+          "remaining_count": 0
+        },
+        "provider": {
+          "all_selected_values_and_json_forms_absent": true,
+          "all_seven_inputs_in_intended_host": true,
+          "authenticated_owned_request_observed": true,
+          "deadline_before_first_request_observed": false,
+          "intended_host_processes": 1,
+          "observation_stage": "original-server-runtime",
+          "owned_loopback_requests": 3,
+          "owned_rejection_redaction_observed": false,
+          "private_log_bytes_checked": 10991,
+          "provider_values_in_argv": 0,
+          "raw_environment_log_and_artifact_contents_exported": false,
+          "retained_bytes_checked": 52959,
+          "retained_entries_checked": 29,
+          "successful_exec_counts": {
+            "classifier": 4,
+            "collector": 2,
+            "daemon": 1,
+            "diagnostic": 2,
+            "entry": 1,
+            "host": 1,
+            "launcher": 1,
+            "original": 4,
+            "other": 44
+          },
+          "successful_private_log_writes": 5,
+          "unrelated_provider_values": 0
+        },
+        "trace_sha256": "57044c7265d5ed47bd570889ff50eaf3e0d72175c8b429a191ba3352397f7a81"
+      },
+      "status": "passed",
+      "unrelated_listener_and_process_preserved": true
+    },
+    {
+      "case": "interrupted-stop",
+      "future_dispatches": 0,
+      "observed_owned_role_counts": {
+        "collector": 2,
+        "host": 1,
+        "owner": 2,
+        "pid1": 2
+      },
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 55,
+        "observed_process_count": 56,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 3,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 10951,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 49595,
+        "retained_entries_checked": 31,
+        "successful_exec_counts": {
+          "classifier": 4,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 2,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 4,
+          "other": 44
+        },
+        "successful_private_log_writes": 5,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "7705335ec583965103945c39b3abd129261eb83df183959fb98fb75bd2b57cb1"
+    },
+    {
+      "case": "daemon-loss-stop",
+      "future_dispatches": 0,
+      "observed_owned_role_counts": {
+        "collector": 2,
+        "host": 1,
+        "owner": 2,
+        "pid1": 2
+      },
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 53,
+        "observed_process_count": 54,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 3,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 5919,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 43018,
+        "retained_entries_checked": 29,
+        "successful_exec_counts": {
+          "classifier": 4,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 4,
+          "other": 44
+        },
+        "successful_private_log_writes": 3,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "9ee904587965c163201ba0e9be0cb569baed06294f1efdda983e4b9b891f8116"
+    },
+    {
+      "case": "unconfirmed-namespace-stop",
+      "future_dispatches": 0,
+      "observed_owned_role_counts": {
+        "collector": 2,
+        "host": 1,
+        "owner": 2,
+        "pid1": 2
+      },
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 54,
+        "observed_process_count": 55,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "deadline_before_first_request_observed": false,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 3,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 5999,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 44724,
+        "retained_entries_checked": 29,
+        "successful_exec_counts": {
+          "classifier": 4,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 4,
+          "other": 44
+        },
+        "successful_private_log_writes": 3,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "2aebd18fe5550088ebd2ce75124305b32c0e215f64da4e3970df6158847ce25c"
+    }
+  ],
+  "format": "sou143-prepared-host-public/1",
+  "original_report_status": "passed",
+  "paid_api_calls": 0,
+  "private_report_sha256": "56bf2c31cb0326892384ab98d175d0b2f8bc1822a943d03382085b44ee1afb6c",
+  "provider": "owned-scripted-loopback",
+  "qualifier_exit_code": 0,
+  "raw_environments_or_logs_exported": false,
+  "raw_process_metadata_exported": false,
+  "selected_sha256": {
+    "agentfw": "bd28286f7ae87e082266cbc69918e610539e9cdd788941281548d9495913b524",
+    "bwrap": "3970ab274258223a8a42fca4181c449bcd1653acb6ed27ff249fa3db807696c2",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "7ce841b8068a448434d17a6214863048380856cf4058cf80980448394e30b05e",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "22ce08923328e6342282c8103d6dc4a87f593db444ef52895552ba9dba6b16eb",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "4170e6b43db976cc0b35668175b13e7971546e3e55bb297f1792574be0eded1f"
+  },
+  "source": {
+    "commit": "1dcfffb7876c9687f5c301a93fd7da5ed7292526",
+    "files_sha256": "3c321eefe4bacabd27fa9ff7c7d1383cfb63a9d2a04c14208d0d81dc64e1b995"
+  },
+  "source_commit": "1dcfffb7876c9687f5c301a93fd7da5ed7292526",
+  "status": "passed",
+  "verification_errors": [],
+  "workflow_run": 40168804513
+}

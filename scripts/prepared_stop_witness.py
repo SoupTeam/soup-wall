@@ -152,7 +152,8 @@ class Provider:
 
 
 class Prepared:
-    def __init__(self, context, root, hold_after=True, defer_ready=False):
+    def __init__(self, context, root, hold_after=True, defer_ready=False, trace_string_bytes=1048576,
+                 trace_seccomp=False):
         self.c, self.root = context, root
         root.mkdir(mode=0o700)
         self.state = root / "state"
@@ -166,11 +167,31 @@ class Prepared:
         self.env = dict(context.env, ANTHROPIC_BASE_URL=self.model.url,
             ANTHROPIC_API_KEY="owned-loopback-only", HTTP_PROXY="http://127.0.0.1:9",
             HTTPS_PROXY="http://127.0.0.1:9", NO_PROXY="127.0.0.1,localhost,::1")
-        command = [str(context.args.strace), "-f", "-qq", "-s", "1048576", "-e",
-            "trace=execve,openat,write,writev,kill", "-o", str(self.trace), sys.executable, "-B",
+        require(type(trace_string_bytes) is int and trace_string_bytes in (4096, 1048576),
+                "stop_trace_string_bound_invalid")
+        command = [str(context.args.strace), "-f", "-qq", "-s", str(trace_string_bytes), "-e",
+            ("trace=execve,openat,close,write,writev,clone,clone3,vfork,fork,kill"
+             if getattr(context.args, "verify_provider_isolation", False) else "trace=execve,openat,write,writev,kill"),
+            "-o", str(self.trace), sys.executable, "-B",
             str(context.source / "scripts/pilot-run.py"), "--run", "--selection",
             str(context.args.selection), "--expected-commit", context.args.expected_commit,
             "--state-root", str(self.state), "--timeout-seconds", "90"]
+        require(type(trace_seccomp) is bool, "stop_trace_filter_invalid")
+        if trace_seccomp:
+            command.insert(1, '--seccomp-bpf')
+        self.budget_path = getattr(context.args, "linux_budget", None)
+        if self.budget_path is not None:
+            if root.name == "peer":
+                self.budget_path = getattr(context.args, "linux_budget_peer", None)
+                require(self.budget_path is not None, "stop_independent_budget_root_required")
+            command += ["--linux-budget", str(self.budget_path)]
+        self.provider_values = self.protocol = None
+        if getattr(context.args, "verify_provider_isolation", False):
+            import pilot_provider_witness
+            self.provider_values = pilot_provider_witness.inputs(self.model.url, root)
+            self.env.update(self.provider_values)
+            self.protocol = pilot_provider_witness.ProtocolEvidence(self.model, self.provider_values)
+            command.insert(1, "-v")
         self.out = (root / "stdout.private").open("wb")
         self.err = (root / "stderr.private").open("wb")
         self.process = subprocess.Popen(command, cwd=root, env=self.env, stdout=self.out,
@@ -217,7 +238,7 @@ class Prepared:
                 "--run", self.run["run_id"], "stop"]
 
     def operator(self, success, status="stopped"):
-        result = subprocess.run(self.operator_command(), cwd=self.root, env=self.env,
+        result = subprocess.run(self.operator_command(), cwd=self.root, env=self.c.env,
                                 stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
         require((result.returncode == 0) == success, "stop_operator_outcome_mismatch")
         require(len(result.stdout) <= 4096, "stop_operator_output_bound")
@@ -350,10 +371,36 @@ class Prepared:
                     len(list(self.state.iterdir())) == 1,
                     "stop_peer_owned_state_survived")
             self.c.run.AUDIT.verify_cleanup(Path(outcome["audit"]["directory"]))
-        return {"entry_status": outcome["status"], "entry_reason": outcome.get("reason"),
+        routing = logs = artifacts = None
+        if self.provider_values is not None:
+            import pilot_provider_witness
+            trace_text = self.trace.read_text()
+            routing = pilot_provider_witness.observe(trace_text, self.c.paths,
+                self.provider_values, self.c.launch.normalized_syscalls)
+            logs = pilot_provider_witness.private_log_writes(trace_text, self.home.parent,
+                self.record["supervisor_pid"], self.provider_values, self.c.launch.normalized_syscalls)
+            artifacts = pilot_provider_witness.retained_artifacts(self.root, self.provider_values)
+        result = {"provider_routing": routing,
+                "provider_private_logs": logs, "provider_retained_artifacts": artifacts,
+                "provider_protocol": self.protocol.finish() if self.protocol is not None else None, "entry_status": outcome["status"], "entry_reason": outcome.get("reason"),
                 "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                 "observed_owned_roles": list(self.identities.values()),
                 "trace_sha256": self.c.base.sha(self.trace)}
+        if self.budget_path is not None:
+            selected = json.loads(self.budget_path.read_bytes())
+            expected = hashlib.sha256(json.dumps(selected, sort_keys=True,
+                separators=(",", ":")).encode()).hexdigest()
+            budget = outcome.get("resource_budget", {})
+            require(budget.get("format") == "sw-prepared-pilot-budget/1"
+                    and budget.get("budget_sha256") == expected
+                    and budget.get("observed_children", 0) >= 2,
+                    "stop_bound_budget_observations_missing")
+            if failure is None:
+                require(budget.get("status") == "closed-enforced"
+                        and budget.get("failed_children") == budget.get("unresolved_children") == 0,
+                        "stop_budget_cleanup_unverified")
+            result["resource_budget"] = budget
+        return result
 
     def diagnostic(self):
         value = {"provider_request_count": len(self.model.requests),
@@ -366,6 +413,11 @@ class Prepared:
             outcome = json.loads((self.root / "stdout.private").read_text().splitlines()[-1])
             value["entry_status"] = outcome.get("status")
             value["entry_reason"] = outcome.get("reason")
+            budget = outcome.get('resource_budget')
+            if isinstance(budget, dict):
+                value['budget_status'] = budget.get('status')
+                value['budget_failed_children'] = budget.get('failed_children')
+                value['budget_unresolved_children'] = budget.get('unresolved_children')
         except (OSError, ValueError, IndexError):
             value["entry_report"] = "not_published"
         if self.trace.exists():
@@ -522,7 +574,7 @@ def lifecycle(context, private, report, case):
             pilot.signal(launcher, signal.SIGSTOP); paused.append(launcher)
             with (private / "operator.stdout.private").open("wb") as out, (
                     private / "operator.stderr.private").open("wb") as err:
-                operator = subprocess.Popen(pilot.operator_command(), cwd=private, env=pilot.env,
+                operator = subprocess.Popen(pilot.operator_command(), cwd=private, env=context.env,
                     stdin=subprocess.DEVNULL, stdout=out, stderr=err, start_new_session=True)
                 until(lambda: pilot.manifest.with_name("stop.json").exists()
                       and pilot.receipt(False)["status"] == "revoked", "stop_revocation_not_durable", seconds=5)

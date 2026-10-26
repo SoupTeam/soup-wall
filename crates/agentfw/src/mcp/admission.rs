@@ -319,6 +319,10 @@ impl InvocationClassifier for FixtureTestDouble {
     fn source(&self) -> &'static str {
         "test-double/fixture-v1"
     }
+    fn revision(&self) -> Option<&str> {
+        // Identifies only this explicit synthetic classifier, not a real model.
+        Some("0092d562da04f992b185a8f57a3c3bd1e390b3a39d6730f8450b934f6ff24112")
+    }
     fn classify(&self, invocation: &Invocation) -> anyhow::Result<Classification> {
         let values: Vec<&str> = invocation
             .args
@@ -415,6 +419,8 @@ pub struct ClassifiedAssessment {
     pub ambiguous_or_unknown: bool,
     /// Selected read-only approval cannot rescue an empty or mixed assessment.
     pub known_read_only: bool,
+    /// Exact known write semantics; the installed create profile is still required.
+    pub known_create: bool,
 }
 
 impl ClassifiedAssessment {
@@ -423,6 +429,7 @@ impl ClassifiedAssessment {
             verdict: ProductionVerdict::Allow,
             ambiguous_or_unknown: false,
             known_read_only: true,
+            known_create: false,
         }
     }
 }
@@ -1003,6 +1010,7 @@ pub struct Collector<'a> {
     config: &'a AdmissionCfg,
     host_session: Option<String>,
     child_authority: Option<String>,
+    prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
     client: reqwest::Client,
     session: String,
     pub liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
@@ -1026,6 +1034,7 @@ impl<'a> Collector<'a> {
             config,
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
+            prepared_budget: None,
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
@@ -1185,6 +1194,7 @@ impl<'a> Collector<'a> {
                 verdict,
                 ambiguous_or_unknown,
                 known_read_only: !ambiguous_or_unknown && res.actions.as_slice() == ["read"],
+                known_create: !ambiguous_or_unknown && res.actions.as_slice() == ["write"],
             })
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
@@ -1232,11 +1242,154 @@ impl<'a> Collector<'a> {
         }
     }
 
+    async fn execute_original_git(
+        &self,
+        call_id: &Value,
+        binding: &Value,
+        profile: &crate::mcp::server_profile::ProfileConfig,
+    ) -> anyhow::Result<Value> {
+        ensure!(
+            !self.is_uncertain() && self.liveness.is_some(),
+            "daemon Git execution requires authenticated live collector"
+        );
+        ensure!(
+            self.prepared_budget.is_none(),
+            "daemon Git execution cannot add a process to a prepared budget"
+        );
+        let mut url = reqwest::Url::parse(&self.config.daemon_url)?;
+        url.set_path(crate::native::verified_git::ENDPOINT);
+        url.set_query(None);
+        url.set_fragment(None);
+        let body = json!({
+            "contract_version":crate::native::verified_git::CONTRACT_EXECUTE,
+            "registry_sha256":self.config.native.registry_sha256, "session_id":self.session,
+            "call_id":call_id, "binding_sha256":binding
+        });
+        let reply = self
+            .post_bounded(
+                url.as_str(),
+                &self.config.native.token,
+                &body,
+                crate::native::verified_git::MAX_RESPONSE,
+                true,
+            )
+            .await?;
+        keys(
+            &reply,
+            &[
+                "contract_version",
+                "profile_sha256",
+                "completed",
+                "receipt",
+                "frame",
+            ],
+        )?;
+        ensure!(
+            reply.as_object().is_some_and(|o| o.len() == 5)
+                && reply["contract_version"] == crate::native::verified_git::CONTRACT_EXECUTE
+                && reply["completed"].is_boolean()
+                && reply["profile_sha256"]
+                    == crate::native::canonical_digest(&serde_json::to_value(profile)?),
+            "daemon Git execution profile/correlation mismatch"
+        );
+        let receipt = &reply["receipt"];
+        keys(
+            receipt,
+            &[
+                "contract_version",
+                "registry_sha256",
+                "session_id",
+                "event",
+                "verdict",
+                "enforced",
+                "release",
+                "call_id",
+                "binding_sha256",
+                "content_sha256",
+                "reason_codes",
+                "managed_policy",
+                "instance_id",
+                "owner_token",
+            ],
+        )?;
+        let required = [
+            "contract_version",
+            "registry_sha256",
+            "session_id",
+            "event",
+            "verdict",
+            "enforced",
+            "release",
+            "call_id",
+            "binding_sha256",
+            "content_sha256",
+            "reason_codes",
+        ];
+        ensure!(
+            receipt
+                .as_object()
+                .is_some_and(|o| required.iter().all(|k| o.contains_key(*k)))
+                && receipt["contract_version"] == CONTRACT
+                && receipt["registry_sha256"] == self.config.native.registry_sha256
+                && receipt["session_id"] == self.session
+                && receipt["event"] == "result"
+                && receipt["enforced"] == true
+                && receipt["call_id"] == *call_id
+                && receipt["binding_sha256"] == *binding
+                && receipt["content_sha256"]
+                    .as_str()
+                    .is_some_and(crate::native::is_digest)
+                && receipt["reason_codes"]
+                    .as_array()
+                    .is_some_and(|codes| codes.len() <= 256
+                        && codes
+                            .iter()
+                            .all(|v| v.as_str().is_some_and(|s| s.len() <= 256))),
+            "daemon Git execution receipt mismatch"
+        );
+        let verdict = receipt["verdict"]
+            .as_str()
+            .context("execution verdict missing")?;
+        ensure!(
+            matches!(verdict, "allow" | "ask" | "deny")
+                && receipt["release"].as_bool() == Some(verdict == "allow"),
+            "daemon Git execution verdict inconsistent"
+        );
+        if verdict == "allow" {
+            let raw = reply["frame"]
+                .as_str()
+                .context("execution release missing frame")?;
+            ensure!(
+                raw.len() <= crate::mcp::server_profile::RESULT_FRAME_BYTES
+                    && receipt["content_sha256"] == sha(raw.as_bytes()),
+                "daemon Git execution content binding mismatch"
+            );
+        } else {
+            ensure!(
+                reply["frame"].is_null(),
+                "withheld execution leaked content"
+            );
+        }
+        Ok(reply)
+    }
+
     async fn post(&self, url: &str, token: &str, body: &Value) -> anyhow::Result<Value> {
+        self.post_bounded(url, token, body, 16 * 1024, url == self.config.daemon_url)
+            .await
+    }
+
+    async fn post_bounded(
+        &self,
+        url: &str,
+        token: &str,
+        body: &Value,
+        limit: usize,
+        native_identity: bool,
+    ) -> anyhow::Result<Value> {
         let mut request = self.client.post(url).bearer_auth(token).json(body);
         // Owner capabilities belong only to the native daemon, never the
         // separate manifest inspector or an MCP server.
-        if url == self.config.daemon_url {
+        if native_identity {
             request = self.bind_liveness_request(request).await?;
         }
         let response = request.send().await.context("MCP admission unavailable")?;
@@ -1246,7 +1399,7 @@ impl<'a> Collector<'a> {
         while let Some(chunk) = chunks.next().await {
             let chunk = chunk?;
             ensure!(
-                bytes.len() + chunk.len() <= 16 * 1024,
+                bytes.len() + chunk.len() <= limit,
                 "MCP admission response exceeds limit"
             );
             bytes.extend_from_slice(&chunk);
@@ -1254,12 +1407,34 @@ impl<'a> Collector<'a> {
         if let Some(limit) = DaemonSizeLimit::from_refusal(status, &bytes) {
             return Err(limit.into());
         }
-        ensure!(
-            status.is_success(),
-            "MCP admission request rejected: status {}, body: {}",
-            status,
-            String::from_utf8_lossy(&bytes)
-        );
+        if !status.is_success() {
+            let status = status.as_u16();
+            // Log only the daemon's stable, low-entropy failure code.
+            // Never echo request arguments, tokens or a raw response body.
+            let body = &bytes;
+            let reason = if body.len() <= 1024 {
+                serde_json::from_slice::<Value>(body)
+                    .ok()
+                    .and_then(|reply| {
+                        reply
+                            .get("error_code")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .filter(|code| {
+                        code.len() <= 96
+                            && code
+                                .bytes()
+                                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+                    })
+            } else {
+                None
+            };
+            anyhow::bail!(
+                "MCP admission request rejected: status={status} code={}",
+                reason.as_deref().unwrap_or("unavailable")
+            );
+        }
         let Strict(reply) =
             serde_json::from_slice(&bytes).context("malformed MCP admission receipt")?;
         Ok(reply)
@@ -3327,7 +3502,15 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
 }
 
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
+    run_with_budget(config, None).await
+}
+
+pub async fn run_with_budget(
+    config: AdmissionCfg,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+) -> anyhow::Result<()> {
     let mut collector = Collector::new(&config)?;
+    collector.prepared_budget = selected;
     let env_liveness_flag = std::env::var("AGENTFW_NATIVE_LIVENESS").ok().map(|v| {
         let v = v.trim().to_ascii_lowercase();
         v != "0" && v != "false" && v != "no" && v != "off"

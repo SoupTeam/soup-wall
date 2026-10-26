@@ -454,7 +454,8 @@ def finish_qualification(report, cases, samples, active, daemon):
             raise cleanup_error
 
 
-def qualify(args, private, report):
+def qualify(args, private, report, pilot_class=None):
+    pilot_class = Pilot if pilot_class is None else pilot_class
     setup = LAUNCH.prepare_original_launch(args, private, report)
     classifier = private / "classifier.py"
     classifier.write_bytes((ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py").read_bytes())
@@ -488,7 +489,7 @@ def qualify(args, private, report):
             for sample_index, case in enumerate(selected_cases):
                 start_daemon(kind, 20 if case == "expire" else 30)
                 paired = kind == "filesystem" and case == "approve"
-                pilot = Pilot(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
+                pilot = pilot_class(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
                               enabled=case != "default", deferred=paired)
                 active.append(pilot)
                 pilot.close_after_primary = case == "collector_term"
@@ -501,7 +502,7 @@ def qualify(args, private, report):
                     # Start both actual hosts before either pending lease is
                     # consumed by the other host's startup. Deadlines stay fixed.
                     row["stage"] = "start_independent_run"
-                    sibling = Pilot(setup, private / ("independent-run-" + str(sample_index)), classifier, kind, deferred=True)
+                    sibling = pilot_class(setup, private / ("independent-run-" + str(sample_index)), classifier, kind, deferred=True)
                     active.append(sibling)
                     row["proposals_released_at_ms"] = release_ready_pilots([pilot, sibling])
                     row["both_hosts_ready_before_proposals"] = True
