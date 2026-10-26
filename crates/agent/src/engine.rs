@@ -749,7 +749,7 @@ impl AgentFirewall {
             let structural_deny = original.verdict == Verdict::Deny
                 && self
                     .policy
-                    .formatter_only_denial(&original_trace, &original_signals);
+                    .formatter_only_denial(&original_trace, &original_signals, &signals);
             if !structural_deny
                 && Self::decision_strength(&original) > Self::decision_strength(&decision)
             {
@@ -1107,6 +1107,30 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn formatter_correction_does_not_discharge_a_deny_that_still_matches() {
+        let text = "commit 0123456789abcdef0123456789abcdef01234567\n--- a\n--- b\n--- c\n";
+        let event = ev(
+            1,
+            EventKind::ToolResult {
+                tool: "git_show".into(),
+                content: text.into(),
+                source: Provenance::McpServer { name: "git".into() },
+            },
+        );
+        let evidence = soup_wall_core::InjectionDetector::mcp_result_evidence(&[text]).unwrap();
+        let policy=AgentPolicySet::from_yaml(
+            "agent_policies:\n  - name: structural-medium-deny\n    when: {detector: injection, facet: tool_result, min_severity: medium}\n    action: deny\n  - name: early-low-allow\n    when: {detector: injection, facet: tool_result, min_severity: low}\n    action: allow\n  - name: hidden-low-deny\n    when: {detector: injection, facet: tool_result, min_severity: low}\n    action: deny\ndefault: allow\n").unwrap();
+        let mut raw = AgentFirewall::new(policy.clone(), DEFAULT_TAINT_CAP);
+        let original = raw.preview_native_mcp_result(&event, &evidence, 0);
+        assert_eq!(original.verdict, Verdict::Deny);
+        let mut verified = AgentFirewall::new(policy, DEFAULT_TAINT_CAP);
+        assert_eq!(
+            verified.preview_verified_git_result(&event, &evidence, 0, &(7..47)),
+            original
+        );
     }
 
     #[test]

@@ -296,7 +296,12 @@ impl AgentPolicySet {
     /// Eligibility gate for the opt-in formatter correction only. This does not
     /// alter the ordinary first-match evaluator. A hidden independent restrictive
     /// predicate is still evidence that the raw refusal was not formatter-only.
-    pub(crate) fn formatter_only_denial(&self, trace: &PolicyTrace, signals: &Signals) -> bool {
+    pub(crate) fn formatter_only_denial(
+        &self,
+        trace: &PolicyTrace,
+        original: &Signals,
+        corrected: &Signals,
+    ) -> bool {
         if self.default != Verdict::Allow
             || trace.applied_floor.is_some()
             || !trace
@@ -307,24 +312,35 @@ impl AgentPolicySet {
             return false;
         }
         if self.agent_policies.iter().any(|rule| {
-            rule.action != Verdict::Allow
-                && !Self::formatter_deny_condition(rule)
-                && self.matches(&rule.when, signals)
+            if rule.action == Verdict::Allow {
+                return false;
+            }
+            let before = self.matches(&rule.when, original);
+            let after = self.matches(&rule.when, corrected);
+            // Discharge only a formatter-specific predicate that actually
+            // stopped matching. A hidden Low Deny that still matches stays.
+            if after {
+                return true;
+            }
+            before && !Self::formatter_deny_condition(rule)
         }) {
             return false;
         }
-        // Operator first-match Deny bypasses shipped-floor evaluation. Check
-        // those unchanged predicates separately before discounting that Deny.
         let floors = Self {
             agent_policies: Vec::new(),
             egress_allowlist: self.egress_allowlist.clone(),
             default: Verdict::Allow,
         };
         floors
-            .evaluate_with_trace(signals)
+            .evaluate_with_trace(original)
             .1
             .applied_floor
             .is_none()
+            && floors
+                .evaluate_with_trace(corrected)
+                .1
+                .applied_floor
+                .is_none()
     }
 
     fn formatter_deny_condition(rule: &AgentRule) -> bool {

@@ -375,6 +375,9 @@ pub(crate) async fn handler(
             Ok(execution) => execution,
             Err(_) => return incomplete(&st, &input, &call, &epoch),
         };
+        if runtime.unchanged().is_err() {
+            return incomplete(&st, &input, &call, &epoch);
+        }
         let raw = match std::str::from_utf8(execution.raw()) {
             Ok(raw) => raw.to_owned(),
             Err(_) => return incomplete(&st, &input, &call, &epoch),

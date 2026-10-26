@@ -223,7 +223,9 @@ signatures and positive result evidence retain the raw aggregate. Raw Ask and
 Escalate always keep their human/judge boundary. A raw Deny can change only when
 the actual first-match trace selects a narrow injection/tool_result/severity
 rule, with no additional conditions or shipped safety floor, an Allow default,
-and no matching independent restrictive predicate anywhere in the policy.
+and no matching independent restrictive predicate anywhere in either policy
+view. A narrow formatter-Deny is discharged only when its predicate actually
+stops matching after correction; a hidden Low Deny that still matches stays.
 This eligibility check also considers restrictions hidden by first-match Allow;
 the ordinary evaluator and rule order remain unchanged. Independent
 privacy, risk and opaque operator Deny rules keep their raw findings and risk.

@@ -8,6 +8,10 @@ profile is trusted operator configuration, never an MCP-server claim.
 """
 from pathlib import Path
 import argparse,hashlib,json,os,socket,subprocess,tempfile,time,urllib.request,urllib.error,shutil,re,sys
+def require(condition, message="qualification check failed"):
+    if not condition:
+        raise RuntimeError(message)
+
 ROOT=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument("--binary",required=True)
@@ -113,13 +117,14 @@ cfg={"port":port,"enforce":True,"max_record_bytes":1048576,"max_body_bytes":1677
 (root/".agentfw/config.yaml").write_text(json.dumps(cfg))
 token=""
 log=(root/"daemon.log").open("wb")
-daemon=subprocess.Popen([a.binary,"serve"],env=env,stdout=log,stderr=log,stdin=subprocess.DEVNULL)
 import importlib.util
 spec=importlib.util.spec_from_file_location("sou109_process_witness",ROOT/"scripts/verify-sou62-real-mcp.py")
 observer_module=importlib.util.module_from_spec(spec);sys.modules[spec.name]=observer_module;spec.loader.exec_module(observer_module)
+daemon=subprocess.Popen([a.binary,"serve"],env=env,stdout=log,stderr=log,stdin=subprocess.DEVNULL)
 daemon_witness=observer_module.ProcessWitness(daemon.pid)
 report={"format":"sou109-actual-daemon-git/1","source":a.source,"binary_sha256":sha(Path(a.binary).read_bytes()),
- "scope":"actual original Git through daemon-owned confined execution, exact native Call/result; direct native protocol (not classifier or Claude host)",
+ "scope":"actual confined original Git through native execute plus the production collector and real rule baseline; no Claude/model qualification",
+ "script_sha256":sha(Path(__file__).read_bytes()),
  "policy_sha256":sha(policy),"profile_sha256":sha(profile_path.read_bytes()),"registry_sha256":rsha,
  "private_directory":str(root),"asset_directory":str(asset),"blob_matches_original_commit_body":True,"status":"incomplete","cases":[],"controls":[],"model_calls":0}
 opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -157,11 +162,11 @@ try:
    "session_id":session,"event":name}|fields,identity)
  status,started,_=event("session_start",host_session="verified-host",server_id="git",child_authority=grant,
   liveness="sw-native-liveness/1",policy_transition="sw-managed-native/1")
- assert status==200 and started["release"],(status,started)
+ require((status==200 and started["release"]), (status,started))
  status,enrolled,_=http("/native/liveness/v1",{"contract_version":"sw-native-liveness/1",
   "registry_sha256":rsha,"session_id":session,"instance_id":instance["instance_id"],
   "action":"enroll","owner_token":started["owner_token"],"lease_seconds":60})
- assert status==200,(status,enrolled)
+ require((status==200), (status,enrolled))
  identity={"contract_version":"sw-native-liveness/1","instance_id":instance["instance_id"],
   "epoch":enrolled["epoch"],"owner_token":started["owner_token"]}
  schemas={t["name"]:t["schema_sha256"] for t in json.loads(registry)["tools"]}
@@ -175,35 +180,35 @@ try:
  ]:
   host_id+=1;args={"repo_path":"/workspace"}|arg
   status,call,_=event("call",identity,tool=tool,args=args,schema_sha256=schemas[tool],mcp_host_call_id=host_id)
-  assert status==200 and call["release"],(status,call)
+  require((status==200 and call["release"]), (status,call))
   body={"contract_version":"sw-native-git-execute/1","registry_sha256":rsha,"session_id":session,
    "call_id":call["call_id"],"binding_sha256":call["binding_sha256"]}
   result=http("/native/git-execute/v1",body,identity);row={"case":name,"expected_release":expected,**compact(result)}
   report["cases"].append(row);save()
   status,value,_=result
   if status==200 and value.get("frame"):
-   frame=value["frame"];decoded=json.loads(frame);assert decoded["id"]==host_id
-   assert sha(frame.encode())==value["receipt"]["content_sha256"]
+   frame=value["frame"];decoded=json.loads(frame);require((decoded["id"]==host_id), "qualification check failed")
+   require((sha(frame.encode())==value["receipt"]["content_sha256"]), "qualification check failed")
    (root/(name+".original-frame.json")).write_text(frame)
    row["original_frame_sha256"]=sha(frame.encode())
    row["original_text_sha256"]=sha(decoded["result"]["content"][0]["text"].encode())
-  assert status==200 and value.get("completed") is True and value["receipt"]["release"] is expected,row
+  require((status==200 and value.get("completed") is True and value["receipt"]["release"] is expected), row)
   replay=http("/native/git-execute/v1",body,identity)
   report["controls"].append({"case":name+"-replay",**compact(replay)})
-  assert replay[0]==409 and replay[1].get("error_code")=="native_call_unknown_or_spent",compact(replay)
+  require((replay[0]==409 and replay[1].get("error_code")=="native_call_unknown_or_spent"), compact(replay))
  # Exact same benign bytes through legacy result submission remain baseline.
  args={"repo_path":"/workspace","revision":plan["benign"]}
  status,call,_=event("call",identity,tool="git_show",args=args,schema_sha256=schemas["git_show"],mcp_host_call_id=101)
- assert status==200 and call["release"]
+ require((status==200 and call["release"]), "qualification check failed")
  raw=(root/"ordinary-show.original-frame.json").read_text()
  result=event("result",identity,tool="git_show",args=args,call_id=call["call_id"],result_kind="value",delivery="mcp_host",content=raw)
  report["controls"].append({"case":"legacy-identical-no-proof",**compact(result)})
- assert result[0]==200 and result[1]["release"] is False,compact(result)
+ require((result[0]==200 and result[1]["release"] is False), compact(result))
  # A broken private copy of the pinned launcher dependency is an incomplete
  # execution, never an inspected synthetic Allow. Do not mutate template assets.
  args={"repo_path":"/workspace","revision":plan["benign"]}
  status,call,_=event("call",identity,tool="git_show",args=args,schema_sha256=schemas["git_show"],mcp_host_call_id=901)
- assert status==200 and call["release"]
+ require((status==200 and call["release"]), "qualification check failed")
  failed_body={"contract_version":"sw-native-git-execute/1","registry_sha256":rsha,"session_id":session,
   "call_id":call["call_id"],"binding_sha256":call["binding_sha256"]}
  saved=bwrap.with_name("bwrap.saved")
@@ -212,13 +217,13 @@ try:
   bwrap.write_bytes(b"not the pinned executable\n");bwrap.chmod(0o700)
   failed=http("/native/git-execute/v1",failed_body,identity)
   report["controls"].append({"case":"runtime-failure-is-incomplete",**compact(failed)})
-  assert failed[0]==409 and failed[1].get("error_code")=="native_git_execution_incomplete",compact(failed)
-  assert "frame" not in failed[1] and failed[1].get("release") is not True
+  require((failed[0]==409 and failed[1].get("error_code")=="native_git_execution_incomplete"), compact(failed))
+  require(("frame" not in failed[1] and failed[1].get("release") is not True), "qualification check failed")
  finally:
   saved.replace(bwrap)
  replay=http("/native/git-execute/v1",failed_body,identity)
  report["controls"].append({"case":"incomplete-execution-is-spent",**compact(replay)})
- assert replay[0]==409 and replay[1].get("error_code")=="native_call_unknown_or_spent",compact(replay)
+ require((replay[0]==409 and replay[1].get("error_code")=="native_call_unknown_or_spent"), compact(replay))
  # Exercise the actual production collector with the real rule baseline.
  import importlib.util,sys
  spec=importlib.util.spec_from_file_location("sou109_client",(ROOT/"scripts/verify-sou62-real-mcp.py"))
@@ -238,11 +243,11 @@ try:
  try:
   hello,_=client.exchange({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
    "protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"independent-sou109","version":"1"}}})
-  assert hello.get("result",{}).get("protocolVersion")=="2025-11-25",hello
+  require((hello.get("result",{}).get("protocolVersion")=="2025-11-25"), hello)
   client.send({"jsonrpc":"2.0","method":"notifications/initialized"})
   manifest,_=client.exchange({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}})
   original=json.loads((ROOT/"profiles/mcp/git-readonly-v1/upstream-tools-list.json").read_text())
-  assert manifest["result"]==original["result"]
+  require((manifest["result"]==original["result"]), "qualification check failed")
   rows=[]
   for i,(name,revision,expected) in enumerate([
    ("ordinary",plan["benign"],True),("blob",plan["blob"],False),
@@ -256,15 +261,15 @@ try:
    rows.append({"case":name,"expected_release":expected,"actual_release":released,
     "host_id":reply["id"],"response_sha256":sha(raw),"latency_ms":round((time.monotonic()-start)*1000,3)})
    report["collector_cases"]=rows;save()
-   assert released is expected,rows[-1]
+   require((released is expected), rows[-1])
    if expected:
     native_frame=json.loads((root/"ordinary-show.original-frame.json").read_text())
-    assert reply["result"]==native_frame["result"],"original result content changed across delivery"
+    require((reply["result"]==native_frame["result"]), "original result content changed across delivery")
  finally:
   code=client.close();collector_log.close()
   report["collector_cleanup"]={"exit_code":code,"forced":client.forced_cleanup,"processes":client.process_witness.final}
   save()
- assert code==0 and client.process_witness.final["all_stopped"] and not client.forced_cleanup,report["collector_cleanup"]
+ require((code==0 and client.process_witness.final["all_stopped"] and not client.forced_cleanup), report["collector_cleanup"])
  report["checks_complete"]=True;save()
 finally:
  save()
@@ -275,6 +280,6 @@ finally:
  report["daemon_cleanup"]=daemon_witness.finish()
  report["status"]="passed" if report.get("checks_complete") and report["daemon_cleanup"]["all_stopped"] else "failed"
  save()
-assert report["status"]=="passed" and report["daemon_cleanup"]["descendant_count"]>0, "owned original processes not witnessed/stopped"
+require((report["status"]=="passed" and report["daemon_cleanup"]["descendant_count"]>0), "owned original processes not witnessed/stopped")
 print(json.dumps({"status":report["status"],"native_cases":len(report["cases"]),
  "collector_cases":len(report.get("collector_cases",[])),"output":a.output}),flush=True)
