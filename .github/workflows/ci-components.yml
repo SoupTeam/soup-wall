@@ -1326,6 +1326,7 @@ jobs:
           PY
           sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou62-binary-hashes.txt"
       - name: Required literal read/search semantics through original filesystem MCP
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1337,6 +1338,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/sou110-literals" \
             2>&1 | tee "$RUNNER_TEMP/sou110-literals.log"
       - name: Required large original results, bounded refusal and useful continuation
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1349,6 +1351,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/large-results" \
             2>&1 | tee "$RUNNER_TEMP/large-results.log"
       - name: Required filesystem names, expected errors and useful continuation
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1361,6 +1364,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/filesystem-paths" \
             2>&1 | tee "$RUNNER_TEMP/filesystem-paths.log"
       - name: SOU-114 read-only installed pilot diagnosis and private incident export
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1372,6 +1376,7 @@ jobs:
             --strace /usr/bin/strace --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou114-doctor"
       - name: SOU-99 full launcher with installed original profiles
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1383,6 +1388,7 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --strace /usr/bin/strace --output "$RUNNER_TEMP/sou99-original-launcher"
       - name: SOU-117 untrusted project configuration through the pinned actual host
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1394,6 +1400,7 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --strace /usr/bin/strace --output "$RUNNER_TEMP/sou117-project-isolation"
       - name: SOU-112 run-scoped operator Ask through actual pilot launcher
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1404,6 +1411,7 @@ jobs:
             --claude "$RUNNER_TEMP/sou62-claude-host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --strace /usr/bin/strace --output "$RUNNER_TEMP/sou112-pilot-ask"
       - name: Profile and evidence controls, safe archive runtime compatibility
+        if: github.event.inputs.original_create_only != 'true'
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
@@ -1424,6 +1432,7 @@ jobs:
           raise SystemExit(0 if result.wasSuccessful() else 1)
           PYCONTROLS
       - name: Required real server, positive sandbox, overlap, cancellation and actual Claude Code
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1434,6 +1443,7 @@ jobs:
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou62-acceptance" 2>&1 | tee "$RUNNER_TEMP/sou62-acceptance.log"
       - name: SOU-98 same-preset original-server acceptance
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1444,6 +1454,7 @@ jobs:
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou98-filesystem" 2>&1 | tee "$RUNNER_TEMP/sou98-filesystem.log"
       - name: Required combined original-server, shared-session, hooks and actual Claude Code smoke
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1454,6 +1465,7 @@ jobs:
             --sandbox-test-binary "$SOU62_SANDBOX_TEST_BINARY" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou62-sou63-combined" 2>&1 | tee "$RUNNER_TEMP/sou62-sou63-combined.log"
       - name: Required installed filesystem and Git pilot through actual Claude Code
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1490,6 +1502,7 @@ jobs:
             --selection "$RUNNER_TEMP/sou100-selection.json" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou100-pilot" 2>&1 | tee "$RUNNER_TEMP/sou100-pilot.log"
       - name: Required exact single-use Ask through original filesystem and Git servers
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1500,8 +1513,36 @@ jobs:
             --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou105-approval" 2>&1 | tee "$RUNNER_TEMP/sou105-approval.log"
+      - name: Focused real original create staging and native boundary controls
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.original_create_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${{ github.event.inputs.native_preparation_only }}" != true && "${{ github.event.inputs.matched_development_only }}" != true && "${{ github.event.inputs.existing_project_only }}" != true && "${{ github.event.inputs.operator_results_only }}" != true && "${{ github.event.inputs.audit_retention_only }}" != true && "${{ github.event.inputs.storage_recovery_only }}" != true && "${{ github.event.inputs.stability_mode }}" == off ]]
+          mkdir "$RUNNER_TEMP/sou83-original-stage-workspace"
+          python3 -B scripts/install-sou62-filesystem-profile.py --run \
+            --destination "$RUNNER_TEMP/sou83-original-stage-profile" --workspace "$RUNNER_TEMP/sou83-original-stage-workspace" \
+            --node "$RUNNER_TEMP/sou62-runtime/bin/node" --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap"
+          SOU62_SANDBOX_TEST_PROFILE="$RUNNER_TEMP/sou83-original-stage-profile/profile.json" \
+            SOU86_TEST_AGENTFW="$PWD/target/debug/agentfw" \
+            "$SOU62_SANDBOX_TEST_BINARY" actual_original_write_file_is_confined_to_unpublished_stage \
+              --ignored --nocapture --test-threads=1 2>&1 | tee "$RUNNER_TEMP/sou83-focused-stage.log"
+          cargo test --locked -p agentfw --lib original_create -- --test-threads=1 2>&1 | tee "$RUNNER_TEMP/sou83-focused-unit.log"
+          cargo test --locked -p agentfw --lib native::approval::tests::selected_tests -- --test-threads=1 2>&1 | tee "$RUNNER_TEMP/sou83-focused-grants.log"
+      - name: Required original create-only single-use Ask and refusal effects
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s scripts/tests -p test_sou83_create_approval.py -v
+          python3 -B scripts/verify-sou83-create-approval.py --run \
+            --agentfw "$PWD/target/debug/agentfw" --node "$RUNNER_TEMP/sou62-runtime/bin/node" \
+            --npm "$RUNNER_TEMP/sou62-runtime/bin/npm" --git "$RUNNER_TEMP/sou100-git-source/git" \
+            --bwrap "$RUNNER_TEMP/sou62-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
+            --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou83-approval" 2>&1 | tee "$RUNNER_TEMP/sou83-approval.log"
       - name: Publish bounded installed-pilot outcome
-        if: always()
+        if: always() && github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           python3 -B - <<'PILOT_OUTCOME'
@@ -1515,6 +1556,7 @@ jobs:
               stream.write('```json\n' + json.dumps(selected, indent=2) + '\n```\n')
           PILOT_OUTCOME
       - name: Required persistent onboarding of the installed filesystem profile
+        if: github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1525,7 +1567,7 @@ jobs:
             --out "$RUNNER_TEMP/profile-onboarding-filesystem" --work-parent "$RUNNER_TEMP" \
             2>&1 | tee "$RUNNER_TEMP/sou62-profile-onboarding.log"
       - name: Publish bounded outcome
-        if: always()
+        if: always() && github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1541,7 +1583,7 @@ jobs:
               stream.write('```json\n' + json.dumps(selected, indent=2) + '\n```\n')
           PY
       - name: Publish bounded combined smoke outcome
-        if: always()
+        if: always() && github.event.inputs.original_create_only != 'true'
         shell: bash
         run: |
           python3 - <<'PYCOMBINED'
@@ -1591,6 +1633,13 @@ jobs:
             ${{ runner.temp }}/filesystem-paths/report.json
             ${{ runner.temp }}/filesystem-paths/enforcing/collector.log
             ${{ runner.temp }}/filesystem-paths/enforcing/daemon.log
+            ${{ runner.temp }}/sou83-focused-stage.log
+            ${{ runner.temp }}/sou83-focused-unit.log
+            ${{ runner.temp }}/sou83-focused-grants.log
+            ${{ runner.temp }}/sou83-approval.log
+            ${{ runner.temp }}/sou83-approval/report.json
+            ${{ runner.temp }}/sou83-approval/**/*.log
+            ${{ runner.temp }}/sou83-approval/**/*.witness.json
             ${{ runner.temp }}/sou105-approval.log
             ${{ runner.temp }}/sou105-approval/report.json
             ${{ runner.temp }}/sou105-approval/**/*.log
@@ -1617,7 +1666,7 @@ jobs:
 
   mcp-real-filesystem--native-ubuntu-2404:
     name: "mcp-real-filesystem / native-ubuntu-2404"
-    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true'))
+    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))
     runs-on: ubuntu-24.04
     # Optional paired Ask measurement owns two <=3600s side budgets plus setup;
     # opt-in A-B-A repeats the original-host qualifier twice. Ordinary PR/default
@@ -2112,6 +2161,22 @@ jobs:
           python3 -B "$GITHUB_WORKSPACE/scripts/pilot-demo.py" --run --selection "$selection" \
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou120-demo"
+      - name: Qualify the guided first-use entry point through the original host
+        if: github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door.py -v
+          # The Agent build stage reuses this job's SOU-119 generation through the front door.
+          python3 -B scripts/qualify-pilot-front-door.py --run \
+            --output "$RUNNER_TEMP/front-door" --expected-commit "$(git rev-parse HEAD)" \
+            --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agent-output "$RUNNER_TEMP/sou119-agent-build" \
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python "$(command -v python3)" --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/front-door.log"
       - name: Qualify terminal Ask inbox through the original Claude host
         if: github.event.inputs.operator_results_only != 'true'
         shell: bash
@@ -2370,6 +2435,8 @@ jobs:
             ${{ runner.temp }}/sou111-assets/source-build-timing.json
             ${{ runner.temp }}/sou111-assets/runtime-timing.json
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
+            ${{ runner.temp }}/front-door/report.json
+            ${{ runner.temp }}/front-door.log
             ${{ runner.temp }}/sou111-assets/apparmor-provisioning.json
             ${{ runner.temp }}/sou111-apparmor-cleanup.json
             ${{ runner.temp }}/sou111-assets/plan.json

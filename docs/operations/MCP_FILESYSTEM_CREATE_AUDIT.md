@@ -1,5 +1,26 @@
 # SOU-83 requirements and review audit
 
+## Separate Ask follow-up (after PR #196)
+
+The team lead requested a separate PR for original-write Ask and the remaining
+qualification. This follow-up adds exact typed resource evidence and single-use
+continuation using the existing native broker. The historical matrices below
+remain source-dated; their Ask-unsupported descriptions apply to those earlier
+increments. Current behavior and bounds are in the
+[operator guide](MCP_FILESYSTEM_CREATE_ONLY.md#single-use-original-create-ask-separate-sou-83-follow-up).
+
+The new acceptance gate must run the actual pinned original writer under native
+approvals, check real bytes/inventory and zero negative effects, and retain
+signed managed SQLite/PostgreSQL epoch controls. Phase cancellation/EOF, result
+size refusal, worker/collector death, no-clobber publication and matched-payload
+overhead controls from PR #196 remain required. Stage tests now also reject FIFO,
+directory and hardlink output and a target inserted after anonymous staging.
+No gate is waived and no historical green result qualifies this new source.
+
+The [follow-up evidence ledger](evidence/sou-83-ask-acceptance/README.md) records
+verification status. Qualification is pending until its exact-source results are
+retained; this section does not itself assert acceptance or merge readiness.
+
 ## October 25 integration continuation
 
 PR #196 was assigned to Nari-Ab for continuation. The reviewed create-only head
