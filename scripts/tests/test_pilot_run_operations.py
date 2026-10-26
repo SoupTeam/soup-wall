@@ -332,8 +332,11 @@ class RunOperations(unittest.TestCase):
         with patch.object(ARCHIVE, "validate_remaining", side_effect=replace):
             result = ARCHIVE.apply(plan, self.output)[0]
         self.assertEqual(result["outcome"], "partial")
-        self.assertEqual(result["reason"], "staged_member_changed")
+        self.assertIn(result["reason"], ("removal_state_changed", "staged_member_changed"))
         staged = list((self.state / result["quarantine"]).glob("member-*"))
+        candidate = self.state / result["quarantine"] / "run/audit/manifest.json"
+        if candidate.exists() and candidate.read_text() == self.marker:
+            staged.append(candidate)
         self.assertEqual(len(staged), 1)
         self.assertEqual(staged[0].read_text(), self.marker)
 

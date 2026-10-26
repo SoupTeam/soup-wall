@@ -249,17 +249,24 @@ never be mistaken for the selected inode after the last inventory check.
 """
     staging_name = "member-" + secrets.token_hex(16)
     archive_guard()
-    rename_exclusive(directory.fd, name, quarantine.fd, staging_name)
-    os.fsync(directory.fd)
-    os.fsync(quarantine.fd)
-    body, held = quarantine.read(staging_name)
-    # A rename changes ctime; all other selected attributes and bytes must match.
-    S.require(held[:7] == expected["identity"][:7] and len(body) == expected["bytes"]
-              and S.sha(body) == expected["sha256"], "staged_member_changed")
-    S.require(quarantine.read(staging_name)[1] == held, "staged_member_changed")
-    archive_guard()
-    os.unlink(staging_name, dir_fd=quarantine.fd)
-    os.fsync(quarantine.fd)
+    source_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory.fd)
+    try:
+        # Keep the original inode alive across detachment. A source replacement
+        # cannot reuse a freed inode between the inventory and staging checks.
+        S.require(S.identity(os.fstat(source_fd)) == expected["identity"], "removal_state_changed")
+        rename_exclusive(directory.fd, name, quarantine.fd, staging_name)
+        os.fsync(directory.fd)
+        os.fsync(quarantine.fd)
+        body, held = quarantine.read(staging_name)
+        # A rename changes ctime; all other selected attributes and bytes match.
+        S.require(held == S.identity(os.fstat(source_fd)) and held[:7] == expected["identity"][:7]
+                  and len(body) == expected["bytes"] and S.sha(body) == expected["sha256"], "staged_member_changed")
+        S.require(quarantine.read(staging_name)[1] == held, "staged_member_changed")
+        archive_guard()
+        os.unlink(staging_name, dir_fd=quarantine.fd)
+        os.fsync(quarantine.fd)
+    finally:
+        os.close(source_fd)
 
 
 def apply_one(parent, output, plan, row):
