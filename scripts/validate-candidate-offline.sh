@@ -27,11 +27,15 @@ with tarfile.open("sym.tar.gz", "w:gz") as tar:
 with tarfile.open("big.tar.gz", "w:gz") as tar:
     ti = tarfile.TarInfo("big.bin"); ti.size = 2 * 1024 * 1024 * 1024; tar.addfile(ti)
 # 5. Empty manifest (missing required assets and identities)
-with open("manifest.json", "w") as f: json.dump({"schema_version":2,"identities":{},"files":{}}, f)
-with tarfile.open("empty_manifest.tar.gz", "w:gz") as tar: tar.add("manifest.json")
+with open("manifest_empty.json", "w") as f: json.dump({"schema_version":2,"identities":{},"files":{}}, f)
+with tarfile.open("empty_manifest.tar.gz", "w:gz") as tar: tar.add("manifest_empty.json", arcname="manifest.json")
 # 6. Unsafe executable mode (setuid)
 with tarfile.open("unsafe_mode.tar.gz", "w:gz") as tar:
     ti = tarfile.TarInfo("setuid.bin"); ti.size = 0; ti.mode = 0o4755; tar.addfile(ti)
+# 7. Missing required assets but valid schema
+with open("manifest_missing.json", "w") as f:
+    json.dump({"schema_version":2,"identities":{"compiler":"c","source_commit":"s","cargo_lock_sha256":"l"},"files":{"bin/agentfw":"hash"}}, f)
+with tarfile.open("missing_assets.tar.gz", "w:gz") as tar: tar.add("manifest_missing.json", arcname="manifest.json")
 EOF
 
 cat <<'EOF' > preflight_validate_archive.py
@@ -65,7 +69,6 @@ try:
             if not (m.isreg() or m.isdir() or m.issym() or m.islnk()):
                 sys.exit(f"CRITICAL: Unsupported archive member type for {name}")
             
-            # Reject setuid, setgid, and sticky bits
             if m.mode & 0o7000:
                 sys.exit(f"CRITICAL: Unsafe file mode {oct(m.mode)} for {name}")
 
@@ -86,17 +89,24 @@ try:
 
         expected_files = manifest_data.get("files", {})
 
-        # Strict requirement for complete candidate inventory
+        # Strict requirement for complete candidate inventory based on installer contract
         required_components = [
             "bin/agentfw", "bin/llm-firewall", "bin/bwrap",
             "assets/baseline.classifier",
             "scripts/install-sou62-filesystem-profile.py",
             "profiles/mcp/filesystem-readonly-v1/package.json",
             "profiles/mcp/filesystem-readonly-v1/package-lock.json",
+            "profiles/mcp/filesystem-readonly-v1/upstream-identity.json",
+            "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+            "profiles/mcp/filesystem-readonly-v1/policy.yaml",
+            "rule_baseline/rule_baseline.py",
             "node-v22.22.0-linux-x64.tar.xz"
         ]
         for req in required_components:
             if req not in expected_files: sys.exit(f"CRITICAL: Mandatory component missing from manifest: {req}")
+        
+        if not any(f.startswith("npm-cache/") for f in expected_files):
+            sys.exit("CRITICAL: Populated npm-cache is missing from manifest")
 
         extracted_paths = set()
         os.makedirs(dest_dir, exist_ok=True)
@@ -139,7 +149,7 @@ EOF
 
 echo "Testing Archive Integrity & Completeness Negative Controls..."
 python3 make_bad_archives.py
-for bad in dup.tar.gz abs.tar.gz sym.tar.gz big.tar.gz empty_manifest.tar.gz unsafe_mode.tar.gz; do
+for bad in dup.tar.gz abs.tar.gz sym.tar.gz big.tar.gz empty_manifest.tar.gz unsafe_mode.tar.gz missing_assets.tar.gz; do
     if python3 preflight_validate_archive.py "$bad" out >/dev/null 2>&1; then
         echo "CRITICAL: preflight_validate_archive.py failed to reject $bad"
         exit 1
@@ -242,15 +252,21 @@ if action == "read":
         sys.exit("CRITICAL: Useful read failed to return expected content.")
 elif action in ["write", "write_bad"]:
     error_obj = resp.get("error")
-    if error_obj and error_obj.get("code") in [-32601, -32602]:
-        sys.exit(f"CRITICAL: Generic/protocol error code {error_obj.get('code')} falsely accepted as policy denial: {resp}")
+    if error_obj:
+        err_code = error_obj.get("code")
+        err_msg = error_obj.get("message", "").lower()
+        if err_code in [-32601, -32602]:
+            sys.exit(f"CRITICAL: Generic/protocol error code {err_code} falsely accepted as policy denial: {resp}")
+        if err_code == -32000 and ("cannot load" in err_msg or "missing file" in err_msg):
+            sys.exit(f"CRITICAL: Setup failure '{err_msg}' falsely accepted as policy denial: {resp}")
     
     refused = "error" in resp or resp.get("result", {}).get("isError") is True
     if not refused:
         sys.exit(f"CRITICAL: Action was not refused. Response: {resp}")
     
-    err_str = json.dumps(resp).lower()
-    is_policy_denial = "baseline-deny-injection" in err_str or "deny" in err_str
+    # Require the exact signature of a policy injection denial
+    err_str = json.dumps(resp)
+    is_policy_denial = "baseline-deny-injection" in err_str
     
     if action == "write_bad":
         if is_policy_denial: sys.exit("CRITICAL: Bad schema error was treated as a valid policy deny instead of setup/protocol error.")
@@ -292,18 +308,25 @@ if [ -f "$ZERO_EFFECT_FILE" ]; then
     echo "CRITICAL: File was written! Zero-effect failed."; exit 1
 fi
 
+echo "Testing Broken Path Control (Setup Failure instead of Outage)..."
+BROKEN_OUT=$(python3 mcp_test_driver.py "read" "/workspace/nonexistent_test.txt" "" agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace 2>&1) || true
+if echo "$BROKEN_OUT" | grep -qiE "admission failed|connection refused"; then
+    echo "CRITICAL: Broken path setup failure falsely identified as daemon loss outage!"
+    exit 1
+fi
+
 echo "Testing Daemon-Loss Refusal..."
 kill -9 $AGENT_PID 2>/dev/null
 wait $AGENT_PID 2>/dev/null || true
 AGENT_PID=""
 
-LOSS_OUT=$(python3 mcp_test_driver.py "read" "$SECRET_FILE" "" agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace 2>&1) || EXIT_CODE=$?
+LOSS_OUT=$(python3 mcp_test_driver.py "read" "/workspace/test_secret.txt" "" agentfw mcp --native-admission --id filesystem-readonly-v1 -- $NODE_BIN $INDEX_JS /workspace 2>&1) || EXIT_CODE=$?
 
 if [ "${EXIT_CODE:-0}" -eq 0 ]; then
     echo "CRITICAL: Command succeeded despite daemon loss!"
     exit 1
 fi
-if ! echo "$LOSS_OUT" | grep -qiE "connect|admission|refused|unavailable|error"; then
+if ! echo "$LOSS_OUT" | grep -qiE "admission failed|connection refused"; then
     echo "CRITICAL: Daemon loss did not establish the intended unavailable-admission boundary in stderr."
     echo "$LOSS_OUT"
     exit 1
