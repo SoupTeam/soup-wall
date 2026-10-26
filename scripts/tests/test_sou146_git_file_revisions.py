@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Independent original-schema and per-file grammar boundary regressions."""
 import importlib.util
+import hashlib
 import json
 import itertools
 import subprocess
@@ -23,6 +24,63 @@ LEGACY = load("sou146_legacy", "rule_baseline/git_readonly_v1/rule_baseline.py")
 VERIFY = load("sou146_verify", "scripts/verify-sou146-git-file-revisions.py")
 
 class PerFileRevisions(unittest.TestCase):
+    def second_ask_run(self, **faults):
+        phase, drains = [False], []
+        report = {}
+        class Client:
+            sent = []
+            def send(self, frame):
+                phase[0] = True
+                self.frame = frame
+                self.sent = [json.dumps(frame).encode() + b"\n"]
+            def receive(self):
+                phase[0] = 2
+                return {"id": 51, "error": {"code": -32602}}, b""
+        client = Client()
+        def drain():
+            drains.append(phase[0])
+            return int(faults.get("opens", False)) if phase[0] else 7
+        def executions(stack):
+            return {"reservations": 1 + int(phase[0] and faults.get("reservation", False)),
+                    "workers": {"first"} | ({"second"} if phase[0] and faults.get("worker", False) else set())}
+        def inspected(*args):
+            return {"args": client.frame["params"]["arguments"], "selected_invocation": {
+                "host_call_id": 51, "request_sha256": "wrong" if faults.get("binding")
+                    else hashlib.sha256(client.sent[-1]).hexdigest()}}
+        stack = SimpleNamespace(env={}, audit=Path("owned-not-read"))
+        with mock.patch.object(VERIFY, "execution_start", side_effect=executions), \
+             mock.patch.object(VERIFY.BASE, "events", side_effect=lambda *args: [0] * (1 + int(
+                 bool(phase[0] and faults.get("result", False)) or bool(phase[0] == 2 and faults.get("rejected_result", False))))), \
+             mock.patch.object(VERIFY.APPROVAL, "pending", return_value={
+                 "pending_id": "first" if faults.get("reused") else "second", "binding_sha256": "owned"}), \
+             mock.patch.object(VERIFY.APPROVAL, "command", return_value="owned"), \
+             mock.patch.object(VERIFY.APPROVAL, "inspected_output", side_effect=inspected):
+            try:
+                VERIFY.second_ask_control(stack, None, client, SimpleNamespace(drain=drain),
+                                          {"pending_id": "first"}, report)
+            except ValueError as error:
+                return report, drains, error
+        return report, drains, None
+
+    def test_second_ask_window_excludes_only_completed_authorized_effects_before_send(self):
+        report, drains, error = self.second_ask_run()
+        self.assertIsNone(error)
+        row = report["approval_windows"][0]
+        self.assertTrue(row["passed"] and row["distinct_pending_id"] and row["exact_second_request_bound"])
+        self.assertEqual(row["completed_call_repository_opens"], 7)
+        self.assertEqual(drains, [False, True, 2])
+        self.assertTrue(row["second_refusal_correlated"])
+
+    def test_second_ask_reused_id_wrong_binding_or_any_new_effect_never_passes(self):
+        for fault in ("reused", "binding", "opens", "reservation", "worker", "result", "rejected_result"):
+            with self.subTest(fault=fault):
+                report, drains, error = self.second_ask_run(**{fault: True})
+                self.assertIsInstance(error, ValueError)
+                row = report["approval_windows"][0]
+                self.assertFalse(row["passed"])
+                self.assertEqual(drains, [False, True, 2] if fault == "rejected_result" else [False, True])
+                self.assertIn("before_second_approval", row)
+
     def batch_run(self, *, expired_followup=False, complete_cleanup=True, repo_setup_failure=False):
         clients = []
         cleanup = {"all_stopped": complete_cleanup, "observation_complete": True, "remaining": [],

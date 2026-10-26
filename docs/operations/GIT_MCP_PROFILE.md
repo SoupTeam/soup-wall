@@ -414,3 +414,14 @@ Each pair retains its useful continuation on the same client, with separate
 raw transcripts, verified ten-second leases and complete observed collector and
 new daemon-worker cleanup. No expired session is retried or revived, and the
 120-second child authority, liveness and worker/approval bounds are unchanged.
+
+[Run #191](https://github.com/SoupTeam/soup-wall/actions/runs/40376739547) remains
+failed/incomplete after all four sixteen-pair batches, short-lease/fresh-session
+and source-withdrawal controls passed. Its first Ask approved the original call
+and created a distinct second pending ID, but the qualifier incorrectly charged
+the completed authorized call's repository opens to the second pending window.
+The corrected window records/drains those completed effects before sending the
+second request, then checks its exact binding, distinct pending ID and zero new
+repository opens, worker reservations/workers or original result events before
+approval and after rejection. Events are never reset after the second send.
+All five Ask cases and the existing timing bounds still require qualification.

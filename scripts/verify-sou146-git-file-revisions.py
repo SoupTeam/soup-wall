@@ -556,6 +556,53 @@ def start_daemon(stack, config, label):
     return stack.daemon
 
 
+def second_ask_control(stack, args, client, witness, waiting, report):
+    # Call50 has already returned its exact approved original frame. Its opens
+    # belong to that completed execution, before the next request is sent.
+    row = {"case": "approve-second-pending", "passed": False,
+           "completed_call_id": 50, "completed_call_repository_opens": witness.drain()}
+    report.setdefault("approval_windows", []).append(row)
+    before = execution_start(stack)
+    results_before = len(BASE.events(stack.audit, "native_result"))
+    frame = GIT.call(51, "git_show", {"revision": REFS[0]})
+    client.send(frame)
+    again = APPROVAL.pending(args, stack.env, timeout=5)
+    inspected = APPROVAL.inspected_output(APPROVAL.command(args, stack.env, "native-approval", "inspect", again["pending_id"]),
+        again["pending_id"], again["binding_sha256"])
+    row.update(first_pending_id=waiting["pending_id"], second_pending_id=again["pending_id"],
+        distinct_pending_id=again["pending_id"] != waiting["pending_id"],
+        exact_second_request_bound=inspected["args"] == frame["params"]["arguments"]
+            and inspected["selected_invocation"]["host_call_id"] == 51
+            and inspected["selected_invocation"]["request_sha256"] == hashlib.sha256(client.sent[-1]).hexdigest())
+
+    def observe(label):
+        current = execution_start(stack)
+        facts = {"repository_opens": witness.drain(),
+            "new_reservations": current["reservations"] - before["reservations"],
+            "new_original_workers": len(current["workers"] - before["workers"]),
+            "new_result_events": len(BASE.events(stack.audit, "native_result")) - results_before}
+        row[label] = facts
+        return facts
+
+    def no_effects(facts, label):
+        require(facts["repository_opens"] == 0, label + " opened repository")
+        require(facts["new_reservations"] == 0 and facts["new_original_workers"] == 0,
+                label + " reached daemon execution")
+        require(facts["new_result_events"] == 0, label + " produced original result effects")
+
+    pending = observe("before_second_approval")
+    require(row["distinct_pending_id"], "second Ask reused the previous pending ID")
+    require(row["exact_second_request_bound"], "second Ask bound a different original request")
+    no_effects(pending, "second pending Ask")
+    APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
+    response, _ = client.receive()
+    row["second_refusal_correlated"] = response.get("id") == 51 and BASE.refused(response)
+    rejected = observe("after_second_rejection")
+    require(row["second_refusal_correlated"], "second Ask rejection lost correlated refusal")
+    no_effects(rejected, "rejected second Ask")
+    row["passed"] = True
+
+
 def policy_controls(stack, config, second, report):
     args = SimpleNamespace(agentfw=stack.binary, output=stack.root)
     python = stack.install / "package/python/bin/python3.11"
@@ -627,11 +674,7 @@ def policy_controls(stack, config, second, report):
                     if case == "approve":
                         require_execution(stack, reserved, "git_show")
                         require(raw == expected, "approved original bytes/execution changed")
-                        client.send(GIT.call(51, "git_show", {"revision": REFS[0]}))
-                        again = APPROVAL.pending(args, stack.env, timeout=5)
-                        require(again["pending_id"] != waiting["pending_id"] and witness.drain() == 0, "approval was reused")
-                        APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
-                        require(BASE.refused(client.receive()[0]), "second Ask was not independently refused")
+                        second_ask_control(stack, args, client, witness, waiting, report)
                     else:
                         require(response.get("error", {}).get("code") == -32602 and witness.drain() == 0
                                 and len(execution_reservations(stack)) == reserved["reservations"],
