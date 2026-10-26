@@ -20,19 +20,19 @@ cat <<'EOF' > make_bad_archives.py
 import tarfile, json, hashlib, os
 
 with tarfile.open("dup.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("test.txt"); ti.size = 0; tar.addfile(ti); tar.addfile(ti)
+    ti = tarfile.TarInfo("kit/test.txt"); ti.size = 0; tar.addfile(ti); tar.addfile(ti)
 with tarfile.open("abs.tar.gz", "w:gz") as tar:
     ti = tarfile.TarInfo("/etc/passwd"); ti.size = 0; tar.addfile(ti)
 with tarfile.open("sym.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("link"); ti.type = tarfile.SYMTYPE; ti.linkname = "../../../etc/passwd"; tar.addfile(ti)
+    ti = tarfile.TarInfo("kit/link"); ti.type = tarfile.SYMTYPE; ti.linkname = "../../../etc/passwd"; tar.addfile(ti)
 with tarfile.open("big.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("big.bin"); ti.size = 2 * 1024 * 1024 * 1024; tar.addfile(ti)
+    ti = tarfile.TarInfo("kit/big.bin"); ti.size = 2 * 1024 * 1024 * 1024; tar.addfile(ti)
 with open("manifest_empty.json", "w") as f: json.dump({"schema_version":2,"identities":{},"files":{}}, f)
-with tarfile.open("empty_manifest.tar.gz", "w:gz") as tar: tar.add("manifest_empty.json", arcname="manifest.json")
+with tarfile.open("empty_manifest.tar.gz", "w:gz") as tar: tar.add("manifest_empty.json", arcname="kit/manifest.json")
 with tarfile.open("unsafe_mode.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("setuid.bin"); ti.size = 0; ti.mode = 0o4755; tar.addfile(ti)
+    ti = tarfile.TarInfo("kit/setuid.bin"); ti.size = 0; ti.mode = 0o4755; tar.addfile(ti)
 
-# Generate realistic missing-notice/valid mock fixtures
+# Generate realistic missing-notice/valid mock fixtures with the required top-level directory
 required = [
     "bin/agentfw", "bin/llm-firewall", "bin/bwrap", "assets/baseline.classifier", 
     "scripts/install-sou62-filesystem-profile.py", "profiles/mcp/filesystem-readonly-v1/package.json",
@@ -60,14 +60,14 @@ with open("profiles/mcp/filesystem-readonly-v1/upstream-identity.json", "rb") as
 manifest = {"schema_version": 2, "identities": {"compiler": "c", "source_commit": "s", "cargo_lock_sha256": "l"}, "files": files_dict}
 with open("manifest_valid.json", "w") as f: json.dump(manifest, f)
 with tarfile.open("valid_mock.tar.gz", "w:gz") as tar:
-    tar.add("manifest_valid.json", arcname="manifest.json")
-    for k in files_dict: tar.add(k)
+    tar.add("manifest_valid.json", arcname="soup-wall-linux-amd64/manifest.json")
+    for k in files_dict: tar.add(k, arcname=f"soup-wall-linux-amd64/{k}")
 
 del manifest["files"]["profiles/mcp/filesystem-readonly-v1/NOTICE.md"]
 with open("manifest_missing.json", "w") as f: json.dump(manifest, f)
 with tarfile.open("missing_notice.tar.gz", "w:gz") as tar:
-    tar.add("manifest_missing.json", arcname="manifest.json")
-    for k in manifest["files"]: tar.add(k)
+    tar.add("manifest_missing.json", arcname="soup-wall-linux-amd64/manifest.json")
+    for k in manifest["files"]: tar.add(k, arcname=f"soup-wall-linux-amd64/{k}")
 EOF
 
 cat <<'EOF' > preflight_validate_archive.py
@@ -287,9 +287,11 @@ try:
     send({"jsonrpc":"2.0","id":2,"method":"tools/list"})
     read_response(2)
 
-    if action in ["verify_unsupported", "verify_generic_error"]:
-        args = {"path":path,"content":content} if action == "verify_unsupported" else {}
-        send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":args}})
+    if action == "verify_unsupported":
+        send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{"path":path,"content":content}}})
+    elif action == "verify_generic_error":
+        # Send a supported tool with missing arguments to bypass profile checks and force a setup/argument error
+        send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{}}})
     else:
         send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{"path":path}}})
 
