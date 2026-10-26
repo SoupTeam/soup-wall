@@ -35,6 +35,7 @@ ASK = load("sou116_ask", "qualify-pilot-ask.py")
 STORE = load("sou132_store", "sou84_owned_acceptance.py")
 STOP = load("sou125_prepared_stop", "prepared_stop_witness.py")
 PROVIDER_WITNESS = load("sou143_provider_witness", "pilot_provider_witness.py")
+CAPTURE = load("sou_prepared_syscall_witness", "prepared_syscall_witness.py")
 BASE, require = LAUNCH.BASE, LAUNCH.require
 
 # Bound unrelated bulk-copy write strings in the prepared entry's trace.
@@ -52,8 +53,10 @@ def read_trace_text(path):
         raise ValueError("private_trace_encoding") from None
 
 
-def no_original_dispatch(path, binary, tool, fingerprint):
+def no_original_dispatch(path, binary, tool, fingerprint, capture=None):
     """Retry only incomplete live records; overflow/invalid proof fails now."""
+    if capture is not None and not capture.sync():
+        return None
     try:
         raw = read_trace_text(path)
     except FileNotFoundError:
@@ -280,7 +283,7 @@ def qualify(args, private, report):
                 return [{"type": "text", "text": "Owned prepared run completed."}]
             model.next = next_step
             command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", str(TRACE_STRING_BYTES), "-e", "trace=execve,openat,close,write,writev,clone,clone3,vfork,fork",
-                "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
+                "-o", str((root / "trace.private").with_suffix('.fifo')), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]
             if case == "ask":
@@ -295,9 +298,10 @@ def qualify(args, private, report):
                 run_env.update(provider_values)
                 command.insert(1, "-v")
                 protocol = PROVIDER_WITNESS.ProtocolEvidence(model, provider_values, reject=case == "provider-reject")
-            process = witness = record = None
+            process = witness = record = capture = None
             decisions = []
             try:
+                capture = CAPTURE.Capture(root / 'trace.private')
                 with (root / "stdout.private").open("wb") as out, (root / "stderr.private").open("wb") as err:
                     process = subprocess.Popen(command, cwd=private, env=run_env, stdout=out, stderr=err,
                                                start_new_session=True)
@@ -347,7 +351,7 @@ def qualify(args, private, report):
                                     fingerprint = BASE.hashlib.sha256(json.dumps(exact["args"], sort_keys=True,
                                         separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
                                     require(until(lambda: no_original_dispatch(root / "trace.private", paths["agentfw"],
-                                                  waiting["tool"], fingerprint), "prepared_witness_incomplete", seconds=2),
+                                                  waiting["tool"], fingerprint, capture), "prepared_witness_incomplete", seconds=2),
                                             "prepared_dispatch_before_approval")
                                     if exact["args"].get("path") == "/workspace/credentials.txt":
                                         require(ASK.SELECTED.trace_effects(root / "trace.private", "filesystem",
@@ -386,6 +390,7 @@ def qualify(args, private, report):
                             require(BASE.ProcessWitness.identity(pid) == start, "prepared_owned_host_identity_changed")
                             os.kill(pid, signal.SIGKILL)
                     process.wait(timeout=220 if case == "audit-rotation" else 100)
+                capture.finish()
                 rows = (root / "stdout.private").read_text().splitlines()
                 outcome = json.loads(rows[-1])
                 success = case in ("useful-refusal", "ask", "default", "audit-rotation")
@@ -428,7 +433,7 @@ def qualify(args, private, report):
                           "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                           "audit_export": audit_export, "audit_summary_sha256": BASE.sha(root / "audit-summary.json")
                           if (root / "audit-summary.json").exists() else None,
-                          "trace_sha256": BASE.sha(root / "trace.private")}
+                          "trace_sha256": BASE.sha(root / "trace.private"), "trace_capture": capture.summary()}
                 if case == "audit-rotation":
                     require(audit_observed and "intentional_retention" in audit_export["notices"],
                             "prepared_audit_loss_not_exported")
@@ -506,6 +511,8 @@ def qualify(args, private, report):
                 except (OSError, ValueError, IndexError):
                     observation["entry_report"] = "not_published"
                 report["failure_observation"] = observation
+                if capture is not None:
+                    observation['trace_capture'] = capture.summary()
                 if provider_values is not None and (root / 'trace.private').exists():
                     observation['provider_failure_stage'] = PROVIDER_WITNESS.failure_stage(
                         read_trace_text(root / 'trace.private'), paths, LAUNCH.normalized_syscalls)
@@ -514,6 +521,7 @@ def qualify(args, private, report):
                             read_trace_text(root / 'trace.private'), paths['agentfw'], LAUNCH.normalized_syscalls, 3)
                 raise
             finally:
+                preserving_failure = sys.exc_info()[0] is not None
                 # strace is only an observer: terminating it does not cancel the
                 # orchestrator. Signal the independently identified owned entry.
                 if record is not None and process is not None and process.poll() is None:
@@ -538,6 +546,13 @@ def qualify(args, private, report):
                     process.kill()
                     process.wait(timeout=10)
                 model.close()
+                if capture is not None:
+                    try:
+                        capture.finish()
+                    except CAPTURE.Invalid as error:
+                        report['trace_capture_failure'] = str(error)
+                        if not preserving_failure:
+                            raise
         if not audit_only:
             STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
         if getattr(args, "verify_provider_isolation", False):
@@ -590,7 +605,8 @@ def main():
         except (OSError, ValueError, subprocess.SubprocessError):
             report.update(status="failed", reason="closing_source_identity_unavailable")
     (args.output / "report.json").write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
-    print(json.dumps({"status": report["status"], "reason": report.get("reason"), "cases": len(report["cases"])}))
+    print(json.dumps({"status": report["status"], "reason": report.get("reason"), "cases": len(report["cases"]),
+                      "trace_capture": report.get('failure_observation', {}).get('trace_capture')}))
     return 0 if report["status"] == "passed" else 1
 
 

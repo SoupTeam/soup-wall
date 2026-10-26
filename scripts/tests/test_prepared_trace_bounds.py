@@ -113,6 +113,12 @@ for method in ('tools/list','tools/call'):
             (root/'driver.py').write_text('''import os,subprocess,sys
 with open('bulk','wb') as f:
  for _ in range(12):f.write(bytes(range(256))*4096)
+from pathlib import Path
+noise=Path.cwd()
+for _ in range(12):
+ noise=noise/('n'*180);noise.mkdir(exist_ok=True)
+noise=noise/'input';noise.write_bytes(b'owned')
+for _ in range(15000):os.close(os.open(noise,os.O_RDONLY))
 for role in ('filesystem','git'):
  r,w=os.pipe()
  child=subprocess.Popen([sys.executable,'mcp',str(w),sys.argv[1],'--id',role],pass_fds=(w,))
@@ -121,12 +127,17 @@ for role in ('filesystem','git'):
  os.close(r);assert child.wait()==0
 ''')
             for length,passes in ((5,True),(M.TRACE_STRING_BYTES+100,False)):
-                trace=root/'trace'
+                trace=root/f'trace-{length}'
+                capture=M.CAPTURE.Capture(trace)
                 command=[STRACE,'-f','--seccomp-bpf','-qq','-s',str(M.TRACE_STRING_BYTES),'-e',
-                    'trace=execve,openat,close,write,writev,clone,clone3,vfork,fork','-o',str(trace),
+                    'trace=execve,openat,close,write,writev,clone,clone3,vfork,fork','-o',str(capture.fifo),
                     sys.executable,'driver.py',str(length)]
-                subprocess.run(command,cwd=root,check=True,timeout=20,capture_output=True)
+                try:
+                    subprocess.run(command,cwd=root,check=True,timeout=20,capture_output=True)
+                finally:
+                    capture.finish()
                 self.assertLess(trace.stat().st_size,M.ASK.SELECTED.TRACE_LIMIT)
+                self.assertGreater(capture.summary()['input_bytes'],M.ASK.SELECTED.TRACE_LIMIT)
                 raw=M.read_trace_text(trace)
                 if passes:
                     observed=M.LAUNCH.collector_dispatches(raw,Path(sys.executable),strict=False)

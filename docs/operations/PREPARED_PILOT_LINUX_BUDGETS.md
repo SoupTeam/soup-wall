@@ -151,14 +151,25 @@ this explicit unsupported outcome must treat the delegated root as unresolved
 until independently reconciled under its own authority.
 
 The prepared qualifier retains the existing **32 MiB total private syscall
-witness bound**. Its strace string projection is 16 KiB per argument instead of
-1 MiB: unrelated bulk preparation writes must not consume that whole witness
-budget. This is an observer setting, not an MCP payload limit or a runtime
-policy change. Every original-channel write and retained-log write used as
-evidence must still decode completely with the exact successful byte count.
-A truncated relevant string/vector or frame refuses qualification; it never
-proves zero execution. All selected syscalls remain observed. No trace tail,
-rotation, dropped effects or larger total bound is accepted.
+witness bound**, using the `prepared-effect-and-wire/1` streaming projection.
+Every exec/write/writev/process record is retained. Exact synthetic target
+opens and all open/close records that can affect the existing private-log
+descriptor witness are retained, including implicit descriptor reuse.
+Only decoded unrelated file metadata is omitted. Unfinished metadata is
+retained at EOF so the existing strict final validators still refuse an
+incomplete supervisor witness. Unknown successful metadata fails closed.
+Input digest/counts and projection counts are recorded, without raw stream
+export. This selects witness predicates before storage; it does not read a
+tail, rotate away effects or raise the retained bound.
+
+The private FIFO is continuously drained with bounded buffers. Before a live
+zero observation, the qualifier synchronously drains queued input: backlog,
+partial records, pending target opens and sticky capture errors cannot prove
+zero. Strings are projected at 16 KiB rather than 1 MiB to bound unrelated
+bulk-copy buffers. Every required original-channel/log write must still
+decode completely with its exact successful byte count; truncated relevant
+strings/vectors refuse qualification. These are observer settings, not MCP
+payload limits, runtime policy changes or additional approval authority.
 
 Trace files are bounded before parsing, with no-follow regular-file opens.
 An overflowing witness fails as `private_trace_limit`; a still-incomplete live
