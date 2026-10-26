@@ -1,0 +1,92 @@
+{
+  "format": "sou156-native-component-acceptance-summary/1",
+  "date": "2026-10-26",
+  "status": "PASS: disabled component only",
+  "qualified_code_source": {
+    "commit": "b7483f275377b5ee54a3af2cf14579d2a22530c8",
+    "tree": "46214b100cde0a45140926b07f92ee33a83c066c",
+    "clean_before_and_after": true
+  },
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/40322620760",
+  "native_platform": "Linux x86_64, GitHub ubuntu-22.04",
+  "native_test": {
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "explicit_exact_selection": true
+  },
+  "case_count": 18,
+  "complete_ordered_cases": [
+    "original_initialize_discovery",
+    "commit",
+    "plain_blob",
+    "commit_looking_blob",
+    "tag_commit",
+    "nested_tag",
+    "local_replay_refused",
+    "direct_tree",
+    "tag_blob",
+    "tag_tree",
+    "missing_oid",
+    "revision_grammar",
+    "concurrent_calls",
+    "local_cancel_then_fresh",
+    "local_inflight_source_change",
+    "local_wait_before_write",
+    "fresh_capture_after_restore",
+    "cleanup_repository_unchanged"
+  ],
+  "artifact": {
+    "id": 12650780935,
+    "sha256": "fb43ea9a8180aeb87cec44177f096e112f571a8f16815f67b5071076d19cdf2a",
+    "size": 136883,
+    "members": 125,
+    "crc": "PASS"
+  },
+  "independent_root_review_sha256": "ff414fdec182874d057f2f19abfd7cdaebe86f838a23883a14c061f0ff38b660",
+  "verified": {
+    "original_whole_wire_lines_and_domain_digests": true,
+    "same_sealed_image_and_fresh_generation": true,
+    "four_session_owner_cleanup": true,
+    "repository_source_and_runtime_assets_unchanged": true,
+    "declared_library_count": 29
+  },
+  "reconstructed_object_oids": {
+    "commit": "0d5ba95b2621ffc0eb8042f594328638170a36c2",
+    "plain_blob": "a0478997127e0292f02d2c501447f7923e5ec850",
+    "commit_looking_blob": "76ceba9ad5f763da3700c2df2e8cda7c8898d625",
+    "tag_commit": "4c140644e1e6a8aef670e9a5d496c44b3d7ba651",
+    "nested_tag": "daca1740e3787b6c1e8c90d6c2380879a2c9faa3"
+  },
+  "default_route_refusal_controls": {
+    "route": "existing accepted SOU-147 preparation",
+    "helper_direct_effects": 1,
+    "helper_protected_effects": 0,
+    "owned_outside_file_and_loopback_controls": "PASS with independent calibration",
+    "witness_override_executed": false,
+    "coverage": "Reviewed exact preparation equivalence for the disabled component test only"
+  },
+  "owner_agreement_url": "https://github.com/SoupTeam/soup-wall/pull/273#issuecomment-6413442028",
+  "scope_limits": [
+    "Native ambiguity is equal decoded original results with different IDs; raw frames retained unchanged",
+    "Historical342-byte whole-frame equality is separate original-package evidence",
+    "Local wait/cancellation/one-use checks are not authenticated SOU-155 Ask or common join",
+    "Production authentication/composition and inspection relief remain disabled",
+    "Final Ready CI, human review and TL admission/merge are separate acceptance steps"
+  ],
+  "code_file_sha256": {
+    "crates/agentfw/src/mcp/server_profile/git.rs": "25f9c6d7719c8a189a9a52dc677c9028e3ef08f8974716587c6b50595b886874",
+    "crates/agentfw/src/mcp/server_profile/git/object_witness.rs": "329baeb0a2a9e446db615aed6458ba7ea2e99776a43a86ac5bc996542ae8b406",
+    "crates/agentfw/src/mcp/server_profile/git/object_witness/linux.rs": "84b5a06afcbcf990a5d6cde2ed71b2ccfa4bd1fa6350fdc974c4fb4d9b4b1d15",
+    "crates/agentfw/src/mcp/server_profile/git/object_witness/tests.rs": "2d28f4e55ed9661a1f50a4b89c3bea6e90367e8118eea311a63a9a6b98a43cd3",
+    "crates/agentfw/src/mcp/server_profile/git/shallow_view/linux.rs": "01d4ad5c713f40905a55fc32c02073cdd54a5af874c56f1f5ea83d29a2f46924",
+    "crates/agentfw/src/mcp/server_sandbox.rs": "2ec2f5e7f08d41801a1e15f739be9fd6ea38c06b2602ee34a11cde78234d8ab2",
+    "crates/agentfw/src/mcp/server_sandbox/object_witness_native_tests.rs": "922921fd93f8b41ef75750e46204bdbff4eb7623443d2e80a9bb90cc7140f6f2",
+    "crates/agentfw/tests/fixtures/sou156-original-object-confusion.json": "1dd0102827e7ae05eb1ad87834ecec346dbb09fb7de5df2f9f4e1f68238d76d3",
+    "scripts/reproduce-sou156-git-object-confusion.py": "52111b4fd744f013e20dc1941d22fb8dee67aeae50acca33f950a395ef45e3b6",
+    "scripts/tests/test_sou156_git_object_confusion.py": "218b4968126f181104af721c57a2fa1398d44f36a034279f8ac7ff2837af070d",
+    "scripts/tests/test_sou156_native_evidence.py": "44a1fc27ff69f43dc52a43920dbb84cc3f4ebc0ef3f82b3893177d6d0fcccc80",
+    "scripts/verify-sou147-shallow-git.py": "739e8af475fd5c666f11f5363c5ee78addc97f6eb7617f6335d83c92efc1f585",
+    "scripts/verify-sou156-git-object-witness.py": "39f02e871d387142f84993cb6fc3efaf53b017791892a63136c4acf6c9366f2f"
+  }
+}

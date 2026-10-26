@@ -242,6 +242,19 @@ source and assets. Its SOU-147 caller preserves that driver's existing matrix an
 artifact retention. Existing outside-file/network/helper controls retain their
 default preparation route; they are not labelled as witness-override execution.
 Static equivalence of the new test preparation and that coverage require review.
-The new test's native execution remains **NOT_RUN** until a separately reviewed
-candidate is actually executed. It does not exercise authenticated Ask, the
-complete result-channel join or production authority.
+Native [run 40322620760](https://github.com/SoupTeam/soup-wall/actions/runs/40322620760)
+qualified code source `b7483f275377b5ee54a3af2cf14579d2a22530c8` on Linux x86-64:
+exactly one selected native test passed, with zero failed/ignored tests and all
+18 ordered, unique component cases passing. Independent review verified the
+retained wire lines/digests, same image and fresh generation, four-session owner
+cleanup, and unchanged source/runtime/profile/package/executable assets including
+all 29 declared libraries. The artifact ZIP digest and qualified code-file hashes
+are in the [dated acceptance summary](evidence/sou-156/native-component-acceptance-2026-10-26.json).
+This documentation follow-up changes no qualified code or test input.
+
+Existing calibrated default-route refusal controls passed at that same source;
+their coverage of this disabled component is accepted through independently
+reviewed preparation equivalence. They did not execute the witness override.
+This acceptance does not exercise authenticated Ask, the complete result-channel
+join or production authority. Final Ready CI, independent human review and TL
+admission/merge remain separate steps.
