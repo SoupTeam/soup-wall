@@ -34,6 +34,39 @@ def args(root, *, prepare=True, rebuild=False):
 
 
 class PreparationBoundary(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "interpreter identity uses Linux file modes")
+    def test_selected_interpreter_identity_accepts_hosted_toolcache_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            interpreter = Path(temporary) / "python"
+            interpreter.write_bytes(b"selected interpreter fixture")
+            interpreter.chmod(0o775)
+            values = SimpleNamespace(git_archive=None, bwrap_archive=None,
+                                     pkg_config_libdir=None, pkg_config_sysroot=None,
+                                     meson_pythonpath=None)
+            with patch.object(PREP.sys, "executable", str(interpreter)):
+                first = PREP.execution_inputs(values)
+                self.assertEqual(first["python"]["path"], str(interpreter))
+                interpreter.write_bytes(b"changed interpreter fixture")
+                self.assertNotEqual(PREP.execution_inputs(values), first)
+
+    @unittest.skipUnless(os.name == "posix", "dependency links require Linux")
+    def test_unresolved_package_link_is_bound_and_external_target_refused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            dependency = Path(temporary) / "selected"
+            dependency.mkdir(mode=0o700)
+            (dependency / "missing-link").symlink_to(dependency / "absent")
+            values = SimpleNamespace(git_archive=None, bwrap_archive=None,
+                                     pkg_config_libdir=None, pkg_config_sysroot=dependency,
+                                     meson_pythonpath=None)
+            before = PREP.execution_inputs(values)
+            (dependency / "absent").write_bytes(b"now present")
+            self.assertNotEqual(PREP.execution_inputs(values), before)
+            external = Path(temporary) / "external"
+            external.write_bytes(b"outside selected root")
+            (dependency / "outside").symlink_to(external)
+            with self.assertRaisesRegex(PREP.Failure, "dependency_link_escape"):
+                PREP.execution_inputs(values)
+
     @unittest.skipUnless(os.name == "posix", "process signals require Linux")
     def test_cancelled_build_stops_owned_descendant(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -216,6 +249,11 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({"worker": os.getpid(), "child":
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             values = args(root)
+            meson = root / "meson-python"
+            meson.mkdir(mode=0o700)
+            module = meson / "reviewed_module.py"
+            module.write_text("version = 1\n")
+            values.meson_pythonpath = meson
             unrelated = root / "unrelated.txt"
             unrelated.write_text("keep")
             tools = {name: str(Path(os.sys.executable).resolve()) for name in PREP.TOOLS}
@@ -247,6 +285,18 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps({"worker": os.getpid(), "child":
                 first = PREP.prepare(values)
                 self.assertEqual(first["status"], "prepared-not-qualified")
                 marker = (values.output / "current.json").read_bytes()
+                self.assertEqual(PREP.prepare(values)["status"], "reused")
+                module.write_text("version = 2\n")
+                with self.assertRaisesRegex(PREP.Failure, "receipt_execution_inputs_changed"):
+                    PREP.prepare(values)
+                self.assertEqual((values.output / "current.json").read_bytes(), marker)
+                values.rebuild = True
+                rebuilt = PREP.prepare(values)
+                self.assertEqual(rebuilt["status"], "prepared-not-qualified")
+                self.assertNotEqual(rebuilt["receipt"], first["receipt"])
+                first = rebuilt
+                marker = (values.output / "current.json").read_bytes()
+                values.rebuild = False
                 self.assertEqual(PREP.prepare(values)["status"], "reused")
                 values.rebuild = True
                 builder.side_effect = PREP.Failure("interrupted_build", "git_build")
