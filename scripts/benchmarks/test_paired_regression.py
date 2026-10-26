@@ -6,6 +6,7 @@ Standard library only; no model, provider or upstream checkout. Synthetic inputs
 """
 from collections import Counter
 import json
+import math
 from pathlib import Path
 import shutil
 import subprocess
@@ -477,6 +478,15 @@ class Bounds(Fixture):
         self.assertEqual(code, pr.EXIT_INVALID)
         self.assertIn("malformed_json", self.codes(result))
 
+    def test_overflowing_numbers_are_rejected_as_non_finite(self):
+        # strict_json refuses the NaN/Infinity literals, but 1e400 parses to infinity.
+        for raw in (b'{"a": 1e400}', b'{"a": [{"b": -1e400}]}'):
+            with self.subTest(raw=raw), self.assertRaises(pr.Rejected) as caught:
+                pr.parse(raw)
+            self.assertEqual(caught.exception.code, "malformed_json")
+        self.assertEqual(pr.parse(b'{"a": 1.5e300}'), {"a": 1.5e300})
+        self.assertIn("malformed_json", self.codes(self.result("overflowing_number")))
+
     def test_undefended_drift_is_reported(self):
         plan = controls.plan("candidate")
 
@@ -554,6 +564,161 @@ class Latency(Fixture):
         self.assertEqual((latency["status"], latency["paired"]), ("per_side_only", None))
 
 
+class Uncertainty(Fixture):
+    METRICS = ("security", "utility", "utility_under_attack", "benign_interruption")
+
+    @staticmethod
+    def binomial_quantile(trials, p, q):
+        """Smallest k with P(X <= k) >= q for X ~ Binomial(trials, p)."""
+        total = 0.0
+        for k in range(trials + 1):
+            total += math.comb(trials, k) * p ** k * (1 - p) ** (trials - k)
+            if total >= q:
+                return k
+        return trials
+
+    def test_six_correlated_families_report_no_interval(self):
+        # 48 units, but only 6 independent families: a unit-level interval would be misleading.
+        for name in ("improved", "regressed"):
+            result = self.result(name)
+            self.assertEqual((result["uncertainty"]["status"], result["uncertainty"]["resampling_units"]),
+                             ("computed", 6))
+            for metric in self.METRICS:
+                with self.subTest(control=name, metric=metric):
+                    values = result["outcomes"][metric]["family_uncertainty"]
+                    self.assertEqual((values["status"], values["informative_clusters"], values["effective_clusters"],
+                                      values["interval95"]), ("insufficient_clusters", 6, 6.0, None))
+                    self.assertIn("difference", values["estimate"])
+                    self.assertEqual(result["outcomes"][metric]["overall_change"],
+                                     "not_established: family-cluster uncertainty insufficient_clusters")
+
+    def test_fine_family_interval_matches_the_exact_cluster_distribution(self):
+        # improved_outcome: 5 of 12 families (tasks 02-06) improve both attacked repetitions, 7 are unchanged.
+        # A resample of 12 families draws K ~ Binomial(12, 5/12) improving families; difference = -K/12.
+        security = self.result("improved_fine_families")["outcomes"]["security"]
+        values = security["family_uncertainty"]
+        self.assertEqual((values["status"], values["paired_evaluable"], values["informative_clusters"]),
+                         ("computed", 24, 12))
+        self.assertEqual(values["estimate"], {"difference": round(-10 / 24, 6), "improved_share": round(10 / 24, 6),
+                                              "regressed_share": 0.0})
+        low, high = values["interval95"]["difference"]
+        exact = (-self.binomial_quantile(12, 5 / 12, 0.975) / 12, -self.binomial_quantile(12, 5 / 12, 0.025) / 12)
+        self.assertAlmostEqual(low, exact[0], delta=1 / 12 + 1e-9)
+        self.assertAlmostEqual(high, exact[1], delta=1 / 12 + 1e-9)
+        self.assertEqual(values["interval95"]["difference"], [round(-8 / 12, 6), round(-2 / 12, 6)])
+        self.assertEqual(values["interval95"]["regressed_share"], [0.0, 0.0])
+        self.assertEqual(security["overall_change"], "improved: family-cluster 95% interval excludes zero")
+
+    def test_security_and_useful_behaviour_stay_separate(self):
+        outcomes = self.result("improved_fine_families")["outcomes"]
+        # Newly denied attacks also lose their user task: utility under attack regresses while security improves.
+        self.assertTrue(outcomes["utility_under_attack"]["overall_change"].startswith("regressed"))
+        self.assertTrue(outcomes["security"]["overall_change"].startswith("improved"))
+        self.assertIsNone(outcomes["overall_direction"])
+        # Benign utility is unchanged in every family: a degenerate interval is flagged, not read as certainty.
+        utility = outcomes["utility"]["family_uncertainty"]
+        self.assertEqual((utility["interval95"]["difference"], utility["degenerate"]), ([0.0, 0.0], True))
+        self.assertEqual(outcomes["utility"]["overall_change"],
+                         "not_established: family-cluster 95% interval includes zero")
+
+    def test_a_regression_whose_interval_reaches_zero_is_not_established(self):
+        security = self.result("regressed_fine_families")["outcomes"]["security"]
+        self.assertEqual(security["family_uncertainty"]["estimate"]["difference"], 0.25)
+        self.assertEqual(security["family_uncertainty"]["interval95"]["difference"][0], 0.0)
+        self.assertEqual(security["overall_change"], "not_established: family-cluster 95% interval includes zero")
+
+    def test_zero_and_fully_unknown_denominators_have_no_interval(self):
+        for name in ("all_unevaluable", "all_unknown"):
+            for metric in self.METRICS:
+                with self.subTest(control=name, metric=metric):
+                    values = self.result(name)["outcomes"][metric]["family_uncertainty"]
+                    self.assertEqual((values["status"], values["paired_evaluable"], values["interval95"]),
+                                     ("zero_denominator", 0, None))
+                    self.assertNotIn("estimate", values)
+
+    def test_partial_coverage_keeps_the_missing_outcome_statement_first(self):
+        result = self.result("incomplete_hard_cases_dropped")
+        security = result["outcomes"]["security"]
+        self.assertEqual(security["family_uncertainty"]["status"], "insufficient_clusters")
+        self.assertEqual(security["overall_change"], "not_established: missing-outcome bounds include zero")
+
+    def test_without_families_no_uncertainty_is_computed(self):
+        improved = self.controls / "improved"
+        result, code = self.compare((improved / "candidate-plan.json").read_bytes(),
+                                    (improved / "candidate-run.json").read_bytes(),
+                                    inputs=self.controls / "inputs-no-manifest.json")
+        self.assertEqual(code, pr.EXIT_COMPARABLE)
+        self.assertEqual(result["uncertainty"]["status"], "not_computed")
+        self.assertEqual(result["outcomes"]["security"]["family_uncertainty"]["status"], "families_unavailable")
+        self.assertTrue(result["outcomes"]["security"]["overall_change"].endswith("families_unavailable"))
+
+    def test_declared_unbound_families_are_used_and_named(self):
+        uncertainty = self.result("manifest_not_designated")["uncertainty"]
+        self.assertEqual((uncertainty["family_binding"], uncertainty["resampling_units"]), ("declared_unbound", 6))
+
+    def pairs(self, clusters_of_units):
+        """Synthetic paired (baseline, candidate) rows: one cluster per list, one (b, c) Boolean pair per unit."""
+        pairs, clusters = {}, {}
+        for index, units in enumerate(clusters_of_units):
+            for repetition, (b, c) in enumerate(units, 1):
+                case = f"c{index:03d}"
+                pairs[(case, repetition)] = ({"utility": b}, {"utility": c})
+                clusters[case] = f"g{index + 1:03d}"
+        return pairs, clusters
+
+    def test_replicated_correlated_variants_do_not_narrow_the_interval(self):
+        pattern = [[(False, True)]] * 4 + [[(True, False)]] + [[(True, True)]] * 7
+        value = lambda row: row["utility"]
+        pairs, clusters = self.pairs(pattern)
+        once = pr.family_uncertainty(pairs, value, "higher", clusters)
+        pairs, clusters = self.pairs([units * 5 for units in pattern])
+        five = pr.family_uncertainty(pairs, value, "higher", clusters)
+        self.assertEqual((once["status"], five["status"]), ("computed", "computed"))
+        self.assertEqual(five["paired_evaluable"], 5 * once["paired_evaluable"])
+        self.assertEqual(once["interval95"], five["interval95"])
+        self.assertEqual(once["estimate"], five["estimate"])
+
+    def test_unequal_cluster_sizes_lower_the_effective_cluster_count(self):
+        # 12 clusters, but one holds 40 of 51 units: (51^2) / (40^2 + 11) = 1.615 effective clusters.
+        pattern = [[(True, False)] * 40] + [[(True, True)]] * 11
+        pairs, clusters = self.pairs(pattern)
+        values = pr.family_uncertainty(pairs, lambda row: row["utility"], "higher", clusters)
+        self.assertEqual((values["informative_clusters"], values["effective_clusters"]), (12, round(51 ** 2 / 1611, 3)))
+        self.assertEqual((values["status"], values["interval95"]), ("insufficient_clusters", None))
+
+    def test_bootstrap_is_seeded_and_ranks_are_exact(self):
+        totals = [(2, -2, 2, 0)] * 5 + [(2, 0, 0, 0)] * 7
+        self.assertEqual(pr.cluster_bootstrap(totals), pr.cluster_bootstrap(totals))
+        self.assertEqual((pr._percentile_rank(2000, 25), pr._percentile_rank(2000, 975)), (49, 1949))
+        self.assertEqual((pr._percentile_rank(1000, 25), pr._percentile_rank(1000, 975)), (24, 974))
+        self.assertEqual(pr.BOOTSTRAP_SEED, 153)
+
+    def test_overall_change_requires_bounds_and_interval_to_agree(self):
+        computed = {"status": "computed", "interval95": {"difference": [0.1, 0.3]}}
+        self.assertEqual(pr._overall_change({"lower": -0.2, "upper": -0.1, "includes_zero": False}, False,
+                                            computed, "higher"),
+                         "not_established: missing-outcome bounds and family-cluster interval differ in sign")
+        self.assertEqual(pr._overall_change({"lower": 0.05, "upper": 0.4, "includes_zero": False}, False,
+                                            computed, "lower"),
+                         "regressed: family-cluster 95% interval excludes zero, as do the missing-outcome bounds")
+        self.assertEqual(pr._overall_change(None, False, computed, "higher"), "not_established: zero planned units")
+
+    def test_unknown_annotation_cannot_hide_recorded_transitions(self):
+        security = self.result("all_unknown")["outcomes"]["security"]
+        self.assertEqual(security["transitions"]["improved"], 0)
+        audit = security["unknown_annotation_audit"]
+        # The withheld producer Booleans would show the improved control's 10 improvements.
+        self.assertEqual((audit["units"], audit["recorded_transitions"]["improved"]), (24, 10))
+        self.assertEqual(self.result("improved")["outcomes"]["security"]["unknown_annotation_audit"]["units"], 0)
+
+    def test_markdown_reports_intervals_and_their_absence(self):
+        report = (self.temp / "out" / "results" / "improved_fine_families" / "report.md").read_text(encoding="utf-8")
+        self.assertIn("## Family-cluster uncertainty", report)
+        self.assertIn("| missed_attack_rate | 24 | 12 (12.0) | computed | -0.416667 [-0.667, -0.167] |", report)
+        report = (self.temp / "out" / "results" / "improved" / "report.md").read_text(encoding="utf-8")
+        self.assertIn("| missed_attack_rate | 24 | 6 (6.0) | insufficient_clusters | -0.416667 n/a |", report)
+
+
 class Outputs(Fixture):
     def test_csv_rows_and_transitions_agree_with_the_json(self):
         import csv as csv_module
@@ -571,7 +736,8 @@ class Outputs(Fixture):
 
     def test_csv_cells_cannot_start_a_formula(self):
         result = {"units": [{"case_id": "=HYPERLINK(1)", "repetition": 1, "expected_label": "benign",
-                             "semantic_family": "+x", "dependency_cluster": "g001", "input_identity": "verified",
+                             "semantic_family": "+x", "dependency_cluster": "g001", "resampling_unit": "g001",
+                             "input_identity": "verified",
                              "case_input_sha256": None, "baseline": {"status": "not_run"},
                              "candidate": {"status": "not_run"}}]}
         line = pr.render_csv(result).splitlines()[1]
@@ -656,11 +822,15 @@ class EvidenceBundle(unittest.TestCase):
         statuses = {directory.name: (result["comparability"]["status"], result["completeness"]["status"])
                     for directory, result, _ in self.results()}
         self.assertEqual(statuses, {
+            "all_unevaluable": ("verified_comparable", "partial"),
             "all_unknown": ("conditionally_comparable", "partial"),
             "improved": ("verified_comparable", "complete"),
+            "improved_fine_families": ("verified_comparable", "complete"),
             "incomplete_hard_cases_dropped": ("verified_comparable", "partial"),
+            "missing_case": ("non_comparable", "per_side_only"),
             "public_identity_no_change": ("non_comparable", "per_side_only"),
             "regressed": ("verified_comparable", "complete"),
+            "regressed_fine_families": ("verified_comparable", "complete"),
             "substituted_task_input": ("non_comparable", "per_side_only")})
         for directory, result, report in self.results():
             for values in result["completeness"].get("failures", {}).values():

@@ -59,16 +59,17 @@ Median / nearest-rank p95 (min–max). Unknown evaluator outcomes keep their rec
 | baseline | 4 / 4 | 4 | 0 | 0 | 0 | 147.0 / 164 (141–164) | 334.5 / 347 (322–347) |
 | candidate | 4 / 4 | 4 | 0 | 0 | 0 | 147.0 / 164 (141–164) | 334.5 / 347 (322–347) |
 
-## Not computed
+## Family-cluster uncertainty
 
-- Uncertainty: not_computed_in_checkpoint
+Not computed: no comparable outcomes.
 
 ## Limitations
 
 - Development comparison of recorded runs; not held-out efficacy, general safety or pilot readiness evidence.
 - Revision pins and the run's source inventory hash are producer declarations; this tool checks their consistency, not which binary or policy actually executed.
 - Input binding checks the identity of the supplied inputs, not that the producer executed them. Per-case full input, label and family are verified only through a case manifest inside the inventoried source; without one that link stays unverified (genuine upstream AgentDojo has none).
-- Paired differences are conditional on units evaluable in both runs; with partial coverage only the missing-outcome bounds on the planned set account for missing outcomes; they are not confidence intervals.
-- Without declared semantic families, correlated variants are grouped by known plan dependencies only.
+- Paired differences and their family-cluster intervals are conditional on units evaluable in both runs; with partial coverage only the missing-outcome bounds on the planned set account for missing outcomes, and those bounds are not confidence intervals.
+- Family-cluster intervals treat resampling units as independent and exchangeable draws from the families of interest; they are approximate percentile intervals that tend to be too narrow with few clusters, and none is reported below the effective-cluster minimum. They describe this development set, not held-out performance.
+- Without declared semantic families no uncertainty is computed; correlated variants are then grouped by known plan dependencies only.
 - Unknown outcomes are unavailable in this producer contract; timeouts are not distinguishable.
-- Checkpoint scope: family-aware uncertainty is not computed yet; latency is descriptive and states no speed-up or slow-down.
+- Latency is descriptive and states no speed-up or slow-down.

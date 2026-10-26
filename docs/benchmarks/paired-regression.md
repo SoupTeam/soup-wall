@@ -1,11 +1,11 @@
 # Paired development regression (SOU-153)
 
-> **Status: checkpoint, not complete.** Implemented: the input contract, comparability, per-case
-> input binding, completeness, paired transitions, missing-outcome bounds, declared unknown
-> outcomes, descriptive latency, CSV/Markdown output, controls and a reproducible
-> [evidence bundle](evidence/sou153/README.md). Pending: family-aware uncertainty; see
+> **Status: implementation complete, pending review.** Implemented: the input contract,
+> comparability, per-case input binding, completeness, paired transitions, missing-outcome
+> bounds, [family-aware uncertainty](#family-aware-uncertainty), declared unknown outcomes,
+> descriptive latency, CSV/Markdown output, controls and a reproducible
+> [evidence bundle](evidence/sou153/README.md). Open questions are listed under
 > [remaining work](#remaining-work).
-> Phase 4 stays open.
 
 [`paired_regression.py`](../../scripts/benchmarks/paired_regression.py) compares two
 recorded runs of the [matched AgentDojo protocol](agentdojo-matched-protocol.md) offline.
@@ -42,7 +42,7 @@ The command writes these files and prints a one-line status:
 | 3 | Usage error, for example a non-empty output directory |
 
 To reproduce every control, or to check the committed
-[checkpoint evidence bundle](evidence/sou153/README.md) byte for byte:
+[evidence bundle](evidence/sou153/README.md) byte for byte:
 
 ```powershell
 python scripts/benchmarks/paired_regression_controls.py --out-dir <new-directory>
@@ -71,8 +71,8 @@ The comparator applies these checks in order, before any outcome is computed:
 
 1. **File size.** A file larger than `max_file_bytes` (8 MiB) is refused by its size, and
    at most that many bytes are ever read.
-2. **Strict JSON.** Duplicate fields, `NaN`/`Infinity`, invalid UTF-8 and runaway nesting
-   are refused (`malformed_json`).
+2. **Strict JSON.** Duplicate fields, `NaN`/`Infinity`, numbers that overflow to infinity
+   (such as `1e400`), invalid UTF-8 and runaway nesting are refused (`malformed_json`).
 3. **Producer contract.** The plan and run schema and protocol must match
    (`incompatible_producer_contract`).
 4. **Record counts.** Plan cases, planned units (cases × repetitions), run rows and bundle
@@ -198,7 +198,9 @@ For each metric the report gives:
 - the rate on each side's evaluable units;
 - missing-outcome bounds;
 - the conditional difference;
-- an `overall_change` statement.
+- its family-cluster interval (`family_uncertainty`);
+- an `overall_change` statement;
+- an `unknown_annotation_audit`.
 
 **Missing-outcome bounds.** Each side's rate is computed on the fixed planned set of P
 units, with every missing outcome set to 0 and then to 1: `[k/P, (k + P − evaluable)/P]`.
@@ -209,12 +211,20 @@ missing data, not confidence intervals.
 **Conditional difference.** `paired_conditional` describes the complete-case intersection,
 a different subset from the planned set.
 
-**Overall change.** `overall_change` is always `not_established` in this checkpoint:
+**Overall change.** Each metric has its own statement. They are checked in this order, and
+the first that applies is reported:
 
-- when the bounds include zero, because of the missing outcomes;
-- otherwise, because no uncertainty is computed.
+| `overall_change` | Condition |
+|---|---|
+| `not_established: zero planned units` | The metric has no planned unit |
+| `not_established: missing-outcome bounds include zero` | Outcomes are missing and the bounds include zero |
+| `not_established: family-cluster uncertainty <status>` | No interval: `families_unavailable`, `zero_denominator` or `insufficient_clusters` |
+| `not_established: family-cluster 95% interval includes zero` | The interval includes zero, including a degenerate `[0, 0]` |
+| `not_established: missing-outcome bounds and family-cluster interval differ in sign` | Partial coverage, with both excluding zero on opposite sides |
+| `improved: …` or `regressed: …` | The interval excludes zero and, with missing outcomes, so do the bounds, on the same side |
 
-No readiness verdict is given, and the plan's acceptance limits are not evaluated.
+Security and useful-behaviour metrics are never merged (`overall_direction` is null). No
+readiness verdict is given, and the plan's acceptance limits are not evaluated.
 
 Worked example (`incomplete_hard_cases_dropped`, security):
 
@@ -256,7 +266,12 @@ For each named unit:
 - the missing-outcome bounds treat it as missing, so it is never a success or a prevented
   attack.
 
-The overlay is always listed as a gap, because the producer did not report it.
+The overlay is always listed as a gap, because the producer did not report it. It can only
+remove outcomes, never add or change one. So that it cannot silently hide a recorded
+change, each metric's `unknown_annotation_audit` counts the units it withholds and the
+transitions the producer recorded there. Those counts are never used in a rate, bound or
+interval. The comparator checks that each named unit is a recorded enforced trajectory of
+the bound run. It cannot check that the annotation's `reason` is true.
 
 ## Latency
 
@@ -288,7 +303,7 @@ denominator. It can differ from `paired_evaluable`, for example when outcomes ar
 The fields `measured_baseline_only`, `measured_candidate_only` and `coverage_differs` show
 coverage changes.
 
-**No speed claim.** `change` is always `not_stated`: no uncertainty is computed, and when
+**No speed claim.** `change` is always `not_stated`: no uncertainty is computed for latency, and when
 coverage differs, the per-side distributions describe different unit sets. Latency is not
 a gate.
 
@@ -301,9 +316,74 @@ a gate.
 - **Semantic families.** These come from the verified case manifest
   (`bound_by_source_inventory`) or from `--families` (`declared_unbound`, listed as a gap).
   Families never carry or change expected labels.
-- **Resampling units.** Dependency clusters merged with families. They will be the unit of
-  the family-aware uncertainty. A dataset that collapses into one unit will report
-  insufficient samples rather than split correlated cases.
+- **Resampling units.** Dependency clusters merged with families: the unit of the
+  family-aware uncertainty. Correlated cases are never split between resampling units.
+  The CSV lists each unit's `resampling_unit`.
+
+## Family-aware uncertainty
+
+`outcomes.<metric>.family_uncertainty` gives an interval for each metric's paired
+difference. `uncertainty` records the method and the status of each metric.
+
+**Why a cluster bootstrap.** The data contract gives:
+
+- Binary outcomes on paired units.
+- Variants and repetitions that share a task, an injection or a semantic family. These
+  are correlated, so treating the 48 units of a control as independent would give
+  intervals that are too narrow.
+- No distributional model of family effects.
+
+A pairs cluster bootstrap over resampling units uses only the assumption that families
+are independent. It needs only the standard library, and it handles the ratio estimator
+directly. A unit-level Wilson or bootstrap interval would treat correlated variants as
+independent evidence, so it is not used.
+
+| Item | Definition |
+|---|---|
+| Estimand | Candidate − baseline rate on the paired-evaluable units (`paired_conditional.difference`), and the shares of those units that improved and that regressed |
+| Resampling unit | `grouping.resampling_units`: semantic families merged with dependency clusters. Every variant and repetition of a unit is drawn together. |
+| Procedure | Draw the metric's G informative units (those with at least one paired-evaluable unit) G times with replacement. Each statistic is the ratio of summed counts. |
+| Interval | 95% percentile: nearest-rank values at ranks ⌈0.025·B⌉ and ⌈0.975·B⌉ of the sorted replicates |
+| Seed and replicates | Seed 153 (`BOOTSTRAP_SEED`), B = 2000 (`BOOTSTRAP_REPLICATES`). Fixed before any data were seen. |
+| Random numbers | `random.Random(153).random()`, whose sequence Python guarantees for an integer seed. Index = ⌊random() · G⌋. Units are taken in ID order, and the generator is reseeded for each metric. |
+| Sufficiency | An interval is reported only with at least 10 effective clusters (`MIN_EFFECTIVE_CLUSTERS`): G_eff = (Σ n_g)² / Σ n_g² over informative units. Unequal sizes lower it, so one dominant family cannot pass as many. |
+
+**Statuses.** Each metric reports one of these:
+
+| Status | Meaning |
+|---|---|
+| `computed` | Interval given, plus `difference_includes_zero` and `degenerate` |
+| `insufficient_clusters` | Point estimate and cluster counts only |
+| `zero_denominator` | No paired-evaluable unit, for example when everything is stopped or unknown. No estimate is given. |
+| `families_unavailable` | No case manifest and no `--families`. Nothing is computed, and there is no fallback to unit-level resampling. |
+
+A degenerate interval such as `[0, 0]` means that every resampled family gave the same
+difference. It shows no observed variation, not certainty.
+
+**Assumptions:**
+
+- resampling units are independent and exchangeable draws from the families of interest;
+- a unit's evaluator outcome is fixed given its trajectory;
+- units missing on either side are excluded, not imputed.
+
+**Limitations:**
+
+- Percentile cluster bootstraps under-cover with few clusters (Cameron, Gelbach and
+  Miller, *Review of Economics and Statistics* 90(3), 2008). Intervals just above the
+  minimum of 10 are therefore optimistic. The minimum is a floor, not a guarantee of
+  coverage.
+- With partial coverage, the interval describes the paired subset only. The
+  missing-outcome bounds describe the planned set, and `overall_change` requires both to
+  agree.
+- Repetition r is paired with repetition r. With complete coverage, cluster totals do not
+  depend on this pairing.
+- The interval describes this development set. It is not held-out or deployment
+  performance, and latency has no interval.
+
+**Correlated variants.** A test replicates every unit of every family five times. The
+interval is unchanged, because only families are resampled. The 6-family synthetic
+controls (48 units) report `insufficient_clusters`. The 12-family controls compute
+intervals.
 
 ## Controls
 
@@ -318,13 +398,14 @@ generated to test the comparator's accounting, and the provenance says so.
 
 | Control | Expected |
 |---|---|
-| improved, regressed, no_change | exit 0, `verified_comparable`, exact transitions |
+| improved, regressed, no_change | exit 0, `verified_comparable`, exact transitions; 6 families, so `insufficient_clusters` |
+| improved_fine_families, regressed_fine_families | exit 0, `verified_comparable`; one family per user task (12), so intervals are computed |
 | incomplete_hard_cases_dropped | `verified_comparable`, partial; conditional −1.0 while bounds include zero |
 | all_unevaluable | `verified_comparable`, zero paired-evaluable units, all rates null |
 | manifest_not_designated | `conditionally_comparable`; gaps `case_semantic_input_unverified`, `semantic_families_unbound` |
 | all_unknown | `conditionally_comparable`; every candidate outcome unknown, 0 evaluable, bounds [0, 1] |
 | missing_case, changed_input, substituted_task_input, settings_mismatch, unverified_inputs | exit 1 with the matching reasons |
-| unknowns_wrong_run, tampered_plan, tampered_row, duplicate_case_id, incompatible_contract, non_finite | exit 2 with the matching codes |
+| unknowns_wrong_run, tampered_plan, tampered_row, duplicate_case_id, incompatible_contract, non_finite, overflowing_number | exit 2 with the matching codes |
 | public_identity_no_change, public_dev_vs_fresh | exit 1, `input_identity_unverified` (negative controls) |
 
 The tests also substitute a task prompt, an expected label or a family on one side, and
@@ -332,10 +413,11 @@ consistently on both sides.
 
 ## Remaining work
 
-- **Uncertainty.** Family-aware uncertainty over resampling units (planned: paired cluster
-  bootstrap with a fixed seed), with its estimand, data-checked weights, an explicitly
-  justified sufficiency rule and its limitations.
+- **Review of the statistical choices.** The minimum of 10 effective clusters, the
+  percentile interval and B = 2000 need review. A stricter minimum or a bias-corrected
+  interval would be a reviewed change of these constants.
 - **Public data.** No public run has a source bundle or case manifest, so no public
   comparison is verified and no public semantic families are declared.
 - **Unknown outcomes.** These rely on the declared annotation contract. No existing
-  producer emits it.
+  producer emits it, and the task owner has not yet confirmed that it satisfies the
+  requirement.

@@ -109,6 +109,12 @@ def bundle(variant=None, with_manifest=True):
             "case_manifest": MANIFEST if with_manifest else None}
 
 
+# A second synthetic world: the same tasks, but each user task is its own family (12 families), so
+# a family-cluster interval can be computed. Its source, and so its inventory, differs from the default.
+FINE_FAMILIES = {"families": {case["case_id"]: f"{family_of(index)}-{index + 1:02d}"
+                              for index, task in enumerate(USER_TASKS) for case in cases([task], index)}}
+
+
 def families():
     return {"schema": pr.FAMILIES_SCHEMA,
             "provenance": {"kind": "synthetic", "assigned_by": "SOU-153 control generator",
@@ -265,14 +271,14 @@ def scenarios():
     result = {}
 
     def add(name, cplan, crun, expected_exit, codes, note, inputs="inputs.json", families=False,
-            status=None, raw_run=None, raw_plan=None, unknowns=None):
+            status=None, raw_run=None, raw_plan=None, unknowns=None, world=None):
         if status is None:
             status = {0: "verified_comparable", 1: "non_comparable", 2: "non_comparable"}[expected_exit]
         result[name] = {"plan": raw_plan if raw_plan is not None else encode(cplan),
                         "run": raw_run if raw_run is not None else encode(crun), "inputs": inputs,
                         "families": families, "expected_exit": expected_exit, "expected_status": status,
                         "expected_codes": codes, "note": note,
-                        "unknowns": encode(unknowns) if unknowns is not None else None}
+                        "unknowns": encode(unknowns) if unknowns is not None else None, "world": world}
 
     add("improved", cand_plan, run("candidate", cand_plan, improved_outcome), 0, [],
         "candidate denies five more attacks; benign outcomes unchanged")
@@ -332,6 +338,17 @@ def scenarios():
         "candidate run uses run schema 1")
     nan_run = encode(good_run).replace(b'"elapsed_ms": 150', b'"elapsed_ms": NaN', 1)
     add("non_finite", cand_plan, None, 2, ["malformed_json"], "a latency is NaN", raw_run=nan_run)
+    overflow_run = encode(good_run).replace(b'"http_timeout_seconds": 30', b'"http_timeout_seconds": 1e400', 1)
+    add("overflowing_number", cand_plan, None, 2, ["malformed_json"],
+        "a run setting is 1e400, which parses to infinity", raw_run=overflow_run)
+    fine_base, fine_cand = plan("baseline", variant=FINE_FAMILIES), plan("candidate", variant=FINE_FAMILIES)
+    fine_world = {"baseline-plan.json": encode(fine_base),
+                  "baseline-run.json": encode(run("baseline", fine_base, baseline_outcome)),
+                  "inputs.json": encode(bundle(FINE_FAMILIES))}
+    add("improved_fine_families", fine_cand, run("candidate", fine_cand, improved_outcome), 0, [],
+        "improved outcomes with one family per user task: 12 resampling units", world=fine_world)
+    add("regressed_fine_families", fine_cand, run("candidate", fine_cand, regressed_outcome), 0, [],
+        "regressed outcomes with one family per user task: 12 resampling units", world=fine_world)
     return base_plan, run("baseline", base_plan, baseline_outcome), result
 
 
@@ -352,9 +369,14 @@ def write_controls(out_dir: Path):
         (directory / "candidate-run.json").write_bytes(scenario["run"])
         if scenario["unknowns"] is not None:
             (directory / "candidate-unknowns.json").write_bytes(scenario["unknowns"])
-        result, code = pr.compare(controls / "baseline-plan.json", controls / "baseline-run.json",
+        base = controls
+        if scenario["world"] is not None:
+            base = directory
+            for file_name, value in scenario["world"].items():
+                (directory / file_name).write_bytes(value)
+        result, code = pr.compare(base / "baseline-plan.json", base / "baseline-run.json",
                                   directory / "candidate-plan.json", directory / "candidate-run.json",
-                                  controls / scenario["inputs"] if scenario["inputs"] else None,
+                                  base / scenario["inputs"] if scenario["inputs"] else None,
                                   controls / "families.json" if scenario["families"] else None,
                                   candidate_unknowns=directory / "candidate-unknowns.json"
                                   if scenario["unknowns"] is not None else None)
@@ -381,7 +403,8 @@ def write_controls(out_dir: Path):
 
 
 EVIDENCE = REPO / "docs/benchmarks/evidence/sou153"
-EVIDENCE_SCENARIOS = ("improved", "regressed", "incomplete_hard_cases_dropped", "all_unknown",
+EVIDENCE_SCENARIOS = ("improved", "regressed", "improved_fine_families", "regressed_fine_families",
+                      "incomplete_hard_cases_dropped", "all_unevaluable", "all_unknown", "missing_case",
                       "substituted_task_input")
 HAND_WRITTEN = {"README.md"}
 
@@ -418,8 +441,10 @@ def write_evidence(out_dir: Path) -> list[str]:
         run_path = store(directory, "candidate-run.json", scenario["run"])
         unknowns = store(directory, "candidate-unknowns.json", scenario["unknowns"]) \
             if scenario["unknowns"] is not None else None
-        result, code = pr.compare(inputs / "baseline-plan.json", inputs / "baseline-run.json", plan_path,
-                                  run_path, inputs / "inputs.json", candidate_unknowns=unknowns)
+        world = {file_name: store(directory, file_name, value) for file_name, value in (scenario["world"] or {}).items()}
+        result, code = pr.compare(world.get("baseline-plan.json", inputs / "baseline-plan.json"),
+                                  world.get("baseline-run.json", inputs / "baseline-run.json"), plan_path, run_path,
+                                  world.get("inputs.json", inputs / "inputs.json"), candidate_unknowns=unknowns)
         if (code, result["comparability"]["status"]) != (scenario["expected_exit"], scenario["expected_status"]):
             problems.append(f"{name}: exit {code} {result['comparability']['status']}")
         pr.write_result(out_dir / "results" / name, result)

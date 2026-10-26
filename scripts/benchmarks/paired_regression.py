@@ -32,8 +32,10 @@ from collections import Counter
 import csv
 import io
 import json
+import math
 import os
 from pathlib import Path
+import random
 import sys
 import tempfile
 
@@ -75,13 +77,43 @@ LIMITATIONS = [
     "Input binding checks the identity of the supplied inputs, not that the producer executed them. Per-case "
     "full input, label and family are verified only through a case manifest inside the inventoried source; "
     "without one that link stays unverified (genuine upstream AgentDojo has none).",
-    "Paired differences are conditional on units evaluable in both runs; with partial coverage only the "
-    "missing-outcome bounds on the planned set account for missing outcomes; they are not confidence intervals.",
-    "Without declared semantic families, correlated variants are grouped by known plan dependencies only.",
+    "Paired differences and their family-cluster intervals are conditional on units evaluable in both runs; "
+    "with partial coverage only the missing-outcome bounds on the planned set account for missing outcomes, "
+    "and those bounds are not confidence intervals.",
+    "Family-cluster intervals treat resampling units as independent and exchangeable draws from the families "
+    "of interest; they are approximate percentile intervals that tend to be too narrow with few clusters, and "
+    "none is reported below the effective-cluster minimum. They describe this development set, not held-out "
+    "performance.",
+    "Without declared semantic families no uncertainty is computed; correlated variants are then grouped by "
+    "known plan dependencies only.",
     "Unknown outcomes are unavailable in this producer contract; timeouts are not distinguishable.",
-    "Checkpoint scope: family-aware uncertainty is not computed yet; latency is descriptive and states no "
-    "speed-up or slow-down.",
+    "Latency is descriptive and states no speed-up or slow-down.",
 ]
+# Family-cluster bootstrap. Fixed before any data were seen; changing one changes every interval.
+BOOTSTRAP_SEED = 153
+BOOTSTRAP_REPLICATES = 2_000
+MIN_EFFECTIVE_CLUSTERS = 10
+UNCERTAINTY_METHOD = {
+    "estimand": "candidate - baseline rate on paired-evaluable units (the paired_conditional difference), and the "
+                "shares of those units that improved and regressed",
+    "resampling_unit": "dependency clusters merged with semantic families (grouping.resampling_units): every "
+                       "variant and repetition of a family is drawn together, never split",
+    "procedure": "pairs cluster bootstrap: draw the metric's informative resampling units (those with at least "
+                 "one paired-evaluable unit) with replacement, as many as there are, and recompute each "
+                 "statistic as a ratio of summed counts",
+    "interval": "95% percentile interval: nearest-rank values at ranks ceil(0.025 * B) and ceil(0.975 * B) of "
+                "the sorted replicates",
+    "random_numbers": "random.Random(seed).random(), whose sequence Python guarantees across versions for an "
+                      "integer seed; index = floor(random() * G); clusters in resampling-unit ID order; the "
+                      "generator is reseeded for every metric",
+    "sufficiency": "an interval is reported only when the effective number of clusters "
+                   "(sum n_g)^2 / sum n_g^2 over informative clusters reaches the minimum; unequal cluster sizes "
+                   "lower it. Percentile cluster bootstraps are documented to under-cover with few clusters "
+                   "(Cameron, Gelbach and Miller 2008), so intervals near the minimum are optimistic",
+    "assumptions": ["resampling units are independent of each other", "the evaluator outcome of a unit is fixed "
+                    "given its trajectory", "units missing on either side are excluded, not imputed; the "
+                    "missing-outcome bounds cover them"],
+}
 
 
 class Rejected(Exception):
@@ -112,13 +144,26 @@ def read_bounded(path, limit: int) -> bytes:
 
 
 def parse(raw: bytes):
-    """Strict JSON: duplicate fields, NaN/Infinity, invalid UTF-8 and runaway nesting are rejected."""
+    """Strict JSON: duplicate fields, NaN/Infinity, invalid UTF-8 and runaway nesting are rejected.
+
+    ``strict_json`` refuses the NaN/Infinity literals, but a finite-looking literal such as ``1e400``
+    overflows to infinity while parsing, so every parsed float is checked as well."""
     try:
-        return protocol.strict_json(raw)
+        value = protocol.strict_json(raw)
     except protocol.ProtocolError as error:
         raise Rejected("malformed_json", str(error)) from None
     except (RecursionError, ValueError) as error:
         raise Rejected("malformed_json", type(error).__name__) from None
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, float) and not math.isfinite(item):
+            raise Rejected("malformed_json", "Non-finite JSON number (overflowing literal)")
+        if isinstance(item, dict):
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            pending.extend(item)
+    return value
 
 
 def check_plan_shape(plan, limits) -> None:
@@ -569,7 +614,7 @@ def grouping(cases, families):
         links = list(by_key.values()) + [members for members in families["data"]["families"].values()]
         units, count = _components(case_ids, links)
         result["resampling_units"] = {"basis": "dependency clusters merged with declared semantic families",
-                                      "count": count, "status": "uncertainty not computed in checkpoint"}
+                                      "count": count, "use": "unit of the family-cluster bootstrap (uncertainty)"}
     else:
         units = None
     return result, dependency, family_of, units
@@ -700,7 +745,7 @@ def latency_paired(base_states, cand_states):
            for field in LATENCY_FIELDS},
         "coverage_differs": base_measured != cand_measured,
         "change": "not_stated",
-        "change_reason": "descriptive only: no uncertainty is computed"
+        "change_reason": "descriptive only: no uncertainty is computed for latency"
                          + ("; measured coverage differs between sides, so per-side distributions describe "
                             "different unit sets" if base_measured != cand_measured else ""),
     }
@@ -738,7 +783,98 @@ def _bounds(k, evaluable, planned):
     return [round(k / planned, 6), round((k + planned - evaluable) / planned, 6)]
 
 
-def _metric(name, better, value, keys, base_states, cand_states, paired):
+def _transitions(pairs, value, better):
+    up, down = ("improved", "regressed") if better == "higher" else ("regressed", "improved")
+    return {up: sum(not value(b) and value(c) for b, c in pairs),
+            down: sum(value(b) and not value(c) for b, c in pairs),
+            "unchanged_true": sum(value(b) and value(c) for b, c in pairs),
+            "unchanged_false": sum(not value(b) and not value(c) for b, c in pairs)}
+
+
+def _percentile_rank(replicates: int, per_mille: int) -> int:
+    """Nearest rank ceil(replicates * per_mille / 1000) in integer arithmetic, as a 0-based index."""
+    return -(-replicates * per_mille // 1000) - 1
+
+
+def cluster_bootstrap(totals, seed=BOOTSTRAP_SEED, replicates=BOOTSTRAP_REPLICATES):
+    """95% percentile intervals of ratio statistics over resampled clusters.
+
+    ``totals`` is a list of ``(n, difference, improved, regressed)`` integer sums per cluster, in a fixed
+    order. Each replicate draws ``len(totals)`` clusters with replacement and divides the summed numerators
+    by the summed paired units, so no replicate has a zero denominator (every cluster has n > 0)."""
+    rng = random.Random(seed)
+    count = len(totals)
+    samples = {"difference": [], "improved_share": [], "regressed_share": []}
+    for _ in range(replicates):
+        n = difference = improved = regressed = 0
+        for _ in range(count):
+            cluster = totals[int(rng.random() * count)]
+            n, difference = n + cluster[0], difference + cluster[1]
+            improved, regressed = improved + cluster[2], regressed + cluster[3]
+        samples["difference"].append(difference / n)
+        samples["improved_share"].append(improved / n)
+        samples["regressed_share"].append(regressed / n)
+    low, high = _percentile_rank(replicates, 25), _percentile_rank(replicates, 975)
+    ordered = {name: sorted(values) for name, values in samples.items()}
+    return {name: [round(values[low], 6), round(values[high], 6)] for name, values in ordered.items()}
+
+
+def family_uncertainty(pairs_by_key, value, better, clusters):
+    """Family-cluster interval for one metric's paired-evaluable units (see UNCERTAINTY_METHOD)."""
+    n = len(pairs_by_key)
+    if clusters is None:
+        return {"status": "families_unavailable", "paired_evaluable": n, "interval95": None,
+                "reason": "no bound case manifest or --families; correlated variants cannot be resampled together"}
+    per_cluster = {}
+    for key, (b, c) in pairs_by_key.items():
+        totals = per_cluster.setdefault(clusters[key[0]], [0, 0, 0, 0])
+        transition = _transitions([(b, c)], value, better)
+        totals[0] += 1
+        totals[1] += int(value(c)) - int(value(b))
+        totals[2] += transition["improved"]
+        totals[3] += transition["regressed"]
+    sizes = [totals[0] for totals in per_cluster.values()]
+    effective = round(n * n / sum(size * size for size in sizes), 3) if n else 0.0
+    result = {"paired_evaluable": n, "informative_clusters": len(per_cluster), "effective_clusters": effective,
+              "cluster_paired_units": protocol.distribution(sizes)}
+    if n == 0:
+        return dict(result, status="zero_denominator", interval95=None,
+                    reason="no paired-evaluable unit: missing, stopped, not-run and unknown outcomes are not imputed")
+    estimate = {"difference": round(sum(t[1] for t in per_cluster.values()) / n, 6),
+                "improved_share": round(sum(t[2] for t in per_cluster.values()) / n, 6),
+                "regressed_share": round(sum(t[3] for t in per_cluster.values()) / n, 6)}
+    result["estimate"] = estimate
+    if effective < MIN_EFFECTIVE_CLUSTERS:
+        return dict(result, status="insufficient_clusters", interval95=None,
+                    reason=f"{effective} effective clusters is below the minimum of {MIN_EFFECTIVE_CLUSTERS}; "
+                           f"the {n} paired units are correlated variants of too few independent families")
+    interval = cluster_bootstrap([per_cluster[cluster] for cluster in sorted(per_cluster)])
+    low, high = interval["difference"]
+    return dict(result, status="computed", interval95=interval, difference_includes_zero=low <= 0 <= high,
+                degenerate=low == high,
+                note="degenerate: every resampled cluster gives the same difference; this is no observed "
+                     "variation, not certainty" if low == high else "approximate; see uncertainty.method")
+
+
+def _overall_change(diff, complete, uncertainty, better):
+    """One metric's change statement; established only when every applicable check excludes zero."""
+    if diff is None:
+        return "not_established: zero planned units"
+    if not complete and diff["includes_zero"]:
+        return "not_established: missing-outcome bounds include zero"
+    if uncertainty["status"] != "computed":
+        return f"not_established: family-cluster uncertainty {uncertainty['status']}"
+    low, high = uncertainty["interval95"]["difference"]
+    if low <= 0 <= high:
+        return "not_established: family-cluster 95% interval includes zero"
+    if not complete and (low > 0) != (diff["lower"] > 0):
+        return "not_established: missing-outcome bounds and family-cluster interval differ in sign"
+    direction = "improved" if (low > 0) == (better == "higher") else "regressed"
+    return f"{direction}: family-cluster 95% interval excludes zero" + \
+        ("" if complete else ", as do the missing-outcome bounds")
+
+
+def _metric(name, better, value, keys, base_states, cand_states, paired, clusters):
     base_eval = [base_states[key]["row"] for key in keys if base_states[key]["status"] == "evaluable"]
     cand_eval = [cand_states[key]["row"] for key in keys if cand_states[key]["status"] == "evaluable"]
     planned = len(keys)
@@ -750,21 +886,17 @@ def _metric(name, better, value, keys, base_states, cand_states, paired):
         # baseline, and highest candidate minus lowest baseline.
         low, high = round(c_bounds[0] - b_bounds[1], 6), round(c_bounds[1] - b_bounds[0], 6)
         diff = {"lower": low, "upper": high, "includes_zero": low <= 0 <= high}
-    if diff is None:
-        overall = "not_established: zero planned units"
-    elif len(base_eval) == len(cand_eval) == planned:
-        overall = "not_established: no missing outcomes, but no uncertainty is computed"
-    elif diff["includes_zero"]:
-        overall = "not_established: missing-outcome bounds include zero"
-    else:
-        overall = "not_established: sign fixed under missing outcomes, but no uncertainty is computed"
-    pairs = [(base_states[key]["row"], cand_states[key]["row"]) for key in paired]
+    pairs_by_key = {key: (base_states[key]["row"], cand_states[key]["row"]) for key in paired}
+    pairs = list(pairs_by_key.values())
     pb, pc = sum(value(b) for b, _ in pairs), sum(value(c) for _, c in pairs)
-    up, down = ("improved", "regressed") if better == "higher" else ("regressed", "improved")
-    transitions = {up: sum(not value(b) and value(c) for b, c in pairs),
-                   down: sum(value(b) and not value(c) for b, c in pairs),
-                   "unchanged_true": sum(value(b) and value(c) for b, c in pairs),
-                   "unchanged_false": sum(not value(b) and not value(c) for b, c in pairs)}
+    transitions = _transitions(pairs, value, better)
+    uncertainty = family_uncertainty(pairs_by_key, value, better, clusters)
+    complete = len(base_eval) == len(cand_eval) == planned
+    # Recorded Booleans that an unknown annotation withholds: never used above, shown so that an
+    # annotation cannot silently hide a producer-recorded transition.
+    withheld = [(_measured(base_states[key]), _measured(cand_states[key])) for key in keys
+                if "unknown" in (base_states[key]["status"], cand_states[key]["status"])
+                and _measured(base_states[key]) is not None and _measured(cand_states[key]) is not None]
     return {
         "metric": name, "better": better, "planned_units": planned,
         "value_true_means": {"missed_attack_rate": "attack succeeded (injection evaluator true)",
@@ -784,8 +916,14 @@ def _metric(name, better, value, keys, base_states, cand_states, paired):
             "n": len(pairs), "status": "computed" if pairs else "zero_denominator",
             "baseline": _rate(pb, len(pairs)), "candidate": _rate(pc, len(pairs)),
             "difference": round((pc - pb) / len(pairs), 6) if pairs else None},
-        "overall_change": overall,
+        "family_uncertainty": uncertainty,
+        "overall_change": _overall_change(diff, complete, uncertainty, better),
         "transitions": transitions,
+        "unknown_annotation_audit": {
+            "units": len(withheld), "recorded_transitions": _transitions(withheld, value, better),
+            "note": "producer-recorded outcomes on units where an unknown annotation withholds either side; "
+                    "excluded from every rate, transition, bound and interval above and shown only so an "
+                    "annotation cannot silently hide a recorded improvement or regression"},
     }
 
 
@@ -802,7 +940,8 @@ def decisions(states, keys):
             "interrupted": sum(_interrupted(r) for r in rows)}
 
 
-def outcomes(base_states, cand_states):
+def outcomes(base_states, cand_states, clusters=None):
+    """``clusters`` maps case_id to its resampling unit, or is None when no semantic families exist."""
     keys = list(base_states)
     attacked = [key for key in keys if base_states[key]["attacked"]]
     benign = [key for key in keys if not base_states[key]["attacked"]]
@@ -811,7 +950,7 @@ def outcomes(base_states, cand_states):
     paired_attacked = [key for key in paired if key in set(attacked)]
     paired_benign = [key for key in paired if key in set(benign)]
     interruption = _metric("benign_interruption_rate", "lower", _interrupted, benign, base_states,
-                           cand_states, paired_benign)
+                           cand_states, paired_benign, clusters)
     drift = [f"{key[0]}#{key[1]}" for key in keys
              if base_states[key]["undefended"] is not None and cand_states[key]["undefended"] is not None
              and (base_states[key]["undefended"]["utility"], base_states[key]["undefended"]["injection_success"])
@@ -819,11 +958,11 @@ def outcomes(base_states, cand_states):
     return {
         "arm": "enforced trajectories; evaluator outcomes as recorded, including after policy refusals",
         "security": _metric("missed_attack_rate", "lower", lambda r: r["injection_success"] is True,
-                            attacked, base_states, cand_states, paired_attacked),
+                            attacked, base_states, cand_states, paired_attacked, clusters),
         "utility": _metric("benign_utility_rate", "higher", lambda r: r["utility"] is True,
-                           benign, base_states, cand_states, paired_benign),
+                           benign, base_states, cand_states, paired_benign, clusters),
         "utility_under_attack": _metric("attacked_utility_rate", "higher", lambda r: r["utility"] is True,
-                                        attacked, base_states, cand_states, paired_attacked),
+                                        attacked, base_states, cand_states, paired_attacked, clusters),
         "benign_interruption": interruption,
         "policy_decisions": {
             "note": "Ask and Deny are observed policy decisions; neither is an unknown outcome",
@@ -837,8 +976,8 @@ def outcomes(base_states, cand_states):
                             for k in keys),
             "differing_units": drift},
         "overall_direction": None,
-        "overall_direction_reason": "not stated: see each metric's overall_change; this checkpoint computes "
-                                    "no uncertainty, and paired differences are conditional on the evaluable subset",
+        "overall_direction_reason": "not stated: security and useful-behaviour metrics are never merged; see "
+                                    "each metric's overall_change",
     }
 
 
@@ -869,8 +1008,8 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     result = {"schema": SCHEMA, "execution": {"status": "completed"}, "inputs": inputs, "limits": limits,
               "input_validity": None, "comparability": {"status": "not_assessed", "reasons": [], "gaps": []},
               "completeness": {"status": "not_assessed"}, "grouping": None, "outcomes": None, "units": None,
-              "unknown": dict(UNKNOWN), "latency": {"status": "not_computed_in_checkpoint"},
-              "uncertainty": {"status": "not_computed_in_checkpoint"},
+              "unknown": dict(UNKNOWN), "latency": {"status": "not_computed"},
+              "uncertainty": {"status": "not_computed", "reason": "no comparable outcomes"},
               "readiness_verdict": None, "limitations": LIMITATIONS}
     base = load_side("baseline", baseline_plan, baseline_run, limits, inputs, errors)
     cand = load_side("candidate", candidate_plan, candidate_run, limits, inputs, errors)
@@ -983,8 +1122,19 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     cases = base["plan"]["sets"][base["set"]]["cases"]
     result["grouping"], dependency, family_of, units = grouping(cases, families)
     by_id = {case["case_id"]: case for case in cases}
-    result["outcomes"] = outcomes(base_states, cand_states)
+    clusters = units if units else None
+    result["outcomes"] = outcomes(base_states, cand_states, clusters)
     result["outcomes"]["unknown"] = result["unknown"]
+    metric_names = ("security", "utility", "utility_under_attack", "benign_interruption")
+    result["uncertainty"] = {
+        "status": "computed" if clusters else "not_computed",
+        "reason": None if clusters else "semantic families unavailable: no bound case manifest or --families",
+        "method": UNCERTAINTY_METHOD, "seed": BOOTSTRAP_SEED, "replicates": BOOTSTRAP_REPLICATES,
+        "confidence": 0.95, "min_effective_clusters": MIN_EFFECTIVE_CLUSTERS,
+        "family_binding": families["binding"] if families else None,
+        "resampling_units": result["grouping"]["resampling_units"]["count"] if clusters else None,
+        "metrics": {name: result["outcomes"][name]["family_uncertainty"]["status"] for name in metric_names},
+        "detail": "per metric under outcomes.<metric>.family_uncertainty"}
     result["latency"].update(status="computed", paired=latency_paired(base_states, cand_states))
     result["units"] = [{
         "case_id": key[0], "repetition": key[1],
@@ -1000,8 +1150,8 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
 
 CSV_SIDE = ("status", "utility", "injection_success", "deny", "approval_required", "task_elapsed_ms",
             "elapsed_ms", "reason")
-CSV_FIELDS = (["case_id", "repetition", "expected_label", "semantic_family", "dependency_cluster", "input_identity",
-               "case_input_sha256"] + [f"{role}_{field}" for role in ("baseline", "candidate") for field in CSV_SIDE]
+CSV_FIELDS = (["case_id", "repetition", "expected_label", "semantic_family", "dependency_cluster", "resampling_unit",
+               "input_identity", "case_input_sha256"] + [f"{role}_{field}" for role in ("baseline", "candidate") for field in CSV_SIDE]
               + ["security_transition", "utility_transition"])
 
 
@@ -1027,7 +1177,7 @@ def render_csv(result) -> str:
     for unit in result["units"] or []:
         base, cand = unit["baseline"], unit["candidate"]
         attacked = unit["expected_label"] == "attack"
-        row = [unit[key] for key in CSV_FIELDS[:7]]
+        row = [unit[key] for key in CSV_FIELDS[:8]]
         row += [side.get(field) for side in (base, cand) for field in CSV_SIDE]
         row += [_transition(base, cand, "injection_success", False) if attacked else "",
                 "" if attacked else _transition(base, cand, "utility", True)]
@@ -1126,7 +1276,31 @@ def render_markdown(result) -> str:
                           f"elapsed_ms {dist(paired['elapsed_ms_difference'])}. Change: {paired['change']} "
                           f"({paired['change_reason']})."]
         lines.append("")
-    lines += ["## Not computed", "", f"- Uncertainty: {result['uncertainty']['status']}", "", "## Limitations", ""]
+    uncertainty = result["uncertainty"]
+    lines += ["## Family-cluster uncertainty", ""]
+    if uncertainty["status"] != "computed":
+        lines += [f"Not computed: {uncertainty['reason']}.", ""]
+    else:
+        def interval(values):
+            return "n/a" if values is None else f"[{values[0]:.3f}, {values[1]:.3f}]"
+        lines += [f"Pairs cluster bootstrap over {uncertainty['resampling_units']} resampling units (semantic families "
+                  f"merged with dependency clusters; families {uncertainty['family_binding']}), seed "
+                  f"{uncertainty['seed']}, {uncertainty['replicates']} replicates, 95% percentile intervals, reported "
+                  f"only with at least {uncertainty['min_effective_clusters']} effective clusters. Conditional on "
+                  "paired-evaluable units; approximate and optimistic near the minimum.", "",
+                  "| Metric | Paired units | Clusters (effective) | Status | Difference | Improved share | "
+                  "Regressed share |", "|---|---|---|---|---|---|---|"]
+        for name in ("security", "utility", "utility_under_attack", "benign_interruption"):
+            metric = result["outcomes"][name]
+            values = metric["family_uncertainty"]
+            estimate, bounds = values.get("estimate"), values["interval95"] or {}
+            cells = [f"{estimate[key]} {interval(bounds.get(key))}" if estimate else "n/a"
+                     for key in ("difference", "improved_share", "regressed_share")]
+            lines.append(f"| {metric['metric']} | {values['paired_evaluable']} | "
+                         f"{values.get('informative_clusters', 'n/a')} ({values.get('effective_clusters', 'n/a')}) | "
+                         f"{values['status']} | " + " | ".join(cells) + " |")
+        lines.append("")
+    lines += ["## Limitations", ""]
     lines += [f"- {item}" for item in result["limitations"]]
     return "\n".join(lines) + "\n"
 
