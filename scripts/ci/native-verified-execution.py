@@ -211,7 +211,14 @@ def main():
    reply,_=selected.exchange({'jsonrpc':'2.0','id':label,'method':'tools/call',
        'params':{'name':'read_text_file','arguments':{'path':'/workspace/'+filename}}})
    results=[row for row in audits() if row.get('event')=='native_result' and row.get('execution')]
-   require('error' in reply and len(results)==before+1 and results[-1]['verdict']=='deny'
+   report['last_result_control']={'case':label,'json_rpc_error':'error' in reply,
+       'mcp_is_error':reply.get('result',{}).get('isError') is True,
+       'new_private_result_rows':len(results)-before,
+       'verdict':results[-1]['verdict'] if results and results[-1].get('verdict') in ('allow','ask','deny') else None,
+       'released':results[-1].get('released') if results else None}
+   save()
+   require(('error' in reply or reply.get('result',{}).get('isError') is True)
+       and len(results)==before+1 and results[-1]['verdict']=='deny'
        and results[-1]['released'] is False,'authenticated_body_or_incomplete_result_released')
    if incomplete:
     require('native_mcp_result_evidence_incomplete' in results[-1]['reason_codes']
@@ -276,7 +283,9 @@ def main():
   require(Path(f'/proc/{owner_pid}/cgroup').read_text().strip()=='0::/system.slice/'+a.unit+'/manager',
       'owner_outside_owned_unit')
   os.kill(owner_pid,signal.SIGKILL)
-  try:lost.receive(timeout=5)
+  # Observer deadline covers the existing 3-second owner cleanup plus native
+  # retirement's 5-second HTTP boundary. Product deadlines remain unchanged.
+  try:lost.receive(timeout=15)
   except (ValueError,RuntimeError):pass
   else:raise RuntimeError('lost_owner_channel_released_result')
   require(lost.close()!=0 and not lost.forced_cleanup,'lost_owner_transport_not_closed')

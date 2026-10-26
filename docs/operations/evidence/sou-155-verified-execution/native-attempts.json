@@ -208,6 +208,28 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "bce2a706573c8245fcfda941313d52197541a442",
+      "run": 40318175433,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "actual_cases_passed": 5,
+      "failed_stage": "strong-body-refusal-control",
+      "cause": "driver-expected-jsonrpc-error-instead-of-documented-mcp-result-isError",
+      "original_response_custody_observed": true,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12648147396,
+          "sha256": "633fc1848d7c580fbacc4da6002b31328bd8c112d4c1c6b7c9046e75169f9386"
+        },
+        {
+          "id": 12648925191,
+          "sha256": "e47407f41cfe9c6079b1af070655abec76dec96aed5e2c8a91b7949f37dd0c6d"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }
