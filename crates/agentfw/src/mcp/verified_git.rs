@@ -2,7 +2,7 @@
 //! Daemon-owned original Git execution, not a native admission or release grant.
 //! No wire import/constructor for Completion exists. Native must still consume
 //! its admitted Call, bind this operation, inspect raw bytes, and audit release.
-#![allow(dead_code)] // private integration component, not wired to ingress here
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 use super::server_profile::ProfileConfig;
 #[cfg(target_os = "linux")]
 use anyhow::{ensure, Context};

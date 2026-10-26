@@ -1,11 +1,9 @@
 # Local Git object witness component (SOU-156)
 
-Status: local component for review; **not a production attestation interface**.
-Daemon IPC/composition is disabled and no agreement with SOU-155 is claimed.
-Base: accepted main
-`3c9cfb08c0f1498676dcc70de131bd2f324dd13b`. SOU-155 owns daemon launch, runtime
-authentication, process/channel custody and the versioned IPC envelope. This
-component must not mint an alternative daemon authority or enable result relief.
+The object-witness record below remains a local diagnostic component, not an
+importable production attestation interface. The separate daemon-owned execution
+path at the end of this document owns its real result pipe and uses the same
+sealed image internally. Serialized claims never authorize result relief.
 
 ## Why result text cannot identify the object
 
@@ -167,3 +165,88 @@ native Linux x86_64 with supported local filesystems and the accepted pinned
 Git/Python/bubblewrap profile. Missing prerequisites or unexecuted native tests
 remain NOT_RUN. No production runtime authentication, IPC integration or
 structural-text relief is enabled by passing local component tests.
+
+## Daemon-owned original Git result inspection (SOU-109)
+
+Linux operators can explicitly select a separate execution boundary for the
+pinned Git profile. This does not change the legacy native result protocol.
+Add to the existing enforced daemon configuration:
+
+~~~yaml
+native:
+  registry_path: /absolute/private/registry.json
+  registry_sha256: <exact registry SHA-256>
+  liveness:
+    default_lease_seconds: 10
+    max_lease_seconds: 60
+    maintenance_interval_ms: 500
+  git_execution:
+    profile_path: /absolute/private/git-profile.json
+    profile_sha256: <exact profile file SHA-256>
+    server_id: git
+~~~
+
+The profile must contain the exact installed runtime/package/library pins and a
+workspaceIdentity observation from the intended workspace. The profile file is
+an owner-controlled regular file, with no symlink ancestors; group/other writes,
+hard links, oversized files and changed bytes are refused. It selects one fixed
+operator server ID and workspace. It is never supplied by an MCP response.
+
+Use the normal selected Git collector with authenticated host/child authority
+and liveness. For that server ID the collector and daemon must select identical
+profile values. The collector automatically uses the configured execution path
+for admitted git_show/git_diff; it does not also forward that tools/call to its
+idle discovery server. Other calls and server IDs keep their existing paths.
+Missing git_execution keeps the previous behavior. Unsupported platforms and
+prepared-run aggregate budget bindings are refused explicitly; this feature
+does not silently create an additional unbudgeted process in a prepared run.
+
+The new POST /native/git-execute/v1 contract is sw-native-git-execute/1.
+Its request contains only contract_version, registry_sha256, session_id,
+call_id and binding_sha256. It requires the authenticated enrolled collector
+identity. A native ingress token, submitted result, serialized object witness or
+formatter flag cannot create a completion. The daemon consumes the exact final
+Call before asynchronous execution, including an already redeemed Ask, then
+launches the pinned original server inside the existing namespace owner and
+read-only confinement. It owns the original input/output pipes and mounts the
+same held sealed Git image that establishes the resolved object kind. The
+current session epoch, lineage, policy and exact original result binding are
+checked again at completion. Only the original inspected frame can be released.
+
+Only a proved complete formatter OID in the first header can lose the weak
+LONG_B64 contribution. git_show additionally requires a directly selected
+commit object; a blob with byte-identical commit text stays on baseline.
+git_diff covers only its fixed original header; its working-tree body remains
+untrusted. No separators or body bytes are stripped. Independent imperatives,
+signatures, secret/PII findings and positive result evidence preserve their
+original coupled policy floors. No policy preset, threshold, label, registry or
+resource grant is relaxed. ML input and invocation conditions remain unchanged.
+This is structural attribution, not a semantic declaration that arbitrary
+unmatched text is benign.
+
+There are at most two native executions per daemon and eight owned workers per
+process. The existing five-second collector/exchange deadline is not increased.
+A runtime, transport, size, snapshot or cleanup failure spends the Call and
+returns an audited incomplete refusal, with no original frame and no fabricated
+Allow result. Host cancellation may withdraw delivery after a read occurred;
+withholding cannot undo an effect. The separate legacy result endpoint cannot
+import or replay the private execution completion.
+
+Run the independent Linux qualification with an already-installed, operator
+reviewed base Git profile. It creates only private synthetic repositories and
+homes; it downloads nothing and makes no model calls:
+
+~~~sh
+python3 -B scripts/verify-sou109-original-git.py \
+  --binary /absolute/current/agentfw \
+  --template-profile /absolute/installed/git-profile.json \
+  --expected-commit "$(git rev-parse HEAD)" \
+  --output /absolute/private/sou109-original-git.json
+~~~
+
+The report separates actual original execution from incomplete failures, checks
+a commit-looking blob built from the original formatter's exact commit body,
+replays, matched attacks, the production collector with the real rule baseline,
+faithful original content delivery and useful continuation after refusals.
+It does not qualify a Claude model, arbitrary servers, Windows/macOS, the
+prepared aggregate-budget path, or claim held-out attack effectiveness.

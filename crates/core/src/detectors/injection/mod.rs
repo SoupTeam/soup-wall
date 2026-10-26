@@ -74,20 +74,27 @@ impl InjectionDetector {
     }
 }
 
-impl Detector for InjectionDetector {
-    fn name(&self) -> &'static str {
-        "injection"
-    }
-
-    fn inspect(&self, ctx: &Context) -> Vec<Finding> {
+impl InjectionDetector {
+    fn inspect_stages(
+        &self,
+        ctx: &Context,
+        formatter_hash: Option<&std::ops::Range<usize>>,
+    ) -> Vec<Finding> {
         let mut findings = signatures::scan(ctx.text);
-        findings.extend(heuristics::scan(ctx.text));
+        #[cfg(feature = "ml")]
+        let original_cheap_findings = {
+            let mut original = findings.clone();
+            original.extend(heuristics::scan(ctx.text));
+            original
+        };
+        findings.extend(match formatter_hash.filter(|_| findings.is_empty()) {
+            Some(span) => heuristics::scan_with_formatter_hash(ctx.text, Some(span)),
+            None => heuristics::scan(ctx.text),
+        });
 
-        // Stage C: only escalate to the ML classifier when the cheap stages were
-        // inconclusive (keeps p99 low). Attached via `with_ml` under `feature = "ml"`.
         #[cfg(feature = "ml")]
         if let Some(clf) = &self.classifier {
-            if should_escalate(&findings) {
+            if should_escalate(&original_cheap_findings) {
                 if let Ok(p) = clf.predict(ctx.text) {
                     if p >= self.ml_threshold {
                         let severity = if p >= 0.85 {
@@ -95,8 +102,6 @@ impl Detector for InjectionDetector {
                         } else {
                             Severity::Medium
                         };
-                        // Own detector id (`injection.ml`) so a policy can act on an
-                        // ML-positive directly, independent of the risk-score banding.
                         findings.push(Finding::new(
                             "injection.ml",
                             severity,
@@ -107,11 +112,28 @@ impl Detector for InjectionDetector {
                 }
             }
         }
-
         for f in &mut findings {
             f.direction = ctx.direction;
         }
         findings
+    }
+}
+
+impl Detector for InjectionDetector {
+    fn name(&self) -> &'static str {
+        "injection"
+    }
+
+    fn inspect(&self, ctx: &Context) -> Vec<Finding> {
+        self.inspect_stages(ctx, None)
+    }
+
+    fn inspect_with_formatter_hash(
+        &self,
+        ctx: &Context,
+        span: &std::ops::Range<usize>,
+    ) -> Vec<Finding> {
+        self.inspect_stages(ctx, Some(span))
     }
 }
 

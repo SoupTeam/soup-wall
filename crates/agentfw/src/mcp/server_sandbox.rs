@@ -153,7 +153,7 @@ pub(crate) fn prepare_with_budget(
 /// Explicit daemon-owned Git execution. Default preparation/capture is unchanged.
 /// Snapshot capture uses the exact opened workspace descriptor mounted below;
 /// the retained snapshot, not another SelectedView, supplies both kind and mount.
-#[allow(dead_code)] // private component; native integration is a separate slice
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn prepare_verified_git(
     profile: &ProfileConfig,
 ) -> anyhow::Result<PreparedServerSandbox> {
