@@ -20,7 +20,9 @@ pub(crate) const HEARTBEAT_MILLIS: u64 = 100;
 pub(crate) const LEASE_MILLIS: u64 = 1_500;
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{spawn, BudgetPrepare, CleanupSpec, LaunchSpec, OwnerGuard, SealedClosure};
+pub(crate) use linux::{
+    spawn, BudgetPrepare, CleanupSpec, ExecutionLiveness, LaunchSpec, OwnerGuard, SealedClosure,
+};
 
 #[cfg(not(target_os = "linux"))]
 pub(crate) struct OwnerGuard;
@@ -291,6 +293,21 @@ mod linux {
         changed: Arc<tokio::sync::Notify>,
         writer: tokio::sync::Mutex<tokio::net::UnixStream>,
         monitor: Option<tokio::task::JoinHandle<()>>,
+    }
+
+    /// Separate pinned observations for the verified execution boundary. A
+    /// monitor's publication latency must not revive a dead owner generation.
+    pub(crate) struct ExecutionLiveness {
+        generations: [File; 3],
+    }
+
+    impl ExecutionLiveness {
+        pub(crate) fn check(&self) -> anyhow::Result<()> {
+            for process in &self.generations {
+                ensure!(!readable(process.as_raw_fd())?, "mcp_owner_lost");
+            }
+            Ok(())
+        }
     }
 
     fn failure(code: &'static str) -> anyhow::Error {
@@ -1164,6 +1181,36 @@ mod linux {
     }
 
     impl OwnerGuard {
+        pub(crate) fn execution_liveness(&self) -> anyhow::Result<ExecutionLiveness> {
+            self.check()?;
+            ensure!(
+                self.ready.original.is_some(),
+                "mcp_owner_namespace_identity_invalid"
+            );
+            let identities = [
+                (self.ready.owner_pid, self.ready.owner_start_ticks),
+                (self.ready.sandbox_pid, self.ready.sandbox_start_ticks),
+                (self.ready.pid1_pid, self.ready.pid1_start_ticks),
+            ];
+            let mut generations = Vec::with_capacity(3);
+            for (pid, ticks) in identities {
+                let process = pidfd(pid)?;
+                ensure!(
+                    process_ticks(pid)? == ticks,
+                    "mcp_owner_process_identity_invalid"
+                );
+                generations.push(process);
+            }
+            let pinned = ExecutionLiveness {
+                generations: generations
+                    .try_into()
+                    .map_err(|_| failure("mcp_owner_process_identity_invalid"))?,
+            };
+            pinned.check()?;
+            self.check()?;
+            Ok(pinned)
+        }
+
         pub(crate) fn failed(&self) -> Arc<AtomicBool> {
             Arc::clone(&self.failed)
         }
@@ -2324,6 +2371,27 @@ mod linux {
             assert!(!readable(process.as_raw_fd()).unwrap());
             let file = File::open("/dev/null").unwrap();
             assert!(inherited_socket(file.as_raw_fd()).is_err());
+        }
+
+        #[test]
+        fn execution_liveness_observes_exit_without_waiting_for_monitor_publication() {
+            for dead in 0..3 {
+                let mut child = std::process::Command::new("/bin/sleep")
+                    .arg("30")
+                    .spawn()
+                    .unwrap();
+                let mut generations = [
+                    pidfd(std::process::id()).unwrap(),
+                    pidfd(std::process::id()).unwrap(),
+                    pidfd(std::process::id()).unwrap(),
+                ];
+                generations[dead] = pidfd(child.id()).unwrap();
+                let pinned = ExecutionLiveness { generations };
+                pinned.check().unwrap();
+                child.kill().unwrap();
+                child.wait().unwrap();
+                assert_eq!(pinned.check().unwrap_err().to_string(), "mcp_owner_lost");
+            }
         }
 
         #[test]

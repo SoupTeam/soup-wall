@@ -158,6 +158,12 @@ call authority. No TTL is extended. Cancellation, expiry, epoch replacement,
 process withdrawal, daemon restart or mismatch refuse new custody. Concurrent
 responses correlate by their own native and JSON-RPC identities.
 
+The verified context separately pins the outside owner, wrapper and namespace
+PID-1 generations with pidfds and polls them at dispatch/result consumption.
+Owner loss therefore does not depend solely on the asynchronous monitor's next
+publication. Missing cleanup confirmation retains the host obligation; observing
+a stopped process in a test does not mint a replacement product cleanup receipt.
+
 Descriptive `execution` metadata appears only on receipts/audit rows produced by
 this private path. Ordinary native/1 result handling cannot create it, even with
 the same token, schema, response bytes or copied fields. Metadata is not a

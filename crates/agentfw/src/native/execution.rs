@@ -40,6 +40,7 @@ fn failure_code(error: &anyhow::Error) -> &'static str {
         "mcp_owner_original_spawn_failed",
         "mcp_owner_parent_lost",
         "mcp_owner_liveness_unverified",
+        "mcp_owner_lost",
         "mcp_owner_launch_unavailable",
         "mcp_owner_parent_identity_invalid",
         "mcp_owner_process_identity_invalid",
@@ -261,6 +262,8 @@ impl Service {
 struct Process {
     identity: Value,
     failed: Arc<AtomicBool>,
+    #[cfg(target_os = "linux")]
+    live: Option<crate::mcp::linux_owner::ExecutionLiveness>,
 }
 
 pub(crate) struct SessionContext {
@@ -289,6 +292,8 @@ impl SessionContext {
             .set(Process {
                 identity,
                 failed: owner.failed(),
+                #[cfg(target_os = "linux")]
+                live: Some(owner.execution_liveness()?),
             })
             .map_err(|_| anyhow::anyhow!("verified_execution_process_replaced"))?;
         self.stage.store(2, Ordering::Release);
@@ -373,6 +378,11 @@ impl SessionContext {
             .process
             .get()
             .context("verified_execution_process_unverified")?;
+        #[cfg(target_os = "linux")]
+        match &process.live {
+            Some(live) => live.check()?,
+            None => ensure!(cfg!(test), "verified_execution_process_unverified"),
+        }
         ensure!(
             self.stage.load(Ordering::Acquire) == 2
                 && !self.withdrawn.load(Ordering::Acquire)

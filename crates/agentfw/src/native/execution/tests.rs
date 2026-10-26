@@ -104,6 +104,8 @@ impl Env {
         assert!(context
             .process
             .set(Process {
+                #[cfg(target_os = "linux")]
+                live: None,
                 identity: json!({"original":{"namespace_pid":2,"start_ticks":123}}),
                 failed: Arc::new(AtomicBool::new(false))
             })
