@@ -58,6 +58,8 @@ pub(crate) struct PreparedServerSandbox {
     workspace: PathBuf,
     git_view: Option<Arc<super::server_profile::git::SelectedView>>,
     #[cfg(target_os = "linux")]
+    verified_git_snapshot: Option<Arc<super::server_profile::git::object_witness::Snapshot>>,
+    #[cfg(target_os = "linux")]
     budget: Option<super::linux_owner::BudgetPrepare>,
     #[cfg(target_os = "linux")]
     bwrap_fd: std::os::fd::RawFd,
@@ -68,6 +70,13 @@ pub(crate) struct PreparedServerSandbox {
 impl PreparedServerSandbox {
     pub(crate) fn git_view(&self) -> Option<Arc<super::server_profile::git::SelectedView>> {
         self.git_view.clone()
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn verified_git_snapshot(
+        &self,
+    ) -> Option<Arc<super::server_profile::git::object_witness::Snapshot>> {
+        self.verified_git_snapshot.clone()
     }
 
     pub(crate) fn workspace(&self) -> &Path {
@@ -138,6 +147,47 @@ pub(crate) fn prepare_with_budget(
             bail!("mcp_budget_platform_unsupported");
         }
         bail!("the selected MCP server profile requires Linux bubblewrap");
+    }
+}
+
+/// Explicit daemon-owned Git execution. Default preparation/capture is unchanged.
+/// Snapshot capture uses the exact opened workspace descriptor mounted below;
+/// the retained snapshot, not another SelectedView, supplies both kind and mount.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn prepare_verified_git(
+    profile: &ProfileConfig,
+) -> anyhow::Result<PreparedServerSandbox> {
+    anyhow::ensure!(
+        super::server_profile::git::is_profile(&profile.format),
+        "verified execution requires a supported Git profile"
+    );
+    // Validate constructed configs as strictly as operator file configs.
+    ProfileConfig::read(&serde_json::to_vec(profile)?)?;
+    anyhow::ensure!(
+        std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
+        "verified Git requires an explicit prepared pilot budget API; ambient binding unsupported"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        prepare_linux_command_inner(
+            profile,
+            &[
+                "-I",
+                "-B",
+                "-m",
+                "mcp_server_git",
+                "--repository",
+                SANDBOX_WORKSPACE,
+            ]
+            .map(str::to_owned),
+            None,
+            false,
+            true,
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        anyhow::bail!("verified Git execution requires Linux");
     }
 }
 
@@ -689,6 +739,17 @@ fn prepare_linux_command(
     selected: Option<&super::linux_budget::BoundConfig>,
     writable_owned_stage: bool,
 ) -> anyhow::Result<PreparedServerSandbox> {
+    prepare_linux_command_inner(profile, node_args, selected, writable_owned_stage, false)
+}
+
+#[cfg(target_os = "linux")]
+fn prepare_linux_command_inner(
+    profile: &ProfileConfig,
+    node_args: &[String],
+    selected: Option<&super::linux_budget::BoundConfig>,
+    writable_owned_stage: bool,
+    verified_git: bool,
+) -> anyhow::Result<PreparedServerSandbox> {
     use std::os::fd::AsRawFd;
     use std::os::unix::process::CommandExt;
 
@@ -719,8 +780,21 @@ fn prepare_linux_command(
             super::server_profile::git::validate_repository(&root)?;
         }
     }
-    let git_view =
-        super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?;
+    let verified_git_snapshot = if verified_git {
+        Some(
+            super::server_profile::git::object_witness::Snapshot::capture(
+                &workspace_pin,
+                &profile.format,
+            )?,
+        )
+    } else {
+        None
+    };
+    let git_view = if verified_git {
+        None
+    } else {
+        super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?
+    };
     let (package_root, package_pin) = open_directory(&profile.package_root)?;
     if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
     {
@@ -848,7 +922,9 @@ fn prepare_linux_command(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
-    if let Some(view) = &git_view {
+    if let Some(snapshot) = &verified_git_snapshot {
+        snapshot.mount(&mut command, &mut pins)?;
+    } else if let Some(view) = &git_view {
         view.mount(&mut command, &mut pins)?;
     }
     let seccomp = if writable_owned_stage {
@@ -959,6 +1035,7 @@ fn prepare_linux_command(
         _pins: pins,
         workspace,
         git_view,
+        verified_git_snapshot,
         budget,
         bwrap_fd,
         owner_executable_fd,
