@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pilot_provider import utility_environment
 import pilot_preparation_lock as coordination
+import pilot_source_identity as SOURCE_IDENTITY
 SOURCES = {
     "git": ("2.51.2", "git-2.51.2",
             "https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz",
@@ -171,8 +172,13 @@ def tool_inventory(args):
 
 def source_identity(expected):
     require(re.fullmatch(r"[0-9a-f]{40}", expected or ""), "full_expected_commit_required")
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, timeout=10, env=utility_environment()).decode().strip()
-    dirty = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, timeout=10, env=utility_environment())
+    installed = SOURCE_IDENTITY.installed(ROOT)
+    if installed is not None:
+        # Verified installed front-door component: its recorded clean commit.
+        head, dirty = installed["commit"], b""
+    else:
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, timeout=10, env=utility_environment()).decode().strip()
+        dirty = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, timeout=10, env=utility_environment())
     require(head == expected and not dirty, "candidate_source_mismatch")
     identity = json.loads((ROOT / "profiles/mcp/git-readonly-v1/upstream-identity.json").read_text())
     require(identity["git_source_url"] == SOURCES["git"][2]

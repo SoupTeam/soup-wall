@@ -1152,6 +1152,26 @@ jobs:
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python "$(command -v python3)" --allow-download \
             2>&1 | tee "$RUNNER_TEMP/front-door.log"
+      - name: Qualify the installed guided pilot front door through the original host
+        if: github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          cargo test --locked -p agentfw --lib pilot_component
+          # The component is built from this checkout and started only as the
+          # installed `agentfw pilot` of this job's SOU-119 build.
+          python3 -B scripts/qualify-installed-front-door.py --run \
+            --output "$RUNNER_TEMP/installed-front-door" --expected-commit "$(git rev-parse HEAD)" \
+            --component-python "$(readlink -f "$(command -v python3)")" \
+            --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" \
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python "$(command -v python3)" --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/installed-front-door.log"
       - name: Qualify terminal Ask inbox through the original Claude host
         if: github.event.inputs.operator_results_only != 'true'
         shell: bash
@@ -1413,6 +1433,8 @@ jobs:
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
             ${{ runner.temp }}/front-door/report.json
             ${{ runner.temp }}/front-door.log
+            ${{ runner.temp }}/installed-front-door/report.json
+            ${{ runner.temp }}/installed-front-door.log
             ${{ runner.temp }}/sou111-assets/apparmor-provisioning.json
             ${{ runner.temp }}/sou111-apparmor-cleanup.json
             ${{ runner.temp }}/sou111-assets/plan.json

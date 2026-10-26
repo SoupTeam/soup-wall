@@ -282,6 +282,25 @@ enum Cmd {
         #[command(subcommand)]
         command: agentfw::mcp::connection::Command,
     },
+    /// Guided Linux pilot from the installed front door: preview,
+    /// prepare, run, status or help. Starts only the verified installed
+    /// component with its recorded interpreter.
+    Pilot {
+        /// Private Agent profile holding `pilot-front-door/` (default ~/.agentfw).
+        #[arg(long)]
+        home: Option<PathBuf>,
+        /// The guided command and its options, e.g. `status --prefix DIR`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<std::ffi::OsString>,
+    },
+    /// Install, verify, update, roll back or remove the guided-pilot front-door component.
+    PilotComponent {
+        /// Private Agent profile holding `pilot-front-door/` (default ~/.agentfw).
+        #[arg(long, global = true)]
+        home: Option<PathBuf>,
+        #[command(subcommand)]
+        action: PilotComponentCmd,
+    },
     /// Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
     PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
     /// Read-only inspection using the accepted original-profile workspace validators.
@@ -399,6 +418,45 @@ enum Cmd {
         /// Maximum UTF-8 response bytes returned to the agent.
         #[arg(long, default_value_t = 1024 * 1024)]
         max_response_bytes: usize,
+    },
+}
+
+#[derive(Subcommand)]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+enum PilotComponentCmd {
+    /// Validate an archive and the interpreter; writes nothing.
+    Preview {
+        archive: PathBuf,
+        /// Expected SHA-256 of the archive file.
+        #[arg(long)]
+        sha256: String,
+        /// Absolute path of the CPython that will run the helpers.
+        #[arg(long)]
+        python: PathBuf,
+    },
+    /// Install or update and select a component (private, atomic; the
+    /// previous component stays selectable for rollback).
+    Install {
+        archive: PathBuf,
+        #[arg(long)]
+        sha256: String,
+        #[arg(long)]
+        python: PathBuf,
+    },
+    /// Re-verify the selected component, every file, mode and the interpreter.
+    Verify,
+    /// Show selected, previous and installed components.
+    Inspect,
+    /// Select the previous component (verified first).
+    Rollback,
+    /// Clear leftovers of an interrupted install; the selection is unchanged.
+    Recover,
+    /// Remove one unselected component, or all component state.
+    Remove {
+        #[arg(long)]
+        component: Option<String>,
+        #[arg(long)]
+        all: bool,
     },
 }
 
@@ -763,6 +821,54 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        #[cfg(target_os = "linux")]
+        Cmd::Pilot { home, args } => {
+            let home = match home {
+                Some(home) => home,
+                None => agentfw::pilot_component::default_home()?,
+            };
+            std::process::exit(agentfw::pilot_component::exec_pilot(&home, &args));
+        }
+        #[cfg(target_os = "linux")]
+        Cmd::PilotComponent { home, action } => {
+            use agentfw::pilot_component as component;
+            let home = match home {
+                Some(home) => home,
+                None => component::default_home()?,
+            };
+            let store = component::Store::new(&home);
+            let value = match action {
+                PilotComponentCmd::Preview {
+                    archive,
+                    sha256,
+                    python,
+                } => store.preview(&component::read_archive_file(&archive)?, &sha256, &python)?,
+                PilotComponentCmd::Install {
+                    archive,
+                    sha256,
+                    python,
+                } => store.install(&component::read_archive_file(&archive)?, &sha256, &python)?,
+                PilotComponentCmd::Verify => store.verify()?,
+                PilotComponentCmd::Inspect => store.inspect()?,
+                PilotComponentCmd::Rollback => store.rollback()?,
+                PilotComponentCmd::Recover => store.recover()?,
+                PilotComponentCmd::Remove { component, all } => {
+                    store.remove(component.as_deref(), all)?
+                }
+            };
+            println!("{}", serde_json::to_string_pretty(&value)?);
+            Ok(())
+        }
+        #[cfg(not(target_os = "linux"))]
+        Cmd::Pilot { home, args } => {
+            let _ = (home, args);
+            anyhow::bail!("the installed guided pilot supports native Linux x86_64 only")
+        }
+        #[cfg(not(target_os = "linux"))]
+        Cmd::PilotComponent { home, action } => {
+            let _ = (home, action);
+            anyhow::bail!("the installed guided pilot supports native Linux x86_64 only")
+        }
         Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
         Cmd::PilotWorkspaces(args) => agentfw::pilot_launcher::inspect_workspaces(args),
         Cmd::PilotApproval(args) if args.output.is_some() => {
