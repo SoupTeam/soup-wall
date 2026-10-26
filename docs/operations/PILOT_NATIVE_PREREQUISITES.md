@@ -2,6 +2,7 @@
 
 `scripts/prepare-native-pilot-prerequisites.py` replaces the two manual source
 builds needed before [pilot runtime preparation](PILOT_RUNTIME_PREPARATION.md).
+Concurrent calls use the [owned preparation protocol](PILOT_PREPARATION_COORDINATION.md).
 It builds only Git 2.51.2 and bubblewrap 0.13.1 for native Ubuntu 24.04 x86_64.
 It does not install packages, alter the host, grant user namespace permission,
 start the daemon, or claim active protection.

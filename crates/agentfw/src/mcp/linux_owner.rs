@@ -676,6 +676,37 @@ mod linux {
         bail!("mcp_owner_test_handoff_cancelled")
     }
 
+    // The ordinary collector clears the owner's environment. Only the native
+    // fault controller in a test build passes this private barrier through the
+    // sealed owner launch. It pauses after leaf creation but before SCM_RIGHTS
+    // handback, so SIGKILL exercises the otherwise unobservable custody gap.
+    fn owner_pre_handback_barrier(
+        prepared: &super::super::linux_budget::PreparedBudget,
+    ) -> anyhow::Result<()> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let Some(path) = std::env::var_os("SOU142_TEST_OWNER_BEFORE_HANDBACK") else {
+            return Ok(());
+        };
+        let path = std::path::PathBuf::from(path);
+        let staged = path.with_extension("staged");
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&staged)?;
+        let bytes = serde_json::to_vec(prepared)?;
+        ensure!(bytes.len() <= MAX_PACKET, "mcp_owner_test_barrier_invalid");
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        std::fs::rename(staged, &path)?;
+        let deadline = Instant::now() + Duration::from_millis(STARTUP_MILLIS);
+        while Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(POLL_MILLIS));
+        }
+        bail!("mcp_owner_test_barrier_expired")
+    }
+
     fn nonblocking(fd: RawFd) -> anyhow::Result<()> {
         let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
         ensure!(
@@ -932,6 +963,10 @@ mod linux {
             .stderr(Stdio::piped())
             .kill_on_drop(false)
             .process_group(0);
+        #[cfg(test)]
+        if let Some(path) = std::env::var_os("SOU142_TEST_OWNER_BEFORE_HANDBACK") {
+            command.env("SOU142_TEST_OWNER_BEFORE_HANDBACK", path);
+        }
         let mut fds = spec.inherited_fds.clone();
         fds.push(control_fd);
         fds.push(startup_fd);
@@ -1017,9 +1052,16 @@ mod linux {
                 // EOF is the owner's unconditional cleanup request. Do not kill
                 // it before it can verify its own resources.
                 let _ = parent.shutdown(std::net::Shutdown::Both);
-                let _ =
+                let owner_status =
                     tokio::time::timeout(Duration::from_millis(CLEANUP_MILLIS + 500), child.wait())
-                        .await;
+                        .await
+                        .ok()
+                        .and_then(Result::ok);
+                let killed_before_handback = spec.budget_prepare.is_some()
+                    && prepared_budget.is_none()
+                    && owner_status
+                        .as_ref()
+                        .is_some_and(|status| status.signal() == Some(libc::SIGKILL));
                 let _ = child.start_kill();
                 let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
                 if spec.sealed_closure.is_some() {
@@ -1076,6 +1118,11 @@ mod linux {
                             "timed_out":timed_out,"elapsed_ms":elapsed_ms,"error_code":error_code,
                                 "helper_codes":helper_codes,"image_code":diagnostic,"setup_step":step,"os_error":os_error})
                     );
+                }
+                if killed_before_handback {
+                    // No leaf descriptor was received. A same-name child of
+                    // the delegated root is not authority to sweep it.
+                    bail!("mcp_budget_owner_lost_before_handback_unsupported");
                 }
                 bail!("mcp_owner_startup_failed");
             }
@@ -1640,6 +1687,7 @@ mod linux {
             let (prepared, descriptors) = budget.export_prepared()?;
             owned_budget = Some(budget);
             ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+            owner_pre_handback_barrier(&prepared)?;
             send_budget_fds(
                 &transfer,
                 &BudgetPrepared {
