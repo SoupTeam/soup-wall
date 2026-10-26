@@ -153,7 +153,9 @@ class RunOperations(unittest.TestCase):
         self.write(self.run / "run.json", record)
         policy = self.root / "policy.yaml"
         self.write(policy, b"agent_policies: []\ndefault: allow\n")
-        trusted_binary = Path(sys.executable).resolve()
+        trusted_binary = self.root / "trusted-agent"
+        self.write(trusted_binary, Path(sys.executable).resolve().read_bytes())
+        trusted_binary.chmod(0o700)
         binary_sha = S.sha(trusted_binary.read_bytes())
         self.receipt.update(binary_sha256=binary_sha, policy_sha256=S.sha(policy.read_bytes()))
         self.write(self.run / "audit-run.json", self.receipt)
