@@ -389,7 +389,17 @@ the five-second worker/first-pending bounds and approval TTLs are unchanged.
 A separate negative requests and verifies a two-second lease, pauses its owned
 collector through a pinned pidfd, and requires `native_session_expired` for that
 exact session and epoch. It requires zero worker reservations/new original
-results, terminal liveness uncertainty and independently observed cleanup.
-Namespace-owner termination (which has its own 1500 ms guard) is not expiry
-evidence. A new ten-second session must return the original bytes; the expired
-session is never revived or retried.
+results, actual host EOF and independently observed cleanup. Terminal grading
+accepts either confirmed owner cleanup with `native_liveness_uncertain`, or the
+exact combined native-expiry/1500 ms namespace-owner guard with
+`pilot_cleanup_unconfirmed`. The combined branch requires matching owner instance
+and process start identities, `mcp_owner_liveness_expired`, and complete independent
+descendant observation. It retains the production receipt's unconfirmed cleanup;
+it does not establish isolated native-denial behavior. Any other failure refuses.
+Namespace-owner termination alone is not native-expiry evidence. A new ten-second
+session must return the original bytes; the expired session is never revived.
+
+[Run #186](https://github.com/SoupTeam/soup-wall/actions/runs/40364573818) remains
+failed/incomplete: all twelve FILE frames and BASE ID200 matched the originals,
+but its qualifier rejected the combined guard before the fresh-session and Ask
+controls. Those controls require a new complete qualification run.

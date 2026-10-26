@@ -941,7 +941,7 @@ def run(args):
             LEASE.qualify_short_lease(make_client=lambda log, seconds: collector(stack, log, lease_seconds=seconds),
                 make_call=lambda identifier: GIT.call(identifier, "git_show", {"revision": REFS[0]}),
                 audit=stack.audit, log_path=output / "short-lease-expiry.log", witness_factory=DaemonProcessWitness,
-                expected_sha256=report["original_read_sha256"]["10"], report=report)
+                expected_sha256=report["original_read_sha256"]["10"], expected_profile=INSTALL.FILE_READS_FORMAT, report=report)
             source_mutations(stack, first, first, report)
             mapped_source_controls(stack, first, report)
             daemon_source_substitution(stack, first, report)
