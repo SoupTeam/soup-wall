@@ -99,7 +99,9 @@ mod linux {
     // Separate opt-in sealed-image launch capsule; control/SCM packets and
     // legacy launches keep their existing bounds.
     const MAX_SEALED_STARTUP: usize = 1024 * 1024;
-    const MAX_SEALED_ARGS: usize = 32768;
+    // Pinned bubblewrap limits total parsed argc to 9000, including the
+    // outside owner's additional --info-fd pair. Never raise the vendor cap.
+    const MAX_SEALED_ARGS: usize = 8998;
     const MAX_SEALED_ARG_BYTES: usize = 768 * 1024;
     const MAX_SEALED_FDS: usize = super::super::verified_closure::MAX_ENTRIES + 64;
 

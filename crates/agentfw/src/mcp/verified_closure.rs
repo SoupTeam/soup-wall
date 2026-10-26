@@ -20,6 +20,18 @@ pub const FORMAT: &str = "sw-mcp/sealed-original-closure/1";
 pub const MAX_ENTRIES: usize = 8192;
 pub const MAX_BYTES: u64 = 256 * 1024 * 1024;
 
+// The fixed Node command has no TS/custom loader or source-map option, clears
+// NODE_OPTIONS, and the pinned JS closure contains no source-map enablement.
+// Still capture and verify these bytes against the complete original manifest;
+// omit only their non-runtime copies from the namespace image.
+#[cfg(any(target_os = "linux", test))]
+fn runtime_asset(path: &str) -> bool {
+    !path.ends_with(".map")
+        && !path.ends_with(".d.ts")
+        && !path.ends_with(".d.cts")
+        && !path.ends_with(".d.mts")
+}
+
 #[cfg(any(target_os = "linux", test))]
 #[derive(Debug)]
 enum Entry {
@@ -119,11 +131,12 @@ impl Runtime {
                     command.args(["--symlink", target, &destination]);
                 }
                 Entry::File(file) => {
+                    if !runtime_asset(path) {
+                        continue;
+                    }
                     let file = linux::reopen(file)?;
                     sealed.push(file.as_raw_fd());
                     command.args([
-                        "--perms",
-                        "0444",
                         "--ro-bind-data",
                         &file.as_raw_fd().to_string(),
                         &destination,
@@ -500,8 +513,8 @@ mod linux {
         let profile_digest = crate::native::canonical_digest(&serde_json::to_value(profile)?);
         let digest = crate::native::canonical_digest(
             &json!({"format":FORMAT,"profile_sha256":profile_digest,
-            "package_tree_sha256":profile.package_tree_sha256,"package_mode":"0444","runtime_mode":"0555",
-            "mount":"sealed-data-empty-readonly-tree","sandbox":"linux-bwrap","environment":"fixed-profile-v1"}),
+            "package_tree_sha256":profile.package_tree_sha256,"package_mode":"0600-readonly-mount","runtime_mode":"0555",
+            "mount":"sealed-runtime-assets-no-declarations-or-source-maps-v1","sandbox":"linux-bwrap","environment":"fixed-profile-v1"}),
         );
         Ok(Runtime {
             profile_digest,
@@ -538,6 +551,52 @@ mod linux {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn complete_original_runtime_image_fits_the_pinned_bubblewrap_argument_limit() {
+        let manifest: serde_json::Value = serde_json::from_slice(include_bytes!(
+            "../../../../profiles/mcp/filesystem-readonly-v1/original-closure-files.json"
+        ))
+        .unwrap();
+        let files = manifest["files"].as_object().unwrap();
+        let runtime_files = files.keys().filter(|path| runtime_asset(path)).count();
+        assert_eq!(files.len(), 4079);
+        assert_eq!(runtime_files, 2439);
+        let mut directories = std::collections::BTreeSet::new();
+        for path in files
+            .keys()
+            .chain(manifest["bin_links"].as_object().unwrap().keys())
+        {
+            for parent in Path::new(path).ancestors().skip(1) {
+                if !parent.as_os_str().is_empty() {
+                    directories.insert(parent);
+                }
+            }
+        }
+        // 3 args/file (plus optional npm metadata), 2/directory, 3/bin link,
+        // all 32 supported libraries with modes plus runtime, and fixed flags.
+        let upper_bound = 3 * (runtime_files + 1)
+            + 2 * directories.len()
+            + 3 * manifest["bin_links"].as_object().unwrap().len()
+            + 33 * 5
+            + 200;
+        assert!(
+            upper_bound + 2 <= 9000,
+            "including the private --info-fd pair: {upper_bound}"
+        );
+        for path in [
+            "package.json",
+            "node_modules/a/index.js",
+            "node_modules/a/index.ts",
+            "node_modules/a/README.md",
+            "node_modules/a/index.cjs",
+            "node_modules/a/module.wasm",
+        ] {
+            assert!(runtime_asset(path));
+        }
+        for path in ["index.d.ts", "index.d.cts", "index.d.mts", "index.js.map"] {
+            assert!(!runtime_asset(path));
+        }
+    }
     #[test]
     fn captured_links_cannot_escape_or_cycle_through_other_links() {
         let mut tree = BTreeMap::from([

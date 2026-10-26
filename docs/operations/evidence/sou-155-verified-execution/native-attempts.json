@@ -160,6 +160,31 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "f9e201dbe0a05b9e1ae73053769d18e282b859e0",
+      "run": 40315138618,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "failed_stage": "bubblewrap-before-namespace-info",
+      "startup_elapsed_ms": 54,
+      "startup_timed_out": false,
+      "setup_step": 1,
+      "startup_error_code": "mcp_owner_sandbox_identity_invalid",
+      "root_cause": "pinned-bubblewrap-9000-argument-cap-exceeded-before-clone",
+      "original_result_observed": false,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12646503335,
+          "sha256": "d1ee0fc9b7040710f8140f29dd57a12d492931cc844677a160873927ad49fca6"
+        },
+        {
+          "id": 12647275599,
+          "sha256": "18674630b95b19a182db963588abf3dd0c4e8141600fd81b286265a3af2bba84"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }

@@ -77,14 +77,22 @@ plus the known npm bin links and validated generated npm lock metadata. An
 alternate formatter cannot acquire original identity by declaring its own tree
 hash. The original Node binary is independently pinned to the accepted version.
 
-The namespace mounts these images into an empty private package filesystem using
-read-only data mounts, then remounts its directory read-only. This protects both
+The namespace mounts runtime assets into an empty private package filesystem using
+read-only data mounts, then remounts its directory read-only. All 4079 original
+files remain captured and hash-checked. The mounted image omits only 996 TypeScript
+declarations and 644 source maps: the fixed Node invocation has no TS/custom
+loader or source-map option, clears NODE_OPTIONS, and the pinned JS assets contain
+no programmatic source-map enablement. All remaining 2439 files, optional validated
+npm metadata, original links and directories remain present. No formatter code is
+rewritten. Data mounts use bubblewrap's default 0600 mode with kernel read-only
+mounts; runtime/interpreter images retain explicit 0555 mode. This protects both
 file bytes and directory entries after capture. A verified installed directory
 bind alone would not. Each launch reopens sealed descriptors with independent
 file offsets so concurrent data mounts cannot consume one another's input.
 
 The new sealed closure contract has explicit bounds: 8192 entries and 256 MiB of
-captured input. Its private startup capsule is bounded to 1 MiB, 32768 arguments,
+captured input. Its private startup capsule is bounded to 1 MiB, 8998 arguments
+(plus the owner's info-fd pair, within the vendor's 9000-argument cap),
 768 KiB of argument text and 8256 descriptors. These bounds cover the measured
 locked closure (4077 archive files, 24,320,025 bytes, before runtime/libraries).
 Legacy launch limits and the 64 KiB owner control/SCM protocols are unchanged.
