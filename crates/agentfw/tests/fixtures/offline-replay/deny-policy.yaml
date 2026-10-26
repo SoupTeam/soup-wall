@@ -1,0 +1,2 @@
+# Public owned synthetic policy for an explicit A/B comparison.
+default: deny

@@ -9,6 +9,9 @@ use anyhow::{ensure, Context};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::path::{Component, PathBuf};
+
+use serde::{Deserialize, Serialize};
 
 use super::ToolProfile;
 
@@ -23,6 +26,80 @@ pub struct CreateSelection {
     pub virtual_target: String,
     pub content_sha256: String,
     pub content_bytes: usize,
+}
+
+/// Collector observation of the exact original-server mutation. This is part
+/// of the native call/approval binding, not a brokered resource capability.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateResource {
+    pub contract_version: String,
+    pub workspace: PathBuf,
+    pub device: u64,
+    pub inode: u64,
+    pub target: String,
+    pub content_sha256: String,
+    pub content_bytes: usize,
+    pub must_be_absent: bool,
+}
+
+impl CreateResource {
+    pub const CONTRACT: &str = "sw-mcp/original-create-resource/1";
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn capture(
+        workspace: &crate::sandbox::PinnedWorkspace,
+        args: &Value,
+    ) -> anyhow::Result<Self> {
+        let selection = validate_request(args)?;
+        ensure!(
+            workspace.verify_root_identity(),
+            "selected create root changed"
+        );
+        ensure!(
+            matches!(std::fs::symlink_metadata(workspace.canonical().join(&selection.leaf)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound),
+            "selected create target must be absent"
+        );
+        let resource = Self {
+            contract_version: Self::CONTRACT.into(),
+            workspace: workspace.canonical().to_path_buf(),
+            device: workspace.dev(),
+            inode: workspace.ino(),
+            target: selection.virtual_target,
+            content_sha256: selection.content_sha256,
+            content_bytes: selection.content_bytes,
+            must_be_absent: true,
+        };
+        resource.validate(args)?;
+        Ok(resource)
+    }
+
+    pub(crate) fn validate(&self, args: &Value) -> anyhow::Result<()> {
+        let selection = validate_request(args)?;
+        ensure!(
+            self.contract_version == Self::CONTRACT
+                && self.must_be_absent
+                && self.inode != 0
+                && self.workspace.is_absolute()
+                && self.workspace.parent().is_some()
+                && self.workspace.components().collect::<PathBuf>().as_os_str()
+                    == self.workspace.as_os_str()
+                && self
+                    .workspace
+                    .components()
+                    .all(|part| matches!(part, Component::RootDir | Component::Normal(_)))
+                && self
+                    .workspace
+                    .to_str()
+                    .is_some_and(|path| path.len() <= 4096 && !path.chars().any(char::is_control))
+                && self.target == selection.virtual_target
+                && self.content_bytes == selection.content_bytes
+                && self.content_sha256 == selection.content_sha256,
+            "invalid selected create resource"
+        );
+        Ok(())
+    }
 }
 
 /// Keep the pinned ORIGINAL discovery bytes and all read-only original tools.
@@ -170,5 +247,69 @@ mod tests {
             super::super::original_manifest_for(FORMAT).unwrap(),
             super::super::original_manifest()
         );
+    }
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    #[cfg(unix)]
+    fn typed_create_resource_binds_exact_bytes_target_and_absent_only_semantics() {
+        let args = json!({"path":"/workspace/a.txt","content":"café 🥣"});
+        let selection = validate_request(&args).unwrap();
+        let valid = CreateResource {
+            contract_version: CreateResource::CONTRACT.into(),
+            workspace: "/tmp/selected-root".into(),
+            device: 1,
+            inode: 2,
+            target: selection.virtual_target,
+            content_sha256: selection.content_sha256,
+            content_bytes: selection.content_bytes,
+            must_be_absent: true,
+        };
+        valid.validate(&args).unwrap();
+        for (field, value) in [
+            ("contract_version", json!("sw-native/create/2")),
+            ("workspace", json!("/")),
+            ("workspace", json!("relative")),
+            ("workspace", json!("/tmp/../other")),
+            ("inode", json!(0)),
+            ("target", json!("/workspace/b.txt")),
+            ("content_sha256", json!("0".repeat(64))),
+            ("content_bytes", json!(7)),
+            ("must_be_absent", json!(false)),
+        ] {
+            let mut changed = json!(valid);
+            changed[field] = value;
+            let changed: CreateResource = serde_json::from_value(changed).unwrap();
+            assert!(changed.validate(&args).is_err(), "{field}");
+        }
+        let mut changed = args.clone();
+        changed["content"] = json!("other");
+        assert!(valid.validate(&changed).is_err());
+        let mut changed = json!(valid);
+        changed["overwrite"] = json!(true);
+        assert!(serde_json::from_value::<CreateResource>(changed).is_err());
+    }
+
+    #[test]
+    #[cfg(not(unix))]
+    fn unix_original_create_resource_is_not_a_windows_absolute_workspace() {
+        let args = json!({"path":"/workspace/a.txt","content":"café 🥣"});
+        let selection = validate_request(&args).unwrap();
+        let resource = CreateResource {
+            contract_version: CreateResource::CONTRACT.into(),
+            workspace: "/tmp/selected-root".into(),
+            device: 1,
+            inode: 2,
+            target: selection.virtual_target,
+            content_sha256: selection.content_sha256,
+            content_bytes: selection.content_bytes,
+            must_be_absent: true,
+        };
+        assert!(resource.validate(&args).is_err());
     }
 }

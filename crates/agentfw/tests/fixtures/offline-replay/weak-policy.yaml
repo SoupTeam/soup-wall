@@ -1,0 +1,10 @@
+# Public owned synthetic policy: mandatory floors must survive this first match.
+agent_policies:
+  - name: first-weak-fallback
+    when: {}
+    action: escalate
+    fallback: allow
+  - name: unreachable-deny
+    when: {}
+    action: deny
+default: ask

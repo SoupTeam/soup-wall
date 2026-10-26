@@ -1,0 +1,191 @@
+{
+  "run_id": 40216278340,
+  "artifact_id": 12607577414,
+  "zip_sha256": "ade2e585d9e30887f1d2ae20509948f4ecf9d2f1e67b1c8f676ba3ba0a09b6a3",
+  "backends": {
+    "sqlite": {
+      "source": {
+        "commit": "2f192faa75afc123d222138f160688d32c9f72ee",
+        "tree": "4d075c74bdb16b377d91d756dbc2c9c245f49793",
+        "dirty": false
+      },
+      "checks": 19,
+      "status": "pass",
+      "new_checks": {
+        "original-create-managed-allow-deny-effects": {
+          "allowed": {
+            "id": 800,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "Successfully wrote to /workspace/managed-allow.txt",
+                  "type": "text"
+                }
+              ],
+              "structuredContent": {
+                "content": "Successfully wrote to /workspace/managed-allow.txt"
+              }
+            }
+          },
+          "denied": {
+            "id": 801,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "Soup Wall withheld MCP invocation (sou82-create-deny-read)",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            }
+          },
+          "allowed_sha256": "b8888bd0eef424558a18c5bf7d21f28df544b2ca52f70b627ee134983f40e7ec",
+          "denied_publications": 0,
+          "deployment_sequence": 9
+        },
+        "original-create-ask-new-sequence-retires-authority": {
+          "response": {
+            "id": 802,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "Soup Wall withheld MCP invocation (native_approval_closed)",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            }
+          },
+          "pending_binding_sha256": "102ee0b2bf73a59bf4c4e6e2379bd098fadfc1e8e58337f834fac12552a07997",
+          "deployment_sequence": 11,
+          "publications": 0
+        },
+        "original-create-fresh-ask-after-transition": {
+          "response": {
+            "id": 803,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "Successfully wrote to /workspace/managed-fresh.txt",
+                  "type": "text"
+                }
+              ],
+              "structuredContent": {
+                "content": "Successfully wrote to /workspace/managed-fresh.txt"
+              }
+            }
+          },
+          "resource_details": {
+            "content_bytes": 46,
+            "content_sha256": "b8888bd0eef424558a18c5bf7d21f28df544b2ca52f70b627ee134983f40e7ec",
+            "contract_version": "sw-mcp/original-create-resource/1",
+            "device": 2049,
+            "inode": 6709314,
+            "must_be_absent": true,
+            "target": "/workspace/managed-fresh.txt",
+            "workspace": "/tmp/sou82-owned-us0ofw_h/filesystem/workspace"
+          },
+          "deployment_sequence": 11,
+          "sha256": "b8888bd0eef424558a18c5bf7d21f28df544b2ca52f70b627ee134983f40e7ec"
+        }
+      },
+      "all_processes_stopped": true
+    },
+    "postgres": {
+      "source": {
+        "commit": "2f192faa75afc123d222138f160688d32c9f72ee",
+        "tree": "4d075c74bdb16b377d91d756dbc2c9c245f49793",
+        "dirty": false
+      },
+      "checks": 19,
+      "status": "pass",
+      "new_checks": {
+        "original-create-managed-allow-deny-effects": {
+          "allowed": {
+            "id": 800,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "Successfully wrote to /workspace/managed-allow.txt",
+                  "type": "text"
+                }
+              ],
+              "structuredContent": {
+                "content": "Successfully wrote to /workspace/managed-allow.txt"
+              }
+            }
+          },
+          "denied": {
+            "id": 801,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "Soup Wall withheld MCP invocation (sou82-create-deny-read)",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            }
+          },
+          "allowed_sha256": "b8888bd0eef424558a18c5bf7d21f28df544b2ca52f70b627ee134983f40e7ec",
+          "denied_publications": 0,
+          "deployment_sequence": 9
+        },
+        "original-create-ask-new-sequence-retires-authority": {
+          "response": {
+            "id": 802,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "Soup Wall withheld MCP invocation (native_approval_closed)",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            }
+          },
+          "pending_binding_sha256": "7791557b9052a5c686bf8874d144af34c5c2940f7afdc029874cca1097343765",
+          "deployment_sequence": 11,
+          "publications": 0
+        },
+        "original-create-fresh-ask-after-transition": {
+          "response": {
+            "id": 803,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "Successfully wrote to /workspace/managed-fresh.txt",
+                  "type": "text"
+                }
+              ],
+              "structuredContent": {
+                "content": "Successfully wrote to /workspace/managed-fresh.txt"
+              }
+            }
+          },
+          "resource_details": {
+            "content_bytes": 46,
+            "content_sha256": "b8888bd0eef424558a18c5bf7d21f28df544b2ca52f70b627ee134983f40e7ec",
+            "contract_version": "sw-mcp/original-create-resource/1",
+            "device": 2049,
+            "inode": 9816367,
+            "must_be_absent": true,
+            "target": "/workspace/managed-fresh.txt",
+            "workspace": "/tmp/sou82-owned-y9r0zq9y/filesystem/workspace"
+          },
+          "deployment_sequence": 11,
+          "sha256": "b8888bd0eef424558a18c5bf7d21f28df544b2ca52f70b627ee134983f40e7ec"
+        }
+      },
+      "all_processes_stopped": true
+    }
+  }
+}

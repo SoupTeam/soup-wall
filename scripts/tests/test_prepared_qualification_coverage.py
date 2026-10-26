@@ -118,6 +118,9 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 self.assertTrue(enabled(preparation, **context))
                 self.assertFalse(enabled(preparation))
                 self.assertIn("--prepared-records", preparation)
+                front_door = step(text, "Qualify the guided first-use entry point through the original host")
+                self.assertFalse(enabled(front_door, **context))
+                self.assertTrue(enabled(front_door))
 
 
 if __name__ == "__main__":

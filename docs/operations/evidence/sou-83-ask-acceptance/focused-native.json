@@ -1,0 +1,117 @@
+{
+  "run_id": 40216060319,
+  "artifact_id": 12608036129,
+  "zip_sha256": "b8a3943375eba79b6db660a6cd6ab8c23fde15542e036a3d3b4b8221e752e686",
+  "source": {
+    "commit": "f7a45ed8755d51c45570dfc16d1f7fa3bb9906b2",
+    "tree": "a6262baa37b8258d24a18c1bb476eea156da2ce4",
+    "dirty": false
+  },
+  "status": "passed",
+  "cases": [
+    {
+      "case": "approve",
+      "passed": true,
+      "workers": 2
+    },
+    {
+      "case": "reject",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "wrong_binding",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "expire",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "timeout",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "cancel",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "default",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "deny",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "classifier_change",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "profile_change",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "root_replace",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "competing_target",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "symlink_target",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "disconnect",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "collector_death",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "restart",
+      "passed": true,
+      "workers": 0
+    },
+    {
+      "case": "lease_expiry",
+      "passed": true,
+      "workers": 0
+    }
+  ],
+  "allowed_publications": 2,
+  "denied_publications": 0,
+  "staging_adversaries": [
+    "extra",
+    "wrong-bytes",
+    "oversize",
+    "hardlink",
+    "symlink",
+    "fifo",
+    "directory"
+  ],
+  "publication_boundaries": [
+    "drop",
+    "competing-target",
+    "root-replacement"
+  ],
+  "all_processes_stopped": true,
+  "agentfw_sha256": "e7f5bb7d53123af4092faefc1f65aa4dff1dce9bf34b95faed399b3513605605",
+  "transcripts_and_native_audit_verified": true
+}
