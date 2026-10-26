@@ -93,7 +93,7 @@ fn main() {
         let findings: Vec<Value> = outcome
             .findings
             .iter()
-            .map(|(facet, f)| json!({"facet": format!("{facet:?}"), "detector": f.detector, "severity": format!("{:?}", f.severity), "confidence": f.confidence}))
+            .map(|(facet, f)| json!({"facet": format!("{facet:?}"), "detector": f.detector, "severity": format!("{:?}", f.severity), "confidence": f.confidence, "label": f.label, "span": f.span}))
             .collect();
         out.push(json!({
             "case_id": id, "status": status, "verdict": format!("{:?}", outcome.verdict),
