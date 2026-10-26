@@ -48,7 +48,10 @@ def generated() -> str:
             continue
         source = (ROOT / ".github/workflows" / workflow).read_text(encoding="utf-8-sig")
         jobs = blocks(source)
-        if set(jobs) != {*expected, "impact"}:
+        # This explicitly dispatched hour-long development exercise must never
+        # enter ordinary component qualification or required admission.
+        manual = {"manual-long-session"} if workflow == "mcp-real-filesystem.yml" else set()
+        if set(jobs) != {*expected, "impact", *manual}:
             raise ValueError("Unregistered source jobs: " + workflow)
         prefix = workflow.removesuffix(".yml")
         for job_id in expected:
@@ -92,7 +95,7 @@ def main() -> int:
         if not TARGET.is_file() or TARGET.read_text(encoding="utf-8") != content:
             parser.error("Component workflow drift: run python3 scripts/ci_components.py")
     else:
-        TARGET.write_text(content, encoding="utf-8")
+        TARGET.write_text(content, encoding="utf-8", newline="\n")
     return 0
 
 

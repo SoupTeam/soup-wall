@@ -14,10 +14,40 @@ use sha2::{Digest, Sha256};
 
 use super::input::InputSchema;
 
+pub mod filesystem_create;
 pub mod git;
+pub mod git_local_clone;
+#[cfg(test)]
+mod git_local_clone_tests;
+
+pub fn git_selected(format: &str) -> bool {
+    git::is_profile(format) || format == git_local_clone::FORMAT
+}
+
+mod read_lease;
+mod verified_inputs;
+
+/// Private to one pending Ask in this collector. Neither serializable nor a
+/// policy/approval result; a daemon restart is still refused on redemption.
+#[derive(Clone)]
+pub(crate) struct VerifiedAssets {
+    profile: Value,
+    profile_path: PathBuf,
+    inputs: verified_inputs::Inputs,
+}
 
 pub fn selected(format: Option<&str>) -> bool {
-    matches!(format, Some(FORMAT | git::FORMAT))
+    matches!(
+        format,
+        Some(
+            FORMAT
+                | filesystem_create::FORMAT
+                | git::FORMAT
+                | git::LOCAL_REFS_FORMAT
+                | git::SHALLOW_FORMAT
+                | git_local_clone::FORMAT
+        )
+    )
 }
 
 pub const FORMAT: &str = "sw-mcp/filesystem-readonly/1";
@@ -38,6 +68,18 @@ pub const SERVER_ENTRYPOINT: &str =
 pub const MAX_PAGES: usize = 4;
 pub const MAX_TOOLS: usize = 64;
 pub const MAX_FRAME_BYTES: usize = 262_144;
+/// Reviewed result budgets, separate from argument/request validation.
+/// One decoded result text (each content block and each structured string).
+pub const RESULT_TEXT_BYTES: usize = super::input::RESULT_STRING_BYTES;
+/// One complete server response line on the wire, newline included. Covers
+/// the duplicated text and structuredContent channels of one maximal text
+/// with ordinary JSON escaping. Larger frames are never buffered whole.
+pub const RESULT_FRAME_BYTES: usize = 1_048_576;
+/// Bytes of one oversized frame that may be validated and discarded while
+/// resynchronizing to its end. Beyond this the session fails closed.
+pub const RESULT_DRAIN_BYTES: usize = 16 * 1024 * 1024;
+/// Wall-clock bound for draining one oversized frame.
+pub const RESULT_DRAIN_TIME: std::time::Duration = std::time::Duration::from_secs(10);
 pub const MAX_DISCOVERY_BYTES: usize = 262_144;
 pub const MAX_PROFILE_BYTES: usize = 65_536;
 const MAX_TREE_FILES: usize = 32_768;
@@ -73,11 +115,35 @@ pub struct Library {
     pub sha256: String,
 }
 
+/// Optional existing-project identity. Content remains mutable, untrusted data;
+/// replacing the selected directory never transfers its execution authority.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceIdentity {
+    pub device: u64,
+    pub inode: u64,
+    pub uid: u32,
+}
+
+impl WorkspaceIdentity {
+    #[cfg(unix)]
+    pub fn from_metadata(metadata: &fs::Metadata) -> Self {
+        use std::os::unix::fs::MetadataExt;
+        Self {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            uid: metadata.uid(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProfileConfig {
     pub format: String,
     pub workspace: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_identity: Option<WorkspaceIdentity>,
     pub runtime_path: PathBuf,
     pub runtime_sha256: String,
     pub package_root: PathBuf,
@@ -91,19 +157,127 @@ pub struct ProfileConfig {
     pub git_launcher: Option<Library>,
 }
 
+fn verified_capture_failure(error: &anyhow::Error) -> &'static str {
+    for cause in error.chain() {
+        match cause.to_string().as_str() {
+            "selected asset changed during identity lookup" => return "identity_lookup_changed",
+            "selected asset changed during verification" => return "identity_changed",
+            "selected asset identity or metadata changed during approval" => {
+                return "identity_changed"
+            }
+            "selected asset size changed during verification" => return "size_changed",
+            "selected asset changed during hashing" => return "bytes_changed",
+            "selected asset read lease lost during capture" | "selected asset read lease lost" => {
+                return "lease_lost"
+            }
+            "selected asset immutable proof unavailable" => return "verity_unavailable",
+            "unsupported selected asset immutable proof" => return "verity_unsupported",
+            "selected executable or library changed during approval" => {
+                return "runtime_digest_mismatch"
+            }
+            "selected package changed during approval" => return "package_digest_mismatch",
+            "selected profile changed before approval" => return "profile_changed",
+            _ => {}
+        }
+        if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+            return match io.kind() {
+                std::io::ErrorKind::NotFound => "input_missing",
+                std::io::ErrorKind::PermissionDenied => "input_permission",
+                _ => "input_io",
+            };
+        }
+    }
+    "capture_failure"
+}
+
 impl ProfileConfig {
     /// Recheck immutable installed assets after an operator wait. This only
     /// observes files; it creates no sandbox, budget, process or authority.
-    pub(crate) fn revalidate_assets(&self) -> anyhow::Result<()> {
+    pub(crate) fn capture_verified_assets(&self) -> anyhow::Result<VerifiedAssets> {
+        let result = self.capture_verified_assets_inner();
+        if let Err(error) = &result {
+            let code = verified_capture_failure(error);
+            eprintln!(
+                "{}",
+                serde_json::json!({"event":"mcp_verified_inputs_capture_failure", "failure_code":code})
+            );
+        }
+        result
+    }
+
+    fn capture_verified_assets_inner(&self) -> anyhow::Result<VerifiedAssets> {
+        let profile_path = std::env::var_os(ENVIRONMENT)
+            .map(PathBuf::from)
+            .context("selected profile disappeared")?;
+        let profile = serde_json::to_value(self)?;
+        let mut inputs = verified_inputs::Inputs::default();
+        let mut verification = verified_inputs::Verification::Capture(&mut inputs);
+        verification.entry(&profile_path)?;
+        ensure!(
+            Self::load_from_env()?
+                .map(serde_json::to_value)
+                .transpose()?
+                == Some(profile.clone()),
+            "selected profile changed before approval"
+        );
+        self.verify_assets_with(&mut verification)?;
+        verification.entry(&profile_path)?;
+        inputs.validate_leases()?;
+        // Diagnostic output cannot interrupt a completed input observation.
+        // Only bounded counts/durations are reported, never paths or authority.
+        {
+            use std::io::Write as _;
+            let _ = writeln!(std::io::stderr().lock(), "{}", inputs.capture_cost());
+        }
+        Ok(VerifiedAssets {
+            profile,
+            profile_path,
+            inputs,
+        })
+    }
+
+    pub(crate) fn revalidate_assets(&self, verified: &VerifiedAssets) -> anyhow::Result<()> {
+        let started = std::time::Instant::now();
+        let mut verification = verified_inputs::Verification::Resume(&verified.inputs);
+        ensure!(
+            std::env::var_os(ENVIRONMENT).map(PathBuf::from).as_ref()
+                == Some(&verified.profile_path),
+            "selected profile path changed during approval"
+        );
+        verification.entry(&verified.profile_path)?;
         let current = Self::load_from_env()?.context("selected profile disappeared")?;
         ensure!(
-            serde_json::to_value(&current)? == serde_json::to_value(self)?,
+            serde_json::to_value(&current)? == verified.profile
+                && serde_json::to_value(self)? == verified.profile,
             "selected profile changed during approval"
         );
-        ensure!(
-            package_tree_sha256(&self.package_root)? == self.package_tree_sha256,
-            "selected package changed during approval"
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
+            "stage":"selected_profile", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
         );
+        self.verify_assets_with(&mut verification)?;
+        verification.entry(&verified.profile_path)?;
+        verified.inputs.validate_leases()?;
+        let (immutable_files, leased_files, rehashed_files) = verified.inputs.counts();
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_verified_inputs_resume",
+            "profile":self.format,"immutable_files":immutable_files,"leased_files":leased_files,"rehashed_files":rehashed_files})
+        );
+        Ok(())
+    }
+
+    /// Verify pinned bytes without modifying process environment or launching a server.
+    pub(crate) fn verify_assets(&self) -> anyhow::Result<()> {
+        self.verify_assets_with(&mut verified_inputs::Verification::Full)
+    }
+
+    fn verify_assets_with(
+        &self,
+        verification: &mut verified_inputs::Verification<'_>,
+    ) -> anyhow::Result<()> {
+        let started = std::time::Instant::now();
         let mut total = 0u64;
         for (path, digest) in [
             (&self.runtime_path, &self.runtime_sha256),
@@ -117,19 +291,31 @@ impl ProfileConfig {
                 .chain(self.git_launcher.iter())
                 .map(|pin| (&pin.path, &pin.sha256)),
         ) {
-            let mut hash = Sha256::new();
-            let file = open_regular(path)?;
-            let size = file.metadata()?.len();
+            let size = fs::metadata(path)?.len();
             total = total
                 .checked_add(size)
                 .context("selected asset size overflow")?;
             ensure!(total <= MAX_TREE_BYTES, "selected asset byte limit");
-            let read = std::io::copy(&mut file.take(size + 1), &mut hash)?;
             ensure!(
-                read == size && format!("{:x}", hash.finalize()) == *digest,
+                verification.digest(path, size)? == *digest,
                 "selected executable or library changed during approval"
             );
         }
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
+            "stage":"runtime_and_libraries", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
+        );
+        let started = std::time::Instant::now();
+        ensure!(
+            package_tree_sha256_with(&self.package_root, verification)? == self.package_tree_sha256,
+            "selected package changed during approval"
+        );
+        eprintln!(
+            "{}",
+            serde_json::json!({"event":"mcp_asset_verification_timing", "profile":self.format,
+            "stage":"package_tree", "elapsed_ms":started.elapsed().as_secs_f64() * 1000.0})
+        );
         Ok(())
     }
 
@@ -159,8 +345,8 @@ impl ProfileConfig {
             "unsupported MCP server profile"
         );
         ensure!(
-            (config.format == git::FORMAT) == config.git.is_some()
-                && (config.format == git::FORMAT) == config.git_launcher.is_some(),
+            git_selected(&config.format) == config.git.is_some()
+                && git_selected(&config.format) == config.git_launcher.is_some(),
             "Git runtime/profile mismatch"
         );
         for git in [&config.git, &config.git_launcher].into_iter().flatten() {
@@ -219,7 +405,7 @@ impl ProfileConfig {
             Path::new(command) == self.runtime_path,
             "MCP command differs from selected runtime"
         );
-        if self.format == git::FORMAT {
+        if git_selected(&self.format) {
             ensure!(
                 args == [
                     "-I",
@@ -272,16 +458,20 @@ pub fn original_manifest() -> Value {
 
 pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
     match format {
-        FORMAT => Ok(original_manifest()),
-        git::FORMAT => Ok(git::original_manifest()),
+        FORMAT | filesystem_create::FORMAT => Ok(original_manifest()),
+        git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT | git_local_clone::FORMAT => {
+            Ok(git::original_manifest())
+        }
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
 
 pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
     match format {
-        FORMAT => validate_initialization(value),
-        git::FORMAT => git::validate_initialization(value),
+        FORMAT | filesystem_create::FORMAT => validate_initialization(value),
+        git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT | git_local_clone::FORMAT => {
+            git::validate_initialization(value)
+        }
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -292,7 +482,10 @@ pub fn classify_manifest_for(
 ) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     match format {
         FORMAT => classify_manifest(value),
-        git::FORMAT => git::classify_manifest(value),
+        filesystem_create::FORMAT => filesystem_create::classify_manifest(value),
+        git::FORMAT | git_local_clone::FORMAT => git::classify_manifest(value),
+        git::LOCAL_REFS_FORMAT => git::classify_manifest_with_local_refs(value, true),
+        git::SHALLOW_FORMAT => git::classify_manifest(value),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -318,6 +511,7 @@ pub struct ToolProfile {
     pub output: Option<InputSchema>,
     pub unsupported_reason: Option<&'static str>,
     git_tool: Option<String>,
+    git_local_references: bool,
 }
 
 impl ToolProfile {
@@ -327,7 +521,7 @@ impl ToolProfile {
             "MCP tool is unsupported by selected profile"
         );
         if let Some(name) = &self.git_tool {
-            return git::validate_arguments(name, value);
+            return git::validate_arguments_with_local_refs(name, value, self.git_local_references);
         }
         self.input
             .as_ref()
@@ -396,12 +590,18 @@ impl ToolProfile {
         for block in blocks {
             exact_keys(block, &["type", "text"])?;
             ensure!(
-                block["type"] == "text"
-                    && block["text"]
-                        .as_str()
-                        .is_some_and(|s| s.len() <= MAX_FRAME_BYTES),
+                block["type"] == "text" && block["text"].is_string(),
                 "unsupported MCP content"
             );
+            if block["text"]
+                .as_str()
+                .is_some_and(|s| s.len() > RESULT_TEXT_BYTES)
+            {
+                return Err(super::input::ResultBudgetExceeded {
+                    limit: RESULT_TEXT_BYTES,
+                }
+                .into());
+            }
         }
         if let Some(structured) = result.get("structuredContent") {
             self.output
@@ -419,30 +619,55 @@ impl ToolProfile {
     }
 }
 
+/// Why a path argument was refused before dispatch. Typed so the transport can
+/// tell the user which boundary applied, with fixed text that never echoes the
+/// argument.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathRefusal {
+    /// Absolute path outside `/workspace`.
+    Outside,
+    /// Empty, overlong, control character, backslash, `~`, drive, or an
+    /// empty / `.` / `..` segment.
+    Spelling,
+}
+
+impl std::fmt::Display for PathRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            PathRefusal::Outside => "MCP path is outside selected workspace",
+            PathRefusal::Spelling => "unsupported MCP workspace path spelling",
+        })
+    }
+}
+
+impl std::error::Error for PathRefusal {}
+
 fn validate_workspace_path(value: &Value) -> anyhow::Result<()> {
     let text = value.as_str().context("MCP path must be text")?;
-    ensure!(
-        !text.is_empty() && text.len() <= 4096 && !text.chars().any(char::is_control),
-        "invalid MCP workspace path"
-    );
+    let spelling = || anyhow::Error::new(PathRefusal::Spelling);
+    if text.is_empty() || text.len() > 4096 || text.chars().any(char::is_control) {
+        return Err(spelling());
+    }
     // These are paths inside the Linux sandbox, even when this parser or its
     // tests are hosted on Windows. Host Path semantics would treat `/etc` as a
     // relative Windows path and accept drive/backslash spellings incorrectly.
-    ensure!(
-        !text.contains(['\\', ':']) && !text.starts_with('~'),
-        "unsupported MCP workspace path spelling"
-    );
+    // A colon is an ordinary Linux name byte. It is accepted only inside an
+    // absolute `/workspace/` path, which cannot be read as a drive or stream;
+    // relative spellings such as `C:/x` or `file:stream` stay refused.
+    let absolute = text.starts_with("/workspace/");
+    if text.starts_with('/') && text != "/workspace" && !absolute {
+        return Err(PathRefusal::Outside.into());
+    }
+    if text.contains('\\') || text.starts_with('~') || (text.contains(':') && !absolute) {
+        return Err(spelling());
+    }
     let relative = text.strip_prefix('/').unwrap_or(text);
-    ensure!(
-        relative
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != ".."),
-        "unsupported MCP path traversal"
-    );
-    ensure!(
-        !text.starts_with('/') || text == "/workspace" || text.starts_with("/workspace/"),
-        "MCP path is outside selected workspace"
-    );
+    if !relative
+        .split('/')
+        .all(|part| !part.is_empty() && part != "." && part != "..")
+    {
+        return Err(spelling());
+    }
     Ok(())
 }
 
@@ -488,7 +713,8 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
             _ => Some("selected_profile_tool_unsupported"),
         };
         let input = InputSchema::read_selected(&tool["inputSchema"]).ok();
-        let output = InputSchema::read_selected(&tool["outputSchema"]).ok();
+        let output =
+            InputSchema::read_selected_role(&tool["outputSchema"], super::input::Role::Result).ok();
         let unsupported_reason = unsupported_reason.or_else(|| {
             if input.is_none() || output.is_none() {
                 Some("selected_profile_schema_unsupported")
@@ -504,7 +730,8 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
                         input,
                         output,
                         unsupported_reason,
-                        git_tool: None
+                        git_tool: None,
+                        git_local_references: false,
                     }
                 )
                 .is_none(),
@@ -518,13 +745,22 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
 /// paths in byte order; files use F\0path\0hex-sha256\n, directories D\0path\n,
 /// symlinks L\0path\0target\n. Nothing is excluded. Links must stay inside root.
 pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
+    package_tree_sha256_with(root, &mut verified_inputs::Verification::Full)
+}
+
+fn package_tree_sha256_with(
+    root: &Path,
+    verification: &mut verified_inputs::Verification<'_>,
+) -> anyhow::Result<String> {
     fn walk(
         root: &Path,
         relative: &Path,
         entries: &mut BTreeMap<String, Vec<u8>>,
         bytes: &mut u64,
         depth: usize,
+        verification: &mut verified_inputs::Verification<'_>,
     ) -> anyhow::Result<()> {
+        verification.entry(&root.join(relative))?;
         ensure!(
             depth <= 32 && entries.len() <= MAX_TREE_FILES,
             "MCP package tree count or depth limit"
@@ -538,6 +774,14 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
                 "invalid MCP package path"
             );
             let metadata = fs::symlink_metadata(entry.path())?;
+            let descriptor_leaf = cfg!(target_os = "linux") && metadata.is_file();
+            // walk() already binds directories immediately before and after
+            // descent, and tree_digest() closes descriptor leaves itself. Only
+            // links/other entries need the surrounding observations here.
+            let observe_here = !descriptor_leaf && !metadata.is_dir();
+            if observe_here {
+                verification.entry(&entry.path())?;
+            }
             let record = if metadata.is_symlink() {
                 let target = fs::read_link(entry.path())?;
                 ensure!(!target.is_absolute(), "MCP package link must be relative");
@@ -570,7 +814,7 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
                 );
                 format!("L\0{name}\0{target}\n").into_bytes()
             } else if metadata.is_dir() {
-                walk(root, &child, entries, bytes, depth + 1)?;
+                walk(root, &child, entries, bytes, depth + 1, verification)?;
                 format!("D\0{name}\n").into_bytes()
             } else {
                 ensure!(metadata.is_file(), "unsupported MCP package file type");
@@ -578,34 +822,19 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
                     .checked_add(metadata.len())
                     .context("MCP package size overflow")?;
                 ensure!(*bytes <= MAX_TREE_BYTES, "MCP package byte limit");
-                let mut file = open_regular(entry.path())?;
-                let mut hash = Sha256::new();
-                let mut buffer = [0u8; 65_536];
-                let mut read_bytes = 0u64;
-                loop {
-                    let n = file.read(&mut buffer)?;
-                    if n == 0 {
-                        break;
-                    }
-                    read_bytes += n as u64;
-                    ensure!(
-                        read_bytes <= metadata.len(),
-                        "MCP package changed during hashing"
-                    );
-                    hash.update(&buffer[..n]);
-                }
-                ensure!(
-                    read_bytes == metadata.len(),
-                    "MCP package changed during hashing"
-                );
-                format!("F\0{name}\0{:x}\n", hash.finalize()).into_bytes()
+                let digest = verification.tree_digest(&entry.path(), &metadata)?;
+                format!("F\0{name}\0{digest}\n").into_bytes()
             };
+            if observe_here {
+                verification.entry(&entry.path())?;
+            }
             ensure!(
                 entries.insert(name.to_owned(), record).is_none()
                     && entries.len() <= MAX_TREE_FILES,
                 "MCP package tree entry limit"
             );
         }
+        verification.entry(&root.join(relative))?;
         Ok(())
     }
     ensure!(
@@ -613,7 +842,8 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
         "MCP package root must be a directory"
     );
     let mut entries = BTreeMap::new();
-    walk(root, Path::new(""), &mut entries, &mut 0, 0)?;
+    walk(root, Path::new(""), &mut entries, &mut 0, 0, verification)?;
+    verification.tree_entries(root, entries.len())?;
     let mut hash = Sha256::new();
     for record in entries.values() {
         hash.update(record);
@@ -625,6 +855,43 @@ pub fn package_tree_sha256(root: &Path) -> anyhow::Result<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires an explicitly selected operator-owned installed native profile"]
+    fn native_installed_profile_ask_capture_resume() {
+        let profile = ProfileConfig::load_from_env()
+            .expect("read selected profile")
+            .expect("explicit selected profile required");
+        profile
+            .verify_assets()
+            .expect("initial selected asset verification");
+        let captured = profile
+            .capture_verified_assets()
+            .expect("selected input capture");
+        profile
+            .revalidate_assets(&captured)
+            .expect("selected input resume");
+        let (immutable, leased, _) = captured.inputs.counts();
+        assert!(
+            immutable + leased > 0,
+            "actual installed input kernel reuse required"
+        );
+    }
+
+    #[test]
+    fn capture_failure_codes_never_export_arbitrary_error_payloads() {
+        assert_eq!(
+            verified_capture_failure(&anyhow::anyhow!("private payload and token")),
+            "capture_failure"
+        );
+        assert_eq!(
+            verified_capture_failure(&anyhow::anyhow!(
+                "selected asset changed during identity lookup"
+            )),
+            "identity_lookup_changed"
+        );
+    }
 
     #[test]
     fn original_upstream_discovery_preserves_every_tool_and_classifies_support() {
@@ -733,6 +1000,54 @@ mod tests {
                 .is_err());
         }
         assert_eq!(read.validate_result(&json!({"result":{"content":[{"type":"text","text":"ordinary error"}],"isError":true}})).unwrap(), "error");
+    }
+
+    #[test]
+    fn result_budget_is_separate_from_argument_budget_on_both_channels() {
+        use super::super::input::ResultBudgetExceeded;
+        let tools = classify_manifest(&original_manifest()).unwrap();
+        let read = &tools["read_text_file"];
+        let frame = |text: &str, structured: &str| {
+            json!({"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":text}],
+                "structuredContent":{"content":structured}}})
+        };
+        let budget_error = |value: &Value| {
+            read.validate_result(value)
+                .unwrap_err()
+                .downcast_ref::<ResultBudgetExceeded>()
+                .copied()
+        };
+        // The old argument default was the result limit; it no longer is.
+        for size in [16_383, 16_384, 16_385, 20 * 1024, 60 * 1024, 120 * 1024] {
+            let text = "a".repeat(size);
+            assert_eq!(read.validate_result(&frame(&text, &text)).unwrap(), "value");
+        }
+        let below = "b".repeat(RESULT_TEXT_BYTES - 1);
+        let at = "b".repeat(RESULT_TEXT_BYTES);
+        let above = "b".repeat(RESULT_TEXT_BYTES + 1);
+        assert_eq!(
+            read.validate_result(&frame(&below, &below)).unwrap(),
+            "value"
+        );
+        assert_eq!(read.validate_result(&frame(&at, &at)).unwrap(), "value");
+        let limit = Some(ResultBudgetExceeded {
+            limit: RESULT_TEXT_BYTES,
+        });
+        assert_eq!(budget_error(&frame(&above, "small")), limit);
+        assert_eq!(budget_error(&frame("small", &above)), limit);
+        // Bytes, not characters: 65_536 four-byte scalars fill the budget exactly.
+        let wide = "\u{1F963}".repeat(RESULT_TEXT_BYTES / 4);
+        assert_eq!(read.validate_result(&frame(&wide, &wide)).unwrap(), "value");
+        let wider = format!("{wide}x");
+        assert_eq!(budget_error(&frame(&wider, &wider)), limit);
+        // Type and shape validation are unchanged by the result role.
+        let typed = json!({"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"x"}],
+            "structuredContent":{"content":7}}});
+        assert!(budget_error(&typed).is_none() && read.validate_result(&typed).is_err());
+        // Arguments keep the reviewed 16 KiB default string budget.
+        let input = read.input.as_ref().unwrap();
+        assert!(input.validate(&json!({"path":"p".repeat(16_384)})).is_ok());
+        assert!(input.validate(&json!({"path":"p".repeat(16_385)})).is_err());
     }
 
     #[test]
@@ -845,8 +1160,65 @@ mod tests {
             "\\workspace\\file",
             "file:stream",
             "~/file",
+            "/workspace/back\\slash",
+            "/workspace/tab\tname",
+            "/workspace:extra",
+            "/workspace/a/../../etc/passwd",
         ] {
             assert!(validate_workspace_path(&json!(path)).is_err(), "{path}");
         }
+    }
+
+    #[test]
+    fn path_refusals_name_their_boundary_and_accept_linux_names() {
+        let refusal = |path: &str| {
+            validate_workspace_path(&json!(path))
+                .unwrap_err()
+                .downcast_ref::<PathRefusal>()
+                .copied()
+        };
+        for path in ["/etc/passwd", "/workspaces/file.txt", "/", "/tmp/x:y"] {
+            assert_eq!(refusal(path), Some(PathRefusal::Outside), "{path}");
+        }
+        for path in [
+            "",
+            "../file",
+            "/workspace/../etc/passwd",
+            "sub//file",
+            "/workspace/",
+            "C:/workspace/file",
+            "file:stream",
+            "~/file",
+            "/workspace/a\\b",
+            "/workspace/a\nb",
+        ] {
+            assert_eq!(refusal(path), Some(PathRefusal::Spelling), "{path:?}");
+        }
+        assert_eq!(
+            refusal(&format!("/workspace/{}", "a".repeat(4096))),
+            Some(PathRefusal::Spelling)
+        );
+        // Ordinary Linux names stay exact: nothing is normalized or decoded.
+        for path in [
+            "/workspace/a:b.txt",
+            "/workspace/dir with spaces/file name.txt",
+            "/workspace/кириллица/файл.txt",
+            "/workspace/-leading-dash.txt",
+            "-leading-dash.txt",
+            "/workspace/.hidden",
+            "/workspace/$(touch pwned).txt",
+            "/workspace/; ls.txt",
+            "/workspace/quote\"name.txt",
+            "/workspace/caf\u{e9}.txt",
+            "/workspace/cafe\u{301}.txt",
+            "/workspace/percent%2F.txt",
+        ] {
+            assert!(validate_workspace_path(&json!(path)).is_ok(), "{path}");
+        }
+        // A type error is not a path refusal.
+        assert!(validate_workspace_path(&json!(7))
+            .unwrap_err()
+            .downcast_ref::<PathRefusal>()
+            .is_none());
     }
 }

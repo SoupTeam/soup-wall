@@ -46,7 +46,9 @@ class CostPolicyTests(unittest.TestCase):
                 api = DraftAPI()
                 event = Path(directory) / "event.json"
                 event.write_text(json.dumps({"pull_request": {
-                    "number": 1, "base": {"repo": {"full_name": "SoupTeam/soup-wall"}},
+                    "number": 1,
+                    "base": {"sha": "a" * 40, "repo": {"full_name": "SoupTeam/soup-wall"}},
+                    "head": {"sha": "b" * 40},
                 }}), encoding="utf-8")
                 args = ["ci_admission.py", "--pr", "1"] + (["--dry-run"] if dry_run else [])
                 with patch.dict(os.environ, {"GITHUB_REPOSITORY": "SoupTeam/soup-wall",
@@ -55,7 +57,7 @@ class CostPolicyTests(unittest.TestCase):
                      patch.object(sys, "argv", args), \
                      patch.object(ci_admission, "GitHub", return_value=api), \
                      patch.object(ci_admission.time, "sleep", side_effect=AssertionError("idle runner")):
-                    self.assertEqual(ci_admission.main(), 0)
+                    self.assertEqual(ci_admission.main(), 2 if dry_run else 0)
                 self.assertEqual(len(api.posts), 0 if dry_run else 1)
                 for suffix, body in api.posts:
                     self.assertEqual(suffix, "/statuses/" + "c" * 40)
@@ -82,7 +84,7 @@ class CostPolicyTests(unittest.TestCase):
     def test_admission_also_handles_draft_transitions(self):
         text = (ROOT / ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
         self.assertIn("ready_for_review, converted_to_draft", text)
-        self.assertNotIn("pull_request.head.sha", text)
+        self.assertNotRegex(text, r"(?m)^\s+ref:.*pull_request\.head")
 
     def test_admission_uses_the_executing_trusted_workflow_revision(self):
         text = (ROOT / ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
@@ -91,7 +93,6 @@ class CostPolicyTests(unittest.TestCase):
         self.assertEqual(re.findall(r"(?m)^          ref: (.+)$", text),
                          ["${{ github.workflow_sha }}"])
         self.assertIn("persist-credentials: false", text)
-        self.assertNotIn("pull_request.head", text)
 
     def test_workflow_command_derives_pr_from_event_without_qualifying_a_draft(self):
         text = (ROOT / ".github/workflows/ci-admission.yml").read_text(encoding="utf-8")
@@ -103,6 +104,7 @@ class CostPolicyTests(unittest.TestCase):
             event.write_text(json.dumps({"pull_request": {
                 "number": 1, "base": {"sha": "a" * 40,
                     "repo": {"full_name": "SoupTeam/soup-wall"}},
+                "head": {"sha": "b" * 40},
             }}), encoding="utf-8")
             with patch.dict(os.environ, {"GITHUB_REPOSITORY": "SoupTeam/soup-wall",
                                          "GITHUB_TOKEN": "test-only",

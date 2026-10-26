@@ -214,6 +214,20 @@ def unpack(archive, destination, spec):
     return roots[0]
 
 
+def reserve_port(resources):
+    """Keep the initial Gateway port bound throughout owned fixture setup.
+
+    The caller closes it immediately before spawning its backend. This avoids
+    reuse by the TLS edge, database or outbound fixture connections; it is not
+    socket activation and does not retry a failed or foreign backend.
+    """
+    listener = resources.enter_context(socket.socket())
+    if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    listener.bind(("127.0.0.1", 0))
+    return listener
+
+
 def free_port():
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -504,7 +518,8 @@ def run(args):
             check("runtime-license-notices-present", (keycloak / "LICENSE.txt").is_file()
                   and (jdk / "legal" / "java.base" / "LICENSE").is_file())
             ca, (tls_cert, tls_key), (sp_cert, sp_key) = certificate_files(directory)
-            gateway_port, vendor_port = free_port(), free_port()
+            gateway_reservation = reserve_port(resources)
+            gateway_port, vendor_port = gateway_reservation.getsockname()[1], free_port()
             suffix = uuid.uuid4().hex
             realm, unsigned_realm = "soup-" + suffix, "unsigned-" + suffix
             username, password = "synthetic-" + suffix, secrets.token_urlsafe(32)
@@ -647,6 +662,7 @@ def run(args):
                 '  admin_token_env: "SOUP_KEYCLOAK_ADMIN_TOKEN"\npolicy_file: "policy.yaml"\n'
                 'fail_mode: fail_closed\n', encoding="utf-8")
             gateway_log = resources.enter_context((directory / "gateway.log").open("wb"))
+            gateway_reservation.close()
             gateway = start_child([str(args.gateway)], directory, gateway_environment, gateway_log, resources)
             children.append(gateway)
             phase = "gateway-startup"

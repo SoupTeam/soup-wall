@@ -1,0 +1,23 @@
+{
+  "accepted_main": "acf59afb35df0bfd113bef5147dd48146323cd1c",
+  "changes": "Retain accepted cleanup integration and both existing artifact sets; generated workflow has no drift. No Rust implementation changed by this integration.",
+  "checks": {
+    "ci_components_check": "passed",
+    "diff_check": "passed",
+    "python": {
+      "failed": 0,
+      "log_sha256": "7abb2ac123d3e38c0454b599d549d42a532ee285163ea38826ef498ce4c6e8fe",
+      "passed": 1110,
+      "run": 1189,
+      "skipped": 79
+    }
+  },
+  "files_sha256": {
+    ".github/workflows/ci-components.yml": "3a707303d810261aa061de36f6f2701be160c9aa745d783d8935199155f5b883",
+    ".github/workflows/mcp-real-filesystem.yml": "d5d6a772ed019e9bb31a315387e627a8a1859c43ce584e49bd4b15222285061f",
+    "scripts/qualify-prepared-pilot-run.py": "ddf568337557981b467422d4bf82399146420917355d7c4a1bac3db77b0e8f60"
+  },
+  "format": "sw-sou124-integration-checks/1",
+  "implementation_before_merge": "374ea20b8d38f1512909bf446041eb46f0818ae0",
+  "performance_evidence": "Native comparison remains attributed to exact clean source d37383e; this integration does not relabel its source."
+}

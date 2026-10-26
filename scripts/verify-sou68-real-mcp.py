@@ -341,12 +341,12 @@ def overlap(client, log, report, base=100):
     record["passed"] = True
 
 
-def protected(stack, report):
+def protected(stack, report, witness_type=RepositoryWitness):
     python = stack.install / "package/python/bin/python3.11"
     env = dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git), GIT_CONFIG_NOSYSTEM="1",
                GIT_CONFIG_GLOBAL="/dev/null", GIT_OPTIONAL_LOCKS="0", GIT_TERMINAL_PROMPT="0")
     originals = {}
-    witness = RepositoryWitness(stack.workspace)
+    witness = witness_type(stack.workspace)
     with (stack.root / "unwrapped.log").open("wb") as log:
         original = Client([str(python), "-I", "-B", "-m", "mcp_server_git", "--repository", str(stack.workspace)],
                           env, stack.workspace, log, "unwrapped original Git")
@@ -379,7 +379,7 @@ def protected(stack, report):
                "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     log_path = stack.root / "collector.log"
     report["reads"], report["refusals"], report["read_admission_failures"] = [], [], []
-    witness = RepositoryWitness(stack.workspace)
+    witness = witness_type(stack.workspace)
     with log_path.open("wb") as log:
         client = Client(command, env, stack.workspace, log, "protected original Git")
         try:
@@ -404,6 +404,12 @@ def protected(stack, report):
                 # Keep the first historical IDs, avoid all subsequent refusal,
                 # useful-followup and outage IDs, and never replay spent IDs.
                 overlap(client, log_path, report, 100 if iteration == 0 else 2000 + iteration * 32)
+                # The clone guard performs bounded repeated repository scans.
+                # Consume each round's independent events before the next one,
+                # retaining overflow as a hard failure rather than losing proof.
+                opens = witness.drain()
+                require(opens > 0, "overlap repository witness did not observe reads")
+                report["overlap_rounds"][-1]["repository_opens"] = opens
             refusals = [
                 ("git_add", {"files": ["notes.txt"]}), ("git_commit", {"message": "forbidden"}),
                 ("git_reset", {}), ("git_checkout", {"branch_name": "main"}),

@@ -12,6 +12,7 @@ use agentfw::sandbox::{
     NetworkPolicy, SandboxSpec,
 };
 use agentfw::Config;
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 
@@ -141,11 +142,13 @@ enum Cmd {
     Doctor(agentfw::doctor::DoctorArgs),
     /// Query authenticated runtime diagnostics; unknown protection exits 2.
     ProtectionStatus(agentfw::protection_status::QueryArgs),
-    /// Summarize an audit log: what would this policy have done?
+    /// Summarize recorded verdicts, or explicitly simulate supplied offline events.
     Replay {
         /// Path to the audit log (defaults to ~/.agentfw/audit.jsonl).
         #[arg(long)]
         log: Option<PathBuf>,
+        #[command(flatten)]
+        offline: agentfw::offline_replay::OfflineArgs,
     },
     /// Print the settings.json hook block and setup instructions.
     Install,
@@ -209,6 +212,12 @@ enum Cmd {
         /// Parent host session to bind this collector and its provenance to.
         #[arg(long)]
         host_session: Option<String>,
+        /// Exact private prepared-run budget binding; environment must agree.
+        #[arg(long)]
+        pilot_budget_binding: Option<PathBuf>,
+        /// Frozen canonical identity of the prepared budget selection.
+        #[arg(long, requires = "pilot_budget_binding")]
+        pilot_budget_sha256: Option<String>,
         /// Authenticated child authority grant token minted for this session and server.
         #[arg(long)]
         child_authority: Option<String>,
@@ -240,6 +249,12 @@ enum Cmd {
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
     SelfTest(agentfw::self_test::Args),
+    #[cfg(windows)]
+    /// Preview a native Windows Agent setup against explicitly selected local assets.
+    OnboardWindows {
+        #[command(subcommand)]
+        command: agentfw::windows_onboarding::Command,
+    },
     /// First-use onboarding: read-only preview, explicit apply of the reviewed plan, and undo (Linux).
     ///
     /// Exit 0 verified/plan ready/undone, 6 configured but unverified, 3 failed, 4 incomplete or refused, 5 unsupported.
@@ -269,6 +284,12 @@ enum Cmd {
     },
     /// Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
     PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
+    /// Read-only inspection using the accepted original-profile workspace validators.
+    PilotWorkspaces(agentfw::pilot_launcher::PilotWorkspacesArgs),
+    /// Inspect or probe an explicitly selected prepared-pilot Linux budget.
+    PilotBudget(agentfw::pilot_budget::BudgetArgs),
+    /// Inspect and decide one exact pending call owned by a live pilot run.
+    PilotApproval(agentfw::pilot_approval::OperatorArgs),
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
     Sandbox {
         /// Writable directory exposed as `/workspace`.
@@ -460,6 +481,11 @@ fn main() -> anyhow::Result<()> {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
         Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
+        #[cfg(windows)]
+        Cmd::OnboardWindows { command } => {
+            prepare_lifecycle_process()?;
+            agentfw::windows_onboarding::run(command)
+        }
         Cmd::Onboard(command) => std::process::exit(agentfw::onboarding::run(command)),
         Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
         Cmd::Serve => {
@@ -472,7 +498,10 @@ fn main() -> anyhow::Result<()> {
                 .build()?
                 .block_on(serve(Config::home()?, None))
         }
-        Cmd::Replay { log } => {
+        Cmd::Replay { log, offline } => {
+            if offline.offline {
+                std::process::exit(agentfw::offline_replay::run_cli(&offline));
+            }
             let home = Config::home()?;
             let path = log.unwrap_or_else(|| home.join("audit.jsonl"));
             let body = std::fs::read_to_string(&path)?;
@@ -735,6 +764,12 @@ fn main() -> anyhow::Result<()> {
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
         Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
+        Cmd::PilotWorkspaces(args) => agentfw::pilot_launcher::inspect_workspaces(args),
+        Cmd::PilotApproval(args) if args.output.is_some() => {
+            std::process::exit(agentfw::pilot_approval::operator_json(args));
+        }
+        Cmd::PilotBudget(args) => agentfw::pilot_budget::inspect(args),
+        Cmd::PilotApproval(args) => agentfw::pilot_approval::operator(args),
         Cmd::McpProfile { home, command } => {
             let home = match home {
                 Some(h) => h,
@@ -830,6 +865,8 @@ fn main() -> anyhow::Result<()> {
         Cmd::Mcp {
             id,
             host_session,
+            pilot_budget_binding,
+            pilot_budget_sha256,
             child_authority,
             native_admission,
             native_approval_wait_seconds,
@@ -847,6 +884,12 @@ fn main() -> anyhow::Result<()> {
                     "both --host-session and --child-authority must be provided together for authenticated binding"
                 );
             }
+            let prepared_budget = agentfw::pilot_budget::verify_launch(
+                pilot_budget_binding.as_deref(),
+                pilot_budget_sha256.as_deref(),
+                host_session.as_deref(),
+                id.as_deref().unwrap_or(""),
+            )?;
             let (cmd, args) = command
                 .split_first()
                 .ok_or_else(|| anyhow::anyhow!("no server command given after --"))?;
@@ -921,7 +964,10 @@ fn main() -> anyhow::Result<()> {
                 let runtime = tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .build()?;
-                let result = runtime.block_on(agentfw::mcp::admission::run(admission));
+                let result = runtime.block_on(agentfw::mcp::admission::run_with_budget(
+                    admission,
+                    prepared_budget,
+                ));
                 // Tokio's stdin uses a blocking thread. A closed admission path must
                 // exit even when the MCP host keeps its stdin handle open.
                 runtime.shutdown_timeout(Duration::from_millis(100));
@@ -1263,11 +1309,27 @@ async fn probe_health(config: &Config, timeout_seconds: u64) -> agentfw::preflig
     }
 }
 
+fn load_serve_config(home: &std::path::Path) -> anyhow::Result<Config> {
+    let path = home.join("config.yaml");
+    match std::fs::read_to_string(&path) {
+        Ok(s) => Config::from_yaml(&s).with_context(|| {
+            format!(
+                "cannot parse daemon configuration {}; restore valid config.yaml before restarting",
+                path.display()
+            )
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "cannot read daemon configuration {}; restore config.yaml access before restarting",
+                path.display()
+            )
+        }),
+    }
+}
+
 async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
+    let cfg = load_serve_config(&home)?;
 
     let mut firewall = match &cfg.policy {
         Some(p) => AgentFirewall::with_taint_limits(
@@ -1448,6 +1510,61 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+
+    #[test]
+    fn serve_config_defaults_only_when_missing() {
+        let home = tempfile::tempdir().unwrap();
+        let config = load_serve_config(home.path()).unwrap();
+        assert_eq!(
+            serde_json::to_value(config).unwrap(),
+            serde_json::to_value(Config::default()).unwrap()
+        );
+        assert!(!home.path().join("config.yaml").exists());
+    }
+
+    #[test]
+    fn serve_config_preserves_valid_operator_settings() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "enforce: true\nport: 18787\n",
+        )
+        .unwrap();
+        let config = load_serve_config(home.path()).unwrap();
+        assert!(config.enforce);
+        assert_eq!(config.port, 18787);
+    }
+
+    #[test]
+    fn serve_config_rejects_malformed_yaml() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("config.yaml"), "enforce: [").unwrap();
+        let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore valid config.yaml"));
+    }
+
+    #[test]
+    fn serve_config_rejects_directory_instead_of_defaults() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir(home.path().join("config.yaml")).unwrap();
+        let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore config.yaml access"));
+        let error = error.downcast_ref::<std::io::Error>().unwrap();
+        assert_ne!(error.kind(), std::io::ErrorKind::NotFound);
+        assert!(home.path().join("config.yaml").is_dir());
+    }
+
+    #[test]
+    fn serve_config_rejects_invalid_utf8_instead_of_defaults() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("config.yaml"), [0xff, 0xfe]).unwrap();
+        let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore config.yaml access"));
+        assert_eq!(
+            error.downcast_ref::<std::io::Error>().unwrap().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+    }
 
     #[test]
     fn managed_instance_preserves_leading_hyphens() {

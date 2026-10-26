@@ -229,3 +229,82 @@ physical request retains its slot and original deadline until it completes. A
 nonresponding withdrawn request still terminates the transport at that deadline.
 Filesystem's existing finite best-effort wire cancellation remains unchanged.
 See the [upstream cancellation report](https://github.com/modelcontextprotocol/python-sdk/issues/2610).
+
+
+## Opt-in strict shallow repositories (SOU-147)
+
+`sw-mcp/git-readonly-shallow/1` is a separate Linux x86-64 profile for a prepared,
+owned standalone repository that satisfies the existing strict repository
+contract and has local shallow boundary metadata. The default v1 profile still
+refuses `.git/shallow`. This selection does not enable named-reference or
+per-file syntax. Unqualified combined identities and simultaneous installer
+options refuse; none falls back to another profile.
+
+```sh
+python3 scripts/install-sou68-git-profile.py --run --shallow-repository \
+  --destination /absolute/private/git-shallow \
+  --workspace /absolute/owned/strict-shallow-project --git /absolute/pinned/git \
+  --git-sha256 REVIEWED_GIT_SHA256 --bwrap /absolute/pinned/bwrap \
+  --git-launcher /absolute/pinned/agentfw-git-sandbox
+```
+
+Use that installation's `profile.json` as `AGENTFW_MCP_SERVER_PROFILE`, and its
+`registry.json` and digest in the enforcing daemon. Keep the accepted
+`rule_baseline/git_readonly_v1/rule_baseline.py` classifier. The original tool
+names, schemas and arguments remain unchanged. `git_show`/`git_diff` still accept
+only HEAD or a full local SHA; status/log/staged/unstaged diff keep their accepted
+bounds. No fetch, deepen, repair, helper or second Git executor is introduced.
+A missing ancestor stays missing and yields an original error or correlated
+explicit refusal; a later safe local read remains usable.
+
+Existing strict **core-only configuration and heads/tags metadata** restrictions
+remain. General clone remote/branch configuration, remote-reference layouts,
+alternates, worktrees, submodules, attributes, active hooks and promisor/partial
+clones are unsupported. A normal clone carrying those features is refused; the
+installer never strips user configuration or changes source data. This task's
+local clone fixtures normalize only their newly generated owned metadata to
+that accepted strict layout. Do not mistake that fixture preparation for an
+automatic conversion command for an existing project.
+
+A present boundary file must contain 1–64 unique lowercase SHA-1 IDs, each an
+exact 40-byte line ending in LF, within 2624 bytes. Every boundary must be an
+available local commit. Blank/duplicate/CRLF/NUL/truncated/oversized records,
+links, hard links, shared writable or unowned inputs and unsupported object
+formats refuse before starting the original server. An ordinary repository with
+no boundary file is also supported as a control; no boundary is synthesized.
+
+The new view reuses same-FD read leases and sealed metadata images. It captures
+at most 128 loose or packed objects, each bounded to 262144 bytes, within a
+16 MiB total image and existing process/descriptor/resource limits. Pack v2,
+index v2 and optional reverse-index v1 have checked count, SHA-1 identity,
+checksums, offsets, fanout/order and CRC framing. Delta records, auxiliary pack
+formats, large-offset indexes and duplicate loose/packed storage are explicitly
+unsupported in this finite profile. The original pinned Git remains the only
+executor. See [Git's pack specification](https://git-scm.com/docs/gitformat-pack).
+
+Read leases reject existing writers/mappings and permanently withdraw a view on
+a later write-open. Directory watches also cover replacement/removal. The
+collector checks withdrawal before admission, before dispatch after Ask and
+before result release. Restoring metadata bytes never reactivates a withdrawn
+session. Current policy/classifier admission, exact single-use Ask, result
+inspection, cancellation, isolation and cleanup remain mandatory; the accepted
+five-second first-pending observation and broker/runtime budgets are unchanged.
+
+The pinned upstream GitPython `git_show` implementation compares a commit with
+its parent. In a depth-one clone it can therefore return its own `fatal: bad
+object` error for HEAD, despite status/log/working-tree diff remaining useful.
+The protected server preserves that original error and permits a later safe
+read. It never fetches the parent or substitutes another implementation.
+Qualification retains this depth-one case and separately checks successful
+byte-identical show output from a shallow fixture with a local parent. Original
+error strings can contain different executable paths outside/inside the fixed
+namespace; both raw errors and hashes are retained without rewriting output.
+
+Run **Real Git MCP profile** on the exact source branch and select **Run only
+opt-in SOU-147 shallow Git acceptance**. The retained
+`sou68-real-git-mcp-evidence` artifact includes ordinary/shallow original-server
+byte comparisons, missing-ancestor calibration and continuation, malformed and
+unsafe metadata refusals, boundary and pack mapped write/restore, in-flight
+withdrawal, Ask/replay/cancel/Deny, calibrated helper/outside/receiver witnesses,
+source identity and process cleanup. Missing native prerequisites fail rather
+than becoming passing skips. Preserve failed/incomplete attempts.

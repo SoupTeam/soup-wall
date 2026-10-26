@@ -33,6 +33,7 @@ SHA = re.compile(r"^[0-9a-f]{40}$")
 CHECK_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
     "agent-doctor.yml": {"agent-doctor-linux": ("doctor-linux",)},
     "agent-fleet.yml": {"fleet": ("Fleet API and real dual-store browser witness",)},
+    "agent-windows-onboarding.yml": {"standard-user-onboarding": ("standard-user-onboarding",)},
     "benchmark.yml": {"agent-scorecard": ("Agent security scorecard",)},
     "ci.yml": {
         "documentation": ("Documentation links",),
@@ -106,22 +107,54 @@ class Verdict:
     reason: str
 
 
-def assess_job_names(jobs: list[dict[str, Any]], expected: tuple[str, ...], merge_sha: str) -> Verdict:
+def assess_job_names(jobs: list[dict[str, Any]], expected: tuple[str, ...], merge_sha: str,
+                     run: dict[str, Any] | None = None, head_sha: str | None = None) -> Verdict:
     names: dict[str, list[dict[str, Any]]] = {}
     for job in jobs:
         names.setdefault(job.get("name", ""), []).append(job)
     # The reusable planner job name includes the server-supplied merge SHA.
-    candidate = [job for job in jobs if job.get("name", "").endswith("Candidate " + merge_sha)]
-    if len(candidate) != 1 or candidate[0].get("conclusion") != "success":
-        return Verdict("failure", "missing or unsuccessful merge-source planner job")
+    planners = [job for job in jobs if "Candidate " in job.get("name", "")]
+    candidate = [job for job in planners if job.get("name", "").endswith("Candidate " + merge_sha)]
+    if len(planners) > 1 or (planners and len(candidate) != 1):
+        return Verdict("failure", "duplicate or stale merge-source planner job")
+    pending: Verdict | None = None
+    if not candidate:
+        pending = Verdict("pending", "merge-source planner job absent from job snapshot")
+    else:
+        verdict = assess_job(candidate[0], run, head_sha)
+        if verdict.state == "failure":
+            return Verdict("failure", "merge-source planner job: " + verdict.reason)
+        if verdict.state == "pending":
+            pending = Verdict("pending", "merge-source planner job: " + verdict.reason)
     for name in expected:
         matches = names.get(name, [])
-        if len(matches) != 1:
-            return Verdict("failure", "missing or duplicate required job: " + name)
-        job = matches[0]
-        if job.get("status") != "completed" or job.get("conclusion") != "success":
-            return Verdict("failure", "required job did not succeed: " + name)
-    return Verdict("success", "all selected jobs succeeded")
+        if len(matches) > 1:
+            return Verdict("failure", "duplicate required job: " + name)
+        if not matches:
+            if pending is None:
+                pending = Verdict("pending", "required job absent from job snapshot: " + name)
+            continue
+        verdict = assess_job(matches[0], run, head_sha)
+        if verdict.state == "failure":
+            return Verdict("failure", "required job " + name + ": " + verdict.reason)
+        if verdict.state == "pending" and pending is None:
+            pending = Verdict("pending", "required job " + name + ": " + verdict.reason)
+    return pending or Verdict("success", "all selected jobs succeeded")
+
+
+def assess_job(job: dict[str, Any], run: dict[str, Any] | None,
+               head_sha: str | None) -> Verdict:
+    """A complete, source-bound job failure is final; incomplete evidence is not."""
+    if run is not None:
+        if job.get("run_id") != run.get("id") or job.get("run_attempt") != run.get("run_attempt"):
+            return Verdict("failure", "run or attempt identity mismatch")
+    if head_sha is not None and job.get("head_sha") != head_sha:
+        return Verdict("failure", "head identity mismatch")
+    if job.get("status") != "completed" or job.get("conclusion") is None:
+        return Verdict("pending", "job evidence incomplete")
+    if job.get("conclusion") != "success":
+        return Verdict("failure", "completed with " + str(job["conclusion"]))
+    return Verdict("success", "completed successfully")
 
 
 def assess_codeql(run: dict[str, Any] | None, jobs: list[dict[str, Any]] | None,
@@ -133,6 +166,8 @@ def assess_codeql(run: dict[str, Any] | None, jobs: list[dict[str, Any]] | None,
         return Verdict("failure", "CodeQL run identity mismatch")
     if run.get("status") != "completed":
         return Verdict("pending", "CodeQL analysis unfinished")
+    if run.get("conclusion") is None:
+        return Verdict("pending", "CodeQL run conclusion unavailable")
     if run.get("conclusion") != "success":
         return Verdict("failure", "CodeQL default setup did not succeed")
     if jobs is None:
@@ -140,12 +175,21 @@ def assess_codeql(run: dict[str, Any] | None, jobs: list[dict[str, Any]] | None,
     names: dict[str, list[dict[str, Any]]] = {}
     for job in jobs:
         names.setdefault(job.get("name", ""), []).append(job)
+    pending: Verdict | None = None
     for name in expected:
         matches = names.get(name, [])
-        if len(matches) != 1 or matches[0].get("conclusion") != "success" or \
-                matches[0].get("status") != "completed" or matches[0].get("head_sha") != head_sha:
-            return Verdict("failure", "missing, neutral, stale or unsuccessful CodeQL analysis: " + name)
-    return Verdict("success", "all five CodeQL analyses succeeded at PR head")
+        if len(matches) > 1:
+            return Verdict("failure", "duplicate CodeQL analysis: " + name)
+        if not matches:
+            if pending is None:
+                pending = Verdict("pending", "CodeQL analysis absent from job snapshot: " + name)
+            continue
+        verdict = assess_job(matches[0], run, head_sha)
+        if verdict.state == "failure":
+            return Verdict("failure", "CodeQL analysis " + name + ": " + verdict.reason)
+        if verdict.state == "pending" and pending is None:
+            pending = Verdict("pending", "CodeQL analysis " + name + ": " + verdict.reason)
+    return pending or Verdict("success", "all five CodeQL analyses succeeded at PR head")
 
 
 class GitHub:
@@ -203,14 +247,96 @@ class GitHub:
 def latest(runs: list[dict[str, Any]], path: str, event: str, sha: str) -> dict[str, Any] | None:
     matching = [run for run in runs if run.get("head_sha") == sha and
                 run.get("event") == event and str(run.get("path", "")).split("@", 1)[0] == path]
-    return max(matching, key=lambda run: (run.get("created_at", ""), run.get("id", 0),
-                                           run.get("run_attempt", 0)), default=None)
+    # Rerunning an older run keeps its original created_at. Any active attempt
+    # is blocking, and completed runs are ordered by the current attempt start.
+    active = [run for run in matching if run.get("status") != "completed"]
+    return max(active or matching,
+               key=lambda run: (run.get("run_started_at") or run.get("updated_at") or
+                                run.get("created_at", ""), run.get("created_at", ""),
+                                run.get("id", 0), run.get("run_attempt", 0)), default=None)
 
 
 def get_jobs(api: GitHub, run: dict[str, Any]) -> list[dict[str, Any]]:
     run_id = int(run["id"])
     attempt = int(run["run_attempt"])
     return api.pages(f"/actions/runs/{run_id}/attempts/{attempt}/jobs", "jobs")
+
+
+def bounded_outcome(job: dict[str, Any]) -> str:
+    status = job.get("status")
+    conclusion = job.get("conclusion")
+    safe_status = status if isinstance(status, str) and status in {
+        "queued", "in_progress", "completed", "waiting", "pending",
+    } else "unknown"
+    safe_conclusion = conclusion if isinstance(conclusion, str) and conclusion in {
+        "success", "failure", "cancelled", "skipped", "neutral", "timed_out",
+        "action_required", "stale",
+    } else (None if conclusion is None else "unknown")
+    return safe_status + "/" + (safe_conclusion or "none")
+
+
+def confirm_jobs(api: GitHub, jobs: list[dict[str, Any]], names: tuple[str, ...],
+                 run: dict[str, Any], head_sha: str,
+                 direct_cache: dict[int, dict[str, Any]]) -> Verdict:
+    """Require independent job detail to agree with the selected attempt list."""
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for job in jobs:
+        by_name.setdefault(job.get("name", ""), []).append(job)
+    pending: Verdict | None = None
+    for name in names:
+        matches = by_name.get(name, [])
+        if len(matches) != 1:
+            # The assessor distinguishes a missing snapshot from a duplicate.
+            continue
+        listed = matches[0]
+        job_id = listed.get("id")
+        if not isinstance(job_id, int) or job_id <= 0:
+            if pending is None:
+                pending = Verdict("pending", "job detail unavailable: " + name)
+            continue
+        if job_id not in direct_cache:
+            direct_cache[job_id] = api.get("/actions/jobs/" + str(job_id))
+        direct = direct_cache[job_id]
+        if direct.get("id") != job_id or direct.get("name") != name:
+            return Verdict("failure", "job detail identity mismatch: " + name)
+        verdict = assess_job(direct, run, head_sha)
+        if verdict.state == "failure" and "mismatch" in verdict.reason:
+            return Verdict("failure", "job detail " + name + ": " + verdict.reason)
+        if (listed.get("status"), listed.get("conclusion")) != \
+                (direct.get("status"), direct.get("conclusion")):
+            if pending is None:
+                pending = Verdict("pending", "inconsistent job " + str(job_id) +
+                                  " attempt " + str(int(run["run_attempt"])) + ": " + name +
+                                  " list=" + bounded_outcome(listed) +
+                                  " detail=" + bounded_outcome(direct))
+            continue
+        if verdict.state == "failure":
+            return Verdict("failure", "job detail " + name + ": " + verdict.reason)
+        if verdict.state == "pending" and pending is None:
+            pending = Verdict("pending", "job detail " + name + ": " + verdict.reason)
+    return pending or Verdict("success", "job list and details agree")
+
+
+def confirm_run(api: GitHub, run: dict[str, Any], head_sha: str) -> Verdict:
+    """A rerun or replacement attempt invalidates a prior job snapshot."""
+    current = api.get("/actions/runs/" + str(int(run["id"])))
+    if current.get("id") != run.get("id") or current.get("head_sha") != head_sha or \
+            str(current.get("path", "")).split("@", 1)[0] != \
+            str(run.get("path", "")).split("@", 1)[0] or \
+            current.get("event") != run.get("event"):
+        return Verdict("failure", "selected workflow source identity changed")
+    if current.get("run_attempt") != run.get("run_attempt") or \
+            current.get("status") != "completed":
+        return Verdict("pending", "selected workflow attempt changed or unfinished")
+    if current.get("conclusion") is None:
+        return Verdict("pending", "selected workflow conclusion unavailable")
+    if current.get("conclusion") != "success":
+        return Verdict("failure", "selected workflow no longer succeeded")
+    return Verdict("success", "selected workflow attempt unchanged")
+
+
+def run_label(run: dict[str, Any]) -> str:
+    return "run " + str(int(run["id"])) + " attempt " + str(int(run["run_attempt"]))
 
 
 def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple[str, Verdict]:
@@ -244,6 +370,7 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
                                                        "event": "pull_request"}), "workflow_runs")
     central = latest(actions, ".github/workflows/ci.yml", "pull_request", head_sha)
     job_cache: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    direct_cache: dict[int, dict[str, Any]] = {}
     selected_runs: list[tuple[str, tuple[str, ...], dict[str, Any]]] = []
     for workflow, job_ids in selected["workflows"].items():
         if not job_ids:
@@ -265,6 +392,8 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
             return merge_sha, Verdict("pending", "selected workflow missing: " + workflow)
         if run.get("status") != "completed":
             return merge_sha, Verdict("pending", "selected workflow unfinished: " + workflow)
+        if run.get("conclusion") is None:
+            return merge_sha, Verdict("pending", "selected workflow conclusion unavailable: " + workflow)
         if run.get("conclusion") != "success":
             return merge_sha, Verdict("failure", "selected workflow did not succeed: " + workflow)
         selected_runs.append((workflow, expected, run))
@@ -278,10 +407,53 @@ def inspect(api: GitHub, number: int, event_base: str, event_head: str) -> tuple
         key = (int(run["id"]), int(run["run_attempt"]))
         if key not in job_cache:
             job_cache[key] = get_jobs(api, run)
-        verdict = assess_job_names(job_cache[key], expected, merge_sha)
+        jobs = job_cache[key]
+        planner = tuple(job["name"] for job in jobs if
+                        str(job.get("name", "")).endswith("Candidate " + merge_sha))
+        verdict = confirm_jobs(api, jobs, (*planner, *expected), run, head_sha, direct_cache)
         if verdict.state != "success":
-            return merge_sha, Verdict(verdict.state, workflow + ": " + verdict.reason)
-    verdict = assess_codeql(codeql, get_jobs(api, codeql), selected["codeql"], head_sha)
+            return merge_sha, Verdict(verdict.state, workflow + " " + run_label(run) + ": " + verdict.reason)
+        verdict = assess_job_names(jobs, expected, merge_sha, run, head_sha)
+        if verdict.state != "success":
+            return merge_sha, Verdict(verdict.state, workflow + " " + run_label(run) + ": " + verdict.reason)
+    codeql_jobs = get_jobs(api, codeql)
+    verdict = confirm_jobs(api, codeql_jobs, tuple(selected["codeql"]), codeql,
+                           head_sha, direct_cache)
+    if verdict.state != "success":
+        return merge_sha, Verdict(verdict.state, "CodeQL " + run_label(codeql) + ": " + verdict.reason)
+    verdict = assess_codeql(codeql, codeql_jobs, selected["codeql"], head_sha)
+    if verdict.state != "success":
+        return merge_sha, Verdict(verdict.state, "CodeQL " + run_label(codeql) + ": " + verdict.reason)
+    for run in {int(item["id"]): item for _, _, item in selected_runs +
+                [("codeql", (), codeql)]}.values():
+        verdict = confirm_run(api, run, head_sha)
+        if verdict.state != "success":
+            return merge_sha, verdict
+    # A new same-head run or rerun can arrive while the old attempt's jobs are
+    # being read. Re-list before publishing success; old green evidence cannot
+    # qualify a candidate whose current attempt is still running.
+    fresh_actions = api.pages("/actions/runs?" + urlencode({"head_sha": head_sha,
+                                                             "event": "pull_request"}),
+                              "workflow_runs")
+    for workflow, _, run in selected_runs:
+        run_path = str(run.get("path", "")).split("@", 1)[0]
+        current_run = latest(fresh_actions, run_path,
+                             "pull_request", head_sha)
+        if current_run is None or (current_run.get("id"), current_run.get("run_attempt")) != \
+                (run.get("id"), run.get("run_attempt")):
+            return merge_sha, Verdict("pending", "selected workflow changed during inspection: " + workflow)
+        if current_run.get("status") != "completed" or current_run.get("conclusion") != "success":
+            return merge_sha, Verdict("pending", "selected workflow evidence changed during inspection: " + workflow)
+    fresh_codeql = api.pages("/actions/runs?" + urlencode({"head_sha": head_sha,
+                                                            "event": "dynamic"}),
+                             "workflow_runs")
+    current_codeql = latest(fresh_codeql, "dynamic/github-code-scanning/codeql",
+                            "dynamic", head_sha)
+    if current_codeql is None or (current_codeql.get("id"), current_codeql.get("run_attempt")) != \
+            (codeql.get("id"), codeql.get("run_attempt")):
+        return merge_sha, Verdict("pending", "CodeQL run changed during inspection")
+    if current_codeql.get("status") != "completed" or current_codeql.get("conclusion") != "success":
+        return merge_sha, Verdict("pending", "CodeQL evidence changed during inspection")
     after = api.get(f"/pulls/{number}")
     if after.get("draft") is True:
         return merge_sha, Verdict("failure", "PR converted to draft while evidence was inspected")
@@ -296,12 +468,15 @@ def completion_targets(api: GitHub, event: dict[str, Any]) -> list[dict[str, Any
     path = str(run.get("path", "")).split("@", 1)[0]
     allowed = ((run.get("event") == "pull_request" and path == ".github/workflows/ci.yml")
                or (run.get("event") == "dynamic" and path.startswith("dynamic/github-code-scanning/codeql")))
-    if not allowed or run.get("status") != "completed" or not SHA.fullmatch(str(run.get("head_sha", ""))):
+    # The API can already describe a newer active attempt when an older
+    # completion event arrives. Route it so the old green status is suspended.
+    if not allowed or run.get("status") not in \
+            {"queued", "requested", "waiting", "in_progress", "completed"} or \
+            not SHA.fullmatch(str(run.get("head_sha", ""))):
         return []
-    candidates = run.get("pull_requests", [])
-    if not candidates:
-        # Default-setup CodeQL can omit PR associations, especially for forks.
-        candidates = api.pages("/pulls?state=open", "")
+    # Associations can be absent or lag behind a base/head transition. Union
+    # them with the current open PR list, then verify every candidate by API.
+    candidates = list(run.get("pull_requests") or []) + api.pages("/pulls?state=open", "")
     targets = []
     seen = set()
     for candidate in candidates:
@@ -315,12 +490,35 @@ def completion_targets(api: GitHub, event: dict[str, Any]) -> list[dict[str, Any
     return targets
 
 
+def suspend_candidate(api: GitHub, pr: dict[str, Any], run_id: int) -> None:
+    """An in-progress selected rerun cannot inherit a previous green status."""
+    current = api.get("/pulls/" + str(int(pr["number"])))
+    if current.get("state") != "open" or \
+            current["base"]["sha"] != pr["base"]["sha"] or \
+            current["head"]["sha"] != pr["head"]["sha"] or \
+            current.get("merge_commit_sha") != pr.get("merge_commit_sha"):
+        return
+    sha = current.get("merge_commit_sha")
+    if not SHA.fullmatch(str(sha)):
+        return
+    print("pending: candidate " + sha + " has in-progress source run " + str(run_id), flush=True)
+    api.post("/statuses/" + sha, {"state": "pending", "context": CONTEXT,
+                                   "description": "Current CI or CodeQL attempt in progress"})
+
+
 def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> int:
     deadline = time.monotonic() + max(0, min(args.wait_seconds, 2700))
     current = api.get(f"/pulls/{args.pr}")
+    if current.get("state") != "open" or \
+            current["base"]["sha"] != pr_event["base"]["sha"] or \
+            current["head"]["sha"] != pr_event["head"]["sha"]:
+        print("stale: event no longer identifies the current PR source", flush=True)
+        return 0
     status_sha = current.get("merge_commit_sha") or current["head"]["sha"]
     if not SHA.fullmatch(status_sha):
         raise RuntimeError("invalid initial status target SHA")
+    print("candidate PR #" + str(args.pr) + " base=" + current["base"]["sha"] +
+          " head=" + current["head"]["sha"] + " merge=" + status_sha, flush=True)
     if current.get("draft") is True:
         # Keep admission pending, never green. GitHub also forbids merging drafts.
         # A ready_for_review event starts fresh qualification; do not occupy a
@@ -329,7 +527,7 @@ def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> in
             api.post("/statuses/" + status_sha, {"state": "pending", "context": CONTEXT,
                                                "description": "Draft: full qualification starts when ready for review"})
         print("pending: draft PR; qualification deferred without runner polling", flush=True)
-        return 0
+        return 2 if args.dry_run else 0
     if not args.dry_run:
         api.post("/statuses/" + status_sha, {"state": "pending", "context": CONTEXT,
                                                "description": "Checking exact-source CI evidence"})
@@ -337,7 +535,13 @@ def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> in
     while True:
         try:
             sha, verdict = inspect(api, args.pr, pr_event["base"]["sha"], pr_event["head"]["sha"])
-        except (RuntimeError, ValueError, KeyError, TypeError, OSError) as error:
+        except (RuntimeError, OSError) as error:
+            print("pending: admission API evidence unavailable (" + type(error).__name__ + ")", flush=True)
+            if not args.dry_run:
+                api.post("/statuses/" + status_sha, {"state": "pending", "context": CONTEXT,
+                                                   "description": "Admission API evidence unavailable"})
+            return 2 if args.dry_run else 0
+        except (ValueError, KeyError, TypeError) as error:
             print("failure: admission evidence unavailable (" + type(error).__name__ + ")", flush=True)
             if not args.dry_run:
                 api.post("/statuses/" + status_sha, {"state": "failure", "context": CONTEXT,
@@ -345,6 +549,19 @@ def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> in
             return 1
         if not SHA.fullmatch(sha):
             raise RuntimeError("invalid status target SHA")
+        refreshed = api.get(f"/pulls/{args.pr}")
+        if refreshed.get("state") != "open" or \
+                refreshed["base"]["sha"] != pr_event["base"]["sha"] or \
+                refreshed["head"]["sha"] != pr_event["head"]["sha"] or \
+                refreshed.get("merge_commit_sha") != sha:
+            print("stale: PR source changed during admission", flush=True)
+            return 0
+        if refreshed.get("draft") is True:
+            if not args.dry_run:
+                api.post("/statuses/" + sha, {"state": "pending", "context": CONTEXT,
+                                                "description": "Draft: full qualification starts when ready for review"})
+            print("pending: PR converted to draft during admission", flush=True)
+            return 2 if args.dry_run else 0
         if sha != status_sha:
             status_sha = sha
             if not args.dry_run:
@@ -356,16 +573,16 @@ def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> in
         if verdict.state == "pending" and time.monotonic() < deadline:
             if args.dry_run:
                 return 2
-            time.sleep(30)
+            time.sleep(min(3, max(0, deadline - time.monotonic())))
             continue
-        if verdict.state == "pending" and args.wait_seconds == 0:
-            # Completion events recheck us without billing an idle polling runner.
-            # Missing evidence stays blocking, never a green qualification.
+        if verdict.state == "pending":
+            # A short focused recheck can settle API propagation. Incomplete
+            # evidence remains blocking even after this bounded window.
             if not args.dry_run:
                 api.post("/statuses/" + sha, {"state": "pending", "context": CONTEXT,
                                             "description": verdict.reason[:140]})
             return 2 if args.dry_run else 0
-        final_state = "failure" if verdict.state == "pending" else verdict.state
+        final_state = verdict.state
         description = ("Selected jobs and all five CodeQL analyses passed" if final_state == "success"
                        else verdict.reason)[:140]
         if not args.dry_run:
@@ -388,10 +605,18 @@ def main() -> int:
     if "workflow_run" in event:
         if args.pr is not None:
             parser.error("completion routing determines the current PR from repository metadata")
+        run_id = int(event["workflow_run"]["id"])
+        source = api.get("/actions/runs/" + str(run_id))
+        source_attempt = int(source.get("run_attempt", 0))
+        event_attempt = int(event["workflow_run"].get("run_attempt", 0))
+        still_active = source.get("status") != "completed" or source_attempt < event_attempt
         result = 0
         for pr in completion_targets(api, event):
-            args.pr = pr["number"]
-            result = max(result, admit(api, args, pr))
+            if still_active:
+                suspend_candidate(api, pr, run_id)
+            else:
+                args.pr = pr["number"]
+                result = max(result, admit(api, args, pr))
         return result
     pr_event = event["pull_request"]
     if args.pr is None:

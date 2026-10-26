@@ -1,0 +1,346 @@
+{
+  "cases": [
+    {
+      "case": "plan",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "a806f1bf0880324edc25e7f31094fb94b0701296736835655c8f56ce37ea93ee"
+    },
+    {
+      "case": "occupied-port",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "ddff5ee0b95d031ab5c8f7a817789805deda77da7c4bdcda2973a902db17fa6a"
+    },
+    {
+      "case": "stale-source",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "b283e47902423b4d837714051b8f10ad1bd6a904dba93f24f0202b434eeffb84"
+    },
+    {
+      "case": "changed-selection",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "23a5469489fcdd6b7e7244223501912dc6eb4e1f913caf5c259848131878b510"
+    },
+    {
+      "case": "provider-unavailable",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "90e18b38766eece78fffc0d2eb714c1eb0d281cc8a8a0222c2c186aa8b62aaa1"
+    },
+    {
+      "case": "provider-reject",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 39,
+        "observed_process_count": 40,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "intended_host_processes": 1,
+        "observation_stage": "first-request-authentication-refusal",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": true,
+        "private_log_bytes_checked": 9772,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 10277,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 5,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "6f9d9dce5a197dc8bf284646411646db8bd2cf387443b5a83c1654cc34c985f2"
+    },
+    {
+      "case": "useful-refusal",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 38,
+        "observed_process_count": 39,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 4,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 14173,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 14163,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 4,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 4,
+          "other": 44
+        },
+        "successful_private_log_writes": 6,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "e30810e5829006d2ef6a701fb5362f8ecf19ef38ea582e6de872eadb4e8aeef7"
+    },
+    {
+      "case": "ask",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 38,
+        "observed_process_count": 39,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 4,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 14588,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 23635,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 7,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 6,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "e46ef9d4ebc87e811645242437ced22b251e1b6e5cf6fc23664c009d029be1a0"
+    },
+    {
+      "case": "default",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 36,
+        "observed_process_count": 37,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 3,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 12458,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 13264,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 4,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 5,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "d52dc9f625b2ba1f7402a7e4e549937c5602f10b79e674fa242450decc94174e"
+    },
+    {
+      "case": "cancel",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 37,
+        "observed_process_count": 38,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 2589,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 9802,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 2,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "f76202c00bc06cffac4a0d40ae228cebd67bc9e6fc29fbb9ea5add3e40e4c167"
+    },
+    {
+      "case": "daemon-loss",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 41,
+        "observed_process_count": 42,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 2594,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 9068,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 2,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "fc9670210aea26c75993299def716740bfc57e6af5b56a21e360bc39bc02c440"
+    },
+    {
+      "case": "host-crash",
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 39,
+        "observed_process_count": 40,
+        "remaining_count": 0
+      },
+      "provider": {
+        "all_selected_values_and_json_forms_absent": true,
+        "all_seven_inputs_in_intended_host": true,
+        "authenticated_owned_request_observed": true,
+        "intended_host_processes": 1,
+        "observation_stage": "original-server-runtime",
+        "owned_loopback_requests": 1,
+        "owned_rejection_redaction_observed": false,
+        "private_log_bytes_checked": 7600,
+        "provider_values_in_argv": 0,
+        "raw_environment_log_and_artifact_contents_exported": false,
+        "retained_bytes_checked": 10257,
+        "retained_entries_checked": 11,
+        "successful_exec_counts": {
+          "classifier": 2,
+          "collector": 2,
+          "daemon": 1,
+          "diagnostic": 1,
+          "entry": 1,
+          "host": 1,
+          "launcher": 1,
+          "original": 3,
+          "other": 44
+        },
+        "successful_private_log_writes": 4,
+        "unrelated_provider_values": 0
+      },
+      "status": "passed",
+      "trace_sha256": "64f4b7ae68b0c934cf38600b26fd942ccc9312c647f19d324384f5c77c2b436b"
+    }
+  ],
+  "emergency_stop": [],
+  "failure_observation": {
+    "bootstrap_counts": {},
+    "bootstrap_failure_stages": [],
+    "denied_exec_counts": {},
+    "entry_reason": "restricted_launcher_failed",
+    "entry_status": "failed",
+    "known_refusals": [
+      "Permission denied"
+    ],
+    "provider_request_count": 0
+  },
+  "format": "sou143-prepared-host-public/1",
+  "original_report_status": "failed",
+  "paid_api_calls": 0,
+  "private_report_sha256": "3996ad47c875d95c31796cc48f7c48602d7c9ff022e9de56b91000a3c8c39761",
+  "provider": "owned-scripted-loopback",
+  "qualifier_exit_code": 1,
+  "raw_environments_or_logs_exported": false,
+  "raw_process_metadata_exported": false,
+  "selected_sha256": {
+    "agentfw": "bd28286f7ae87e082266cbc69918e610539e9cdd788941281548d9495913b524",
+    "bwrap": "3970ab274258223a8a42fca4181c449bcd1653acb6ed27ff249fa3db807696c2",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "7ce841b8068a448434d17a6214863048380856cf4058cf80980448394e30b05e",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "22ce08923328e6342282c8103d6dc4a87f593db444ef52895552ba9dba6b16eb",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "4170e6b43db976cc0b35668175b13e7971546e3e55bb297f1792574be0eded1f"
+  },
+  "source": {
+    "commit": "fe2c64cc43a025bd6b348e91b10409d155f9bfbb",
+    "files_sha256": "1b8c1c8e163cfefabc8305f04676d9ca6ee96564198e99f16d08e05afa9fc6d1"
+  },
+  "source_commit": "fe2c64cc43a025bd6b348e91b10409d155f9bfbb",
+  "status": "failed",
+  "verification_errors": [
+    "emergency_stop_evidence_unproven",
+    "inventory_preservation_unproven",
+    "qualifier_not_completed_successfully"
+  ],
+  "workflow_run": 40167503275
+}

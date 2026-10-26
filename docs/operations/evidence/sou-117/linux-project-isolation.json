@@ -1,0 +1,830 @@
+{
+  "active_case": "repeat",
+  "cases": [
+    {
+      "case": "private-state-workspace-alias",
+      "host_execution": 0,
+      "status": "passed",
+      "trace_sha256": "83f0ab6b61c577fe086b5401f51d494df9ed272e00254748d2295099fc4cf160"
+    },
+    {
+      "case": "ordinary",
+      "kernel_read_count": 1,
+      "marker_created": false,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 27,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 9600,
+            "start_time_ticks": 44226
+          },
+          {
+            "parent_process": false,
+            "pid": 9604,
+            "start_time_ticks": 44226
+          },
+          {
+            "parent_process": false,
+            "pid": 9606,
+            "start_time_ticks": 44849
+          },
+          {
+            "parent_process": false,
+            "pid": 9616,
+            "start_time_ticks": 44886
+          },
+          {
+            "parent_process": false,
+            "pid": 9617,
+            "start_time_ticks": 44888
+          },
+          {
+            "parent_process": false,
+            "pid": 9618,
+            "start_time_ticks": 44890
+          },
+          {
+            "parent_process": false,
+            "pid": 9621,
+            "start_time_ticks": 44892
+          },
+          {
+            "parent_process": false,
+            "pid": 9620,
+            "start_time_ticks": 44892
+          },
+          {
+            "parent_process": false,
+            "pid": 9619,
+            "start_time_ticks": 44892
+          },
+          {
+            "parent_process": false,
+            "pid": 9622,
+            "start_time_ticks": 44895
+          },
+          {
+            "parent_process": false,
+            "pid": 9623,
+            "start_time_ticks": 44895
+          },
+          {
+            "parent_process": false,
+            "pid": 9624,
+            "start_time_ticks": 44896
+          },
+          {
+            "parent_process": false,
+            "pid": 9632,
+            "start_time_ticks": 44902
+          },
+          {
+            "parent_process": false,
+            "pid": 9635,
+            "start_time_ticks": 44903
+          },
+          {
+            "parent_process": false,
+            "pid": 9634,
+            "start_time_ticks": 44903
+          },
+          {
+            "parent_process": false,
+            "pid": 9633,
+            "start_time_ticks": 44903
+          },
+          {
+            "parent_process": false,
+            "pid": 9637,
+            "start_time_ticks": 44906
+          },
+          {
+            "parent_process": false,
+            "pid": 9636,
+            "start_time_ticks": 44905
+          },
+          {
+            "parent_process": false,
+            "pid": 9648,
+            "start_time_ticks": 45544
+          },
+          {
+            "parent_process": false,
+            "pid": 9649,
+            "start_time_ticks": 45545
+          },
+          {
+            "parent_process": false,
+            "pid": 9650,
+            "start_time_ticks": 45546
+          },
+          {
+            "parent_process": false,
+            "pid": 9651,
+            "start_time_ticks": 45550
+          },
+          {
+            "parent_process": false,
+            "pid": 9674,
+            "start_time_ticks": 45766
+          },
+          {
+            "parent_process": false,
+            "pid": 9675,
+            "start_time_ticks": 45767
+          },
+          {
+            "parent_process": false,
+            "pid": 9676,
+            "start_time_ticks": 45768
+          },
+          {
+            "parent_process": false,
+            "pid": 9677,
+            "start_time_ticks": 45776
+          },
+          {
+            "parent_process": false,
+            "pid": 9679,
+            "start_time_ticks": 45894
+          },
+          {
+            "parent_process": false,
+            "pid": 9689,
+            "start_time_ticks": 45935
+          }
+        ],
+        "remaining": []
+      },
+      "receiver_deliveries": 0,
+      "status": "passed",
+      "trace_sha256": "e6a4c3222755ad5d2775e1ad63a98522bd868a2a8e6a95eed4f2ea9924ea3b56",
+      "unauthorized_dispatches": 0,
+      "useful_original_results": true
+    },
+    {
+      "case": "project",
+      "kernel_read_count": 1,
+      "marker_created": false,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 27,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 9695,
+            "start_time_ticks": 46142
+          },
+          {
+            "parent_process": false,
+            "pid": 9699,
+            "start_time_ticks": 46142
+          },
+          {
+            "parent_process": false,
+            "pid": 9701,
+            "start_time_ticks": 46760
+          },
+          {
+            "parent_process": false,
+            "pid": 9711,
+            "start_time_ticks": 46818
+          },
+          {
+            "parent_process": false,
+            "pid": 9712,
+            "start_time_ticks": 46820
+          },
+          {
+            "parent_process": false,
+            "pid": 9713,
+            "start_time_ticks": 46821
+          },
+          {
+            "parent_process": false,
+            "pid": 9716,
+            "start_time_ticks": 46825
+          },
+          {
+            "parent_process": false,
+            "pid": 9715,
+            "start_time_ticks": 46824
+          },
+          {
+            "parent_process": false,
+            "pid": 9714,
+            "start_time_ticks": 46824
+          },
+          {
+            "parent_process": false,
+            "pid": 9717,
+            "start_time_ticks": 46827
+          },
+          {
+            "parent_process": false,
+            "pid": 9719,
+            "start_time_ticks": 46828
+          },
+          {
+            "parent_process": false,
+            "pid": 9718,
+            "start_time_ticks": 46827
+          },
+          {
+            "parent_process": false,
+            "pid": 9727,
+            "start_time_ticks": 46834
+          },
+          {
+            "parent_process": false,
+            "pid": 9730,
+            "start_time_ticks": 46834
+          },
+          {
+            "parent_process": false,
+            "pid": 9729,
+            "start_time_ticks": 46834
+          },
+          {
+            "parent_process": false,
+            "pid": 9728,
+            "start_time_ticks": 46834
+          },
+          {
+            "parent_process": false,
+            "pid": 9731,
+            "start_time_ticks": 46837
+          },
+          {
+            "parent_process": false,
+            "pid": 9732,
+            "start_time_ticks": 46837
+          },
+          {
+            "parent_process": false,
+            "pid": 9744,
+            "start_time_ticks": 47469
+          },
+          {
+            "parent_process": false,
+            "pid": 9745,
+            "start_time_ticks": 47470
+          },
+          {
+            "parent_process": false,
+            "pid": 9746,
+            "start_time_ticks": 47470
+          },
+          {
+            "parent_process": false,
+            "pid": 9747,
+            "start_time_ticks": 47474
+          },
+          {
+            "parent_process": false,
+            "pid": 9770,
+            "start_time_ticks": 47692
+          },
+          {
+            "parent_process": false,
+            "pid": 9771,
+            "start_time_ticks": 47693
+          },
+          {
+            "parent_process": false,
+            "pid": 9772,
+            "start_time_ticks": 47694
+          },
+          {
+            "parent_process": false,
+            "pid": 9773,
+            "start_time_ticks": 47702
+          },
+          {
+            "parent_process": false,
+            "pid": 9774,
+            "start_time_ticks": 47816
+          },
+          {
+            "parent_process": false,
+            "pid": 9785,
+            "start_time_ticks": 47851
+          }
+        ],
+        "remaining": []
+      },
+      "receiver_deliveries": 0,
+      "status": "passed",
+      "trace_sha256": "4c9a6a061f8c22d5ef719ffb14da0cd1e47e9d7388ad24d0c5257432ca7abb61",
+      "unauthorized_dispatches": 0,
+      "useful_original_results": true
+    },
+    {
+      "case": "nested",
+      "kernel_read_count": 1,
+      "marker_created": false,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 27,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 9860,
+            "start_time_ticks": 48008
+          },
+          {
+            "parent_process": false,
+            "pid": 9864,
+            "start_time_ticks": 48008
+          },
+          {
+            "parent_process": false,
+            "pid": 9866,
+            "start_time_ticks": 48635
+          },
+          {
+            "parent_process": false,
+            "pid": 9876,
+            "start_time_ticks": 48672
+          },
+          {
+            "parent_process": false,
+            "pid": 9877,
+            "start_time_ticks": 48674
+          },
+          {
+            "parent_process": false,
+            "pid": 9878,
+            "start_time_ticks": 48675
+          },
+          {
+            "parent_process": false,
+            "pid": 9880,
+            "start_time_ticks": 48678
+          },
+          {
+            "parent_process": false,
+            "pid": 9879,
+            "start_time_ticks": 48678
+          },
+          {
+            "parent_process": false,
+            "pid": 9881,
+            "start_time_ticks": 48679
+          },
+          {
+            "parent_process": false,
+            "pid": 9883,
+            "start_time_ticks": 48681
+          },
+          {
+            "parent_process": false,
+            "pid": 9882,
+            "start_time_ticks": 48681
+          },
+          {
+            "parent_process": false,
+            "pid": 9884,
+            "start_time_ticks": 48682
+          },
+          {
+            "parent_process": false,
+            "pid": 9892,
+            "start_time_ticks": 48688
+          },
+          {
+            "parent_process": false,
+            "pid": 9895,
+            "start_time_ticks": 48689
+          },
+          {
+            "parent_process": false,
+            "pid": 9894,
+            "start_time_ticks": 48689
+          },
+          {
+            "parent_process": false,
+            "pid": 9893,
+            "start_time_ticks": 48689
+          },
+          {
+            "parent_process": false,
+            "pid": 9896,
+            "start_time_ticks": 48691
+          },
+          {
+            "parent_process": false,
+            "pid": 9897,
+            "start_time_ticks": 48691
+          },
+          {
+            "parent_process": false,
+            "pid": 9907,
+            "start_time_ticks": 49330
+          },
+          {
+            "parent_process": false,
+            "pid": 9908,
+            "start_time_ticks": 49331
+          },
+          {
+            "parent_process": false,
+            "pid": 9909,
+            "start_time_ticks": 49331
+          },
+          {
+            "parent_process": false,
+            "pid": 9910,
+            "start_time_ticks": 49335
+          },
+          {
+            "parent_process": false,
+            "pid": 9933,
+            "start_time_ticks": 49542
+          },
+          {
+            "parent_process": false,
+            "pid": 9934,
+            "start_time_ticks": 49544
+          },
+          {
+            "parent_process": false,
+            "pid": 9935,
+            "start_time_ticks": 49544
+          },
+          {
+            "parent_process": false,
+            "pid": 9936,
+            "start_time_ticks": 49552
+          },
+          {
+            "parent_process": false,
+            "pid": 9939,
+            "start_time_ticks": 49667
+          },
+          {
+            "parent_process": false,
+            "pid": 9949,
+            "start_time_ticks": 49702
+          }
+        ],
+        "remaining": []
+      },
+      "receiver_deliveries": 0,
+      "status": "passed",
+      "trace_sha256": "c8dd808e73b1fe1336967d8b6ace5f7934c2db83ce3419218643b56f567661d1",
+      "unauthorized_dispatches": 0,
+      "useful_original_results": true
+    },
+    {
+      "case": "cancel",
+      "marker_created": false,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 26,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 9954,
+            "start_time_ticks": 49808
+          },
+          {
+            "parent_process": false,
+            "pid": 9958,
+            "start_time_ticks": 49809
+          },
+          {
+            "parent_process": false,
+            "pid": 9960,
+            "start_time_ticks": 50423
+          },
+          {
+            "parent_process": false,
+            "pid": 9970,
+            "start_time_ticks": 50460
+          },
+          {
+            "parent_process": false,
+            "pid": 9971,
+            "start_time_ticks": 50462
+          },
+          {
+            "parent_process": false,
+            "pid": 9972,
+            "start_time_ticks": 50463
+          },
+          {
+            "parent_process": false,
+            "pid": 9974,
+            "start_time_ticks": 50466
+          },
+          {
+            "parent_process": false,
+            "pid": 9973,
+            "start_time_ticks": 50466
+          },
+          {
+            "parent_process": false,
+            "pid": 9975,
+            "start_time_ticks": 50467
+          },
+          {
+            "parent_process": false,
+            "pid": 9977,
+            "start_time_ticks": 50469
+          },
+          {
+            "parent_process": false,
+            "pid": 9976,
+            "start_time_ticks": 50469
+          },
+          {
+            "parent_process": false,
+            "pid": 9978,
+            "start_time_ticks": 50470
+          },
+          {
+            "parent_process": false,
+            "pid": 9986,
+            "start_time_ticks": 50476
+          },
+          {
+            "parent_process": false,
+            "pid": 9989,
+            "start_time_ticks": 50477
+          },
+          {
+            "parent_process": false,
+            "pid": 9988,
+            "start_time_ticks": 50477
+          },
+          {
+            "parent_process": false,
+            "pid": 9987,
+            "start_time_ticks": 50477
+          },
+          {
+            "parent_process": false,
+            "pid": 9990,
+            "start_time_ticks": 50479
+          },
+          {
+            "parent_process": false,
+            "pid": 9991,
+            "start_time_ticks": 50480
+          },
+          {
+            "parent_process": false,
+            "pid": 10002,
+            "start_time_ticks": 51114
+          },
+          {
+            "parent_process": false,
+            "pid": 10003,
+            "start_time_ticks": 51115
+          },
+          {
+            "parent_process": false,
+            "pid": 10004,
+            "start_time_ticks": 51115
+          },
+          {
+            "parent_process": false,
+            "pid": 10005,
+            "start_time_ticks": 51119
+          },
+          {
+            "parent_process": false,
+            "pid": 10028,
+            "start_time_ticks": 51336
+          },
+          {
+            "parent_process": false,
+            "pid": 10029,
+            "start_time_ticks": 51337
+          },
+          {
+            "parent_process": false,
+            "pid": 10030,
+            "start_time_ticks": 51338
+          },
+          {
+            "parent_process": false,
+            "pid": 10031,
+            "start_time_ticks": 51345
+          },
+          {
+            "parent_process": false,
+            "pid": 10033,
+            "start_time_ticks": 51461
+          }
+        ],
+        "remaining": []
+      },
+      "receiver_deliveries": 0,
+      "status": "passed",
+      "trace_sha256": "168c0d39fa983fd2e6e70121cf6b20f61e627e067d12616d386f70de77e0b99b"
+    },
+    {
+      "case": "repeat",
+      "kernel_read_count": 1,
+      "marker_created": false,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 26,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 10041,
+            "start_time_ticks": 51528
+          },
+          {
+            "parent_process": false,
+            "pid": 10045,
+            "start_time_ticks": 51529
+          },
+          {
+            "parent_process": false,
+            "pid": 10048,
+            "start_time_ticks": 52142
+          },
+          {
+            "parent_process": false,
+            "pid": 10058,
+            "start_time_ticks": 52176
+          },
+          {
+            "parent_process": false,
+            "pid": 10059,
+            "start_time_ticks": 52178
+          },
+          {
+            "parent_process": false,
+            "pid": 10060,
+            "start_time_ticks": 52180
+          },
+          {
+            "parent_process": false,
+            "pid": 10061,
+            "start_time_ticks": 52182
+          },
+          {
+            "parent_process": false,
+            "pid": 10063,
+            "start_time_ticks": 52183
+          },
+          {
+            "parent_process": false,
+            "pid": 10062,
+            "start_time_ticks": 52182
+          },
+          {
+            "parent_process": false,
+            "pid": 10065,
+            "start_time_ticks": 52186
+          },
+          {
+            "parent_process": false,
+            "pid": 10064,
+            "start_time_ticks": 52185
+          },
+          {
+            "parent_process": false,
+            "pid": 10066,
+            "start_time_ticks": 52186
+          },
+          {
+            "parent_process": false,
+            "pid": 10074,
+            "start_time_ticks": 52192
+          },
+          {
+            "parent_process": false,
+            "pid": 10077,
+            "start_time_ticks": 52193
+          },
+          {
+            "parent_process": false,
+            "pid": 10076,
+            "start_time_ticks": 52193
+          },
+          {
+            "parent_process": false,
+            "pid": 10075,
+            "start_time_ticks": 52193
+          },
+          {
+            "parent_process": false,
+            "pid": 10079,
+            "start_time_ticks": 52195
+          },
+          {
+            "parent_process": false,
+            "pid": 10078,
+            "start_time_ticks": 52195
+          },
+          {
+            "parent_process": false,
+            "pid": 10090,
+            "start_time_ticks": 52828
+          },
+          {
+            "parent_process": false,
+            "pid": 10091,
+            "start_time_ticks": 52829
+          },
+          {
+            "parent_process": false,
+            "pid": 10092,
+            "start_time_ticks": 52829
+          },
+          {
+            "parent_process": false,
+            "pid": 10093,
+            "start_time_ticks": 52833
+          },
+          {
+            "parent_process": false,
+            "pid": 10116,
+            "start_time_ticks": 53054
+          },
+          {
+            "parent_process": false,
+            "pid": 10117,
+            "start_time_ticks": 53056
+          },
+          {
+            "parent_process": false,
+            "pid": 10118,
+            "start_time_ticks": 53056
+          },
+          {
+            "parent_process": false,
+            "pid": 10119,
+            "start_time_ticks": 53064
+          },
+          {
+            "parent_process": false,
+            "pid": 10131,
+            "start_time_ticks": 53217
+          }
+        ],
+        "remaining": []
+      },
+      "receiver_deliveries": 0,
+      "status": "passed",
+      "trace_sha256": "97ceb517356b7d0fd65cf275a9ca5e02476b89793334a9d7df235ddd8b5b7927",
+      "unauthorized_dispatches": 0,
+      "useful_original_results": true
+    }
+  ],
+  "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "format": "sw-project-isolation-acceptance/1",
+  "independent_observer_calibrated": true,
+  "live_model_effectiveness": "not_tested",
+  "no_secret_receiver_delivery": true,
+  "operator_configuration_preserved": true,
+  "pinned_help_sha256": "5ff2e7a0bca8535fb9ec097fa0a21e9d6b735ed94104fa0d1f58ac73a841d52d",
+  "policy_sha256": "d31b6663b3bd778889cfd0ea733809a4800c5501f78d1af1245e45af5ea22bcd",
+  "profiles": {
+    "filesystem": {
+      "format": "sw-mcp/filesystem-readonly/1",
+      "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+      "profile_sha256": "65b8efb614f25114a81afa9ff3815b2d253c31ee4f291d69cd7ccdd68603058e",
+      "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+      "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31"
+    },
+    "git": {
+      "format": "sw-mcp/git-readonly/1",
+      "package_tree_sha256": "2f7e164a0faeb021d083e4904069b7ad79571817741218e7b562a9c4dc3acd0d",
+      "profile_sha256": "62aaee3d64ec1ff614e5057e914c18f9e666decd1489b76fa13f2221ce511ef6",
+      "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c"
+    }
+  },
+  "provider": "owned-scripted-loopback",
+  "selected_sha256": {
+    "agentfw": "f2ade234197775cacecf15d336300266efd497d018a6ca884eed88d6f71d3836",
+    "bwrap": "05ea79a4760092d08756604bd7670ecb62834eff7df8b550da5db58e82587c9a",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "git": "efdebf1bbe90a2e7a84f35a843491895fa5405a88f11ea4d0ea1c0e83605ee39",
+    "git_launcher": "f1cab944e0ce7540d4f68106bf2185a0936e4ef52e226817e38bd349c3129ea7",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "strace": "38a5c75cb29dd85ddd7780d54f5bf595554d7a1b5c42524b23065f5dc4c4b01d"
+  },
+  "source": {
+    "commit": "6a6ba651b76aa1c8e7783a202f6fb3ef04672717",
+    "dirty": false,
+    "tree": "905cd6bd3c6fa6ea8aa5016828ccd661ff9171d5"
+  },
+  "source_after": {
+    "commit": "6a6ba651b76aa1c8e7783a202f6fb3ef04672717",
+    "dirty": false,
+    "tree": "905cd6bd3c6fa6ea8aa5016828ccd661ff9171d5"
+  },
+  "status": "passed",
+  "unrelated_preserved": true
+}

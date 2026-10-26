@@ -1,0 +1,18 @@
+{
+  "format": "pilot-storage-attempt/1",
+  "source_commit": "fbd2f96834fcb057a9bce98b7278d066f6f281dc",
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/39996317100",
+  "job_id": 120560707502,
+  "platform": "GitHub-hosted Ubuntu 24.04 x86_64",
+  "status": "failed-before-build",
+  "reason": "cargo-fmt was not installed for toolchain 1.94.1",
+  "affected_step": "Focused preparation boundaries",
+  "rust_tests_executed": false,
+  "protected_host_executed": false,
+  "storage_qualification_executed": false,
+  "native_acceptance": false,
+  "cleanup_step": "success",
+  "artifact_id": 12518774692,
+  "artifact_sha256_from_upload_log": "a8e78fb4c0422921758ee514920da1246e87b75ad7c8b3946e52ddae20c7dc69",
+  "correction": "Explicitly provision the rustfmt component in the existing native job; preserve all checks."
+}

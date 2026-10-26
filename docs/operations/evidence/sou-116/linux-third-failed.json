@@ -1,0 +1,68 @@
+{
+  "active_case": "useful-refusal",
+  "cases": [
+    {
+      "case": "plan",
+      "reason": null,
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "f80dc3d1ec2a834a426ef732957e44e79a8ed961e9778ba344dcb23f11ef3a06"
+    },
+    {
+      "case": "occupied-port",
+      "reason": "occupied_port_refused",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "6bbbdee832b4377fb1d4ba0dce6199535a82b2859e8a373181f62b67f29c0660"
+    },
+    {
+      "case": "stale-source",
+      "reason": "candidate_source_mismatch",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "93e312a9e285893cc993bb504256cdfffd6d9f2cd6e9b31dba52506870ac3567"
+    },
+    {
+      "case": "changed-selection",
+      "reason": "selected_executable_changed",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "d63820c214ec11c3e5ad666e9800dc9c8990bee9848f4961c6a978bec85a419c"
+    }
+  ],
+  "failure_location": {
+    "function": "until",
+    "line": 43
+  },
+  "failure_observation": {
+    "correlated_results": {},
+    "entry_report": "not_published",
+    "operator_decision_count": 0,
+    "provider_request_count": 0
+  },
+  "format": "sw-prepared-pilot-acceptance/1",
+  "live_model_effectiveness": "not_tested",
+  "provider": "owned-scripted-loopback",
+  "reason": "prepared_run_not_published",
+  "selected_sha256": {
+    "agentfw": "8841cf736e51e1130f492b4495de40c92a50597654ff7e1c34f43d887865596e",
+    "bwrap": "11d1043e90679d4d2a1ba1f67aa2bfc0cd22e0d888cef8874ac10288d0dc5bf6",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "ef1e2f8afb85870cd67aced4295f578c7178dd522adc25921a862a1a4aec1a14",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "cc9cf0b7ffe0f1f864d328283750bfa72fe0131deff5de2a27185fd0b0c11eca",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "65d82aa3fd68e5cb1328225aaa371cbf515b1abff061d6713b7b82d2f9940243"
+  },
+  "source_before": {
+    "commit": "5551ac3f17a60766588221cc73f25ae99ea234f6",
+    "dirty": false,
+    "files_sha256": "ba7774eb6fcac60e999ef350e43cd91e7ae95c067c2da83bac5b596fd5218c78",
+    "tree": "46deea419690b7ea90aa1c54c6506f7fd881096d"
+  },
+  "status": "failed"
+}

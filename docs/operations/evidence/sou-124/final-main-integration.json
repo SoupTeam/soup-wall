@@ -1,0 +1,25 @@
+{
+  "accepted_main": "adefce2a658272e5f23c9c72ef791befe0285648",
+  "changes": "Integrate accepted long-session tools, both installed modes and stricter source-build quota inventory; preserve manual paired Ask budget/inputs/artifacts.",
+  "checks": {
+    "generated_workflow_check": "passed",
+    "python": {
+      "failed": 0,
+      "log_sha256": "a164d7306aac1dab14e0dd257596f2da824779e760a1e070fe03b4c078318a41",
+      "passed": 1132,
+      "run": 1211,
+      "skipped": 79
+    }
+  },
+  "files_sha256": {
+    ".github/workflows/ci-components.yml": "7aa021d839bfaf8d82af4ca6be754258ae628bbe49ce5b5c9a93b1cd2cb44faf",
+    ".github/workflows/mcp-real-filesystem.yml": "3b164a3d90f7f2ad21c897c7336d1e8c6a6cd095034d53b0328e16aa40aed543",
+    "scripts/build-native-pilot-inputs.py": "7c8db30636192ee126dfde73a3231ebc8b07ea3fd3fc879f3d1ba089b746cb95",
+    "scripts/ci_components.py": "6adadca96ced5f1796792a966dc3d61b2ad27608535542e841ed482ae63e546d"
+  },
+  "format": "sw-sou124-final-main-integration/1",
+  "native_run": 40000217110,
+  "native_source": "3f22f94162d79d35977618215cf4c041a40308b0",
+  "readiness": "Draft until complete native before/after actual reuse and performance qualification passes.",
+  "rust_and_ask_harness_diff_since_native_source": "none"
+}

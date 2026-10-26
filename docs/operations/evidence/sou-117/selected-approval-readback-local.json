@@ -1,0 +1,37 @@
+{
+  "actual_linux_new_candidate": "pending; prior-source reports not transferred",
+  "base_commit": "451f255b77fcfac4b7f3f9f3bfc0ff595b37e980",
+  "docs": "Checked 238 Markdown files and 898 local links; 0 errors.",
+  "format": "passed",
+  "isolation": "read-only source snapshot; dedicated cache/scratch writes; Seatbelt denies external network and permits owned loopback",
+  "local_status": "passed",
+  "logs_sha256": {
+    "all-python": "c77e25f4a50216e281780d2bdb349b2ea4f3ebeaf7c0883861b2e56ac6a3af55",
+    "clippy": "73596b79c23573c30ea3176cec2df235cf5a72cea804331b01f4aa027afa4a13",
+    "docs": "6b4721bc0a0628253e11a98ec92e0a0b1133478715c16574294894630a5c1c87",
+    "fmt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests": "6a62de61f3c091bb052bf443b2ab1a9e1ab56b17dfddf728034cc0c1b3ca262d",
+    "workflows": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "python": {
+    "failed": 0,
+    "run": 1094,
+    "skip_note": "59 existing platform/optional and 3 unchanged Linux /proc controls inapplicable on macOS; retained in Linux CI",
+    "skipped": 62
+  },
+  "rust_workspace": {
+    "failed": 0,
+    "ignored": 13,
+    "passed": 1656
+  },
+  "scope": "post-decision response observation only; runtime enforcement, pending wait, broker TTL and negative deadlines unchanged",
+  "source_sha256": {
+    "docs/operations/SELECTED_MCP_ASK_APPROVAL.md": "317e2aa546031c6cebdef9acc4c000b1d5f7abaad1d38139e0e4da3a6b85960b",
+    "docs/operations/evidence/sou-117/selected-approval-readback-failed.json": "93198a2ecd7c152d5ea9e43c3dfdcc6156cb116d6ae4d4a16baee0cb87ae61f5",
+    "scripts/tests/test_sou105_selected_approval.py": "3f94550a5f321b20b07a5cd3a28b60129282fc4fa8f28123ffabf9e9bc04b32e",
+    "scripts/verify-sou105-selected-approval.py": "8ec4f3777d113bae9119eff7b8eff82b6c9400936b8afc3c6f88f9fa4e2ab6fc"
+  },
+  "strict_clippy": "passed_zero_warnings",
+  "task": "SOU-117",
+  "workflow_generation": "passed"
+}

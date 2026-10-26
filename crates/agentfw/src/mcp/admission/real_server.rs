@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use anyhow::{bail, ensure, Context};
 use futures_util::stream::{FuturesUnordered, StreamExt};
@@ -12,8 +12,11 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::time::Instant;
 
+use super::DaemonSizeLimit;
 use super::{canonical, id, keys, line, not_classified, parse, sha, withheld, write};
 use super::{AdmittedTool, ClassificationAuthority, Collector, ProductionVerdict, Snapshot};
+#[cfg(target_os = "linux")]
+use crate::mcp::original_create::{run_original_upstream, VerifiedOutput};
 use crate::mcp::{server_profile, server_sandbox};
 use crate::native::CONTRACT;
 
@@ -24,14 +27,69 @@ const MAX_PROGRESS: usize = 128;
 const MAX_JSON_DEPTH: usize = 20;
 const MAX_JSON_NODES: usize = 16_384;
 
+// Fixed, bounded, correlated refusals. Each names the specific limit; none
+// copies server bytes. A withheld result may already have been executed.
+const TEXT_BUDGET_MESSAGE: &str = "MCP result withheld: a result text exceeds the 262144-byte per-result budget; the original call may have executed";
+const FRAME_BUDGET_MESSAGE: &str = "MCP result withheld: the response frame exceeds the 1048576-byte envelope budget; the original call may have executed";
+const OVERSIZED_CONTROL_ERROR: &str = "oversized MCP control response";
+const PATH_OUTSIDE_MESSAGE: &str =
+    "MCP path refused before execution: it is outside the selected workspace /workspace";
+const PATH_SPELLING_MESSAGE: &str = "MCP path refused before execution: unsupported spelling (empty, '.', '..' or '//' segment, backslash, '~', control character, relative ':' or over 4096 bytes)";
+
+mod frames;
+
+// Host-owned diagnostic pipes may close before the namespace owners finish.
+// Reporting must not panic past cleanup or its authenticated acknowledgement;
+// failures of the actual transport, drain and owner boundaries remain errors.
+macro_rules! diagnostic {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr().lock(), $($arg)*);
+    }};
+}
+
 struct Grant {
     call_id: Value,
     binding: Value,
     boundary: Option<crate::policy_transition::Boundary>,
+    continuation: Option<ContinuationTiming>,
+}
+
+/// Observations only: never used for authority, deadlines, retries or admission.
+struct ContinuationTiming {
+    observed: Instant,
+    previous: Instant,
+}
+
+impl ContinuationTiming {
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            observed: now,
+            previous: now,
+        }
+    }
+
+    fn record(&mut self, call: &Call, stage: &'static str, success: bool) {
+        let now = Instant::now();
+        diagnostic!(
+            "{}",
+            json!({
+                "event": "mcp_real_approval_timing", "profile": call.profile,
+                "host_call_id": call.id, "stage": stage, "success": success,
+                "stage_ms": now.duration_since(self.previous).as_secs_f64() * 1000.0,
+                "post_observed_ms": now.duration_since(self.observed).as_secs_f64() * 1000.0,
+                "clock": "collector_monotonic", "authority": false
+            })
+        );
+        self.previous = now;
+    }
 }
 
 struct Release {
     raw: Vec<u8>,
+    #[cfg(target_os = "linux")]
+    authorized: bool,
     _boundary: Option<crate::policy_transition::Boundary>,
 }
 
@@ -39,6 +97,10 @@ enum Phase {
     Queued,
     Admitting,
     Running(Grant),
+    #[cfg(target_os = "linux")]
+    Creating(Grant),
+    #[cfg(target_os = "linux")]
+    Staging,
     Inspecting,
     Reclaiming,
 }
@@ -58,6 +120,45 @@ struct Call {
     progress: Option<Value>,
     progress_count: usize,
     last_progress: f64,
+    // Cancellation spends native authority before the producer necessarily
+    // finishes cleanup. Workers retain this lease independently of the call.
+    create_lease: Option<Arc<()>>,
+    // Pin the exact operator workspace *before* native admission.
+    // Never reopen a substituted root after native result Allow.
+    #[cfg(target_os = "linux")]
+    pinned_workspace: Option<Arc<crate::sandbox::PinnedWorkspace>>,
+}
+
+#[derive(Default)]
+struct CreateSlot(Weak<()>);
+
+impl CreateSlot {
+    fn reserve(&mut self) -> Option<Arc<()>> {
+        if self.0.upgrade().is_some() {
+            return None;
+        }
+        let lease = Arc::new(());
+        self.0 = Arc::downgrade(&lease);
+        Some(lease)
+    }
+}
+
+#[cfg(any(test, target_os = "linux"))]
+async fn retain_create_slot<T>(lease: Option<Arc<()>>, work: impl Future<Output = T>) -> T {
+    let _lease = lease;
+    work.await
+}
+
+#[cfg(target_os = "linux")]
+async fn produce_original_create(
+    profile: &server_profile::ProfileConfig,
+    args: &Value,
+) -> anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)> {
+    #[cfg(test)]
+    if let Some(result) = fault_tests::controlled_create_output(args) {
+        return result;
+    }
+    run_original_upstream(profile, args).await
 }
 
 enum Decision {
@@ -68,6 +169,16 @@ enum Decision {
 enum WorkEvent {
     Admitted(String, anyhow::Result<Decision>),
     Inspected(String, anyhow::Result<Option<Release>>),
+    #[cfg(target_os = "linux")]
+    Created(String, anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)>),
+    #[cfg(target_os = "linux")]
+    CreateInspected(String, anyhow::Result<Option<Release>>, VerifiedOutput),
+    #[cfg(target_os = "linux")]
+    CreateStaged(
+        String,
+        anyhow::Result<crate::mcp::create_file::StagedCreate>,
+        Release,
+    ),
     Reclaimed(String, anyhow::Result<()>),
 }
 
@@ -127,7 +238,7 @@ fn error(id: &Value, code: i64, message: &'static str) -> Vec<u8> {
 }
 
 fn audit(call: &Call, state: &str, active: usize, queued: usize) {
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_call","profile":call.profile,
         "host_call_id":call.id,"id_type":if call.id.is_string(){"string"}else{"integer"},
@@ -173,6 +284,15 @@ async fn admit(
     call: &Call,
     profile: &server_profile::ProfileConfig,
 ) -> anyhow::Result<Decision> {
+    let creating =
+        call.profile == server_profile::filesystem_create::FORMAT && call.tool == "write_file";
+    if creating && (!cfg!(target_os = "linux") || collector.config.classifier.is_none()) {
+        return Ok(Decision::Refused(withheld(
+            &call.id,
+            "invocation",
+            &json!(["original_create_classifier_or_platform_unavailable"]),
+        )));
+    }
     let installed = collector
         .config
         .native
@@ -190,7 +310,7 @@ async fn admit(
             installed.action_class,
             ClassificationAuthority {
                 egress_declared: false,
-                create_file_profile: None,
+                create_file_profile: creating.then_some(server_profile::filesystem_create::FORMAT),
                 https_get: false,
             },
         )
@@ -206,7 +326,13 @@ async fn admit(
     if assessment.verdict == ProductionVerdict::Deny {
         return Ok(refusal("classifier_deny"));
     }
-    if !assessment.known_read_only {
+    // Only the exact installed create-only profile may continue a classified
+    // mutation. Unknown read-only semantics remain unsupported for approvals.
+    if !(if creating {
+        assessment.known_create
+    } else {
+        assessment.known_read_only
+    }) {
         return Ok(refusal(if collector.config.approval.is_some() {
             "classifier_unknown_approval_unsupported"
         } else {
@@ -216,6 +342,36 @@ async fn admit(
     let mut boundary = collector.policy_boundary().await?;
     let mut fields = json!({"tool":call.tool,"args":call.args,
         "schema_sha256":installed.schema_sha256,"mcp_host_call_id":call.id});
+    let create_context = if creating {
+        #[cfg(target_os = "linux")]
+        {
+            let Some(workspace) = call.pinned_workspace.as_deref() else {
+                return Ok(refusal("native_approval_create_resource_unavailable"));
+            };
+            let resource = match server_profile::filesystem_create::CreateResource::capture(
+                workspace, &call.args,
+            ) {
+                Ok(resource) => resource,
+                Err(_) => return Ok(refusal("native_approval_create_resource_changed")),
+            };
+            Some(selected_invocation(
+                collector,
+                &snapshot,
+                call,
+                profile,
+                Some(resource),
+            )?)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            None
+        }
+    } else {
+        None
+    };
+    if let Some(context) = &create_context {
+        fields["selected_invocation"] = json!(context);
+    }
     let mut receipt = if assessment.verdict == ProductionVerdict::Ask {
         None
     } else {
@@ -231,6 +387,7 @@ async fn admit(
     } else {
         None
     };
+    let mut continuation = None;
     if let Some(source) = source {
         // No transition gate is held across a human wait. Acquire a fresh
         // boundary, rerun classification and redeem under the current policy.
@@ -242,55 +399,50 @@ async fn admit(
                 refusal("classifier_ask")
             });
         }
-        let Some(classifier) = &collector.config.classifier else {
-            return Ok(refusal("native_approval_classifier_identity_required"));
-        };
-        let Some(classifier_digest) = classifier
-            .revision()
-            .filter(|digest| crate::native::is_digest(digest))
-        else {
-            return Ok(refusal("native_approval_classifier_identity_required"));
-        };
         // This increment requires the accepted host/agent capability and live
         // collector owner. Plain legacy sessions keep their correlated refusal.
         if collector.host_session.is_none() || collector.liveness.is_none() {
             return Ok(refusal("native_approval_bound_owner_required"));
         }
-        let definition = snapshot
-            .tools
-            .get(&call.tool)
-            .context("selected definition missing")?;
-        let context = crate::native::approval::SelectedInvocation {
-            host_call_id: call.id.clone(),
-            request_sha256: call.request_sha256.clone(),
-            server_id: collector.config.server_id.clone(),
-            profile: call.profile.clone(),
-            profile_sha256: sha(canonical(&serde_json::to_value(profile)?)
-                .to_string()
-                .as_bytes()),
-            classifier_sha256: classifier_digest.to_owned(),
-            snapshot_sha256: snapshot.sha256.clone(),
-            definition_sha256: definition.definition_sha256.clone(),
-            input_sha256: super::prediction_identity(
-                &collector.config.server_id,
-                &snapshot,
-                definition,
-                &call.tool,
-                &call.args,
-                classifier.source(),
-                classifier.revision(),
-            ),
+        let context = match create_context {
+            Some(context) => context,
+            None => selected_invocation(collector, &snapshot, call, profile, None)?,
         };
+        // Bind same-FD verified input observations before publishing a pending
+        // request. Only kernel-enforced immutable bytes may be reused later.
+        // This state belongs to this exact Ask, never a global authority cache.
+        let frozen = profile.clone();
+        let verified_assets =
+            tokio::task::spawn_blocking(move || frozen.capture_verified_assets()).await??;
         let approval_id =
             match wait_approval(collector, call, source, &installed.schema_sha256, &context).await?
             {
                 Ok(id) => id,
                 Err(code) => return Ok(refusal(&code)),
             };
+        let mut timing = ContinuationTiming::new();
         let resumed = async {
             let frozen = profile.clone();
-            tokio::task::spawn_blocking(move || frozen.revalidate_assets()).await??;
+            let verified =
+                tokio::task::spawn_blocking(move || frozen.revalidate_assets(&verified_assets))
+                    .await;
+            timing.record(call, "profile_and_assets", matches!(&verified, Ok(Ok(()))));
+            verified??;
+            #[cfg(target_os = "linux")]
+            if let Some(expected) = &context.original_create {
+                let workspace = call
+                    .pinned_workspace
+                    .as_deref()
+                    .context("selected create root missing")?;
+                ensure!(
+                    &server_profile::filesystem_create::CreateResource::capture(
+                        workspace, &call.args
+                    )? == expected,
+                    "selected create resource changed during approval"
+                );
+            }
             boundary = collector.policy_boundary().await?;
+            timing.record(call, "policy_boundary", true);
             let reassessed = collector
                 .classify(
                     &snapshot,
@@ -300,15 +452,20 @@ async fn admit(
                     installed.action_class,
                     ClassificationAuthority {
                         egress_declared: false,
-                        create_file_profile: None,
+                        create_file_profile: creating
+                            .then_some(server_profile::filesystem_create::FORMAT),
                         https_get: false,
                     },
                 )
-                .await?;
+                .await;
+            timing.record(call, "classifier", matches!(&reassessed, Ok(Ok(_))));
+            let reassessed = reassessed?;
             ensure!(
-                reassessed.is_ok_and(
-                    |value| value.known_read_only && value.verdict != ProductionVerdict::Deny
-                ),
+                reassessed.is_ok_and(|value| (if creating {
+                    value.known_create
+                } else {
+                    value.known_read_only
+                }) && value.verdict != ProductionVerdict::Deny),
                 "selected approval reclassification refused"
             );
             ensure!(
@@ -325,11 +482,17 @@ async fn admit(
         fields["approval_id"] = json!(approval_id);
         fields["selected_invocation"] = json!(context);
         let admitted = collector.event("call", fields).await;
+        timing.record(
+            call,
+            "daemon_redemption",
+            admitted.as_ref().is_ok_and(|r| r["release"] == true),
+        );
         // Idempotent cancellation removes approved but unused state. A lost or
         // malformed native receipt is session-fatal, as on the ordinary path:
         // retire the session rather than orphaning an unseen reserved call.
         collector.cancel_approval(&approval_id).await?;
         receipt = Some(admitted?);
+        continuation = Some(timing);
     }
     let receipt = receipt.context("selected admission receipt absent")?;
     if receipt["release"] != true {
@@ -343,7 +506,54 @@ async fn admit(
         call_id: receipt["call_id"].clone(),
         binding: receipt["binding_sha256"].clone(),
         boundary,
+        continuation,
     }))
+}
+
+/// Freeze observations for the existing signed grant and call binding. Runtime,
+/// package, schema and classifier revisions remain part of this same identity.
+fn selected_invocation(
+    collector: &Collector<'_>,
+    snapshot: &Snapshot,
+    call: &Call,
+    profile: &server_profile::ProfileConfig,
+    original_create: Option<server_profile::filesystem_create::CreateResource>,
+) -> anyhow::Result<crate::native::approval::SelectedInvocation> {
+    let classifier = collector
+        .config
+        .classifier
+        .as_ref()
+        .context("selected classifier missing")?;
+    let classifier_digest = classifier
+        .revision()
+        .filter(|digest| crate::native::is_digest(digest))
+        .context("selected classifier revision missing")?;
+    let definition = snapshot
+        .tools
+        .get(&call.tool)
+        .context("selected definition missing")?;
+    Ok(crate::native::approval::SelectedInvocation {
+        host_call_id: call.id.clone(),
+        request_sha256: call.request_sha256.clone(),
+        server_id: collector.config.server_id.clone(),
+        profile: call.profile.clone(),
+        profile_sha256: sha(canonical(&serde_json::to_value(profile)?)
+            .to_string()
+            .as_bytes()),
+        classifier_sha256: classifier_digest.to_owned(),
+        snapshot_sha256: snapshot.sha256.clone(),
+        definition_sha256: definition.definition_sha256.clone(),
+        input_sha256: super::prediction_identity(
+            &collector.config.server_id,
+            snapshot,
+            definition,
+            &call.tool,
+            &call.args,
+            classifier.source(),
+            classifier.revision(),
+        ),
+        original_create,
+    })
 }
 
 /// One bounded admission worker, independent of host input and useful peers.
@@ -382,7 +592,7 @@ async fn wait_approval(
         .as_str()
         .context("pending id")?
         .to_owned();
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_native_approval_pending","pending_id":id,
         "tool":call.tool,"host_call_id":call.id,"binding_sha256":reply["binding_sha256"],
@@ -428,23 +638,98 @@ async fn wait_approval(
 async fn inspect(
     collector: &Collector<'_>,
     call: &Call,
-    grant: Grant,
+    mut grant: Grant,
     raw: Vec<u8>,
     kind: &str,
 ) -> anyhow::Result<Option<Release>> {
     let boundary = collector.policy_boundary().await?;
-    let content = std::str::from_utf8(&raw).context("selected MCP result is not UTF-8")?;
-    let receipt = collector.event("result",json!({"tool":call.tool,"args":call.args,
+    let fields = |kind: &str, content: &str| {
+        json!({"tool":call.tool,"args":call.args,
         "call_id":grant.call_id,"expected_binding_sha256":grant.binding,
-        "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})).await?;
-    let raw = if receipt["release"] == true {
+        "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})
+    };
+    let content = std::str::from_utf8(&raw).context("selected MCP result is not UTF-8")?;
+    let (raw, receipt, _original_inspected) =
+        match collector.event("result", fields(kind, content)).await {
+            Ok(receipt) => (raw, receipt, true),
+            Err(failure) => {
+                // A size refusal leaves the grant unspent at the daemon. Spend it
+                // with a small correlated error instead of ending the session.
+                let limit = failure
+                    .downcast_ref::<DaemonSizeLimit>()
+                    .copied()
+                    .ok_or(failure)?;
+                diagnostic!(
+                    "{}",
+                    json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
+                    "limit":limit.code(),"observed_bytes":raw.len(),"released":false})
+                );
+                let replacement = error(&call.id, -32603, limit.message());
+                let content = std::str::from_utf8(&replacement).expect("fixed UTF-8 error");
+                let receipt = collector.event("result", fields("error", content)).await?;
+                // Allowing this correlated error to reach the host does not
+                // authorize publication of an uninspected original create result.
+                (replacement, receipt, false)
+            }
+        };
+    if let Some(timing) = &mut grant.continuation {
+        timing.record(call, "result_inspection", receipt["release"] == true);
+    }
+    let authorized = receipt["release"] == true;
+    let raw = if authorized {
         raw
     } else {
         withheld(&call.id, "result", &receipt["reason_codes"])
     };
     Ok(Some(Release {
         raw,
+        #[cfg(target_os = "linux")]
+        authorized: authorized && _original_inspected,
         _boundary: boundary,
+    }))
+}
+
+async fn execute_in_daemon(
+    collector: &Collector<'_>,
+    call: &Call,
+    mut grant: Grant,
+    profile: &server_profile::ProfileConfig,
+) -> anyhow::Result<Option<Release>> {
+    let reply = collector
+        .execute_original_git(&grant.call_id, &grant.binding, profile)
+        .await?;
+    ensure!(
+        reply["completed"] == true,
+        "original daemon execution incomplete"
+    );
+    let receipt = &reply["receipt"];
+    let authorized = receipt["release"] == true;
+    let raw = if authorized {
+        let raw = reply["frame"]
+            .as_str()
+            .context("original daemon frame missing")?;
+        let decoded = parse(raw.as_bytes())?;
+        ensure!(decoded["id"] == call.id, "original daemon host ID mismatch");
+        let profiles = server_profile::classify_manifest_for(
+            &profile.format,
+            &server_profile::original_manifest_for(&profile.format)?,
+        )?;
+        profiles
+            .get(&call.tool)
+            .context("original daemon tool missing")?
+            .validate_result(&decoded)?;
+        raw.as_bytes().to_vec()
+    } else {
+        withheld(&call.id, "result", &receipt["reason_codes"])
+    };
+    if let Some(timing) = &mut grant.continuation {
+        timing.record(call, "daemon_original_result", authorized);
+    }
+    Ok(Some(Release {
+        raw,
+        #[cfg(target_os = "linux")]
+        authorized,
+        _boundary: grant.boundary.take(),
     }))
 }
 
@@ -477,6 +762,9 @@ fn detached(call: &Call) -> Call {
         progress: call.progress.clone(),
         progress_count: 0,
         last_progress: 0.0,
+        create_lease: call.create_lease.clone(),
+        #[cfg(target_os = "linux")]
+        pinned_workspace: call.pinned_workspace.clone(),
     }
 }
 
@@ -495,8 +783,20 @@ fn validate_registry(
     // them to this relay's callable profiles or advertised discovery result.
     // Arbitrary unadvertised registry entries remain a startup refusal.
     let peer_format = match format {
-        server_profile::FORMAT => server_profile::git::FORMAT,
-        server_profile::git::FORMAT => server_profile::FORMAT,
+        server_profile::FORMAT => collector
+            .config
+            .native
+            .registry
+            .tools
+            .iter()
+            .filter_map(|tool| tool.mcp_result_profile.as_deref())
+            .find(|format| server_profile::git_selected(format))
+            .unwrap_or(server_profile::git::FORMAT),
+        server_profile::git::FORMAT
+        | server_profile::git::LOCAL_REFS_FORMAT
+        | server_profile::git::SHALLOW_FORMAT
+        | server_profile::git_local_clone::FORMAT => server_profile::FORMAT,
+        server_profile::filesystem_create::FORMAT => server_profile::git::FORMAT,
         _ => bail!("unsupported selected registry profile"),
     };
     let peer_manifest = server_profile::original_manifest_for(peer_format)?;
@@ -510,6 +810,11 @@ fn validate_registry(
             .find(|value| value["name"] == tool.name)
             .map(|definition| (definition, &profiles[&tool.name], format))
             .or_else(|| {
+                // The separately installed create-only profile does not acquire
+                // the readonly pilot's union-registry authority.
+                if format == server_profile::filesystem_create::FORMAT {
+                    return None;
+                }
                 peer_tools
                     .iter()
                     .find(|value| value["name"] == tool.name)
@@ -525,15 +830,22 @@ fn validate_registry(
             "selected server cannot acquire built-in resource authority"
         );
         if profile.unsupported_reason.is_none() {
+            let required_action = if expected_format == server_profile::filesystem_create::FORMAT
+                && tool.name == "write_file"
+            {
+                soup_wall_agent::ActionClass::SideEffecting
+            } else {
+                soup_wall_agent::ActionClass::ReadOnly
+            };
             ensure!(
-                tool.action_class == soup_wall_agent::ActionClass::ReadOnly
+                tool.action_class == required_action
                     && tool.egress.is_empty()
                     && matches!(
                         tool.result_provenance,
                         crate::native::ResultProvenance::Untrusted
                     )
                     && tool.mcp_result_profile.as_deref() == Some(expected_format),
-                "selected read authority is not explicitly installed"
+                "selected per-tool authority is not explicitly installed"
             );
         }
     }
@@ -547,7 +859,7 @@ fn validate_registry(
                     .tools
                     .iter()
                     .any(|tool| tool.name == *name),
-                "selected read tool is not installed"
+                "selected supported tool is not installed"
             );
         }
     }
@@ -566,7 +878,7 @@ fn forwarded_cancellation_limit(format: &str) -> usize {
     // A wire abort during response backpressure kills its sibling tasks/stdio.
     // Withdraw locally and drain instead: keep the physical slot and deadline
     // until the original response arrives, without modifying the upstream server.
-    if format == server_profile::git::FORMAT {
+    if server_profile::git_selected(format) {
         0
     } else {
         FORWARDED_CANCELLATIONS
@@ -580,6 +892,7 @@ async fn relay<R, W, S, T>(
     server: &mut S,
     child: &mut T,
     profile: &server_profile::ProfileConfig,
+    git_view: Option<&server_profile::git::SelectedView>,
 ) -> anyhow::Result<()>
 where
     R: AsyncBufRead + Unpin,
@@ -588,11 +901,23 @@ where
     T: AsyncWrite + Unpin,
 {
     let format = profile.format.as_str();
+    let daemon_git = collector
+        .config
+        .native
+        .git_execution_selected(&collector.config.server_id, profile)?;
+    ensure!(
+        !daemon_git
+            || (server_profile::git_selected(format)
+                && collector.prepared_budget.is_none()
+                && collector.liveness.is_some()),
+        "daemon Git execution requires selected Git, liveness and an independent execution budget"
+    );
     let mut initialized = false;
     let mut notified = false;
     let mut ready = false;
     let mut control: Option<Control> = None;
     let mut calls: BTreeMap<String, Call> = BTreeMap::new();
+    let mut create_slot = CreateSlot::default();
     let mut queue = VecDeque::new();
     let mut used = BTreeSet::new();
     let mut wire: BTreeMap<String, (Instant, bool)> = BTreeMap::new();
@@ -604,7 +929,7 @@ where
     let mut snapshot: Option<Arc<Snapshot>> = None;
     let mut server_info = Value::Null;
     let mut client_partial = Vec::new();
-    let mut server_partial = Vec::new();
+    let mut server_frames = frames::ServerFrames::default();
     let mut messages = 0usize;
     let mut client_closed = false;
     loop {
@@ -723,6 +1048,17 @@ where
                                     WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
                                 }));
                             }
+                            #[cfg(target_os = "linux")]
+                            Phase::Creating(grant) => {
+                                let input = detached(call);
+                                let worker_key = key.clone();
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Reclaimed(worker_key,
+                                        reclaim(collector, &input, grant).await)
+                                }));
+                            }
+                            #[cfg(target_os = "linux")]
+                            Phase::Staging => { calls.remove(&key); }
                             Phase::Admitting => call.phase = Phase::Admitting,
                             Phase::Inspecting => call.phase = Phase::Inspecting,
                             Phase::Reclaiming => {}
@@ -732,7 +1068,7 @@ where
                             audit(call, "cancelled", active, queued);
                         }
                     } else {
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_cancel","state":if used.contains(&key){"late"}else{"unknown"}})
                         );
@@ -744,10 +1080,15 @@ where
                 }
                 let request_id = &value["id"];
                 let key = rpc_key(request_id)?;
-                ensure!(
-                    used.len() < super::MAX_REQUESTS && used.insert(key.clone()),
-                    "duplicate MCP ID or request-count limit"
-                );
+                ensure!(used.len() < super::MAX_REQUESTS, "MCP request-count limit");
+                if !used.insert(key.clone()) {
+                    // A replayed/previously spent host ID must never reach
+                    // another native admission. Preserve useful read/write
+                    // peers instead of terminating the entire session.
+                    write(host, &error(request_id, -32600,
+                        "Replayed or spent MCP request ID refused")).await?;
+                    continue;
+                }
                 if !params.is_object() {
                     write(
                         host,
@@ -849,7 +1190,7 @@ where
                             .await?;
                             continue;
                         };
-                        let Some(profile) = profiles.get(name) else {
+                        let Some(tool_profile) = profiles.get(name) else {
                             write(
                                 host,
                                 &error(
@@ -861,7 +1202,7 @@ where
                             .await?;
                             continue;
                         };
-                        if profile.unsupported_reason.is_some() {
+                        if tool_profile.unsupported_reason.is_some() {
                             write(
                                 host,
                                 &error(
@@ -878,23 +1219,46 @@ where
                             .cloned()
                             .unwrap_or_else(|| json!({}));
                         let progress = match metadata(&params).and_then(|progress| {
-                            profile.validate_arguments(&args)?;
+                            tool_profile.validate_arguments(&args)?;
+                            if format == server_profile::filesystem_create::FORMAT
+                                && name == "write_file"
+                            {
+                                server_profile::filesystem_create::validate_request(&args)?;
+                            }
                             Ok(progress)
                         }) {
                             Ok(progress) => progress,
-                            Err(_) => {
-                                write(
-                                    host,
-                                    &error(
-                                        request_id,
-                                        -32602,
-                                        "MCP arguments violate the selected input profile",
-                                    ),
-                                )
-                                .await?;
+                            Err(failure) => {
+                                // Not dispatched. Fixed text names the boundary
+                                // and never echoes the refused argument.
+                                let message = match failure.downcast_ref::<server_profile::PathRefusal>() {
+                                    Some(server_profile::PathRefusal::Outside) => PATH_OUTSIDE_MESSAGE,
+                                    Some(server_profile::PathRefusal::Spelling) => PATH_SPELLING_MESSAGE,
+                                    None => "MCP arguments violate the selected input profile",
+                                };
+                                write(host, &error(request_id, -32602, message)).await?;
                                 continue;
                             }
                         };
+                        if git_view.is_some_and(|view| view.validate_call(name, &args).is_err()) {
+                            write(host, &error(request_id, -32602,
+                                "Git local reference unavailable, unsupported, or its source changed")).await?;
+                            continue;
+                        }
+                        // One original mutator at a time. Each selected
+                        // create receives a new heavy isolated Node/owner
+                        // process; native read-only calls stay concurrent.
+                        let create_lease = if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file" {
+                            match create_slot.reserve() {
+                                Some(lease) => Some(lease),
+                                None => {
+                                    write(host, &error(request_id, -32003,
+                                        "An original create operation is already active")).await?;
+                                    continue;
+                                }
+                            }
+                        } else { None };
                         let (active, queued) = counts(&calls);
                         if active >= ACTIVE_LIMIT && queued >= QUEUE_LIMIT {
                             write(
@@ -904,6 +1268,21 @@ where
                             .await?;
                             continue;
                         }
+                        #[cfg(target_os = "linux")]
+                        let pinned_workspace = if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file"
+                        {
+                            match crate::sandbox::PinnedWorkspace::open(&profile.workspace) {
+                                Ok(workspace) => Some(Arc::new(workspace)),
+                                Err(_) => {
+                                    write(host, &error(request_id, -32603,
+                                        "Original create workspace identity unavailable")).await?;
+                                    continue;
+                                }
+                            }
+                        } else {
+                            None
+                        };
                         let call = Call {
                             profile: format.to_owned(),
                             id: request_id.clone(),
@@ -911,6 +1290,7 @@ where
                             args,
                             request_sha256: sha(&raw),
                             raw,
+                            create_lease,
                             phase: Phase::Queued,
                             cancelled: false,
                             cancel: tokio::sync::watch::channel(false).0,
@@ -919,6 +1299,8 @@ where
                             progress,
                             progress_count: 0,
                             last_progress: 0.0,
+                            #[cfg(target_os = "linux")]
+                            pinned_workspace,
                         };
                         audit(&call, "queued", active, queued + 1);
                         calls.insert(key.clone(), call);
@@ -943,6 +1325,12 @@ where
                         let Some(call) = calls.get_mut(&key) else {
                             bail!("unbound native admission completion");
                         };
+                        // A disconnected host cannot authorize new execution.
+                        // Reclaim any late native Allow rather than launching
+                        // an ephemeral writer after the client has disappeared.
+                        if client_closed {
+                            call.cancelled = true;
+                        }
                         match result? {
                             Decision::Refused(raw) => {
                                 if !call.cancelled {
@@ -955,6 +1343,10 @@ where
                                     grants.insert(id(&grant.call_id)?),
                                     "native receipt call ID was reused"
                                 );
+                                if !call.cancelled && git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
+                                    write(host, &error(&call.id, -32602, "Git local-reference view changed or target unsupported")).await?;
+                                    call.cancelled = true;
+                                }
                                 if call.cancelled || wire.len() >= WIRE_LIMIT {
                                     if !call.cancelled {
                                         write(
@@ -974,8 +1366,52 @@ where
                                         )
                                     }));
                                 } else {
+                                    #[cfg(target_os = "linux")]
+                                    if format == server_profile::filesystem_create::FORMAT
+                                        && call.tool == "write_file"
+                                    {
+                                        // The installed server stays read-only.
+                                        // Only an isolated fresh ORIGINAL server
+                                        // can run the mutating upstream tool.
+                                        let worker_key = key.clone();
+                                        let args = call.args.clone();
+                                        let runner = profile.clone();
+                                        let lease = call.create_lease.clone();
+                                        call.phase = Phase::Creating(grant);
+                                        call.dispatched = true;
+                                        // The external Linux acceptance can
+                                        // observe actual post-admission creation
+                                        // without exposing content or credentials.
+                                        diagnostic!("{}", json!({
+                                            "event":"mcp_original_create_state",
+                                            "host_call_id":call.id,
+                                            "state":"creating"
+                                        }));
+                                        workers.push(Box::pin(async move {
+                                            WorkEvent::Created(worker_key,
+                                                retain_create_slot(lease,
+                                                    produce_original_create(&runner, &args)).await)
+                                        }));
+                                        continue;
+                                    }
+                                    if daemon_git && matches!(call.tool.as_str(), "git_show" | "git_diff") {
+                                        // Do NOT also dispatch the tools/call to the collector's server.
+                                        // The daemon consumes the admission and owns the one actual result pipe.
+                                        let input = detached(call);
+                                        let worker_key = key.clone();
+                                        call.dispatched = true;
+                                        call.phase = Phase::Inspecting;
+                                        workers.push(Box::pin(async move {
+                                            WorkEvent::Inspected(worker_key,
+                                                execute_in_daemon(collector, &input, grant, profile).await)
+                                        }));
+                                        continue;
+                                    }
                                     write(child, &call.raw).await?;
                                     call.dispatched = true;
+                                    if let Some(timing) = &mut grant.continuation {
+                                        timing.record(call, "original_dispatch", true);
+                                    }
                                     drop(grant.boundary.take());
                                     call.phase = Phase::Running(grant);
                                     wire.insert(key.clone(), (call.deadline, false));
@@ -985,6 +1421,174 @@ where
                             }
                         }
                     }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::Created(key, produced) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        if call.cancelled { continue; }
+                        if client_closed {
+                            // A host EOF before native result release must
+                            // spend the admission grant and drop the isolated
+                            // output. No publication occurs and relay can exit.
+                            let phase = std::mem::replace(&mut call.phase, Phase::Reclaiming);
+                            let Phase::Creating(grant) = phase else {
+                                bail!("orphaned original create without native grant");
+                            };
+                            let input = detached(call);
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(key,
+                                    reclaim(collector, &input, grant).await)
+                            }));
+                            continue;
+                        }
+                        let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
+                        let Phase::Creating(grant) = phase else {
+                            bail!("original create returned without its bound native grant");
+                        };
+                        let input = detached(call);
+                        let worker_key = key.clone();
+                        match produced {
+                            Ok((raw, verified)) => {
+                                // Internal original-server RPC always uses id=3.
+                                // The host must receive its own opaque request ID.
+                                // Only the JSON-RPC transport ID is changed;
+                                // original result/error fields are untouched.
+                                let mut decoded = parse(&raw)?;
+                                ensure!(decoded["id"] == 3,
+                                    "unexpected original-server response correlation");
+                                decoded["id"] = call.id.clone();
+                                let raw = frame(&decoded);
+                                if let Some(verified) = verified {
+                                    workers.push(Box::pin(async move {
+                                        let receipt = inspect(collector, &input, grant, raw, "value").await;
+                                        #[cfg(test)]
+                                        fault_tests::pause_create_completion("inspected").await;
+                                        WorkEvent::CreateInspected(worker_key,
+                                            receipt, verified)
+                                    }));
+                                } else {
+                                    // Preserve the valid ORIGINAL error. It
+                                    // has no output/publication capability.
+                                    workers.push(Box::pin(async move {
+                                        WorkEvent::Inspected(worker_key,
+                                            inspect(collector, &input, grant, raw, "error").await)
+                                    }));
+                                }
+                            }
+                            Err(_) => {
+                                let failure = error(&call.id, -32603,
+                                    "Original isolated MCP create failed; workspace unchanged");
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Inspected(worker_key,
+                                        inspect(collector, &input, grant, failure, "error").await)
+                                }));
+                            }
+                        }
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::CreateInspected(key, receipt, output) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if call.deadline <= Instant::now() {
+                            write(host, &error(&call.id, -32001,
+                                "Original create timed out before publication; no file committed")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        let release = receipt?.context("native original-create result missing")?;
+                        if !release.authorized {
+                            write(host, &release.raw).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if collector.is_uncertain() {
+                            write(host, &error(&call.id, -32603,
+                                "Native collector became uncertain before publication")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        let prepared = call.pinned_workspace.as_deref()
+                            .context("original create workspace pin not held")
+                            .and_then(|workspace| output.prepare_atomic_publication(workspace));
+                        let prepared = match prepared {
+                            Ok(value) => value,
+                            Err(_) => {
+                                write(host, &error(&call.id, -32603,
+                                    "Unsafe or existing original-create destination; no publication")).await?;
+                                calls.remove(&key);
+                                continue;
+                            }
+                        };
+                        call.phase = Phase::Staging;
+                        let lease = call.create_lease.clone();
+                        workers.push(Box::pin(async move {
+                            let stage = tokio::task::spawn_blocking(move || {
+                                let _lease = lease;
+                                prepared.stage()
+                            })
+                                .await.map_err(anyhow::Error::from)
+                                .and_then(|value| value.map_err(anyhow::Error::from));
+                            #[cfg(test)]
+                            fault_tests::pause_create_completion("staged").await;
+                            WorkEvent::CreateStaged(key, stage, release)
+                        }));
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::CreateStaged(key, stage, release) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        // Cancellation after native result Allow, but before
+                        // linkat, closes only an anonymous stage.
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if collector.is_uncertain() || call.deadline <= Instant::now() {
+                            write(host, &error(&call.id,
+                                if collector.is_uncertain() { -32603 } else { -32001 },
+                                "Original create authority expired or became uncertain; no file committed")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        // release owns the native result policy boundary until
+                        // this synchronous publication point is finished.
+                        match stage {
+                            Ok(stage) => match stage.publish() {
+                                Ok(result) if result.committed && result.file_synced
+                                    && result.directory_synced => {
+                                    diagnostic!("{}", json!({
+                                        "event":"mcp_original_create_commit",
+                                        "committed":true,
+                                        "bytes":result.bytes_written,
+                                        "content_disclosed":false
+                                    }));
+                                    write(host, &release.raw).await?;
+                                }
+                                Ok(_) => bail!("incomplete original-create publication"),
+                                Err(publish_error) => {
+                                    diagnostic!("{}", json!({
+                                        "event":"mcp_original_create_commit",
+                                        "committed":publish_error.committed,
+                                        "bytes":publish_error.committed_bytes,
+                                        "reason":publish_error.code,
+                                        "content_disclosed":false
+                                    }));
+                                    write(host, &error(&call.id, -32603,
+                                        if publish_error.committed {
+                                            "Create failed after commit; file effect may remain"
+                                        } else {
+                                            "Create publication refused; no file committed"
+                                        })).await?;
+                                }
+                            },
+                            Err(_) => {
+                                write(host, &error(&call.id, -32603,
+                                    "Original create staging failed; no file committed")).await?;
+                            }
+                        }
+                        calls.remove(&key);
+                    }
                     WorkEvent::Inspected(key, result) => {
                         let call = calls
                             .remove(&key)
@@ -992,7 +1596,11 @@ where
                         let result = result?;
                         if !call.cancelled {
                             if let Some(release) = result {
-                                write(host, &release.raw).await?;
+                                if git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
+                                    write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
+                                } else {
+                                    write(host, &release.raw).await?;
+                                }
                             }
                         }
                         let (active, queued) = counts(&calls);
@@ -1006,8 +1614,52 @@ where
                     }
                 }
             },
-            raw=line(server,&mut server_partial)=>{
-                let raw = raw?.context("selected MCP server closed with incomplete state")?;
+            next=server_frames.next(server)=>{
+                let raw = match next?.context("selected MCP server closed with incomplete state")? {
+                    frames::Frame::Line(raw) => raw,
+                    frames::Frame::Oversized(oversized) => {
+                        // Complete and well-formed, but over the envelope
+                        // budget: never buffered, parsed or released. The
+                        // validated top-level ID binds it to one admitted call.
+                        messages += 1;
+                        ensure!(messages <= MAX_MESSAGES, "selected MCP message count limit");
+                        let key = rpc_key(&oversized.id)?;
+                        ensure!(
+                            control.as_ref().is_none_or(|item| item.id != oversized.id),
+                            OVERSIZED_CONTROL_ERROR
+                        );
+                        ensure!(
+                            wire.remove(&key).is_some(),
+                            "unknown or duplicate MCP response ID"
+                        );
+                        let Some(call) = calls.get_mut(&key) else {
+                            continue;
+                        };
+                        let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
+                        let Phase::Running(grant) = phase else {
+                            ensure!(
+                                call.cancelled,
+                                "MCP response arrived in an invalid call phase"
+                            );
+                            continue;
+                        };
+                        diagnostic!(
+                            "{}",
+                            json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
+                                "limit":"result_frame_bytes","budget_bytes":server_profile::RESULT_FRAME_BYTES,
+                                "observed_bytes":oversized.bytes,"released":false})
+                        );
+                        let input = detached(call);
+                        let replacement = error(&call.id, -32603, FRAME_BUDGET_MESSAGE);
+                        workers.push(Box::pin(async move {
+                            WorkEvent::Inspected(
+                                key,
+                                inspect(collector, &input, grant, replacement, "error").await,
+                            )
+                        }));
+                        continue;
+                    }
+                };
                 let value = parse(&raw)?;
                 bounded(&value, 0, &mut 0)?;
                 messages += 1;
@@ -1069,12 +1721,12 @@ where
                         }
                         // Progress/logging text has no independently admitted data
                         // channel. Consume it; never forward even a message field.
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_notification","kind":"progress","released":false})
                         );
                     } else {
-                        eprintln!(
+                        diagnostic!(
                             "{}",
                             json!({"event":"mcp_real_notification","kind":"unsupported_or_logging","released":false})
                         );
@@ -1207,13 +1859,16 @@ where
                     continue;
                 };
                 let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
-                let Phase::Running(grant) = phase else {
+                let Phase::Running(mut grant) = phase else {
                     ensure!(
                         call.cancelled,
                         "MCP response arrived in an invalid call phase"
                     );
                     continue;
                 };
+                if let Some(timing) = &mut grant.continuation {
+                    timing.record(call, "original_response", value.get("result").is_some());
+                }
                 let input = detached(call);
                 let worker_key = key.clone();
                 let validated = profiles[&call.tool]
@@ -1226,13 +1881,28 @@ where
                             inspect(collector, &input, grant, raw, &kind).await,
                         )
                     })),
-                    Err(_) => {
+                    Err(failure) => {
                         // Unsupported output is never partially released. A local
                         // error completes this reservation and leaves other calls usable.
+                        let budget = failure
+                            .downcast_ref::<crate::mcp::input::ResultBudgetExceeded>()
+                            .is_some();
+                        if budget {
+                            diagnostic!(
+                                "{}",
+                                json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
+                                    "limit":"result_text_bytes","budget_bytes":server_profile::RESULT_TEXT_BYTES,
+                                    "observed_bytes":raw.len(),"released":false})
+                            );
+                        }
                         let replacement = error(
                             &call.id,
                             -32603,
-                            "Unsupported MCP result withheld by the selected output profile",
+                            if budget {
+                                TEXT_BUDGET_MESSAGE
+                            } else {
+                                "Unsupported MCP result withheld by the selected output profile"
+                            },
                         );
                         workers.push(Box::pin(async move {
                             WorkEvent::Inspected(
@@ -1287,6 +1957,17 @@ where
                                 WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
                             }));
                         }
+                        #[cfg(target_os = "linux")]
+                        Phase::Creating(grant) => {
+                            let input = detached(call);
+                            let worker_key = key.clone();
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(worker_key,
+                                    reclaim(collector, &input, grant).await)
+                            }));
+                        }
+                        #[cfg(target_os = "linux")]
+                        Phase::Staging => { calls.remove(&key); }
                         Phase::Admitting => call.phase = Phase::Admitting,
                         Phase::Inspecting => call.phase = Phase::Inspecting,
                         Phase::Reclaiming => {}
@@ -1359,6 +2040,12 @@ fn relay_failure_code(error: &anyhow::Error) -> &'static str {
                 return "response_shape_invalid"
             }
             "server response ID missing" => return "response_id_missing",
+            OVERSIZED_CONTROL_ERROR => return "control_frame_oversized",
+            frames::DRAIN_BYTES_ERROR => return "result_drain_bytes",
+            frames::DRAIN_TIME_ERROR => return "result_drain_time",
+            frames::MALFORMED_ERROR => return "result_frame_malformed",
+            frames::UNCORRELATED_ERROR => return "result_frame_uncorrelated",
+            frames::UNTERMINATED_ERROR => return "server_frame_unterminated",
             _ => {}
         }
     }
@@ -1419,7 +2106,7 @@ async fn drain_stderr(mut stream: tokio::process::ChildStderr) -> anyhow::Result
         }
     }
     .await;
-    eprintln!("{}", witness.metadata(result.is_ok()));
+    diagnostic!("{}", witness.metadata(result.is_ok()));
     result
 }
 
@@ -1428,12 +2115,68 @@ pub(super) async fn run(
     profile: &server_profile::ProfileConfig,
     workspace: &std::path::Path,
 ) -> anyhow::Result<()> {
+    // The host may TERM its MCP children during normal shutdown, including
+    // after their namespace owners have finished but before the authenticated
+    // cleanup acknowledgement. Install interception before creating an owner;
+    // later TERM must not abruptly kill the completion path.
+    #[cfg(unix)]
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .context("install selected collector termination handler")?;
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
-    let prepared = server_sandbox::prepare(profile)?;
+    let selected_budget = collector.prepared_budget.as_ref();
+    if collector
+        .config
+        .native
+        .git_execution_selected(&collector.config.server_id, profile)?
+    {
+        ensure!(
+            server_profile::git_selected(&profile.format)
+                && selected_budget.is_none()
+                && collector.liveness.is_some(),
+            "daemon Git execution does not support prepared budget selection"
+        );
+    }
+    ensure!(
+        selected_budget.is_none() || profile.format != server_profile::filesystem_create::FORMAT,
+        "prepared budgets do not support the original-create profile"
+    );
+    ensure!(
+        selected_budget.is_some() || std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
+        "pilot_budget_binding_required"
+    );
+    let mut budget_record = selected_budget
+        .map(|selection| selection.reserve(&collector.config.server_id))
+        .transpose()?;
+    // Register before even preparing/starting the selected owner's namespace.
+    // Stop spends grants under the same native lock, so a late registration
+    // cannot start a server after an unenrolled grant was revoked.
+    let cleanup_owner = if collector.host_session.is_some()
+        && matches!(collector.config.server_id.as_str(), "filesystem" | "git")
+    {
+        collector.liveness.as_ref()
+    } else {
+        None
+    };
+    if let Some(owner) = cleanup_owner {
+        owner.pilot_cleanup("begin").await?;
+    }
+    let prepared = match server_sandbox::prepare_with_budget(
+        profile,
+        selected_budget.map(crate::pilot_budget::VerifiedSelection::bound),
+    ) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            if let Some(owner) = cleanup_owner {
+                owner.pilot_cleanup("finish").await?;
+            }
+            return Err(error);
+        }
+    };
     ensure!(
         prepared.workspace() == workspace,
         "selected sandbox workspace changed"
     );
+    let git_view = prepared.git_view();
     let (mut process, mut budget, mut owner, sandbox_pid) = prepared.spawn().await?;
     let attached = if let Some(budget) = budget.as_mut() {
         budget.verify_attached(sandbox_pid)
@@ -1452,16 +2195,16 @@ pub(super) async fn run(
         "unbudgeted"
     };
     let mut stderr_task = None;
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_owner_start","owner":owner.metadata()})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_budget_start","mode":budget_mode,
         "budget":budget.as_ref().map(super::super::linux_budget::OwnedBudget::metadata)})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_server_start","profile":profile.format,
         "sandbox":server_sandbox::profile_name(&profile.format),"sandbox_workspace":server_sandbox::SANDBOX_WORKSPACE,
@@ -1473,6 +2216,9 @@ pub(super) async fn run(
         let transport = async {
             attached?;
             owner.check()?;
+            if let (Some(record), Some(budget)) = (&mut budget_record, &budget) {
+                record.record(budget.metadata(), false)?;
+            }
             let stderr = process
                 .stderr
                 .take()
@@ -1519,6 +2265,7 @@ pub(super) async fn run(
                     &mut server,
                     &mut child,
                     profile,
+                    git_view.as_deref(),
                 );
                 tokio::pin!(exchange);
                 tokio::select! {
@@ -1534,7 +2281,7 @@ pub(super) async fn run(
                 // Record the relay's actual first failure before stdin shutdown
                 // can provoke a secondary wrapper/server exit. The owner select
                 // arm can otherwise win while this shutdown is still pending.
-                eprintln!(
+                diagnostic!(
                     "{}",
                     json!({"event":"mcp_real_transport_failure",
                     "failure_code":relay_failure_code(error),"released":false})
@@ -1577,6 +2324,12 @@ pub(super) async fn run(
                 Ok(()) => Err(anyhow::anyhow!("mcp_budget_monitor_stopped")),
             },
             _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("native_mcp_interrupted")),
+            _ = async {
+                #[cfg(unix)]
+                sigterm.recv().await;
+                #[cfg(not(unix))]
+                std::future::pending::<()>().await;
+            } => Err(anyhow::anyhow!("native_mcp_terminated")),
             result = &mut transport => result,
         }
     };
@@ -1622,18 +2375,18 @@ pub(super) async fn run(
     let owner_failed = owner_failed.load(std::sync::atomic::Ordering::Acquire)
         || owner_check.is_err()
         || owner_quiesce.is_err();
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_owner_end","owner":owner.metadata(),
         "cleanup_verified":owner_cleanup.is_ok(),"observed_failure":owner_failed})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_budget_end","mode":budget_mode,
         "budget":budget.as_ref().map(super::super::linux_budget::OwnedBudget::metadata),
         "cleanup_verified":budget_cleanup.is_ok(),"observed_failure":budget_failed})
     );
-    eprintln!(
+    diagnostic!(
         "{}",
         json!({"event":"mcp_real_server_end","profile":profile.format,
         "budget_requested":budget_requested,"budget_cleanup_verified":budget_cleanup.is_ok(),
@@ -1644,6 +2397,29 @@ pub(super) async fn run(
         "transport_complete":operation.is_ok()&&budget_check.is_ok()&&!budget_failed&&!owner_failed
             &&cleanup.is_ok()&&stderr_cleanup.is_ok()&&budget_cleanup.is_ok()&&owner_cleanup.is_ok()})
     );
+    // Only the existing independent owner/budget/reap/stderr boundaries can
+    // discharge this obligation. A transport error (including revoked lease)
+    // does not prevent cleanup confirmation, and a failed boundary never does.
+    let record_result = if let (Some(record), Some(budget)) = (&mut budget_record, &budget) {
+        record.record(budget.metadata(), true)
+    } else {
+        Ok(())
+    };
+    let cleanup_confirmation = if cleanup.is_ok()
+        && stderr_cleanup.is_ok()
+        && budget_cleanup.is_ok()
+        && owner_cleanup.is_ok()
+    {
+        if let Some(owner) = cleanup_owner {
+            owner.pilot_cleanup("finish").await
+        } else {
+            Ok(())
+        }
+    } else {
+        Err(anyhow::anyhow!("pilot_cleanup_unconfirmed"))
+    };
+    cleanup_confirmation?;
+    record_result?;
     operation?;
     budget_check?;
     owner_check?;
@@ -1660,6 +2436,124 @@ pub(super) async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn original_create_cancelled_call_keeps_slot_until_producer_cleanup() {
+        let mut slot = CreateSlot::default();
+        let call = slot.reserve().unwrap();
+        let reclaim = call.clone();
+        let (finish, cleanup) = tokio::sync::oneshot::channel::<()>();
+        let worker = tokio::spawn(retain_create_slot(Some(call.clone()), async move {
+            cleanup.await.unwrap();
+        }));
+        // Native reclamation and logical removal do not stop the isolated
+        // producer. A fresh writer must wait for its real cleanup completion.
+        drop(call);
+        drop(reclaim);
+        assert!(slot.reserve().is_none());
+        finish.send(()).unwrap();
+        worker.await.unwrap();
+        assert!(slot.reserve().is_some());
+    }
+
+    #[tokio::test]
+    async fn original_create_blocking_stage_keeps_slot_after_waiter_is_aborted() {
+        let mut slot = CreateSlot::default();
+        let call = slot.reserve().unwrap();
+        let stage_lease = call.clone();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (finish, cleanup) = std::sync::mpsc::channel();
+        let worker = tokio::task::spawn_blocking(move || {
+            let _lease = stage_lease;
+            started.send(()).unwrap();
+            cleanup.recv().unwrap();
+        });
+        let waiter = tokio::spawn(async move { worker.await.unwrap() });
+        ready.await.unwrap();
+        waiter.abort();
+        let _ = waiter.await;
+        drop(call);
+        assert!(slot.reserve().is_none());
+        finish.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while slot.reserve().is_none() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closed_diagnostic_pipe_cannot_abort_stderr_cleanup() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        const PROBE: &str = "AGENTFW_OWNED_CLOSED_DIAGNOSTIC_PROBE";
+        if std::env::var_os(PROBE).is_some() {
+            // The parent closes the stderr reader before releasing this child.
+            let mut ready = [0u8; 1];
+            std::io::Read::read_exact(&mut std::io::stdin(), &mut ready).unwrap();
+            assert_eq!(ready, [1]);
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async {
+                for (script, expect_quota) in [
+                    ("printf owned-stderr >&2", false),
+                    ("/usr/bin/head -c 1048577 /dev/zero >&2", true),
+                ] {
+                    let mut child = tokio::process::Command::new("/bin/sh")
+                        .args(["-c", script])
+                        .stderr(Stdio::piped())
+                        .kill_on_drop(true)
+                        .spawn()
+                        .unwrap();
+                    let result = drain_stderr(child.stderr.take().unwrap()).await;
+                    child.wait().await.unwrap();
+                    if expect_quota {
+                        assert!(result
+                            .unwrap_err()
+                            .to_string()
+                            .contains("selected MCP server stderr quota exceeded"));
+                    } else {
+                        result.unwrap();
+                    }
+                }
+            });
+            println!("owned-stderr-drain-and-quota-preserved");
+            return;
+        }
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "mcp::admission::real_server::tests::closed_diagnostic_pipe_cannot_abort_stderr_cleanup",
+                "--nocapture",
+            ])
+            .env(PROBE, "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        drop(child.stderr.take());
+        child.stdin.take().unwrap().write_all(&[1]).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while child.try_wait().unwrap().is_none() {
+            if std::time::Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("owned closed-diagnostic subprocess did not finish");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "closed stderr aborted cleanup");
+        assert!(String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("owned-stderr-drain-and-quota-preserved"));
+    }
+
     #[test]
     fn relay_failure_metadata_does_not_echo_untrusted_context_or_suffixes() {
         let error = anyhow::anyhow!("unknown or duplicate MCP response ID")

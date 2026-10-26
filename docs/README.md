@@ -24,6 +24,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | --- | --- |
 | [Self-hosting](SELF_HOSTING.md) | Build and run the Agent, Gateway and optional Console |
 | [Managed Agent lifecycle](operations/AGENT_LIFECYCLE.md) | Install, verify, upgrade, roll back and remove a user-scoped Agent |
+| [Native Windows onboarding](operations/WINDOWS_ONBOARDING.md) | Preview, apply, verify, recover and remove one owned Windows MCP setup |
 | [macOS launchd Agent service](operations/AGENT_LAUNCHD.md) | Explicit user-session service, verified readiness, bounded crash recovery and safe updates |
 | [Upgrading](UPGRADING.md) | Existing deployment compatibility and migration guidance |
 | [Production runbook](operations/PRODUCTION_RUNBOOK.md) | Readiness, operations, alerts and recovery |
@@ -35,6 +36,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Claude HTTP-hook acceptance](operations/CLAUDE_HOST_ACCEPTANCE.md) | Actual host behavior with deterministic local model fixtures |
 | [First-use onboarding](operations/ONBOARDING.md) | Read-only preview, explicit journaled apply, truthful configured/verified result and undo (Linux) |
 | [Agent self-test](operations/SELF_TEST.md) | One Linux command: witnessed useful reads, a refused synthetic send, daemon loss and a versioned report |
+| [Offline policy replay](operations/OFFLINE_POLICY_REPLAY.md) | Explicit bounded legacy-event policy simulation, production traces and exact-source synthetic parity |
 | [Offline Agent audit explorer](operations/AGENT_AUDIT_EXPLORER.md) | Private Linux JSONL report generation, decision timeline, filters and evidence limits |
 | [Bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION.md) | Opt-in Linux segments, crash recovery, private verified export and loss-aware browsing |
 | [Windows bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION_WINDOWS.md) | Native local NTFS scope, private ACLs, recovery, export and standard-user acceptance |
@@ -44,6 +46,9 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Native MCP diagnostic output](operations/NATIVE_MCP_STDERR.md) | Bounded discarded child stderr, safe metadata, owned cleanup and required Linux evidence |
 | [Sandboxed real filesystem MCP](operations/MCP_REAL_FILESYSTEM.md) | Explicit pinned Linux read-only server, bounded overlap/cancellation and required actual-host acceptance |
 | [Installed two-server pilot qualification](operations/INSTALLED_PILOT_QUALIFICATION.md) | Actual Claude Code, installed filesystem/Git MCP, independent refusal witnesses and bounded recovery |
+| [Exact-candidate pilot evidence dossier](operations/PILOT_EVIDENCE_DOSSIER.md) | Selected evidence identities, blocker ledger and historical/current pilot scorecard |
+| [Read-only existing projects](operations/PILOT_EXISTING_PROJECT.md) | Explicit owned roots, pinned directory identities and source-preserving prepared runs |
+| [Long-running pilot exercise](operations/PILOT_LONG_SESSIONS.md) | Opt-in hour-long original filesystem/Git workload, resource observations and owned failure recovery |
 | [Linux MCP resource budgets](operations/MCP_LINUX_RESOURCE_BUDGETS.md) | Opt-in delegated aggregate memory, CPU and task limits, wall expiry and independent Linux witnesses |
 | [Windows MCP resource budgets](operations/MCP_WINDOWS_RESOURCE_BUDGETS.md) | Opt-in aggregate Job memory, process and user-CPU budgets with pre-execution ownership and native standard-user witnesses |
 | [Linux MCP crash supervision](operations/MCP_LINUX_CRASH_SUPERVISION.md) | Owned collector-loss cleanup, private PID 1 supervision, restart isolation and independent native witnesses |
@@ -86,6 +91,7 @@ overview. Choose a guide below for development, operation or evaluation.
 ## Status and retained evidence
 
 - [Read-only Git MCP profile](operations/GIT_MCP_PROFILE.md): original-server pins, bounded operations, private installation and exact-source Linux acceptance.
+- [Explicit local Git references](operations/GIT_LOCAL_REFERENCES.md): opt-in bounded branch/tag reads, immutable metadata, source withdrawal and original-server acceptance.
 
 [ROADMAP](ROADMAP.md) records the tagged baseline, product principles,
 dependency-ordered phases, open decisions and one final release gate. Internal

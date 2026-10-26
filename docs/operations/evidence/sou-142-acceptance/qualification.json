@@ -1,0 +1,31 @@
+{
+  "additional_unqualified_fault_boundary": "outside-cleanup-owner-SIGKILL-before-descriptor-handback",
+  "all_observed_owned_roots_empty": true,
+  "all_pressure_peers_useful_and_fresh_recovery_verified": true,
+  "baseline_projection_sha256": "23b70d224c911a79b17f6878798f50cccb24ecb92db181c6a23d77dbc29d67fe",
+  "baseline_workflow": 40173141964,
+  "collector_parent_loss_controls_passed": 4,
+  "emergency_stop_cases_passed": 4,
+  "final_shared_ci_admission": "not-run-TL-owned",
+  "format": "sou142-combined-native-task-controls/1",
+  "full_shared_acceptance": false,
+  "main_cases_passed": 11,
+  "original_pressure_cases_passed": 6,
+  "paid_api_calls": 0,
+  "pressure_projection_sha256": "0f3908e7eaba7cce0fa28b5298e969c9b76396b081c21672da0c542d9b70a6d3",
+  "pressure_workflow": 40173144358,
+  "raw_process_metadata_or_logs_exported": false,
+  "ready_for_tl_review": true,
+  "selected_sha256": {
+    "agentfw": "7ecb68d7888836221055cbd09b8824f2cee9379ce055e2367e19541f49f9ffb1",
+    "bwrap_source": "a1d90bd44d70ec3996ee56710743befcd18cb7d911b65279a7cdc1219dc7a0d5",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "git": "a08f2f7b6f6e3a097a3f03d36ad41028e4adca513ab708e3879e73179186711f",
+    "git_launcher": "5164cf232ab862229350e24282773795f68ae5ddec302ef68262250e7673a0b2",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "8cddb1b09b3a3a00d27bd3f6a931def3638ba9112d6ef7b2cc5423f59d1c2dfe"
+  },
+  "source_commit": "77044075f3ae0af2cbe1ef0f5696710e7ad585ee",
+  "status": "task-controls-passed"
+}

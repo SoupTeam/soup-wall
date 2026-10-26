@@ -10,4 +10,20 @@ pub trait Detector: Send + Sync {
 
     /// Inspect `ctx` and return zero or more findings.
     fn inspect(&self, ctx: &Context) -> Vec<Finding>;
+
+    /// A trusted execution owner may identify the exact formatter-owned object
+    /// hash in an otherwise entirely untrusted result. This is not wire input
+    /// or an origin verifier. Every detector defaults to the original bytes.
+    /// The injection implementation changes only the weak encoding contribution;
+    /// signatures, model input, other heuristics and all other detectors stay raw.
+    /// Return (original, contextual) from the same observation so policy can keep
+    /// independent floors without running a model twice.
+    fn inspect_with_formatter_hash(
+        &self,
+        ctx: &Context,
+        _span: &std::ops::Range<usize>,
+    ) -> (Vec<Finding>, Vec<Finding>) {
+        let original = self.inspect(ctx);
+        (original.clone(), original)
+    }
 }

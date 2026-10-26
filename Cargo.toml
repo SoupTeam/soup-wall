@@ -16,3 +16,8 @@ repository = "https://github.com/SoupTeam/soup-wall"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Keep same-FD SHA-256 verification usable in debug/test builds.
+# Security checks and release profiles are unchanged.
+[profile.dev.package."sha2@0.10.9"]
+opt-level = 3

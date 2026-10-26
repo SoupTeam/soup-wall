@@ -807,6 +807,22 @@ impl Store {
         self.verify_package(&pointer.package, &pointer.python)
     }
 
+    /// Identity of the selection pointer without re-hashing the package: the selected
+    /// package id and the interpreter record it pins. Used to tell whether an already
+    /// verified worker still belongs to the current selection; it never replaces `current`,
+    /// which every worker start still uses.
+    pub fn selected_identity(&self) -> anyhow::Result<(String, PythonRecord)> {
+        ensure_supported()?;
+        ensure!(
+            !self.journal_path().exists(),
+            "an interrupted install was detected: run `agentfw classifier-package recover`"
+        );
+        let pointer = self.read_pointer(&self.current_path())?.context(
+            "no classifier package is installed: run `agentfw classifier-package install`",
+        )?;
+        Ok((pointer.package, pointer.python))
+    }
+
     pub fn preview(&self, archive: &[u8], python: &Path) -> anyhow::Result<Value> {
         let package = parse(archive)?;
         let record = probe_python(python)?;

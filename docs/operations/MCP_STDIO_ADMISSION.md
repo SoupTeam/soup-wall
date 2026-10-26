@@ -10,6 +10,10 @@ adds a Linux sandbox and a bounded concurrent transport for one pinned original
 server. Select it explicitly with `AGENTFW_MCP_SERVER_PROFILE`; it does not widen
 the legacy contract described below or the built-in resource executors.
 
+The optional [daemon-owned Git execution boundary](GIT_OBJECT_WITNESS.md#daemon-owned-original-git-result-inspection-sou-109)
+adds a separately versioned Linux execution root for a fixed pinned Git profile.
+The ordinary result endpoint cannot import its private completion.
+
 ## Operator configuration
 
 Start the Agent with enforcement enabled, the optional judge disabled, and an

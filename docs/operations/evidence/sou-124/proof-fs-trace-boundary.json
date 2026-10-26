@@ -1,0 +1,45 @@
+{
+  "changes": [
+    "Do not consult userspace/remote/layered filesystem verity ioctls as content authority. fstatfs on the opened FD gates ext4/f2fs/btrfs kernel verity; otherwise full byte hashing remains mandatory.",
+    "Use the identical selected syscall witness set with strace seccomp assistance for both paired sides; no syscall/effect assertion or deadline is removed. Request/fallback metadata is explicit, and mismatched trace reports cannot be spliced."
+  ],
+  "checks": {
+    "cargo_fmt": "passed",
+    "current_local_profile_controls": {
+      "failed": 0,
+      "passed": 23
+    },
+    "last_full_rust_workspace_macos": {
+      "current_rust_delta": "Linux-only; does not change compiled macOS implementation",
+      "failed": 0,
+      "ignored": 13,
+      "passed": 1696,
+      "source": "9c5e87b"
+    },
+    "python": {
+      "failed": 0,
+      "passed": 1136,
+      "run": 1215,
+      "skipped": 79
+    },
+    "strict_clippy_all_targets_macos": "passed"
+  },
+  "files_sha256": {
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "9da0748121fb78d71803ed4bd22947a540e8920414fc438eed3f2931973223ca",
+    "scripts/pilot_ask_latency.py": "b59e67b9af3e141bdbe6ece39496f765deece410653f3b3eac5e3fc061f8a1d6",
+    "scripts/qualify-pilot-ask-comparison.py": "ddaa4014413462f27093f2a4f652b1adf9f9624bf720b08e699c96c14d9cf791",
+    "scripts/qualify-pilot-ask.py": "058d40b7dc9d10d60394ab3b65b8ad2085e226f3f25d60533d2bb14caa12ff73"
+  },
+  "format": "sw-sou124-proof-fs-and-trace-boundary/1",
+  "logs_sha256": {
+    "clippy-fs-proof-boundary.log": "e0f43f1331db5aa39cce451477861b4f30e5f56a6bed9adf261ab7b212df0c4d",
+    "profile-controls-fs-proof.log": "247b669c3a5480e0265ecd21211bc4cc498251c7102bfc0fba2f4b471f246203",
+    "python-trace-contract-final.log": "bbd8041ee14387706f2fce2ca3950a2044477304395fadab243d328da111fb0b"
+  },
+  "native_status": "Fresh Linux-only proof gate, real profile/host controls and complete paired performance qualification required. Earlier ordinary-ptrace reports remain historical.",
+  "parent_commit": "9c5e87b35ef140755cdff929eb42aba470f607b6",
+  "primary_sources": [
+    "https://github.com/torvalds/linux/blob/v6.17/fs/fuse/ioctl.c",
+    "https://github.com/strace/strace/blob/master/doc/INTERNALS.md"
+  ]
+}

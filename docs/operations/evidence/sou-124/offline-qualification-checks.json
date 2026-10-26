@@ -1,0 +1,31 @@
+{
+  "format": "sw-sou124-offline-qualification-checks/1",
+  "previous_commit": "27338061812c45c525162e73c8adab8b24c22132",
+  "change": "Separate hash-locked preparation from measurement. One current harness measures both exact-source runtime binaries with separate provenance. Existing runtime/call/approval deadlines and all effect assertions are unchanged.",
+  "rust_sources_unchanged": {
+    "crates/agentfw/src/mcp/server_profile.rs": "e6362c58394e02461e00910f4dddb14663856bb3dac75ea8d5a89507de0ac26b",
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "b4e810fa126d4983029fc91e3e37cfd0fbd28a4ea04f672635cdad731c224213",
+    "crates/agentfw/src/mcp/server_profile/read_lease.rs": "d080215a62024edecab2dd6d3ce2f413241ca76a94d6ee43af3d4f6598f85da6",
+    "crates/agentfw/src/mcp/server_profile/read_lease/native_tests.rs": "44f0d52d7630e3e3b6a44f0c1fb7519fc49fbb2b477227879f70ae46f3387d55"
+  },
+  "native_kernel_proof": {
+    "run": 39987054307,
+    "status": "passed",
+    "strict_real_lease_test_count": 1,
+    "fallback_allowed": false
+  },
+  "native_windows_regression": {
+    "run": 39987632120,
+    "status": "success",
+    "same_rust_bytes": true
+  },
+  "python": {
+    "run": 1173,
+    "passed": 1109,
+    "skipped": 64,
+    "failed": 0,
+    "log_sha256": "547064b4c65e08d001cac410c72125db18249fb2a6819b935893de825edee1d4"
+  },
+  "before_after_performance": "pending_second_actual_run",
+  "first_failed_attempt": "native-attempt1.json"
+}

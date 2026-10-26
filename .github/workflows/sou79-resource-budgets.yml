@@ -2,12 +2,27 @@ name: Linux MCP aggregate resource budgets
 
 on:
   workflow_dispatch:
+    inputs:
+      prepared_budget_phase:
+        description: SOU142 bounded qualification phase; both baseline and pressure are required
+        type: choice
+        options: ['baseline', 'pressure', 'all']
+        default: 'baseline'
+      prepared_host:
+        description: Opt in to pinned actual-host SOU142 budget qualification slice
+        type: boolean
+        default: false
+      prepared_focus:
+        description: Focused native first slice; no original-host/admission claim
+        type: choice
+        options: ['off', '142', '143']
+        default: 'off'
 
 permissions:
   contents: read
 
 concurrency:
-  group: sou79-resource-budgets-${{ github.event.pull_request.number || github.ref }}
+  group: sou79-resource-budgets-${{ github.event.pull_request.number || github.ref }}-${{ github.event.inputs.prepared_focus == '142' && github.event.inputs.prepared_budget_phase || 'all' }}
   cancel-in-progress: true
 
 jobs:
@@ -20,20 +35,31 @@ jobs:
     if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-disposable-delegated-linux')
     # This job explicitly prepares ONE disposable, owned delegated service.
     # Other hosted checks retain their existing permissions and prerequisites.
-    runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    runs-on: ${{ github.event.inputs.prepared_focus != '' && github.event.inputs.prepared_focus != 'off' && 'ubuntu-24.04' || 'ubuntu-22.04' }}
+    timeout-minutes: ${{ github.event.inputs.prepared_host == 'true' && 65 || 35 }}
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: clippy
+      - name: Require an explicit reviewed prepared focus for host qualification
+        if: github.event.inputs.prepared_host == 'true'
+        env:
+          PREPARED_FOCUS: ${{ github.event.inputs.prepared_focus }}
+        run: test "$PREPARED_FOCUS" = 142 || test "$PREPARED_FOCUS" = 143
       - uses: Swatinem/rust-cache@v2
+        if: github.event.inputs.prepared_focus == '' || github.event.inputs.prepared_focus == 'off'
       - name: Build pinned Node and unprivileged bubblewrap prerequisites
+        if: github.event.inputs.prepared_focus == '' || github.event.inputs.prepared_focus == 'off'
         shell: bash
         run: |
           set -euo pipefail
@@ -50,6 +76,7 @@ jobs:
           meson compile -C "$RUNNER_TEMP/sou79-bwrap-build"
           sha256sum "$RUNNER_TEMP/sou79-node.tar.xz" "$RUNNER_TEMP/sou79-node/bin/node" "$RUNNER_TEMP/sou79-bwrap.tar.xz" "$RUNNER_TEMP/sou79-bwrap-build/bwrap" > "$RUNNER_TEMP/sou79-runtime-hashes.txt"
       - name: Build exact candidate and require nonempty observer controls
+        if: github.event.inputs.prepared_focus == '' || github.event.inputs.prepared_focus == 'off'
         shell: bash
         run: |
           set -euo pipefail
@@ -67,6 +94,7 @@ jobs:
           raise SystemExit(0 if result.wasSuccessful() else 1)
           PY
       - name: Explicitly prepare disposable delegation and run as ordinary user
+        if: github.event.inputs.prepared_focus == '' || github.event.inputs.prepared_focus == 'off'
         shell: bash
         run: |
           set -euo pipefail
@@ -88,7 +116,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --disposable-systemd-unit="$unit.service" \
             --output "$RUNNER_TEMP/sou79-acceptance"
       - name: Publish bounded sanitized kernel evidence
-        if: always()
+        if: always() && (github.event.inputs.prepared_focus == '' || github.event.inputs.prepared_focus == 'off')
         run: |
           python3 -B - <<'PY'
           import importlib.util,json,os
@@ -102,7 +130,7 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as stream: stream.write('```json\n'+rendered+'\n```\n')
           PY
       - name: Retain source identities and sanitized owned observations
-        if: always()
+        if: always() && (github.event.inputs.prepared_focus == '' || github.event.inputs.prepared_focus == 'off')
         uses: actions/upload-artifact@v7
         with:
           name: sou79-linux-resource-budget-evidence
@@ -111,4 +139,346 @@ jobs:
             ${{ runner.temp }}/sou79-build.jsonl
             ${{ runner.temp }}/sou79-acceptance/report.json
           if-no-files-found: warn
+          retention-days: 30
+
+      - name: Validate explicit full-host selection
+        if: github.event.inputs.prepared_host == 'true'
+        shell: bash
+        env:
+          SOU_FOCUS: ${{ github.event.inputs.prepared_focus }}
+        run: |
+          set -euo pipefail
+          [[ "$SOU_FOCUS" == 142 || "$SOU_FOCUS" == 143 ]]
+
+
+      - name: Trusted dependency download without candidate execution
+        if: github.event.inputs.prepared_focus == '142' || github.event.inputs.prepared_focus == '143'
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch="$RUNNER_TEMP/prepared-native-first-slice"
+          mkdir -m 700 "$scratch" "$scratch/home" "$scratch/tmp" "$scratch/cargo-home"
+          commit="$(git rev-parse HEAD)"
+          # Retain a finite checkpoint even if trusted setup refuses before
+          # the offline candidate driver starts.
+          printf 'SOU_FOCUSED_SCRATCH=%s\n' "$scratch" >> "$GITHUB_ENV"
+          git rev-parse HEAD > "$scratch/source.txt"
+          python3 - "$scratch" "$commit" <<'PYCODE'
+          import json,sys
+          from pathlib import Path
+          (Path(sys.argv[1])/'native-first-slice.json').write_text(json.dumps({
+              'format':'sou142143-native-first-slice/1','status':'incomplete',
+              'source':sys.argv[2],'phase':'trusted-setup','target_code_executed':False})+'\n')
+          PYCODE
+          test -z "$(git status --porcelain --untracked-files=all)"
+          accepted=04efdf1d959599238a0a9a3eb42cbe26b3531b74
+          git merge-base --is-ancestor "$accepted" "$commit"
+          python3 - "$accepted" <<'PY'
+          import subprocess,sys
+          from pathlib import Path
+          names=subprocess.check_output(['git','ls-files','-z']).split(b'\0')
+          for raw in names:
+              if not raw: continue
+              name=raw.decode()
+              if name in ('Cargo.toml','Cargo.lock') or name.endswith('/Cargo.toml') or name.startswith('.cargo/'):
+                  expected=subprocess.check_output(['git','show',sys.argv[1]+':'+name])
+                  if Path(name).read_bytes()!=expected: raise SystemExit('trusted_dependency_inputs_changed')
+          PY
+          cargo="$(rustup which --toolchain 1.94.1 cargo)"
+          env -i PATH="$(dirname "$cargo"):/usr/bin:/bin" HOME="$scratch/home" TMPDIR="$scratch/tmp" \
+            CARGO_HOME="$scratch/cargo-home" RUSTUP_TOOLCHAIN=1.94.1 RUSTUP_AUTO_INSTALL=0 \
+            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+            "$cargo" fetch --locked
+          printf 'SOU_FOCUSED_SCRATCH=%s\nSOU_FOCUSED_CARGO=%s\nSOU_FOCUSED_COMMIT=%s\n' \
+            "$scratch" "$cargo" "$commit" >> "$GITHUB_ENV"
+          git rev-parse HEAD > "$scratch/source.txt"
+          "$cargo" --version > "$scratch/cargo.txt"
+
+      - name: Native offline read-only focused controls
+        if: github.event.inputs.prepared_focus == '142' || github.event.inputs.prepared_focus == '143'
+        shell: bash
+        env:
+          SOU_FOCUS: ${{ github.event.inputs.prepared_focus }}
+        run: |
+          set -euo pipefail
+          unit="sou79-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          properties=(--property="User=$(id -un)" --property="Group=$(id -gn)"
+            --property=PrivateNetwork=yes --property=NoNewPrivileges=yes
+            --property=ProtectSystem=strict
+            --property="ReadOnlyPaths=$GITHUB_WORKSPACE /sys/fs/cgroup"
+            --property="ReadWritePaths=$SOU_FOCUSED_SCRATCH"
+            --property=RuntimeMaxSec=30min --property=KillMode=control-group)
+          # Source-build steps previously had no outer MemoryMax/TasksMax/CPUQuota.
+          # Do not impose or relax product limits to pass compilation. Runtime native
+          # qualification later retains the accepted SOU79/SOU136 outer service caps.
+          if [[ "$SOU_FOCUS" == 142 || "$SOU_FOCUS" == 143 ]]; then
+            properties+=(--property='Delegate=cpu memory pids'
+              --property="ReadWritePaths=/sys/fs/cgroup/system.slice/$unit.service")
+          fi
+          status=0
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" "${properties[@]}" \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env -i PATH=/usr/bin:/bin HOME="$SOU_FOCUSED_SCRATCH/home" TMPDIR="$SOU_FOCUSED_SCRATCH/tmp" \
+            python3 -B "$GITHUB_WORKSPACE/scripts/ci/native-prepared-first-slice.py" \
+            --issue "$SOU_FOCUS" --source "$GITHUB_WORKSPACE" --scratch "$SOU_FOCUSED_SCRATCH" \
+            --cargo "$SOU_FOCUSED_CARGO" --expected-commit "$SOU_FOCUSED_COMMIT" --unit="$unit.service" || status=$?
+          # This belongs to the trusted parent after the bounded unit has stopped.
+          test ! -d "/sys/fs/cgroup/system.slice/$unit.service"
+          printf '{"delegated_service_removed":true,"unit_exit_code":%s}\n' "$status" \
+            > "$SOU_FOCUSED_SCRATCH/cleanup.json"
+          exit "$status"
+
+      - name: Retain first native slice including failures and incomplete checkpoints
+        if: always() && (github.event.inputs.prepared_focus == '142' || github.event.inputs.prepared_focus == '143')
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou${{ github.event.inputs.prepared_focus }}-native-first-slice-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/prepared-native-first-slice/native-first-slice.json
+            ${{ runner.temp }}/prepared-native-first-slice/cleanup.json
+            ${{ runner.temp }}/prepared-native-first-slice/source.txt
+            ${{ runner.temp }}/prepared-native-first-slice/cargo.txt
+            ${{ runner.temp }}/prepared-native-first-slice/compiler-diagnostics.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Prepare fixed accepted actual-host inputs without candidate execution
+        if: github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '142'
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$RUNNER_TEMP/sou142-prepared-host"
+          mkdir -m 700 "$host"
+          python="$(command -v python3)"
+          trusted_rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+          printf 'SOU142_HOST=%s\nSOU142_PYTHON=%s\n' "$host" "$python" >> "$GITHUB_ENV"
+          env -i PATH=/usr/bin:/bin RUSTUP_HOME="$trusted_rustup_home" \
+            "$python" -B "$GITHUB_WORKSPACE/scripts/ci/native-prepared-host-inputs.py" \
+            --issue 142 --source "$GITHUB_WORKSPACE" --scratch "$host" --fast-scratch "$SOU_FOCUSED_SCRATCH" \
+            --expected-commit "$SOU_FOCUSED_COMMIT" --rustup-home "$trusted_rustup_home"
+
+      - name: Provision accepted job-scoped bubblewrap permission
+        if: github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '142'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          helper="$GITHUB_WORKSPACE/scripts/ci_bwrap_userns.py"
+          git show 04efdf1d959599238a0a9a3eb42cbe26b3531b74:scripts/ci_bwrap_userns.py | cmp - "$helper"
+          # Helper bytes were materialized by the setup from accepted04efdf1, after
+          # equality with the current reviewed helper. Only trusted setup has sudo.
+          scoped_env=(PATH=/usr/bin:/bin HOME="$SOU142_HOST/setup-home"
+            RUNNER_TEMP="$RUNNER_TEMP" GITHUB_ACTIONS=true CI=true RUNNER_OS=Linux RUNNER_ARCH=X64
+            SOUP_CI_RUNNER_ENVIRONMENT="$SOUP_CI_RUNNER_ENVIRONMENT"
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT"
+            GITHUB_JOB="$GITHUB_JOB" GITHUB_ENV="$GITHUB_ENV")
+          env -i "${scoped_env[@]}" "$SOU142_PYTHON" -B "$helper" check \
+            > "$SOU142_HOST/apparmor-check.private.log" 2>&1
+          source="$SOU142_HOST/assets/bwrap-build/bwrap"
+          env -i "${scoped_env[@]}" "$SOU142_PYTHON" -B "$helper" install --source "$source" \
+            --sha256 "$(sha256sum "$source" | cut -d ' ' -f1)" \
+            --report "$SOU142_HOST/apparmor-provisioning.private.json" \
+            > "$SOU142_HOST/apparmor-install.private.log" 2>&1
+
+      - name: Offline pinned host and original filesystem Git routing observations
+        if: github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '142'
+        shell: bash
+        env:
+          SOU142_PHASE: ${{ github.event.inputs.prepared_budget_phase }}
+        run: |
+          set -euo pipefail
+          unit="sou79-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          status=0
+          # Keep accepted SOU79 outer service caps. The product's case limits, Ask
+          # authority, provider inputs and expected labels are untouched.
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property=PrivateNetwork=yes --property=NoNewPrivileges=yes \
+            --property='Delegate=cpu memory pids' \
+            --property="ReadWritePaths=/sys/fs/cgroup/system.slice/$unit.service" \
+            --property=ProtectSystem=strict --property="ReadOnlyPaths=$GITHUB_WORKSPACE $SOU_FOCUSED_SCRATCH /sys/fs/cgroup" \
+            --property="ReadWritePaths=$SOU142_HOST" \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 \
+            --property=TasksMax=256 --property=CPUQuota=200% \
+            --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env -i PATH=/usr/bin:/bin HOME="$SOU142_HOST/home" TMPDIR="$SOU142_HOST/runtime-tmp" \
+            "$SOU142_PYTHON" -B "$GITHUB_WORKSPACE/scripts/ci/native-prepared-budget-host.py" --run --unit="$unit.service" \
+            --source "$GITHUB_WORKSPACE" --scratch "$SOU142_HOST" --phase "$SOU142_PHASE" \
+            --expected-commit "$SOU_FOCUSED_COMMIT" --bwrap "$SOU111_BWRAP" || status=$?
+          if [[ -d "/sys/fs/cgroup/system.slice/$unit.service" ]]; then status=125; fi
+          printf '{"unit_exit_code":%s}\n' "$status" > "$SOU142_HOST/runtime-unit-exit.json"
+          # This trusted parent projection must pass even if unit exit was successful.
+          # It checks exact denominators and finite role/protocol/cleanup witnesses.
+          "$SOU142_PYTHON" -B "$GITHUB_WORKSPACE/scripts/ci/project-prepared-budget-host.py" \
+            --raw "$SOU142_HOST/prepared-budget-native/report.json" \
+            --attempt "$SOU142_HOST/budget-runtime-attempt.json" \
+            --output "$SOU142_HOST/budget-host-public.json" \
+            --expected-commit "$SOU_FOCUSED_COMMIT" --exit-code "$status" --phase "$SOU142_PHASE"
+          exit "$status"
+
+      - name: Remove only the owned runtime unit and accepted job sandbox permission
+        if: always() && github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '142'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          host="$RUNNER_TEMP/sou142-prepared-host"
+          mkdir -p "$host"
+          unit="sou79-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          unit_status=0
+          if systemctl is-active --quiet "$unit.service"; then sudo systemctl stop "$unit.service" || unit_status=$?; fi
+          if [[ -d "/sys/fs/cgroup/system.slice/$unit.service" ]]; then unit_status=125; fi
+          profile_status=0
+          helper="$GITHUB_WORKSPACE/scripts/ci_bwrap_userns.py"
+          if [[ -f "$host/apparmor-provisioning.private.json" ]]; then
+            git show 04efdf1d959599238a0a9a3eb42cbe26b3531b74:scripts/ci_bwrap_userns.py | cmp - "$helper"
+            env -i PATH=/usr/bin:/bin HOME="$host/setup-home" RUNNER_TEMP="$RUNNER_TEMP" \
+              GITHUB_ACTIONS=true CI=true RUNNER_OS=Linux RUNNER_ARCH=X64 \
+              SOUP_CI_RUNNER_ENVIRONMENT="$SOUP_CI_RUNNER_ENVIRONMENT" \
+              GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+              GITHUB_JOB="$GITHUB_JOB" GITHUB_ENV="$GITHUB_ENV" \
+              "${SOU142_PYTHON:-/usr/bin/python3}" -B "$helper" cleanup \
+              --report "$host/apparmor-cleanup.private.json" \
+              > "$host/apparmor-cleanup.private.log" 2>&1 || profile_status=$?
+          fi
+          printf '{"owned_unit_removed":%s,"unit_cleanup_exit_code":%s,"profile_cleanup_exit_code":%s}\n' \
+            "$([[ "$unit_status" == 0 ]] && echo true || echo false)" "$unit_status" "$profile_status" \
+            > "$host/cleanup-public.json"
+          [[ "$unit_status" == 0 && "$profile_status" == 0 ]]
+
+      - name: Retain only bounded finite host evidence including failed attempts
+        if: always() && github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '142'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou142-budget-host-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou142-prepared-host/setup-attempt.json
+            ${{ runner.temp }}/sou142-prepared-host/inputs-public.json
+            ${{ runner.temp }}/sou142-prepared-host/budget-runtime-attempt.json
+            ${{ runner.temp }}/sou142-prepared-host/runtime-unit-exit.json
+            ${{ runner.temp }}/sou142-prepared-host/budget-host-public.json
+            ${{ runner.temp }}/sou142-prepared-host/preparation/generations/*/*-install.log
+            ${{ runner.temp }}/sou142-prepared-host/cleanup-public.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Prepare fixed accepted actual-host inputs without candidate execution
+        if: github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '143'
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$RUNNER_TEMP/sou143-prepared-host"
+          mkdir -m 700 "$host"
+          python="$(command -v python3)"
+          trusted_rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
+          printf 'SOU143_HOST=%s\nSOU143_PYTHON=%s\n' "$host" "$python" >> "$GITHUB_ENV"
+          env -i PATH=/usr/bin:/bin RUSTUP_HOME="$trusted_rustup_home" \
+            "$python" -B "$GITHUB_WORKSPACE/scripts/ci/native-prepared-host-inputs.py" \
+            --issue 143 --source "$GITHUB_WORKSPACE" --scratch "$host" --fast-scratch "$SOU_FOCUSED_SCRATCH" \
+            --expected-commit "$SOU_FOCUSED_COMMIT" --rustup-home "$trusted_rustup_home"
+
+      - name: Provision accepted job-scoped bubblewrap permission
+        if: github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '143'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          helper="$GITHUB_WORKSPACE/scripts/ci_bwrap_userns.py"
+          git show 04efdf1d959599238a0a9a3eb42cbe26b3531b74:scripts/ci_bwrap_userns.py | cmp - "$helper"
+          # Helper bytes were materialized by the setup from accepted04efdf1, after
+          # equality with the current reviewed helper. Only trusted setup has sudo.
+          scoped_env=(PATH=/usr/bin:/bin HOME="$SOU143_HOST/setup-home"
+            RUNNER_TEMP="$RUNNER_TEMP" GITHUB_ACTIONS=true CI=true RUNNER_OS=Linux RUNNER_ARCH=X64
+            SOUP_CI_RUNNER_ENVIRONMENT="$SOUP_CI_RUNNER_ENVIRONMENT"
+            GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT"
+            GITHUB_JOB="$GITHUB_JOB" GITHUB_ENV="$GITHUB_ENV")
+          env -i "${scoped_env[@]}" "$SOU143_PYTHON" -B "$helper" check \
+            > "$SOU143_HOST/apparmor-check.private.log" 2>&1
+          source="$SOU143_HOST/assets/bwrap-build/bwrap"
+          env -i "${scoped_env[@]}" "$SOU143_PYTHON" -B "$helper" install --source "$source" \
+            --sha256 "$(sha256sum "$source" | cut -d ' ' -f1)" \
+            --report "$SOU143_HOST/apparmor-provisioning.private.json" \
+            > "$SOU143_HOST/apparmor-install.private.log" 2>&1
+
+      - name: Offline pinned host and original filesystem Git routing observations
+        if: github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '143'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou143-host-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          status=0
+          # Keep accepted SOU79 outer service caps. The product's case limits, Ask
+          # authority, provider inputs and expected labels are untouched.
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property=PrivateNetwork=yes --property=NoNewPrivileges=yes \
+            --property=ProtectSystem=strict --property="ReadOnlyPaths=$GITHUB_WORKSPACE $SOU_FOCUSED_SCRATCH /sys/fs/cgroup" \
+            --property="ReadWritePaths=$SOU143_HOST" \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 \
+            --property=TasksMax=256 --property=CPUQuota=200% \
+            --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env -i PATH=/usr/bin:/bin HOME="$SOU143_HOST/home" TMPDIR="$SOU143_HOST/runtime-tmp" \
+            "$SOU143_PYTHON" -B "$GITHUB_WORKSPACE/scripts/ci/native-prepared-provider-host.py" \
+            --source "$GITHUB_WORKSPACE" --scratch "$SOU143_HOST" \
+            --expected-commit "$SOU_FOCUSED_COMMIT" --bwrap "$SOU111_BWRAP" || status=$?
+          if [[ -d "/sys/fs/cgroup/system.slice/$unit.service" ]]; then status=125; fi
+          printf '{"unit_exit_code":%s}\n' "$status" > "$SOU143_HOST/runtime-unit-exit.json"
+          # This trusted parent projection must pass even if unit exit was successful.
+          # It checks exact denominators and finite role/protocol/cleanup witnesses.
+          "$SOU143_PYTHON" -B "$GITHUB_WORKSPACE/scripts/ci/project-prepared-provider-host.py" \
+            --raw "$SOU143_HOST/prepared-native/report.json" \
+            --output "$SOU143_HOST/provider-host-public.json" \
+            --expected-commit "$SOU_FOCUSED_COMMIT" --exit-code "$status"
+          exit "$status"
+
+      - name: Remove only the owned runtime unit and accepted job sandbox permission
+        if: always() && github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '143'
+        shell: bash
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          host="$RUNNER_TEMP/sou143-prepared-host"
+          mkdir -p "$host"
+          unit="sou143-host-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          unit_status=0
+          if systemctl is-active --quiet "$unit.service"; then sudo systemctl stop "$unit.service" || unit_status=$?; fi
+          if [[ -d "/sys/fs/cgroup/system.slice/$unit.service" ]]; then unit_status=125; fi
+          profile_status=0
+          helper="$GITHUB_WORKSPACE/scripts/ci_bwrap_userns.py"
+          if [[ -f "$host/apparmor-provisioning.private.json" ]]; then
+            git show 04efdf1d959599238a0a9a3eb42cbe26b3531b74:scripts/ci_bwrap_userns.py | cmp - "$helper"
+            env -i PATH=/usr/bin:/bin HOME="$host/setup-home" RUNNER_TEMP="$RUNNER_TEMP" \
+              GITHUB_ACTIONS=true CI=true RUNNER_OS=Linux RUNNER_ARCH=X64 \
+              SOUP_CI_RUNNER_ENVIRONMENT="$SOUP_CI_RUNNER_ENVIRONMENT" \
+              GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" \
+              GITHUB_JOB="$GITHUB_JOB" GITHUB_ENV="$GITHUB_ENV" \
+              "${SOU143_PYTHON:-/usr/bin/python3}" -B "$helper" cleanup \
+              --report "$host/apparmor-cleanup.private.json" \
+              > "$host/apparmor-cleanup.private.log" 2>&1 || profile_status=$?
+          fi
+          printf '{"owned_unit_removed":%s,"unit_cleanup_exit_code":%s,"profile_cleanup_exit_code":%s}\n' \
+            "$([[ "$unit_status" == 0 ]] && echo true || echo false)" "$unit_status" "$profile_status" \
+            > "$host/cleanup-public.json"
+          [[ "$unit_status" == 0 && "$profile_status" == 0 ]]
+
+      - name: Retain only bounded finite host evidence including failed attempts
+        if: always() && github.event.inputs.prepared_host == 'true' && github.event.inputs.prepared_focus == '143'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou143-provider-host-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou143-prepared-host/setup-attempt.json
+            ${{ runner.temp }}/sou143-prepared-host/inputs-public.json
+            ${{ runner.temp }}/sou143-prepared-host/runtime-attempt.json
+            ${{ runner.temp }}/sou143-prepared-host/runtime-unit-exit.json
+            ${{ runner.temp }}/sou143-prepared-host/provider-host-public.json
+            ${{ runner.temp }}/sou143-prepared-host/preparation/generations/*/*-install.log
+            ${{ runner.temp }}/sou143-prepared-host/cleanup-public.json
+          if-no-files-found: error
           retention-days: 30

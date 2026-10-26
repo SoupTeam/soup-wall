@@ -1,0 +1,201 @@
+{
+  "format": "sou124-selected-collector-terminal-signal-correction/1",
+  "failed_source": "e3409329a984cb20d0829c9310c21d39a9724493",
+  "failed_ci_run": 40073742485,
+  "failed_job": 120812585091,
+  "qualification_sha256": "7ea87ffd8ed8403b8c0e79b359b4aa5cd0356f4687701e62683b3da6e40dd4d4",
+  "historical_failure": {
+    "error": "unexpected_launcher_exit_collector_retirement_unconfirmed",
+    "planned_cases": 14,
+    "passed": 3,
+    "failed": 1,
+    "incomplete": 10,
+    "failed_case": {
+      "profile": "git",
+      "case": "reject",
+      "sample_index": 3,
+      "stage": "exact_decision",
+      "decision_submitted": "reject"
+    },
+    "finite_observations": [
+      {
+        "profile": "git",
+        "entry_returncode": 1,
+        "offered_count": 2,
+        "provider_requests": 3,
+        "primary_present": true,
+        "primary_is_error": true,
+        "primary_diagnostic": "unclassified",
+        "stderr_diagnostic": "collector_retirement_unconfirmed",
+        "asset_timings": [
+          {
+            "server": "filesystem",
+            "stage": "runtime_and_libraries",
+            "elapsed_ms": 3952.0775989999997
+          },
+          {
+            "server": "filesystem",
+            "stage": "package_tree",
+            "elapsed_ms": 1581.227885
+          },
+          {
+            "server": "filesystem",
+            "stage": "selected_profile",
+            "elapsed_ms": 1.44564
+          },
+          {
+            "server": "filesystem",
+            "stage": "runtime_and_libraries",
+            "elapsed_ms": 176.47294599999998
+          },
+          {
+            "server": "filesystem",
+            "stage": "package_tree",
+            "elapsed_ms": 1267.596789
+          },
+          {
+            "server": "git",
+            "stage": "runtime_and_libraries",
+            "elapsed_ms": 1774.2171600000001
+          },
+          {
+            "server": "git",
+            "stage": "package_tree",
+            "elapsed_ms": 4308.383672
+          }
+        ],
+        "collector_failures": [],
+        "collector_cleanup": [
+          {
+            "server": "filesystem",
+            "event": "mcp_real_owner_end",
+            "cleanup_verified": true,
+            "observed_failure": false
+          },
+          {
+            "server": "filesystem",
+            "event": "mcp_real_budget_end",
+            "cleanup_verified": true,
+            "observed_failure": false
+          },
+          {
+            "server": "filesystem",
+            "event": "mcp_real_server_end",
+            "cleanup_verified": true,
+            "budget_cleanup_verified": true,
+            "budget_failure_observed": false,
+            "owner_cleanup_verified": true,
+            "owner_failure_observed": false,
+            "transport_complete": false
+          },
+          {
+            "server": "git",
+            "event": "mcp_real_owner_end",
+            "cleanup_verified": true,
+            "observed_failure": false
+          },
+          {
+            "server": "git",
+            "event": "mcp_real_budget_end",
+            "cleanup_verified": true,
+            "observed_failure": false
+          }
+        ],
+        "trace_sha256": "3062b23aa6f8a5efd5eab5659c9b7f1db1442faae619c77b3ec6dcb57efc24b4"
+      }
+    ],
+    "signal_attribution": "No terminal signal was retained in this historical report; do not infer one specific signal from missing metadata."
+  },
+  "source_defect": "The real collector observed Ctrl-C but did not intercept Unix SIGTERM. Host shutdown could abruptly terminate it between successful owner/budget cleanup and final collector cleanup acknowledgement.",
+  "correction": "Install SIGTERM interception before creating any selected namespace owner. A received TERM cancels transport and enters the existing independent owner, budget, child-reap, stderr and authenticated cleanup-confirmation path; transport remains failed.",
+  "native_regression": {
+    "new_case": "git/collector_term",
+    "planned_full_lifecycle_cases": 15,
+    "existing_cases_preserved": 14,
+    "signal_target": "Kernel execve identifies the selected collector; a previously sampled owned-descendant start time and pidfd pin must match the live process. Missing, ambiguous, stale or replaced identity refuses without signalling.",
+    "required_observations": [
+      "pending original Ask before signal",
+      "pinned collector receives SIGTERM",
+      "original host receives correlated primary error",
+      "zero original MCP dispatch and kernel effects",
+      "normal collector exit_group(1), not signal death",
+      "existing RunGuard authenticated cleanup acknowledgement succeeds",
+      "all owned descendants stopped; private run/configuration removed"
+    ],
+    "no_followup_claim": "This cancellation-only probe ends the scripted provider after the primary refusal; existing continuation cases are unchanged.",
+    "not_run_locally": "Real Linux process proof is required from current CI. macOS development tests do not qualify it."
+  },
+  "preserved": {
+    "cleanup_acknowledgement_required": true,
+    "foreign_or_missing_ack_refuses": true,
+    "physical_cleanup_and_reaping_required": true,
+    "existing_deadlines_unchanged": true,
+    "approval_path_and_latency_measurement_unchanged": true,
+    "performance_comparison_denominator_unchanged": 80
+  },
+  "diagnostic_redaction": "Only selected collector fixed event/boolean fields, bounded exit code or enumerated terminal signal, and hashes; no raw trace, owner metadata, arguments or credentials.",
+  "same_failed_workflow_other_native_reports": {
+    "sou111-qualification/report.json": {
+      "sha256": "602729b50294764c2bf11ce574fb6a35c5557fc1bd7c96032b9dc4fa9ddbdffb",
+      "status": "passed",
+      "passed_cases": 12,
+      "total_cases": 12
+    },
+    "sou120-demo/report.json": {
+      "sha256": "b104032df362cd8376a4639a3cbd6578f2c97b9df9e572accbc6594fe7a2beb5",
+      "status": "passed",
+      "passed_cases": 11,
+      "total_cases": 11,
+      "emergency_stop": {
+        "passed": 4,
+        "total": 4
+      }
+    },
+    "sou116-qualification/report.json": {
+      "sha256": "68352f35394d0065865c53dc6d221d0ac000c68fd3e985f92ad045538d52efa8",
+      "status": "passed",
+      "passed_cases": 11,
+      "total_cases": 11,
+      "emergency_stop": {
+        "passed": 4,
+        "total": 4
+      }
+    }
+  },
+  "integrated_main": "2b0799172f69e9604bcef8d0af45c1f0e1621ff8",
+  "merge_resolution": "Both conflicting workflow insertions retained: optional Ask comparison validation and accepted native compiler/interpreter attestation. ci_components.py --check passed.",
+  "local_checks": {
+    "host": "macOS Homebrew Rust/Cargo 1.99.0, Python 3.11; development only, not pinned native Linux attestation",
+    "read_only_source_seatbelt": "loopback-only networking; target/scratch-only writes",
+    "rust_workspace": {
+      "passed": 1716,
+      "failed": 0,
+      "ignored": 13
+    },
+    "supported_python": {
+      "run": 1273,
+      "passed": 1194,
+      "failed": 0,
+      "platform_or_optional_skips": 79
+    },
+    "strict_workspace_all_target_clippy": "passed, -D warnings",
+    "fmt": "passed",
+    "docs": "252 Markdown, 920 local links, 0 errors",
+    "generated_component_workflow": "passed",
+    "unix_handshake": "included in full workspace",
+    "windows_unsupported_contract_control": "requires current Windows CI; not executed on macOS"
+  },
+  "local_log_sha256": {
+    "workspace-terminal-current-base.log": "51ceea92fe6842cecb673dab3c22919612e71aa66e6411fb502b6782dcc3d915",
+    "python-terminal-current-base.log": "98f01f5191601367bc347670fd7125d4ca521f6c4a755a966dc8c5ddd500cbbb",
+    "clippy-terminal-current-base.log": "de90beb653954a31828b88f776f4959f1409637d35faa262fa86c467e7bfda86",
+    "docs-terminal-current-base.log": "2fb1a2a2835d32fd4a58f1a8d9138493cc2a3f91ab24087891cf4db77a77fbad"
+  },
+  "changed_source_sha256": {
+    "crates/agentfw/src/mcp/admission/real_server.rs": "290df8d947668b4d1965fae3c5557827a9ef6227c89947866c47f1570cf703e0",
+    "crates/agentfw/src/pilot_approval.rs": "8e018c94a0603b44ee0be38c432f7d6821ef41b09fd537666cb339f759cee939",
+    "scripts/qualify-pilot-ask.py": "531797b96a70f06fd566e58fbf2cb7f40000e89cd02740785be927e4b8ac527c",
+    "scripts/tests/test_pilot_ask_scheduling.py": "e06ff2e5af33e19330b2e4601122aadc260b1fb2a2aa4a88c4e5f1d59c9460f7"
+  },
+  "current_native_readiness": "Required after this source commit; historical successful preparation reports cannot qualify the new TERM path."
+}
