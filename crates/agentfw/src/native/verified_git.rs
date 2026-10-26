@@ -36,7 +36,7 @@ impl Runtime {
             );
             let profile = read_profile(config)?;
             anyhow::ensure!(
-                profile.format == crate::mcp::server_profile::git::FORMAT
+                crate::mcp::verified_git::supports_profile(&profile.format)
                     && profile.workspace_identity.is_some(),
                 "daemon execution requires a pinned Git workspace identity"
             );

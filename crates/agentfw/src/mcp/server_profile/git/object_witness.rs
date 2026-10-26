@@ -283,6 +283,8 @@ impl Repository {
 enum Source {
     #[cfg(target_os = "linux")]
     Native(Arc<super::shallow_view::View>),
+    #[cfg(target_os = "linux")]
+    FileRevisions(Arc<super::revision_view::View>),
     #[cfg(test)]
     Memory(std::sync::atomic::AtomicBool),
 }
@@ -305,6 +307,11 @@ impl std::fmt::Debug for Snapshot {
 }
 
 impl Snapshot {
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn transport_test_snapshot() -> Arc<Self> {
+        tests::transport_snapshot()
+    }
+
     #[cfg(target_os = "linux")]
     pub fn capture(workspace: &std::fs::File, profile: &str) -> anyhow::Result<Arc<Self>> {
         linux::capture(workspace, profile)
@@ -324,10 +331,21 @@ impl Snapshot {
         Ok(target)
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) fn validate_call(&self, tool: &str, args: &Value) -> anyhow::Result<()> {
+        self.valid()?;
+        if let Source::FileRevisions(view) = &self.source {
+            view.validate_call(tool, args)?;
+        }
+        self.valid()
+    }
+
     fn valid(&self) -> anyhow::Result<()> {
         match &self.source {
             #[cfg(target_os = "linux")]
             Source::Native(view) => view.object_witness_valid(),
+            #[cfg(target_os = "linux")]
+            Source::FileRevisions(view) => view.object_witness_valid(),
             #[cfg(test)]
             Source::Memory(live) => {
                 ensure!(
@@ -350,6 +368,7 @@ impl Snapshot {
         self.valid()?;
         match &self.source {
             Source::Native(view) => view.mount(command, pins),
+            Source::FileRevisions(view) => view.mount(command, pins),
             #[cfg(test)]
             Source::Memory(_) => anyhow::bail!("test memory view cannot be mounted"),
         }

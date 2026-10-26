@@ -39,6 +39,11 @@ struct Fixture {
     tree_tag: String,
 }
 
+#[cfg(target_os = "linux")]
+pub(super) fn transport_snapshot() -> Arc<Snapshot> {
+    Fixture::new().snapshot()
+}
+
 impl Fixture {
     fn new() -> Self {
         let mut images = BTreeMap::new();

@@ -180,6 +180,7 @@ jobs:
           set -euo pipefail
           cargo test --locked -p agentfw server_profile::git --lib
           python3 -B -m unittest discover -s scripts/tests -p test_sou146_git_file_revisions.py -v
+          cargo test --locked -p agentfw --lib verified_git
           python3 -B scripts/verify-sou146-git-file-revisions.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou68-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou68-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \

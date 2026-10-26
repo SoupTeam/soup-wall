@@ -7,7 +7,7 @@ use tokio::io::AsyncBufReadExt;
 
 fn profile() -> ProfileConfig {
     ProfileConfig {
-        format: git::LOCAL_REFS_FORMAT.into(),
+        format: git::FORMAT.into(),
         workspace: "/workspace".into(),
         workspace_identity: None,
         runtime_path: "/owned/python".into(),
@@ -38,6 +38,126 @@ fn show() -> Vec<u8> {
         "git_show",
         json!({"repo_path":"/workspace","revision":"HEAD"}),
     )
+}
+
+#[tokio::test]
+#[ignore = "requires explicit owned Linux FILE profile and pinned original runtime"]
+async fn file_worker_withholds_after_original_tools_call_write_and_source_restore() {
+    let path =
+        std::env::var("SOU68_SANDBOX_TEST_PROFILE").expect("explicit owned profile required");
+    let p = ProfileConfig::read(&std::fs::read(path).unwrap()).unwrap();
+    assert_eq!(p.format, git::FILE_READS_FORMAT);
+    let reference = p.workspace.join(".git/refs/heads/main");
+    let original = std::fs::read(&reference).unwrap();
+    let moved = reference.with_extension("sou146-owned-withdrawal");
+    assert!(!moved.exists());
+    let (written_tx, written_rx) = oneshot::channel();
+    let (resume_tx, resume_rx) = oneshot::channel();
+    let key = crate::token::generate();
+    let raw = wire(
+        json!(&key),
+        "git_show",
+        json!({"repo_path":"/workspace","revision":"HEAD:notes.txt"}),
+    );
+    let expected = run(&p, &raw).await.unwrap().raw().to_vec();
+    struct ResetBarrier {
+        key: String,
+        resume: Option<oneshot::Sender<()>>,
+    }
+    impl Drop for ResetBarrier {
+        fn drop(&mut self) {
+            let mut slot = AFTER_TOOLS_WRITE.lock().unwrap();
+            if slot.as_ref().is_some_and(|barrier| barrier.key == self.key) {
+                slot.take();
+            }
+            if let Some(resume) = self.resume.take() {
+                let _ = resume.send(());
+            }
+        }
+    }
+    let mut reset = ResetBarrier {
+        key: key.clone(),
+        resume: Some(resume_tx),
+    };
+    assert!(AFTER_TOOLS_WRITE
+        .lock()
+        .unwrap()
+        .replace(DispatchBarrier {
+            key,
+            original: raw.clone(),
+            workspace: p.workspace.clone(),
+            format: p.format.clone(),
+            written: written_tx,
+            resume: resume_rx,
+        })
+        .is_none());
+    let runner = p.clone();
+    let original_request = raw.clone();
+    let task = tokio::spawn(async move { run(&runner, &original_request).await });
+    tokio::time::timeout(Duration::from_secs(4), written_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    std::fs::rename(&reference, &moved).unwrap();
+    std::fs::rename(&moved, &reference).unwrap();
+    reset.resume.take().unwrap().send(()).unwrap();
+    let result = task.await.unwrap();
+    let failure = result
+        .err()
+        .expect("withdrawn source must never create a Completion");
+    assert_eq!(
+        failure.to_string(),
+        "Git file-revision source changed; a new protected session is required"
+    );
+    assert_eq!(std::fs::read(&reference).unwrap(), original);
+    assert!(AFTER_TOOLS_WRITE.lock().unwrap().is_none());
+    let fresh = run(&p, &raw).await.unwrap();
+    assert_eq!(fresh.raw(), expected);
+    println!("SOU146_REAL_WORKER_AFTER_WRITE_WITHHELD restored=true completion=false fresh_original_bytes=true");
+}
+#[test]
+fn execution_profiles_are_finite_and_file_grammar_stays_separate() {
+    for format in [git::FORMAT, git::FILE_READS_FORMAT] {
+        let mut p = profile();
+        p.format = format.into();
+        assert!(supports_profile(format));
+        assert!(request(&p, &show()).is_ok());
+        let file = wire(
+            json!(7),
+            "git_show",
+            json!({"repo_path":"/workspace","revision":"HEAD:docs/機能 notes.txt"}),
+        );
+        assert_eq!(request(&p, &file).is_ok(), format == git::FILE_READS_FORMAT);
+        for tool in ["git_show", "git_diff"] {
+            let key = if tool == "git_show" {
+                "revision"
+            } else {
+                "target"
+            };
+            for revision in [
+                "refs/heads/main",
+                "HEAD:../outside",
+                "HEAD~1",
+                "HEAD:.git/config",
+            ] {
+                let mut args = json!({"repo_path":"/workspace"});
+                args[key] = json!(revision);
+                assert!(request(&p, &wire(json!(7), tool, args)).is_err());
+            }
+        }
+    }
+    for format in [
+        git::LOCAL_REFS_FORMAT,
+        git::SHALLOW_FORMAT,
+        server_profile::git_local_clone::FORMAT,
+        server_profile::FORMAT,
+        "unknown",
+    ] {
+        let mut p = profile();
+        p.format = format.into();
+        assert!(!supports_profile(format));
+        assert!(request(&p, &show()).is_err());
+    }
 }
 #[test]
 fn request_rejects_duplicate_keys_malformed_frames_and_unapproved_tools() {
@@ -98,6 +218,13 @@ fn oid_range_is_fixed_header_only_and_commit_kind_is_required() {
                 None
             }
         );
+        assert!(header_span(
+            "git_show",
+            &json!({"revision":"HEAD:notes.txt"}),
+            Some(&target),
+            &text
+        )
+        .is_none());
         assert!(header_span(
             "git_show",
             &json!({}),
@@ -182,7 +309,8 @@ async fn original_request_bytes_are_written_once_after_pinned_handshake_and_disc
             line.clear();
             assert_eq!(r.read_line(&mut line).await.unwrap(), 0);
         });
-        let result = exchange(&p, &original, &call, &mut r, &mut w).await;
+        let snapshot = Snapshot::transport_test_snapshot();
+        let result = exchange(&p, &original, &call, &snapshot, &mut r, &mut w).await;
         assert_eq!(result.is_err(), bad_manifest);
         if let Ok((reply, raw)) = result {
             assert_eq!(reply["id"], "host-77");
@@ -194,7 +322,7 @@ async fn original_request_bytes_are_written_once_after_pinned_handshake_and_disc
         assert_eq!(seen.load(Ordering::SeqCst), usize::from(!bad_manifest));
     }
 }
-fn fixture() -> (tempfile::TempDir, Value, Arc<Snapshot>) {
+fn fixture(format: &str) -> (tempfile::TempDir, Value, Arc<Snapshot>) {
     use base64::Engine;
     let data: Value = serde_json::from_str(include_str!(
         "../../tests/fixtures/sou156-original-object-confusion.json"
@@ -215,57 +343,56 @@ fn fixture() -> (tempfile::TempDir, Value, Arc<Snapshot>) {
         )
         .unwrap();
     }
-    let snapshot = Snapshot::capture(
-        &std::fs::File::open(root.path()).unwrap(),
-        git::LOCAL_REFS_FORMAT,
-    )
-    .unwrap();
+    let snapshot = Snapshot::capture(&std::fs::File::open(root.path()).unwrap(), format).unwrap();
     (root, data, snapshot)
 }
 #[test]
 fn completion_binds_entire_original_text_and_retains_sticky_snapshot() {
     use base64::Engine;
-    let (root, data, snapshot) = fixture();
-    let raw = base64::engine::general_purpose::STANDARD
-        .decode(data["original_response_base64"].as_str().unwrap())
-        .unwrap();
-    let reply: Value = serde_json::from_slice(&raw).unwrap();
-    let text = reply["result"]["content"][0]["text"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let p = profile();
-    for (key, eligible) in [("commit_oid", true), ("blob_oid", false)] {
+    for format in [git::FORMAT, git::FILE_READS_FORMAT] {
+        let (root, data, snapshot) = fixture(format);
+        let raw = base64::engine::general_purpose::STANDARD
+            .decode(data["original_response_base64"].as_str().unwrap())
+            .unwrap();
+        let reply: Value = serde_json::from_slice(&raw).unwrap();
+        let text = reply["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let mut p = profile();
+        p.format = format.into();
+        for (key, eligible) in [("commit_oid", true), ("blob_oid", false)] {
+            let original = wire(
+                json!(10),
+                "git_show",
+                json!({"repo_path":"/workspace","revision":data[key]}),
+            );
+            let call = request(&p, &original).unwrap();
+            // Local completion parser test, NOT a runtime-origin acceptance claim.
+            let completion =
+                completed_owned_output(&p, &call, reply.clone(), raw.clone(), snapshot.clone())
+                    .unwrap();
+            assert_eq!(completion.raw(), raw);
+            assert_eq!(completion.formatter_span(&text).is_some(), eligible);
+            assert!(completion
+                .formatter_span(&format!("{text}changed"))
+                .is_none());
+            completion.validate().unwrap();
+        }
         let original = wire(
             json!(10),
             "git_show",
-            json!({"repo_path":"/workspace","revision":data[key]}),
+            json!({"repo_path":"/workspace","revision":"HEAD"}),
         );
         let call = request(&p, &original).unwrap();
-        // Local completion parser test, NOT a runtime-origin acceptance claim.
-        let completion =
-            completed_owned_output(&p, &call, reply.clone(), raw.clone(), snapshot.clone())
-                .unwrap();
-        assert_eq!(completion.raw(), raw);
-        assert_eq!(completion.formatter_span(&text).is_some(), eligible);
-        assert!(completion
-            .formatter_span(&format!("{text}changed"))
-            .is_none());
-        completion.validate().unwrap();
+        let completion = completed_owned_output(&p, &call, reply, raw, snapshot).unwrap();
+        let selected = root.path().join(".git/refs/heads/main");
+        let moved = selected.with_extension("moved");
+        std::fs::rename(&selected, &moved).unwrap();
+        std::fs::rename(&moved, &selected).unwrap();
+        assert!(completion.validate().is_err());
+        assert!(completion.formatter_span(&text).is_none());
     }
-    let original = wire(
-        json!(10),
-        "git_show",
-        json!({"repo_path":"/workspace","revision":"HEAD"}),
-    );
-    let call = request(&p, &original).unwrap();
-    let completion = completed_owned_output(&p, &call, reply, raw, snapshot).unwrap();
-    let selected = root.path().join(".git/refs/heads/main");
-    let moved = selected.with_extension("moved");
-    std::fs::rename(&selected, &moved).unwrap();
-    std::fs::rename(&moved, &selected).unwrap();
-    assert!(completion.validate().is_err());
-    assert!(completion.formatter_span(&text).is_none());
 }
 #[tokio::test]
 #[ignore = "requires native Linux pinned Git/Python/bwrap profile and SOU86_TEST_AGENTFW; not a scripted qualification"]
@@ -273,7 +400,7 @@ async fn actual_owned_original_git_commit_and_blob_keep_exact_kind_boundary() {
     let profile_path = std::env::var_os("SOU156_VERIFIED_GIT_TEST_PROFILE")
         .expect("explicit pinned profile required");
     let mut p = ProfileConfig::read(&std::fs::read(profile_path).unwrap()).unwrap();
-    let (root, data, _) = fixture();
+    let (root, data, _) = fixture(&p.format);
     p.workspace = root.path().to_owned();
     p.workspace_identity = Some(server_profile::WorkspaceIdentity::from_metadata(
         &std::fs::metadata(root.path()).unwrap(),
@@ -298,6 +425,7 @@ async fn actual_owned_original_git_commit_and_blob_keep_exact_kind_boundary() {
         let text = value["result"]["content"][0]["text"].as_str().unwrap();
         assert_eq!(completion.formatter_span(text).is_some(), eligible);
     }
+    println!("SOU146_REAL_WORKER_KIND_BOUNDARY format={}", p.format);
 }
 
 #[test]

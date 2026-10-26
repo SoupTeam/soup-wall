@@ -29,6 +29,13 @@ const MAX_WATCHES: usize = 256;
 const MAX_DIRECTORIES: usize = 128;
 const ROOT: &str = "/workspace/.git";
 
+#[cfg(test)]
+thread_local! {
+    // Private synchronous test barrier; no production hook or wire control.
+    static AFTER_GIT_OPEN: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 struct Withdrawal {
     file: File,
     broken: bool,
@@ -417,7 +424,19 @@ impl Capture {
 impl View {
     pub(crate) fn capture(workspace: &File) -> anyhow::Result<Arc<Self>> {
         owned(&workspace.metadata()?)?;
+        // Retain this observer for the entire selected session, including Ask.
+        // It must cover the first dependent .git directory-entry lookup.
+        let mut source = Withdrawal::new()?;
+        source.watch(workspace)?;
         let git = child(workspace, ".git", true)?;
+        #[cfg(test)]
+        if let Some(action) = AFTER_GIT_OPEN.with(|slot| slot.borrow_mut().take()) {
+            action();
+        }
+        ensure!(
+            source.valid(),
+            "Git file-revision workspace changed during lookup"
+        );
         let mut filesystem = std::mem::MaybeUninit::<libc::statfs>::uninit();
         ensure!(
             unsafe { libc::fstatfs(git.as_raw_fd(), filesystem.as_mut_ptr()) } == 0,
@@ -430,7 +449,6 @@ impl View {
             ),
             "Git file-revision filesystem unsupported"
         );
-        let mut source = Withdrawal::new()?;
         source.watch(&git)?;
         // A pending lock is an unsupported/racy state, never a retry that
         // silently acquires authority over a different reference image.
@@ -566,11 +584,51 @@ impl View {
         }))
     }
 
-    pub(crate) fn validate_call(&self, tool: &str, args: &Value) -> anyhow::Result<()> {
+    pub(crate) fn object_witness_valid(&self) -> anyhow::Result<()> {
         ensure!(
             self.source.lock().is_ok_and(|mut source| source.valid()),
             "Git file-revision source changed; a new protected session is required"
         );
+        Ok(())
+    }
+
+    /// Read only the retained sealed descriptors consumed by `mount`.
+    /// Never reopen a source path or derive a kind from formatted result text.
+    pub(crate) fn object_witness_images(&self) -> anyhow::Result<BTreeMap<String, Vec<u8>>> {
+        use std::os::unix::fs::FileExt;
+        self.object_witness_valid()?;
+        let mut result = BTreeMap::new();
+        let mut total = 0usize;
+        for (path, file) in &self.images {
+            let seals = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GET_SEALS) };
+            let required =
+                libc::F_SEAL_WRITE | libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL;
+            ensure!(
+                seals >= 0 && seals & required == required,
+                "Git file-revision image is not sealed"
+            );
+            let size = usize::try_from(file.metadata()?.len())?;
+            total = total
+                .checked_add(size)
+                .context("Git file-revision image overflow")?;
+            ensure!(total <= MAX_IMAGE_BYTES, "Git file-revision image bound");
+            let mut bytes = vec![0; size];
+            file.read_exact_at(&mut bytes, 0)?;
+            let relative = path
+                .strip_prefix("/workspace/")?
+                .to_str()
+                .context("Git file-revision image path encoding")?;
+            ensure!(
+                result.insert(relative.to_owned(), bytes).is_none(),
+                "duplicate Git file-revision image"
+            );
+        }
+        self.object_witness_valid()?;
+        Ok(result)
+    }
+
+    pub(crate) fn validate_call(&self, tool: &str, args: &Value) -> anyhow::Result<()> {
+        self.object_witness_valid()?;
         if tool == "git_show" {
             if let Some((revision, path)) = args["revision"].as_str().and_then(super::file_revision)
             {
@@ -617,6 +675,42 @@ mod tests {
 
     fn fixture() -> (tempfile::TempDir, String) {
         fixture_in(None)
+    }
+
+    #[test]
+    fn workspace_observation_precedes_git_lookup_and_withdrawal_is_sticky() {
+        let (root, _) = fixture();
+        let (replacement, _) = fixture();
+        let workspace = File::open(root.path()).unwrap();
+        let selected = root.path().join(".git");
+        let retained = root.path().join("owned-retained-directory");
+        let incoming = replacement.path().join(".git");
+        let selected_copy = selected.clone();
+        let retained_copy = retained.clone();
+        let incoming_copy = incoming.clone();
+        AFTER_GIT_OPEN.with(|slot| {
+            assert!(slot.borrow().is_none());
+            *slot.borrow_mut() = Some(Box::new(move || {
+                std::fs::rename(&selected_copy, &retained_copy).unwrap();
+                std::fs::rename(&incoming_copy, &selected_copy).unwrap();
+                // Restoring the same entries cannot revoke the observed change.
+                std::fs::rename(&selected_copy, &incoming_copy).unwrap();
+                std::fs::rename(&retained_copy, &selected_copy).unwrap();
+            }));
+        });
+        let captured = View::capture(&workspace);
+        assert!(AFTER_GIT_OPEN.with(|slot| slot.borrow().is_none()));
+        assert!(captured
+            .unwrap_err()
+            .to_string()
+            .contains("workspace changed during lookup"));
+        let view = View::capture(&workspace).unwrap();
+        let images = view.object_witness_images().unwrap();
+        assert!(images.contains_key(".git/HEAD"));
+        std::fs::rename(&selected, &retained).unwrap();
+        std::fs::rename(&retained, &selected).unwrap();
+        assert!(view.object_witness_valid().is_err());
+        assert!(view.object_witness_images().is_err());
     }
 
     fn fixture_in(parent: Option<&Path>) -> (tempfile::TempDir, String) {

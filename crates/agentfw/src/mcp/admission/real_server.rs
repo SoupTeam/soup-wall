@@ -1594,8 +1594,18 @@ where
                         let call = calls
                             .remove(&key)
                             .context("unbound native result completion")?;
+                        // A fresh daemon worker must not turn withdrawal of
+                        // the original collector-held view into an uncorrelated
+                        // transport failure. Keep the same sticky refusal even
+                        // when that worker also refused its source snapshot.
+                        let source_withdrawn = git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err());
+                        if source_withdrawn && !call.cancelled {
+                            write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
+                        }
+                        // Preserve fatal retirement on transport/auth/audit or
+                        // cleanup uncertainty, even after the correlated refusal.
                         let result = result?;
-                        if !call.cancelled {
+                        if !call.cancelled && !source_withdrawn {
                             if let Some(release) = result {
                                 if git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
                                     write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;

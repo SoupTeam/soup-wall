@@ -160,7 +160,7 @@ pub(crate) fn prepare_verified_git(
     profile: &ProfileConfig,
 ) -> anyhow::Result<PreparedServerSandbox> {
     anyhow::ensure!(
-        super::server_profile::git::is_profile(&profile.format),
+        super::verified_git::supports_profile(&profile.format),
         "verified execution requires a supported Git profile"
     );
     // Validate constructed configs as strictly as operator file configs.
@@ -1146,6 +1146,18 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires explicit pinned Linux Git/Python profile and bubblewrap"]
     async fn selected_git_sandbox_isolates_real_python_and_git() {
+        git_sandbox_boundary(false).await;
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "requires explicit pinned Linux BASE or file-revision Git profile and bubblewrap"]
+    async fn verified_git_preparation_isolates_real_python_and_git() {
+        git_sandbox_boundary(true).await;
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn git_sandbox_boundary(verified: bool) {
         use std::io::{Read, Write};
         use std::net::{TcpListener, TcpStream};
         use std::os::fd::{AsRawFd, FromRawFd};
@@ -1258,7 +1270,14 @@ print(json.dumps(result))
             normal_scheduler = libc::SCHED_OTHER,
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
-        let mut prepared = prepare_linux_command(&profile, &args, None, false).unwrap();
+        let mut prepared = if verified {
+            assert!(super::super::verified_git::supports_profile(
+                &profile.format
+            ));
+            prepare_linux_command_inner(&profile, &args, None, false, true).unwrap()
+        } else {
+            prepare_linux_command(&profile, &args, None, false).unwrap()
+        };
         // Add an owned FIFO after repository validation to prove that read-only
         // mounts alone are insufficient, and that Landlock still blocks IPC.
         let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
@@ -1371,6 +1390,11 @@ print(json.dumps(result))
             std::io::ErrorKind::WouldBlock
         );
         println!("SOU68_SANDBOX_POSITIVE {}", result);
+        if verified {
+            // This is a syscall/confinement probe of the worker preparation
+            // branch; original tools/call bytes are qualified separately.
+            println!("SOU146_VERIFIED_PREPARATION_POSITIVE");
+        }
     }
 
     #[cfg(unix)]

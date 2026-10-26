@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from types import SimpleNamespace
 
@@ -164,6 +165,8 @@ def collector(stack, log, *, legacy=False, bound=None):
     env = dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.profile), AGENTFW_CLASSIFIER="rule-baseline",
         AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py" if legacy else CLASSIFIER),
         AGENTFW_CLASSIFIER_PYTHON=sys.executable)
+    if bound is None:
+        bound = "execution-" + os.urandom(8).hex()
     extra = []
     if bound is not None:
         args = SimpleNamespace(agentfw=stack.binary, output=stack.root)
@@ -182,6 +185,36 @@ def collector(stack, log, *, legacy=False, bound=None):
     return GIT.Client([str(stack.binary), "mcp", "--native-admission", "--id", "sou146-git", *extra, "--",
         str(python), "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"],
         env, stack.workspace, log, "protected file-revision original Git")
+
+
+def execution_config(config, profile):
+    return dict(config, native={**config["native"], "git_execution": {
+        "profile_path": str(profile), "profile_sha256": sha(profile), "server_id": "sou146-git"}})
+
+
+def execution_reservations(stack):
+    return BASE.events(stack.audit, "native_git_execution_reserved")
+
+
+def execution_start(stack):
+    witness = stack.daemon_witnesses[-1][2]
+    witness.sample()
+    return {"reservations": len(execution_reservations(stack)),
+            "workers": {key for key, row in list(witness.observed.items()) if row.get("original_git_server")}}
+
+
+def require_execution(stack, before, tool):
+    rows = execution_reservations(stack)[before["reservations"]:]
+    witness = stack.daemon_witnesses[-1][2]
+    witness.sample()
+    workers = [row for key, row in list(witness.observed.items())
+               if row.get("original_git_server") and key not in before["workers"]]
+    require(len(rows) == 1 and rows[0]["tool"] == tool
+            and rows[0]["profile_sha256"] == sha(stack.profile) and workers and not witness.incomplete,
+            "exact configured execution and owned original worker witness required")
+    return {"route": "daemon_owned_original_pipe", "profile": json.loads(stack.profile.read_text())["format"],
+            "profile_sha256": sha(stack.profile), "reservation_count": 1, "owned_original_workers": workers,
+            "completion_proof": "private completed/released frame checked against direct original bytes"}
 
 
 def exact_reads(stack, first, report):
@@ -212,10 +245,12 @@ def exact_reads(stack, first, report):
             report["reads"], report["refusals"] = [], []
             for identifier, (tool, args, ref) in enumerate(reads(first), 10):
                 witness.drain()
+                reserved = execution_start(stack)
                 response, raw = client.exchange(GIT.call(identifier, tool, args))
+                execution = require_execution(stack, reserved, tool) if tool in ("git_show", "git_diff") else None
                 if BASE.refused(response) and tool in ("git_show", "git_diff") and ":" not in ref:
-                    # Preserve this benign expectation as FAILED. SOU-109 owns the
-                    # shared structural-result detector; continue unrelated checks.
+                    # Preserve the benign expectation as FAILED; never relabel
+                    # a legacy refusal or a worker failure as successful equality.
                     report.setdefault("failed_benign_controls", []).append({"id": identifier, "tool": tool,
                         "reference": ref, "expected": "original_bytes_released", "observed": "withheld",
                         "passed": False, "related_issue": "SOU-109", "response": response,
@@ -223,12 +258,16 @@ def exact_reads(stack, first, report):
                     continue
                 GIT.text(response)
                 require(raw == originals[identifier], "original response bytes changed: " + tool + " " + ref)
-                require(any(row.get("host_call_id") == identifier and row.get("state") == "inflight" for row in BASE.events(path)), "original dispatch witness absent")
+                require(execution is not None or any(row.get("host_call_id") == identifier
+                    and row.get("state") == "inflight" for row in BASE.events(path)), "original dispatch witness absent")
                 report["reads"].append({"id": identifier, "tool": tool, "reference": ref,
-                    "response_sha256": hashlib.sha256(raw).hexdigest(), "original_bytes_equal": True})
+                    "response_sha256": hashlib.sha256(raw).hexdigest(), "original_bytes_equal": True,
+                    "execution": execution})
             witness.drain()
+            reserved = execution_start(stack)
             poison, _ = client.exchange(GIT.call(80, "git_show", {"revision": stack.poison}))
-            require(BASE.refused(poison) and GIT.INJECTION not in json.dumps(poison) and any(row.get("host_call_id") == 80 and row.get("state") == "inflight" for row in BASE.events(path)),
+            require_execution(stack, reserved, "git_show")
+            require(BASE.refused(poison) and GIT.INJECTION not in json.dumps(poison),
                     "unsafe executed original output escaped result inspection")
             GIT.text(client.exchange(GIT.call(81, "git_show", {"revision": REFS[0]}))[0])
             report["result_injection_withheld"] = True
@@ -265,6 +304,16 @@ def exact_reads(stack, first, report):
 
 
 def legacy_refusal(stack, report):
+    python = stack.install / "package/python/bin/python3.11"
+    with (stack.root / "legacy-original.log").open("wb") as original_log:
+        original = GIT.Client([str(python), "-I", "-B", "-m", "mcp_server_git", "--repository", str(stack.workspace)],
+            dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git)), stack.workspace, original_log, "direct BASE control")
+        try:
+            original.initialize()
+            _, expected = original.exchange(GIT.call(200, repo=stack.workspace))
+        finally:
+            original.close()
+            report["legacy_original_client"] = original.transcript()
     path = stack.root / "legacy-collector.log"
     with path.open("wb") as log:
         client = collector(stack, log, legacy=True)
@@ -276,13 +325,18 @@ def legacy_refusal(stack, report):
                     response, _ = client.exchange(GIT.call(identifier + offset, tool, {key: ref}))
                     require(BASE.refused(response), "default v1 unexpectedly admits named references")
                     report["legacy_refusals"].append({"id": identifier + offset, "response": response})
-            baseline, _ = client.exchange(GIT.call(200))
+            reserved = execution_start(stack)
+            baseline, raw = client.exchange(GIT.call(200))
+            execution = require_execution(stack, reserved, "git_show")
             if BASE.refused(baseline):
                 report.setdefault("failed_benign_controls", []).append({"id": 200, "tool": "git_show",
                     "reference": "HEAD", "profile": INSTALL.FORMAT, "expected": "original_bytes_released",
                     "observed": "withheld", "passed": False, "related_issue": "SOU-109", "response": baseline})
             else:
                 GIT.text(baseline)
+                require(raw == expected, "BASE control ID200 original response bytes changed")
+                report["baseline_read"] = {"id": 200, "original_bytes_equal": True,
+                    "response_sha256": hashlib.sha256(raw).hexdigest(), "execution": execution}
             GIT.text(client.exchange(GIT.call(201, "git_status", {}))[0])
         finally:
             client.close()
@@ -325,11 +379,64 @@ def helper_control(stack, report):
         config.write_bytes(original)
 
 
+class DaemonProcessWitness(BASE.ProcessWitness):
+    """Bounded procfs observation includes children of every Tokio worker TID."""
+    incomplete = False
+
+    def sample(self):
+        pending, visited, task_count = [self.parent], set(), 0
+        while pending:
+            if len(visited) >= 512:
+                self.incomplete = True
+                return
+            pid = pending.pop()
+            if pid in visited:
+                continue
+            visited.add(pid)
+            identity = self.identity(pid)
+            if identity is None:
+                continue
+            key = (pid, identity)
+            row = self.observed.setdefault(key, {"pid": pid, "start_time_ticks": identity,
+                                                 "parent_process": pid == self.parent})
+            try:
+                argv = Path(f"/proc/{pid}/cmdline").read_bytes()[:4096].split(b"\0")
+                if argv[0] == b"/mcp-server/python/bin/python3.11" and b"mcp_server_git" in argv:
+                    row["original_git_server"] = True
+            except OSError:
+                pass
+            try:
+                tasks = list(Path(f"/proc/{pid}/task").iterdir())
+                task_count += len(tasks)
+                if task_count > 4096:
+                    self.incomplete = True
+                    return
+                for task in tasks:
+                    try:
+                        data = (task / "children").read_text()
+                        if len(data) > 4096:
+                            self.incomplete = True
+                            return
+                        pending.extend(int(value) for value in data.split())
+                    except FileNotFoundError:
+                        pass
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+            except (OSError, ValueError):
+                self.incomplete = True
+
+    def finish(self):
+        result = super().finish()
+        result["observation_complete"] = not self.incomplete
+        result["all_stopped"] = result["all_stopped"] and not self.incomplete
+        return result
+
+
 def start_daemon(stack, config, label):
     write(Path(stack.env["HOME"]) / ".agentfw/config.yaml", config)
     with (stack.root / (label + "-daemon.log")).open("wb") as log:
         stack.daemon = subprocess.Popen([str(stack.binary), "serve"], env=stack.env, stdout=log, stderr=log)
-    stack.daemon_witnesses.append((label, stack.daemon, BASE.ProcessWitness(stack.daemon.pid)))
+    stack.daemon_witnesses.append((label, stack.daemon, DaemonProcessWitness(stack.daemon.pid)))
     require(BASE.DEMO.wait_healthy(config["port"], stack.daemon), "owned enforcing daemon failed to start: " + label)
     return stack.daemon
 
@@ -364,10 +471,12 @@ def policy_controls(stack, config, second, report):
                 client.initialize()
                 witness.drain()
                 frame = GIT.call(50, "git_show", {"revision": REFS[0]})
+                reserved = execution_start(stack)
                 client.send(frame)
                 # Retain the shared first-pending bound, including cold input
                 # preparation; no separate preparation allowance.
                 waiting = APPROVAL.pending(args, stack.env, timeout=5)
+                require(len(execution_reservations(stack)) == reserved["reservations"], "pending Ask reached daemon execution")
                 inspected = APPROVAL.inspected_output(APPROVAL.command(args, stack.env, "native-approval", "inspect", waiting["pending_id"]),
                     waiting["pending_id"], waiting["binding_sha256"])
                 require(inspected["args"] == frame["params"]["arguments"] and
@@ -400,14 +509,16 @@ def policy_controls(stack, config, second, report):
                     response, raw = client.receive()
                     require(response["id"] == 50, "approval response correlation changed")
                     if case == "approve":
-                        require(raw == expected and any(row.get("host_call_id") == 50 and row.get("state") == "inflight" for row in BASE.events(path)), "approved original bytes/execution changed")
+                        require_execution(stack, reserved, "git_show")
+                        require(raw == expected, "approved original bytes/execution changed")
                         client.send(GIT.call(51, "git_show", {"revision": REFS[0]}))
                         again = APPROVAL.pending(args, stack.env, timeout=5)
                         require(again["pending_id"] != waiting["pending_id"] and witness.drain() == 0, "approval was reused")
                         APPROVAL.command(args, stack.env, "native-approval", "reject", again["pending_id"])
                         require(BASE.refused(client.receive()[0]), "second Ask was not independently refused")
                     else:
-                        require(response.get("error", {}).get("code") == -32602 and witness.drain() == 0,
+                        require(response.get("error", {}).get("code") == -32602 and witness.drain() == 0
+                                and len(execution_reservations(stack)) == reserved["reservations"],
                                 "approved substituted reference dispatched")
                     APPROVAL.pending(args, stack.env, empty=True, timeout=8)
                     APPROVAL.command(args, stack.env, "native-approval", "approve", waiting["pending_id"],
@@ -559,7 +670,8 @@ def inflight_substitution(stack, second, report, *, mapped=False, restore=False)
             ref.write_bytes(original)
             restored, _ = client.exchange(GIT.call(51))
             require(restored.get("error", {}).get("code") == -32602, "inflight withdrawal was revived")
-            row = {"execution_dispatched_before_mutation": True,
+            row = {"route": "collector_held_selected_view_without_daemon_execution",
+                "execution_dispatched_before_mutation": True,
                 "result_released": False, "restoration_still_refused": True, "passed": True}
             if mapped:
                 row.update(mapped=True, restored_before_result=restore)
@@ -575,6 +687,119 @@ def inflight_substitution(stack, second, report, *, mapped=False, restore=False)
     require(before == BASE.snapshot(stack.workspace), "inflight fixture state was not restored")
     require(client.process.returncode == 0 and client.process_witness.final["all_stopped"], "inflight cleanup unverified")
 
+
+
+def pause_daemon_worker(stack, before):
+    """Stop only a new owned original server; a sampled PID alone is no barrier."""
+    require(hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"),
+            "pidfd stop barrier prerequisite unavailable")
+    witness = stack.daemon_witnesses[-1][2]
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        witness.sample()
+        require(not witness.incomplete, "daemon ownership observation incomplete")
+        for key, row in list(witness.observed.items()):
+            pid, start = key
+            if key in before["workers"] or not row.get("original_git_server"):
+                continue
+            if BASE.ProcessWitness.identity(pid) != start:
+                continue
+            confirmed = False
+            suspended = False
+            pin = None
+            try:
+                pin = os.pidfd_open(pid, 0)
+                os.set_inheritable(pin, False)
+                if BASE.ProcessWitness.identity(pid) != start:
+                    continue
+                signal.pidfd_send_signal(pin, signal.SIGSTOP)
+                suspended = True
+                stopped_until = min(deadline, time.monotonic() + 0.2)
+                while time.monotonic() < stopped_until:
+                    raw = Path(f"/proc/{pid}/stat").read_text()
+                    state = raw[raw.rfind(")") + 2:].split()[0]
+                    if BASE.ProcessWitness.identity(pid) != start:
+                        break
+                    if state in ("T", "t"):
+                        confirmed = True
+                        return {"pid": pid, "start_time_ticks": start, "stopped_state": state,
+                                "daemon_descendant": True, "original_git_server": True, "pidfd": pin}
+                    time.sleep(0.001)
+            except (OSError, ProcessLookupError):
+                pass
+            finally:
+                if not confirmed and pin is not None:
+                    try:
+                        if suspended:
+                            signal.pidfd_send_signal(pin, signal.SIGCONT)
+                    except ProcessLookupError:
+                        pass
+                    finally:
+                        os.close(pin)
+        time.sleep(0.001)
+    raise RuntimeError("new owned daemon original worker stop barrier not witnessed")
+
+
+def daemon_source_substitution(stack, second, report, *, mapped=False, restore=False):
+    label = "daemon-" + ("mapped-restored" if restore else "mapped" if mapped else "ref-substitution")
+    reference = stack.workspace / ".git/refs/heads/main"
+    original, before = reference.read_bytes(), BASE.snapshot(stack.workspace)
+    target, opened = None, None
+    with (stack.root / (label + ".log")).open("wb") as log:
+        client = collector(stack, log)
+        try:
+            client.initialize()
+            cursor = execution_start(stack)
+            client.send(GIT.call(50, "git_show", {"revision": REFS[0]}))
+            target = pause_daemon_worker(stack, cursor)
+            rows = execution_reservations(stack)[cursor["reservations"]:]
+            require(len(rows) == 1 and rows[0]["profile_sha256"] == sha(stack.profile),
+                    "paused worker not bound to exact selected daemon invocation")
+            if mapped:
+                opened = writable_mapping(reference)
+                opened[1][:] = (second + "\n").encode()
+                opened[1].flush()
+                require(reference.read_bytes() != original, "daemon mapped write did not calibrate")
+                if restore:
+                    opened[1][:] = original
+                    opened[1].flush()
+                    require(reference.read_bytes() == original, "daemon mapped restore did not calibrate")
+            else:
+                reference.write_text(second + "\n")
+            barrier = {key: value for key, value in target.items() if key != "pidfd"}
+            signal.pidfd_send_signal(target["pidfd"], signal.SIGCONT)
+            os.close(target["pidfd"])
+            target = None
+            response, _ = client.receive()
+            require(response.get("id") == 50 and response.get("error", {}).get("code") == -32602,
+                    "daemon source withdrawal lacked correlated refusal")
+        finally:
+            if target is not None:
+                try:
+                    signal.pidfd_send_signal(target["pidfd"], signal.SIGCONT)
+                except ProcessLookupError:
+                    pass
+                finally:
+                    os.close(target["pidfd"])
+            close_mapping(opened)
+            reference.write_bytes(original)
+            client.close()
+    require(client.process_witness.final["all_stopped"], "withdrawn daemon collector cleanup unverified")
+    # An incomplete worker may retire the old session. Never relabel that as
+    # same-session continuation or suppress transport/cleanup uncertainty.
+    with (stack.root / (label + "-fresh.log")).open("wb") as log:
+        fresh = collector(stack, log)
+        try:
+            fresh.initialize()
+            GIT.text(fresh.exchange(GIT.call(51, "git_show", {"revision": REFS[0]}))[0])
+        finally:
+            fresh.close()
+    require(fresh.process.returncode == 0 and fresh.process_witness.final["all_stopped"], "fresh source session failed")
+    require(BASE.snapshot(stack.workspace) == before, "daemon source fixture changed")
+    report.setdefault("daemon_source_withdrawal", []).append({"case": label,
+        "barrier": barrier, "boundary": "actual worker prepared and paused; original tools/call write not claimed",
+        "mapped": mapped, "restored_before_resume": restore, "correlated_refusal": True,
+        "old_session_exit_code": client.process.returncode, "fresh_session_valid": True, "passed": True})
 
 
 def run(args):
@@ -602,12 +827,14 @@ def run(args):
             subprocess.run([str(args.agentfw), "install"], env=env, capture_output=True, check=True, timeout=30)
             port = BASE.DEMO.free_port()
             config = {"port": port, "enforce": True, "max_record_bytes": 1048576,
-                "policy": str(install / "policy.yaml"), "native": {"registry_path": str(install / "registry.json"),
-                "registry_sha256": sha(install / "registry.json")}}
+                "policy": str(install / "policy.yaml"), "audit": str(output / "native-audit.jsonl"),
+                "native": {"registry_path": str(install / "registry.json"),
+                "registry_sha256": sha(install / "registry.json"), "liveness": {
+                    "default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100}}}
             write(home / ".agentfw/config.yaml", config)
             stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace,
                 install=install, profile=install / "profile.json", env=env, daemon=None, port=port,
-                poison=poison, daemon_witnesses=[])
+                poison=poison, daemon_witnesses=[], audit=output / "native-audit.jsonl")
             positive = subprocess.run([str(args.sandbox_test_binary), "selected_git_sandbox_isolates_real_python_and_git", "--ignored", "--nocapture"],
                 env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(stack.profile), SOU86_TEST_AGENTFW=str(args.agentfw.resolve())),
                 capture_output=True, timeout=90)
@@ -615,27 +842,76 @@ def run(args):
             require(positive.returncode == 0 and b"SOU68_SANDBOX_POSITIVE" in positive.stdout and b"1 passed; 0 failed" in positive.stdout,
                     "file-revision OS isolation failed: " + positive.stderr[-2000:].decode("utf-8", "replace"))
             report["sandbox_positive"] = True
+            verified = subprocess.run([str(args.sandbox_test_binary), "verified_git_preparation_isolates_real_python_and_git", "--ignored", "--nocapture"],
+                env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(stack.profile), SOU86_TEST_AGENTFW=str(args.agentfw.resolve())),
+                capture_output=True, timeout=90)
+            (output / "verified-preparation-positive.log").write_bytes(verified.stdout + verified.stderr)
+            require(verified.returncode == 0 and b"SOU146_VERIFIED_PREPARATION_POSITIVE" in verified.stdout
+                    and b"1 passed; 0 failed" in verified.stdout,
+                    "verified preparation confinement failed: " + verified.stderr[-2000:].decode("utf-8", "replace"))
+            report["confinement_probes"] = {"collector_preparation": "pass", "verified_worker_preparation": "pass",
+                "probe": "independently calibrated syscall script in actual preparation branches; original MCP bytes tested separately"}
+            for test, marker, label in (
+                ("actual_owned_original_git_commit_and_blob_keep_exact_kind_boundary",
+                 "SOU146_REAL_WORKER_KIND_BOUNDARY format=" + INSTALL.FILE_READS_FORMAT, "worker-kind-boundary"),
+                ("file_worker_withholds_after_original_tools_call_write_and_source_restore",
+                 "SOU146_REAL_WORKER_AFTER_WRITE_WITHHELD restored=true completion=false fresh_original_bytes=true", "worker-after-write")):
+                process = subprocess.Popen([str(args.sandbox_test_binary), "mcp::verified_git::linux::tests::" + test,
+                    "--exact", "--ignored", "--nocapture", "--test-threads=1"],
+                    env=dict(env, SOU68_SANDBOX_TEST_PROFILE=str(stack.profile), SOU156_VERIFIED_GIT_TEST_PROFILE=str(stack.profile),
+                             SOU86_TEST_AGENTFW=str(args.agentfw.resolve())), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                witness = DaemonProcessWitness(process.pid)
+                out, err = b"", b""
+                try:
+                    out, err = process.communicate(timeout=90)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    out, err = process.communicate(timeout=5)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait(timeout=5)
+                    cleanup = witness.finish()
+                    report.setdefault("worker_libtest_cleanup", {})[label] = cleanup
+                (output / (label + ".log")).write_bytes(out + err)
+                require(process.returncode == 0 and marker.encode() in out
+                        and b"1 passed; 0 failed" in out and cleanup["all_stopped"],
+                        "actual original worker qualification failed: " + label)
+            report["worker_after_original_write"] = {"passed": True, "source_restored": True,
+                "completion_created": False, "barrier": "private cfg(test) immediately after actual original tools/call write+flush",
+                "production_hook": False, "fresh_original_bytes_equal": True,
+                "cleanup": report["worker_libtest_cleanup"]["worker-after-write"]}
+            report["file_source_kind_boundary"] = {"passed": True, "profile": INSTALL.FILE_READS_FORMAT,
+                "probe": "actual pinned original commit and commit-looking blob; exact new FileRevisions Snapshot source"}
             legacy = private / "legacy"
             legacy.mkdir(mode=0o700)
             legacy_profile = json.loads(stack.profile.read_text())
             legacy_profile["format"] = INSTALL.FORMAT
             write(legacy / "profile.json", legacy_profile)
             write(legacy / "registry.json", INSTALL.registry(json.loads((INSTALL.ASSETS / "upstream-tools-list.json").read_text())))
-            legacy_config = dict(config, native={"registry_path": str(legacy / "registry.json"), "registry_sha256": sha(legacy / "registry.json")})
+            legacy_config = execution_config(dict(config, native={**config["native"],
+                "registry_path": str(legacy / "registry.json"), "registry_sha256": sha(legacy / "registry.json")}), legacy / "profile.json")
             stack.profile = legacy / "profile.json"
             daemon = start_daemon(stack, legacy_config, "legacy")
             legacy_refusal(stack, report)
             BASE.DEMO.stop(daemon)
             stack.profile = install / "profile.json"
-            daemon = start_daemon(stack, config, "local-refs")
+            daemon = start_daemon(stack, config, "startup-guards")
             helper_control(stack, report)
             GIT.startup_refusals(stack, report)
-            exact_reads(stack, first, report)
-            source_mutations(stack, first, first, report)
-            mapped_source_controls(stack, first, report)
             inflight_substitution(stack, first, report)
             inflight_substitution(stack, first, report, mapped=True)
             inflight_substitution(stack, first, report, mapped=True, restore=True)
+            report["startup_guard_route"] = "collector preparation without daemon execution opt-in"
+            BASE.DEMO.stop(daemon)
+            config = execution_config(config, stack.profile)
+            daemon = start_daemon(stack, config, "file-revisions-execution")
+            exact_reads(stack, first, report)
+            source_mutations(stack, first, first, report)
+            mapped_source_controls(stack, first, report)
+            daemon_source_substitution(stack, first, report)
+            daemon_source_substitution(stack, first, report, mapped=True)
+            daemon_source_substitution(stack, first, report, mapped=True, restore=True)
             policy_controls(stack, config, first, report)
             require(INSTALL.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"],
                     "original package bytes changed")

@@ -316,6 +316,21 @@ extension is not a combined local-reference, shallow or installed-pilot preset.
 Unknown combined profile identities refuse at startup; named refs and shallow
 repositories remain unsupported by this selection.
 
+To execute whole-commit and diff reads with daemon-owned formatter attribution,
+explicitly configure `native.git_execution.profile_path` to this installation's
+absolute `profile.json`, `profile_sha256` to its SHA-256, and `server_id` to the
+collector's exact server ID. Keep its workspace identity pinned and use the
+authenticated host/child-authority and liveness configuration documented for
+daemon Git execution. Execution accepts exactly the BASE and file-revision
+formats; it does not enable local-reference or shallow combinations. The worker
+retains the same revision View for its sealed mount and typed object facts and
+rechecks its path proof immediately before writing the original request. The
+collector independently retains its original View throughout a pending Ask.
+File payloads (`HEAD:path` or full-SHA plus path) receive full baseline result
+inspection, including payloads that look like commit headers. No result text or
+serialized receipt can manufacture formatter origin. Missing execution opt-in
+preserves the original inspection route and may withhold a whole-commit result.
+
 The original upstream `git_show` name, schema and arguments are preserved. Its
 `revision` accepts `HEAD:notes.txt` or `FULL_40_HEX_COMMIT_SHA:docs/機能 notes.txt`.
 The path is a literal UTF-8 relative path: at most 1024 bytes, 16 components and
@@ -355,3 +370,10 @@ source replacement and mapped write/restore, Ask/replay/cancel/Deny, actual
 in-flight source withdrawal, calibrated helper/outside/receiver controls and
 independent process cleanup. A missing Linux prerequisite is a failure, never a
 passing skip. Preserve incomplete and failed reports alongside a later pass.
+The report distinguishes collector and verified-worker confinement probes,
+actual daemon-worker preparation/stop barriers, and a private libtest barrier
+after the real original `tools/call` write. The latter proves source restoration
+cannot create a Completion after withdrawal; it adds no production hook. A known
+withdrawn collector View receives its correlated refusal before any worker error
+propagates. Incomplete execution still retires the uncertain old session; a fresh
+protected session must pass after restoring the owned source.
