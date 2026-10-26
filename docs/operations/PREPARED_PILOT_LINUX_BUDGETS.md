@@ -134,6 +134,23 @@ controls, original kernel refusals, surviving useful peers, fresh recovery and
 empty owned roots. It explicitly requires separate baseline proof. Preserve
 both exact source/config/binary identities, and failed/incomplete attempts.
 
+The prepared qualifier retains the existing **32 MiB total private syscall
+witness bound**. Its strace string projection is 16 KiB per argument instead of
+1 MiB: unrelated bulk preparation writes must not consume that whole witness
+budget. This is an observer setting, not an MCP payload limit or a runtime
+policy change. Every original-channel write and retained-log write used as
+evidence must still decode completely with the exact successful byte count.
+A truncated relevant string/vector or frame refuses qualification; it never
+proves zero execution. All selected syscalls remain observed. No trace tail,
+rotation, dropped effects or larger total bound is accepted.
+
+Trace files are bounded before parsing, with no-follow regular-file opens.
+An overflowing witness fails as `private_trace_limit`; a still-incomplete live
+wire fails as `prepared_witness_incomplete`. An independently observed pending
+call dispatch fails immediately as `prepared_dispatch_before_approval`. These
+are distinct outcomes; a witness-capacity failure is not proof of an Ask bypass.
+Keep previous red attempts and qualify the corrected source independently.
+
 The pressure phase prepares a fresh owned Git fixture with a real HEAD and
 30,000 identical small files in a supported eight-level index directory. This
 keeps normal status output small while exercising Git 2.51.2's own ordinary
