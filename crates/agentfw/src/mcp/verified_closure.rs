@@ -192,8 +192,14 @@ fn resolve_link(tree: &BTreeMap<String, Entry>, path: &str) -> anyhow::Result<()
             }
             Component::Normal(name) => {
                 done.push(name);
-                let key = done.to_str().context("verified_execution_path_invalid")?;
-                match tree.get(key).context("verified_execution_link_missing")? {
+                // The captured Linux namespace uses '/' keys even when its
+                // pure component controls run on a Windows host.
+                let key = done
+                    .iter()
+                    .map(|part| part.to_str().context("verified_execution_path_invalid"))
+                    .collect::<anyhow::Result<Vec<_>>>()?
+                    .join("/");
+                match tree.get(&key).context("verified_execution_link_missing")? {
                     Entry::Link(target) => {
                         links += 1;
                         ensure!(links <= 40, "verified_execution_link_cycle");

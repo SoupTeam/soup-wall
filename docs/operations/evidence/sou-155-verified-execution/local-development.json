@@ -783,8 +783,53 @@
       "elapsed_seconds": 0.36,
       "source_after_sha256": "313257852a564cbb52821aa4039eca49dc420aa416a9df018a426bc2e349e316",
       "log_sha256": "fd4850812406b74fd9c77e800c1ea6fc68a5431cd4fbd42e57633cb1cdc44d0f"
+    },
+    {
+      "label": "windows-path-and-local-transport-regression",
+      "source_files_sha256": "3194a13c847eeff2e44dbf07f7a347b41135c1ff323b15b775cf7d22e235da6c",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 18.94,
+      "source_after_sha256": "3194a13c847eeff2e44dbf07f7a347b41135c1ff323b15b775cf7d22e235da6c",
+      "log_sha256": "edbd4ffe42935fa56f03ecfe89791430ce91bffdfed9da6bebfe2cbd4ab5a46d"
+    },
+    {
+      "label": "final-portable-closure-workspace",
+      "source_files_sha256": "3fc944ea720bb411e7cd6ad5218359bdf0dcb031a6596ec8178d6ab326416924",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 131.55,
+      "source_after_sha256": "3fc944ea720bb411e7cd6ad5218359bdf0dcb031a6596ec8178d6ab326416924",
+      "log_sha256": "f6fda613e907b021ea158b76b6d35c021b78f6cbf0941d325a8bf61a811a3b2e"
     }
   ],
-  "native_qualified_source": "f0cf66346de236c133ede5eeed4302cc8af8bafd",
-  "scope": "native component qualified at named source; current full workflow/admission remains separate"
+  "native_qualified_source": "4a73894001e11c42a7c8b64d441c7c506e5b8439",
+  "scope": "native component qualified at named source; current full workflow/admission remains separate",
+  "ready_ci_observation": {
+    "run": 40321949154,
+    "source_commit": "4a73894001e11c42a7c8b64d441c7c506e5b8439",
+    "status": "failed-checks-before-overall-completion",
+    "failures": [
+      {
+        "job": 121568881771,
+        "control": "captured_links_cannot_escape_or_cycle_through_other_links",
+        "cause": "host-native-separator-used-for-Linux-namespace-key-on-Windows"
+      },
+      {
+        "check": 121566494322,
+        "rule": "rust/non-https-url",
+        "location": "crates/agentfw/src/native/execution/transport.rs:353",
+        "cause": "test-HTTP-URL-flow-to-forwarding-client"
+      }
+    ],
+    "corrective_changes": "stable-component-namespace-keys; pure-local-destination-validation-and-fixed-loopback-test-listener"
+  }
 }

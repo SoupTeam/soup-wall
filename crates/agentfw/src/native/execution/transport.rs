@@ -304,19 +304,9 @@ fn input_stream<R: AsyncRead + Unpin + Send + 'static>(
     })
 }
 
-/// Forwarder only: no local upstream command, classifier, snapshot or evidence.
-async fn client<R, W>(
-    url: String,
-    token: String,
-    preamble: Preamble,
-    input: R,
-    mut output: W,
-) -> anyhow::Result<()>
-where
-    R: AsyncRead + Unpin + Send + 'static,
-    W: AsyncWrite + Unpin,
-{
-    let parsed = reqwest::Url::parse(&url)?;
+/// Pure destination validation, before any client or request body is created.
+fn local_daemon_url(url: &str) -> anyhow::Result<reqwest::Url> {
+    let parsed = reqwest::Url::parse(url)?;
     let loopback = parsed
         .host_str()
         .and_then(|host| {
@@ -335,6 +325,22 @@ where
             && parsed.path() == ENDPOINT,
         "verified_execution_local_daemon_required"
     );
+    Ok(parsed)
+}
+
+/// Forwarder only: no local upstream command, classifier, snapshot or evidence.
+async fn client<R, W>(
+    url: String,
+    token: String,
+    preamble: Preamble,
+    input: R,
+    mut output: W,
+) -> anyhow::Result<()>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin,
+{
+    let url = local_daemon_url(&url)?;
     let mut prefix = serde_json::to_vec(&preamble)?;
     ensure!(
         prefix.len() <= PREAMBLE_BYTES,
@@ -553,7 +559,7 @@ mod tests {
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(5),
             client(
-                format!("http://{address}{ENDPOINT}"),
+                format!("http://127.0.0.1:{}{ENDPOINT}", address.port()),
                 "fixture-native-key".into(),
                 preamble(),
                 tokio::io::empty(),
@@ -600,23 +606,26 @@ mod tests {
             assert!(result.is_err());
         }
     }
-    #[tokio::test]
-    async fn forwarding_refuses_non_loopback_or_credentialed_destinations_before_io() {
+    #[test]
+    fn forwarding_refuses_non_loopback_or_credentialed_destinations_before_io() {
         for url in [
             "https://example.com/native/execution/v1",
             "http://127.0.0.1.evil.invalid/native/execution/v1",
             "http://secret@127.0.0.1:1/native/execution/v1",
             "http://127.0.0.1:1/other",
+            "http://localhost:1/native/execution/v1",
+            "http://[::ffff:192.0.2.1]:1/native/execution/v1",
+            "http://127.0.0.1:1/native/execution/v1?forward=outside",
+            "http://127.0.0.1:1/native/execution/v1#outside",
         ] {
-            assert!(client(
-                url.into(),
-                "fixture-native-key".into(),
-                preamble(),
-                tokio::io::empty(),
-                tokio::io::sink()
-            )
-            .await
-            .is_err());
+            assert!(local_daemon_url(url).is_err(), "{url}");
+        }
+        for url in [
+            "http://127.0.0.1:1/native/execution/v1",
+            "http://127.2.3.4:1/native/execution/v1",
+            "http://[::1]:1/native/execution/v1",
+        ] {
+            assert_eq!(local_daemon_url(url).unwrap().as_str(), url);
         }
     }
 }
