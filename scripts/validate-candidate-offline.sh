@@ -26,9 +26,12 @@ with tarfile.open("sym.tar.gz", "w:gz") as tar:
     ti = tarfile.TarInfo("link"); ti.type = tarfile.SYMTYPE; ti.linkname = "../../../etc/passwd"; tar.addfile(ti)
 with tarfile.open("big.tar.gz", "w:gz") as tar:
     ti = tarfile.TarInfo("big.bin"); ti.size = 2 * 1024 * 1024 * 1024; tar.addfile(ti)
-# 5. Empty manifest (missing required assets)
-with open("manifest.json", "w") as f: json.dump({"schema_version":2,"files":{}}, f)
+# 5. Empty manifest (missing required assets and identities)
+with open("manifest.json", "w") as f: json.dump({"schema_version":2,"identities":{},"files":{}}, f)
 with tarfile.open("empty_manifest.tar.gz", "w:gz") as tar: tar.add("manifest.json")
+# 6. Unsafe executable mode (setuid)
+with tarfile.open("unsafe_mode.tar.gz", "w:gz") as tar:
+    ti = tarfile.TarInfo("setuid.bin"); ti.size = 0; ti.mode = 0o4755; tar.addfile(ti)
 EOF
 
 cat <<'EOF' > preflight_validate_archive.py
@@ -61,16 +64,37 @@ try:
                     sys.exit(f"CRITICAL: Unsafe symlink/hardlink destination: {linkname}")
             if not (m.isreg() or m.isdir() or m.issym() or m.islnk()):
                 sys.exit(f"CRITICAL: Unsupported archive member type for {name}")
+            
+            # Reject setuid, setgid, and sticky bits
+            if m.mode & 0o7000:
+                sys.exit(f"CRITICAL: Unsafe file mode {oct(m.mode)} for {name}")
+
             if name.endswith("manifest.json") and manifest_member is None: manifest_member = m
 
         if not manifest_member: sys.exit("CRITICAL: manifest.json not found in archive root/members")
             
         f_manifest = tar.extractfile(manifest_member)
         manifest_data = json.load(f_manifest)
+        
+        if manifest_data.get("schema_version") != 2:
+            sys.exit("CRITICAL: Invalid manifest schema version")
+        
+        identities = manifest_data.get("identities", {})
+        for req_id in ["compiler", "source_commit", "cargo_lock_sha256"]:
+            if req_id not in identities:
+                sys.exit(f"CRITICAL: Missing required identity '{req_id}' in manifest")
+
         expected_files = manifest_data.get("files", {})
 
-        # Strict requirement for mandatory candidate assets
-        required_components = ["bin/agentfw", "bin/llm-firewall", "assets/baseline.classifier"]
+        # Strict requirement for complete candidate inventory
+        required_components = [
+            "bin/agentfw", "bin/llm-firewall", "bin/bwrap",
+            "assets/baseline.classifier",
+            "scripts/install-sou62-filesystem-profile.py",
+            "profiles/mcp/filesystem-readonly-v1/package.json",
+            "profiles/mcp/filesystem-readonly-v1/package-lock.json",
+            "node-v22.22.0-linux-x64.tar.xz"
+        ]
         for req in required_components:
             if req not in expected_files: sys.exit(f"CRITICAL: Mandatory component missing from manifest: {req}")
 
@@ -87,11 +111,13 @@ try:
             
             if m.isdir():
                 os.makedirs(target_path, exist_ok=True)
+                os.chmod(target_path, m.mode & 0o777)
             elif m.isreg():
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 source = tar.extractfile(m)
                 if source:
                     with open(target_path, "wb") as out: out.write(source.read())
+                    os.chmod(target_path, m.mode & 0o777)
                     extracted_paths.add(rel_path)
             elif m.issym():
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
@@ -113,7 +139,7 @@ EOF
 
 echo "Testing Archive Integrity & Completeness Negative Controls..."
 python3 make_bad_archives.py
-for bad in dup.tar.gz abs.tar.gz sym.tar.gz big.tar.gz empty_manifest.tar.gz; do
+for bad in dup.tar.gz abs.tar.gz sym.tar.gz big.tar.gz empty_manifest.tar.gz unsafe_mode.tar.gz; do
     if python3 preflight_validate_archive.py "$bad" out >/dev/null 2>&1; then
         echo "CRITICAL: preflight_validate_archive.py failed to reject $bad"
         exit 1
@@ -124,9 +150,16 @@ echo "Executing Strict Pre-Extraction Archive & Manifest Safety Check..."
 python3 preflight_validate_archive.py "$KIT_ARCHIVE" soup-wall-linux-amd64
 cd soup-wall-linux-amd64
 
+echo "Verifying Restored Executable Permissions..."
+./bin/agentfw --version >/dev/null || { echo "CRITICAL: agentfw lost executable permission"; exit 1; }
+./bin/bwrap --version >/dev/null || { echo "CRITICAL: bwrap lost executable permission"; exit 1; }
+
 echo "=> Extracting Node & Bootstrapping Profile (Strictly Offline)..."
 tar -xf node-v22.22.0-linux-x64.tar.xz
 export PATH="$(pwd)/node-v22.22.0-linux-x64/bin:$(pwd)/bin:$PATH"
+
+node --version >/dev/null || { echo "CRITICAL: Node lost executable permission"; exit 1; }
+
 export HOME="$(pwd)/agent-home"
 mkdir -p "$HOME/.agentfw" "$(pwd)/workspace"
 
