@@ -169,7 +169,8 @@ structural-text relief is enabled by passing local component tests.
 ## Daemon-owned original Git result inspection (SOU-109)
 
 Linux operators can explicitly select a separate execution boundary for the
-pinned Git profile. This does not change the legacy native result protocol.
+base sw-mcp/git-readonly/1 profile. Extended local-reference/shallow profiles
+retain their existing paths and cannot select this first native execution root. This does not change the legacy native result protocol.
 Add to the existing enforced daemon configuration:
 
 ~~~yaml
@@ -218,8 +219,15 @@ LONG_B64 contribution. git_show additionally requires a directly selected
 commit object; a blob with byte-identical commit text stays on baseline.
 git_diff covers only its fixed original header; its working-tree body remains
 untrusted. No separators or body bytes are stripped. Independent imperatives,
-signatures, secret/PII findings and positive result evidence preserve their
-original coupled policy floors. No policy preset, threshold, label, registry or
+signatures and positive result evidence retain the raw aggregate. Raw Ask and
+Escalate always keep their human/judge boundary. A raw Deny can change only when
+the actual first-match trace selects a narrow injection/tool_result/severity
+rule, with no additional conditions or shipped safety floor, an Allow default,
+and no matching independent restrictive predicate anywhere in the policy.
+This eligibility check also considers restrictions hidden by first-match Allow;
+the ordinary evaluator and rule order remain unchanged. Independent
+privacy, risk and opaque operator Deny rules keep their raw findings and risk.
+Secret/PII detectors always receive and retain the original bytes and findings. No policy preset, threshold, label, registry or
 resource grant is relaxed. ML input and invocation conditions remain unchanged.
 This is structural attribution, not a semantic declaration that arbitrary
 unmatched text is benign.

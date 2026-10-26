@@ -293,6 +293,55 @@ impl AgentPolicySet {
         (decision, trace)
     }
 
+    /// Eligibility gate for the opt-in formatter correction only. This does not
+    /// alter the ordinary first-match evaluator. A hidden independent restrictive
+    /// predicate is still evidence that the raw refusal was not formatter-only.
+    pub(crate) fn formatter_only_denial(&self, trace: &PolicyTrace, signals: &Signals) -> bool {
+        if self.default != Verdict::Allow
+            || trace.applied_floor.is_some()
+            || !trace
+                .operator_rule
+                .and_then(|index| self.agent_policies.get(index))
+                .is_some_and(Self::formatter_deny_condition)
+        {
+            return false;
+        }
+        if self.agent_policies.iter().any(|rule| {
+            rule.action != Verdict::Allow
+                && !Self::formatter_deny_condition(rule)
+                && self.matches(&rule.when, signals)
+        }) {
+            return false;
+        }
+        // Operator first-match Deny bypasses shipped-floor evaluation. Check
+        // those unchanged predicates separately before discounting that Deny.
+        let floors = Self {
+            agent_policies: Vec::new(),
+            egress_allowlist: self.egress_allowlist.clone(),
+            default: Verdict::Allow,
+        };
+        floors
+            .evaluate_with_trace(signals)
+            .1
+            .applied_floor
+            .is_none()
+    }
+
+    fn formatter_deny_condition(rule: &AgentRule) -> bool {
+        rule.action == Verdict::Deny
+            && rule.when.detector.as_deref() == Some("injection")
+            && rule.when.facet == Some(Facet::ToolResult)
+            && serde_json::to_value(&rule.when)
+                .ok()
+                .and_then(|value| value.as_object().cloned())
+                .is_some_and(|fields| {
+                    fields.iter().all(|(key, value)| {
+                        value.is_null()
+                            || matches!(key.as_str(), "detector" | "facet" | "min_severity")
+                    })
+                })
+    }
+
     fn evaluate_rules(&self, s: &Signals) -> (AgentDecision, Option<usize>) {
         for (index, rule) in self.agent_policies.iter().enumerate() {
             if self.matches(&rule.when, s) {

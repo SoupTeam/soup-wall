@@ -79,43 +79,53 @@ impl InjectionDetector {
         &self,
         ctx: &Context,
         formatter_hash: Option<&std::ops::Range<usize>>,
-    ) -> Vec<Finding> {
-        let mut findings = signatures::scan(ctx.text);
-        #[cfg(feature = "ml")]
-        let original_cheap_findings = {
-            let mut original = findings.clone();
-            original.extend(heuristics::scan(ctx.text));
-            original
-        };
-        findings.extend(match formatter_hash.filter(|_| findings.is_empty()) {
-            Some(span) => heuristics::scan_with_formatter_hash(ctx.text, Some(span)),
-            None => heuristics::scan(ctx.text),
+    ) -> (Vec<Finding>, Option<Vec<Finding>>) {
+        let mut original = signatures::scan(ctx.text);
+        let mut contextual = formatter_hash.map(|span| {
+            let mut adjusted = original.clone();
+            adjusted.extend(if original.is_empty() {
+                heuristics::scan_with_formatter_hash(ctx.text, Some(span))
+            } else {
+                heuristics::scan(ctx.text)
+            });
+            adjusted
         });
-
+        original.extend(heuristics::scan(ctx.text));
         #[cfg(feature = "ml")]
-        if let Some(clf) = &self.classifier {
-            if should_escalate(&original_cheap_findings) {
-                if let Ok(p) = clf.predict(ctx.text) {
-                    if p >= self.ml_threshold {
-                        let severity = if p >= 0.85 {
+        if let Some(classifier) = &self.classifier {
+            // One prediction over unchanged original bytes, with exactly the
+            // original invocation condition. Both policy views share it.
+            if should_escalate(&original) {
+                if let Ok(probability) = classifier.predict(ctx.text) {
+                    if probability >= self.ml_threshold {
+                        let severity = if probability >= 0.85 {
                             Severity::High
                         } else {
                             Severity::Medium
                         };
-                        findings.push(Finding::new(
+                        let finding = Finding::new(
                             "injection.ml",
                             severity,
-                            p,
-                            format!("ML classifier P(injection)={p:.2}"),
-                        ));
+                            probability,
+                            format!("ML classifier P(injection)={probability:.2}"),
+                        );
+                        if let Some(adjusted) = &mut contextual {
+                            adjusted.push(finding.clone());
+                        }
+                        original.push(finding);
                     }
                 }
             }
         }
-        for f in &mut findings {
-            f.direction = ctx.direction;
+        for finding in &mut original {
+            finding.direction = ctx.direction;
         }
-        findings
+        if let Some(adjusted) = &mut contextual {
+            for finding in adjusted {
+                finding.direction = ctx.direction;
+            }
+        }
+        (original, contextual)
     }
 }
 
@@ -125,15 +135,16 @@ impl Detector for InjectionDetector {
     }
 
     fn inspect(&self, ctx: &Context) -> Vec<Finding> {
-        self.inspect_stages(ctx, None)
+        self.inspect_stages(ctx, None).0
     }
 
     fn inspect_with_formatter_hash(
         &self,
         ctx: &Context,
         span: &std::ops::Range<usize>,
-    ) -> Vec<Finding> {
-        self.inspect_stages(ctx, Some(span))
+    ) -> (Vec<Finding>, Vec<Finding>) {
+        let (original, contextual) = self.inspect_stages(ctx, Some(span));
+        (original, contextual.expect("formatter view requested"))
     }
 }
 
