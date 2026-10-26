@@ -859,6 +859,126 @@ mod tests {
             .unwrap();
     }
 
+    // The fresh positive fixture needs an independently observed writer-close
+    // boundary. Production capture still refuses any uncertain source state.
+    struct MappingClose {
+        file: File,
+        watch: i32,
+        name: Vec<u8>,
+    }
+
+    impl MappingClose {
+        fn new(path: &Path) -> Self {
+            let directory = File::open(path.parent().unwrap()).unwrap();
+            let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
+            assert!(fd >= 0, "owned mapper-close observer unavailable");
+            let file = unsafe { File::from_raw_fd(fd) };
+            let anchor = CString::new(format!("/proc/self/fd/{}", directory.as_raw_fd())).unwrap();
+            let watch = unsafe {
+                libc::inotify_add_watch(
+                    file.as_raw_fd(),
+                    anchor.as_ptr(),
+                    libc::IN_ONLYDIR | libc::IN_CLOSE_WRITE,
+                )
+            };
+            assert!(watch >= 0, "owned mapper-close watch unavailable");
+            Self {
+                file,
+                watch,
+                name: path
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .as_bytes()
+                    .to_vec(),
+            }
+        }
+
+        fn closed(&self) -> bool {
+            let mut found = false;
+            let mut bytes = [0_u8; 4096];
+            for _ in 0..16 {
+                let count = unsafe {
+                    libc::read(
+                        self.file.as_raw_fd(),
+                        bytes.as_mut_ptr().cast(),
+                        bytes.len(),
+                    )
+                };
+                if count < 0 {
+                    match std::io::Error::last_os_error().raw_os_error() {
+                        Some(libc::EINTR) => continue,
+                        Some(libc::EAGAIN) => return found,
+                        other => panic!("owned mapper-close read failed: {other:?}"),
+                    }
+                }
+                assert!(count > 0, "owned mapper-close observer closed");
+                let count = count as usize;
+                let header = std::mem::size_of::<libc::inotify_event>();
+                let mut offset = 0;
+                while offset < count {
+                    assert!(count - offset >= header, "truncated mapper-close event");
+                    let event = unsafe {
+                        std::ptr::read_unaligned(
+                            bytes.as_ptr().add(offset).cast::<libc::inotify_event>(),
+                        )
+                    };
+                    let end = offset + header + event.len as usize;
+                    assert!(end <= count, "truncated mapper-close name");
+                    assert_eq!(
+                        event.mask & (libc::IN_Q_OVERFLOW | libc::IN_IGNORED | libc::IN_UNMOUNT),
+                        0,
+                        "owned mapper-close observation lost"
+                    );
+                    assert_eq!(event.wd, self.watch, "owned mapper-close watch changed");
+                    let name = bytes[offset + header..end]
+                        .split(|byte| *byte == 0)
+                        .next()
+                        .unwrap();
+                    if event.mask & libc::IN_CLOSE_WRITE != 0 && name == self.name {
+                        found = true;
+                    }
+                    offset = end;
+                }
+            }
+            panic!("owned mapper-close events exceed bound");
+        }
+
+        fn wait(&self) {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            loop {
+                if self.closed() {
+                    return;
+                }
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                assert!(
+                    !remaining.is_zero(),
+                    "timed out waiting for owned mapper CLOSE_WRITE"
+                );
+                let mut fd = libc::pollfd {
+                    fd: self.file.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                };
+                let result = unsafe { libc::poll(&mut fd, 1, remaining.as_millis().max(1) as i32) };
+                if result < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR)
+                {
+                    continue;
+                }
+                assert!(
+                    result > 0,
+                    "timed out or failed waiting for owned mapper CLOSE_WRITE"
+                );
+                assert_eq!(
+                    fd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL),
+                    0,
+                    "owned mapper-close poll observation lost"
+                );
+            }
+        }
+    }
+
     struct Mapping {
         _file: File,
         address: *mut u8,
@@ -949,7 +1069,12 @@ mod tests {
             let (root, _) = fixture_in(parent);
             let path = root.path().join(".git/shallow");
             let before = std::fs::read(&path).unwrap();
+            let close = MappingClose::new(&path);
             let mapping = Mapping::new(&path);
+            assert!(
+                !close.closed(),
+                "mapper close cannot complete while its writer remains open"
+            );
             let workspace = File::open(root.path()).unwrap();
             assert!(View::capture(&workspace).is_err());
             mapping.set_first(if before[0] == b'a' { b'b' } else { b'a' });
@@ -958,7 +1083,12 @@ mod tests {
             mapping.set_first(before[0]);
             assert_eq!(std::fs::read(&path).unwrap(), before);
             assert!(View::capture(&workspace).is_err());
+            assert!(
+                !close.closed(),
+                "restored bytes cannot establish mapper closure"
+            );
             drop(mapping);
+            close.wait();
             let view = View::capture(&workspace).unwrap();
             for _ in 0..8 {
                 view.validate_call("git_show", &serde_json::json!({"revision":"HEAD"}))
