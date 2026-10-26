@@ -75,6 +75,19 @@ worker deadline and existing scan/resource budgets remain unchanged. Only a
 proved original formatter header receives the existing attribution; raw blobs,
 body content and policy floors retain baseline inspection.
 
+Healthy qualification sessions explicitly request and verify the production
+default ten-second liveness lease. The shared fixture initially chose two
+seconds; [SOU-146 run #185](https://github.com/SoupTeam/soup-wall/actions/runs/40355477933)
+failed on liveness uncertainty after its first file read. It does not qualify
+healthy two-second execution for either profile or establish a complete cause.
+This qualifier retains that limitation and separately tests a granted two-second
+lease: pause only the pinned owned collector, match its exact session/epoch
+`native_session_expired` audit, require zero execution/new original results and
+terminal uncertainty, and independently verify cleanup. The namespace owner's
+1500 ms guard is separate evidence. A new ten-second session must return the
+original bytes. Production defaults, five-second calls, approval TTLs and
+resource/policy guards remain unchanged.
+
 ## Acceptance
 
 The targeted native Linux command must retain exact source/profile/runtime/

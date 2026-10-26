@@ -181,6 +181,7 @@ jobs:
           cargo test --locked -p agentfw git_tracked_symlinks --lib
           cargo test --locked -p agentfw --lib verified_git
           python3 -B -m unittest discover -s scripts/tests -p test_sou150_profile.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_native_git_liveness_control.py -v
           python3 -B scripts/verify-sou150-tracked-symlinks.py --run --agentfw "$PWD/target/debug/agentfw" \
             --git "$RUNNER_TEMP/sou107-git-source/git" --git-sha256 "$(sha256sum "$RUNNER_TEMP/sou107-git-source/git" | cut -d' ' -f1)" \
             --bwrap "$RUNNER_TEMP/sou68-bwrap-build/bwrap" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \

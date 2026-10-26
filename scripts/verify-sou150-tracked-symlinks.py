@@ -26,6 +26,7 @@ SPEC.loader.exec_module(CLONE)
 V1, BASE = CLONE.V1, CLONE.BASE
 INSTALL = CLONE.load("sou150_installer", "install-sou150-git-profile.py")
 APPROVAL = CLONE.load("sou150_approval", "verify-sou105-selected-approval.py")
+LEASE = CLONE.load("sou150_git_lease", "native_git_liveness_control.py")
 require, sha, write = BASE.require, BASE.sha, BASE.write
 READS = (
     ("git_show", {"revision": "HEAD"}, "tracked-link"),
@@ -59,7 +60,7 @@ def fixture(root, git_binary, env):
     require(git(stack, "show", "HEAD:tracked-link") == b"notes.txt", "Git link-object calibration failed")
 
 
-def collector(stack, log, protected):
+def collector(stack, log, protected, *, lease_seconds=LEASE.HEALTHY_LEASE_SECONDS):
     python = str(stack.install / "package/python/bin/python3.11")
     if protected:
         env = dict(stack.env, **stack.selection["environment"])
@@ -73,14 +74,17 @@ def collector(stack, log, protected):
         token = APPROVAL.command(SimpleNamespace(agentfw=stack.binary, output=stack.root), env,
             "child-authority", "mint", "--session", "host-" + bound, "--server", "sou150-git",
             "--agent-id", "agent-" + bound, "--instance-id", instance, "--ttl-seconds", "120", "--tools", ",".join(tools))
-        env.update(AGENTFW_NATIVE_LIVENESS="true", AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS="2", AGENTFW_MCP_SESSION=bound)
+        env.update(AGENTFW_NATIVE_LIVENESS="true", AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS=str(lease_seconds), AGENTFW_MCP_SESSION=bound)
         command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou150-git",
             "--host-session", "host-" + bound, "--child-authority", token, "--",
             python, "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     else:
         command = [python, "-I", "-B", "-m", "mcp_server_git", "--repository", str(stack.workspace)]
         env = dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git))
-    return V1.Client(command, env, stack.workspace, log, "SOU150 protected" if protected else "SOU150 unwrapped")
+    client = V1.Client(command, env, stack.workspace, log, "SOU150 protected" if protected else "SOU150 unwrapped")
+    if protected:
+        client.liveness_session_id = bound
+    return client
 
 
 class DaemonProcessWitness(BASE.ProcessWitness):
@@ -166,6 +170,7 @@ def byte_reads(stack, report):
             client.close()
             report["unwrapped_client"] = client.transcript()
     require(client.process_witness.final["all_stopped"], "unwrapped descendants remain")
+    report["original_read_sha256"] = {tool: hashlib.sha256(raw).hexdigest() for tool, raw in originals.items()}
     # The reference server runs outside the read-only boundary. Retain its
     # effects separately and take the protected baseline before protected launch.
     before = BASE.snapshot(stack.workspace)
@@ -180,6 +185,9 @@ def byte_reads(stack, report):
         client = collector(stack, log, True)
         try:
             client.initialize()
+            epoch = LEASE.enrolled_epoch(LEASE.audit_rows(stack.audit), client.liveness_session_id, LEASE.HEALTHY_LEASE_SECONDS)
+            report["healthy_lease"] = {"requested_seconds": LEASE.HEALTHY_LEASE_SECONDS,
+                "granted_seconds": LEASE.HEALTHY_LEASE_SECONDS, "epoch_sha256": hashlib.sha256(epoch.encode()).hexdigest()}
             for n, (tool, args, _) in enumerate(READS, 10):
                 cursor = execution_cursor(stack)
                 reply, raw = client.exchange(V1.call(n, tool, args))
@@ -463,7 +471,7 @@ def run(args):
             config["audit"] = str(output / "native-audit.jsonl")
             config["native"].update(git_execution={"profile_path": str(execution_profile),
                 "profile_sha256": sha(execution_profile), "server_id": "sou150-git"}, liveness={
-                "default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100})
+                "default_lease_seconds": LEASE.HEALTHY_LEASE_SECONDS, "max_lease_seconds": 60, "maintenance_interval_ms": 100})
             execution_selection = {**selection, "profile_sha256": sha(execution_profile),
                 "environment": {**selection["environment"], "AGENTFW_MCP_SERVER_PROFILE": str(execution_profile)}}
             report["execution_selection"] = execution_selection
@@ -477,6 +485,10 @@ def run(args):
                                         daemon_witness=daemon_witness, audit=output / "native-audit.jsonl",
                                         profile_sha256=sha(execution_profile))
                 byte_reads(stack, report)
+                LEASE.qualify_short_lease(make_client=lambda log, seconds: collector(stack, log, True, lease_seconds=seconds),
+                    make_call=lambda identifier: V1.call(identifier, "git_show", {"revision": "HEAD"}),
+                    audit=stack.audit, log_path=output / "short-lease-expiry.log", witness_factory=DaemonProcessWitness,
+                    expected_sha256=report["original_read_sha256"]["git_show"], report=report)
                 late_changes(stack, report)
             require(INSTALL.SHARED.V1.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"], "original package changed")
             require(sha(config["policy"]) == selection["policy_sha256"], "policy changed")
