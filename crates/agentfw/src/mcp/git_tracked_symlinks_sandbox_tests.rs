@@ -29,6 +29,16 @@ impl Drop for Writer {
 #[tokio::test]
 #[ignore = "requires the explicit pinned Linux tracked-symlink profile"]
 async fn selected_tracked_symlinks_late_and_racing_outside_reads_are_os_contained() {
+    tracked_link_confinement(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires the explicit pinned Linux tracked-symlink profile"]
+async fn verified_tracked_preparation_late_and_racing_outside_reads_are_os_contained() {
+    tracked_link_confinement(true).await;
+}
+
+async fn tracked_link_confinement(verified: bool) {
     let profile =
         ProfileConfig::read(&std::fs::read(std::env::var("SOU150_TEST_PROFILE").unwrap()).unwrap())
             .unwrap();
@@ -85,9 +95,13 @@ print(json.dumps({{'late_link_contained':True,'useful_read':True}}))
         );
         // Capture descriptors on a valid tracked link, then replace it. Python
         // reads directly; neither the Rust parser nor the Git guard can refuse.
-        let prepared =
-            prepare_linux_command(&profile, &["-I".into(), "-B".into(), "-c".into(), script])
-                .unwrap();
+        let args = ["-I".into(), "-B".into(), "-c".into(), script];
+        let prepared = if verified {
+            prepare_linux_command_inner(&profile, &args, None, false, true)
+        } else {
+            prepare_linux_command(&profile, &args, None, false)
+        }
+        .unwrap();
         std::fs::remove_file(&link).unwrap();
         symlink(if round == 0 { &marker } else { &relative }, &link).unwrap();
         assert_eq!(
@@ -175,4 +189,9 @@ print(json.dumps({{'late_link_contained':True,'useful_read':True}}))
         b"unrelated state unchanged"
     );
     println!("SOU150_LATE_RACE_OS_MARKER_PASSED");
+    if verified {
+        // Confinement-only probe of the actual worker preparation branch;
+        // late link mutation withdraws its data view, so no Completion is claimed.
+        println!("SOU150_VERIFIED_PREPARATION_OS_MARKER_PASSED");
+    }
 }

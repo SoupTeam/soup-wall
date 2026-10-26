@@ -163,7 +163,7 @@ pub(crate) fn prepare_verified_git(
     profile: &ProfileConfig,
 ) -> anyhow::Result<PreparedServerSandbox> {
     anyhow::ensure!(
-        super::server_profile::git::is_profile(&profile.format),
+        super::verified_git::supports_profile(&profile.format),
         "verified execution requires a supported Git profile"
     );
     // Validate constructed configs as strictly as operator file configs.

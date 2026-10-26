@@ -7,7 +7,7 @@ use tokio::io::AsyncBufReadExt;
 
 fn profile() -> ProfileConfig {
     ProfileConfig {
-        format: git::LOCAL_REFS_FORMAT.into(),
+        format: git::FORMAT.into(),
         workspace: "/workspace".into(),
         workspace_identity: None,
         runtime_path: "/owned/python".into(),
@@ -38,6 +38,38 @@ fn show() -> Vec<u8> {
         "git_show",
         json!({"repo_path":"/workspace","revision":"HEAD"}),
     )
+}
+#[test]
+fn tracked_execution_allowlist_preserves_the_original_argument_contract() {
+    for format in [git::FORMAT, server_profile::git_tracked_symlinks::FORMAT] {
+        let mut p = profile();
+        p.format = format.into();
+        assert!(supports_profile(format));
+        assert!(request(&p, &show()).is_ok());
+        for revision in ["HEAD:notes.txt", "refs/heads/main", "HEAD~1", "../outside"] {
+            assert!(request(
+                &p,
+                &wire(
+                    json!(1),
+                    "git_show",
+                    json!({"repo_path":"/workspace","revision":revision})
+                )
+            )
+            .is_err());
+        }
+    }
+    for format in [
+        git::LOCAL_REFS_FORMAT,
+        git::SHALLOW_FORMAT,
+        server_profile::git_local_clone::FORMAT,
+        "sw-mcp/git-readonly-file-revisions/1",
+        server_profile::FORMAT,
+    ] {
+        let mut p = profile();
+        p.format = format.into();
+        assert!(!supports_profile(format));
+        assert!(request(&p, &show()).is_err());
+    }
 }
 #[test]
 fn request_rejects_duplicate_keys_malformed_frames_and_unapproved_tools() {
@@ -194,7 +226,7 @@ async fn original_request_bytes_are_written_once_after_pinned_handshake_and_disc
         assert_eq!(seen.load(Ordering::SeqCst), usize::from(!bad_manifest));
     }
 }
-fn fixture() -> (tempfile::TempDir, Value, Arc<Snapshot>) {
+fn fixture(format: &str) -> (tempfile::TempDir, Value, Arc<Snapshot>) {
     use base64::Engine;
     let data: Value = serde_json::from_str(include_str!(
         "../../tests/fixtures/sou156-original-object-confusion.json"
@@ -215,57 +247,56 @@ fn fixture() -> (tempfile::TempDir, Value, Arc<Snapshot>) {
         )
         .unwrap();
     }
-    let snapshot = Snapshot::capture(
-        &std::fs::File::open(root.path()).unwrap(),
-        git::LOCAL_REFS_FORMAT,
-    )
-    .unwrap();
+    let snapshot = Snapshot::capture(&std::fs::File::open(root.path()).unwrap(), format).unwrap();
     (root, data, snapshot)
 }
 #[test]
 fn completion_binds_entire_original_text_and_retains_sticky_snapshot() {
     use base64::Engine;
-    let (root, data, snapshot) = fixture();
-    let raw = base64::engine::general_purpose::STANDARD
-        .decode(data["original_response_base64"].as_str().unwrap())
-        .unwrap();
-    let reply: Value = serde_json::from_slice(&raw).unwrap();
-    let text = reply["result"]["content"][0]["text"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let p = profile();
-    for (key, eligible) in [("commit_oid", true), ("blob_oid", false)] {
+    for format in [git::FORMAT, server_profile::git_tracked_symlinks::FORMAT] {
+        let (root, data, snapshot) = fixture(format);
+        let raw = base64::engine::general_purpose::STANDARD
+            .decode(data["original_response_base64"].as_str().unwrap())
+            .unwrap();
+        let reply: Value = serde_json::from_slice(&raw).unwrap();
+        let text = reply["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let mut p = profile();
+        p.format = format.into();
+        for (key, eligible) in [("commit_oid", true), ("blob_oid", false)] {
+            let original = wire(
+                json!(10),
+                "git_show",
+                json!({"repo_path":"/workspace","revision":data[key]}),
+            );
+            let call = request(&p, &original).unwrap();
+            // Local completion parser test, NOT a runtime-origin acceptance claim.
+            let completion =
+                completed_owned_output(&p, &call, reply.clone(), raw.clone(), snapshot.clone())
+                    .unwrap();
+            assert_eq!(completion.raw(), raw);
+            assert_eq!(completion.formatter_span(&text).is_some(), eligible);
+            assert!(completion
+                .formatter_span(&format!("{text}changed"))
+                .is_none());
+            completion.validate().unwrap();
+        }
         let original = wire(
             json!(10),
             "git_show",
-            json!({"repo_path":"/workspace","revision":data[key]}),
+            json!({"repo_path":"/workspace","revision":"HEAD"}),
         );
         let call = request(&p, &original).unwrap();
-        // Local completion parser test, NOT a runtime-origin acceptance claim.
-        let completion =
-            completed_owned_output(&p, &call, reply.clone(), raw.clone(), snapshot.clone())
-                .unwrap();
-        assert_eq!(completion.raw(), raw);
-        assert_eq!(completion.formatter_span(&text).is_some(), eligible);
-        assert!(completion
-            .formatter_span(&format!("{text}changed"))
-            .is_none());
-        completion.validate().unwrap();
+        let completion = completed_owned_output(&p, &call, reply, raw, snapshot).unwrap();
+        let selected = root.path().join(".git/refs/heads/main");
+        let moved = selected.with_extension("moved");
+        std::fs::rename(&selected, &moved).unwrap();
+        std::fs::rename(&moved, &selected).unwrap();
+        assert!(completion.validate().is_err());
+        assert!(completion.formatter_span(&text).is_none());
     }
-    let original = wire(
-        json!(10),
-        "git_show",
-        json!({"repo_path":"/workspace","revision":"HEAD"}),
-    );
-    let call = request(&p, &original).unwrap();
-    let completion = completed_owned_output(&p, &call, reply, raw, snapshot).unwrap();
-    let selected = root.path().join(".git/refs/heads/main");
-    let moved = selected.with_extension("moved");
-    std::fs::rename(&selected, &moved).unwrap();
-    std::fs::rename(&moved, &selected).unwrap();
-    assert!(completion.validate().is_err());
-    assert!(completion.formatter_span(&text).is_none());
 }
 #[tokio::test]
 #[ignore = "requires native Linux pinned Git/Python/bwrap profile and SOU86_TEST_AGENTFW; not a scripted qualification"]
@@ -273,7 +304,7 @@ async fn actual_owned_original_git_commit_and_blob_keep_exact_kind_boundary() {
     let profile_path = std::env::var_os("SOU156_VERIFIED_GIT_TEST_PROFILE")
         .expect("explicit pinned profile required");
     let mut p = ProfileConfig::read(&std::fs::read(profile_path).unwrap()).unwrap();
-    let (root, data, _) = fixture();
+    let (root, data, _) = fixture(&p.format);
     p.workspace = root.path().to_owned();
     p.workspace_identity = Some(server_profile::WorkspaceIdentity::from_metadata(
         &std::fs::metadata(root.path()).unwrap(),
@@ -298,6 +329,7 @@ async fn actual_owned_original_git_commit_and_blob_keep_exact_kind_boundary() {
         let text = value["result"]["content"][0]["text"].as_str().unwrap();
         assert_eq!(completion.formatter_span(text).is_some(), eligible);
     }
+    println!("SOU150_REAL_WORKER_KIND_BOUNDARY format={}", p.format);
 }
 
 #[test]

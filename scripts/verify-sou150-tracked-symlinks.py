@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import urllib.request
 from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
@@ -24,6 +25,7 @@ CLONE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CLONE)
 V1, BASE = CLONE.V1, CLONE.BASE
 INSTALL = CLONE.load("sou150_installer", "install-sou150-git-profile.py")
+APPROVAL = CLONE.load("sou150_approval", "verify-sou105-selected-approval.py")
 require, sha, write = BASE.require, BASE.sha, BASE.write
 READS = (
     ("git_show", {"revision": "HEAD"}, "tracked-link"),
@@ -60,13 +62,92 @@ def fixture(root, git_binary, env):
 def collector(stack, log, protected):
     python = str(stack.install / "package/python/bin/python3.11")
     if protected:
-        command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou150-git", "--",
-            python, "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
         env = dict(stack.env, **stack.selection["environment"])
+        bound = "sou150-" + os.urandom(8).hex()
+        native_token = (Path(stack.env["HOME"]) / ".agentfw/native-token").read_text().strip()
+        request = urllib.request.Request(f"http://127.0.0.1:{stack.port}/native/v1/instance",
+            headers={"Authorization": "Bearer " + native_token})
+        with urllib.request.urlopen(request, timeout=5) as reply:
+            instance = json.load(reply)["instance_id"]
+        tools = [t["name"] for t in json.loads((stack.install / "registry.json").read_text())["tools"] if t.get("mcp_result_profile")]
+        token = APPROVAL.command(SimpleNamespace(agentfw=stack.binary, output=stack.root), env,
+            "child-authority", "mint", "--session", "host-" + bound, "--server", "sou150-git",
+            "--agent-id", "agent-" + bound, "--instance-id", instance, "--ttl-seconds", "120", "--tools", ",".join(tools))
+        env.update(AGENTFW_NATIVE_LIVENESS="true", AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS="2", AGENTFW_MCP_SESSION=bound)
+        command = [str(stack.binary), "mcp", "--native-admission", "--id", "sou150-git",
+            "--host-session", "host-" + bound, "--child-authority", token, "--",
+            python, "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"]
     else:
         command = [python, "-I", "-B", "-m", "mcp_server_git", "--repository", str(stack.workspace)]
         env = dict(stack.env, GIT_PYTHON_GIT_EXECUTABLE=str(stack.git))
     return V1.Client(command, env, stack.workspace, log, "SOU150 protected" if protected else "SOU150 unwrapped")
+
+
+class DaemonProcessWitness(BASE.ProcessWitness):
+    """Observe descendants spawned by every Tokio thread, as in accepted SOU-109."""
+    incomplete = False
+
+    def sample(self):
+        pending, visited, task_count = [self.parent], set(), 0
+        while pending:
+            if len(visited) >= 512:
+                self.incomplete = True
+                return
+            pid = pending.pop()
+            if pid in visited:
+                continue
+            visited.add(pid)
+            identity = self.identity(pid)
+            if identity is None:
+                continue
+            row = self.observed.setdefault((pid, identity), {"pid": pid, "start_time_ticks": identity,
+                                                           "parent_process": pid == self.parent})
+            try:
+                with Path(f"/proc/{pid}/cmdline").open("rb") as stream:
+                    argv = stream.read(4096).split(b"\0")
+                if argv[0] == b"/mcp-server/python/bin/python3.11" and b"mcp_server_git" in argv:
+                    row["original_git_server"] = True
+                tasks = list(Path(f"/proc/{pid}/task").iterdir())
+                task_count += len(tasks)
+                if task_count > 4096:
+                    self.incomplete = True
+                    return
+                for task in tasks:
+                    try:
+                        data = (task / "children").read_text()
+                        if len(data) > 4096:
+                            self.incomplete = True
+                            return
+                        pending.extend(int(value) for value in data.split())
+                    except FileNotFoundError:
+                        pass
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+            except (OSError, ValueError):
+                self.incomplete = True
+
+    def finish(self):
+        result = super().finish()
+        result["observation_complete"] = not self.incomplete
+        result["all_stopped"] = result["all_stopped"] and not self.incomplete
+        return result
+
+
+def execution_cursor(stack):
+    stack.daemon_witness.sample()
+    return (len(BASE.events(stack.audit, "native_git_execution_reserved")),
+            {key for key, row in list(stack.daemon_witness.observed.items()) if row.get("original_git_server")})
+
+
+def execution_proof(stack, before, tool):
+    stack.daemon_witness.sample()
+    rows = BASE.events(stack.audit, "native_git_execution_reserved")[before[0]:]
+    workers = [row for key, row in list(stack.daemon_witness.observed.items())
+               if row.get("original_git_server") and key not in before[1]]
+    require(len(rows) == 1 and rows[0]["tool"] == tool and rows[0]["profile_sha256"] == stack.profile_sha256
+            and workers and not stack.daemon_witness.incomplete, "exact daemon invocation and original worker witness required")
+    return {"route": "daemon_owned_original_pipe", "profile": INSTALL.FORMAT, "profile_sha256": stack.profile_sha256,
+            "owned_original_workers": workers, "completion": "released original frame independently byte-compared"}
 
 
 def byte_reads(stack, report):
@@ -100,12 +181,17 @@ def byte_reads(stack, report):
         try:
             client.initialize()
             for n, (tool, args, _) in enumerate(READS, 10):
+                cursor = execution_cursor(stack)
                 reply, raw = client.exchange(V1.call(n, tool, args))
                 if BASE.refused(reply):
-                    report["read_admission_failures"].append({"tool": tool, "response": reply})
+                    report["read_admission_failures"].append({"id": n, "tool": tool, "response": reply,
+                        "expected": "original_bytes_released", "passed": False,
+                        "original_sha256": hashlib.sha256(originals[tool]).hexdigest()})
                     continue
                 require(raw == originals[tool], "original payload bytes changed: " + tool)
-                report["reads"].append({"tool": tool, "byte_identical": True, "sha256": hashlib.sha256(raw).hexdigest()})
+                execution = execution_proof(stack, cursor, tool) if tool in ("git_show", "git_diff") else {"route": "collector_original_server"}
+                report["reads"].append({"id": n, "tool": tool, "byte_identical": True,
+                    "sha256": hashlib.sha256(raw).hexdigest(), "execution": execution})
         finally:
             client.close()
             report["protected_client"] = client.transcript()
@@ -307,7 +393,7 @@ def run(args):
     report = {"format": "sou150-tracked-symlinks-acceptance/1", "status": "incomplete", "source_before": before,
               "runtime_sha256": {name: sha(getattr(args, name)) for name in ("agentfw", "git", "bwrap", "git_launcher", "sandbox_test_binary")},
               "driver_sha256": sha(__file__), "skipped": 0}
-    daemon = None
+    daemon, daemon_witness = None, None
     try:
         with tempfile.TemporaryDirectory(prefix="sou150-owned-") as temporary:
             private = Path(temporary)
@@ -319,6 +405,13 @@ def run(args):
             fixture(workspace, args.git, env)
             INSTALL.install(install, workspace, args.git, args.git_sha256, args.bwrap, args.git_launcher)
             report["installation"] = json.loads((install / "installation.json").read_text())
+            selected_profile = json.loads((install / "profile.json").read_text())
+            observed = workspace.stat()
+            selected_profile["workspaceIdentity"] = {"device": observed.st_dev, "inode": observed.st_ino, "uid": observed.st_uid}
+            execution_profile = output / "execution-profile.json"
+            write(execution_profile, selected_profile)
+            report["execution_profile"] = {"sha256": sha(execution_profile), "profile": selected_profile,
+                "installed_profile_sha256": sha(install / "profile.json"), "qualification_copy": True}
             positive = subprocess.run([str(args.sandbox_test_binary),
                 "selected_tracked_symlinks_late_and_racing_outside_reads_are_os_contained", "--ignored", "--nocapture"],
                 env=dict(env, SOU150_TEST_PROFILE=str(install / "profile.json"), SOU86_TEST_AGENTFW=str(args.agentfw.resolve())),
@@ -327,18 +420,62 @@ def run(args):
             require(positive.returncode == 0 and b"SOU150_LATE_RACE_OS_MARKER_PASSED" in positive.stdout
                     and b"1 passed; 0 failed" in positive.stdout, "independent late/racing OS marker proof failed")
             report["sandbox_positive"] = True
+            verified = subprocess.run([str(args.sandbox_test_binary),
+                "verified_tracked_preparation_late_and_racing_outside_reads_are_os_contained", "--ignored", "--nocapture"],
+                env=dict(env, SOU150_TEST_PROFILE=str(execution_profile), SOU86_TEST_AGENTFW=str(args.agentfw.resolve())),
+                capture_output=True, timeout=150)
+            (output / "verified-preparation-os-marker.log").write_bytes(verified.stdout + verified.stderr)
+            require(verified.returncode == 0 and b"SOU150_VERIFIED_PREPARATION_OS_MARKER_PASSED" in verified.stdout
+                    and b"1 passed; 0 failed" in verified.stdout, "verified worker preparation containment failed")
+            report["confinement_probes"] = {"collector_preparation": True, "verified_worker_preparation": True,
+                "scope": "actual preparation/filter/mount branches; late mutation withdraws data, no Completion claimed"}
+            kind = subprocess.Popen([str(args.sandbox_test_binary),
+                "mcp::verified_git::linux::tests::actual_owned_original_git_commit_and_blob_keep_exact_kind_boundary",
+                "--exact", "--ignored", "--nocapture"],
+                env=dict(env, SOU156_VERIFIED_GIT_TEST_PROFILE=str(execution_profile), SOU86_TEST_AGENTFW=str(args.agentfw.resolve())),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            kind_witness = DaemonProcessWitness(kind.pid)
+            out, err = b"", b""
+            try:
+                out, err = kind.communicate(timeout=90)
+            except subprocess.TimeoutExpired:
+                kind.kill()
+                out, err = kind.communicate(timeout=5)
+            finally:
+                if kind.poll() is None:
+                    kind.kill()
+                    kind.wait(timeout=5)
+                cleanup = kind_witness.finish()
+                report["actual_worker_kind_cleanup"] = cleanup
+            (output / "worker-kind-boundary.log").write_bytes(out + err)
+            require(kind.returncode == 0 and b"1 passed; 0 failed" in out and cleanup["all_stopped"]
+                    and ("SOU150_REAL_WORKER_KIND_BOUNDARY format=" + INSTALL.FORMAT).encode() in out
+                    and any(row.get("original_git_server") and not row["parent_process"] for row in cleanup["observed"]),
+                    "actual tracked-profile worker kind boundary or original-descendant cleanup unverified")
+            report["actual_worker_kind_boundary"] = {"passed": True, "profile": INSTALL.FORMAT,
+                "scope": "original commit and commit-looking blob from same mounted object image"}
             default_refusal(SimpleNamespace(root=output, binary=args.agentfw, git=args.git,
                                            workspace=workspace, install=install), report)
             subprocess.run([str(args.agentfw), "install"], env=env, stdin=subprocess.DEVNULL, capture_output=True, check=True, timeout=30)
             port = BASE.DEMO.free_port()
             config, selection = INSTALL.prepare(install, output / "selection", port)
             report["pilot_selection"] = selection
+            config["audit"] = str(output / "native-audit.jsonl")
+            config["native"].update(git_execution={"profile_path": str(execution_profile),
+                "profile_sha256": sha(execution_profile), "server_id": "sou150-git"}, liveness={
+                "default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100})
+            execution_selection = {**selection, "profile_sha256": sha(execution_profile),
+                "environment": {**selection["environment"], "AGENTFW_MCP_SERVER_PROFILE": str(execution_profile)}}
+            report["execution_selection"] = execution_selection
             write(home / ".agentfw/config.yaml", config)
             with (output / "daemon.log").open("wb") as log:
                 daemon = subprocess.Popen([str(args.agentfw), "serve"], env=env, stdout=log, stderr=log)
+                daemon_witness = DaemonProcessWitness(daemon.pid)
                 require(BASE.DEMO.wait_healthy(port, daemon), "owned enforcing daemon failed")
                 stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace,
-                                        install=install, env=env, selection=selection)
+                                        install=install, env=env, selection=execution_selection, port=port,
+                                        daemon_witness=daemon_witness, audit=output / "native-audit.jsonl",
+                                        profile_sha256=sha(execution_profile))
                 byte_reads(stack, report)
                 late_changes(stack, report)
             require(INSTALL.SHARED.V1.tree_sha(install / "package") == report["installation"]["profile"]["packageTreeSha256"], "original package changed")
@@ -353,6 +490,10 @@ def run(args):
             report["daemon_stopped"] = daemon.poll() is not None
             if not report["daemon_stopped"]:
                 report["status"], report["cleanup_error"] = "fail", "owned daemon remains"
+            if daemon_witness is not None:
+                report["daemon_cleanup"] = daemon_witness.finish()
+                if not report["daemon_cleanup"]["all_stopped"]:
+                    report["status"], report["cleanup_error"] = "fail", "owned daemon descendants unverified"
         try:
             report["source_after"] = BASE.source()
             report["source_unchanged"] = report["source_after"] == before

@@ -49,6 +49,32 @@ even if a writer races the final validation/use interval. No repair, rewritten
 link, sanitized repository copy or implicit combination with local-reference,
 shallow or per-file capabilities is permitted.
 
+## Optional daemon-owned execution
+
+Whole-commit formatter attribution requires explicit `native.git_execution`
+configuration. Create a separately reviewed copy of the tracked profile with
+the owned workspace's observed `workspaceIdentity` (device, inode and uid).
+Configure its absolute `profile_path`, exact file `profile_sha256`, and the
+collector's `server_id`; use this same profile in the collector environment.
+Authenticate the host/child authority and enable native liveness. The installer
+and original selection metadata remain unchanged by this opt-in.
+
+This execution route accepts exactly BASE and TRACKED profile identities. It
+uses the existing private original-Git worker, with the tracked repository
+validator before and after capture. The same retained sealed metadata/object
+image supplies both its typed object facts and its mount. The tracked launcher
+still checks inventory, index, historical targets and worktree state on every
+actual Git invocation. Working-tree links retain their original names and
+targets and confer no outside-file authority.
+
+The optional witness supports at most 128 loose objects, each at most 262144
+compressed/inflated bytes, within a 16 MiB image. Packed or larger images refuse;
+the original tracked profile retains its separately bounded packed/loose
+behavior when this optional execution route is not selected. The five-second
+worker deadline and existing scan/resource budgets remain unchanged. Only a
+proved original formatter header receives the existing attribution; raw blobs,
+body content and policy floors retain baseline inspection.
+
 ## Acceptance
 
 The targeted native Linux command must retain exact source/profile/runtime/

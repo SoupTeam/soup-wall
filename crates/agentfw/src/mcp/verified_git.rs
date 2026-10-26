@@ -8,6 +8,14 @@ use super::server_profile::ProfileConfig;
 use anyhow::{ensure, Context};
 use std::ops::Range;
 
+/// Execution is an explicit, separately qualified finite profile selection.
+pub(crate) fn supports_profile(format: &str) -> bool {
+    matches!(
+        format,
+        super::server_profile::git::FORMAT | super::server_profile::git_tracked_symlinks::FORMAT
+    )
+}
+
 pub(crate) struct Completion {
     raw: Vec<u8>,
     text: Option<String>,
@@ -78,7 +86,7 @@ mod linux {
 
     fn request(profile: &ProfileConfig, raw: &[u8]) -> anyhow::Result<Value> {
         ensure!(
-            git::is_profile(&profile.format),
+            supports_profile(&profile.format),
             "verified Git profile unsupported"
         );
         ensure!(
