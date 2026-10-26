@@ -335,6 +335,7 @@ mod linux {
                 Some("mcp_owner_process_identity_unavailable")
             }
             "mcp_owner_namespace_identity_invalid" => Some("mcp_owner_namespace_identity_invalid"),
+            "mcp_owner_sandbox_identity_invalid" => Some("mcp_owner_sandbox_identity_invalid"),
             "mcp_owner_original_spawn_failed" => Some("mcp_owner_original_spawn_failed"),
             "mcp_owner_private_lease_unavailable" => Some("mcp_owner_private_lease_unavailable"),
             "mcp_owner_parent_death_unavailable" => Some("mcp_owner_parent_death_unavailable"),
@@ -995,66 +996,88 @@ mod linux {
             Ok::<_, anyhow::Error>((reader, ready, owner_pidfd))
         };
         let startup_started = std::time::Instant::now();
-        let (reader, ready, owner_pidfd) =
-            match tokio::time::timeout(Duration::from_millis(STARTUP_MILLIS), started).await {
-                Ok(Ok(value)) => value,
-                failed_startup => {
-                    let timed_out = failed_startup.is_err();
-                    let error_code = match &failed_startup {
-                        Ok(Err(error)) => error
-                            .chain()
-                            .find_map(|cause| startup_failure_code(&cause.to_string())),
-                        _ => None,
-                    };
-                    let elapsed_ms = startup_started.elapsed().as_millis();
-                    // EOF is the owner's unconditional cleanup request. Do not kill
-                    // it before it can verify its own resources.
-                    let _ = parent.shutdown(std::net::Shutdown::Both);
-                    let _ = tokio::time::timeout(
-                        Duration::from_millis(CLEANUP_MILLIS + 500),
-                        child.wait(),
-                    )
-                    .await;
-                    let _ = child.start_kill();
-                    let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
-                    if spec.sealed_closure.is_some() {
-                        use tokio::io::AsyncReadExt;
-                        let mut bytes = Vec::new();
-                        if let Some(stderr) = child.stderr.take() {
-                            let mut stderr = stderr.take(8192);
-                            let _ = tokio::time::timeout(
-                                Duration::from_millis(100),
-                                stderr.read_to_end(&mut bytes),
-                            )
-                            .await;
-                        }
-                        let text = String::from_utf8_lossy(&bytes);
-                        let helper_codes: BTreeSet<_> = text
-                            .lines()
-                            .filter_map(|line| {
-                                line.strip_prefix("agentfw-owner-error:")
-                                    .and_then(startup_failure_code)
-                            })
-                            .collect();
-                        let diagnostic = if text.contains("execvp") {
-                            "mcp_owner_image_exec_failed"
-                        } else if text.contains("Permission denied") {
-                            "mcp_owner_image_permission_failed"
-                        } else if text.contains("Unknown option") {
-                            "mcp_owner_image_option_failed"
-                        } else {
-                            "mcp_owner_image_failure_unclassified"
-                        };
-                        eprintln!(
-                            "{}",
-                            serde_json::json!({"event":"mcp_owner_startup_diagnostic",
-                            "timed_out":timed_out,"elapsed_ms":elapsed_ms,"error_code":error_code,
-                            "helper_codes":helper_codes,"image_code":diagnostic})
-                        );
+        let (reader, ready, owner_pidfd) = match tokio::time::timeout(
+            Duration::from_millis(STARTUP_MILLIS),
+            started,
+        )
+        .await
+        {
+            Ok(Ok(value)) => value,
+            failed_startup => {
+                let timed_out = failed_startup.is_err();
+                let error_code = match &failed_startup {
+                    Ok(Err(error)) => error
+                        .chain()
+                        .find_map(|cause| startup_failure_code(&cause.to_string())),
+                    _ => None,
+                };
+                let elapsed_ms = startup_started.elapsed().as_millis();
+                // EOF is the owner's unconditional cleanup request. Do not kill
+                // it before it can verify its own resources.
+                let _ = parent.shutdown(std::net::Shutdown::Both);
+                let _ =
+                    tokio::time::timeout(Duration::from_millis(CLEANUP_MILLIS + 500), child.wait())
+                        .await;
+                let _ = child.start_kill();
+                let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
+                if spec.sealed_closure.is_some() {
+                    use tokio::io::AsyncReadExt;
+                    let mut bytes = Vec::new();
+                    if let Some(stderr) = child.stderr.take() {
+                        let mut stderr = stderr.take(8192);
+                        let _ = tokio::time::timeout(
+                            Duration::from_millis(100),
+                            stderr.read_to_end(&mut bytes),
+                        )
+                        .await;
                     }
-                    bail!("mcp_owner_startup_failed");
+                    let text = String::from_utf8_lossy(&bytes);
+                    let helper_codes: BTreeSet<_> = text
+                        .lines()
+                        .filter_map(|line| {
+                            line.strip_prefix("agentfw-owner-error:")
+                                .and_then(startup_failure_code)
+                        })
+                        .collect();
+                    let diagnostic = if text.contains("execvp") {
+                        "mcp_owner_image_exec_failed"
+                    } else if text.contains("Permission denied") {
+                        "mcp_owner_image_permission_failed"
+                    } else if text.contains("Unknown option") {
+                        "mcp_owner_image_option_failed"
+                    } else if text.contains("No such file or directory") {
+                        "mcp_owner_image_path_failed"
+                    } else if text.contains("Can't create") {
+                        "mcp_owner_image_create_failed"
+                    } else if text.contains("Can't mount") || text.contains("Can't bind mount") {
+                        "mcp_owner_image_mount_failed"
+                    } else {
+                        "mcp_owner_image_failure_unclassified"
+                    };
+                    let step = text
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("agentfw-owner-step:")
+                                .and_then(|value| value.parse::<u8>().ok())
+                        })
+                        .filter(|step| *step <= 8);
+                    let os_error = text
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("agentfw-owner-errno:")
+                                .and_then(|value| value.parse::<i32>().ok())
+                        })
+                        .filter(|code| (1..=4095).contains(code));
+                    eprintln!(
+                        "{}",
+                        serde_json::json!({"event":"mcp_owner_startup_diagnostic",
+                            "timed_out":timed_out,"elapsed_ms":elapsed_ms,"error_code":error_code,
+                                "helper_codes":helper_codes,"image_code":diagnostic,"setup_step":step,"os_error":os_error})
+                    );
                 }
-            };
+                bail!("mcp_owner_startup_failed");
+            }
+        };
         let writer = tokio::net::UnixStream::from_std(parent)?;
         let failed = Arc::new(AtomicBool::new(false));
         let complete = Arc::new(AtomicBool::new(false));
@@ -1742,6 +1765,7 @@ mod linux {
         drop(info_writer);
         let sandbox_pid = child.id();
         let mut namespace = None;
+        let mut setup_step = 1_u8;
         let setup = (|| {
             let mut bytes = Vec::new();
             let mut byte = [0];
@@ -1756,18 +1780,21 @@ mod linux {
                 }
             }
             let value: Value = decode(&bytes)?;
+            setup_step = 2;
             let pid1_pid = value
                 .get("child-pid")
                 .and_then(Value::as_u64)
                 .and_then(|pid| u32::try_from(pid).ok())
                 .context("mcp_owner_sandbox_identity_invalid")?;
             namespace = Some(pidfd(pid1_pid)?);
+            setup_step = 3;
             let hello = Control {
                 format: FORMAT.to_owned(),
                 instance: instance.clone(),
                 action: "prepare".to_owned(),
             };
             send(&mut lease, &hello)?;
+            setup_step = 4;
             let prepared: Control = receive(&mut lease)?;
             ensure!(
                 prepared.format == FORMAT
@@ -1777,6 +1804,7 @@ mod linux {
             );
             ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
             ensure!(child.try_wait()?.is_none(), "mcp_owner_sandbox_lost");
+            setup_step = 5;
             send(
                 &mut lease,
                 &Control {
@@ -1784,6 +1812,7 @@ mod linux {
                     ..hello
                 },
             )?;
+            setup_step = 6;
             let original = if spec.sealed_closure.is_some() {
                 let started: SealedStarted = receive(&mut lease)?;
                 ensure!(
@@ -1805,6 +1834,7 @@ mod linux {
                 );
                 None
             };
+            setup_step = 7;
             let owner_pid = unsafe { libc::getpid() } as u32;
             let ready = Ready {
                 format: FORMAT.to_owned(),
@@ -1817,8 +1847,29 @@ mod linux {
                 pid1_start_ticks: process_ticks(pid1_pid)?,
                 original,
             };
+            setup_step = 8;
             send(&mut control, &ready)
         })();
+        if spec.sealed_closure.is_some() {
+            if let Err(error) = &setup {
+                let code = error
+                    .chain()
+                    .find_map(|cause| startup_failure_code(&cause.to_string()))
+                    .unwrap_or("mcp_owner_startup_failed");
+                let os_error = error
+                    .chain()
+                    .find_map(|cause| {
+                        cause
+                            .downcast_ref::<std::io::Error>()
+                            .and_then(std::io::Error::raw_os_error)
+                    })
+                    .unwrap_or(0);
+                let message=format!("agentfw-owner-error:{code}\nagentfw-owner-step:{setup_step}\nagentfw-owner-errno:{os_error}\n");
+                unsafe {
+                    libc::write(2, message.as_ptr().cast(), message.len());
+                }
+            }
+        }
         let mut reason = if setup.is_ok() {
             "mcp_owner_stop_requested"
         } else {

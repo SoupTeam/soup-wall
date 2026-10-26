@@ -136,6 +136,30 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "093517e576a418521c2d6fab371b896e2f9c6ce7",
+      "run": 40313794868,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "failed_stage": "outside-owner-startup-handshake",
+      "startup_elapsed_ms": 49,
+      "startup_timed_out": false,
+      "startup_error_code": "mcp_owner_control_invalid",
+      "original_result_observed": false,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12646790550,
+          "sha256": "95dc7c29d0502f08770ffe544df182cb2644b2c38b5f8cf1893449ca4d35d47b"
+        },
+        {
+          "id": 12645677705,
+          "sha256": "249dbd8125ab2d1731507f61d1513d55daa970d11e0d41201f4ee911eb5bf220"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }

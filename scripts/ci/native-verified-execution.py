@@ -372,6 +372,8 @@ def main():
      elapsed=item.get('elapsed_ms')
      report['startup_diagnostics'].append({'timed_out':item.get('timed_out') is True,
          'elapsed_ms':elapsed if type(elapsed) is int and 0<=elapsed<=60000 else None,
+         'setup_step':item.get('setup_step') if type(item.get('setup_step')) is int and 1<=item['setup_step']<=8 else None,
+         'os_error':item.get('os_error') if type(item.get('os_error')) is int and 1<=item['os_error']<=4095 else None,
          'error_code':item.get('error_code') if item.get('error_code') in allowed else None,
          'helper_codes':[code for code in item.get('helper_codes',[]) if code in allowed][:8],
          'image_code':item.get('image_code') if item.get('image_code') in allowed else None})
