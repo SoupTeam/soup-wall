@@ -120,8 +120,55 @@ log=(root/"daemon.log").open("wb")
 import importlib.util
 spec=importlib.util.spec_from_file_location("sou109_process_witness",ROOT/"scripts/verify-sou62-real-mcp.py")
 observer_module=importlib.util.module_from_spec(spec);sys.modules[spec.name]=observer_module;spec.loader.exec_module(observer_module)
+class NativeProcessWitness(observer_module.ProcessWitness):
+    """Include children spawned by every Tokio worker, not just the main TID."""
+    incomplete = False
+
+    def sample(self):
+        pending, visited, charged_tasks = [self.parent], set(), 0
+        while pending:
+            if len(visited) >= 512:
+                self.incomplete = True
+                return
+            pid = pending.pop()
+            if pid in visited:
+                continue
+            visited.add(pid)
+            identity = self.identity(pid)
+            if identity is None:
+                continue
+            self.observed[(pid, identity)] = {
+                "pid": pid, "start_time_ticks": identity,
+                "parent_process": pid == self.parent}
+            try:
+                tasks = list(Path(f"/proc/{pid}/task").iterdir())
+                charged_tasks += len(tasks)
+                if charged_tasks > 4096:
+                    self.incomplete = True
+                    return
+                for task in tasks:
+                    try:
+                        data = (task/"children").read_text()
+                        if len(data) > 4096:
+                            self.incomplete = True
+                            return
+                        pending.extend(int(value) for value in data.split())
+                    except FileNotFoundError:
+                        pass
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+            except (OSError, ValueError):
+                self.incomplete = True
+
+    def finish(self):
+        result = super().finish()
+        result["observation_complete"] = not self.incomplete
+        result["all_stopped"] = result["all_stopped"] and not self.incomplete
+        return result
+
+before_workspace=observer_module.snapshot(repo)
 daemon=subprocess.Popen([a.binary,"serve"],env=env,stdout=log,stderr=log,stdin=subprocess.DEVNULL)
-daemon_witness=observer_module.ProcessWitness(daemon.pid)
+daemon_witness=NativeProcessWitness(daemon.pid)
 report={"format":"sou109-actual-daemon-git/1","source":a.source,"binary_sha256":sha(Path(a.binary).read_bytes()),
  "scope":"actual confined original Git through native execute plus the production collector and real rule baseline; no Claude/model qualification",
  "script_sha256":sha(Path(__file__).read_bytes()),
@@ -192,6 +239,8 @@ try:
    (root/(name+".original-frame.json")).write_text(frame)
    row["original_frame_sha256"]=sha(frame.encode())
    row["original_text_sha256"]=sha(decoded["result"]["content"][0]["text"].encode())
+   if name=="ordinary-show":
+    require(decoded["result"]["content"][0]["text"].encode()==original_text,"original formatter content changed")
   require((status==200 and value.get("completed") is True and value["receipt"]["release"] is expected), row)
   replay=http("/native/git-execute/v1",body,identity)
   report["controls"].append({"case":name+"-replay",**compact(replay)})
@@ -270,6 +319,8 @@ try:
   report["collector_cleanup"]={"exit_code":code,"forced":client.forced_cleanup,"processes":client.process_witness.final}
   save()
  require((code==0 and client.process_witness.final["all_stopped"] and not client.forced_cleanup), report["collector_cleanup"])
+ require(observer_module.snapshot(repo)==before_workspace,"protected read changed workspace/index/HEAD")
+ report["workspace_unchanged"]=True
  report["checks_complete"]=True;save()
 finally:
  save()
@@ -278,7 +329,7 @@ finally:
  except subprocess.TimeoutExpired:daemon.kill();daemon.wait(timeout=5)
  log.close()
  report["daemon_cleanup"]=daemon_witness.finish()
- report["status"]="passed" if report.get("checks_complete") and report["daemon_cleanup"]["all_stopped"] else "failed"
+ report["status"]="passed" if report.get("checks_complete") and report["daemon_cleanup"]["all_stopped"] and report["daemon_cleanup"]["descendant_count"]>0 else "failed"
  save()
 require((report["status"]=="passed" and report["daemon_cleanup"]["descendant_count"]>0), "owned original processes not witnessed/stopped")
 print(json.dumps({"status":report["status"],"native_cases":len(report["cases"]),
