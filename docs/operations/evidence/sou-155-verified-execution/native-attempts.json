@@ -230,6 +230,31 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "f0cf66346de236c133ede5eeed4302cc8af8bafd",
+      "run": 40319425828,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "runtime_acceptance_pass": true,
+      "actual_cases_passed": 15,
+      "original_results": 13,
+      "daemon_generations": 3,
+      "process_generations": 3,
+      "failed_stage": "old-full-host-focus-validation-after-native-acceptance",
+      "cause": "older-selector-allowed-142-and-143-but-not-155",
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12648812673,
+          "sha256": "71bd48ac56775e66d86327a6be6e35d91bd7270589f423c0a2e051f1ba9a918c"
+        },
+        {
+          "id": 12648602161,
+          "sha256": "f7424a00738e391a00b4876d0b21a005937ccea73e48b3a70e664f6bcc15696d"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }

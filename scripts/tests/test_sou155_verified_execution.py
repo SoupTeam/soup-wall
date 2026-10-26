@@ -5,6 +5,9 @@ import importlib.util
 from pathlib import Path
 import subprocess
 import tempfile
+import os
+import re
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -66,6 +69,19 @@ def complete():
 
 
 class NativeEvidence(unittest.TestCase):
+    def test_full_host_focus_gate_accepts_every_supported_slice_and_refuses_others(self):
+        source = (ROOT / '.github/workflows/sou79-resource-budgets.yml').read_text()
+        gate = source.split('- name: Validate explicit full-host selection', 1)[1]
+        script = re.search(r'(?ms)^        run: \|\n(.*?)(?=^      - name:)', gate)[1]
+        script = textwrap.dedent(script)
+        for focus in ('142', '143', '155', '', 'off', '999', '155; echo unexpected'):
+            result = subprocess.run(['/bin/bash', '-c', script],
+                                    env={'PATH': os.defpath, 'SOU_FOCUS': focus},
+                                    capture_output=True, timeout=5)
+            with self.subTest(focus=focus):
+                self.assertEqual(result.returncode == 0, focus in ('142', '143', '155'))
+                self.assertEqual(result.stdout, b'')
+
     def test_candidate_report_read_is_bounded_and_refuses_ambiguous_or_linked_input(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

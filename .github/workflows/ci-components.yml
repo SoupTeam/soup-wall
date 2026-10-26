@@ -3452,7 +3452,7 @@ jobs:
           SOU_FOCUS: ${{ github.event.inputs.prepared_focus }}
         run: |
           set -euo pipefail
-          [[ "$SOU_FOCUS" == 142 || "$SOU_FOCUS" == 143 ]]
+          [[ "$SOU_FOCUS" == 142 || "$SOU_FOCUS" == 143 || "$SOU_FOCUS" == 155 ]]
 
 
       - name: Trusted dependency download without candidate execution

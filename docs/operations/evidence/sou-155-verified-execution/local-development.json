@@ -1,7 +1,7 @@
 {
   "format": "sou155-local-development/1",
   "status": "development-candidate",
-  "native_verified_launch_qualified": false,
+  "native_verified_launch_qualified": true,
   "acceptance_pass": false,
   "attempts": [
     {
@@ -640,6 +640,151 @@
       "elapsed_seconds": 0.2,
       "source_after_sha256": "b430ab8d3bad0a5749d1421c8f64add3d455d895cfa206a2341b864d17237966",
       "log_sha256": "f5ec8578e68c7078ce5bc1146d16b0d411ebddf0d22e444934cc72a5608f206f"
+    },
+    {
+      "label": "direct-owner-liveness-controls",
+      "source_files_sha256": "bff6e5645e675b8db4b6a4b4288edd5a024c2792aea9d1a2ad15dae73567c655",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 15.7,
+      "source_after_sha256": "bff6e5645e675b8db4b6a4b4288edd5a024c2792aea9d1a2ad15dae73567c655",
+      "log_sha256": "94772dfad8be7c963c16f291ba305e3d7e1bb232e069caa431159cefda01809d"
+    },
+    {
+      "label": "final-direct-owner-local",
+      "source_files_sha256": "f5196244889f0b366cb73c4d549ed498cdfe63ebbda0324002c3448aa66b9bd6",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 14.81,
+      "source_after_sha256": "f5196244889f0b366cb73c4d549ed498cdfe63ebbda0324002c3448aa66b9bd6",
+      "log_sha256": "ce397c3794af2671a9d0337480b86cd4b31454027671ad577ca918502a8f1380"
+    },
+    {
+      "label": "final-platform-regressions",
+      "source_files_sha256": "f5196244889f0b366cb73c4d549ed498cdfe63ebbda0324002c3448aa66b9bd6",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 133.99,
+      "source_after_sha256": "f5196244889f0b366cb73c4d549ed498cdfe63ebbda0324002c3448aa66b9bd6",
+      "log_sha256": "3579b18b5767d7db0ecdb818cb62d76b0e1f87c482a90d1307d53d647ed67079"
+    },
+    {
+      "label": "bounded-startup-diagnostic",
+      "source_files_sha256": "8fb1d4ec76e5a06fb8ce748f91f30994d0ec8999e04809aaab18cdcae05e3d8f",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 12.47,
+      "source_after_sha256": "8fb1d4ec76e5a06fb8ce748f91f30994d0ec8999e04809aaab18cdcae05e3d8f",
+      "log_sha256": "94ab790bab5eba168e904f7608f3968083e1dbd6309dc782724256b8c960b8f0"
+    },
+    {
+      "label": "startup-driver-contract",
+      "source_files_sha256": "5139c28aa5d8d2d1e3ae4a0c1f96dc80bbc247ddb3619fa443301ff3a27fb81a",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.25,
+      "source_after_sha256": "5139c28aa5d8d2d1e3ae4a0c1f96dc80bbc247ddb3619fa443301ff3a27fb81a",
+      "log_sha256": "f5ec8578e68c7078ce5bc1146d16b0d411ebddf0d22e444934cc72a5608f206f"
+    },
+    {
+      "label": "private-startup-phase-diagnostic",
+      "source_files_sha256": "51f0c2a3dfdfd12312069f381c6491dff045edac64ab6d8615e16b407ae0c84b",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 7.13,
+      "source_after_sha256": "51f0c2a3dfdfd12312069f381c6491dff045edac64ab6d8615e16b407ae0c84b",
+      "log_sha256": "7c02202bba2a33753acaead7865937d2d8c0d9f7e91f266b7c26547693635d4b"
+    },
+    {
+      "label": "original-runtime-image-argument-bound",
+      "source_files_sha256": "317c2cd2b5837d4cdce80d4cccca0d50073fc40ae8dd821c54d95f8190300dac",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 17.64,
+      "source_after_sha256": "317c2cd2b5837d4cdce80d4cccca0d50073fc40ae8dd821c54d95f8190300dac",
+      "log_sha256": "82400379e8643490b4dc7ffc738c28d0800becde00d34a531293a0a08189e8d8"
+    },
+    {
+      "label": "final-runtime-image-workspace",
+      "source_files_sha256": "22e4d412ac77a345bc436f682c4e4715fdfb0b98aca298e63cdd6ea3ceb98cd2",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 121.69,
+      "source_after_sha256": "22e4d412ac77a345bc436f682c4e4715fdfb0b98aca298e63cdd6ea3ceb98cd2",
+      "log_sha256": "922eddd28d577e67e5f73e11fe5a5fa7b76c4ea0c58cd7c696d439ad755f012b"
+    },
+    {
+      "label": "correct-ordinary-native-contract",
+      "source_files_sha256": "d46debc9256261982e965b681fc63f3070901b9e83320a0dafe557d9c7eb8408",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.25,
+      "source_after_sha256": "d46debc9256261982e965b681fc63f3070901b9e83320a0dafe557d9c7eb8408",
+      "log_sha256": "f5ec8578e68c7078ce5bc1146d16b0d411ebddf0d22e444934cc72a5608f206f"
+    },
+    {
+      "label": "mcp-refusal-shape-contract",
+      "source_files_sha256": "23dfa9aa4fe74ed815a157a1b6548a3f07402e3e0f6a85b78a8c0952d48556d4",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.2,
+      "source_after_sha256": "23dfa9aa4fe74ed815a157a1b6548a3f07402e3e0f6a85b78a8c0952d48556d4",
+      "log_sha256": "f5ec8578e68c7078ce5bc1146d16b0d411ebddf0d22e444934cc72a5608f206f"
+    },
+    {
+      "label": "final-focus-routing-and-workflow-contract",
+      "source_files_sha256": "313257852a564cbb52821aa4039eca49dc420aa416a9df018a426bc2e349e316",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.36,
+      "source_after_sha256": "313257852a564cbb52821aa4039eca49dc420aa416a9df018a426bc2e349e316",
+      "log_sha256": "fd4850812406b74fd9c77e800c1ea6fc68a5431cd4fbd42e57633cb1cdc44d0f"
     }
-  ]
+  ],
+  "native_qualified_source": "f0cf66346de236c133ede5eeed4302cc8af8bafd",
+  "scope": "native component qualified at named source; current full workflow/admission remains separate"
 }

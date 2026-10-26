@@ -1,8 +1,9 @@
 # Daemon-owned original execution binding (SOU-155)
 
-Development implementation on accepted base
-`379f9f9a17ec7369acaa65455d26f745c36ab866`. Native qualification is still pending;
-this document does not claim merge readiness. The remaining SOU-142 outside-owner
+Implementation on accepted base
+`379f9f9a17ec7369acaa65455d26f745c36ab866`. Qualification is source-specific;
+use the current source's retained artifacts and PR checks to establish readiness.
+This design document alone is not merge approval. The remaining SOU-142 outside-owner
 SIGKILL delivery was transferred to @waattoo on October 26 and is not a SOU-155
 dependency. Its separate diagnostic handoff remains in PR #272.
 
@@ -229,6 +230,14 @@ read-only source/runtime inputs, scratch-only writes, private loopback and expli
 per-original-tree budgets. Compiler/unit/Clippy results alone do not qualify its
 actual launch. Every failed/incomplete attempt remains retained in
 [evidence](evidence/sou-155-verified-execution/local-development.json).
+
+The retained [native component acceptance](evidence/sou-155-verified-execution/native-acceptance-f0cf663.json)
+records 15 actual Linux scenarios, 13 authenticated original results and three
+daemon/process/channel generations at source `f0cf66346de236c133ede5eeed4302cc8af8bafd`.
+That workflow later failed an older focus-selection guard after runtime acceptance;
+the [attempt ledger](evidence/sou-155-verified-execution/native-attempts.json) preserves
+both facts. A subsequent candidate must qualify its own exact source. No declaration
+or diagnostic record substitutes for the actual private execution binding.
 
 Required native controls include useful original reads, exact request/response
 identity, immutable executable/formatter replacement, identical-schema alternate
