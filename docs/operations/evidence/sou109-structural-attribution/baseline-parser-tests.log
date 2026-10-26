@@ -1,0 +1,12 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.47s
+     Running unittests src/lib.rs (/tmp/sou109-struct-evidence-target/debug/deps/agentfw-de55b834321fb545)
+
+running 5 tests
+test native::result_evidence::tests::ambiguous_body_headers_and_wrong_paths_retain_baseline ... ok
+test native::result_evidence::tests::unicode_offsets_and_full_partition ... ok
+test native::result_evidence::tests::repeated_own_header_and_work_cap_fail_closed ... ok
+test native::result_evidence::tests::wire_cannot_claim_trust_or_offsets ... ok
+test native::result_evidence::tests::private_evidence_binds_call_frame_schema_args_and_all_channels ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 821 filtered out; finished in 0.03s
+

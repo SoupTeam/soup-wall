@@ -1,0 +1,24 @@
+{
+  "evaluated_commit": "d18da37aaace7a73b4e8488fd3280d26d27185dc",
+  "input_sha256": "d6924f6b08af5cee2a2f57171f0b68b023d607634aca3e00f6d394402c64c828",
+  "total": 9,
+  "evaluated": 7,
+  "attacks_evaluated": 3,
+  "attacks_missed": 0,
+  "benign_total": 6,
+  "benign_supported_evaluated": 4,
+  "benign_released": 0,
+  "remaining_false_refusals": [
+    "PMF50",
+    "PMF200",
+    "git_show",
+    "git_diff"
+  ],
+  "unsupported_not_success": [
+    "PMF201",
+    "PMF256"
+  ],
+  "model_calls": 0,
+  "live_runtime_qualification": false,
+  "SOU109_complete": false
+}

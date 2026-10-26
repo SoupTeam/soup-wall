@@ -1,0 +1,22 @@
+   Compiling agentfw v0.3.0 (/mnt/c/Users/winux/Documents/Codex/2026-10-25/sou109-resolution/work/soup-wall/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 20.39s
+     Running unittests src/lib.rs (/tmp/sou109-struct-evidence-target/debug/deps/agentfw-de55b834321fb545)
+
+running 1 test
+test native::tests::result_evidence_tests::matching_profile_from_unverified_other_runtime_cannot_claim_formatter_origin ... FAILED
+
+failures:
+
+---- native::tests::result_evidence_tests::matching_profile_from_unverified_other_runtime_cannot_claim_formatter_origin stdout ----
+
+thread 'native::tests::result_evidence_tests::matching_profile_from_unverified_other_runtime_cannot_claim_formatter_origin' (811165) panicked at crates/agentfw/src/native/tests/result_evidence_tests.rs:263:5:
+static registry/profile declarations are not authenticated active formatter provenance
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    native::tests::result_evidence_tests::matching_profile_from_unverified_other_runtime_cannot_claim_formatter_origin
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 824 filtered out; finished in 0.15s
+
+error: test failed, to rerun pass `-p agentfw --lib`

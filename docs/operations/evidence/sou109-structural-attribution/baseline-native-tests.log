@@ -1,0 +1,73 @@
+   Compiling agentfw v0.3.0 (/mnt/c/Users/winux/Documents/Codex/2026-10-25/sou109-resolution/work/soup-wall/crates/agentfw)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.54s
+     Running unittests src/lib.rs (/tmp/sou109-struct-evidence-target/debug/deps/agentfw-de55b834321fb545)
+
+running 65 tests
+test native::tests::delegated_scope_containment_is_typed_and_canonical ... ok
+test native::tests::managed_transition_legacy_collector_cannot_cross_first_activation ... ok
+test native::tests::audit_write_failure_withholds_result_and_does_not_commit_taint_or_spans ... ok
+test native::tests::expired_native_session_clears_taint_and_invalidates_pending_calls ... ok
+test native::tests::managed_transition_rechecks_old_call_even_when_new_result_policy_allows ... ok
+test native::tests::managed_transition_rollback_keeps_session_and_allows_new_useful_work ... ok
+test native::tests::managed_transition_preserves_existing_taint_and_incomplete_history ... ok
+test native::tests::legacy_native_parent_and_model_deliveries_remain_supported ... ok
+test native::tests::mcp_host_result_admits_original_decoded_text_and_spends_invocation ... ok
+test native::tests::provenance_approval_open_cannot_bypass_the_call_input_budget ... ok
+test native::tests::mcp_host_unicode_escaped_injection_is_withheld_before_admission ... ok
+test native::tests::literal_arguments::literal_fields_keep_taint_overlap_and_incomplete_history ... ok
+test native::tests::provenance_audit_failure_after_mcp_tracking_withholds_and_keeps_only_bounded_evidence ... ok
+test native::tests::mcp_host_error_kind_matches_both_rpc_and_tool_errors ... ok
+test native::tests::provenance_delivered_error_text_requires_the_same_tracking_budget ... ok
+test native::tests::provenance_diagnostics_require_native_authority_and_expose_only_aggregate_storage ... ok
+test native::tests::mcp_host_rejects_uninspected_fields_and_content_without_spending_again ... ok
+test native::tests::provenance_partial_registration_and_failed_start_audit_release_only_new_shells ... ok
+test native::tests::provenance_close_and_expiry_reclaim_local_capacity_without_erasing_shared_history ... ok
+test native::tests::literal_arguments::generic_native_read_baseline_keeps_real_and_split_command_scanning ... ok
+test native::tests::provenance_incomplete_history_preserves_a_matched_hard_deny ... ok
+test native::tests::provenance_model_result_defers_tracking_until_the_actual_context_transition ... ok
+test native::tests::literal_arguments::literal_paths_and_search_text_are_read_only_after_validation ... ok
+test native::tests::provenance_read_only_calls_bound_the_whole_argument_envelope_before_any_grant ... ok
+test native::tests::provenance_result_literal_limit_is_correlated_audited_and_never_a_release ... ok
+test native::tests::provenance_shared_copy_global_pressure_refuses_all_contexts_and_consumes_grant ... ok
+test native::tests::provenance_multiblock_self_eviction_withholds_whole_result_but_allows_fitting_continuation ... ok
+test native::tests::provenance_zero_budget_refuses_start_before_any_allow_or_authority ... ok
+test native::tests::registry_rejects_invalid_pointer_escapes_and_semantic_caller_claims ... ok
+test native::tests::provenance_unavailable_context_cannot_be_recreated_by_a_call ... ok
+test native::tests::literal_arguments::literal_data_keeps_current_policy_floors_and_all_inspection_facets ... ok
+test native::tests::result_evidence_tests::public_dev_replay ... ignored, explicit one-shot frozen public dev replay; no model or external server
+test native::tests::provenance_shared_history_approval_is_single_use_and_never_clears_the_floor ... ok
+test native::tests::provenance_rejected_review_allows_a_new_review_without_clearing_shared_history ... ok
+test native::tests::result_evidence_tests::matching_profile_from_unverified_other_runtime_cannot_claim_formatter_origin ... ok
+test native::tests::result_evidence_tests::git_show_without_object_witness_preserves_original_refusal_even_with_model_permit ... ok
+test native::tests::result_review_tests::native_rejects_reviewer_configuration_before_any_worker_start ... ok
+test native::tests::result_evidence_tests::substituted_args_or_receipt_have_no_relief ... ok
+test native::tests::result_review_tests::a_permit_for_other_channel_bytes_cannot_rescue_the_result ... ok
+test native::tests::result_evidence_tests::ordered_cross_channel_directives_and_signatures_are_additive ... ok
+test native::tests::result_review_tests::a_complete_private_permit_cannot_lower_native_baseline ... ok
+test native::tests::selected_git_text_only_result_does_not_weaken_filesystem_or_metadata_checks ... ok
+test native::tests::result_review_tests::data_cannot_override_body_signatures_or_a_later_policy_change ... ok
+test native::tests::result_review_tests::ordinary_allow_and_hard_signatures_do_not_request_model_review ... ok
+test native::tests::result_evidence_tests::parser_preview_never_bypasses_existing_taint_capacity ... ok
+test native::tests::result_evidence_tests::fake_headers_channels_and_changed_policy_cannot_rescue_result ... ok
+test native::tests::retained_sink_failure_withholds_native_admission ... ok
+test native::tests::selected_mcp_injection_only_in_structured_content_is_withheld ... ok
+test native::tests::selected_mcp_registry_rejects_unknown_profile_or_broadened_authority ... ok
+test native::tests::retained_sink_failure_withholds_native_result ... ok
+test native::tests::literal_arguments::literal_roles_require_complete_schema_and_workspace_validation ... ok
+test native::tests::selected_native_host_id_is_required_bounded_and_profile_specific ... ok
+test native::tests::selected_mcp_result_inspects_both_original_text_channels_and_keeps_raw_hash ... ok
+test native::tests::selected_native_grants_bind_numeric_and_string_host_ids_independently ... ok
+test native::tests::selected_native_result_delivery_cannot_downgrade_to_parent_or_model ... ok
+test native::tests::selected_mcp_record_cap_applies_per_inspected_text_and_spends_with_a_receipt ... ok
+test native::tests::selected_mcp_parser_refuses_uninspected_meta_duplicates_and_missing_structured_values ... ok
+test native::tests::result_evidence_tests::parser_preview_excludes_only_fixed_separators_but_native_without_origin_keeps_baseline ... ok
+test native::tests::sou89_maintenance_waits_for_initial_profile_activation_transaction ... ok
+test native::tests::mcp_result_envelope_budget_does_not_raise_other_request_limits ... ok
+test native::tests::sou89_enroll_rechecks_time_after_waiting_for_the_state_lock ... ok
+test native::tests::sou89_renew_rechecks_time_after_waiting_for_the_state_lock ... ok
+test native::tests::pending_call_cap_rejects_new_invocation_without_eviction ... ok
+test native::tests::reviewe358_lossy_hook_must_not_take_firewall_before_native_mutex ... ok
+test native::tests::selected_mcp_large_results_are_inspected_whole_within_the_result_budgets ... ok
+
+test result: ok. 64 passed; 0 failed; 1 ignored; 0 measured; 761 filtered out; finished in 3.03s
+
