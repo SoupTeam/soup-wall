@@ -1,0 +1,36 @@
+{
+  "format": "sou142-owner-self-loss-native-attempts/1",
+  "full_sou142_qualification": false,
+  "attempts": [
+    {
+      "source_commit": "2d6dad6164a29c29d73be35783c26d7210546d18",
+      "workflow_run": 40282553955,
+      "status": "failed",
+      "stage": "owner-loss-diagnostic-output-setup",
+      "owner_self_loss_observed": false,
+      "reason": "attempt-and-case-output-alias",
+      "native_build_unit_clippy_adoption_slice": "passed",
+      "host_artifact": 12633286107,
+      "host_artifact_sha256": "700f3891b740344287e7048b2b98cbf2dc7598b7ae9e45e990fc4b85b804c859",
+      "build_artifact": 12633037304,
+      "build_artifact_sha256": "5b8948077f3f663197790571b1fbdb7ba1c6e3af649df80895734e8d16632275",
+      "zip_crc_verified": true,
+      "acceptance_pass": false
+    },
+    {
+      "source_commit": "39415fb717ad22b50701100aeebc96927e0b9690",
+      "workflow_run": 40285176569,
+      "status": "blocked-diagnostic-verified",
+      "owner_self_loss_observed": true,
+      "native_build_unit_clippy_adoption_slice": "passed",
+      "host_artifact": 12633104910,
+      "host_artifact_sha256": "ddcc57dcc1783c0be6a8f7f90840b0fca7de8a45861955f3119e4bfc580676f4",
+      "build_artifact": 12634066952,
+      "build_artifact_sha256": "3b1b4e99ce892c31ce9521c555b1ab1db886c17722534ee3b08782c1f04512ab",
+      "zip_crc_verified": true,
+      "acceptance_pass": false,
+      "production_cleanup_verified": false,
+      "observer_cleanup_verified": true
+    }
+  ]
+}

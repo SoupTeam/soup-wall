@@ -364,6 +364,64 @@ def project(attempt, raw, expected, exit_code):
     return output
 
 
+def project_owner_loss(attempt, expected, exit_code):
+    """A reproduced orphan stays blocked even when diagnostic execution succeeds."""
+    output = {'format': 'sou142-owner-self-loss-handoff/1', 'status': 'incomplete',
+              'acceptance_pass': False, 'full_sou142_qualification': False,
+              'remaining_gaps': list(GAPS), 'cases': []}
+    try:
+        need(exit_code == 0 and attempt.get('format') == 'sou142-offline-budget-host-attempt/1'
+             and attempt.get('phase') == 'owner-loss'
+             and attempt.get('status') == 'owner-self-loss-diagnostic-completed'
+             and re.fullmatch('[0-9a-f]{40}', expected) and attempt.get('source_commit') == expected,
+             'same_source_owner_loss_diagnostic_required')
+        need(attempt.get('source_read_only') is True and attempt.get('reused_binaries_read_only') is True
+             and attempt.get('network') == 'private-loopback-only' and attempt.get('paid_api_calls') == 0
+             and attempt.get('owned_budget_root_empty') is True
+             and attempt.get('owned_peer_budget_root_empty') is True
+             and attempt.get('actual_original_host_covered') is False,
+             'isolated_owner_loss_cleanup_required')
+        selected = attempt['selected_sha256']
+        rows = attempt.get('owner_self_loss')
+        need(type(rows) is list and [row.get('server') for row in rows] == ['filesystem', 'git'],
+             'both_owner_loss_profiles_required')
+        for row in rows:
+            need(row.get('format') == 'sou142-owner-self-loss/1' and row.get('source_commit') == expected
+                 and row.get('status') == 'blocked' and row.get('acceptance_pass') is False
+                 and row.get('reason') == 'owner_self_loss_orphan_reproduced'
+                 and row.get('owner_signal') == 'SIGKILL'
+                 and row.get('observed_stage') == 'descriptor_sendmsg_entry'
+                 and row.get('descriptors_delivered') is False and row.get('descriptor_count') == 8
+                 and row.get('owner_generation_verified') is True and row.get('collector_refused') is True
+                 and row.get('original_started') is False
+                 and type(row.get('owned_members')) is int and row['owned_members'] == 0
+                 and row.get('residual_owned_leaf') is True
+                 and row.get('production_cleanup_verified') is False
+                 and row.get('observer_cleanup_attempted') is True
+                 and row.get('observer_cleanup_verified') is True
+                 and row.get('all_traced_processes_stopped') is True
+                 and row.get('runtime_or_policy_modified') is False,
+                 'truthful_pre_handback_owner_loss_required')
+            need(digest(row.get('agentfw_sha256')) == digest(selected['agentfw'])
+                 and digest(row.get('test_binary_sha256')) == digest(selected['sandbox_tests'])
+                 and digest(row.get('budget_sha256')) == digest(attempt['budget_sha256']),
+                 'owner_loss_runtime_or_budget_mismatch')
+            output['cases'].append({key: row[key] for key in (
+                'server', 'status', 'reason', 'owner_signal', 'observed_stage', 'descriptor_count',
+                'descriptors_delivered', 'owner_generation_verified', 'collector_refused',
+                'original_started', 'owned_members', 'residual_owned_leaf',
+                'production_cleanup_verified', 'observer_cleanup_attempted',
+                'observer_cleanup_verified', 'all_traced_processes_stopped', 'profile_sha256',
+                'agentfw_sha256', 'test_binary_sha256', 'budget_sha256', 'private_log_sha256')})
+            digest(row.get('profile_sha256')); digest(row.get('private_log_sha256'))
+        output.update(status='blocked-diagnostic-verified', source_commit=expected,
+                      production_cleanup_verified=False, observer_cleanup_verified=True,
+                      owned_budget_root_empty=True)
+    except (Invalid, KeyError, TypeError) as error:
+        output['reason'] = str(error) if isinstance(error, Invalid) else 'malformed_owner_loss_report'
+    return output
+
+
 def read(path):
     need(path.stat().st_size <= 4 * 1024 * 1024, 'private_report_bound')
     def pairs(items):
@@ -379,7 +437,7 @@ def read(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure'), default='all')
+    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure', 'owner-loss'), default='all')
     parser.add_argument('--raw', type=Path)
     for name in ('attempt', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
@@ -387,7 +445,9 @@ def main():
     parser.add_argument('--exit-code', type=int, required=True)
     args = parser.parse_args()
     try:
-        if args.phase == 'pressure':
+        if args.phase == 'owner-loss':
+            result = project_owner_loss(read(args.attempt), args.expected_commit, args.exit_code)
+        elif args.phase == 'pressure':
             result = project_pressure(read(args.attempt), args.expected_commit, args.exit_code)
         else:
             need(args.raw is not None, 'baseline_report_required')
@@ -399,7 +459,8 @@ def main():
     rendered = json.dumps(result, indent=2) + '\n'
     need(len(rendered.encode()) <= 128 * 1024, 'finite_public_report_bound')
     args.output.write_text(rendered)
-    return 0 if result['status'] in ('partial-slice-passed', 'pressure-slice-passed') else 1
+    return 0 if result['status'] in ('partial-slice-passed', 'pressure-slice-passed',
+                                    'blocked-diagnostic-verified') else 1
 
 
 if __name__ == '__main__':

@@ -90,10 +90,36 @@ def owner_observation(log, test):
     return observations[0]
 
 
+def owner_loss_controls(src, out, paths, identity, budget, profiles, commit, run, checkpoint, verify_empty):
+    """Keep case destinations out of the enclosing attempt serializer's scope."""
+    observations = []
+    for server in ('filesystem', 'git'):
+        verify_empty()
+        case_report = out / ('owner-self-loss-' + server + '.json')
+        run('owner-self-loss-' + server, [sys.executable, '-B',
+            src / 'scripts/ci/observe-owner-self-loss.py', '--run', '--source', src,
+            '--agentfw', paths['agentfw'], '--test-binary', paths['sandbox_tests'],
+            '--agentfw-sha256', identity['binaries']['agentfw'],
+            '--test-sha256', identity['binaries']['sandbox_tests'],
+            '--expected-commit', commit,
+            '--profile', profiles[server]['profile']['path'], '--budget', budget,
+            '--output', case_report], 35)
+        observation = bounded_json(case_report)
+        require(observation.get('status') == 'blocked'
+                and observation.get('acceptance_pass') is False
+                and observation.get('production_cleanup_verified') is False
+                and observation.get('observer_cleanup_verified') is True,
+                'owner_self_loss_diagnostic_unverified')
+        observations.append(dict(observation, server=server))
+        verify_empty()
+        checkpoint(observations)
+    return observations
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', action='store_true')
-    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure'), default='all')
+    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure', 'owner-loss'), default='all')
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--scratch', type=Path, required=True)
     parser.add_argument('--expected-commit', required=True)
@@ -246,7 +272,14 @@ def main():
         entry = load(src, 'sou142_prepared_entry', 'scripts/pilot-run.py')
         selected, _, profiles = entry.selected(argparse.Namespace(selection=selection,
             expected_commit=args.expected_commit, ask_wait_seconds=0, timeout_seconds=60, port=0))
-        if args.phase != 'pressure':
+        if args.phase == 'owner-loss':
+            record['owner_self_loss'] = []
+            def checkpoint_owner_loss(observations):
+                record['owner_self_loss'] = list(observations)
+                save()
+            owner_loss_controls(src, out, paths, identity, budget, profiles, args.expected_commit,
+                run, checkpoint_owner_loss, lambda: empty_root(delegated))
+        if args.phase not in ('pressure', 'owner-loss'):
             for server in ('filesystem', 'git'):
                 for label, test, stage, leaf_created in OWNER_TESTS:
                     empty_root(delegated)
@@ -307,7 +340,7 @@ def main():
         qualifier = load(src, 'sou142_actual_host_baseline', 'scripts/qualify-prepared-pilot-run.py')
         context = SimpleNamespace(BASE=qualifier.BASE, RESOURCE=resource, ROOT=src, QUALIFIER=qualifier,
             budget=budget, peer_budget=peer_budget)
-        if args.phase != 'baseline':
+        if args.phase not in ('baseline', 'owner-loss'):
             if args.phase == 'pressure':
                 qualifier.prepare_owned_workspaces(selected, profiles)
             record['git_calibration_fixture'] = pressure.prepare_git_calibration(selected, profiles, paths['git'])
@@ -325,8 +358,10 @@ def main():
         clean_source()
         for role, digest in identity['binaries'].items():
             require(sha(paths[role]) == digest, 'closing_runtime_identity_changed')
-        record.update(status='partial-runtime-completed-pending-parent-projection',
-                      owned_budget_root_empty=True, actual_original_host_covered=args.phase != 'pressure')
+        record.update(status='owner-self-loss-diagnostic-completed' if args.phase == 'owner-loss'
+                      else 'partial-runtime-completed-pending-parent-projection',
+                      owned_budget_root_empty=True,
+                      actual_original_host_covered=args.phase not in ('pressure', 'owner-loss'))
     except BaseException as error:
         record['status'] = 'failed'
         record['reason'] = str(error) if isinstance(error, Refusal) else 'runtime_failure'
@@ -353,7 +388,8 @@ def main():
             except (Refusal, OSError):
                 record.update(status='failed', owned_peer_budget_root_empty=False)
         save()
-    return 0 if record['status'] == 'partial-runtime-completed-pending-parent-projection' else 1
+    return 0 if record['status'] in ('partial-runtime-completed-pending-parent-projection',
+                                    'owner-self-loss-diagnostic-completed') else 1
 
 
 if __name__ == '__main__':

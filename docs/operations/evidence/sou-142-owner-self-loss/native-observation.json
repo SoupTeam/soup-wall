@@ -1,0 +1,62 @@
+{
+  "format": "sou142-owner-self-loss-handoff/1",
+  "status": "blocked-diagnostic-verified",
+  "acceptance_pass": false,
+  "full_sou142_qualification": false,
+  "remaining_gaps": [
+    "original-memory-pid-wall-calibration",
+    "owner-loss-before-descriptor-handback"
+  ],
+  "cases": [
+    {
+      "server": "filesystem",
+      "status": "blocked",
+      "reason": "owner_self_loss_orphan_reproduced",
+      "owner_signal": "SIGKILL",
+      "observed_stage": "descriptor_sendmsg_entry",
+      "descriptor_count": 8,
+      "descriptors_delivered": false,
+      "owner_generation_verified": true,
+      "collector_refused": true,
+      "original_started": false,
+      "owned_members": 0,
+      "residual_owned_leaf": true,
+      "production_cleanup_verified": false,
+      "observer_cleanup_attempted": true,
+      "observer_cleanup_verified": true,
+      "all_traced_processes_stopped": true,
+      "profile_sha256": "c0ac901669a2f3bf86c514b53fd09373f10d84debb8f7d9e8bf4543aa5747023",
+      "agentfw_sha256": "4dfcbeff40cd30f0be56b1e0e4f44caf24b662a2e6b693d40017416e7963819e",
+      "test_binary_sha256": "70af0a9c013f187c29d60c9f0adcc0cfa9056e3c437c2c83003420342f691943",
+      "budget_sha256": "5cc253b22e56d262580405d06eb28064b26a70aba3d920180ad4dadaf27d6f44",
+      "private_log_sha256": "081f60442b735d6244c1532bc33764f0ad5cd789815779384581bbd6f45bccc8"
+    },
+    {
+      "server": "git",
+      "status": "blocked",
+      "reason": "owner_self_loss_orphan_reproduced",
+      "owner_signal": "SIGKILL",
+      "observed_stage": "descriptor_sendmsg_entry",
+      "descriptor_count": 8,
+      "descriptors_delivered": false,
+      "owner_generation_verified": true,
+      "collector_refused": true,
+      "original_started": false,
+      "owned_members": 0,
+      "residual_owned_leaf": true,
+      "production_cleanup_verified": false,
+      "observer_cleanup_attempted": true,
+      "observer_cleanup_verified": true,
+      "all_traced_processes_stopped": true,
+      "profile_sha256": "9a24f61ce6ea7d2dcf94928949b2bdcc3aa6508519771ea4da9f6ca32063338f",
+      "agentfw_sha256": "4dfcbeff40cd30f0be56b1e0e4f44caf24b662a2e6b693d40017416e7963819e",
+      "test_binary_sha256": "70af0a9c013f187c29d60c9f0adcc0cfa9056e3c437c2c83003420342f691943",
+      "budget_sha256": "5cc253b22e56d262580405d06eb28064b26a70aba3d920180ad4dadaf27d6f44",
+      "private_log_sha256": "789b0ed701e9562a37b833f09b6bf8f55d7393442063e397255b138b309de428"
+    }
+  ],
+  "source_commit": "39415fb717ad22b50701100aeebc96927e0b9690",
+  "production_cleanup_verified": false,
+  "observer_cleanup_verified": true,
+  "owned_budget_root_empty": true
+}

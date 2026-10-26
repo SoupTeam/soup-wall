@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       prepared_budget_phase:
-        description: SOU142 bounded qualification phase; both baseline and pressure are required
+        description: SOU142 phase; owner-loss is a blocked diagnostic, never acceptance
         type: choice
-        options: ['baseline', 'pressure', 'all']
+        options: ['baseline', 'pressure', 'all', 'owner-loss']
         default: 'baseline'
       prepared_host:
         description: Opt in to pinned actual-host SOU142 budget qualification slice
