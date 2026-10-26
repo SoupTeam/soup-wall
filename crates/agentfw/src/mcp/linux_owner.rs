@@ -327,6 +327,21 @@ mod linux {
         }
     }
 
+    fn startup_failure_code(value: &str) -> Option<&'static str> {
+        match value {
+            "mcp_owner_launch_invalid" => Some("mcp_owner_launch_invalid"),
+            "mcp_owner_sealed_closure_invalid" => Some("mcp_owner_sealed_closure_invalid"),
+            "mcp_owner_process_identity_unavailable" => {
+                Some("mcp_owner_process_identity_unavailable")
+            }
+            "mcp_owner_namespace_identity_invalid" => Some("mcp_owner_namespace_identity_invalid"),
+            "mcp_owner_original_spawn_failed" => Some("mcp_owner_original_spawn_failed"),
+            "mcp_owner_private_lease_unavailable" => Some("mcp_owner_private_lease_unavailable"),
+            "mcp_owner_parent_death_unavailable" => Some("mcp_owner_parent_death_unavailable"),
+            _ => failure_code(value),
+        }
+    }
+
     fn encode<T: Serialize>(value: &T) -> anyhow::Result<Vec<u8>> {
         let packet = serde_json::to_vec(value)?;
         ensure!(packet.len() <= MAX_PACKET, "mcp_owner_control_oversized");
@@ -979,10 +994,19 @@ mod linux {
             let owner_pidfd = pidfd(ready.owner_pid)?;
             Ok::<_, anyhow::Error>((reader, ready, owner_pidfd))
         };
+        let startup_started = std::time::Instant::now();
         let (reader, ready, owner_pidfd) =
             match tokio::time::timeout(Duration::from_millis(STARTUP_MILLIS), started).await {
                 Ok(Ok(value)) => value,
-                _ => {
+                failed_startup => {
+                    let timed_out = failed_startup.is_err();
+                    let error_code = match &failed_startup {
+                        Ok(Err(error)) => error
+                            .chain()
+                            .find_map(|cause| startup_failure_code(&cause.to_string())),
+                        _ => None,
+                    };
+                    let elapsed_ms = startup_started.elapsed().as_millis();
                     // EOF is the owner's unconditional cleanup request. Do not kill
                     // it before it can verify its own resources.
                     let _ = parent.shutdown(std::net::Shutdown::Both);
@@ -993,6 +1017,41 @@ mod linux {
                     .await;
                     let _ = child.start_kill();
                     let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
+                    if spec.sealed_closure.is_some() {
+                        use tokio::io::AsyncReadExt;
+                        let mut bytes = Vec::new();
+                        if let Some(stderr) = child.stderr.take() {
+                            let mut stderr = stderr.take(8192);
+                            let _ = tokio::time::timeout(
+                                Duration::from_millis(100),
+                                stderr.read_to_end(&mut bytes),
+                            )
+                            .await;
+                        }
+                        let text = String::from_utf8_lossy(&bytes);
+                        let helper_codes: BTreeSet<_> = text
+                            .lines()
+                            .filter_map(|line| {
+                                line.strip_prefix("agentfw-owner-error:")
+                                    .and_then(startup_failure_code)
+                            })
+                            .collect();
+                        let diagnostic = if text.contains("execvp") {
+                            "mcp_owner_image_exec_failed"
+                        } else if text.contains("Permission denied") {
+                            "mcp_owner_image_permission_failed"
+                        } else if text.contains("Unknown option") {
+                            "mcp_owner_image_option_failed"
+                        } else {
+                            "mcp_owner_image_failure_unclassified"
+                        };
+                        eprintln!(
+                            "{}",
+                            serde_json::json!({"event":"mcp_owner_startup_diagnostic",
+                            "timed_out":timed_out,"elapsed_ms":elapsed_ms,"error_code":error_code,
+                            "helper_codes":helper_codes,"image_code":diagnostic})
+                        );
+                    }
                     bail!("mcp_owner_startup_failed");
                 }
             };
@@ -1400,6 +1459,18 @@ mod linux {
                 namespace_pid1(inherited_socket(fd)?, &command, kind == SEALED_PID1_ARG)
             }
         })();
+        if let Err(error) = &result {
+            let code = error
+                .chain()
+                .find_map(|cause| startup_failure_code(&cause.to_string()))
+                .unwrap_or("mcp_owner_startup_failed");
+            let message = format!("agentfw-owner-error:{code}\n");
+            // No formatting of raw errors/paths and no stderr panic under the
+            // unchanged seccomp filter; this is private startup diagnostics.
+            unsafe {
+                libc::write(2, message.as_ptr().cast(), message.len());
+            }
+        }
         Some(if result.is_ok() { 0 } else { 1 })
     }
 

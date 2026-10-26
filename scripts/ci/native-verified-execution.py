@@ -359,11 +359,23 @@ def main():
    allowed.update(re.findall(r'"((?:verified_execution_|pilot_budget_|mcp_owner_|mcp_budget_|native_)[a-z_]{1,80})"',
        (source/'crates/agentfw/src'/name).read_text()))
   observed=set()
+  report['startup_diagnostics']=[]
   for log in logs:
    log.flush()
    with Path(log.name).open('rb') as reader:
     reader.seek(max(0,os.fstat(reader.fileno()).st_size-16384));tail=reader.read(16384)
    observed.update(code for code in allowed if code.encode() in tail)
+   for line in tail.decode('utf-8',errors='replace').splitlines():
+    try:item=json.loads(line)
+    except ValueError:continue
+    if isinstance(item,dict) and item.get('event')=='mcp_owner_startup_diagnostic':
+     elapsed=item.get('elapsed_ms')
+     report['startup_diagnostics'].append({'timed_out':item.get('timed_out') is True,
+         'elapsed_ms':elapsed if type(elapsed) is int and 0<=elapsed<=60000 else None,
+         'error_code':item.get('error_code') if item.get('error_code') in allowed else None,
+         'helper_codes':[code for code in item.get('helper_codes',[]) if code in allowed][:8],
+         'image_code':item.get('image_code') if item.get('image_code') in allowed else None})
+  report['startup_diagnostics']=report['startup_diagnostics'][-4:]
   report['diagnostic_codes']=sorted(observed)[:32]
   report['collector_exit_codes']=[client.process.poll() for client in clients][:8]
   trace=error.__traceback__

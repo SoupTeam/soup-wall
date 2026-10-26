@@ -110,6 +110,32 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "bf911e5a20f171c4c0fd5ad641d13eddae3c514f",
+      "run": 40311748794,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "daemon_healthy": true,
+      "failed_stage": "outside-owner-startup-handshake",
+      "diagnostic_codes": [
+        "mcp_owner_startup_failed",
+        "verified_execution_incomplete"
+      ],
+      "original_result_observed": false,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12645671638,
+          "sha256": "e086b369108e4f05ad653465672324f1d172405f7d08cbb3891a26828aa538ca"
+        },
+        {
+          "id": 12645975536,
+          "sha256": "5cb427195fdcec4f16c265d0ffe137b0590a5d71b0c7112de610db0e3639569d"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }
