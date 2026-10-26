@@ -101,3 +101,12 @@ wire/syscall controls cover useful calls, refused mutation, exactly-once Ask,
 useful continuation, cancellation, timeout, daemon loss and owned-only cleanup.
 Only bounded sanitized reports are retained. Source, package and workspace
 identities are compared before and after qualification.
+
+The prepared-run syscall observer reads at most 32 MiB per case. Its ordinary
+mode records execution, exact file opens, process creation and original-server
+pipe writes; the separate provider-isolation mode also records `close` to bind
+log writes to the correct descriptor after reuse. An over-limit trace fails
+qualification with `prepared_trace_exceeded_bound`, and the public failure
+report records only its byte count and over-limit flag. A partially written
+live trace cannot establish absence of an Ask dispatch. Raw traces remain
+private and are never copied into the acceptance artifact.

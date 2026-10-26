@@ -36,6 +36,40 @@ STORE = load("sou132_store", "sou84_owned_acceptance.py")
 STOP = load("sou125_prepared_stop", "prepared_stop_witness.py")
 PROVIDER_WITNESS = load("sou143_provider_witness", "pilot_provider_witness.py")
 BASE, require = LAUNCH.BASE, LAUNCH.require
+TRACE_LIMIT = 32 * 1024 * 1024
+
+
+def bounded_trace_text(path):
+    """Read one complete private observer snapshot within the existing limit."""
+    with path.open("rb") as stream:
+        raw = stream.read(TRACE_LIMIT + 1)
+    require(len(raw) <= TRACE_LIMIT, "prepared_trace_exceeded_bound")
+    return raw.decode("utf-8", errors="strict")
+
+
+def trace_syscalls(args):
+    # Exact dispatch/effect witnesses use execve, openat and writes. The
+    # provider log witness additionally needs close to prove FD reuse.
+    selected = "execve,openat,write,writev,clone,clone3,vfork,fork"
+    return selected + (",close" if getattr(args, "verify_provider_isolation", False) else "")
+
+
+def preapproval_dispatch_absent(path, binary, tool, fingerprint):
+    """A partial live observer snapshot cannot prove absence of a dispatch."""
+    raw = bounded_trace_text(path)
+    if not raw.endswith("\n"):
+        return None
+    try:
+        observed = LAUNCH.collector_dispatches(raw, binary, strict=False)
+        _, pending = LAUNCH.normalized_syscalls(raw)
+    except ValueError:
+        return None
+    collectors = set(observed["collector_pids"])
+    if any(int(pid) in collectors and syscall.startswith(("write(", "writev("))
+           for pid, syscall in pending.items()):
+        return None
+    return not any(call["tool"] == tool and call["args_sha256"] == fingerprint
+                   for call in observed["calls"])
 
 
 def until(check, label, seconds=30):
@@ -94,7 +128,7 @@ def qualify(args, private, report):
                                  start_new_session=True, env=env, cwd=private)
     report.update(source_before=before, selected_sha256=selected_before, cases=[],
                   trace_requested={"mode": "seccomp-bpf", "fallback_possible": True,
-                                   "run_syscalls": "execve,openat,close,write,writev",
+                                   "run_syscalls": trace_syscalls(args),
                                    "validation_syscalls": "execve"})
     try:
         # These are actual entry-point invocations, with kernel-observed zero
@@ -246,7 +280,8 @@ def qualify(args, private, report):
                         return [{"type": "tool_use", "id": identifier, "name": f"mcp__{server}__{tool}", "input": arguments}]
                 return [{"type": "text", "text": "Owned prepared run completed."}]
             model.next = next_step
-            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,close,write,writev,clone,clone3,vfork,fork",
+            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e",
+                "trace=" + trace_syscalls(args),
                 "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]
@@ -314,14 +349,8 @@ def qualify(args, private, report):
                                     fingerprint = BASE.hashlib.sha256(json.dumps(exact["args"], sort_keys=True,
                                         separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
                                     def no_original_dispatch():
-                                        try:
-                                            raw = (root / "trace.private").read_text()
-                                            require(len(raw) <= 32 * 1024 * 1024, "private_trace_limit")
-                                            observed = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
-                                        except ValueError:
-                                            return None  # Partial live syscalls do not prove zero.
-                                        return not any(call["tool"] == waiting["tool"] and
-                                            call["args_sha256"] == fingerprint for call in observed["calls"])
+                                        return preapproval_dispatch_absent(root / "trace.private",
+                                            paths["agentfw"], waiting["tool"], fingerprint)
                                     require(until(no_original_dispatch, "prepared_dispatch_before_approval", seconds=2),
                                             "prepared_dispatch_before_approval")
                                     if exact["args"].get("path") == "/workspace/credentials.txt":
@@ -373,7 +402,7 @@ def qualify(args, private, report):
                     require(outcome.get("reason") in expected[case], "prepared_wrong_failure_reason")
                     require(outcome["status"] == "failed", "prepared_false_terminal_success")
                 require(any('execve(' + json.dumps(str(paths["claude"])) + ',' in row and row.endswith(" = 0")
-                            for row in LAUNCH.normalized_syscalls((root / "trace.private").read_text())[0]),
+                            for row in LAUNCH.normalized_syscalls(bounded_trace_text(root / "trace.private"))[0]),
                         "actual_pinned_host_execution_not_observed")
                 cleanup = witness.finish()
                 require(cleanup["all_stopped"], "prepared_owned_process_survived")
@@ -403,7 +432,8 @@ def qualify(args, private, report):
                           "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                           "audit_export": audit_export, "audit_summary_sha256": BASE.sha(root / "audit-summary.json")
                           if (root / "audit-summary.json").exists() else None,
-                          "trace_sha256": BASE.sha(root / "trace.private")}
+                          "trace_sha256": BASE.sha(root / "trace.private"),
+                          "trace_bytes": (root / "trace.private").stat().st_size}
                 if case == "audit-rotation":
                     require(audit_observed and "intentional_retention" in audit_export["notices"],
                             "prepared_audit_loss_not_exported")
@@ -412,7 +442,7 @@ def qualify(args, private, report):
                     result["audit_failure"] = audit_observed
 
                 if provider_values is not None:
-                    trace_text = (root / "trace.private").read_text()
+                    trace_text = bounded_trace_text(root / "trace.private")
                     result["provider_routing"] = PROVIDER_WITNESS.observe(
                         trace_text, paths, provider_values, LAUNCH.normalized_syscalls,
                         rejected=case == "provider-reject")
@@ -451,13 +481,13 @@ def qualify(args, private, report):
                         require("tracked.txt" in json.dumps(model.results["toolu_prepared_1"]), "prepared_git_bytes_missing")
                         require(model.results["toolu_prepared_2"]["is_error"] is True, "prepared_mutator_not_refused")
                         git_execs = []
-                        for row in LAUNCH.normalized_syscalls((root / "trace.private").read_text())[0]:
+                        for row in LAUNCH.normalized_syscalls(bounded_trace_text(root / "trace.private"))[0]:
                             match = RUN.re.search(r'execve\("/mcp-runtime/git", (\[.*\]), .*\) += 0$', row)
                             if match and "status" in json.loads(match.group(1)):
                                 git_execs.append(row)
                         require(len(git_execs) == 1, "prepared_kernel_git_status_witness_missing")
                         result["kernel_git_status_count"] = len(git_execs)
-                    observation = LAUNCH.collector_dispatches((root / "trace.private").read_text(), paths["agentfw"], strict=False)
+                    observation = LAUNCH.collector_dispatches(bounded_trace_text(root / "trace.private"), paths["agentfw"], strict=False)
                     counts = [sum(call["tool"] == tool and call["args_sha256"] == BASE.hashlib.sha256(
                         json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
                         for call in observation["calls"]) for _, tool, arguments in proposals]
@@ -481,12 +511,16 @@ def qualify(args, private, report):
                 except (OSError, ValueError, IndexError):
                     observation["entry_report"] = "not_published"
                 report["failure_observation"] = observation
-                if provider_values is not None and (root / 'trace.private').exists():
+                trace = root / "trace.private"
+                if trace.exists():
+                    observation["trace_bytes"] = trace.stat().st_size
+                    observation["trace_over_32_mib"] = observation["trace_bytes"] > TRACE_LIMIT
+                if provider_values is not None and trace.exists() and not observation["trace_over_32_mib"]:
                     observation['provider_failure_stage'] = PROVIDER_WITNESS.failure_stage(
-                        (root / 'trace.private').read_text(), paths, LAUNCH.normalized_syscalls)
+                        bounded_trace_text(root / 'trace.private'), paths, LAUNCH.normalized_syscalls)
                     if case == 'timeout':
                         observation['provider_timeout_refusal'] = PROVIDER_WITNESS.launcher_timeout(
-                            (root / 'trace.private').read_text(), paths['agentfw'], LAUNCH.normalized_syscalls, 3)
+                            bounded_trace_text(root / 'trace.private'), paths['agentfw'], LAUNCH.normalized_syscalls, 3)
                 raise
             finally:
                 # strace is only an observer: terminating it does not cancel the

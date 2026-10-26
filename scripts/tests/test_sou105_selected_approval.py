@@ -54,6 +54,15 @@ class Witness(unittest.TestCase):
         trace += '15 openat(AT_FDCWD, "/workspace/notes.txt", O_RDONLY|O_CLOEXEC) = 4\n'
         self.assertEqual(self.count(trace, "filesystem"), 1)
 
+    def test_trace_overflow_fails_before_parsing_or_export(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "syscalls"
+            with path.open("wb") as stream:
+                stream.truncate(129)
+            with patch.object(M, "TRACE_LIMIT", 128):
+                with self.assertRaisesRegex(ValueError, "syscall witness exceeded bound"):
+                    M.trace_effects(path, "filesystem")
+
 
 class OperatorInspect(unittest.TestCase):
     def test_record_and_exact_existing_cli_hint_are_required(self):

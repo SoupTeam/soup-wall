@@ -35,6 +35,7 @@ BASE = load("sou105_fs", "verify-sou62-real-mcp.py")
 GIT = load("sou105_git", "verify-sou68-real-mcp.py")
 require, sha, write = BASE.require, BASE.sha, BASE.write
 FORMAT = "sw-mcp/selected-approval-acceptance/1"
+TRACE_LIMIT = 32 * 1024 * 1024
 CASES = ("approve", "reject", "expire", "timeout", "cancel", "wrong_binding", "classifier_change", "profile_change",
          "disconnect", "collector_death", "restart", "default", "deny")
 
@@ -47,8 +48,12 @@ def trace_effects(path, kind, git_path=None, target="/workspace/notes.txt", evid
     execution (not launcher attempts, failed searches or returned payloads).
     FS counts successful read-only opens of the exact synthetic target.
     """
-    raw = path.read_bytes() if path.exists() else b""
-    require(len(raw) <= 32 * 1024 * 1024, "syscall witness exceeded bound")
+    if path.exists():
+        with path.open("rb") as stream:
+            raw = stream.read(TRACE_LIMIT + 1)
+    else:
+        raw = b""
+    require(len(raw) <= TRACE_LIMIT, "syscall witness exceeded bound")
     rows, unfinished = [], {}
     for line in raw.decode("utf-8", errors="strict").splitlines():
         entry = re.match(r"\s*(\d+)\s+(.*)", line)
