@@ -35,7 +35,43 @@ ASK = load("sou116_ask", "qualify-pilot-ask.py")
 STORE = load("sou132_store", "sou84_owned_acceptance.py")
 STOP = load("sou125_prepared_stop", "prepared_stop_witness.py")
 PROVIDER_WITNESS = load("sou143_provider_witness", "pilot_provider_witness.py")
+CAPTURE = load("sou_prepared_syscall_witness", "prepared_syscall_witness.py")
 BASE, require = LAUNCH.BASE, LAUNCH.require
+
+# Bound unrelated bulk-copy write strings in the prepared entry's trace.
+# Original wire/log observers still require complete successful syscall bytes;
+# a truncated relevant write is an inconclusive/failed witness, never zero.
+TRACE_STRING_BYTES = 16 * 1024
+LIVE_INCOMPLETE = frozenset(("two_actual_collector_execs_required", "original_discovery_not_observed",
+    "unfinished_collector_syscall", "incomplete_original_wire_frame", "missing_observer_syscall_prefix"))
+
+
+def read_trace_text(path):
+    try:
+        return ASK.SELECTED.read_private_trace(path).decode("utf-8", errors="strict")
+    except UnicodeError:
+        raise ValueError("private_trace_encoding") from None
+
+
+def no_original_dispatch(path, binary, tool, fingerprint, capture=None):
+    """Retry only incomplete live records; overflow/invalid proof fails now."""
+    if capture is not None and not capture.sync():
+        return None
+    try:
+        raw = read_trace_text(path)
+    except FileNotFoundError:
+        return None
+    if not raw.endswith("\n"):
+        return None
+    try:
+        observed = LAUNCH.collector_dispatches(raw, binary, strict=False)
+    except ValueError as error:
+        if str(error) in LIVE_INCOMPLETE:
+            return None
+        raise
+    require(not any(call["tool"] == tool and call["args_sha256"] == fingerprint
+                    for call in observed["calls"]), "prepared_dispatch_before_approval")
+    return True
 
 
 def until(check, label, seconds=30):
@@ -128,7 +164,7 @@ def qualify(args, private, report):
                 value = json.loads(result.stdout)
                 require((result.returncode == 0) == (control == "plan") and value["executed"] is False,
                         "refusal_or_plan_executed")
-                rows = trace.read_text()
+                rows = read_trace_text(trace)
                 require(all("execve(" + json.dumps(str(paths[role])) + "," not in rows
                             for role in ("agentfw", "claude")), "refused_entry_started_selected_runtime")
                 require(not list(root.glob("soup-wall-run-*")), "refusal_created_runtime_state")
@@ -246,8 +282,8 @@ def qualify(args, private, report):
                         return [{"type": "tool_use", "id": identifier, "name": f"mcp__{server}__{tool}", "input": arguments}]
                 return [{"type": "text", "text": "Owned prepared run completed."}]
             model.next = next_step
-            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "1048576", "-e", "trace=execve,openat,close,write,writev,clone,clone3,vfork,fork",
-                "-o", str(root / "trace.private"), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
+            command = [str(args.strace), "-f", "--seccomp-bpf", "-qq", "-s", str(TRACE_STRING_BYTES), "-e", "trace=execve,openat,close,write,writev,clone,clone3,vfork,fork",
+                "-o", str((root / "trace.private").with_suffix('.fifo')), sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"),
                 "--run", "--selection", str(args.selection), "--expected-commit", args.expected_commit,
                 "--state-root", str(state), "--timeout-seconds", "3" if case == "timeout" else "180" if case == "audit-rotation" else "60"]
             if case == "ask":
@@ -262,9 +298,10 @@ def qualify(args, private, report):
                 run_env.update(provider_values)
                 command.insert(1, "-v")
                 protocol = PROVIDER_WITNESS.ProtocolEvidence(model, provider_values, reject=case == "provider-reject")
-            process = witness = record = None
+            process = witness = record = capture = None
             decisions = []
             try:
+                capture = CAPTURE.Capture(root / 'trace.private')
                 with (root / "stdout.private").open("wb") as out, (root / "stderr.private").open("wb") as err:
                     process = subprocess.Popen(command, cwd=private, env=run_env, stdout=out, stderr=err,
                                                start_new_session=True)
@@ -313,16 +350,8 @@ def qualify(args, private, report):
                                             "prepared_inspection_not_selected_call")
                                     fingerprint = BASE.hashlib.sha256(json.dumps(exact["args"], sort_keys=True,
                                         separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
-                                    def no_original_dispatch():
-                                        try:
-                                            raw = (root / "trace.private").read_text()
-                                            require(len(raw) <= 32 * 1024 * 1024, "private_trace_limit")
-                                            observed = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
-                                        except ValueError:
-                                            return None  # Partial live syscalls do not prove zero.
-                                        return not any(call["tool"] == waiting["tool"] and
-                                            call["args_sha256"] == fingerprint for call in observed["calls"])
-                                    require(until(no_original_dispatch, "prepared_dispatch_before_approval", seconds=2),
+                                    require(until(lambda: no_original_dispatch(root / "trace.private", paths["agentfw"],
+                                                  waiting["tool"], fingerprint, capture), "prepared_witness_incomplete", seconds=2),
                                             "prepared_dispatch_before_approval")
                                     if exact["args"].get("path") == "/workspace/credentials.txt":
                                         require(ASK.SELECTED.trace_effects(root / "trace.private", "filesystem",
@@ -361,6 +390,7 @@ def qualify(args, private, report):
                             require(BASE.ProcessWitness.identity(pid) == start, "prepared_owned_host_identity_changed")
                             os.kill(pid, signal.SIGKILL)
                     process.wait(timeout=220 if case == "audit-rotation" else 100)
+                capture.finish()
                 rows = (root / "stdout.private").read_text().splitlines()
                 outcome = json.loads(rows[-1])
                 success = case in ("useful-refusal", "ask", "default", "audit-rotation")
@@ -373,7 +403,7 @@ def qualify(args, private, report):
                     require(outcome.get("reason") in expected[case], "prepared_wrong_failure_reason")
                     require(outcome["status"] == "failed", "prepared_false_terminal_success")
                 require(any('execve(' + json.dumps(str(paths["claude"])) + ',' in row and row.endswith(" = 0")
-                            for row in LAUNCH.normalized_syscalls((root / "trace.private").read_text())[0]),
+                            for row in LAUNCH.normalized_syscalls(read_trace_text(root / "trace.private"))[0]),
                         "actual_pinned_host_execution_not_observed")
                 cleanup = witness.finish()
                 require(cleanup["all_stopped"], "prepared_owned_process_survived")
@@ -403,7 +433,7 @@ def qualify(args, private, report):
                           "cleanup": outcome["cleanup"], "process_cleanup": cleanup,
                           "audit_export": audit_export, "audit_summary_sha256": BASE.sha(root / "audit-summary.json")
                           if (root / "audit-summary.json").exists() else None,
-                          "trace_sha256": BASE.sha(root / "trace.private")}
+                          "trace_sha256": BASE.sha(root / "trace.private"), "trace_capture": capture.summary()}
                 if case == "audit-rotation":
                     require(audit_observed and "intentional_retention" in audit_export["notices"],
                             "prepared_audit_loss_not_exported")
@@ -412,7 +442,7 @@ def qualify(args, private, report):
                     result["audit_failure"] = audit_observed
 
                 if provider_values is not None:
-                    trace_text = (root / "trace.private").read_text()
+                    trace_text = read_trace_text(root / "trace.private")
                     result["provider_routing"] = PROVIDER_WITNESS.observe(
                         trace_text, paths, provider_values, LAUNCH.normalized_syscalls,
                         rejected=case == "provider-reject")
@@ -451,13 +481,13 @@ def qualify(args, private, report):
                         require("tracked.txt" in json.dumps(model.results["toolu_prepared_1"]), "prepared_git_bytes_missing")
                         require(model.results["toolu_prepared_2"]["is_error"] is True, "prepared_mutator_not_refused")
                         git_execs = []
-                        for row in LAUNCH.normalized_syscalls((root / "trace.private").read_text())[0]:
+                        for row in LAUNCH.normalized_syscalls(read_trace_text(root / "trace.private"))[0]:
                             match = RUN.re.search(r'execve\("/mcp-runtime/git", (\[.*\]), .*\) += 0$', row)
                             if match and "status" in json.loads(match.group(1)):
                                 git_execs.append(row)
                         require(len(git_execs) == 1, "prepared_kernel_git_status_witness_missing")
                         result["kernel_git_status_count"] = len(git_execs)
-                    observation = LAUNCH.collector_dispatches((root / "trace.private").read_text(), paths["agentfw"], strict=False)
+                    observation = LAUNCH.collector_dispatches(read_trace_text(root / "trace.private"), paths["agentfw"], strict=False)
                     counts = [sum(call["tool"] == tool and call["args_sha256"] == BASE.hashlib.sha256(
                         json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
                         for call in observation["calls"]) for _, tool, arguments in proposals]
@@ -481,14 +511,17 @@ def qualify(args, private, report):
                 except (OSError, ValueError, IndexError):
                     observation["entry_report"] = "not_published"
                 report["failure_observation"] = observation
+                if capture is not None:
+                    observation['trace_capture'] = capture.summary()
                 if provider_values is not None and (root / 'trace.private').exists():
                     observation['provider_failure_stage'] = PROVIDER_WITNESS.failure_stage(
-                        (root / 'trace.private').read_text(), paths, LAUNCH.normalized_syscalls)
+                        read_trace_text(root / 'trace.private'), paths, LAUNCH.normalized_syscalls)
                     if case == 'timeout':
                         observation['provider_timeout_refusal'] = PROVIDER_WITNESS.launcher_timeout(
-                            (root / 'trace.private').read_text(), paths['agentfw'], LAUNCH.normalized_syscalls, 3)
+                            read_trace_text(root / 'trace.private'), paths['agentfw'], LAUNCH.normalized_syscalls, 3)
                 raise
             finally:
+                preserving_failure = sys.exc_info()[0] is not None
                 # strace is only an observer: terminating it does not cancel the
                 # orchestrator. Signal the independently identified owned entry.
                 if record is not None and process is not None and process.poll() is None:
@@ -513,6 +546,13 @@ def qualify(args, private, report):
                     process.kill()
                     process.wait(timeout=10)
                 model.close()
+                if capture is not None:
+                    try:
+                        capture.finish()
+                    except CAPTURE.Invalid as error:
+                        report['trace_capture_failure'] = str(error)
+                        if not preserving_failure:
+                            raise
         if not audit_only:
             STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
         if getattr(args, "verify_provider_isolation", False):
@@ -551,9 +591,12 @@ def main():
             qualify(args, Path(temporary), report)
     except Exception as error:
         value = str(error)
-        frame = traceback.extract_tb(error.__traceback__)[-1]
+        frames = traceback.extract_tb(error.__traceback__)
+        frame = frames[-1]
+        caller = frames[-2] if len(frames) > 1 else frame
         report.update(status="failed", reason=value if RUN.re.fullmatch(r"[a-z0-9_]{1,100}", value) else "qualification_failure",
-                      failure_location={"function": frame.name, "line": frame.lineno})
+                      failure_location={"function": frame.name, "line": frame.lineno},
+                      failure_caller={"function": caller.name, "line": caller.lineno, "file": Path(caller.filename).name})
     if "source_before" in report:
         try:
             report["source_after"] = RUN.PREP.PILOT.source()
@@ -562,7 +605,8 @@ def main():
         except (OSError, ValueError, subprocess.SubprocessError):
             report.update(status="failed", reason="closing_source_identity_unavailable")
     (args.output / "report.json").write_text(json.dumps(report, sort_keys=True, indent=2) + "\n")
-    print(json.dumps({"status": report["status"], "reason": report.get("reason"), "cases": len(report["cases"])}))
+    print(json.dumps({"status": report["status"], "reason": report.get("reason"), "cases": len(report["cases"]),
+                      "trace_capture": report.get('failure_observation', {}).get('trace_capture')}))
     return 0 if report["status"] == "passed" else 1
 
 

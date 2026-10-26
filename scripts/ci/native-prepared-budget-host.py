@@ -85,7 +85,8 @@ def owner_observation(log, test):
     require(len(observations) == 1, 'one_owner_control_observation_required')
     allowed = {'format', 'status', 'stage', 'binary_sha256', 'owner_binary_sha256',
                'budget_sha256', 'leaf_created', 'original_started', 'owned_members',
-               'production_cleanup_verified', 'witness_cleanup_attempted', 'inventory_restored'}
+               'production_cleanup_verified', 'witness_cleanup_attempted', 'inventory_restored',
+               'owner_held_leaf_descriptor', 'collector_had_no_leaf_descriptor'}
     require(set(observations[0]) <= allowed, 'finite_owner_control_projection_required')
     return observations[0]
 
@@ -93,7 +94,7 @@ def owner_observation(log, test):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', action='store_true')
-    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure'), default='all')
+    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure', 'owner-loss'), default='all')
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--scratch', type=Path, required=True)
     parser.add_argument('--expected-commit', required=True)
@@ -246,6 +247,34 @@ def main():
         entry = load(src, 'sou142_prepared_entry', 'scripts/pilot-run.py')
         selected, _, profiles = entry.selected(argparse.Namespace(selection=selection,
             expected_commit=args.expected_commit, ask_wait_seconds=0, timeout_seconds=60, port=0))
+        if args.phase == 'owner-loss':
+            test = 'pilot_budget::tests::native_outside_owner_sigkill_before_descriptor_handback'
+            for server in ('filesystem', 'git'):
+                empty_root(delegated)
+                log = run('native-outside-owner-loss-' + server,
+                    [paths['sandbox_tests'], test, '--exact', '--ignored', '--nocapture', '--test-threads=1'], 25,
+                    {'SOU142_BUDGET_CONFIG': str(budget),
+                     'SOU142_OWNER_PROFILE': profiles[server]['profile']['path'],
+                     'SOU86_TEST_AGENTFW': paths['agentfw']})
+                observed = owner_observation(log, test)
+                expected = {'status': 'unsupported-fail-closed',
+                    'stage': 'owner-loss-before-descriptor-handback', 'leaf_created': True,
+                    'binary_sha256': identity['binaries']['sandbox_tests'],
+                    'owner_binary_sha256': identity['binaries']['agentfw'],
+                    'budget_sha256': budget_digest, 'original_started': False, 'owned_members': 0,
+                    'owner_held_leaf_descriptor': True,
+                    'collector_had_no_leaf_descriptor': True,
+                    'production_cleanup_verified': False, 'witness_cleanup_attempted': True,
+                    'inventory_restored': True}
+                require(all(observed.get(key) == value for key, value in expected.items()),
+                        'outside_owner_loss_observation_unverified')
+                empty_root(delegated)
+                record['owner_controls'].append({'server': server, **observed})
+                save()
+            clean_source()
+            record.update(status='owner-loss-unsupported-fail-closed',
+                          owned_budget_root_empty=True, actual_original_host_covered=False)
+            return 0
         if args.phase != 'pressure':
             for server in ('filesystem', 'git'):
                 for label, test, stage, leaf_created in OWNER_TESTS:

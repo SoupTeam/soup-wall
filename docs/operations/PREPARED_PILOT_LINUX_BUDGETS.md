@@ -134,6 +134,60 @@ controls, original kernel refusals, surviving useful peers, fresh recovery and
 empty owned roots. It explicitly requires separate baseline proof. Preserve
 both exact source/config/binary identities, and failed/incomplete attempts.
 
+The baseline parent projection requires the complete current default producer
+inventory: five preflight controls (including missing provider access), seven
+actual-host lifecycle cases, and four emergency-stop cases. Missing, duplicated
+or reordered cases refuse qualification. The missing-provider preflight must
+report `provider_unavailable` with zero selected execution; it is not an
+authenticated provider or original-server runtime observation.
+
+`prepared_budget_phase: owner-loss` is a separate **negative boundary control**.
+It sends SIGKILL to the outside cleanup owner after that owner creates a budget
+leaf and before descriptor handback. The controller pins the exact leaf inode,
+checks that the owner still holds its leaf descriptor while the collector has
+none, checks the owner has no original-server descendants, and requires the selected
+launch to refuse with `mcp_budget_owner_lost_before_handback_unsupported`.
+The current owner/adoption contract cannot prove production cleanup after this
+SIGKILL: the collector has received no leaf descriptor, and a same-name leaf
+is not ownership evidence. The native test controller alone removes the pinned
+empty leaf as disposable fixture teardown. Its public report says
+`unsupported-fail-closed-observed`, leaves full acceptance false and retains
+the owner-loss gap. This control must never be cited as qualified owner-loss
+recovery, active protection or an unbudgeted fallback. A real operator seeing
+this explicit unsupported outcome must treat the delegated root as unresolved
+until independently reconciled under its own authority.
+
+The prepared qualifier retains the existing **32 MiB total private syscall
+witness bound**, using the `prepared-effect-and-wire/1` streaming projection.
+Every exec/write/writev/process record is retained. Exact synthetic target
+opens and all open/close records that can affect the existing private-log
+descriptor witness are retained, including implicit descriptor reuse.
+Only decoded unrelated file metadata is omitted. Unfinished metadata is
+retained at EOF so the existing strict final validators still refuse an
+incomplete supervisor witness. Unclassified records are retained unchanged;
+a split unclassified record keeps that process's remaining metadata in full
+instead of guessing its descriptor state. The existing strict validators
+still decide whether the required witness is complete.
+Input digest/counts and projection counts are recorded, without raw stream
+export. This selects witness predicates before storage; it does not read a
+tail, rotate away effects or raise the retained bound.
+
+The private FIFO is continuously drained with bounded buffers. Before a live
+zero observation, the qualifier synchronously drains queued input: backlog,
+partial records, pending target opens and sticky capture errors cannot prove
+zero. Strings are projected at 16 KiB rather than 1 MiB to bound unrelated
+bulk-copy buffers. Every required original-channel/log write must still
+decode completely with its exact successful byte count; truncated relevant
+strings/vectors refuse qualification. These are observer settings, not MCP
+payload limits, runtime policy changes or additional approval authority.
+
+Trace files are bounded before parsing, with no-follow regular-file opens.
+An overflowing witness fails as `private_trace_limit`; a still-incomplete live
+wire fails as `prepared_witness_incomplete`. An independently observed pending
+call dispatch fails immediately as `prepared_dispatch_before_approval`. These
+are distinct outcomes; a witness-capacity failure is not proof of an Ask bypass.
+Keep previous red attempts and qualify the corrected source independently.
+
 The pressure phase prepares a fresh owned Git fixture with a real HEAD and
 30,000 identical small files in a supported eight-level index directory. This
 keeps normal status output small while exercising Git 2.51.2's own ordinary
