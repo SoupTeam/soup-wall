@@ -1,7 +1,8 @@
-# Git object witness: proposed component boundary (SOU-156)
+# Local Git object witness component (SOU-156)
 
-Status: local component implemented; interface proposal **not agreed with
-SOU-155** and not a production attestation interface. Base: accepted main
+Status: local component for review; **not a production attestation interface**.
+Daemon IPC/composition is disabled and no agreement with SOU-155 is claimed.
+Base: accepted main
 `3c9cfb08c0f1498676dcc70de131bd2f324dd13b`. SOU-155 owns daemon launch, runtime
 authentication, process/channel custody and the versioned IPC envelope. This
 component must not mint an alternative daemon authority or enable result relief.
@@ -35,7 +36,7 @@ a missing full OID are independent controls. Output explicitly records the actua
 Python/Git/platform and does not claim the accepted Linux runtime or confinement
 was exercised merely because the package pins match.
 
-## Proposed narrow first version
+## Component scope and boundary
 
 Support `git_show` only, with its unchanged original arguments. Validate using the
 selected existing profile grammar: `HEAD`, a full SHA-1, and literal local refs
@@ -84,10 +85,12 @@ watch overflow or broken proof permanently withdraw this snapshot; restoring the
 old bytes cannot revive it. Unsupported filesystems/platforms fail closed for the
 witness while ordinary unattested paths retain their baseline behavior.
 
-## Fields proposed to the SOU-155 owner
+## Implemented local record and digest domains
 
-The additive component schema is provisionally `sw-mcp/git-object-witness/1`.
-This name and the following fields are a proposal, not an agreed wire contract.
+The local diagnostic record is `sw-mcp/git-object-witness/1`.
+The following fields describe the current in-process component, not an agreed
+daemon wire contract. Interface proposals and unsent coordination drafts remain
+outside public documentation.
 `Claim` is serializable for diagnostics but has no wire import/deserialization
 API. A serialized claim cannot create a snapshot, invocation or local authority.
 
@@ -126,7 +129,7 @@ until that integration is independently reviewed. Legacy/native/1 and unattested
 runtimes retain baseline inspection. No signature, policy, threshold, hard floor
 or SOU-109 structural parser changes belong here.
 
-## Acceptance plan before any production integration
+## Required acceptance before any production integration
 
 - Commit, plain blob, commit-looking blob, tree, annotated tag and missing target
   retain their actual typed identities. Ambiguous short OIDs and unsupported
