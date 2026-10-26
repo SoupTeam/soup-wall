@@ -31,8 +31,8 @@ def main():
             assert not subprocess.check_output(['/usr/bin/git','status','--porcelain','--untracked-files=all'],cwd=source,env=env,timeout=10)
         clean()
         steps=[('native-build',['build','--offline','--locked','-p','agentfw','--bins'],None),
-               ('native-closure-unit',['test','--offline','--locked','-p','agentfw','--lib','verified_closure'],r'test result: ok\. [1-9][0-9]* passed; 0 failed;'),
-               ('native-execution-unit',['test','--offline','--locked','-p','agentfw','--lib','native::execution'],r'test result: ok\. [1-9][0-9]* passed; 0 failed;'),
+               ('native-closure-unit',['test','--offline','--locked','-p','agentfw','--lib','mcp::verified_'],r'test result: ok\. [1-9][0-9]* passed; 0 failed;'),
+               ('native-execution-unit',['test','--offline','--locked','-p','agentfw','--lib','native::'],r'test result: ok\. [1-9][0-9]* passed; 0 failed;'),
                ('native-owner-unit',['test','--offline','--locked','-p','agentfw','--lib','mcp::linux_owner'],r'test result: ok\. [1-9][0-9]* passed; 0 failed;'),
                ('native-clippy',['clippy','--offline','--locked','-p','agentfw','--all-targets','--','-D','warnings'],None)]
         for label,words,witness in steps:

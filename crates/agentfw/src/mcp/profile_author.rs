@@ -940,6 +940,7 @@ pub fn compiled_bundle_files(
     // FINAL no-clobber directory, not temporary publication staging.
     let native = crate::config::NativeCfg {
         execution: None,
+        git_execution: None,
         registry_path: out.join("registry.json"),
         registry_sha256: p.profile.registry_sha256.clone(),
         approval: None,

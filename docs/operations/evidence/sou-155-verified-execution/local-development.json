@@ -809,9 +809,48 @@
       "elapsed_seconds": 131.55,
       "source_after_sha256": "3fc944ea720bb411e7cd6ad5218359bdf0dcb031a6596ec8178d6ab326416924",
       "log_sha256": "f6fda613e907b021ea158b76b6d35c021b78f6cbf0941d325a8bf61a811a3b2e"
+    },
+    {
+      "label": "main469-integration-compile",
+      "source_files_sha256": "64490f350439ae38ac04a89d1cd529088cfa5a7b4c4e9833f2f88260e01953a1",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "failed",
+      "exit_code": 101,
+      "elapsed_seconds": 11.22,
+      "source_after_sha256": "64490f350439ae38ac04a89d1cd529088cfa5a7b4c4e9833f2f88260e01953a1",
+      "log_sha256": "f2e9f3a4d2a2763414c46530c833f3b2c2c9ab4d9176db2972c2c5c4fd1a5918"
+    },
+    {
+      "label": "main469-integration-regressions",
+      "source_files_sha256": "fe48462bf2f27a3b9dfa356d1925ab22c8150a6cc0a8dd31aad84be7fae098ca",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "failed",
+      "exit_code": 101,
+      "elapsed_seconds": 32.02,
+      "source_after_sha256": "fe48462bf2f27a3b9dfa356d1925ab22c8150a6cc0a8dd31aad84be7fae098ca",
+      "log_sha256": "b27541a90f3177cf312be04151eb8863ca41ebca9d8b953b58a43ab23c9d0481"
+    },
+    {
+      "label": "main469-full-workspace",
+      "source_files_sha256": "6b7909bc7532a4296e762b38218b8a135223bd4c6788db89d0fc542d8dcc4ef2",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 203.28,
+      "source_after_sha256": "6b7909bc7532a4296e762b38218b8a135223bd4c6788db89d0fc542d8dcc4ef2",
+      "log_sha256": "f2edfa8a96b7a5acd68f3f5fe7fbbfc4aa6b0b01f8e074cab9792850c0367677"
     }
   ],
-  "native_qualified_source": "4a73894001e11c42a7c8b64d441c7c506e5b8439",
+  "native_qualified_source": "9d2429d4437b9ea5511825b18094f9674f8e84c6",
   "scope": "native component qualified at named source; current full workflow/admission remains separate",
   "ready_ci_observation": {
     "run": 40321949154,
@@ -831,5 +870,16 @@
       }
     ],
     "corrective_changes": "stable-component-namespace-keys; pure-local-destination-validation-and-fixed-loopback-test-listener"
+  },
+  "integration_base": "46921f8d84b56c379b73dd80688567a7a14dddd7",
+  "prior_ci_observation": {
+    "run": 40324894207,
+    "source_commit": "9d2429d4437b9ea5511825b18094f9674f8e84c6",
+    "status": "superseded-during-final-checks",
+    "observed_completed_successful_jobs": 64,
+    "observed_failed_jobs": 0,
+    "windows_security": "passed",
+    "codeql": "passed",
+    "reason": "accepted-main-advanced-to-46921f8-requiring-conflict-resolution-and-new-source-qualification"
   }
 }

@@ -1,7 +1,8 @@
 # Daemon-owned original execution binding (SOU-155)
 
 Implementation on accepted base
-`379f9f9a17ec7369acaa65455d26f745c36ab866`. Qualification is source-specific;
+`46921f8d84b56c379b73dd80688567a7a14dddd7` (including accepted PR #277).
+Qualification is source-specific;
 use the current source's retained artifacts and PR checks to establish readiness.
 This design document alone is not merge approval. The remaining SOU-142 outside-owner
 SIGKILL delivery was transferred to @waattoo on October 26 and is not a SOU-155
@@ -22,6 +23,15 @@ runtimes, other platforms and existing native/1 clients retain their original
 paths and baseline inspection. This PR enables no structural-text relief, new
 model inference, policy changes or bypass of result inspection. Authenticated
 original output can still contain hostile content and remains untrusted.
+
+Accepted main independently provides `native.git_execution` and its private Git
+result path. Both configuration fields and endpoints are preserved. The FS
+capability introduced here does not authorize Git attribution: each private result
+enters its own validation before the shared inspection and durable audit. No
+request may combine the two result capabilities. The internal FS collector view
+inherits neither daemon execution authority. The accepted Git snapshot mount and
+its inspection restrictions remain unchanged; this PR adds no Git integration
+to the FS execution metadata contract.
 
 ## Operator selection and immutable closure
 

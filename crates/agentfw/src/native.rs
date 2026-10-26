@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Opt-in native admission. Semantics come only from an immutable startup registry.
-//! A trusted collector owns execution; this protocol is not runtime attestation.
+//! Legacy native/1 trusts the collector and does not attest runtime origin.
+//! The separate opt-in git-execute contract owns its actual original process pipes.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -28,6 +29,7 @@ pub mod pilot_cleanup;
 pub mod pilot_stop;
 pub mod resource;
 pub mod resource_approval;
+pub(crate) mod verified_git;
 pub mod workspace;
 
 pub const CONTRACT: &str = "sw-native/1";
@@ -391,6 +393,8 @@ enum Stage {
 
 #[derive(Clone)]
 struct Call {
+    #[cfg(target_os = "linux")]
+    execution_args: Option<Value>,
     managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
     host_call_id: Option<Value>,
     contract_version: &'static str,
@@ -544,6 +548,7 @@ pub(crate) fn validate_lineage(
 }
 
 pub struct NativeState {
+    git_execution: Option<verified_git::Runtime>,
     pub registry: Registry,
     pub registry_sha256: String,
     pub token: String,
@@ -712,6 +717,7 @@ impl NativeState {
         }
         anyhow::ensure!(!token.is_empty(), "native collector token is absent");
         Ok(Self {
+            git_execution: None,
             registry,
             registry_sha256: expected.into(),
             token,
@@ -732,6 +738,16 @@ impl NativeState {
     ) -> anyhow::Result<Self> {
         self.continuity = Some(continuity::Continuity::attach(home, &mut self, firewall)?);
         Ok(self)
+    }
+
+    pub(crate) fn git_execution_selected(
+        &self,
+        server: &str,
+        profile: &crate::mcp::server_profile::ProfileConfig,
+    ) -> anyhow::Result<bool> {
+        self.git_execution
+            .as_ref()
+            .map_or(Ok(false), |runtime| runtime.selected(server, profile))
     }
 
     pub fn with_policy_barrier(mut self, home: &std::path::Path) -> anyhow::Result<Self> {
@@ -771,6 +787,7 @@ impl NativeState {
 
     pub(crate) fn collector_view(&self) -> Self {
         Self {
+            git_execution: None,
             registry: self.registry.clone(),
             registry_sha256: self.registry_sha256.clone(),
             token: self.token.clone(),
@@ -968,7 +985,19 @@ impl NativeState {
         std::fs::File::open(&config.registry_path)?
             .take((MAX_BODY + 1) as u64)
             .read_to_end(&mut bytes)?;
-        Self::from_bytes(&bytes, &config.registry_sha256, token)
+        let mut native = Self::from_bytes(&bytes, &config.registry_sha256, token)?;
+        native.git_execution = config
+            .git_execution
+            .as_ref()
+            .map(verified_git::Runtime::load)
+            .transpose()?;
+        if native.git_execution.is_some() {
+            anyhow::ensure!(
+                config.liveness.is_some(),
+                "daemon Git execution requires authenticated liveness"
+            );
+        }
+        Ok(native)
     }
 }
 
@@ -1915,6 +1944,31 @@ fn inspect_bound(
     identity: Option<&liveness::CollectorIdentity>,
     evidence: Option<execution::OriginalResult>,
 ) -> Result<Response, &'static str> {
+    inspect_bound_complete(st, native, request, identity, None, evidence)
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_bound_with_execution(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+    execution: Option<verified_git::OwnedResult>,
+) -> Result<Response, &'static str> {
+    inspect_bound_complete(st, native, request, identity, execution, None)
+}
+
+fn inspect_bound_complete(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+    execution: Option<verified_git::OwnedResult>,
+    evidence: Option<execution::OriginalResult>,
+) -> Result<Response, &'static str> {
+    if execution.is_some() && evidence.is_some() {
+        return Err("verified_execution_source_mismatch");
+    }
     if request.event == "session_start"
         && request.host_session.is_none()
         && native
@@ -2708,6 +2762,16 @@ fn inspect_bound(
             session.calls.insert(
                 id.clone(),
                 Call {
+                    #[cfg(target_os = "linux")]
+                    execution_args: native
+                        .git_execution
+                        .as_ref()
+                        .filter(|_| {
+                            tool.mcp_result_profile
+                                .as_deref()
+                                .is_some_and(crate::mcp::server_profile::git_selected)
+                        })
+                        .map(|_| args.clone()),
                     managed_policy: firewall.active_managed_policy(),
                     host_call_id: request.mcp_host_call_id.clone().or_else(|| {
                         request
@@ -2730,10 +2794,16 @@ fn inspect_bound(
     let id = request.call_id.as_deref().ok_or("native_call_missing")?;
     // Remove before validation. A mismatched/failed completion cannot be retried
     // into a different admission after observing its error.
-    let mut call = session
-        .calls
-        .remove(id)
-        .ok_or("native_call_unknown_or_spent")?;
+    let mut call = match execution.as_ref() {
+        Some(owned) => {
+            owned.validate(&request, session, now)?;
+            owned.call.clone()
+        }
+        None => session
+            .calls
+            .remove(id)
+            .ok_or("native_call_unknown_or_spent")?,
+    };
     if request.event == "result"
         && crate::mcp::server_profile::selected(tool.mcp_result_profile.as_deref())
         && request.delivery.as_deref() != Some("mcp_host")
@@ -2935,7 +3005,14 @@ fn inspect_bound(
             source: provenance.clone(),
         });
         let outcome = if let Some(evidence) = &mcp_evidence {
-            firewall.preview_native_mcp_result(&ev, evidence, block_index)
+            if let Some(span) = execution
+                .as_ref()
+                .and_then(|owned| owned.formatter_span(&ev))
+            {
+                firewall.preview_verified_git_result(&ev, evidence, block_index, &span)
+            } else {
+                firewall.preview_native_mcp_result(&ev, evidence, block_index)
+            }
         } else {
             firewall.preview_native_result(&ev)
         };

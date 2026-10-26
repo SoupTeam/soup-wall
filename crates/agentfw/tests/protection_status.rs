@@ -48,6 +48,7 @@ impl Fixture {
             policy: Some(policy_path),
             native: native.then(|| agentfw::config::NativeCfg {
                 execution: None,
+                git_execution: None,
                 registry_path,
                 registry_sha256: sha.clone(),
                 approval: None,

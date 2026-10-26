@@ -278,6 +278,29 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "9d2429d4437b9ea5511825b18094f9674f8e84c6",
+      "run": 40324889224,
+      "status": "passed",
+      "build_units_clippy": "passed",
+      "runtime_acceptance_pass": true,
+      "actual_cases_passed": 15,
+      "original_results": 13,
+      "daemon_generations": 3,
+      "process_generations": 3,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12650014846,
+          "sha256": "0344908766de95f5df93cd1c3095984af9928af2cbd7dba8e10aab973f5887b5"
+        },
+        {
+          "id": 12649934886,
+          "sha256": "cba583d31425dd045af96bfae88ae5bcd94df8852c3872e6d55dd47433e705a1"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }

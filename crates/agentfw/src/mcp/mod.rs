@@ -29,4 +29,5 @@ pub mod server_sandbox;
 pub(crate) mod stdio;
 pub mod store;
 pub(crate) mod verified_closure;
+pub(crate) mod verified_git;
 pub(crate) mod windows_budget;

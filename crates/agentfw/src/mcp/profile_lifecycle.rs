@@ -805,6 +805,7 @@ impl ProfileManager {
 
         cfg.native = Some(NativeCfg {
             execution: None,
+            git_execution: None,
             registry_path,
             registry_sha256: registry_sha256.to_string(),
             approval,

@@ -2,6 +2,13 @@
 
 Interface response published by Nari-Ab on 2026-10-26 in PR #273, comment 6413442028. This records the SOU-155-side agreement; implementation and qualification are separate.
 
+Subsequent accepted main `46921f8d84b56c379b73dd80688567a7a14dddd7` merged the
+separate Git execution and inspection path in PR #277. This historical agreement
+does not disable that accepted path. The SOU-155 filesystem capability remains
+separate; composing Git into its metadata/extension contract is not enabled here.
+Both private result paths retain their own validation, the shared inspection and
+durable audit. Existing Git snapshot custody and restriction floors are preserved.
+
 Olzhas, reviewed the SOU-156 proposal at 05014886c5270c0c0abb91304ca82d0d91c09d01 and the latest SOU-155 integration decision. From the SOU-155 side, I agree to these interface boundaries, with the following explicit mapping:
 
 1. Snapshot: yes. Retain the private Snapshot/Arc<View> and its leases; mount the exact same sealed descriptors and generation for the admitted invocation. Hold/check it across pending Ask, execution and completion. No ambient repository fallback or claim of a full working-tree snapshot. Withdrawal is sticky.
