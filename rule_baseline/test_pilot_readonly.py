@@ -232,7 +232,14 @@ class GlobPatternBound(unittest.TestCase):
     def test_profile_bound_is_the_documented_constant(self):
         source = (ROOT / 'crates/agentfw/src/mcp/input.rs').read_text(encoding='utf-8')
         self.assertIn('const DEFAULT_STRING_BYTES: usize = 16 * 1024;', source)
-        self.assertIn('let max_bytes = max_chars.map_or(DEFAULT_STRING_BYTES, |max| max * 4);', source)
+        # Without maxLength an argument string keeps DEFAULT_STRING_BYTES; the larger result budget applies
+        # only to a server's outputSchema, never to the inputSchema the profile validates arguments with.
+        self.assertIn('let max_bytes = max_chars.map_or(role.default_string_bytes(), |max| max * 4);', source)
+        self.assertIn('Role::Arguments => DEFAULT_STRING_BYTES,', source)
+        self.assertIn('Self::read_selected_role(value, Role::Arguments)', source)
+        profile = (ROOT / 'crates/agentfw/src/mcp/server_profile.rs').read_text(encoding='utf-8')
+        self.assertIn('InputSchema::read_selected(&tool["inputSchema"])', profile)
+        self.assertNotRegex(profile, r'read_selected_role\(\s*&tool\["inputSchema"\]')
         for name in ('search_files', 'directory_tree'):
             self.assertNotIn('maxLength', FS[name]['inputSchema']['properties']['excludePatterns']['items'])
         self.assertNotIn('maxLength', FS['search_files']['inputSchema']['properties']['pattern'])

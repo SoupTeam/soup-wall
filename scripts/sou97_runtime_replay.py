@@ -53,6 +53,30 @@ NATIVE_ERROR_MESSAGES = frozenset((
     "MCP control request is busy or not initialized",
     "Operator-pinned MCP discovery is required",
     "MCP call timed out; dispatched execution may have occurred",
+    "Replayed or spent MCP request ID refused",
+    "Git local reference unavailable, unsupported, or its source changed",
+    "Git local-reference view changed during execution",
+    "Git local-reference view changed or target unsupported",
+    "An original create operation is already active",
+    "Original create staging failed; no file committed",
+    "Original create timed out before publication; no file committed",
+    "Original create workspace identity unavailable",
+    "Original isolated MCP create failed; workspace unchanged",
+    "Unsafe or existing original-create destination; no publication",
+    "Native collector became uncertain before publication",
+    # Fixed *_MESSAGE constants of the same file.
+    "MCP result withheld: a result text exceeds the 262144-byte per-result budget; the original call may have executed",
+    "MCP result withheld: the response frame exceeds the 1048576-byte envelope budget; the original call may have executed",
+    "MCP path refused before execution: it is outside the selected workspace /workspace",
+    "MCP path refused before execution: unsupported spelling (empty, '.', '..' or '//' segment, backslash, '~', "
+    "control character, relative ':' or over 4096 bytes)",
+    # DaemonSizeLimit::message (crates/agentfw/src/mcp/admission.rs), sent through the same error frame.
+    "MCP result withheld: the native daemon record limit (native_record_over_cap) refused its size; "
+    "the original call may have executed",
+    "MCP result withheld: the native daemon content limit (native_content_over_cap) refused its size; "
+    "the original call may have executed",
+    "MCP result withheld: the native daemon body limit (native_body_over_cap) refused its size; "
+    "the original call may have executed",
 ))
 NOT_CLASSIFIED_PREFIX = "Soup Wall could not classify the MCP invocation ("
 OUTPUT_PROFILE_WITHHELD = "Unsupported MCP result withheld by the selected output profile"

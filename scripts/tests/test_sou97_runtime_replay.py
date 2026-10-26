@@ -265,7 +265,12 @@ class ResponseClassification(unittest.TestCase):
         timeout = {"jsonrpc": "2.0", "id": 1, "error": {"code": -32001,
                    "message": "MCP call timed out; dispatched execution may have occurred"}}
         self.assertEqual(REPLAY.classify_response(timeout, True)["result_kind"], "native_error_after_dispatch")
-        original = {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "upstream failure text"}}
+        budget = {"jsonrpc": "2.0", "id": 1, "error": {"code": -32603, "message": (
+            "MCP result withheld: a result text exceeds the 262144-byte per-result budget; the original call may have executed")}}
+        got_budget = REPLAY.classify_response(budget, True)
+        self.assertEqual((got_budget["result_kind"], got_budget["native_verdict"]),
+                         ("native_error_after_dispatch", "allow_result_withheld"))
+        original ={"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "upstream failure text"}}
         self.assertEqual(REPLAY.classify_response(original, True)["result_kind"], "original_error_jsonrpc")
         unknown = REPLAY.classify_response(original, False)
         self.assertEqual((unknown["native_verdict"], unknown.get("unrecognised_native_message")), ("refused", True))
@@ -280,8 +285,19 @@ class ResponseClassification(unittest.TestCase):
     def test_native_message_list_matches_the_rust_source(self):
         source = (ROOT / "crates/agentfw/src/mcp/admission/real_server.rs").read_text(encoding="utf-8")
         found = set(re.findall(r'error\(\s*&?[\w.]+,\s*-?\d+,\s*"([^"]+)"\s*,?\s*\)', source))
-        self.assertEqual(found, set(REPLAY.NATIVE_ERROR_MESSAGES))
+        # Fixed messages that reach error() through a constant or a selecting expression.
+        found |= set(re.findall(r'const \w+_MESSAGE: &str =\s*"([^"]+)";', source))
+        routed = {"MCP arguments violate the selected input profile",
+                  "Unsupported MCP result withheld by the selected output profile"}
+        for message in routed:
+            self.assertIn(f'"{message}"', source)
+        found |= routed
         admission = (ROOT / "crates/agentfw/src/mcp/admission.rs").read_text(encoding="utf-8")
+        self.assertIn("error(&call.id, -32603, limit.message())", source)
+        limit = admission[admission.index("impl DaemonSizeLimit"):]
+        limit = limit[limit.index("fn message(self)"):limit.index("impl std::fmt::Display for DaemonSizeLimit")]
+        found |= set(re.findall(r'=> "([^"]+)"', limit))
+        self.assertEqual(found, set(REPLAY.NATIVE_ERROR_MESSAGES))
         self.assertIn('"Soup Wall could not classify the MCP invocation ({failure}); policy not reached"', admission)
 
     def record(self, **changes):
