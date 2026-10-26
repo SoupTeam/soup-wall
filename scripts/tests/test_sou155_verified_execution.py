@@ -69,6 +69,60 @@ def complete():
 
 
 class NativeEvidence(unittest.TestCase):
+    def test_owner_signal_pins_before_observation_and_never_uses_numeric_kill(self):
+        owner = dict(owner_pid=424242, owner_start_ticks=73, original=dict(namespace_pid=2))
+        events = []
+        fields = ['S', '1234'] + ['0'] * 17 + ['73']
+        def read(path, *args, **kwargs):
+            events.append(('read', str(path)))
+            return '424242 (owner) ' + ' '.join(fields) if str(path).endswith('/stat') else 'owned-cgroup\n'
+        with patch.object(DRIVER.os, 'pidfd_open', create=True, side_effect=lambda *a: events.append(('pin', a)) or 87), \
+             patch.object(DRIVER.select, 'select', return_value=([], [], [])), \
+             patch.object(Path, 'read_text', read), \
+             patch.object(DRIVER.signal, 'pidfd_send_signal', create=True, side_effect=lambda *a: events.append(('signal', a))), \
+             patch.object(DRIVER.os, 'kill') as numeric, patch.object(DRIVER.os, 'close') as close:
+            DRIVER.kill_owned_owner(owner, 1234, 'owned-cgroup')
+            self.assertEqual(events[0], ('pin', (424242, 0)))
+            self.assertEqual(events[-1], ('signal', (87, DRIVER.signal.SIGKILL)))
+            numeric.assert_not_called()
+            close.assert_called_once_with(87)
+
+    def test_owner_signal_rejects_wrong_parent_generation_cgroup_and_exited_pin(self):
+        owner = dict(owner_pid=424242, owner_start_ticks=73, original=dict(namespace_pid=2))
+        for parent, ticks, cgroup, ready in [(999, 73, 'owned', [[], []]),
+                                            (1234, 74, 'owned', [[], []]),
+                                            (1234, 73, 'other', [[], []]),
+                                            (1234, 73, 'owned', [[87]]),
+                                            (1234, 73, 'owned', [[], [87]])]:
+            fields = ['S', str(parent)] + ['0'] * 17 + [str(ticks)]
+            def read(path, *args, **kwargs):
+                return '424242 (owner) ' + ' '.join(fields) if str(path).endswith('/stat') else cgroup
+            with self.subTest(parent=parent, ticks=ticks, cgroup=cgroup, ready=ready), \
+                 patch.object(DRIVER.os, 'pidfd_open', create=True, return_value=87), \
+                 patch.object(DRIVER.select, 'select', side_effect=[(row, [], []) for row in ready]), \
+                 patch.object(Path, 'read_text', read), \
+                 patch.object(DRIVER.signal, 'pidfd_send_signal', create=True) as signal, \
+                 patch.object(DRIVER.os, 'kill') as numeric, patch.object(DRIVER.os, 'close') as close:
+                with self.assertRaises(RuntimeError):
+                    DRIVER.kill_owned_owner(owner, 1234, 'owned')
+                signal.assert_not_called()
+                numeric.assert_not_called()
+                close.assert_called_once_with(87)
+
+    @unittest.skipUnless(hasattr(os, 'pidfd_open') and hasattr(DRIVER.signal, 'pidfd_send_signal'), 'Linux pidfd required')
+    def test_owner_signal_stops_only_real_owned_child(self):
+        child = subprocess.Popen(['/bin/sleep', '30'])
+        try:
+            fields = Path(f'/proc/{child.pid}/stat').read_text().rsplit(')', 1)[1].split()
+            owner = dict(owner_pid=child.pid, owner_start_ticks=int(fields[19]), original=dict(namespace_pid=2))
+            group = Path(f'/proc/{child.pid}/cgroup').read_text().strip()
+            DRIVER.kill_owned_owner(owner, os.getpid(), group)
+            self.assertEqual(child.wait(timeout=3), -DRIVER.signal.SIGKILL)
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait(timeout=3)
+
     def test_full_host_focus_gate_accepts_every_supported_slice_and_refuses_others(self):
         source = (ROOT / '.github/workflows/sou79-resource-budgets.yml').read_text()
         gate = source.split('- name: Validate explicit full-host selection', 1)[1]

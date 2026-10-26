@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """Actual original FS/daemon/forwarder witnesses in an owned native Linux unit."""
-import argparse,hashlib,importlib.util,json,os,platform,re,shutil,signal,socket,stat,subprocess,sys,time,urllib.error,urllib.request,uuid,errno
+import argparse,hashlib,importlib.util,json,os,platform,re,select,shutil,signal,socket,stat,subprocess,sys,time,urllib.error,urllib.request,uuid,errno
 from pathlib import Path
 
 
@@ -23,6 +23,26 @@ def selected_budget(binary,config,env):
      and selected.get('protected_children_started') is False
      and selected.get('scope')=='per-original-server-process-tree','budget_selection_invalid')
  return selected
+
+def kill_owned_owner(owner, parent_pid, owned_cgroup):
+ """Pin before observing; a reused numeric PID can never receive our signal."""
+ pid=owner.get('owner_pid');ticks=owner.get('owner_start_ticks')
+ require(type(pid) is int and pid>1 and pid not in (os.getpid(),parent_pid)
+     and type(ticks) is int and ticks>0,'invalid_owner_pid')
+ require(hasattr(os,'pidfd_open') and hasattr(signal,'pidfd_send_signal'),'owner_pidfd_unavailable')
+ pinned=os.pidfd_open(pid,0)
+ try:
+  require(not select.select([pinned],[],[],0)[0],'owner_generation_exited')
+  observed=Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()
+  require(int(observed[1])==parent_pid and int(observed[19])==ticks
+      and owner.get('original',{}).get('namespace_pid',0)>1,'actual_owner_generation_changed')
+  require(Path(f'/proc/{pid}/cgroup').read_text().strip()==owned_cgroup,'owner_outside_owned_unit')
+  # A concurrent exit/reap may have invalidated the observations above. The
+  # final check and signal both concern the already pinned generation only.
+  require(not select.select([pinned],[],[],0)[0],'owner_generation_exited')
+  signal.pidfd_send_signal(pinned,signal.SIGKILL)
+ finally:
+  os.close(pinned)
 
 def main():
  p=argparse.ArgumentParser();
@@ -275,14 +295,8 @@ def main():
    except ValueError:continue
    if item.get('event')=='mcp_real_owner_start':owners.append(item['owner'])
   require(bool(owners),'actual_owner_identity_missing')
-  owner=owners[-1];owner_pid=owner['owner_pid']
-  require(type(owner_pid) is int and owner_pid not in (os.getpid(),daemon.pid,1),'invalid_owner_pid')
-  observed=Path(f'/proc/{owner_pid}/stat').read_text().rsplit(')',1)[1].split()
-  require(int(observed[19])==owner['owner_start_ticks'] and owner.get('original',{}).get('namespace_pid',0)>1,
-      'actual_owner_generation_changed')
-  require(Path(f'/proc/{owner_pid}/cgroup').read_text().strip()=='0::/system.slice/'+a.unit+'/manager',
-      'owner_outside_owned_unit')
-  os.kill(owner_pid,signal.SIGKILL)
+  owner=owners[-1]
+  kill_owned_owner(owner,daemon.pid,'0::/system.slice/'+a.unit+'/manager')
   # Observer deadline covers the existing 3-second owner cleanup plus native
   # retirement's 5-second HTTP boundary. Product deadlines remain unchanged.
   try:lost.receive(timeout=15)
