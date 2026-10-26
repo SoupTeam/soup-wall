@@ -20,7 +20,8 @@ use tokio::process::Command;
 
 use super::super::super::read_lease;
 use super::{
-    decode_object, oid, packed_references, Object, MAX_OBJECT_BYTES, MAX_REFS, MAX_TAG_DEPTH,
+    decode_object, oid, packed_references, Object, OriginTarget, MAX_OBJECT_BYTES, MAX_REFS,
+    MAX_TAG_DEPTH,
 };
 
 const MAX_IMAGE_BYTES: usize = 16 * 1024 * 1024;
@@ -302,6 +303,8 @@ struct Capture {
     object_cache: BTreeMap<String, Object>,
     bytes: usize,
     packed: BTreeSet<String>,
+    tracked: bool,
+    origins: BTreeMap<String, OriginTarget>,
 }
 
 impl Capture {
@@ -365,19 +368,44 @@ impl Capture {
         self.source.watch(&directory)?;
         self.directory(Path::new(ROOT).join(prefix))?;
         for name in entries(&directory)? {
+            if self.tracked && prefix == "refs" {
+                ensure!(
+                    matches!(name.as_str(), "heads" | "tags" | "remotes"),
+                    "Git tracked reference directory unsupported"
+                );
+            }
             let relative = format!("{prefix}/{name}");
             if let Ok(nested) = child(&directory, &name, true) {
+                if self.tracked && relative.starts_with("refs/remotes") {
+                    ensure!(
+                        relative == "refs/remotes"
+                            || relative == "refs/remotes/origin"
+                            || super::is_origin_reference(&relative),
+                        "Git origin directory unsupported"
+                    );
+                }
                 self.loose_refs(nested, &relative, depth + 1)?;
                 continue;
             }
             ensure!(
-                super::is_metadata_reference(&relative),
+                super::is_metadata_reference(&relative)
+                    || self.tracked && super::is_origin_reference(&relative),
                 "Git shallow namespace unsupported"
             );
             let bytes = self.read(child(&directory, &name, false)?, 256)?;
-            let target = std::str::from_utf8(&bytes)
-                .ok()
-                .and_then(|s| oid(s.strip_suffix('\n').unwrap_or(s)).ok());
+            let target = if self.tracked && super::is_origin_reference(&relative) {
+                let target = super::origin_target(&relative, &bytes)?;
+                let id = match &target {
+                    OriginTarget::Object(id) => Some(id.clone()),
+                    OriginTarget::Symbolic(_) => None,
+                };
+                self.origins.insert(relative.clone(), target);
+                id
+            } else {
+                std::str::from_utf8(&bytes)
+                    .ok()
+                    .and_then(|s| oid(s.strip_suffix('\n').unwrap_or(s)).ok())
+            };
             self.refs.insert(relative.clone(), target);
             ensure!(
                 self.refs.len() <= MAX_REFS,
@@ -434,18 +462,31 @@ impl Capture {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CaptureMode {
+    SelectedShallow,
+    ObjectWitness,
+    TrackedObjectWitness,
+}
+
 impl View {
     pub(crate) fn capture(workspace: &File) -> anyhow::Result<Arc<Self>> {
-        Self::capture_inner(workspace, false)
+        Self::capture_inner(workspace, CaptureMode::SelectedShallow)
     }
 
     /// Additive component capture. Existing selected-profile behavior is
     /// unchanged; this snapshot also withdraws on workspace entry changes.
     pub(crate) fn capture_object_witness(workspace: &File) -> anyhow::Result<Arc<Self>> {
-        Self::capture_inner(workspace, true)
+        Self::capture_inner(workspace, CaptureMode::ObjectWitness)
     }
 
-    fn capture_inner(workspace: &File, object_witness: bool) -> anyhow::Result<Arc<Self>> {
+    pub(crate) fn capture_tracked_object_witness(workspace: &File) -> anyhow::Result<Arc<Self>> {
+        Self::capture_inner(workspace, CaptureMode::TrackedObjectWitness)
+    }
+
+    fn capture_inner(workspace: &File, mode: CaptureMode) -> anyhow::Result<Arc<Self>> {
+        let object_witness = mode != CaptureMode::SelectedShallow;
+        let tracked = mode == CaptureMode::TrackedObjectWitness;
         owned(&workspace.metadata()?)?;
         let (git, observed) = if object_witness {
             let (git, source) = object_witness_directory(workspace)?;
@@ -498,11 +539,17 @@ impl View {
             object_cache: BTreeMap::new(),
             bytes: 0,
             packed: BTreeSet::new(),
+            tracked,
+            origins: BTreeMap::new(),
         };
         capture.directory(format!("{ROOT}/objects"))?;
         capture.directory(format!("{ROOT}/info"))?;
         let config = capture.read(child(&git, "config", false)?, 8192)?;
-        super::super::validate_configuration(&config)?;
+        if tracked {
+            super::super::super::git_local_clone::validate_config(&config)?;
+        } else {
+            super::super::validate_configuration(&config)?;
+        }
         capture.image(format!("{ROOT}/config"), &config)?;
         let head = capture.read(child(&git, "HEAD", false)?, 256)?;
         capture.image(format!("{ROOT}/HEAD"), &head)?;
@@ -554,7 +601,11 @@ impl View {
             capture.image(format!("{ROOT}/objects/pack/{peer}"), &index)?;
         }
         if let Some(packed) = capture.optional(&git, "packed-refs", 65_536)? {
-            let parsed = packed_references(&packed)?;
+            let parsed = if tracked {
+                super::tracked_packed_references(&packed)?
+            } else {
+                packed_references(&packed)?
+            };
             // Git may consult the packed peeled optimization. It must match
             // the exact bounded object chain, never become a second target.
             for (name, peeled) in &parsed.peels {
@@ -562,6 +613,13 @@ impl View {
                     capture.target(&parsed.refs[name], true)?.as_ref() == Some(peeled),
                     "Git packed peeled target differs from its object chain"
                 );
+            }
+            for (name, id) in &parsed.refs {
+                if tracked && super::is_origin_reference(name) {
+                    capture
+                        .origins
+                        .insert(name.clone(), OriginTarget::Object(id.clone()));
+                }
             }
             capture.refs = parsed
                 .refs
@@ -574,10 +632,12 @@ impl View {
         ensure!(
             entries(&refs)?
                 .iter()
-                .all(|name| matches!(name.as_str(), "heads" | "tags")),
+                .all(|name| matches!(name.as_str(), "heads" | "tags")
+                    || tracked && name == "remotes"),
             "Git reference namespace unsupported"
         );
         capture.loose_refs(refs, "refs", 0)?;
+        super::validate_origin_references(&capture.origins)?;
         if let Some(info) = optional_directory(&git, "info")? {
             capture.source.watch(&info)?;
             ensure!(

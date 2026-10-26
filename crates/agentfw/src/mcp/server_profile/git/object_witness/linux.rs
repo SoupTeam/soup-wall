@@ -21,12 +21,21 @@ pub(super) fn capture(workspace: &std::fs::File, profile: &str) -> anyhow::Resul
         }
     };
     validate()?;
-    let view = super::super::shallow_view::View::capture_object_witness(workspace)?;
+    let view = if profile == tracked::FORMAT {
+        super::super::shallow_view::View::capture_tracked_object_witness(workspace)?
+    } else {
+        super::super::shallow_view::View::capture_object_witness(workspace)?
+    };
     // Revalidate after the workspace watch has been installed. Both passes
     // preserve existing configuration/attributes/indirection guards; source
     // mutations from this point remain sticky and cannot refresh authority.
     validate()?;
-    let repository = Repository::images(view.object_witness_images()?)?;
+    let images = view.object_witness_images()?;
+    let repository = if profile == tracked::FORMAT {
+        Repository::tracked_images(images)?
+    } else {
+        Repository::images(images)?
+    };
     view.object_witness_valid()?;
     Ok(Arc::new(Snapshot {
         source: Source::Native(view),

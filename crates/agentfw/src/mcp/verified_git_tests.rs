@@ -46,7 +46,14 @@ fn tracked_execution_allowlist_preserves_the_original_argument_contract() {
         p.format = format.into();
         assert!(supports_profile(format));
         assert!(request(&p, &show()).is_ok());
-        for revision in ["HEAD:notes.txt", "refs/heads/main", "HEAD~1", "../outside"] {
+        for revision in [
+            "HEAD:notes.txt",
+            "refs/heads/main",
+            "refs/remotes/origin/main",
+            "refs/remotes/origin/HEAD",
+            "HEAD~1",
+            "../outside",
+        ] {
             assert!(request(
                 &p,
                 &wire(

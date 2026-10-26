@@ -167,12 +167,39 @@ struct Repository {
 
 impl Repository {
     fn images(images: BTreeMap<String, Vec<u8>>) -> anyhow::Result<Self> {
+        Self::images_inner(images, false)
+    }
+
+    fn tracked_images(images: BTreeMap<String, Vec<u8>>) -> anyhow::Result<Self> {
+        Self::images_inner(images, true)
+    }
+
+    fn images_inner(images: BTreeMap<String, Vec<u8>>, tracked: bool) -> anyhow::Result<Self> {
+        if tracked {
+            super::super::git_local_clone::validate_config(
+                images
+                    .get(".git/config")
+                    .context("Git tracked witness config missing")?,
+            )?;
+        }
         let mut manifest = Vec::new();
         let mut total = 0usize;
         let mut objects = BTreeMap::new();
         let mut refs = BTreeMap::new();
+        let mut origins = BTreeMap::new();
         if let Some(bytes) = images.get(".git/packed-refs") {
-            refs = super::shallow_view::packed_references(bytes)?.refs;
+            let packed = if tracked {
+                super::shallow_view::tracked_packed_references(bytes)?
+            } else {
+                super::shallow_view::packed_references(bytes)?
+            };
+            for (name, id) in packed.refs {
+                if tracked && super::shallow_view::is_origin_reference(&name) {
+                    origins.insert(name, super::shallow_view::OriginTarget::Object(id));
+                } else {
+                    refs.insert(name, id);
+                }
+            }
         }
         for (path, bytes) in &images {
             total = total
@@ -189,14 +216,24 @@ impl Repository {
             manifest.extend_from_slice(bytes);
             if let Some(name) = path.strip_prefix(".git/refs/") {
                 let name = format!("refs/{name}");
+                if tracked && super::shallow_view::is_origin_reference(&name) {
+                    origins.insert(
+                        name.clone(),
+                        super::shallow_view::origin_target(&name, bytes)?,
+                    );
+                } else {
+                    ensure!(
+                        super::is_local_reference(&name),
+                        "Git witness reference unsupported"
+                    );
+                    let id = std::str::from_utf8(bytes)?;
+                    let id = oid(id.strip_suffix('\n').unwrap_or(id))?;
+                    refs.insert(name, id);
+                }
                 ensure!(
-                    super::is_local_reference(&name),
-                    "Git witness reference unsupported"
+                    refs.len() + origins.len() <= 64,
+                    "Git witness reference bound"
                 );
-                let id = std::str::from_utf8(bytes)?;
-                let id = oid(id.strip_suffix('\n').unwrap_or(id))?;
-                refs.insert(name, id);
-                ensure!(refs.len() <= 64, "Git witness reference bound");
             }
             if let Some(name) = path.strip_prefix(".git/objects/") {
                 let (prefix, suffix) = name.split_once('/').context("Git object image path")?;
@@ -212,6 +249,7 @@ impl Repository {
                 );
             }
         }
+        super::shallow_view::validate_origin_references(&origins)?;
         let head = std::str::from_utf8(
             images
                 .get(".git/HEAD")

@@ -67,9 +67,20 @@ still checks inventory, index, historical targets and worktree state on every
 actual Git invocation. Working-tree links retain their original names and
 targets and confer no outside-file authority.
 
+Only the TRACKED witness capture accepts the existing bounded ordinary-clone
+core/user/origin/branch config grammar. It preserves those config bytes, loose
+and packed `refs/remotes/origin/*`, and a bounded symbolic origin HEAD in the
+same sealed image and digest. The symbolic target must be a present direct
+same-origin reference. Other remotes, escaping/malformed names and symbolic
+cycles refuse. These metadata do not enable named-remote request arguments;
+actual HEAD remains a proved local branch or detached commit. BASE and selected
+SHALLOW capture keep their existing config and namespace restrictions.
+
 The optional witness supports at most 128 loose objects, each at most 262144
-compressed/inflated bytes, within a 16 MiB image. Packed or larger images refuse;
-the original tracked profile retains its separately bounded packed/loose
+compressed/inflated bytes, within a 16 MiB image and 64 references in total.
+Packed object witnesses or larger images refuse; bounded packed references
+remain metadata within the same reference limit. The original tracked profile
+retains its separately bounded packed/loose
 behavior when this optional execution route is not selected. The five-second
 worker deadline and existing scan/resource budgets remain unchanged. Only a
 proved original formatter header receives the existing attribution; raw blobs,
@@ -93,6 +104,12 @@ does not prove isolated native-denial behavior. Other errors refuse, and owner
 termination alone is not native-expiry evidence. A new ten-second session must
 return the original bytes. Production defaults, five-second calls, approval TTLs
 and resource/policy guards remain unchanged.
+
+[Run #187](https://github.com/SoupTeam/soup-wall/actions/runs/40364823623) remains
+failed/incomplete: verified preparation rejected the fixture's permitted
+origin/tracking config before starting the actual read scenarios. The fixture
+and its metadata are retained for the new qualification; this failure provides
+no runtime byte-equality or extended-profile SOU-109 acceptance evidence.
 
 ## Acceptance
 
