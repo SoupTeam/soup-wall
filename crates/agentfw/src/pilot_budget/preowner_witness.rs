@@ -166,6 +166,56 @@ fn binary_identity(path: &Path) -> Result<String> {
     Ok(format!("{:x}", digest.finalize()))
 }
 
+fn matching_leaf_descriptors(pid: u32, leaf: &Ready) -> Result<usize> {
+    let mut matches = 0;
+    let mut inspected = 0;
+    for descriptor in fs::read_dir(format!("/proc/{pid}/fd"))? {
+        inspected += 1;
+        ensure!(
+            inspected <= 512,
+            "owner_loss_witness_descriptor_bound_exceeded"
+        );
+        let path = descriptor?.path();
+        match fs::metadata(path) {
+            Ok(metadata) if metadata.dev() == leaf.device && metadata.ino() == leaf.inode => {
+                matches += 1;
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(matches)
+}
+
+fn process_children(pid: u32) -> Result<Vec<u32>> {
+    let mut children = std::collections::BTreeSet::new();
+    let mut tasks = 0;
+    for task in fs::read_dir(format!("/proc/{pid}/task"))? {
+        tasks += 1;
+        ensure!(tasks <= 256, "owner_loss_witness_task_bound_exceeded");
+        let path = task?.path().join("children");
+        let listing = match fs::read_to_string(path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        ensure!(
+            listing.len() <= 4096,
+            "owner_loss_witness_child_bound_exceeded"
+        );
+        for child in listing.split_ascii_whitespace() {
+            ensure!(
+                children.len() < 16,
+                "owner_loss_witness_child_bound_exceeded"
+            );
+            children.insert(child.parse::<u32>()?);
+        }
+    }
+    ensure!(tasks > 0, "owner_loss_witness_task_inventory_empty");
+    Ok(children.into_iter().collect())
+}
+
 pub(super) fn child() -> Result<()> {
     let Some(ready) = std::env::var_os(READY_ENV) else {
         return Ok(());
@@ -193,6 +243,29 @@ pub(super) fn child() -> Result<()> {
         }),
     )?;
     let ready = PathBuf::from(ready);
+    if std::env::var("SOU142_TEST_COLLECTOR_STAGE").as_deref() == Ok("owner-loss") {
+        // The selected original profile is prepared, but the owner pauses
+        // before transferring any leaf descriptor or starting bubblewrap.
+        std::env::set_var("SOU142_TEST_OWNER_BEFORE_HANDBACK", &ready);
+        let outcome = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(prepared.spawn());
+        let reason = outcome
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("owner_loss_witness_unexpected_success"))?;
+        write_json(
+            &ready.with_extension("outcome"),
+            &json!({
+                "reason": reason.to_string(), "original_started": false
+            }),
+        )?;
+        ensure!(
+            reason.to_string() == "mcp_budget_owner_lost_before_handback_unsupported",
+            "owner_loss_witness_wrong_outcome"
+        );
+        return Ok(());
+    }
     if std::env::var("SOU142_TEST_COLLECTOR_STAGE").as_deref() == Ok("handoff") {
         // The candidate Agent image runs its ordinary owner code; the barrier
         // exists only in this libtest collector before its adoption ACK.
@@ -229,6 +302,14 @@ pub(super) fn child() -> Result<()> {
 }
 
 pub(super) fn reproduce(handoff: bool) -> Result<()> {
+    reproduce_case(handoff, false)
+}
+
+pub(super) fn reproduce_owner_loss() -> Result<()> {
+    reproduce_case(true, true)
+}
+
+fn reproduce_case(handoff: bool, owner_loss: bool) -> Result<()> {
     let path = std::env::var_os("SOU142_BUDGET_CONFIG")
         .ok_or_else(|| anyhow::anyhow!("explicit_owned_budget_required"))?;
     let config = Config::load_file(Path::new(&path))?;
@@ -251,7 +332,13 @@ pub(super) fn reproduce(handoff: bool) -> Result<()> {
             .env("SOU86_TEST_AGENTFW", owner_image)
             .env(
                 "SOU142_TEST_COLLECTOR_STAGE",
-                if handoff { "handoff" } else { "prepared" },
+                if owner_loss {
+                    "owner-loss"
+                } else if handoff {
+                    "handoff"
+                } else {
+                    "prepared"
+                },
             )
             .args([
                 "--ignored",
@@ -334,6 +421,96 @@ pub(super) fn reproduce(handoff: bool) -> Result<()> {
     };
     owned.verify()?;
     owned.empty()?;
+    if owner_loss {
+        let collector_pid = child.child.id();
+        let pids = process_children(collector_pid)?;
+        ensure!(
+            pids.len() == 1,
+            "owner_loss_witness_one_outside_owner_required"
+        );
+        let owner_pid = pids[0];
+        ensure!(
+            binary_identity(Path::new(&format!("/proc/{owner_pid}/exe")))? == owner_binary_sha256,
+            "owner_loss_witness_owner_image_changed"
+        );
+        let args = fs::read(format!("/proc/{owner_pid}/cmdline"))?;
+        ensure!(
+            args.windows(b"--agentfw-mcp-owner-v1".len())
+                .any(|part| part == b"--agentfw-mcp-owner-v1"),
+            "owner_loss_witness_owner_command_changed"
+        );
+        let owner_children = process_children(owner_pid)?;
+        ensure!(
+            owner_children.is_empty(),
+            "owner_loss_witness_original_process_started"
+        );
+        ensure!(
+            matching_leaf_descriptors(owner_pid, &owned.identity)? >= 1,
+            "owner_loss_witness_owner_did_not_hold_leaf"
+        );
+        ensure!(
+            matching_leaf_descriptors(collector_pid, &owned.identity)? == 0,
+            "owner_loss_witness_leaf_already_handed_back"
+        );
+        let pidfd = unsafe { libc::syscall(libc::SYS_pidfd_open, owner_pid, 0) };
+        ensure!(pidfd >= 0, "owner_loss_witness_pidfd_unavailable");
+        let pidfd = unsafe { File::from_raw_fd(pidfd as i32) };
+        ensure!(
+            unsafe {
+                libc::syscall(
+                    libc::SYS_pidfd_send_signal,
+                    pidfd.as_raw_fd(),
+                    libc::SIGKILL,
+                    std::ptr::null::<libc::siginfo_t>(),
+                    0,
+                )
+            } == 0,
+            "owner_loss_witness_sigkill_failed"
+        );
+        let status = child.child.wait()?;
+        child.reaped = true;
+        if !status.success() {
+            let outcome: serde_json::Value =
+                private_json(&ready_path.with_extension("outcome")).unwrap_or_default();
+            if outcome["reason"] == "mcp_owner_startup_failed" {
+                anyhow::bail!("owner_loss_witness_generic_startup_failure");
+            }
+        }
+        ensure!(status.success(), "owner_loss_witness_collector_failed");
+        let outcome: serde_json::Value = private_json(&ready_path.with_extension("outcome"))?;
+        ensure!(
+            outcome["reason"] == "mcp_budget_owner_lost_before_handback_unsupported"
+                && outcome["original_started"] == false,
+            "owner_loss_witness_outcome_unverified"
+        );
+        owned.verify()?;
+        owned.empty()?;
+        // Production has no descriptor handback after owner SIGKILL. The
+        // witness pins this exact inode before the kill and removes it only
+        // as disposable test teardown, never as a production recovery claim.
+        owned.remove()?;
+        ensure!(
+            root_identity(&config.delegation_root)? == owned.root_identity
+                && fs::read_dir(&config.delegation_root)?.all(|entry| entry
+                    .is_ok_and(|entry| entry.file_type().is_ok_and(|kind| !kind.is_dir()))),
+            "owner_loss_witness_inventory_not_restored"
+        );
+        println!(
+            "{}",
+            json!({"format":"sou142-owner-first-parent-loss/1",
+                "status":"unsupported-fail-closed",
+                "stage":"owner-loss-before-descriptor-handback",
+                "binary_sha256":binary_sha256,
+                "owner_binary_sha256":owner_binary_sha256,
+                "budget_sha256":config.identity(),
+                "leaf_created":true,"original_started":false,"owned_members":0,
+                "owner_held_leaf_descriptor":true,
+                "collector_had_no_leaf_descriptor":true,
+                "production_cleanup_verified":false,
+                "witness_cleanup_attempted":true,"inventory_restored":true})
+        );
+        return Ok(());
+    }
     child.child.kill()?;
     let status = child.child.wait()?;
     child.reaped = true;
@@ -434,4 +611,47 @@ pub(super) fn reproduce(handoff: bool) -> Result<()> {
         "inventory_restored":true})
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod process_children_tests {
+    use super::*;
+
+    #[test]
+    fn includes_child_spawned_by_non_leader_thread() -> Result<()> {
+        let (ready_sender, ready_receiver) = std::sync::mpsc::channel();
+        let (done_sender, done_receiver) = std::sync::mpsc::channel::<()>();
+        let worker = std::thread::spawn(move || -> Result<()> {
+            let mut child = Command::new("/usr/bin/sleep")
+                .arg("5")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()?;
+            ready_sender.send(child.id())?;
+            let _ = done_receiver.recv();
+            let _ = child.kill();
+            let _ = child.wait();
+            Ok(())
+        });
+        let child_pid = ready_receiver.recv_timeout(Duration::from_secs(2))?;
+        let observed = process_children(std::process::id());
+        let leader_listing =
+            fs::read_to_string(format!("/proc/{0}/task/{0}/children", std::process::id()))?;
+        let _ = done_sender.send(());
+        worker
+            .join()
+            .map_err(|_| anyhow::anyhow!("child_inventory_worker_panicked"))??;
+        ensure!(
+            !leader_listing
+                .split_ascii_whitespace()
+                .any(|value| value == child_pid.to_string()),
+            "child_inventory_regression_not_exercised"
+        );
+        ensure!(
+            observed?.contains(&child_pid),
+            "child_inventory_missed_non_leader_thread"
+        );
+        Ok(())
+    }
 }

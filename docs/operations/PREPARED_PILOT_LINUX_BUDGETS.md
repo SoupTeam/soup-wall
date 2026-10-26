@@ -134,6 +134,22 @@ controls, original kernel refusals, surviving useful peers, fresh recovery and
 empty owned roots. It explicitly requires separate baseline proof. Preserve
 both exact source/config/binary identities, and failed/incomplete attempts.
 
+`prepared_budget_phase: owner-loss` is a separate **negative boundary control**.
+It sends SIGKILL to the outside cleanup owner after that owner creates a budget
+leaf and before descriptor handback. The controller pins the exact leaf inode,
+checks that the owner still holds its leaf descriptor while the collector has
+none, checks the owner has no original-server descendants, and requires the selected
+launch to refuse with `mcp_budget_owner_lost_before_handback_unsupported`.
+The current owner/adoption contract cannot prove production cleanup after this
+SIGKILL: the collector has received no leaf descriptor, and a same-name leaf
+is not ownership evidence. The native test controller alone removes the pinned
+empty leaf as disposable fixture teardown. Its public report says
+`unsupported-fail-closed-observed`, leaves full acceptance false and retains
+the owner-loss gap. This control must never be cited as qualified owner-loss
+recovery, active protection or an unbudgeted fallback. A real operator seeing
+this explicit unsupported outcome must treat the delegated root as unresolved
+until independently reconciled under its own authority.
+
 The pressure phase prepares a fresh owned Git fixture with a real HEAD and
 30,000 identical small files in a supported eight-level index directory. This
 keeps normal status output small while exercising Git 2.51.2's own ordinary

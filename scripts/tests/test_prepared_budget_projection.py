@@ -74,6 +74,47 @@ def fixture():
 
 
 class Projection(unittest.TestCase):
+    def test_owner_loss_is_an_explicit_unsupported_negative_control(self):
+        attempt, _ = fixture()
+        attempt.update(phase='owner-loss', status='owner-loss-unsupported-fail-closed',
+            source_read_only=True, reused_binaries_read_only=True,
+            network='private-loopback-only', provider='owned-scripted-loopback',
+            paid_api_calls=0, actual_original_host_covered=False,
+            full_sou142_qualification=False, remaining_gaps=list(P.GAPS))
+        attempt['owner_controls'] = [
+            {'server': server, 'status': 'unsupported-fail-closed',
+             'stage': 'owner-loss-before-descriptor-handback', 'leaf_created': True,
+             'original_started': False, 'owned_members': 0,
+             'owner_held_leaf_descriptor': True,
+             'collector_had_no_leaf_descriptor': True,
+             'production_cleanup_verified': False, 'witness_cleanup_attempted': True,
+             'inventory_restored': True, 'budget_sha256': SHA,
+             'binary_sha256': SHA, 'owner_binary_sha256': SHA}
+            for server in ('filesystem', 'git')]
+        observed = P.project_owner_loss(attempt, COMMIT, 0)
+        self.assertEqual(observed['status'], 'unsupported-fail-closed-observed')
+        self.assertIs(observed['acceptance_pass'], False)
+        self.assertIs(observed['full_sou142_qualification'], False)
+        self.assertIn('owner-loss-before-descriptor-handback', observed['remaining_gaps'])
+        for mutate in (
+            lambda x: x['owner_controls'].pop(),
+            lambda x: x['owner_controls'][0].update(original_started=True),
+            lambda x: x['owner_controls'][0].update(production_cleanup_verified=True),
+            lambda x: x['owner_controls'][0].update(witness_cleanup_attempted=False),
+            lambda x: x['owner_controls'][0].update(owned_members=1),
+            lambda x: x['owner_controls'][0].update(owner_held_leaf_descriptor=False),
+            lambda x: x['owner_controls'][0].update(collector_had_no_leaf_descriptor=False),
+            lambda x: x['owner_controls'][0].update(owner_binary_sha256='c' * 64),
+            lambda x: x.update(owned_budget_root_empty=False),
+            lambda x: x.update(full_sou142_qualification=True),
+            lambda x: x.update(remaining_gaps=[]),
+            lambda x: x.update(source_commit='c' * 40),
+        ):
+            invalid = copy.deepcopy(attempt)
+            mutate(invalid)
+            self.assertEqual(P.project_owner_loss(invalid, COMMIT, 0)['status'], 'failed')
+        self.assertEqual(P.project_owner_loss(attempt, COMMIT, 1)['status'], 'failed')
+
     def test_slice_never_becomes_full_acceptance_or_exports_private_observations(self):
         a, r = fixture()
         result = P.project(a, r, COMMIT, 0)
