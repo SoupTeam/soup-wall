@@ -3,7 +3,9 @@
 import hashlib
 import json
 import os
+import queue
 import signal
+import subprocess
 import time
 from pathlib import Path
 
@@ -24,7 +26,7 @@ def audit_rows(path):
 
 def enrolled_epoch(rows, session_id, seconds):
     matches = [row for row in rows if row.get("event") == "native_liveness_enrolled"
-               and row.get("session_id") == session_id]
+               and row.get("session_id") == session_id and row.get("released") is True]
     need(len(matches) == 1 and matches[0].get("lease_seconds") == seconds,
          "actual granted lease/session not matched")
     epoch = matches[0].get("session")
@@ -35,7 +37,45 @@ def enrolled_epoch(rows, session_id, seconds):
 def expired(rows, session_id, epoch):
     return any(row.get("event") == "native_session_expired"
                and row.get("session_id") == session_id and row.get("session") == epoch
+               and row.get("released") is False
                for row in rows)
+
+
+def drain_host_eof(client):
+    client.reader.join(timeout=3)
+    need(not client.reader.is_alive(), "collector stdout EOF reader incomplete")
+    frames, raw_frames, total, eof = [], [], 0, False
+    while not client.lines.empty():
+        try:
+            raw = client.lines.get_nowait()
+        except queue.Empty:
+            break
+        if raw is None:
+            eof = True
+            need(client.lines.empty(), "host data after EOF sentinel")
+            break
+        total += len(raw)
+        need(len(raw) <= 1024 * 1024 and raw.endswith(b"\n")
+             and total <= 2 * 1024 * 1024 and len(frames) < 32, "host observation exceeds bound")
+        try:
+            value = json.loads(raw)
+        except (ValueError, UnicodeError):
+            raise RuntimeError("malformed host JSON-RPC observation") from None
+        need(isinstance(value, dict), "host observation is not a JSON-RPC object")
+        frames.append(value)
+        raw_frames.append(raw)
+        client.received.append(raw)
+    need(eof, "collector stdout EOF sentinel not observed")
+    need(not any("result" in frame for frame in frames), "expired original result reached host")
+    return {"eof_observed": True, "frames": len(frames), "bytes": total,
+            "sha256": hashlib.sha256(b"".join(raw_frames)).hexdigest()}
+
+
+def safe_close(client):
+    try:
+        client.close()
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("owned collector cleanup deadline exceeded") from None
 
 
 def qualify_short_lease(*, make_client, make_call, audit, log_path, witness_factory,
@@ -80,15 +120,17 @@ def qualify_short_lease(*, make_client, make_call, audit, log_path, witness_fact
             signal.pidfd_send_signal(pin, signal.SIGCONT)
             os.close(pin)
             pin = None
-            client.process.wait(timeout=8)
+            try:
+                client.process.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("expired collector termination deadline exceeded") from None
+            host_observation = drain_host_eof(client)
             rows = audit_rows(audit)
             need(not any(item.get("event") == "native_git_execution_reserved"
                          and item.get("session") == epoch for item in rows),
                  "expired session reserved execution")
             need(not any(item.get("event") == "native_result" and item.get("session") == epoch
                          for item in rows), "expired session produced an original result")
-            need(not any(json.loads(raw).get("id") == 90 and "result" in json.loads(raw)
-                         for raw in client.received), "expired original result reached host")
             terminal = [line for line in log_path.read_text().splitlines() if line.startswith("Error:")]
             need(client.process.returncode != 0 and terminal
                  and terminal[-1] == "Error: native_liveness_uncertain",
@@ -96,6 +138,7 @@ def qualify_short_lease(*, make_client, make_call, audit, log_path, witness_fact
             row.update(granted_seconds=SHORT_LEASE_SECONDS, native_expiry_audited=True,
                        epoch_sha256=hashlib.sha256(epoch.encode()).hexdigest(),
                        stopped_collector={"pid": client.process.pid, "start_time_ticks": start},
+                       host_observation=host_observation,
                        execution_reservations=0, original_results=0, terminal="native_liveness_uncertain")
         finally:
             if pin is not None:
@@ -107,7 +150,7 @@ def qualify_short_lease(*, make_client, make_call, audit, log_path, witness_fact
                 finally:
                     os.close(pin)
             try:
-                client.close()
+                safe_close(client)
             finally:
                 row["cleanup"] = witness.finish()
     need(row["cleanup"]["all_stopped"] and any(
@@ -124,7 +167,7 @@ def qualify_short_lease(*, make_client, make_call, audit, log_path, witness_fact
             need(hashlib.sha256(raw).hexdigest() == expected_sha256, "fresh session original bytes differ")
         finally:
             try:
-                fresh.close()
+                safe_close(fresh)
             finally:
                 row["fresh_cleanup"] = fresh_witness.finish()
     need(fresh.process.returncode == 0 and row["fresh_cleanup"]["all_stopped"],
