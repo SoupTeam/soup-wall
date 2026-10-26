@@ -20,7 +20,7 @@ pub(crate) const HEARTBEAT_MILLIS: u64 = 100;
 pub(crate) const LEASE_MILLIS: u64 = 1_500;
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{spawn, BudgetPrepare, CleanupSpec, LaunchSpec, OwnerGuard};
+pub(crate) use linux::{spawn, BudgetPrepare, CleanupSpec, LaunchSpec, OwnerGuard, SealedClosure};
 
 #[cfg(not(target_os = "linux"))]
 pub(crate) struct OwnerGuard;
@@ -90,9 +90,24 @@ mod linux {
 
     const OWNER_ARG: &str = "--agentfw-mcp-owner-v1";
     const PID1_ARG: &str = "--agentfw-mcp-pid1-v1";
+    const SEALED_PID1_ARG: &str = "--agentfw-mcp-pid1-v2";
     const MAX_PACKET: usize = 65_536;
     const MAX_ARGS: usize = 2_048;
     const MAX_FDS: usize = 128;
+    // Separate opt-in sealed-image launch capsule; control/SCM packets and
+    // legacy launches keep their existing bounds.
+    const MAX_SEALED_STARTUP: usize = 1024 * 1024;
+    const MAX_SEALED_ARGS: usize = 32768;
+    const MAX_SEALED_ARG_BYTES: usize = 768 * 1024;
+    const MAX_SEALED_FDS: usize = super::super::verified_closure::MAX_ENTRIES + 64;
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(crate) struct SealedClosure {
+        pub format: String,
+        pub sha256: String,
+        pub images: Vec<RawFd>,
+    }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -126,6 +141,8 @@ mod linux {
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub(crate) struct LaunchSpec {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub sealed_closure: Option<SealedClosure>,
         pub bwrap_fd: RawFd,
         pub owner_executable_fd: RawFd,
         pub inherited_fds: Vec<RawFd>,
@@ -145,6 +162,24 @@ mod linux {
         budget_transfer_fd: Option<RawFd>,
     }
 
+    /// Namespace-relative identity is paired with the pinned PID-1 generation.
+    /// The trusted PID 1 retains/reaps this exact child until namespace teardown.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct OriginalGeneration {
+        namespace_pid: u32,
+        start_ticks: u64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct SealedStarted {
+        format: String,
+        instance: String,
+        action: String,
+        original: OriginalGeneration,
+    }
+
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Ready {
@@ -156,6 +191,8 @@ mod linux {
         sandbox_start_ticks: u64,
         pid1_pid: u32,
         pid1_start_ticks: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        original: Option<OriginalGeneration>,
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -681,7 +718,12 @@ mod linux {
         ensure!(raw >= 0, "mcp_owner_launch_unavailable");
         let mut file = unsafe { File::from_raw_fd(raw) };
         let packet = serde_json::to_vec(startup)?;
-        ensure!(packet.len() <= MAX_PACKET, "mcp_owner_launch_invalid");
+        let limit = if startup.launch.sealed_closure.is_some() {
+            MAX_SEALED_STARTUP
+        } else {
+            MAX_PACKET
+        };
+        ensure!(packet.len() <= limit, "mcp_owner_launch_invalid");
         file.write_all(&packet)?;
         ensure!(
             unsafe {
@@ -708,21 +750,41 @@ mod linux {
             unsafe { libc::fcntl(fd, libc::F_GET_SEALS) } == expected,
             "mcp_owner_launch_invalid"
         );
-        let bytes = pinned_text(fd)?;
-        decode(bytes.as_bytes())
+        use std::os::unix::fs::FileExt;
+        let file = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(fd) });
+        let size = usize::try_from(file.metadata()?.len()).context("mcp_owner_launch_invalid")?;
+        ensure!(
+            size > 0 && size <= MAX_SEALED_STARTUP,
+            "mcp_owner_launch_invalid"
+        );
+        let mut bytes = vec![0u8; size];
+        file.read_exact_at(&mut bytes, 0)?;
+        let startup: Startup = decode(&bytes)?;
+        ensure!(
+            startup.launch.sealed_closure.is_some() || size <= MAX_PACKET,
+            "mcp_owner_launch_invalid"
+        );
+        Ok(startup)
     }
 
     fn validate(spec: &LaunchSpec) -> anyhow::Result<()> {
+        let sealed = spec.sealed_closure.is_some();
         ensure!(
-            spec.bwrap_args.len() <= MAX_ARGS && !spec.bwrap_args.is_empty(),
+            spec.bwrap_args.len() <= if sealed { MAX_SEALED_ARGS } else { MAX_ARGS }
+                && !spec.bwrap_args.is_empty(),
             "mcp_owner_launch_invalid"
         );
         ensure!(
-            spec.bwrap_args.iter().map(String::len).sum::<usize>() <= MAX_PACKET / 2,
+            spec.bwrap_args.iter().map(String::len).sum::<usize>()
+                <= if sealed {
+                    MAX_SEALED_ARG_BYTES
+                } else {
+                    MAX_PACKET / 2
+                },
             "mcp_owner_launch_invalid"
         );
         ensure!(
-            spec.inherited_fds.len() <= MAX_FDS,
+            spec.inherited_fds.len() <= if sealed { MAX_SEALED_FDS } else { MAX_FDS },
             "mcp_owner_launch_invalid"
         );
         let fds: BTreeSet<_> = spec.inherited_fds.iter().copied().collect();
@@ -746,6 +808,22 @@ mod linux {
                     == 2,
             "mcp_owner_launch_invalid"
         );
+        if let Some(closure) = &spec.sealed_closure {
+            let images: BTreeSet<_> = closure.images.iter().copied().collect();
+            let seals =
+                libc::F_SEAL_SEAL | libc::F_SEAL_SHRINK | libc::F_SEAL_GROW | libc::F_SEAL_WRITE;
+            ensure!(
+                closure.format == super::super::verified_closure::FORMAT
+                    && crate::native::is_digest(&closure.sha256)
+                    && !images.is_empty()
+                    && images.len() <= super::super::verified_closure::MAX_ENTRIES
+                    && images.len() == closure.images.len()
+                    && images.contains(&spec.bwrap_fd)
+                    && images.iter().all(|fd| fds.contains(fd)
+                        && unsafe { libc::fcntl(*fd, libc::F_GET_SEALS) } == seals),
+                "mcp_owner_sealed_closure_invalid"
+            );
+        }
         if let Some(fd) = spec.budget_attach_fd {
             ensure!(fds.contains(&fd), "mcp_owner_launch_invalid");
         }
@@ -871,6 +949,10 @@ mod linux {
                     && budget_instance
                         .as_ref()
                         .is_none_or(|instance| *instance == ready.instance)
+                    && (spec.sealed_closure.is_some() == ready.original.is_some())
+                    && ready.original.as_ref().is_none_or(
+                        |original| original.namespace_pid > 1 && original.start_ticks > 0
+                    )
                     && Some(ready.owner_pid) == child.id()
                     && process_ticks(ready.owner_pid)? == ready.owner_start_ticks
                     && process_ticks(ready.sandbox_pid)? == ready.sandbox_start_ticks
@@ -1191,6 +1273,7 @@ mod linux {
                 "owner_pid":self.ready.owner_pid,"owner_start_ticks":self.ready.owner_start_ticks,
                 "sandbox_pid":self.ready.sandbox_pid,"sandbox_start_ticks":self.ready.sandbox_start_ticks,
                 "pid1_pid":self.ready.pid1_pid,"pid1_start_ticks":self.ready.pid1_start_ticks,
+                "original":self.ready.original,
                 "startup_bound_ms":STARTUP_MILLIS,"poll_ms":POLL_MILLIS,"cleanup_bound_ms":CLEANUP_MILLIS,
                 "heartbeat_ms":HEARTBEAT_MILLIS,"lease_ms":LEASE_MILLIS,
                 "reason":state.reason,"sandbox_exit":state.sandbox_exit,
@@ -1240,7 +1323,7 @@ mod linux {
     pub(super) fn early_dispatch() -> Option<i32> {
         let args: Vec<_> = std::env::args_os().collect();
         let kind = args.get(1)?.to_str()?;
-        if kind != OWNER_ARG && kind != PID1_ARG {
+        if kind != OWNER_ARG && kind != PID1_ARG && kind != SEALED_PID1_ARG {
             return None;
         }
         // Raw writes are required under the unchanged filesystem seccomp
@@ -1267,7 +1350,7 @@ mod linux {
                     "mcp_owner_launch_invalid"
                 );
                 let command = args[4..].to_vec();
-                namespace_pid1(inherited_socket(fd)?, &command)
+                namespace_pid1(inherited_socket(fd)?, &command, kind == SEALED_PID1_ARG)
             }
         })();
         Some(if result.is_ok() { 0 } else { 1 })
@@ -1583,13 +1666,27 @@ mod linux {
                     ..hello
                 },
             )?;
-            let started: Control = receive(&mut lease)?;
-            ensure!(
-                started.format == FORMAT
-                    && started.instance == instance
-                    && started.action == "started",
-                "mcp_owner_namespace_identity_invalid"
-            );
+            let original = if spec.sealed_closure.is_some() {
+                let started: SealedStarted = receive(&mut lease)?;
+                ensure!(
+                    started.format == FORMAT
+                        && started.instance == instance
+                        && started.action == "started"
+                        && started.original.namespace_pid > 1
+                        && started.original.start_ticks > 0,
+                    "mcp_owner_namespace_identity_invalid"
+                );
+                Some(started.original)
+            } else {
+                let started: Control = receive(&mut lease)?;
+                ensure!(
+                    started.format == FORMAT
+                        && started.instance == instance
+                        && started.action == "started",
+                    "mcp_owner_namespace_identity_invalid"
+                );
+                None
+            };
             let owner_pid = unsafe { libc::getpid() } as u32;
             let ready = Ready {
                 format: FORMAT.to_owned(),
@@ -1600,6 +1697,7 @@ mod linux {
                 sandbox_start_ticks: process_ticks(sandbox_pid)?,
                 pid1_pid,
                 pid1_start_ticks: process_ticks(pid1_pid)?,
+                original,
             };
             send(&mut control, &ready)
         })();
@@ -1915,7 +2013,11 @@ mod linux {
         }
     }
 
-    fn namespace_pid1(mut lease: UnixStream, command: &[std::ffi::OsString]) -> anyhow::Result<()> {
+    fn namespace_pid1(
+        mut lease: UnixStream,
+        command: &[std::ffi::OsString],
+        sealed: bool,
+    ) -> anyhow::Result<()> {
         ensure!(
             unsafe { libc::getpid() } == 1,
             "mcp_owner_namespace_required"
@@ -1980,13 +2082,28 @@ mod linux {
         let mut child = original
             .spawn()
             .context("mcp_owner_original_spawn_failed")?;
-        send(
-            &mut lease,
-            &Control {
-                action: "started".to_owned(),
-                ..hello
-            },
-        )?;
+        if sealed {
+            send(
+                &mut lease,
+                &SealedStarted {
+                    format: hello.format.clone(),
+                    instance: hello.instance.clone(),
+                    action: "started".into(),
+                    original: OriginalGeneration {
+                        namespace_pid: child.id(),
+                        start_ticks: process_ticks(child.id())?,
+                    },
+                },
+            )?;
+        } else {
+            send(
+                &mut lease,
+                &Control {
+                    action: "started".into(),
+                    ..hello
+                },
+            )?;
+        }
         close_stdio();
         nonblocking(lease.as_raw_fd())?;
         // Absolute CLOCK_MONOTONIC deadlines prevent a buffered old heartbeat
@@ -2171,6 +2288,7 @@ mod linux {
             let file = File::open("/dev/null").unwrap();
             let fd = file.as_raw_fd();
             let mut spec = LaunchSpec {
+                sealed_closure: None,
                 bwrap_fd: fd,
                 owner_executable_fd: fd,
                 inherited_fds: vec![fd],
@@ -2267,6 +2385,7 @@ mod linux {
             let fd = file.as_raw_fd();
             let startup = Startup {
                 launch: LaunchSpec {
+                    sealed_closure: None,
                     bwrap_fd: fd,
                     owner_executable_fd: fd,
                     inherited_fds: vec![fd],

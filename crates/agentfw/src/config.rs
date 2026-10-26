@@ -185,6 +185,9 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeCfg {
+    /// Opt-in daemon-owned verified original runtime. No client profile/command.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<crate::native::execution::Config>,
     pub registry_path: PathBuf,
     pub registry_sha256: String,
     /// Opt-in single-use operator approval for native Ask calls. Absent = refusal.
