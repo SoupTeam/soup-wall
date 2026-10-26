@@ -151,15 +151,51 @@ class RunOperations(unittest.TestCase):
         record = {"format": "sw-prepared-pilot-run/1", "home": str(home), "supervisor_pid": 1,
                   "launcher_pid": manifest["launcher_pid"], "daemon_pid": manifest["launcher_pid"], "port": 12345}
         self.write(self.run / "run.json", record)
-        self.write(home / "config.yaml", {"bind": "127.0.0.1", "port": 12345, "enforce": True,
-            "policy": "/not-read", "native": {"registry_sha256": self.receipt["registry_sha256"],
-            "registry_path": str(home / "registry.json")}, "audit_retention": {}})
+        policy = self.root / "policy.yaml"
+        self.write(policy, b"agent_policies: []\ndefault: allow\n")
+        trusted_binary = Path(sys.executable).resolve()
+        binary_sha = S.sha(trusted_binary.read_bytes())
+        self.receipt.update(binary_sha256=binary_sha, policy_sha256=S.sha(policy.read_bytes()))
+        self.write(self.run / "audit-run.json", self.receipt)
+        config = {"bind": "127.0.0.1", "port": 12345, "enforce": True,
+            "policy": str(policy), "native": {"registry_sha256": self.receipt["registry_sha256"],
+            "registry_path": str(home / "registry.json")}, "audit_retention": {}}
+        self.write(home / "config.yaml", config)
+        manifest["files"] = [{"path": str(home / "config.yaml"), "sha256": S.sha(S.encoded(config))},
+                             {"path": str(policy), "sha256": S.sha(policy.read_bytes())}] + [{}] * 3
+        self.write(native / "run.json", manifest)
         before = self.snapshot()
-        with patch.object(DISCOVERY, "request", side_effect=AssertionError("stale state cannot query")):
-            result = DISCOVERY.discover(self.state, probing=True)
+        with patch.object(DISCOVERY, "request", side_effect=AssertionError("stale state cannot query")), \
+             patch.object(DISCOVERY, "sealed_launcher", wraps=DISCOVERY.sealed_launcher) as sealed:
+            result = DISCOVERY.discover(self.state, probing=True, agentfw=trusted_binary, agentfw_sha256=binary_sha)
+        sealed.assert_called_once()
         self.assertFalse(result["complete"])
         self.assertEqual(result["runs"][0]["observation"]["state"], "unavailable")
         self.assertEqual(before, self.snapshot())
+
+    def test_run_receipt_cannot_select_an_executable_or_contact_an_endpoint(self):
+        home, _, manifest = self.active()
+        self.write(self.run / "run.json", {"format": "sw-prepared-pilot-run/1", "home": str(home),
+            "supervisor_pid": 10, "launcher_pid": manifest["launcher_pid"], "daemon_pid": 42, "port": 12345})
+        before = self.snapshot()
+        with patch.object(DISCOVERY.subprocess, "Popen", side_effect=AssertionError("receipt cannot authorize execution")), \
+             patch.object(DISCOVERY, "request", side_effect=AssertionError("unverified state cannot query")):
+            result = DISCOVERY.discover(self.state, probing=True)
+        self.assertEqual(result["runs"][0]["reason"], "explicit_agent_pin_required")
+        self.assertEqual(before, self.snapshot())
+
+    def test_explicit_binary_pin_is_read_only_and_rejects_wrong_digest_or_link(self):
+        binary = self.root / "agent"
+        self.write(binary, b"owned selected bytes")
+        with patch.object(DISCOVERY.subprocess, "Popen", side_effect=AssertionError("pin validation is read-only")):
+            self.assertEqual(DISCOVERY.verified_agent(binary, S.sha(binary.read_bytes()), time.monotonic() + 10),
+                             S.sha(binary.read_bytes()))
+            with self.assertRaises(S.Refusal):
+                DISCOVERY.verified_agent(binary, "0" * 64, time.monotonic() + 10)
+            link = self.root / "agent-link"
+            link.symlink_to(binary)
+            with self.assertRaises((OSError, S.Refusal)):
+                DISCOVERY.verified_agent(link, S.sha(binary.read_bytes()), time.monotonic() + 10)
 
     def test_symlink_hardlink_fifo_modes_and_foreign_owner_refuse(self):
         path = self.run / "audit-run.json"
@@ -459,19 +495,20 @@ class RunOperations(unittest.TestCase):
         projection = {"state": "authenticated_daemon_observed", "protection": "unknown"}
         with patch.object(DISCOVERY, "sealed_launcher", side_effect=sealed), \
              patch.object(DISCOVERY, "diagnostic_projection", return_value=projection), \
+             patch.object(DISCOVERY, "verified_agent", return_value=self.receipt["binary_sha256"]), \
              patch.dict(os.environ, {"HTTP_PROXY": "http://127.0.0.1:1"}):
             self.instance = "owned-instance"
-            result = DISCOVERY.discover(self.state, probing=True)
+            result = DISCOVERY.discover(self.state, probing=True, agentfw=Path(sys.executable), agentfw_sha256="b" * 64)
             observed = result["runs"][0]["observation"]
             self.assertEqual(observed["state"], "authenticated_daemon_observed")
             self.assertEqual(observed["protection"], "unknown")
             self.instance = "restarted-daemon"
-            result = DISCOVERY.discover(self.state, probing=True)
+            result = DISCOVERY.discover(self.state, probing=True, agentfw=Path(sys.executable), agentfw_sha256="b" * 64)
             self.assertEqual(result["runs"][0]["reason"], "stale_daemon_instance")
             config["bind"] = "remote.invalid"
             self.write(home / "config.yaml", config)
             with patch.object(DISCOVERY, "request", side_effect=AssertionError("untrusted endpoint")):
-                result = DISCOVERY.discover(self.state, probing=True)
+                result = DISCOVERY.discover(self.state, probing=True, agentfw=Path(sys.executable), agentfw_sha256="b" * 64)
             self.assertEqual(result["runs"][0]["reason"], "untrusted_endpoint")
         self.write(home / "config.yaml", {**config, "bind": "127.0.0.1"})
         # Restore metadata differs, so compare private bytes instead of mtimes.

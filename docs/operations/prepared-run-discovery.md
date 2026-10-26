@@ -7,7 +7,8 @@ provider. Recorded state remains distinct from authenticated observed state.
 ```sh
 python3 -B scripts/pilot-runs.py --state-parent /absolute/selected/state
 python3 -B scripts/pilot-runs.py --state-parent /absolute/selected/state \
-  --run-id EXACT_PREPARED_RUN_ID --probe --probe-seconds 10
+  --run-id EXACT_PREPARED_RUN_ID --probe --probe-seconds 10 \
+  --agentfw /absolute/reviewed/agentfw --agentfw-sha256 REVIEWED_BINARY_SHA256
 ```
 
 The prepared run ID is the suffix of `soup-wall-run-…`; the inner launcher's
@@ -24,7 +25,13 @@ layout. `retained_stop_state` means stop/recovery authority must be preserved;
 discovery does not authenticate a stop receipt or claim that its cleanup finished.
 An active-looking record remains `active_or_interrupted` until an explicit probe.
 
-`--probe` checks the launcher's process start identity, sealed memfd, exact
+`--probe` requires an explicit trusted Agent path and SHA-256 pin selected by the
+operator from their reviewed installed/prepared selection. A run receipt alone
+cannot authorize executable selection. Missing pins or runs with different
+binary identities remain unavailable; select the appropriate reviewed binary
+when inspecting another generation. The binary pin is checked without execution.
+
+The probe checks the launcher's process start identity, sealed memfd, exact
 record bytes, executable hash and sealed configuration identity. It uses only
 the selected `127.0.0.1` port and private tokens to query the accepted
 `/native/v1/instance` and `/diagnostics/v1/protection` endpoints. Requests disable

@@ -23,6 +23,7 @@ FILES = (
     "scripts/tests/test_pilot_run_operations.py", "scripts/pilot_audit.py",
     "scripts/agent-audit-report.py", "scripts/tests/test_pilot_audit.py",
     "scripts/verify-prepared-run-checkpoint.py",
+    "crates/agentfw/src/pilot_observation.rs", "scripts/qualify-prepared-run-operations.py",
 )
 
 
@@ -78,11 +79,10 @@ def main(argv=None):
               "evidence_kind": "disposable_synthetic_files_and_loopback_http_fixtures",
               "real_prepared_runs": False, "real_original_servers": False,
               "launcher_proof_mocked_in_positive_http_fixture": True,
+              "offline_projection_mocked_in_positive_http_fixture": True,
               "foreign_uid_fixture_emulated": True,
               "native_acceptance": False, "provider_calls": 0,
-              "remaining_work": ["full_accepted_diagnostic_projection", "genuine_native_ubuntu_prepared_runs",
-                                 "native_foreign_ownership_controls", "full_concurrent_race_and_crash_matrix",
-                                 "reviewed_partial_removal_recovery", "final_ready_qualification"]}
+              "acceptance_evidence": "independent_exact_source_native_report_required"}
     S.AUDIT.REPORT._private_output(args.output, S.encoded(report) + b"\n")
     print(json.dumps({"status": report["status"], "tests_run": result.testsRun, "native_acceptance": False}, sort_keys=True))
     return 0 if passed else 1

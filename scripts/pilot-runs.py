@@ -35,6 +35,42 @@ def deadline_check(deadline):
     S.require(time.monotonic() < deadline, "probe_time_limit")
 
 
+def verified_agent(path, wanted, deadline):
+    """Only an explicit operator-selected binary pin can authorize validation.
+
+    Run receipts are owner-editable; their executable hashes alone must never
+    select a program to execute. Nothing is started while checking this pin.
+    """
+    S.platform()
+    S.require(path is not None and type(wanted) is str and S.SHA.fullmatch(wanted), "explicit_agent_pin_required")
+    path = Path(path)
+    S.require(path.is_absolute() and ".." not in path.parts, "canonical_agent_required")
+    directory = S.AUDIT.REPORT._open_dir_nofollow(path.parent)
+    fd = None
+    try:
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        info = os.fstat(fd)
+        S.require(stat.S_ISREG(info.st_mode) and info.st_uid in (0, os.getuid())
+                  and not info.st_mode & 0o022 and info.st_size <= 512 * 1024 * 1024, "trusted_agent_invalid")
+        digest, count = hashlib.sha256(), 0
+        while True:
+            deadline_check(deadline)
+            block = os.read(fd, 1024 * 1024)
+            if not block:
+                break
+            count += len(block)
+            S.require(count <= 512 * 1024 * 1024, "trusted_agent_size_limit")
+            digest.update(block)
+        S.require(S.identity(info) == S.identity(os.fstat(fd))
+                  == S.identity(os.stat(path.name, dir_fd=directory, follow_symlinks=False))
+                  and digest.hexdigest() == wanted, "trusted_agent_pin_mismatch")
+        return wanted
+    finally:
+        if fd is not None:
+            os.close(fd)
+        os.close(directory)
+
+
 def proc_read(pid, name, limit):
     S.require(type(pid) is int and 0 < pid < 2**31, "launcher_unverified")
     S.require(os.stat(f"/proc/{pid}").st_uid == os.getuid(), "foreign_process")
@@ -125,8 +161,8 @@ def diagnostic_projection(executable, config_raw, policy_raw, status, nonce, rec
         S.require(type(value) is dict and set(value) == {"format", "state", "reason", "mode", "policy_sha256",
                   "registry_sha256", "config_sha256", "binary_sha256", "protection", "execution_coverage", "paths"}
                   and value["format"] == "sw-prepared-pilot-observation/1"
-                  and value["state"] == "authenticated_daemon_observed"
-                  and value["reason"] == "current_instance_ready_not_execution"
+                  and value["state"] == "snapshot_contract_validated"
+                  and value["reason"] == "diagnostic_contract_validated"
                   and value["protection"] == value["execution_coverage"] == "unknown"
                   and value["mode"] in ("enforcing", "shadow")
                   and value["binary_sha256"] == selected["binary_sha256"]
@@ -134,7 +170,9 @@ def diagnostic_projection(executable, config_raw, policy_raw, status, nonce, rec
                   and type(value["paths"]) is list and len(value["paths"]) == 7,
                   "diagnostic_projection_invalid")
         deadline_check(deadline)
-        return value
+        # The offline child proves only contract validity. Authenticated transport
+        # and sealed run binding were observed by this caller, never by stdin.
+        return dict(value, state="authenticated_daemon_observed", reason="current_instance_ready_not_execution")
     finally:
         if process.poll() is None:
             process.kill()
@@ -188,7 +226,9 @@ def token(home, name):
     return raw.decode("ascii").strip()
 
 
-def probe(run, selected, record, deadline):
+def probe(run, selected, record, deadline, trusted_agent=None):
+    S.require(trusted_agent is not None, "explicit_agent_pin_required")
+    S.require(selected["binary_sha256"] == trusted_agent, "selected_agent_pin_mismatch")
     S.require(set(record) == {"format", "home", "supervisor_pid", "launcher_pid", "daemon_pid", "port"}
               and record["format"] == "sw-prepared-pilot-run/1"
               and record["home"] == str(run.path / ".agentfw")
@@ -224,12 +264,12 @@ def probe(run, selected, record, deadline):
                           "sealed_endpoint_selection_mismatch")
                 S.require(type(config.get("policy")) is str, "selected_policy_unverified")
                 policy_path = Path(config["policy"])
-                with S.Directory(policy_path.parent) as policy_directory:
-                    policy_raw, policy_identity = policy_directory.read(policy_path.name)
-                    S.require(sum(row == {"path": str(policy_path), "sha256": S.sha(policy_raw)} for row in files) == 1
-                              and S.sha(policy_raw) == selected["policy_sha256"], "selected_policy_unverified")
-                    executable = sealed_launcher(raw, manifest, selected, deadline, pin=True)
-                    try:
+                executable = sealed_launcher(raw, manifest, selected, deadline, pin=True)
+                try:
+                    with S.Directory(policy_path.parent) as policy_directory:
+                        policy_raw, policy_identity = policy_directory.read(policy_path.name)
+                        S.require(sum(row == {"path": str(policy_path), "sha256": S.sha(policy_raw)} for row in files) == 1
+                                  and S.sha(policy_raw) == selected["policy_sha256"], "selected_policy_unverified")
                         daemon_start = process_start(record["daemon_pid"])
                         daemon_exe = os.stat(f"/proc/{record['daemon_pid']}/exe")
                         S.require(S.same_object(daemon_exe)[:2] == S.same_object(os.fstat(executable))[:2],
@@ -246,12 +286,12 @@ def probe(run, selected, record, deadline):
                                   and process_start(record["daemon_pid"]) == daemon_start, "record_changed")
                         sealed_launcher(raw, manifest, selected, deadline)
                         return value
-                    finally:
-                        if executable is not None:
-                            os.close(executable)
+                finally:
+                    if executable is not None:
+                        os.close(executable)
 
 
-def inspect(parent, name, probing, deadline):
+def inspect(parent, name, probing, deadline, trusted_agent=None):
     result = {"run_id": S.run_id(name), "lifecycle": "unknown", "protection": "unknown",
               "observation": {"state": "not_probed", "reason": "explicit_probe_required"}}
     try:
@@ -287,7 +327,7 @@ def inspect(parent, name, probing, deadline):
                                     result["recorded_stop"] = {"status": stop["status"], "authentication": "not_checked"}
                 if probing and result["lifecycle"] != "retained_stop_state":
                     before = run.read("run.json")[0]
-                    result["observation"] = probe(run, selected, S.strict(before), deadline)
+                    result["observation"] = probe(run, selected, S.strict(before), deadline, trusted_agent)
                     S.require(run.read("run.json")[0] == before and S.receipt(run) == selected, "record_changed")
             else:
                 raise S.Refusal("incomplete_run_state")
@@ -300,7 +340,8 @@ def inspect(parent, name, probing, deadline):
     return result
 
 
-def discover(path, probing=False, scan_limit=512, candidate_limit=32, probe_seconds=10, selected_ids=None):
+def discover(path, probing=False, scan_limit=512, candidate_limit=32, probe_seconds=10, selected_ids=None,
+             agentfw=None, agentfw_sha256=None):
     S.require(type(scan_limit) is int and 1 <= scan_limit <= 4096
               and type(candidate_limit) is int and 1 <= candidate_limit <= 64
               and 1 <= probe_seconds <= 30, "invalid_limits")
@@ -311,6 +352,7 @@ def discover(path, probing=False, scan_limit=512, candidate_limit=32, probe_seco
     result = {"format": FORMAT, "complete": True, "probe_requested": probing, "runs": [],
               "excluded_entries": 0, "scanned_entries": 0, "reasons": []}
     deadline = time.monotonic() + probe_seconds
+    trusted = verified_agent(agentfw, agentfw_sha256, deadline) if probing and (agentfw or agentfw_sha256) else None
     with S.Directory(path, state_parent=True) as parent:
         with os.scandir(parent.fd) as entries:
             for entry in entries:
@@ -327,7 +369,7 @@ def discover(path, probing=False, scan_limit=512, candidate_limit=32, probe_seco
                     result["complete"] = False
                     result["reasons"].append("candidate_limit")
                     break
-                row = inspect(parent, entry.name, probing, deadline)
+                row = inspect(parent, entry.name, probing, deadline, trusted)
                 result["runs"].append(row)
                 if row["lifecycle"] == "unknown":
                     result["complete"] = False
@@ -346,13 +388,15 @@ def main(argv=None):
     parser.add_argument("--state-parent", type=Path, required=True)
     parser.add_argument("--run-id", action="append")
     parser.add_argument("--probe", action="store_true")
+    parser.add_argument("--agentfw", type=Path, help="Explicit trusted Agent binary for the offline diagnostic validator")
+    parser.add_argument("--agentfw-sha256", help="Operator-selected SHA-256 pin, never read from a run receipt")
     parser.add_argument("--scan-limit", type=int, default=512)
     parser.add_argument("--candidate-limit", type=int, default=32)
     parser.add_argument("--probe-seconds", type=int, default=10)
     args = parser.parse_args(argv)
     try:
         result = discover(args.state_parent, args.probe, args.scan_limit, args.candidate_limit,
-                          args.probe_seconds, args.run_id)
+                          args.probe_seconds, args.run_id, args.agentfw, args.agentfw_sha256)
         code = 0 if result["complete"] else 2
     except S.Refusal as error:
         result, code = {"format": FORMAT, "complete": False, "reason": str(error)}, 1

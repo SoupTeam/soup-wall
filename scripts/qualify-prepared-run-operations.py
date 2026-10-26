@@ -19,6 +19,7 @@ import stat
 import subprocess
 import sys
 import time
+import traceback
 from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
@@ -159,7 +160,7 @@ def qualify(args, private, report, save):
     def cli(script, words, label, injection=None, timeout=30):
         trace = private / (label + ".trace.private")
         command = [str(args.strace), "-f", "-qq", "-s", "256", "-e",
-            "trace=execve,connect,openat,unlinkat,renameat2,rmdir,kill,chmod,fchmod", "-o", str(trace)]
+            "trace=execve,connect,openat,unlinkat,renameat2,rmdir,kill,chmod,fchmod,linkat,fsync", "-o", str(trace)]
         if injection:
             command += ["-e", "inject=" + injection]
         command += [sys.executable, "-B", str(ROOT / "scripts" / script), *map(str, words)]
@@ -177,8 +178,14 @@ def qualify(args, private, report, save):
         for identity in ids:
             words += ["--run-id", identity]
         if probe:
-            words += ["--probe", "--probe-seconds", "30"]
+            words += ["--probe", "--probe-seconds", "30", "--agentfw", paths["agentfw"],
+                      "--agentfw-sha256", selected_hashes["agentfw"]]
         code, value, trace = cli("pilot-runs.py", words, label, timeout=40)
+        report.setdefault("probe_observations", []).append({"phase": label, "exit_code": code,
+            "runs": [{"lifecycle": row.get("lifecycle"), "state": row.get("observation", {}).get("state"),
+                      "reason": row.get("observation", {}).get("reason"), "record_reason": row.get("reason")}
+                     for row in value.get("runs", [])]})
+        save()
         require([len(p.model.requests) for p in active] == calls, "operations_probe_contacted_provider")
         for p in active:
             if str(p.root) in controls and p.process.poll() is None:
@@ -233,14 +240,21 @@ def qualify(args, private, report, save):
         (subject.home.parent / "run.json").write_bytes(original_record)
         passed("foreign-process-refused", unrelated_survived=Q.BASE.ProcessWitness.identity(unrelated.pid) == unrelated_identity)
         old_instance = subject.run["instance_id"]
+        loss_signal_at = time.monotonic_ns()
         subject.signal(subject.record["daemon_pid"], signal.SIGKILL)
         code, value, _ = observe("daemon-loss-probe", [ids[0]], True)
         require(code == 2, "operations_lost_daemon_accepted")
         loss = subject.finish(failure={"owned_daemon_lost"}); active.remove(subject); subject.close()
         passed("daemon-loss", **loss)
+        peer.provider.release.set()
+        completed = peer.finish(); peer.check_useful(); active.remove(peer); peer.close()
+        require(peer.provider.offered_at and min(peer.provider.offered_at.values()) > loss_signal_at,
+                "operations_peer_work_not_after_daemon_loss")
+        passed("genuine-original-completed-state", filesystem_kernel_reads=1, git_status_dispatches=1,
+               peer_useful_after_daemon_loss=True, **completed)
         fresh = Prepared(context, private / "fresh", state, hold=True); active.append(fresh)
         require(fresh.run["instance_id"] != old_instance, "operations_daemon_restart_reused_identity")
-        code, value, _ = observe("fresh-and-peer", [identity(fresh), ids[1]], True)
+        code, value, _ = observe("fresh-instance", [identity(fresh)], True)
         require(code == 0, "operations_restart_or_peer_probe_failed")
         fresh.useful()
         fresh.operator(True)
@@ -250,9 +264,6 @@ def qualify(args, private, report, save):
         code, value, _ = cli("pilot-run-archive.py", ["preview", "--state-parent", state, "--run-id", identity(fresh)], "retained-preview")
         require(code == 2 and not value["runs"], "operations_stop_receipt_cleanup_eligible")
         passed("restart-and-retained-stop", fresh_instance=True, repeated_stop_verified=True, **stopped)
-        peer.provider.release.set()
-        completed = peer.finish(); peer.check_useful(); active.remove(peer); peer.close()
-        passed("genuine-original-completed-state", filesystem_kernel_reads=1, git_status_dispatches=1, **completed)
         completed_path, completed_id = peer.home.parent, ids[1]
         import fcntl
         with (completed_path / "audit/writer.lock").open("rb") as writer:
@@ -324,10 +335,14 @@ def qualify(args, private, report, save):
         passed("changed-plan-refused", source_retained=True)
         plan, plan_path = planned(completed_id, "archive-preview")
         before_write_failure = snapshot(completed_path)
-        code, result, _ = command("archive", plan, plan_path, "failed-archive", "linkat:error=ENOSPC:when=1")
-        require(code != 0 and snapshot(completed_path) == before_write_failure, "operations_archive_write_failure_not_preserved")
-        code, result, _ = command("archive", plan, plan_path, "uncertain-archive-publication", "fsync:error=EIO:when=2")
-        require(code != 0 and snapshot(completed_path) == before_write_failure, "operations_uncertain_archive_removed_source")
+        code, result, fault_trace = command("archive", plan, plan_path, "failed-archive", "linkat:error=ENOSPC:when=1")
+        require(code != 0 and snapshot(completed_path) == before_write_failure
+                and any("linkat(" in line and "ENOSPC" in line and "INJECTED" in line for line in fault_trace.splitlines()),
+                "operations_archive_write_failure_not_preserved")
+        code, result, fault_trace = command("archive", plan, plan_path, "uncertain-archive-publication", "fsync:error=EIO:when=2")
+        require(code != 0 and snapshot(completed_path) == before_write_failure
+                and any("fsync(" in line and "EIO" in line and "INJECTED" in line for line in fault_trace.splitlines()),
+                "operations_uncertain_archive_removed_source")
         passed("archive-write-and-publication-faults", faults=["ENOSPC", "EIO"], source_retained=True)
         # Successful archive, repeated verification, then an actual syscall-level
         # interruption during apply. No production fault/test switches exist.
@@ -347,8 +362,8 @@ def qualify(args, private, report, save):
                source_retained=True, failed_write_preserved=True)
         # Retain this genuine source for interrupted removal; a second genuine
         # finished run (the loss run) supplies the independent positive apply.
-        code, _, _ = command("apply", plan, plan_path, "interrupted-apply", "unlinkat:signal=SIGKILL:when=3")
-        require(code != 0, "operations_interruption_not_exercised")
+        code, _, interrupted_trace = command("apply", plan, plan_path, "interrupted-apply", "unlinkat:signal=SIGKILL:when=3")
+        require(code != 0 and "SIGKILL" in interrupted_trace, "operations_interruption_not_exercised")
         quarantines = list(state.glob(".soup-wall-cleanup-*"))
         require(len(quarantines) == 1 and (quarantines[0] / "cleanup.json").is_file(), "operations_interruption_journal_missing")
         code, inspection, _ = cli("pilot-run-archive.py", ["inspect", "--plan", plan_path,
@@ -410,19 +425,24 @@ def qualify(args, private, report, save):
                         require((quarantine / "run/foreign.txt").read_text() == "Owned concurrent foreign member.\n",
                                 "operations_replacement_run_deleted")
                     saved.rename(subject.home.parent)
+                require("DELAYED" in trace.read_text(), "operations_syscall_delay_unobserved")
                 passed(kind + "-concurrent-race-refused", original_retained=True, replacement_retained=True,
-                       syscall_delay_observed="DELAYED" in trace.read_text(), trace_sha256=S.sha(trace.read_bytes()))
+                       syscall_delay_observed=True, trace_sha256=S.sha(trace.read_bytes()))
             finally:
                 if process.poll() is None:
                     process.kill(); process.communicate()
         for kind in ("rename", "symlink", "member"):
             race(kind)
-        plan2, path2 = planned(loss_id, "positive-apply-preview")
+        final_run = Prepared(context, private / "positive", state, hold=False); active.append(final_run)
+        final_run.provider.release.set()
+        final_completed = final_run.finish(); final_run.check_useful(); active.remove(final_run); final_run.close()
+        passed("successful-original-completed-state", filesystem_kernel_reads=1, git_status_dispatches=1, **final_completed)
+        plan2, path2 = planned(identity(final_run), "positive-apply-preview")
         code, _, _ = command("archive", plan2, path2, "positive-archive")
         require(code == 0, "operations_second_archive_failed")
         code, value, _ = command("apply", plan2, path2, "positive-apply")
         require(code == 0 and value["runs"][0]["outcome"] == "archived_and_removed"
-                and not subject.home.parent.exists(), "operations_positive_apply_failed")
+                and not final_run.home.parent.exists(), "operations_positive_apply_failed")
         code, _, _ = command("apply", plan2, path2, "repeat-removed-apply")
         require(code != 0, "operations_repeat_removed_reported_success")
         passed("exact-removal-and-repeat-refusal", removed_only_selected=True, retained_stop_state=fresh.home.parent.exists())
@@ -463,9 +483,14 @@ def main(argv=None):
         qualify(args, private, report, save)
         return 0
     except BaseException as error:
+        (private / "failure.private.log").write_text(traceback.format_exc())
         report.update(status="failed", native_acceptance=False,
-                      reason=str(error) if type(error) is ValueError and re.fullmatch(r"[a-z][a-z0-9_]{0,100}", str(error))
+                      reason=str(error) if isinstance(error, ValueError) and re.fullmatch(r"[a-z][a-z0-9_]{0,100}", str(error))
                       else "native_qualification_unavailable")
+        report["failure_location"] = [{"file": Path(frame.filename).name, "line": frame.lineno,
+                                       "function": frame.name} for frame in traceback.extract_tb(error.__traceback__)[-8:]]
+        if isinstance(error, OSError):
+            report["errno"] = error.errno
         return 1
     finally:
         save()

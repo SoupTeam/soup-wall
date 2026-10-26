@@ -63,7 +63,7 @@ fn project(input: Input, now: u64) -> Result<Value, &'static str> {
     status::validate(&input.snapshot, &input.nonce, now, &expected)?;
     let s = input.snapshot;
     Ok(json!({"format":"sw-prepared-pilot-observation/1",
-        "state":"authenticated_daemon_observed", "reason":"current_instance_ready_not_execution",
+        "state":"snapshot_contract_validated", "reason":"diagnostic_contract_validated",
         "mode":s.mode, "policy_sha256":s.policy.sha256,
         "registry_sha256":s.registry.sha256, "config_sha256":s.runtime.loaded_config_sha256,
         "binary_sha256":s.runtime.binary_sha256, "protection":"unknown", "execution_coverage":"unknown",
@@ -152,6 +152,7 @@ mod tests {
     #[test]
     fn accepted_validator_binds_policy_config_and_coverage_without_claiming_execution() {
         let value = project(input(), 10001).unwrap();
+        assert_eq!(value["state"], "snapshot_contract_validated");
         assert_eq!(value["protection"], "unknown");
         assert_eq!(value["paths"].as_array().unwrap().len(), 7);
         assert!(value.get("nonce").is_none());
