@@ -1,0 +1,1276 @@
+{
+  "format": "sw-ask-series/1-retroactive",
+  "note": "WSL2 on eb6aa6a5 (before PR 196). samples20 was the first run after setup (not declared cold or warm); warm-2, cold-3 and cold-4 follow the declared definitions. Per-stage timings are omitted for WSL2: without the verified-reuse report the collector passes cannot be separated reliably.",
+  "platform_kind": "wsl2",
+  "pooled": {
+    "cold": {
+      "filesystem": {
+        "continuation_ms": {
+          "n": 40,
+          "p50": 2201.775,
+          "p95": 2974.033,
+          "worst": 3303.088
+        },
+        "failed": 0,
+        "incomplete": 0,
+        "p95_target_met": true,
+        "planned": 40,
+        "successful": 40,
+        "target_ms": 3000
+      },
+      "git": {
+        "continuation_ms": {
+          "n": 40,
+          "p50": 3068.628,
+          "p95": 4815.855,
+          "worst": 5255.627
+        },
+        "failed": 0,
+        "incomplete": 0,
+        "p95_target_met": false,
+        "planned": 40,
+        "successful": 40,
+        "target_ms": 3000
+      },
+      "runs_counted": [
+        3,
+        4
+      ]
+    },
+    "warm": {
+      "filesystem": {
+        "continuation_ms": {
+          "n": 20,
+          "p50": 2143.388,
+          "p95": 2887.285,
+          "worst": 3083.14
+        },
+        "failed": 0,
+        "incomplete": 0,
+        "p95_target_met": true,
+        "planned": 20,
+        "successful": 20,
+        "target_ms": 3000
+      },
+      "git": {
+        "continuation_ms": {
+          "n": 20,
+          "p50": 2289.143,
+          "p95": 2400.716,
+          "worst": 2720.755
+        },
+        "failed": 0,
+        "incomplete": 0,
+        "p95_target_met": true,
+        "planned": 20,
+        "successful": 20,
+        "target_ms": 3000
+      },
+      "runs_counted": [
+        2
+      ]
+    }
+  },
+  "runs": [
+    {
+      "conditions_before_text": [
+        "Linux wsl2-host 6.6.114.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Mon Dec  1 20:46:23 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+        "6",
+        "MemTotal:        3701372 kB",
+        "0.64 0.49 0.30 1/183 27999",
+        "some avg10=0.01 avg60=0.53 avg300=0.28 total=18719083",
+        "full avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "Python 3.12.3",
+        "2026-10-25T19:24:27Z",
+        "eb6aa6a531cef67a0eac307404da981a5a600f07"
+      ],
+      "declared_kind": "undeclared",
+      "effective_kind": "undeclared",
+      "index": 1,
+      "label": "samples20",
+      "qualification_sha256": "310b0a35de827964e8d6cbea5ad503e935d1b043dedd25afaef88562b96f21a9",
+      "summary": {
+        "latency": {
+          "filesystem": {
+            "failed": 0,
+            "incomplete": 0,
+            "metric": "operator_attempt_to_correlated_original_result_monotonic",
+            "p50_ms": 1889.404028,
+            "p95_ms": 2263.337181,
+            "planned": 20,
+            "successful": 20,
+            "target_met": true,
+            "target_ms": 3000
+          },
+          "git": {
+            "failed": 0,
+            "incomplete": 0,
+            "metric": "operator_attempt_to_correlated_original_result_monotonic",
+            "p50_ms": 2326.178296,
+            "p95_ms": 4551.306433,
+            "planned": 20,
+            "successful": 20,
+            "target_met": false,
+            "target_ms": 3000
+          },
+          "status": "performance_blocker"
+        },
+        "qualification_status": "performance_blocker",
+        "reported_latency_matches": true,
+        "trials": {
+          "filesystem": {
+            "continuation_ms_by_trial": [
+              {
+                "decision_to_result_ms": 1837.929739,
+                "passed": true,
+                "sample_index": 0
+              },
+              {
+                "decision_to_result_ms": 1871.54754,
+                "passed": true,
+                "sample_index": 1
+              },
+              {
+                "decision_to_result_ms": 1867.457937,
+                "passed": true,
+                "sample_index": 2
+              },
+              {
+                "decision_to_result_ms": 1867.325266,
+                "passed": true,
+                "sample_index": 3
+              },
+              {
+                "decision_to_result_ms": 1889.04711,
+                "passed": true,
+                "sample_index": 4
+              },
+              {
+                "decision_to_result_ms": 1779.553115,
+                "passed": true,
+                "sample_index": 5
+              },
+              {
+                "decision_to_result_ms": 1842.026294,
+                "passed": true,
+                "sample_index": 6
+              },
+              {
+                "decision_to_result_ms": 1873.194668,
+                "passed": true,
+                "sample_index": 7
+              },
+              {
+                "decision_to_result_ms": 1850.195699,
+                "passed": true,
+                "sample_index": 8
+              },
+              {
+                "decision_to_result_ms": 1889.404028,
+                "passed": true,
+                "sample_index": 9
+              },
+              {
+                "decision_to_result_ms": 1967.71296,
+                "passed": true,
+                "sample_index": 10
+              },
+              {
+                "decision_to_result_ms": 2199.360438,
+                "passed": true,
+                "sample_index": 11
+              },
+              {
+                "decision_to_result_ms": 2263.337181,
+                "passed": true,
+                "sample_index": 12
+              },
+              {
+                "decision_to_result_ms": 2175.173731,
+                "passed": true,
+                "sample_index": 13
+              },
+              {
+                "decision_to_result_ms": 2038.968201,
+                "passed": true,
+                "sample_index": 14
+              },
+              {
+                "decision_to_result_ms": 2162.954943,
+                "passed": true,
+                "sample_index": 15
+              },
+              {
+                "decision_to_result_ms": 2048.153563,
+                "passed": true,
+                "sample_index": 16
+              },
+              {
+                "decision_to_result_ms": 1983.461168,
+                "passed": true,
+                "sample_index": 17
+              },
+              {
+                "decision_to_result_ms": 2238.212152,
+                "passed": true,
+                "sample_index": 18
+              },
+              {
+                "decision_to_result_ms": 2654.543963,
+                "passed": true,
+                "sample_index": 19
+              }
+            ],
+            "reuse": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "git": {
+            "continuation_ms_by_trial": [
+              {
+                "decision_to_result_ms": 4431.582376,
+                "passed": true,
+                "sample_index": 0
+              },
+              {
+                "decision_to_result_ms": 4555.493339,
+                "passed": true,
+                "sample_index": 1
+              },
+              {
+                "decision_to_result_ms": 4234.183704,
+                "passed": true,
+                "sample_index": 2
+              },
+              {
+                "decision_to_result_ms": 4551.306433,
+                "passed": true,
+                "sample_index": 3
+              },
+              {
+                "decision_to_result_ms": 4420.058051,
+                "passed": true,
+                "sample_index": 4
+              },
+              {
+                "decision_to_result_ms": 4533.791977,
+                "passed": true,
+                "sample_index": 5
+              },
+              {
+                "decision_to_result_ms": 2391.137687,
+                "passed": true,
+                "sample_index": 6
+              },
+              {
+                "decision_to_result_ms": 2264.784715,
+                "passed": true,
+                "sample_index": 7
+              },
+              {
+                "decision_to_result_ms": 2319.433654,
+                "passed": true,
+                "sample_index": 8
+              },
+              {
+                "decision_to_result_ms": 2326.178296,
+                "passed": true,
+                "sample_index": 9
+              },
+              {
+                "decision_to_result_ms": 2349.217254,
+                "passed": true,
+                "sample_index": 10
+              },
+              {
+                "decision_to_result_ms": 2171.958154,
+                "passed": true,
+                "sample_index": 11
+              },
+              {
+                "decision_to_result_ms": 2223.15358,
+                "passed": true,
+                "sample_index": 12
+              },
+              {
+                "decision_to_result_ms": 2269.95302,
+                "passed": true,
+                "sample_index": 13
+              },
+              {
+                "decision_to_result_ms": 2214.485779,
+                "passed": true,
+                "sample_index": 14
+              },
+              {
+                "decision_to_result_ms": 2204.404702,
+                "passed": true,
+                "sample_index": 15
+              },
+              {
+                "decision_to_result_ms": 2437.660017,
+                "passed": true,
+                "sample_index": 16
+              },
+              {
+                "decision_to_result_ms": 2912.717077,
+                "passed": true,
+                "sample_index": 17
+              },
+              {
+                "decision_to_result_ms": 2313.525001,
+                "passed": true,
+                "sample_index": 18
+              },
+              {
+                "decision_to_result_ms": 2304.57531,
+                "passed": true,
+                "sample_index": 19
+              }
+            ],
+            "reuse": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        }
+      },
+      "validated": false
+    },
+    {
+      "conditions_before_text": [
+        "0.00 0.12 0.56 2/178 39397",
+        "some avg10=0.00 avg60=0.00 avg300=0.07 total=39843839",
+        "full avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "               total        used        free      shared  buff/cache   available",
+        "Mem:            3614         446        2923           3         335        3167",
+        "2026-10-25T19:56:10Z"
+      ],
+      "declared_kind": "warm",
+      "effective_kind": "warm",
+      "index": 2,
+      "label": "warm-2",
+      "qualification_sha256": "cf630e59238023582318191b79837b87c36e7c77537484c2eb5f74b273492e04",
+      "summary": {
+        "latency": {
+          "filesystem": {
+            "failed": 0,
+            "incomplete": 0,
+            "metric": "operator_attempt_to_correlated_original_result_monotonic",
+            "p50_ms": 2143.387663,
+            "p95_ms": 2887.284663,
+            "planned": 20,
+            "successful": 20,
+            "target_met": true,
+            "target_ms": 3000
+          },
+          "git": {
+            "failed": 0,
+            "incomplete": 0,
+            "metric": "operator_attempt_to_correlated_original_result_monotonic",
+            "p50_ms": 2289.142673,
+            "p95_ms": 2400.716058,
+            "planned": 20,
+            "successful": 20,
+            "target_met": true,
+            "target_ms": 3000
+          },
+          "status": "target_met"
+        },
+        "qualification_status": "pass",
+        "reported_latency_matches": true,
+        "trials": {
+          "filesystem": {
+            "continuation_ms_by_trial": [
+              {
+                "decision_to_result_ms": 1852.861764,
+                "passed": true,
+                "sample_index": 0
+              },
+              {
+                "decision_to_result_ms": 1815.933296,
+                "passed": true,
+                "sample_index": 1
+              },
+              {
+                "decision_to_result_ms": 2465.663911,
+                "passed": true,
+                "sample_index": 2
+              },
+              {
+                "decision_to_result_ms": 1786.391873,
+                "passed": true,
+                "sample_index": 3
+              },
+              {
+                "decision_to_result_ms": 1828.185958,
+                "passed": true,
+                "sample_index": 4
+              },
+              {
+                "decision_to_result_ms": 1847.620529,
+                "passed": true,
+                "sample_index": 5
+              },
+              {
+                "decision_to_result_ms": 1873.197818,
+                "passed": true,
+                "sample_index": 6
+              },
+              {
+                "decision_to_result_ms": 1799.951918,
+                "passed": true,
+                "sample_index": 7
+              },
+              {
+                "decision_to_result_ms": 2136.226351,
+                "passed": true,
+                "sample_index": 8
+              },
+              {
+                "decision_to_result_ms": 2318.670902,
+                "passed": true,
+                "sample_index": 9
+              },
+              {
+                "decision_to_result_ms": 3083.140155,
+                "passed": true,
+                "sample_index": 10
+              },
+              {
+                "decision_to_result_ms": 2664.351081,
+                "passed": true,
+                "sample_index": 11
+              },
+              {
+                "decision_to_result_ms": 2167.249757,
+                "passed": true,
+                "sample_index": 12
+              },
+              {
+                "decision_to_result_ms": 2143.387663,
+                "passed": true,
+                "sample_index": 13
+              },
+              {
+                "decision_to_result_ms": 2387.969254,
+                "passed": true,
+                "sample_index": 14
+              },
+              {
+                "decision_to_result_ms": 2226.689294,
+                "passed": true,
+                "sample_index": 15
+              },
+              {
+                "decision_to_result_ms": 2367.145969,
+                "passed": true,
+                "sample_index": 16
+              },
+              {
+                "decision_to_result_ms": 2887.284663,
+                "passed": true,
+                "sample_index": 17
+              },
+              {
+                "decision_to_result_ms": 2102.548899,
+                "passed": true,
+                "sample_index": 18
+              },
+              {
+                "decision_to_result_ms": 2580.784763,
+                "passed": true,
+                "sample_index": 19
+              }
+            ],
+            "reuse": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "git": {
+            "continuation_ms_by_trial": [
+              {
+                "decision_to_result_ms": 2356.394025,
+                "passed": true,
+                "sample_index": 0
+              },
+              {
+                "decision_to_result_ms": 2265.859682,
+                "passed": true,
+                "sample_index": 1
+              },
+              {
+                "decision_to_result_ms": 2720.75468,
+                "passed": true,
+                "sample_index": 2
+              },
+              {
+                "decision_to_result_ms": 2289.569438,
+                "passed": true,
+                "sample_index": 3
+              },
+              {
+                "decision_to_result_ms": 2341.148914,
+                "passed": true,
+                "sample_index": 4
+              },
+              {
+                "decision_to_result_ms": 2361.401294,
+                "passed": true,
+                "sample_index": 5
+              },
+              {
+                "decision_to_result_ms": 2227.503909,
+                "passed": true,
+                "sample_index": 6
+              },
+              {
+                "decision_to_result_ms": 2280.341072,
+                "passed": true,
+                "sample_index": 7
+              },
+              {
+                "decision_to_result_ms": 2235.563387,
+                "passed": true,
+                "sample_index": 8
+              },
+              {
+                "decision_to_result_ms": 2289.142673,
+                "passed": true,
+                "sample_index": 9
+              },
+              {
+                "decision_to_result_ms": 2286.704831,
+                "passed": true,
+                "sample_index": 10
+              },
+              {
+                "decision_to_result_ms": 2266.039636,
+                "passed": true,
+                "sample_index": 11
+              },
+              {
+                "decision_to_result_ms": 2289.943035,
+                "passed": true,
+                "sample_index": 12
+              },
+              {
+                "decision_to_result_ms": 2400.716058,
+                "passed": true,
+                "sample_index": 13
+              },
+              {
+                "decision_to_result_ms": 2243.055615,
+                "passed": true,
+                "sample_index": 14
+              },
+              {
+                "decision_to_result_ms": 2198.306379,
+                "passed": true,
+                "sample_index": 15
+              },
+              {
+                "decision_to_result_ms": 2297.71303,
+                "passed": true,
+                "sample_index": 16
+              },
+              {
+                "decision_to_result_ms": 2290.307046,
+                "passed": true,
+                "sample_index": 17
+              },
+              {
+                "decision_to_result_ms": 2332.884673,
+                "passed": true,
+                "sample_index": 18
+              },
+              {
+                "decision_to_result_ms": 2252.363633,
+                "passed": true,
+                "sample_index": 19
+              }
+            ],
+            "reuse": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        }
+      },
+      "validated": false
+    },
+    {
+      "conditions_before_text": [
+        "0.08 0.02 0.20 2/178 50273",
+        "some avg10=0.00 avg60=0.00 avg300=0.00 total=60361911",
+        "full avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "               total        used        free      shared  buff/cache   available",
+        "Mem:            3614         406        3138           3         141        3207",
+        "2026-10-25T20:39:50Z"
+      ],
+      "declared_kind": "cold",
+      "effective_kind": "cold",
+      "index": 3,
+      "label": "cold-3",
+      "qualification_sha256": "0fb6abe1aed48b70f724cf360f8c25c362d64c927053aa3fdbe2f3513799f895",
+      "summary": {
+        "latency": {
+          "filesystem": {
+            "failed": 0,
+            "incomplete": 0,
+            "metric": "operator_attempt_to_correlated_original_result_monotonic",
+            "p50_ms": 2372.948398,
+            "p95_ms": 3148.554312,
+            "planned": 20,
+            "successful": 20,
+            "target_met": false,
+            "target_ms": 3000
+          },
+          "git": {
+            "failed": 0,
+            "incomplete": 0,
+            "metric": "operator_attempt_to_correlated_original_result_monotonic",
+            "p50_ms": 4686.427408,
+            "p95_ms": 4815.855164,
+            "planned": 20,
+            "successful": 20,
+            "target_met": false,
+            "target_ms": 3000
+          },
+          "status": "performance_blocker"
+        },
+        "qualification_status": "performance_blocker",
+        "reported_latency_matches": true,
+        "trials": {
+          "filesystem": {
+            "continuation_ms_by_trial": [
+              {
+                "decision_to_result_ms": 2501.242007,
+                "passed": true,
+                "sample_index": 0
+              },
+              {
+                "decision_to_result_ms": 2328.277442,
+                "passed": true,
+                "sample_index": 1
+              },
+              {
+                "decision_to_result_ms": 2449.772407,
+                "passed": true,
+                "sample_index": 2
+              },
+              {
+                "decision_to_result_ms": 2259.959302,
+                "passed": true,
+                "sample_index": 3
+              },
+              {
+                "decision_to_result_ms": 2227.145175,
+                "passed": true,
+                "sample_index": 4
+              },
+              {
+                "decision_to_result_ms": 3303.087752,
+                "passed": true,
+                "sample_index": 5
+              },
+              {
+                "decision_to_result_ms": 3148.554312,
+                "passed": true,
+                "sample_index": 6
+              },
+              {
+                "decision_to_result_ms": 2828.939114,
+                "passed": true,
+                "sample_index": 7
+              },
+              {
+                "decision_to_result_ms": 2974.033267,
+                "passed": true,
+                "sample_index": 8
+              },
+              {
+                "decision_to_result_ms": 2364.693854,
+                "passed": true,
+                "sample_index": 9
+              },
+              {
+                "decision_to_result_ms": 2362.143712,
+                "passed": true,
+                "sample_index": 10
+              },
+              {
+                "decision_to_result_ms": 2571.921685,
+                "passed": true,
+                "sample_index": 11
+              },
+              {
+                "decision_to_result_ms": 2372.238472,
+                "passed": true,
+                "sample_index": 12
+              },
+              {
+                "decision_to_result_ms": 2320.815961,
+                "passed": true,
+                "sample_index": 13
+              },
+              {
+                "decision_to_result_ms": 2201.775036,
+                "passed": true,
+                "sample_index": 14
+              },
+              {
+                "decision_to_result_ms": 2291.011697,
+                "passed": true,
+                "sample_index": 15
+              },
+              {
+                "decision_to_result_ms": 2427.43562,
+                "passed": true,
+                "sample_index": 16
+              },
+              {
+                "decision_to_result_ms": 2695.667011,
+                "passed": true,
+                "sample_index": 17
+              },
+              {
+                "decision_to_result_ms": 2461.692998,
+                "passed": true,
+                "sample_index": 18
+              },
+              {
+                "decision_to_result_ms": 2372.948398,
+                "passed": true,
+                "sample_index": 19
+              }
+            ],
+            "reuse": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "git": {
+            "continuation_ms_by_trial": [
+              {
+                "decision_to_result_ms": 3705.83154,
+                "passed": true,
+                "sample_index": 0
+              },
+              {
+                "decision_to_result_ms": 4630.12359,
+                "passed": true,
+                "sample_index": 1
+              },
+              {
+                "decision_to_result_ms": 4493.297634,
+                "passed": true,
+                "sample_index": 2
+              },
+              {
+                "decision_to_result_ms": 4749.673692,
+                "passed": true,
+                "sample_index": 3
+              },
+              {
+                "decision_to_result_ms": 4636.762419,
+                "passed": true,
+                "sample_index": 4
+              },
+              {
+                "decision_to_result_ms": 4701.339845,
+                "passed": true,
+                "sample_index": 5
+              },
+              {
+                "decision_to_result_ms": 4686.427408,
+                "passed": true,
+                "sample_index": 6
+              },
+              {
+                "decision_to_result_ms": 4718.430711,
+                "passed": true,
+                "sample_index": 7
+              },
+              {
+                "decision_to_result_ms": 4609.870355,
+                "passed": true,
+                "sample_index": 8
+              },
+              {
+                "decision_to_result_ms": 4923.010208,
+                "passed": true,
+                "sample_index": 9
+              },
+              {
+                "decision_to_result_ms": 4618.229363,
+                "passed": true,
+                "sample_index": 10
+              },
+              {
+                "decision_to_result_ms": 4736.148124,
+                "passed": true,
+                "sample_index": 11
+              },
+              {
+                "decision_to_result_ms": 4745.150397,
+                "passed": true,
+                "sample_index": 12
+              },
+              {
+                "decision_to_result_ms": 4698.154997,
+                "passed": true,
+                "sample_index": 13
+              },
+              {
+                "decision_to_result_ms": 4609.301474,
+                "passed": true,
+                "sample_index": 14
+              },
+              {
+                "decision_to_result_ms": 4712.99896,
+                "passed": true,
+                "sample_index": 15
+              },
+              {
+                "decision_to_result_ms": 4756.62737,
+                "passed": true,
+                "sample_index": 16
+              },
+              {
+                "decision_to_result_ms": 3068.627684,
+                "passed": true,
+                "sample_index": 17
+              },
+              {
+                "decision_to_result_ms": 3523.639002,
+                "passed": true,
+                "sample_index": 18
+              },
+              {
+                "decision_to_result_ms": 4815.855164,
+                "passed": true,
+                "sample_index": 19
+              }
+            ],
+            "reuse": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        }
+      },
+      "validated": false
+    },
+    {
+      "conditions_before_text": [
+        "0.04 0.94 1.11 2/191 62860",
+        "some avg10=0.00 avg60=0.03 avg300=0.92 total=88748351",
+        "full avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "               total        used        free      shared  buff/cache   available",
+        "Mem:            3614         419        3111           3         156        3195",
+        "2026-10-25T21:05:41Z"
+      ],
+      "declared_kind": "cold",
+      "effective_kind": "cold",
+      "index": 4,
+      "label": "cold-4",
+      "qualification_sha256": "cbe303bdfe72eed3819f92a9aa1adc4a46d25c557bd464e95009a4bf4fbb28b1",
+      "summary": {
+        "latency": {
+          "filesystem": {
+            "failed": 0,
+            "incomplete": 0,
+            "metric": "operator_attempt_to_correlated_original_result_monotonic",
+            "p50_ms": 2118.150867,
+            "p95_ms": 2198.954991,
+            "planned": 20,
+            "successful": 20,
+            "target_met": true,
+            "target_ms": 3000
+          },
+          "git": {
+            "failed": 0,
+            "incomplete": 0,
+            "metric": "operator_attempt_to_correlated_original_result_monotonic",
+            "p50_ms": 2520.407297,
+            "p95_ms": 3014.737578,
+            "planned": 20,
+            "successful": 20,
+            "target_met": false,
+            "target_ms": 3000
+          },
+          "status": "performance_blocker"
+        },
+        "qualification_status": "performance_blocker",
+        "reported_latency_matches": true,
+        "trials": {
+          "filesystem": {
+            "continuation_ms_by_trial": [
+              {
+                "decision_to_result_ms": 2450.6823,
+                "passed": true,
+                "sample_index": 0
+              },
+              {
+                "decision_to_result_ms": 2198.954991,
+                "passed": true,
+                "sample_index": 1
+              },
+              {
+                "decision_to_result_ms": 2189.104067,
+                "passed": true,
+                "sample_index": 2
+              },
+              {
+                "decision_to_result_ms": 2118.891597,
+                "passed": true,
+                "sample_index": 3
+              },
+              {
+                "decision_to_result_ms": 2154.3355,
+                "passed": true,
+                "sample_index": 4
+              },
+              {
+                "decision_to_result_ms": 2101.383588,
+                "passed": true,
+                "sample_index": 5
+              },
+              {
+                "decision_to_result_ms": 2096.324903,
+                "passed": true,
+                "sample_index": 6
+              },
+              {
+                "decision_to_result_ms": 2126.527023,
+                "passed": true,
+                "sample_index": 7
+              },
+              {
+                "decision_to_result_ms": 2090.650749,
+                "passed": true,
+                "sample_index": 8
+              },
+              {
+                "decision_to_result_ms": 2107.915119,
+                "passed": true,
+                "sample_index": 9
+              },
+              {
+                "decision_to_result_ms": 2128.024797,
+                "passed": true,
+                "sample_index": 10
+              },
+              {
+                "decision_to_result_ms": 2072.716654,
+                "passed": true,
+                "sample_index": 11
+              },
+              {
+                "decision_to_result_ms": 2093.942317,
+                "passed": true,
+                "sample_index": 12
+              },
+              {
+                "decision_to_result_ms": 2118.150867,
+                "passed": true,
+                "sample_index": 13
+              },
+              {
+                "decision_to_result_ms": 2134.296992,
+                "passed": true,
+                "sample_index": 14
+              },
+              {
+                "decision_to_result_ms": 2078.906302,
+                "passed": true,
+                "sample_index": 15
+              },
+              {
+                "decision_to_result_ms": 2113.770828,
+                "passed": true,
+                "sample_index": 16
+              },
+              {
+                "decision_to_result_ms": 2118.483473,
+                "passed": true,
+                "sample_index": 17
+              },
+              {
+                "decision_to_result_ms": 1963.087494,
+                "passed": true,
+                "sample_index": 18
+              },
+              {
+                "decision_to_result_ms": 2166.948567,
+                "passed": true,
+                "sample_index": 19
+              }
+            ],
+            "reuse": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "git": {
+            "continuation_ms_by_trial": [
+              {
+                "decision_to_result_ms": 2972.099893,
+                "passed": true,
+                "sample_index": 0
+              },
+              {
+                "decision_to_result_ms": 3014.737578,
+                "passed": true,
+                "sample_index": 1
+              },
+              {
+                "decision_to_result_ms": 2991.38792,
+                "passed": true,
+                "sample_index": 2
+              },
+              {
+                "decision_to_result_ms": 2974.146688,
+                "passed": true,
+                "sample_index": 3
+              },
+              {
+                "decision_to_result_ms": 5255.62741,
+                "passed": true,
+                "sample_index": 4
+              },
+              {
+                "decision_to_result_ms": 2621.42872,
+                "passed": true,
+                "sample_index": 5
+              },
+              {
+                "decision_to_result_ms": 2517.888585,
+                "passed": true,
+                "sample_index": 6
+              },
+              {
+                "decision_to_result_ms": 2492.753405,
+                "passed": true,
+                "sample_index": 7
+              },
+              {
+                "decision_to_result_ms": 2495.099828,
+                "passed": true,
+                "sample_index": 8
+              },
+              {
+                "decision_to_result_ms": 2429.540782,
+                "passed": true,
+                "sample_index": 9
+              },
+              {
+                "decision_to_result_ms": 2518.987259,
+                "passed": true,
+                "sample_index": 10
+              },
+              {
+                "decision_to_result_ms": 2546.448842,
+                "passed": true,
+                "sample_index": 11
+              },
+              {
+                "decision_to_result_ms": 2500.71245,
+                "passed": true,
+                "sample_index": 12
+              },
+              {
+                "decision_to_result_ms": 2520.407297,
+                "passed": true,
+                "sample_index": 13
+              },
+              {
+                "decision_to_result_ms": 2508.373548,
+                "passed": true,
+                "sample_index": 14
+              },
+              {
+                "decision_to_result_ms": 2472.784634,
+                "passed": true,
+                "sample_index": 15
+              },
+              {
+                "decision_to_result_ms": 2501.175771,
+                "passed": true,
+                "sample_index": 16
+              },
+              {
+                "decision_to_result_ms": 2541.371882,
+                "passed": true,
+                "sample_index": 17
+              },
+              {
+                "decision_to_result_ms": 2546.145994,
+                "passed": true,
+                "sample_index": 18
+              },
+              {
+                "decision_to_result_ms": 2725.126903,
+                "passed": true,
+                "sample_index": 19
+              }
+            ],
+            "reuse": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        }
+      },
+      "validated": false
+    }
+  ],
+  "samples_per_profile": 20
+}

@@ -67,10 +67,12 @@ job and the WSL2 runs execute.
 ## Costs
 
 Each run is 40 approvals (20 per profile) through the real host and original servers.
-On a GitHub-hosted `ubuntu-24.04` runner the first series took 615 to 634 seconds per
-run (`wall_seconds` in each `run.json`), and the whole four-run dispatch, including
-native preparation, finished in about 1 hour 13 minutes. On a 6-vCPU, 3.7 GiB WSL2
-laptop a run took roughly 17 to 20 minutes by wall clock (not recorded in a report).
+On a GitHub-hosted `ubuntu-24.04` runner the final series (`12f3f2b`) took 555.8 to
+557.1 seconds per run (`wall_seconds` in each `run.json`; an earlier series on the same
+runner took 615 to 634 seconds), and the whole four-run dispatch, including native
+preparation, finished in 1 hour 4 minutes. On a 6-vCPU, 3.7 GiB WSL2 laptop a run took
+roughly 17 to 20 minutes by wall clock (not recorded in a report). Retained results are
+in `docs/operations/evidence/sou-141/`.
 
 ## Supported evidence and limits
 
