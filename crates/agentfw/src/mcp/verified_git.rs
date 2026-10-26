@@ -4,6 +4,7 @@
 //! its admitted Call, bind this operation, inspect raw bytes, and audit release.
 #![allow(dead_code)] // private integration component, not wired to ingress here
 use super::server_profile::ProfileConfig;
+#[cfg(target_os = "linux")]
 use anyhow::{ensure, Context};
 use std::ops::Range;
 
