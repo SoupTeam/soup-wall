@@ -111,6 +111,15 @@ origin/tracking config before starting the actual read scenarios. The fixture
 and its metadata are retained for the new qualification; this failure provides
 no runtime byte-equality or extended-profile SOU-109 acceptance evidence.
 
+[Run #189](https://github.com/SoupTeam/soup-wall/actions/runs/40373408778) failed
+in the new Linux snapshot test before the acceptance driver ran. Exact sealed
+image export and HEAD-kind checks passed, but the test incorrectly constructed
+the generic component Producer with TRACKED, which its existing profile boundary
+refuses. The corrected test retains that refusal and checks Snapshot validation,
+export, mount and sticky origin-ref withdrawal through existing APIs. It makes
+no generic Producer completion claim; actual private-worker kind and original
+read-byte qualification still require a new complete native run.
+
 ## Acceptance
 
 The targeted native Linux command must retain exact source/profile/runtime/

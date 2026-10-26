@@ -607,24 +607,29 @@ fn git_tracked_symlinks_native_witness_keeps_exact_origin_images_and_sticky_ref_
         snapshot.repository.resolve("HEAD").unwrap().effective.kind,
         ObjectKind::Commit
     );
-    let req = request(10, "HEAD");
     let context = ExecutionContext {
         profile_format: format.into(),
         ..context()
     };
-    let producer = Producer::new(context.clone()).unwrap();
-    let ticket = producer.begin(snapshot.clone(), &req).unwrap();
-    let raw = response(10, "original bytes");
-    let completed = producer.complete(&ticket, &raw).unwrap();
+    // The generic component Producer remains narrow. The private tracked
+    // worker authenticates its own proof; this test checks only its Snapshot.
+    assert!(Producer::new(context).is_err());
+    snapshot.validate().unwrap();
+    assert_eq!(
+        snapshot.show_target("HEAD").unwrap().effective.kind,
+        ObjectKind::Commit
+    );
+    let mut command = tokio::process::Command::new("/owned-not-executed");
+    let mut pins = Vec::new();
+    snapshot.mount(&mut command, &mut pins).unwrap();
     let path = root.path().join(".git/refs/remotes/origin/main");
     let before = std::fs::read(&path).unwrap();
     let moved = path.with_extension("owned-moved");
     std::fs::rename(&path, &moved).unwrap();
     std::fs::rename(&moved, &path).unwrap();
     assert_eq!(std::fs::read(path).unwrap(), before);
-    assert!(producer
-        .verify_local(&completed, &context, &req, &raw)
-        .is_err());
+    assert!(snapshot.validate().is_err());
+    assert!(snapshot.show_target("HEAD").is_err());
     assert!(view.object_witness_images().is_err());
     assert!(snapshot
         .mount(
@@ -632,7 +637,7 @@ fn git_tracked_symlinks_native_witness_keeps_exact_origin_images_and_sticky_ref_
             &mut Vec::new()
         )
         .is_err());
-    drop(producer);
+    drop(pins);
     drop(snapshot);
     Snapshot::capture(&workspace, format).unwrap();
 }
