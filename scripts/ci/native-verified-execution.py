@@ -113,7 +113,17 @@ def main():
   def http(route,value=None):
    request=urllib.request.Request(f'http://127.0.0.1:{port}'+route,headers={'Authorization':'Bearer '+native_key,
        'Content-Type':'application/json'},data=None if value is None else json.dumps(value).encode())
-   with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request,timeout=10) as response:raw=response.read(1048577)
+   try:
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request,timeout=10) as response:raw=response.read(1048577)
+   except urllib.error.HTTPError as error:
+    raw=error.read(16385)
+    try:detail=json.loads(raw) if len(raw)<=16384 else {}
+    except ValueError:detail={}
+    known=set(re.findall(r'"(native_[a-z_]{1,80})"',(source/'crates/agentfw/src/native.rs').read_text()))
+    code=detail.get('error_code') if isinstance(detail,dict) else None
+    refusals=report.setdefault('http_refusals',[])
+    if len(refusals)<16:refusals.append({'status':error.code,'error_code':code if code in known else None})
+    save();raise
    require(len(raw)<=1048576,'daemon_reply_over_cap');return json.loads(raw)
   def proof(agent):
    instance=http('/native/v1/instance')
@@ -155,8 +165,9 @@ def main():
       env=env,capture_output=True,timeout=10)
   require(alternate.returncode==0 and alternate.stdout==raw,'alternate_same_bytes_control_broken')
   native_session='unattested-alternate-'+uuid.uuid4().hex
+  ordinary_contract=json.loads((installed/'registry.json').read_text())['contract_version']
   def ordinary(event,fields=None):
-   return http('/native/v1',{'contract_version':'native/1',
+   return http('/native/v1',{'contract_version':ordinary_contract,
        'registry_sha256':config['native']['registry_sha256'],'session_id':native_session,
        'event':event,**(fields or {})})
   require(ordinary('session_start')['release'] is True,'alternate_baseline_session_failed')
@@ -210,7 +221,7 @@ def main():
    report['cases'].append({'case':label,'status':'passed','refused':True,
        'useful_followup':True,'incomplete_deny':incomplete})
   # A wire copy cannot create an affine original result or redeem its metadata.
-  forged={'contract_version':'native/1','registry_sha256':config['native']['registry_sha256'],
+  forged={'contract_version':ordinary_contract,'registry_sha256':config['native']['registry_sha256'],
       'session_id':'forged-source','event':'result','execution':evidence}
   try:http('/native/v1',forged)
   except urllib.error.HTTPError as error:require(error.code==400,'forged_result_wrong_refusal')

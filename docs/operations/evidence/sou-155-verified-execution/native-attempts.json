@@ -185,6 +185,29 @@
         }
       ],
       "zip_crc_verified": true
+    },
+    {
+      "source_commit": "eb9bcd56c462efd6f5ab68acf25c97a3a12152c0",
+      "run": 40317299420,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "actual_original_useful_read": "passed",
+      "private_call_result_custody": "observed",
+      "failed_stage": "alternate-process-baseline-control",
+      "cause": "driver-used-native-1-instead-of-registry-sw-native-1",
+      "original_results_observed": 1,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12647328598,
+          "sha256": "1f7abb6e00cf45ad19b1ca20521a546c847a0bae553b10013e162abe7fcbc3d3"
+        },
+        {
+          "id": 12648130536,
+          "sha256": "afd8d3c04163bfd5a33aaaf3b8a51b2beb8f162bccacf4ef0832599b4799858d"
+        }
+      ],
+      "zip_crc_verified": true
     }
   ]
 }
