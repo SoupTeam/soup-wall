@@ -23,7 +23,7 @@ LEGACY = load("sou146_legacy", "rule_baseline/git_readonly_v1/rule_baseline.py")
 VERIFY = load("sou146_verify", "scripts/verify-sou146-git-file-revisions.py")
 
 class PerFileRevisions(unittest.TestCase):
-    def batch_run(self, *, expired_followup=False, complete_cleanup=True):
+    def batch_run(self, *, expired_followup=False, complete_cleanup=True, repo_setup_failure=False):
         clients = []
         cleanup = {"all_stopped": complete_cleanup, "observation_complete": True, "remaining": [],
                    "observed": [{"parent_process": False, "original_git_server": True}]}
@@ -50,6 +50,10 @@ class PerFileRevisions(unittest.TestCase):
             def transcript(self):
                 return {"sent": [json.dumps(frame) for frame in self.calls], "received": [], "exit_code": 0}
         observer = SimpleNamespace(sample=lambda: None, observed={})
+        def repository_observer(path):
+            if repo_setup_failure:
+                raise RuntimeError("injected repository observer setup failure")
+            return SimpleNamespace(drain=lambda: 0, close=lambda: None)
         report = {"refusals": []}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -59,7 +63,7 @@ class PerFileRevisions(unittest.TestCase):
                                     workspace=root, daemon_witnesses=[("owned", None, observer)])
             with mock.patch.object(VERIFY, "collector", side_effect=lambda *args: Client()), \
                  mock.patch.object(VERIFY, "DaemonProcessWitness", side_effect=lambda pid: SimpleNamespace(finish=lambda: cleanup)), \
-                 mock.patch.object(VERIFY.GIT, "RepositoryWitness", side_effect=lambda path: SimpleNamespace(drain=lambda: 0, close=lambda: None)), \
+                 mock.patch.object(VERIFY.GIT, "RepositoryWitness", side_effect=repository_observer), \
                  mock.patch.object(VERIFY, "batch_worker_cleanup", return_value=cleanup), \
                  mock.patch.object(VERIFY.BASE, "snapshot", return_value={}), \
                  mock.patch.object(VERIFY.BASE, "events", return_value=[]), \
@@ -99,6 +103,15 @@ class PerFileRevisions(unittest.TestCase):
             self.assertTrue(clients[0].closed)
             self.assertFalse(report["refusal_batches"][0]["passed"])
             self.assertIn("collector_cleanup", report["refusal_batches"][0])
+
+    def test_repository_observer_setup_failure_closes_spawned_client_without_retry(self):
+        clients, report, error = self.batch_run(repo_setup_failure=True)
+        self.assertEqual(str(error), "injected repository observer setup failure")
+        self.assertEqual(len(clients), 1)
+        self.assertTrue(clients[0].closed)
+        self.assertEqual(clients[0].calls, [])
+        self.assertFalse(report["refusal_batches"][0]["passed"])
+        self.assertFalse(report["refusal_batches"][0]["repository_observer_ready"])
 
     def test_separate_identity_original_manifest_schema_and_default(self):
         manifest = json.loads((INSTALL.ASSETS / "upstream-tools-list.json").read_text())

@@ -285,9 +285,10 @@ def refusal_batches(stack, first, report, expected_text):
         previous = {key for key, _ in list(observer.observed.items())}
         with path.open("wb") as log:
             client = collector(stack, log)
-            processes = DaemonProcessWitness(client.process.pid)
-            witness = GIT.RepositoryWitness(stack.workspace)
+            processes, witness, failure = None, None, None
             try:
+                processes = DaemonProcessWitness(client.process.pid)
+                witness = GIT.RepositoryWitness(stack.workspace)
                 client.initialize()
                 row["lease"] = healthy_lease(stack, client, report, label)
                 require(row["lease"]["session_id"] not in sessions and row["lease"]["epoch_sha256"] not in epochs,
@@ -311,17 +312,29 @@ def refusal_batches(stack, first, report, expected_text):
                     followup, _ = client.exchange(GIT.call(identifier + 1000, "git_show", {"revision": REFS[0]}))
                     require(GIT.text(followup) == expected_text, "same-client useful continuation changed")
                     row["completed_pairs"].append({"refusal_id": identifier, "continuation_id": identifier + 1000})
+            except Exception as error:
+                failure = error
             finally:
                 try:
                     LEASE.safe_close(client)
+                except Exception as error:
+                    row["collector_close_error"] = type(error).__name__
+                    if failure is None:
+                        failure = error
                 finally:
-                    witness.close()
+                    if witness is not None:
+                        witness.close()
                     row["protected_client"] = client.transcript()
-                    row["collector_cleanup"] = processes.finish()
+                    row["collector_cleanup"] = processes.finish() if processes is not None else {
+                        "all_stopped": False, "observation_complete": False,
+                        "observed": [], "remaining": None, "reason": "collector observer unavailable"}
+                    row["repository_observer_ready"] = witness is not None
                     row["worker_cleanup"] = batch_worker_cleanup(stack, previous)
                     row["diagnostics"] = GIT.protected_diagnostics(row, folder)
                     row["elapsed_seconds"] = round(time.monotonic() - started, 3)
                     row["repository_unchanged"] = BASE.snapshot(stack.workspace) == before
+            if failure is not None:
+                raise failure
             cleanup = row["collector_cleanup"]
             workers = row["worker_cleanup"]
             require(client.process.returncode == 0 and not client.forced_cleanup
