@@ -696,12 +696,15 @@ fn cli_closed_stdout_is_a_failure() {
     let policy = root.join("policy.yaml");
     write(&input, SEQUENCE);
     write(&policy, SHIPPED);
+    // Establish a broken pipe before the child can write, independently of
+    // whether the parent or child runs first after spawn.
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
     let mut child = invocation(&home, &input, &policy)
-        .stdout(Stdio::piped())
+        .stdout(Stdio::from(writer))
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    drop(child.stdout.take());
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         if let Some(status) = child.try_wait().unwrap() {
