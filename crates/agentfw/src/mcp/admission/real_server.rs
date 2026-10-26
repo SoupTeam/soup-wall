@@ -689,6 +689,50 @@ async fn inspect(
     }))
 }
 
+async fn execute_in_daemon(
+    collector: &Collector<'_>,
+    call: &Call,
+    mut grant: Grant,
+    profile: &server_profile::ProfileConfig,
+) -> anyhow::Result<Option<Release>> {
+    let reply = collector
+        .execute_original_git(&grant.call_id, &grant.binding, profile)
+        .await?;
+    ensure!(
+        reply["completed"] == true,
+        "original daemon execution incomplete"
+    );
+    let receipt = &reply["receipt"];
+    let authorized = receipt["release"] == true;
+    let raw = if authorized {
+        let raw = reply["frame"]
+            .as_str()
+            .context("original daemon frame missing")?;
+        let decoded = parse(raw.as_bytes())?;
+        ensure!(decoded["id"] == call.id, "original daemon host ID mismatch");
+        let profiles = server_profile::classify_manifest_for(
+            &profile.format,
+            &server_profile::original_manifest_for(&profile.format)?,
+        )?;
+        profiles
+            .get(&call.tool)
+            .context("original daemon tool missing")?
+            .validate_result(&decoded)?;
+        raw.as_bytes().to_vec()
+    } else {
+        withheld(&call.id, "result", &receipt["reason_codes"])
+    };
+    if let Some(timing) = &mut grant.continuation {
+        timing.record(call, "daemon_original_result", authorized);
+    }
+    Ok(Some(Release {
+        raw,
+        #[cfg(target_os = "linux")]
+        authorized,
+        _boundary: grant.boundary.take(),
+    }))
+}
+
 async fn reclaim(collector: &Collector<'_>, call: &Call, mut grant: Grant) -> anyhow::Result<()> {
     drop(grant.boundary.take());
     // A local transport error spends exactly this grant. It makes no claim that
@@ -857,6 +901,17 @@ where
     T: AsyncWrite + Unpin,
 {
     let format = profile.format.as_str();
+    let daemon_git = collector
+        .config
+        .native
+        .git_execution_selected(&collector.config.server_id, profile)?;
+    ensure!(
+        !daemon_git
+            || (server_profile::git_selected(format)
+                && collector.prepared_budget.is_none()
+                && collector.liveness.is_some()),
+        "daemon Git execution requires selected Git, liveness and an independent execution budget"
+    );
     let mut initialized = false;
     let mut notified = false;
     let mut ready = false;
@@ -1336,6 +1391,19 @@ where
                                             WorkEvent::Created(worker_key,
                                                 retain_create_slot(lease,
                                                     produce_original_create(&runner, &args)).await)
+                                        }));
+                                        continue;
+                                    }
+                                    if daemon_git && matches!(call.tool.as_str(), "git_show" | "git_diff") {
+                                        // Do NOT also dispatch the tools/call to the collector's server.
+                                        // The daemon consumes the admission and owns the one actual result pipe.
+                                        let input = detached(call);
+                                        let worker_key = key.clone();
+                                        call.dispatched = true;
+                                        call.phase = Phase::Inspecting;
+                                        workers.push(Box::pin(async move {
+                                            WorkEvent::Inspected(worker_key,
+                                                execute_in_daemon(collector, &input, grant, profile).await)
                                         }));
                                         continue;
                                     }
@@ -2056,6 +2124,18 @@ pub(super) async fn run(
         .context("install selected collector termination handler")?;
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
     let selected_budget = collector.prepared_budget.as_ref();
+    if collector
+        .config
+        .native
+        .git_execution_selected(&collector.config.server_id, profile)?
+    {
+        ensure!(
+            server_profile::git_selected(&profile.format)
+                && selected_budget.is_none()
+                && collector.liveness.is_some(),
+            "daemon Git execution does not support prepared budget selection"
+        );
+    }
     ensure!(
         selected_budget.is_none() || profile.format != server_profile::filesystem_create::FORMAT,
         "prepared budgets do not support the original-create profile"
