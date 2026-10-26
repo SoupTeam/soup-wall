@@ -251,6 +251,76 @@ def trial_table(cases, samples, metrics):
     return table
 
 
+ASSET_STAGES = ('runtime_and_libraries', 'package_tree', 'selected_profile')
+
+
+def finite_number(value):
+    return type(value) in (int, float) and math.isfinite(value) and value >= 0
+
+
+def diagnostic_samples(cases):
+    """Per-trial collector timings kept in each case's verified_inputs_resume proof.
+
+    Asset-verification stages repeat once per pass: pass 1 runs before the pending
+    approval is published (its sum is the collector-side first-pending cost), pass 2
+    revalidates after the approval. Approval stages follow the operator decision.
+    """
+    found = []
+    for case in cases:
+        if case.get('case') != 'approve' or case.get('passed') is not True or case.get('profile') not in PROFILES:
+            continue
+        proof = case.get('verified_inputs_resume')
+        timings = proof.get('diagnostic_timings') if isinstance(proof, dict) else None
+        if not isinstance(timings, list):
+            continue
+        passes, assets, approval, post = {}, {}, {}, None
+        for event in timings:
+            if not isinstance(event, dict):
+                continue
+            stage = event.get('stage')
+            if event.get('event') == STAGE_EVENT and stage in ASSET_STAGES:
+                passes[stage] = passes.get(stage, 0) + 1  # a bad value never shifts the pass number
+                if finite_number(event.get('elapsed_ms')):
+                    assets['%s/pass_%d' % (stage, passes[stage])] = event['elapsed_ms']
+            elif event.get('event') == 'mcp_real_approval_timing' and isinstance(stage, str) and finite_number(event.get('stage_ms')):
+                approval[stage] = event['stage_ms']
+                if finite_number(event.get('post_observed_ms')):
+                    post = event['post_observed_ms']
+        first = [assets['%s/pass_1' % stage] for stage in ASSET_STAGES if '%s/pass_1' % stage in assets]
+        if len(first) != len(ASSET_STAGES):
+            first = []  # an incomplete first pass is excluded, never reported as a smaller total
+        found.append({'profile': case['profile'], 'sample_index': case.get('sample_index'), 'assets_ms': assets,
+                      'approval_stage_ms': approval, 'post_observed_ms': post,
+                      'first_pending_asset_verification_ms': sum(first) if first else None,
+                      'continuation_ms': case.get('decision_to_result_ms')})
+    return found
+
+
+def diagnostic_distributions(samples):
+    out = {}
+    for profile in PROFILES:
+        rows = [s for s in samples if s['profile'] == profile]
+        if not rows:
+            continue
+        def collect(getter):
+            return [v for v in (getter(r) for r in rows) if finite_number(v)]
+        assets, approval = {}, {}
+        for r in rows:
+            for key, value in r['assets_ms'].items():
+                stage, _, number = key.partition('/')
+                assets.setdefault(stage, {}).setdefault(number, []).append(value)
+            for stage, value in r['approval_stage_ms'].items():
+                approval.setdefault(stage, []).append(value)
+        out[profile] = {
+            'trials_with_diagnostics': len(rows),
+            'first_pending_asset_verification_ms': distribution(collect(lambda r: r['first_pending_asset_verification_ms'])),
+            'continuation_ms': distribution(collect(lambda r: r['continuation_ms'])),
+            'post_observed_total_ms': distribution(collect(lambda r: r['post_observed_ms'])),
+            'asset_verification_ms': {s: {n: distribution(v) for n, v in sorted(p.items())} for s, p in sorted(assets.items())},
+            'approval_stage_ms': {s: distribution(v) for s, v in sorted(approval.items())}}
+    return out
+
+
 def run_summary(qualification, samples, events):
     cases = qualification.get('cases') if isinstance(qualification, dict) else None
     out = {'qualification_status': qualification.get('status') if isinstance(qualification, dict) else None}
@@ -259,6 +329,8 @@ def run_summary(qualification, samples, events):
         out['latency'] = metrics
         out['trials'] = trial_table(cases, samples, metrics)
         out['reported_latency_matches'] = qualification.get('latency') == metrics
+        out['diagnostic_samples'] = diagnostic_samples(cases)
+        out['diagnostics'] = diagnostic_distributions(out['diagnostic_samples'])
     out['stages'] = stage_distributions(events)
     return out
 
@@ -267,7 +339,8 @@ def pool(runs, samples):
     pooled = {}
     for kind in ('cold', 'warm'):
         chosen = [r for r in runs if r.get('effective_kind') == kind and 'latency' in r.get('summary', {})]
-        entry = {'runs_counted': [r['index'] for r in chosen]}
+        entry = {'runs_counted': [r['index'] for r in chosen],
+                 'diagnostics': diagnostic_distributions([s for r in chosen for s in r['summary'].get('diagnostic_samples', [])])}
         for profile in PROFILES:
             values, planned, ok, failed, incomplete = [], 0, 0, 0, 0
             for r in chosen:

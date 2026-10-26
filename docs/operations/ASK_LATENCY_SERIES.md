@@ -13,13 +13,21 @@ plan that is written to `manifest.json` before the first trial. Per profile
 - continuation time: operator decision attempt to the correlated original-server
   result (`decision_to_result_ms`, monotonic). The existing p95 target of 3000 ms
   is unchanged;
-- the per-stage timings that the harness collector prints
-  (`mcp_asset_verification_timing`: `runtime_and_libraries`, `package_tree`,
-  `selected_profile`), grouped by pass within each host launch;
-- the first-pass asset-verification total per host launch, as a **proxy** for the
-  work done before the pending approval is published (the harness does not print a
-  call-start event, so the exact first-pending time is not available here);
-- the reuse counts (`immutable_files`, `leased_files`, `rehashed_files`).
+- per-trial collector stage timings from the reuse proof
+  (`verified_inputs_resume.diagnostic_timings`, present with `--require-verified-reuse`):
+  asset verification (`runtime_and_libraries`, `package_tree`, `selected_profile`) for
+  pass 1 (before the pending approval is published) and pass 2 (revalidation after the
+  approval), and the approval stages (`profile_and_assets`, `policy_boundary`,
+  `classifier`, `daemon_redemption`, `original_dispatch`, `original_response`,
+  `result_inspection`, with their `post_observed_ms` total);
+- first-pending: the sum of the pass-1 asset-verification stages per trial, i.e. the
+  collector-side work before the pending approval is published. It does not include
+  the host call start, so it is a lower bound of the operator-visible wait. The
+  5-second pending bound itself is enforced and reported by the SOU-105 acceptance
+  (`pending approval state missed declared deadline`);
+- the reuse counts (`immutable_files`, `leased_files`, `rehashed_files`);
+- the raw stage events copied from the private harness logs (`stage-events.jsonl`) as a
+  cross-check.
 
 p50, p95 (nearest rank) and worst are reported per run and pooled per run kind,
 always with planned, successful, failed and incomplete counts. The worst trial is
@@ -59,22 +67,29 @@ job and the WSL2 runs execute.
 ## Costs
 
 Each run is 40 approvals (20 per profile) through the real host and original servers.
-Measured on a 6-vCPU, 3.7 GiB WSL2 machine, one run takes about 17 to 20 minutes, so a
-four-run plan is roughly 70 to 80 minutes before preparation. Native hosted-runner
-timing is not assumed here; the artifact records `wall_seconds` per run.
+On a GitHub-hosted `ubuntu-24.04` runner the first series took 615 to 634 seconds per
+run (`wall_seconds` in each `run.json`), and the whole four-run dispatch, including
+native preparation, finished in about 1 hour 13 minutes. On a 6-vCPU, 3.7 GiB WSL2
+laptop a run took roughly 17 to 20 minutes by wall clock (not recorded in a report).
 
 ## Supported evidence and limits
 
 - Only `platform_kind: native_linux` results are native Linux evidence. A WSL2 kernel
   is labeled `wsl2` and never stands in for native results. WSL2 has its own
   preparation and acceptance; the official native preparation scripts refuse it.
-- WSL2 does not provide fs-verity, so there every verified input is leased or
-  rehashed. Such results do not demonstrate the optimized fs-verity path.
+- On the WSL2 machine no fs-verity reuse was observed (`immutable_files` is 0), and the
+  same was observed on the native hosted runner. Whether the kernel, the file system or
+  the profile files lack verity was not investigated, so these results do not
+  demonstrate an fs-verity path.
 - Operator decisions are explicit same-user CLI actions in an owned harness, not proof
   of physical presence. The provider is scripted and loopback-only; no paid model call
   is made (`paid_api_calls` is validated as 0).
-- `mcp_real_approval_timing` events (decision-side stages) are not printed by this
-  harness, so decision-side stage distributions come from the SOU-105 acceptance logs
-  instead, not from the series.
+- Stage timings come from the collector's own monotonic clock and start when the
+  collector observes the approval, not when the operator decides. Without
+  `--require-verified-reuse` (for example a WSL2 run) the per-trial diagnostics are not
+  attached to the qualification report, and only the raw stage events remain.
+- Even with the real reuse proof present, `immutable_files` can be 0 (fs-verity not in
+  use). Reuse then rests on read leases and most files are still rehashed, so
+  `package_tree` hashing dominates both passes.
 - Run-to-run variance on shared or small machines is real. The series reports it
   instead of hiding it; a single slow cold run is not by itself a code defect.

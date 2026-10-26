@@ -83,6 +83,63 @@ class ReadingEvents(unittest.TestCase):
             self.assertEqual(passes['pass_1']['n'], 2)
 
 
+def diagnostics(first=100, second=80, approval=50):
+    timings = [{'event': SERIES.STAGE_EVENT, 'stage': 'runtime_and_libraries', 'elapsed_ms': 5},
+               {'event': SERIES.STAGE_EVENT, 'stage': 'package_tree', 'elapsed_ms': first},
+               {'event': SERIES.STAGE_EVENT, 'stage': 'selected_profile', 'elapsed_ms': 1},
+               {'event': SERIES.STAGE_EVENT, 'stage': 'runtime_and_libraries', 'elapsed_ms': 4},
+               {'event': SERIES.STAGE_EVENT, 'stage': 'package_tree', 'elapsed_ms': second}]
+    total = 0
+    for stage_name in ('profile_and_assets', 'classifier', 'result_inspection'):
+        total += approval
+        timings.append({'event': 'mcp_real_approval_timing', 'stage': stage_name, 'stage_ms': approval, 'post_observed_ms': total})
+    return {'diagnostic_timings': timings}
+
+
+class Diagnostics(unittest.TestCase):
+    def cases(self):
+        rows = qualification([2000] * 20, [2300] * 20)['cases']
+        for index, row in enumerate(rows):
+            row['verified_inputs_resume'] = diagnostics(first=100 + index)
+        return rows
+
+    def test_first_pending_is_the_sum_of_pass_one_and_passes_are_kept_apart(self):
+        samples = SERIES.diagnostic_samples(self.cases())
+        self.assertEqual(len(samples), 40)
+        first = samples[0]
+        self.assertEqual(first['first_pending_asset_verification_ms'], 5 + first['assets_ms']['package_tree/pass_1'] + 1)
+        self.assertEqual(first['assets_ms']['package_tree/pass_2'], 80)
+        self.assertEqual(first['post_observed_ms'], 150)
+
+    def test_distributions_per_profile_with_stage_and_pass(self):
+        out = SERIES.diagnostic_distributions(SERIES.diagnostic_samples(self.cases()))
+        git = out['git']
+        self.assertEqual(git['trials_with_diagnostics'], 20)
+        self.assertEqual(git['asset_verification_ms']['package_tree']['pass_2']['p95'], 80)
+        self.assertEqual(git['approval_stage_ms']['classifier']['worst'], 50)
+        self.assertEqual(git['post_observed_total_ms']['p50'], 150)
+
+    def test_failed_and_malformed_trials_are_not_counted_as_diagnostics(self):
+        rows = self.cases()
+        rows[0]['passed'] = False
+        rows[1]['verified_inputs_resume'] = {'diagnostic_timings': 'broken'}
+        rows[2]['verified_inputs_resume']['diagnostic_timings'][1]['elapsed_ms'] = float('nan')
+        samples = SERIES.diagnostic_samples(rows)
+        self.assertEqual(len(samples), 38)
+        bad = [s for s in samples if s['sample_index'] == rows[2]['sample_index'] and s['profile'] == rows[2]['profile']][0]
+        self.assertNotIn('package_tree/pass_1', bad['assets_ms'])
+        self.assertEqual(bad['assets_ms']['package_tree/pass_2'], 80)
+        self.assertIsNone(bad['first_pending_asset_verification_ms'])
+
+    def test_pool_aggregates_diagnostics_only_for_effective_kinds(self):
+        summary = SERIES.run_summary({'status': 'pass', 'cases': self.cases()}, 20, [])
+        runs = [{'index': 1, 'effective_kind': 'cold', 'summary': summary},
+                {'index': 2, 'effective_kind': 'cold_unavailable', 'summary': summary}]
+        pooled = SERIES.pool(runs, 20)
+        self.assertEqual(pooled['cold']['diagnostics']['git']['trials_with_diagnostics'], 20)
+        self.assertEqual(pooled['warm']['diagnostics'], {})
+
+
 class Summaries(unittest.TestCase):
     def test_stage_passes_and_first_pass_proxy(self):
         rows = []
