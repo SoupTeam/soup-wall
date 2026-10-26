@@ -1086,6 +1086,8 @@ mod tests {
                 | "owner_loss_witness_owner_did_not_hold_leaf"
                 | "owner_loss_witness_leaf_already_handed_back"
                 | "owner_loss_witness_pidfd_unavailable"
+                | "owner_loss_witness_parent_unverified"
+                | "owner_loss_witness_owner_exited_before_signal"
                 | "owner_loss_witness_sigkill_failed"
                 | "owner_loss_witness_generic_startup_failure"
                 | "owner_loss_witness_collector_failed"

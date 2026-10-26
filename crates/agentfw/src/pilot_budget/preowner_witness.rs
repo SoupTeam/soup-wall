@@ -188,6 +188,42 @@ fn matching_leaf_descriptors(pid: u32, leaf: &Ready) -> Result<usize> {
     Ok(matches)
 }
 
+fn live_owner(pidfd: &File) -> Result<()> {
+    let mut descriptor = libc::pollfd {
+        fd: pidfd.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    ensure!(
+        unsafe { libc::poll(&mut descriptor, 1, 0) } == 0,
+        "owner_loss_witness_owner_exited_before_signal"
+    );
+    Ok(())
+}
+
+fn pin_owner(pid: u32, collector: u32) -> Result<File> {
+    // Pin before inspecting /proc. A numeric PID inspected first can be
+    // reaped/reused before pidfd_open; it is never authority to signal a peer.
+    let raw = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) };
+    ensure!(raw >= 0, "owner_loss_witness_pidfd_unavailable");
+    let pinned = unsafe { File::from_raw_fd(raw as i32) };
+    let mut record = String::new();
+    File::open(format!("/proc/{pid}/stat"))?
+        .take(4097)
+        .read_to_string(&mut record)?;
+    ensure!(record.len() <= 4096, "owner_loss_witness_parent_unverified");
+    let parent = record
+        .rsplit_once(')')
+        .and_then(|(_, fields)| fields.split_ascii_whitespace().nth(1))
+        .and_then(|value| value.parse::<u32>().ok());
+    ensure!(
+        parent == Some(collector),
+        "owner_loss_witness_parent_unverified"
+    );
+    live_owner(&pinned)?;
+    Ok(pinned)
+}
+
 fn process_children(pid: u32) -> Result<Vec<u32>> {
     let mut children = std::collections::BTreeSet::new();
     let mut tasks = 0;
@@ -429,6 +465,7 @@ fn reproduce_case(handoff: bool, owner_loss: bool) -> Result<()> {
             "owner_loss_witness_one_outside_owner_required"
         );
         let owner_pid = pids[0];
+        let pidfd = pin_owner(owner_pid, collector_pid)?;
         ensure!(
             binary_identity(Path::new(&format!("/proc/{owner_pid}/exe")))? == owner_binary_sha256,
             "owner_loss_witness_owner_image_changed"
@@ -452,9 +489,7 @@ fn reproduce_case(handoff: bool, owner_loss: bool) -> Result<()> {
             matching_leaf_descriptors(collector_pid, &owned.identity)? == 0,
             "owner_loss_witness_leaf_already_handed_back"
         );
-        let pidfd = unsafe { libc::syscall(libc::SYS_pidfd_open, owner_pid, 0) };
-        ensure!(pidfd >= 0, "owner_loss_witness_pidfd_unavailable");
-        let pidfd = unsafe { File::from_raw_fd(pidfd as i32) };
+        live_owner(&pidfd)?;
         ensure!(
             unsafe {
                 libc::syscall(
@@ -616,6 +651,24 @@ fn reproduce_case(handoff: bool, owner_loss: bool) -> Result<()> {
 #[cfg(test)]
 mod process_children_tests {
     use super::*;
+
+    #[test]
+    fn pinned_owner_refuses_wrong_parent_and_exited_process() -> Result<()> {
+        let mut child = Command::new("/usr/bin/sleep")
+            .arg("5")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+        let pinned = pin_owner(child.id(), std::process::id());
+        let wrong_parent = pin_owner(child.id(), std::process::id().wrapping_add(1));
+        let _ = child.kill();
+        let _ = child.wait();
+        ensure!(wrong_parent.is_err(), "unrelated_parent_was_accepted");
+        let pinned = pinned?;
+        ensure!(live_owner(&pinned).is_err(), "exited_owner_was_accepted");
+        Ok(())
+    }
 
     #[test]
     fn includes_child_spawned_by_non_leader_thread() -> Result<()> {
