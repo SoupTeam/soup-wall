@@ -20,6 +20,10 @@ on:
         description: Run only native Ubuntu 24.04 preparation qualification
         type: boolean
         default: false
+      preparation_concurrency:
+        description: Exercise SOU-139 concurrent native prerequisite and Agent source preparation
+        type: boolean
+        default: false
       storage_recovery_only:
         description: Run targeted native storage recovery on the prepared pilot
         type: boolean
@@ -552,6 +556,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_switch_prepared_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_preparation_coordination.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_cleanup.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_build_native_pilot_inputs.py -v
       - name: Verify disposable runner administration boundary before building
@@ -561,10 +566,53 @@ jobs:
       - name: Build accepted selected runtimes without global installation
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          PILOT_CONCURRENT_PREPARATION: ${{ github.event.inputs.preparation_concurrency }}
+          NATIVE_ONLY: ${{ github.event.inputs.native_preparation_only }}
         shell: bash
         run: |
           set -euo pipefail
           : "${RUNNER_TEMP:?}"
+          if [[ "$PILOT_CONCURRENT_PREPARATION" == true && "$NATIVE_ONLY" != true ]]; then
+            echo 'Concurrent preparation requires the focused native-only dispatch' >&2
+            exit 1
+          fi
+          await_preparation_owner() {
+            python3 -B - "$1" "$2" "$3" <<'PY'
+          import fcntl, json, os, sys, time
+          from pathlib import Path
+          lock = Path(sys.argv[1]) / '.pilot-input-preparation.lock'
+          owner = Path('/proc') / sys.argv[2] / 'stat'
+          record = Path(sys.argv[3])
+          deadline = time.monotonic() + 45
+          while time.monotonic() < deadline:
+              try:
+                  fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+              except FileNotFoundError:
+                  pass
+              else:
+                  try:
+                      try:
+                          fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                      except BlockingIOError:
+                          raise SystemExit(0)
+                  finally:
+                      os.close(fd)
+              try:
+                  exited = owner.read_text().split()[2] == 'Z'
+              except OSError:
+                  exited = True
+              if exited:
+                  try:
+                      row = json.loads(record.read_bytes()[:1024])
+                      detail = ':'.join(str(row.get(key, 'unknown'))[:300]
+                                        for key in ('status', 'stage', 'reason'))
+                  except (OSError, ValueError, TypeError):
+                      detail = 'bounded_result_unavailable'
+                  raise SystemExit('owner_exited_before_lock: ' + detail)
+              time.sleep(.05)
+          raise SystemExit('owned preparation lock was not observed within 45 seconds')
+          PY
+          }
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets"
           curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/node.tar.xz"
@@ -605,20 +653,45 @@ jobs:
           fi
           cat "$RUNNER_TEMP/sou111-assets/native-plan.json"
           start="$(date +%s)"
-          if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
-            "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-first.json"; then
-            cp "$RUNNER_TEMP/sou111-assets/native-first.json" \
-              "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
-            cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
-            exit 1
-          fi
-          finish="$(date +%s)"
-          if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
-            "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-reused.json"; then
-            cp "$RUNNER_TEMP/sou111-assets/native-reused.json" \
-              "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
-            cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
-            exit 1
+          if [[ "$PILOT_CONCURRENT_PREPARATION" == true ]]; then
+            python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-first.json" &
+            native_owner=$!
+            await_preparation_owner "$RUNNER_TEMP/sou111-native-prerequisites" \
+              "$native_owner" "$RUNNER_TEMP/sou111-assets/native-first.json"
+            python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              --wait-seconds 2700 "${native_args[@]}" \
+              > "$RUNNER_TEMP/sou111-assets/native-reused.json" &
+            native_waiter=$!
+            if ! wait "$native_owner"; then
+              kill "$native_waiter" 2>/dev/null || true
+              wait "$native_waiter" 2>/dev/null || true
+              cat "$RUNNER_TEMP/sou111-assets/native-first.json"
+              exit 1
+            fi
+            finish="$(date +%s)"
+            if ! wait "$native_waiter"; then
+              cp "$RUNNER_TEMP/sou111-assets/native-reused.json" \
+                "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              exit 1
+            fi
+          else
+            if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-first.json"; then
+              cp "$RUNNER_TEMP/sou111-assets/native-first.json" \
+                "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              exit 1
+            fi
+            finish="$(date +%s)"
+            if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-reused.json"; then
+              cp "$RUNNER_TEMP/sou111-assets/native-reused.json" \
+                "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              exit 1
+            fi
           fi
           marker="$RUNNER_TEMP/sou111-native-prerequisites/current.json"
           marker_before="$(sha256sum "$marker" | cut -d ' ' -f1)"
@@ -651,6 +724,10 @@ jobs:
           assert recovered['status'] == 'reused'
           assert all(result[role] == repeated[role] == recovered[role]
                      for role in ('git', 'bwrap', 'receipt'))
+          if os.environ.get('PILOT_CONCURRENT_PREPARATION') == 'true':
+              assert repeated['contended'] is True
+              assert len(list((Path(os.environ['RUNNER_TEMP']) /
+                               'sou111-native-prerequisites/generations').iterdir())) == 1
           receipt = json.loads(Path(result['receipt']).read_text())
           summary = {'status': 'prepared-not-qualified', 'reused': True,
                      'bad_digest_refused': True, 'old_generation_preserved': True,
@@ -678,9 +755,28 @@ jobs:
             fi
           }
           source_build "$RUNNER_TEMP/sou111-assets/source-plan.json" "${source_args[@]}"
-          source_build "$RUNNER_TEMP/sou111-assets/source-first.json" --build "${source_args[@]}"
-          reuse_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
-          source_build "$RUNNER_TEMP/sou111-assets/source-reused.json" --build "${source_args[@]}"
+          if [[ "$PILOT_CONCURRENT_PREPARATION" == true ]]; then
+            source_build "$RUNNER_TEMP/sou111-assets/source-first.json" --build \
+              "${source_args[@]}" &
+            source_owner=$!
+            await_preparation_owner "$RUNNER_TEMP/sou119-agent-build" \
+              "$source_owner" "$RUNNER_TEMP/sou111-assets/source-first.json"
+            reuse_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
+            source_build "$RUNNER_TEMP/sou111-assets/source-reused.json" --build \
+              --wait-seconds 2700 "${source_args[@]}" &
+            source_waiter=$!
+            if ! wait "$source_owner"; then
+              kill "$source_waiter" 2>/dev/null || true
+              wait "$source_waiter" 2>/dev/null || true
+              cat "$RUNNER_TEMP/sou111-assets/source-first.json"
+              exit 1
+            fi
+            wait "$source_waiter"
+          else
+            source_build "$RUNNER_TEMP/sou111-assets/source-first.json" --build "${source_args[@]}"
+            reuse_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
+            source_build "$RUNNER_TEMP/sou111-assets/source-reused.json" --build "${source_args[@]}"
+          fi
           reuse_finish="$(python3 -c 'import time; print(time.monotonic_ns())')"
           source_marker="$RUNNER_TEMP/sou119-agent-build/current.json"
           marker_before="$(sha256sum "$source_marker" | cut -d ' ' -f1)"
@@ -722,10 +818,41 @@ jobs:
                          ['git', 'rev-parse', 'HEAD'], text=True, timeout=10).strip(),
                      'binary_sha256': binaries}
           (asset / 'source-summary.json').write_text(json.dumps(summary, sort_keys=True) + '\n')
-          (asset / 'source-build-timing.json').write_text(json.dumps({
-              'clean_build_seconds': rows['first']['build_seconds'],
-              'verified_reuse_seconds': round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3),
-          }, sort_keys=True) + '\n')
+          timing = {'clean_build_seconds': rows['first']['build_seconds']}
+          elapsed = round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3)
+          if os.environ.get('PILOT_CONCURRENT_PREPARATION') == 'true':
+              assert rows['reused']['contended'] is True
+              assert len(list((output / 'generations').iterdir())) == 1
+              timing['concurrent_wait_and_verified_reuse_seconds'] = elapsed
+              native_first = json.loads((asset / 'native-first.json').read_text())
+              native_reused = json.loads((asset / 'native-reused.json').read_text())
+              native_root = Path(os.environ['RUNNER_TEMP']) / 'sou111-native-prerequisites'
+              native_generations = list((native_root / 'generations').iterdir())
+              source_generations = list((output / 'generations').iterdir())
+              assert len(native_generations) == len(source_generations) == 1
+              assert (native_generations[0] / 'git-build.log').is_file()
+              assert (source_generations[0] / 'cargo-bins.log').is_file()
+              assert native_reused['status'] == 'reused' and native_reused['contended'] is True
+              assert native_first['receipt'] == native_reused['receipt']
+              report = {'format': 'sou139-native-concurrent-preparation/1',
+                        'status': 'passed',
+                        'source_commit': json.loads(receipt.read_text())['source']['commit'],
+                        'native': {'requests': 2, 'completed_build_invocations': 1,
+                                   'duplicate_builds_avoided': 1,
+                                   'receipt_sha256': hashlib.sha256(
+                                       Path(native_first['receipt']).read_bytes()).hexdigest(),
+                                   'waited_seconds': native_reused['waited_seconds']},
+                        'source': {'requests': 2, 'completed_build_invocations': 1,
+                                   'duplicate_builds_avoided': 1,
+                                   'receipt_sha256': hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                                   'waited_seconds': rows['reused']['waited_seconds']},
+                        'build_is_runtime_qualification': False,
+                        'active_protection_claim': False}
+              (asset / 'concurrent-preparation.json').write_text(
+                  json.dumps(report, sort_keys=True) + '\n')
+          else:
+              timing['verified_reuse_seconds'] = elapsed
+          (asset / 'source-build-timing.json').write_text(json.dumps(timing, sort_keys=True) + '\n')
           with Path(os.environ['GITHUB_ENV']).open('a') as environment:
               for role, variable in (('agentfw', 'SOU119_AGENTFW'),
                                      ('git_launcher', 'SOU119_GIT_LAUNCHER'),
@@ -1281,6 +1408,7 @@ jobs:
             ${{ runner.temp }}/sou111-assets/source-recovered.json
             ${{ runner.temp }}/sou111-assets/source-summary.json
             ${{ runner.temp }}/sou111-assets/source-build-timing.json
+            ${{ runner.temp }}/sou111-assets/concurrent-preparation.json
             ${{ runner.temp }}/sou111-assets/runtime-timing.json
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
             ${{ runner.temp }}/front-door/report.json
