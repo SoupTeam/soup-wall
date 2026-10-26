@@ -689,6 +689,8 @@ def _metric(name, better, value, keys, base_states, cand_states, paired):
         diff = {"lower": low, "upper": high, "includes_zero": low <= 0 <= high}
     if diff is None:
         overall = "not_established: zero planned units"
+    elif len(base_eval) == len(cand_eval) == planned:
+        overall = "not_established: no missing outcomes, but no uncertainty is computed"
     elif diff["includes_zero"]:
         overall = "not_established: missing-outcome bounds include zero"
     else:
