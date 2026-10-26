@@ -40,8 +40,11 @@ removal and repeated-apply refusal. The member race observes the delayed staging
 syscall while the original source descriptor is open before performing its
 replacement. Product deadlines and witness success requirements are preserved.
 
-Subsequent delivery changes only document and retain this evidence; executable
-sources, tests and workflow at the qualified revision remain unchanged.
+Subsequent delivery changes retain this evidence and update the CI coverage
+guard to recognize the explicit operations dispatch input. The guard continues
+to reject unknown conditions and checks that this focused mode cannot replace
+ordinary PR lifecycle/audit gates. Executable sources, their operations tests
+and the workflows at the qualified revision remain unchanged.
 
 ## Retained failures
 
