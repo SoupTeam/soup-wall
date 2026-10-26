@@ -244,6 +244,16 @@ def _case(task_index, attacked):
     return f"{task}/{INJECTION_TASKS[task_index]}" if attacked else f"{task}/benign"
 
 
+def unknowns_overlay(run_value):
+    """Declare every enforced outcome of a run unknown (synthetic all-unknown control)."""
+    return {"schema": pr.UNKNOWNS_SCHEMA, "run_report_sha256": protocol.digest(encode(run_value)),
+            "provenance": {"kind": "synthetic", "assigned_by": "SOU-153 control generator",
+                           "basis": "all-unknown control: no evaluator outcome is treated as known"},
+            "trajectories": [{"case_id": row["case_id"], "repetition": row["repetition"],
+                              "reason": "synthetic control: evaluator outcome declared unknown"}
+                             for row in run_value["cases"] if row["defended"]]}
+
+
 def scenarios():
     """name -> candidate plan/run bytes, which inputs to pass, and the expected status and codes."""
     base_plan = plan("baseline")
@@ -251,13 +261,14 @@ def scenarios():
     result = {}
 
     def add(name, cplan, crun, expected_exit, codes, note, inputs="inputs.json", families=False,
-            status=None, raw_run=None, raw_plan=None):
+            status=None, raw_run=None, raw_plan=None, unknowns=None):
         if status is None:
             status = {0: "verified_comparable", 1: "non_comparable", 2: "non_comparable"}[expected_exit]
         result[name] = {"plan": raw_plan if raw_plan is not None else encode(cplan),
                         "run": raw_run if raw_run is not None else encode(crun), "inputs": inputs,
                         "families": families, "expected_exit": expected_exit, "expected_status": status,
-                        "expected_codes": codes, "note": note}
+                        "expected_codes": codes, "note": note,
+                        "unknowns": encode(unknowns) if unknowns is not None else None}
 
     add("improved", cand_plan, run("candidate", cand_plan, improved_outcome), 0, [],
         "candidate denies five more attacks; benign outcomes unchanged")
@@ -275,6 +286,13 @@ def scenarios():
         ["case_semantic_input_unverified", "semantic_families_unbound"],
         "improved with a bundle that designates no case manifest and separate --families",
         inputs="inputs-no-manifest.json", families=True, status="conditionally_comparable")
+    all_unknown_run = run("candidate", cand_plan, improved_outcome)
+    add("all_unknown", cand_plan, all_unknown_run, 0, ["unknown_outcomes_declared_overlay"],
+        "every candidate enforced outcome declared unknown by a bound annotation; zero paired-evaluable units",
+        status="conditionally_comparable", unknowns=unknowns_overlay(all_unknown_run))
+    add("unknowns_wrong_run", cand_plan, run("candidate", cand_plan, regressed_outcome), 2,
+        ["unknowns_binding_failed"], "unknown annotation bound to a different run report",
+        unknowns=unknowns_overlay(all_unknown_run))
     reduced = cases()[:-2]
     missing_plan = plan("candidate", reduced)
     add("missing_case", missing_plan, run("candidate", missing_plan, baseline_outcome), 1,
@@ -328,10 +346,14 @@ def write_controls(out_dir: Path):
         directory.mkdir()
         (directory / "candidate-plan.json").write_bytes(scenario["plan"])
         (directory / "candidate-run.json").write_bytes(scenario["run"])
+        if scenario["unknowns"] is not None:
+            (directory / "candidate-unknowns.json").write_bytes(scenario["unknowns"])
         result, code = pr.compare(controls / "baseline-plan.json", controls / "baseline-run.json",
                                   directory / "candidate-plan.json", directory / "candidate-run.json",
                                   controls / scenario["inputs"] if scenario["inputs"] else None,
-                                  controls / "families.json" if scenario["families"] else None)
+                                  controls / "families.json" if scenario["families"] else None,
+                                  candidate_unknowns=directory / "candidate-unknowns.json"
+                                  if scenario["unknowns"] is not None else None)
         pr.write_result(out_dir / "results" / name, result)
         codes = sorted(({r["code"] for r in result["comparability"]["reasons"]} |
                         {e["code"] for e in result["input_validity"]["errors"]} |

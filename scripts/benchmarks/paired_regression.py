@@ -41,6 +41,7 @@ import agentdojo_protocol as protocol
 SCHEMA = "soup-wall-paired-regression/1"
 INPUTS_SCHEMA = "soup-wall-paired-regression-inputs/1"
 FAMILIES_SCHEMA = "soup-wall-paired-regression-families/1"
+UNKNOWNS_SCHEMA = "soup-wall-paired-regression-unknowns/1"
 DEFAULT_LIMITS = {
     "max_file_bytes": 8 * 1024 * 1024,
     "max_plan_cases": 5_000,
@@ -240,6 +241,35 @@ def load_inputs(path, limits):
     if bundle["case_manifest"] is not None and bundle["case_manifest"] not in files:
         raise Rejected("invalid_inputs_bundle", "case_manifest must be null or the path of a bundled src/ file")
     return bundle, protocol.digest(raw)
+
+
+def load_unknowns(path, limits):
+    """Declared unknown evaluator outcomes for one run; matched/1 itself never reports them."""
+    raw = read_bounded(path, limits["max_file_bytes"])
+    data = parse(raw)
+    keys = {"schema", "run_report_sha256", "provenance", "trajectories"}
+    if not isinstance(data, dict) or set(data) != keys or data["schema"] != UNKNOWNS_SCHEMA:
+        raise Rejected("invalid_unknowns", f"unknowns must be {UNKNOWNS_SCHEMA} with fields {sorted(keys)}")
+    provenance = data["provenance"]
+    if not isinstance(provenance, dict) or set(provenance) != {"kind", "assigned_by", "basis"} or \
+            not all(_text(value) for value in provenance.values()):
+        raise Rejected("invalid_unknowns", "provenance needs text kind, assigned_by and basis")
+    if not protocol._hash(data["run_report_sha256"]):
+        raise Rejected("invalid_unknowns", "run_report_sha256 must be a SHA-256")
+    entries = data["trajectories"]
+    if not isinstance(entries, list) or len(entries) > limits["max_run_rows"]:
+        raise Rejected("invalid_unknowns", "trajectories must be a bounded list")
+    seen = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"case_id", "repetition", "reason"} or \
+                not isinstance(entry["case_id"], str) or type(entry["repetition"]) is not int or \
+                not _text(entry["reason"]):
+            raise Rejected("invalid_unknowns", "each trajectory needs case_id, integer repetition and a reason")
+        key = (entry["case_id"], entry["repetition"])
+        if key in seen:
+            raise Rejected("invalid_unknowns", f"trajectory {key} listed twice")
+        seen.add(key)
+    return data, protocol.digest(raw)
 
 
 def load_families(path, limits):
@@ -578,16 +608,50 @@ def unit_states(side):
     return states
 
 
+def apply_unknowns(states, overlay, side) -> list[str]:
+    """Mark declared unknown evaluator outcomes; the recorded Booleans are withheld, never used."""
+    if overlay is None:
+        return []
+    data = overlay["data"]
+    if data["run_report_sha256"] != side["run_sha256"]:
+        return ["unknowns run_report_sha256 differs from the SHA-256 of the supplied run report"]
+    problems = []
+    for entry in data["trajectories"]:
+        key = (entry["case_id"], entry["repetition"])
+        state = states.get(key)
+        if state is None or state["status"] != "evaluable":
+            problems.append(f"{key}: an unknown outcome must refer to a recorded enforced trajectory")
+            continue
+        # Evaluator Booleans are withheld; Deny/Ask stay observable policy decisions.
+        states[key] = {"status": "unknown", "reason": entry["reason"], "undefended": state["undefended"],
+                       "attacked": state["attacked"], "decision_row": state["row"]}
+    return problems
+
+
 def denominators(states):
     result = {}
     for domain, keep in (("all", lambda s: True), ("attacked", lambda s: s["attacked"]),
                          ("benign", lambda s: not s["attacked"])):
         selected = [s for s in states.values() if keep(s)]
         count = Counter(s["status"] for s in selected)
-        result[domain] = {"planned": len(selected), "attempted": count["evaluable"] + count["incomplete"],
-                          "evaluable": count["evaluable"], "incomplete": count["incomplete"],
-                          "not_run": count["not_run"]}
+        result[domain] = {"planned": len(selected),
+                          "attempted": count["evaluable"] + count["unknown"] + count["incomplete"],
+                          "evaluable": count["evaluable"], "unknown": count["unknown"],
+                          "incomplete": count["incomplete"], "not_run": count["not_run"]}
     return result
+
+
+def unknown_summary(states_by_role, overlays):
+    if not any(overlays.values()):
+        return dict(UNKNOWN)
+    return {"availability": "declared_overlay",
+            "reason": "unknown outcomes come from a declared soup-wall-paired-regression-unknowns/1 annotation "
+                      "bound to the run report, not from the matched/1 producer; they are neither successes nor "
+                      "failures and count as missing in the missing-outcome bounds",
+            **{role: {"count": sum(s["status"] == "unknown" for s in states.values()),
+                      "provenance": overlays[role]["data"]["provenance"] if overlays[role] else None,
+                      "sha256": overlays[role]["sha256"] if overlays[role] else None}
+               for role, states in states_by_role.items()}}
 
 
 def failures(states):
@@ -663,8 +727,10 @@ def _interrupted(row):
 
 
 def decisions(states, keys):
-    rows = [states[key]["row"] for key in keys if states[key]["status"] == "evaluable"]
-    return {"evaluable": len(rows), "deny_observed": sum(r["deny"] > 0 for r in rows),
+    """Observed policy decisions on every recorded enforced trajectory, including unknown outcomes."""
+    rows = [states[key].get("row") or states[key].get("decision_row") for key in keys
+            if states[key]["status"] in ("evaluable", "unknown")]
+    return {"recorded_trajectories": len(rows), "deny_observed": sum(r["deny"] > 0 for r in rows),
             "ask_observed": sum(r["approval_required"] > 0 for r in rows),
             "interrupted": sum(_interrupted(r) for r in rows)}
 
@@ -717,13 +783,17 @@ def _unit_view(state):
                     approval_required=row["approval_required"])
     elif state["status"] == "incomplete":
         view.update(reason=state["reason"], error_type=state["error_type"])
+    elif state["status"] == "unknown":
+        row = state["decision_row"]
+        view.update(reason=state["reason"], evaluator_outcomes="withheld", deny=row["deny"],
+                    approval_required=row["approval_required"])
     return view
 
 
 # ---------------------------------------------------------------- driver
 
 def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_path=None, families_path=None,
-            limits=None):
+            limits=None, baseline_unknowns=None, candidate_unknowns=None):
     """Return ``(result, exit_code)``. Never raises for bad inputs; they become explicit statuses."""
     limits = dict(DEFAULT_LIMITS, **(limits or {}))
     errors, inputs = [], []
@@ -735,20 +805,27 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
               "readiness_verdict": None, "limitations": LIMITATIONS}
     base = load_side("baseline", baseline_plan, baseline_run, limits, inputs, errors)
     cand = load_side("candidate", candidate_plan, candidate_run, limits, inputs, errors)
-    bundle = families = None
-    for role, path, loader in (("inputs", inputs_path, load_inputs), ("families", families_path, load_families)):
+    optional = {}
+    for role, path, loader in (("inputs", inputs_path, load_inputs), ("families", families_path, load_families),
+                               ("baseline_unknowns", baseline_unknowns, load_unknowns),
+                               ("candidate_unknowns", candidate_unknowns, load_unknowns)):
         if path is None:
             continue
         try:
             data, sha = loader(path, limits)
             inputs.append({"role": role, "file": Path(path).name, "sha256": sha, "bytes": os.stat(path).st_size})
-            if role == "inputs":
-                bundle = data
-            else:
-                families = {"data": data, "sha256": sha}
+            optional[role] = {"data": data, "sha256": sha}
         except Rejected as error:
             errors.append(_error(error.code, role, error.detail))
             inputs.append({"role": role, "file": Path(path).name, "sha256": None, "bytes": None})
+    bundle = optional["inputs"]["data"] if "inputs" in optional else None
+    families = optional.get("families")
+    overlays = {"baseline": optional.get("baseline_unknowns"), "candidate": optional.get("candidate_unknowns")}
+    if not errors:
+        base_states, cand_states = unit_states(base), unit_states(cand)
+        for role, side, states in (("baseline", base, base_states), ("candidate", cand, cand_states)):
+            errors.extend(_error("unknowns_binding_failed", f"{role}_unknowns", problem)
+                          for problem in apply_unknowns(states, overlays[role], side)[:20])
     result["input_validity"] = {"status": "invalid" if errors else "valid", "errors": errors}
     if errors:
         result["comparability"] = {"status": "non_comparable", "gaps": [], "reasons": [
@@ -791,6 +868,9 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     elif families["binding"] == "declared_unbound":
         gaps.append(_reason("semantic_families_unbound",
                             "--families is a separate declaration not bound to the recorded source inventory"))
+    if any(overlays.values()):
+        gaps.append(_reason("unknown_outcomes_declared_overlay",
+                            "unknown outcomes are a declared annotation bound to the run report, not producer output"))
     status = "non_comparable" if reasons else "conditionally_comparable" if gaps else "verified_comparable"
     result["comparability"] = {"status": status, "reasons": reasons, "gaps": [] if reasons else gaps,
                                "statuses": {
@@ -804,14 +884,15 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
                                "pins": {"baseline": pins(base), "candidate": pins(cand),
                                         "differs": _diff_keys(pins(base), pins(cand)),
                                         "note": "pins are producer declarations checked for run/plan consistency"}}
-    base_states, cand_states = unit_states(base), unit_states(cand)
     per_side = {"baseline": denominators(base_states), "candidate": denominators(cand_states)}
+    result["unknown"] = unknown_summary({"baseline": base_states, "candidate": cand_states}, overlays)
     result["completeness"] = {
         "status": "per_side_only",
         "definitions": {
             "planned": "case x repetition units in the frozen plan set",
-            "attempted": "units whose execution started: evaluable or stopped there",
+            "attempted": "units whose execution started: evaluable, unknown, or stopped there",
             "evaluable": "units with an enforced trajectory and recorded evaluator outcomes",
+            "unknown": "recorded enforced trajectories whose evaluator outcome a bound annotation declares unknown",
             "incomplete": "the unit where the run stopped; evaluators were not reported",
             "not_run": "planned units never started",
             "paired_evaluable": "units evaluable in both runs"},
@@ -831,6 +912,7 @@ def compare(baseline_plan, baseline_run, candidate_plan, candidate_run, inputs_p
     result["grouping"], dependency, family_of, units = grouping(cases, families)
     by_id = {case["case_id"]: case for case in cases}
     result["outcomes"] = outcomes(base_states, cand_states)
+    result["outcomes"]["unknown"] = result["unknown"]
     result["units"] = [{
         "case_id": key[0], "repetition": key[1],
         "expected_label": "attack" if base_states[key]["attacked"] else "benign",
@@ -869,6 +951,8 @@ def main(argv=None) -> int:
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--inputs", help=f"{INPUTS_SCHEMA} source bundle binding both plans to source bytes")
     parser.add_argument("--families", help=f"{FAMILIES_SCHEMA} declared semantic families")
+    for role in ("baseline", "candidate"):
+        parser.add_argument(f"--{role}-unknowns", help=f"{UNKNOWNS_SCHEMA} annotation bound to the {role} run report")
     parser.add_argument("--out-dir", required=True, help="new or empty directory for comparison.json")
     args = parser.parse_args(argv)
     out_dir = Path(args.out_dir)
@@ -876,7 +960,7 @@ def main(argv=None) -> int:
         print("usage error: --out-dir must be a new or empty directory", file=sys.stderr)
         return EXIT_USAGE
     result, code = compare(args.baseline_plan, args.baseline_run, args.candidate_plan, args.candidate_run,
-                           args.inputs, args.families)
+                           args.inputs, args.families, None, args.baseline_unknowns, args.candidate_unknowns)
     destination = write_result(out_dir, result)
     print(summary_line(result, code))
     print(f"wrote {destination}")

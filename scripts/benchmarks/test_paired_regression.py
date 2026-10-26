@@ -93,7 +93,8 @@ class Controls(Fixture):
         self.assertEqual(result["completeness"]["status"], "partial")
         self.assertEqual(result["completeness"]["paired"]["paired_evaluable"], 18)
         self.assertEqual(result["completeness"]["candidate"]["all"],
-                         {"planned": 48, "attempted": 19, "evaluable": 18, "incomplete": 1, "not_run": 29})
+                         {"planned": 48, "attempted": 19, "evaluable": 18, "unknown": 0, "incomplete": 1,
+                          "not_run": 29})
         # Conditional on the evaluated subset the candidate looks perfect ...
         self.assertEqual(security["paired_conditional"]["difference"], -1.0)
         # ... but on the fixed planned set missing outcomes may all be missed attacks.
@@ -378,6 +379,62 @@ class Families(Fixture):
         self.assertEqual(grouping["dependency_clusters"]["count"], 3)
         self.assertEqual(dependency[cases[1]["case_id"]], dependency[cases[2]["case_id"]])
         self.assertEqual(grouping["semantic_families"]["status"], "unavailable")
+
+
+class Unknowns(Fixture):
+    def overlay_compare(self, run_value, overlay):
+        directory = Path(tempfile.mkdtemp(dir=self.temp))
+        plan_path = write(directory, "candidate-plan.json", controls.plan("candidate"))
+        run_path = write(directory, "candidate-run.json", run_value)
+        return pr.compare(self.controls / "baseline-plan.json", self.controls / "baseline-run.json",
+                          plan_path, run_path, self.controls / "inputs.json",
+                          candidate_unknowns=write(directory, "unknowns.json", overlay))
+
+    def test_all_unknown_control_has_no_evaluable_outcomes_and_no_success(self):
+        result = self.result("all_unknown")
+        self.assertEqual(result["comparability"]["status"], "conditionally_comparable")
+        self.assertEqual(result["unknown"]["availability"], "declared_overlay")
+        self.assertEqual(result["unknown"]["candidate"]["count"], 48)
+        self.assertEqual(result["completeness"]["candidate"]["all"],
+                         {"planned": 48, "attempted": 48, "evaluable": 0, "unknown": 48, "incomplete": 0,
+                          "not_run": 0})
+        for name in ("security", "utility", "utility_under_attack", "benign_interruption"):
+            with self.subTest(metric=name):
+                metric = result["outcomes"][name]
+                self.assertEqual(metric["candidate"]["missing_outcome_bounds"], [0.0, 1.0])
+                self.assertEqual(metric["paired_conditional"]["status"], "zero_denominator")
+                self.assertTrue(metric["overall_change"].startswith("not_established"))
+        self.assertEqual(result["units"][0]["candidate"]["evaluator_outcomes"], "withheld")
+
+    def test_unknown_outcomes_keep_observed_policy_decisions(self):
+        decisions = self.result("all_unknown")["outcomes"]["policy_decisions"]["candidate"]
+        # improved_outcome denies 11 attacked tasks x 2 repetitions and asks on one benign task x 2.
+        self.assertEqual((decisions["attacked"]["deny_observed"], decisions["benign"]["ask_observed"]), (22, 2))
+
+    def test_an_unknown_annotation_must_bind_to_the_compared_run(self):
+        result = self.result("unknowns_wrong_run")
+        self.assertEqual(result["input_validity"]["errors"][0]["code"], "unknowns_binding_failed")
+
+    def test_unknowns_cannot_mark_stopped_or_unrun_units(self):
+        cand_plan = controls.plan("candidate")
+        stopped = controls.run("candidate", cand_plan, controls.baseline_outcome,
+                               stop=(controls._case(0, False), 2, True, "runtime_error"))
+        overlay = controls.unknowns_overlay(stopped)
+        overlay["trajectories"].append({"case_id": controls._case(5, True), "repetition": 1, "reason": "x"})
+        result, code = self.overlay_compare(stopped, overlay)
+        self.assertEqual(code, pr.EXIT_INVALID)
+        self.assertIn("must refer to a recorded enforced trajectory", json.dumps(result["input_validity"]))
+
+    def test_duplicate_unknown_entries_are_rejected(self):
+        run_value = controls.run("candidate", controls.plan("candidate"), controls.improved_outcome)
+        overlay = controls.unknowns_overlay(run_value)
+        overlay["trajectories"].append(dict(overlay["trajectories"][0]))
+        result, code = self.overlay_compare(run_value, overlay)
+        self.assertEqual(code, pr.EXIT_INVALID)
+        self.assertIn("invalid_unknowns", self.codes(result))
+
+    def test_without_an_annotation_unknown_is_unavailable(self):
+        self.assertEqual(self.result("improved")["unknown"]["availability"], "unavailable")
 
 
 class Bounds(Fixture):
