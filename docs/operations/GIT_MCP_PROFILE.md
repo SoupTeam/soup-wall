@@ -377,3 +377,19 @@ cannot create a Completion after withdrawal; it adds no production hook. A known
 withdrawn collector View receives its correlated refusal before any worker error
 propagates. Incomplete execution still retires the uncertain old session; a fresh
 protected session must pass after restoring the owned source.
+
+Healthy qualification sessions explicitly request and verify the production
+default ten-second liveness lease. The earlier [run #185](https://github.com/SoupTeam/soup-wall/actions/runs/40355477933)
+requested two seconds and failed on `native_liveness_uncertain` after FILE ID10;
+FILE IDs20/21 were not reached. That failed short-lease workload remains evidence,
+and healthy execution with a two-second lease is not claimed. Request/response
+timing does not establish its full cause. Production liveness code/defaults,
+the five-second worker/first-pending bounds and approval TTLs are unchanged.
+
+A separate negative requests and verifies a two-second lease, pauses its owned
+collector through a pinned pidfd, and requires `native_session_expired` for that
+exact session and epoch. It requires zero worker reservations/new original
+results, terminal liveness uncertainty and independently observed cleanup.
+Namespace-owner termination (which has its own 1500 ms guard) is not expiry
+evidence. A new ten-second session must return the original bytes; the expired
+session is never revived or retried.

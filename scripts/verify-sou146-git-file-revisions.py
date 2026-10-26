@@ -27,6 +27,7 @@ GIT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GIT)
 BASE, INSTALL = GIT.BASE, GIT.INSTALL
 APPROVAL = GIT.load("sou146_approval", "verify-sou105-selected-approval.py")
+LEASE = GIT.load("sou146_git_lease", "native_git_liveness_control.py")
 require, sha, write = BASE.require, BASE.sha, BASE.write
 CLASSIFIER = ROOT / "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py"
 PATHS = ("notes.txt", "docs/機能 notes.txt", "docs/café.txt", ".hidden.txt")
@@ -160,7 +161,7 @@ def mapped_source_controls(stack, second, report):
     require(BASE.snapshot(stack.workspace) == snapshot, "mapped-source controls changed owned repository state")
 
 
-def collector(stack, log, *, legacy=False, bound=None):
+def collector(stack, log, *, legacy=False, bound=None, lease_seconds=LEASE.HEALTHY_LEASE_SECONDS):
     python = stack.install / "package/python/bin/python3.11"
     env = dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.profile), AGENTFW_CLASSIFIER="rule-baseline",
         AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py" if legacy else CLASSIFIER),
@@ -179,17 +180,25 @@ def collector(stack, log, *, legacy=False, bound=None):
         token = APPROVAL.command(args, env, "child-authority", "mint", "--session", "host-" + bound,
             "--server", "sou146-git", "--agent-id", "agent-" + bound, "--instance-id", instance,
             "--ttl-seconds", "120", "--tools", ",".join(tools))
-        env.update(AGENTFW_NATIVE_LIVENESS="true", AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS="2",
+        env.update(AGENTFW_NATIVE_LIVENESS="true", AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS=str(lease_seconds),
             AGENTFW_MCP_SESSION="collector-" + bound)
         extra = ["--host-session", "host-" + bound, "--child-authority", token, "--native-approval-wait-seconds", "25"]
-    return GIT.Client([str(stack.binary), "mcp", "--native-admission", "--id", "sou146-git", *extra, "--",
+    client = GIT.Client([str(stack.binary), "mcp", "--native-admission", "--id", "sou146-git", *extra, "--",
         str(python), "-I", "-B", "-m", "mcp_server_git", "--repository", "/workspace"],
         env, stack.workspace, log, "protected file-revision original Git")
+    client.liveness_session_id = "collector-" + bound
+    return client
 
 
 def execution_config(config, profile):
     return dict(config, native={**config["native"], "git_execution": {
         "profile_path": str(profile), "profile_sha256": sha(profile), "server_id": "sou146-git"}})
+
+
+def healthy_lease(stack, client, report, label):
+    epoch = LEASE.enrolled_epoch(LEASE.audit_rows(stack.audit), client.liveness_session_id, LEASE.HEALTHY_LEASE_SECONDS)
+    report.setdefault("healthy_leases", []).append({"case": label, "requested_seconds": LEASE.HEALTHY_LEASE_SECONDS,
+        "granted_seconds": LEASE.HEALTHY_LEASE_SECONDS, "epoch_sha256": hashlib.sha256(epoch.encode()).hexdigest()})
 
 
 def pinned_execution_profile(installed, workspace):
@@ -243,6 +252,7 @@ def exact_reads(stack, first, report):
         finally:
             client.close()
             report["direct_client"] = client.transcript()
+    report["original_read_sha256"] = {str(identifier): hashlib.sha256(raw).hexdigest() for identifier, raw in originals.items()}
     before = BASE.snapshot(stack.workspace)
     witness = GIT.RepositoryWitness(stack.workspace)
     path = stack.root / "collector.log"
@@ -251,6 +261,7 @@ def exact_reads(stack, first, report):
         try:
             client.initialize()
             report["reads"], report["refusals"] = [], []
+            healthy_lease(stack, client, report, "file-exact-reads")
             for identifier, (tool, args, ref) in enumerate(reads(first), 10):
                 witness.drain()
                 reserved = execution_start(stack)
@@ -328,6 +339,7 @@ def legacy_refusal(stack, report):
         try:
             client.initialize()
             report["legacy_refusals"] = []
+            healthy_lease(stack, client, report, "BASE-ID200")
             for identifier, ref in enumerate(REFS, 10):
                 for tool, key, offset in (("git_show", "revision", 0), ("git_diff", "target", 100)):
                     response, _ = client.exchange(GIT.call(identifier + offset, tool, {key: ref}))
@@ -464,7 +476,7 @@ def policy_controls(stack, config, second, report):
     policy = stack.root / "ask-policy.yaml"
     policy.write_text("agent_policies:\n  - name: sou146-owned-read\n    when: { action_class: read_only }\n    action: ask\ndefault: allow\n")
     selected = dict(config, policy=str(policy), native={**config["native"], "approval": {"ttl_seconds": 30},
-        "liveness": {"default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100}})
+        "liveness": {"default_lease_seconds": LEASE.HEALTHY_LEASE_SECONDS, "max_lease_seconds": 60, "maintenance_interval_ms": 100}})
     start_daemon(stack, selected, "ask")
     report["approval_controls"] = []
     ref = stack.workspace / ".git/refs/heads/main"
@@ -477,6 +489,7 @@ def policy_controls(stack, config, second, report):
             opened = None
             try:
                 client.initialize()
+                healthy_lease(stack, client, report, "Ask-" + case)
                 witness.drain()
                 frame = GIT.call(50, "git_show", {"revision": REFS[0]})
                 reserved = execution_start(stack)
@@ -844,7 +857,7 @@ def run(args):
                 "policy": str(install / "policy.yaml"), "audit": str(output / "native-audit.jsonl"),
                 "native": {"registry_path": str(install / "registry.json"),
                 "registry_sha256": sha(install / "registry.json"), "liveness": {
-                    "default_lease_seconds": 2, "max_lease_seconds": 60, "maintenance_interval_ms": 100}}}
+                    "default_lease_seconds": LEASE.HEALTHY_LEASE_SECONDS, "max_lease_seconds": 60, "maintenance_interval_ms": 100}}}
             write(home / ".agentfw/config.yaml", config)
             stack = SimpleNamespace(root=output, binary=args.agentfw, git=args.git, workspace=workspace,
                 install=install, profile=execution_profile, env=env, daemon=None, port=port,
@@ -925,6 +938,10 @@ def run(args):
             config = execution_config(config, stack.profile)
             daemon = start_daemon(stack, config, "file-revisions-execution")
             exact_reads(stack, first, report)
+            LEASE.qualify_short_lease(make_client=lambda log, seconds: collector(stack, log, lease_seconds=seconds),
+                make_call=lambda identifier: GIT.call(identifier, "git_show", {"revision": REFS[0]}),
+                audit=stack.audit, log_path=output / "short-lease-expiry.log", witness_factory=DaemonProcessWitness,
+                expected_sha256=report["original_read_sha256"]["10"], report=report)
             source_mutations(stack, first, first, report)
             mapped_source_controls(stack, first, report)
             daemon_source_substitution(stack, first, report)
