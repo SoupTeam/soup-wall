@@ -147,6 +147,30 @@ def main():
   evidence=rows[0]['execution'];require(evidence['original_result_sha256']==hashlib.sha256(raw).hexdigest() and evidence['original_result_bytes']==len(raw),'original_response_identity_changed')
   require(evidence['closure_sha256']==service['runtime']['closure_sha256'] and evidence['domain_witness'] is None,'source_closure_mismatch')
   report['cases'].append({'case':'actual-original-useful-read','status':'passed','execution':evidence})
+  # A distinct actual process can emit byte-identical original output. Possession
+  # of the ordinary ingress token still gives it only baseline inspection, never
+  # the daemon-private runtime/result capability.
+  alternate=subprocess.run([sys.executable,'-I','-B','-c',
+      'import sys;sys.stdout.buffer.write(sys.stdin.buffer.read(1048577))'],input=raw,
+      env=env,capture_output=True,timeout=10)
+  require(alternate.returncode==0 and alternate.stdout==raw,'alternate_same_bytes_control_broken')
+  native_session='unattested-alternate-'+uuid.uuid4().hex
+  def ordinary(event,fields=None):
+   return http('/native/v1',{'contract_version':'native/1',
+       'registry_sha256':config['native']['registry_sha256'],'session_id':native_session,
+       'event':event,**(fields or {})})
+  require(ordinary('session_start')['release'] is True,'alternate_baseline_session_failed')
+  tool=next(row for row in json.loads((installed/'registry.json').read_text())['tools'] if row['name']=='read_text_file')
+  issued=ordinary('call',{'tool':'read_text_file','args':invocation['params']['arguments'],
+      'schema_sha256':tool['schema_sha256'],'mcp_host_call_id':invocation['id']})
+  require(issued['release'] is True,'alternate_baseline_call_failed')
+  completed=ordinary('result',{'tool':'read_text_file','args':invocation['params']['arguments'],
+      'call_id':issued['call_id'],'content':alternate.stdout.decode('utf-8'),
+      'result_kind':'value','delivery':'mcp_host'})
+  require(completed['release'] is True and completed.get('execution') is None,'alternate_acquired_private_execution')
+  ordinary('session_end')
+  report['cases'].append({'case':'actual-alternate-process-identical-bytes-remains-unattested',
+      'status':'passed','byte_identical':True,'baseline_release':True,'execution_metadata':False})
   # Input-path replacement after capture cannot change the sealed running closure.
   entry=installed/'package'/install.SERVER_ENTRYPOINT if hasattr(install,'SERVER_ENTRYPOINT') else installed/'package/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js'
   original_entry=entry.read_bytes();entry.write_text('throw new Error("alternate formatter must not execute");\n')
@@ -221,6 +245,51 @@ def main():
   require(replay.close()!=0 and not replay.forced_cleanup,'token_replay_not_closed')
   require(not any(path.is_dir() for path in delegated.iterdir()),'replay_left_owned_inventory')
   report['cases'].append({'case':'retired-child-authority-replay','status':'passed','original_started':False})
+  # Kill only the independently observed outside owner of this initialized
+  # selected process, after successful adoption. This is not SOU142's separate
+  # pre-handback owner-self-loss delivery.
+  lost=client('owner-loss')
+  private=out/'daemon-positive.private.log'
+  require(private.stat().st_size<=2097152,'private_diagnostic_over_cap')
+  owners=[]
+  for line in private.read_text().splitlines():
+   try:item=json.loads(line)
+   except ValueError:continue
+   if item.get('event')=='mcp_real_owner_start':owners.append(item['owner'])
+  require(bool(owners),'actual_owner_identity_missing')
+  owner=owners[-1];owner_pid=owner['owner_pid']
+  require(type(owner_pid) is int and owner_pid not in (os.getpid(),daemon.pid,1),'invalid_owner_pid')
+  observed=Path(f'/proc/{owner_pid}/stat').read_text().rsplit(')',1)[1].split()
+  require(int(observed[19])==owner['owner_start_ticks'] and owner.get('original',{}).get('namespace_pid',0)>1,
+      'actual_owner_generation_changed')
+  require(Path(f'/proc/{owner_pid}/cgroup').read_text().strip()=='0::/system.slice/'+a.unit+'/manager',
+      'owner_outside_owned_unit')
+  os.kill(owner_pid,signal.SIGKILL)
+  try:lost.receive(timeout=5)
+  except (ValueError,RuntimeError):pass
+  else:raise RuntimeError('lost_owner_channel_released_result')
+  require(lost.close()!=0 and not lost.forced_cleanup,'lost_owner_transport_not_closed')
+  require(not any(path.is_dir() for path in delegated.iterdir()),'owner_loss_cleanup_incomplete')
+  # The dead owner cannot return a cleanup receipt. The service must retain
+  # that obligation, rather than presenting the missing receipt as success.
+  require(http('/native/v1/instance')['execution_service']['retained_host_entries']==1,
+      'unknown_owner_cleanup_discharged')
+  blocked=client('owner-loss-relaunch',initialize=False)
+  try:blocked.initialize()
+  except (ValueError,RuntimeError):pass
+  else:raise RuntimeError('unknown_owner_cleanup_relaunched')
+  require(blocked.close()!=0 and not blocked.forced_cleanup,'unknown_cleanup_relaunch_not_closed')
+  generations=[(owner[name+'_pid'],owner[name+'_start_ticks']) for name in ('owner','sandbox','pid1')]
+  def generation_running(pid,ticks):
+   try:words=Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()
+   except FileNotFoundError:return False
+   return int(words[19])==ticks and words[0] not in ('Z','X')
+  limit=time.monotonic()+3
+  while any(generation_running(pid,ticks) for pid,ticks in generations) and time.monotonic()<limit:time.sleep(0.02)
+  require(not any(generation_running(pid,ticks) for pid,ticks in generations),'owner_loss_generation_still_running')
+  report['cases'].append({'case':'actual-owner-loss-refuses-old-channel-and-retains-cleanup-obligation','status':'passed',
+      'owner_generation_verified':True,'old_channel_closed':True,'controller_cleanup_verified':False,
+      'host_relaunch_refused':True,'observer_generations_stopped':True,'owned_budget_removed':True})
   report['cleanup_verified']=True;report['service']=service;report['budget_sha256']=digest(budget);save()
   report['phase']='substitution-controls';save()
   stop(daemon);daemon=None

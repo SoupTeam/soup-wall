@@ -11,7 +11,9 @@ CASES={
  'retired-child-authority-replay','executable-replacement-before-capture',
  'identical-schema-alternate-formatter-with-new-tree-hash',
  'daemon-restart-old-authority-refused-new-read-useful','exact-original-ask-approved-once',
- 'strong-body-refusal-with-useful-followup','bounded-evidence-overflow-with-useful-followup'}
+ 'strong-body-refusal-with-useful-followup','bounded-evidence-overflow-with-useful-followup',
+ 'actual-alternate-process-identical-bytes-remains-unattested',
+ 'actual-owner-loss-refuses-old-channel-and-retains-cleanup-obligation'}
 META={'contract','daemon_instance_id','catalogue_sha256','closure_sha256','process_generation_sha256',
       'channel_generation_sha256','session_epoch_sha256','native_call_id','invocation_sha256',
       'original_result_sha256','original_result_bytes','domain_witness'}
@@ -50,9 +52,16 @@ def project(report,build,expected,exit_code):
  require(report.get('binary_sha256')==build.get('binary_sha256') and hash_string(report.get('binary_sha256')),
     'candidate_binary_mismatch')
  require(report.get('cleanup_verified') is True and report.get('owned_root_empty_final') is True,'cleanup_unverified')
- rows=report.get('cases');require(isinstance(rows,list) and len(rows)==len(CASES)
+ rows=report.get('cases');require(isinstance(rows,list) and all(isinstance(row,dict) for row in rows) and len(rows)==len(CASES)
     and {row.get('case') for row in rows}==CASES and all(row.get('status')=='passed' for row in rows),'denominator_incomplete')
  by_name={row['case']:row for row in rows}
+ alternate=by_name['actual-alternate-process-identical-bytes-remains-unattested']
+ require(alternate.get('byte_identical') is True and alternate.get('baseline_release') is True
+    and alternate.get('execution_metadata') is False,'alternate_origin_unverified')
+ owner=by_name['actual-owner-loss-refuses-old-channel-and-retains-cleanup-obligation']
+ require(all(owner.get(name) is True for name in ('owner_generation_verified','old_channel_closed',
+    'host_relaunch_refused','observer_generations_stopped','owned_budget_removed'))
+    and owner.get('controller_cleanup_verified') is False,'owner_loss_unverified')
  require(by_name['concurrent-original-call-correlation'].get('calls')==4,'concurrency_denominator_invalid')
  require(by_name['actual-original-cancel-with-useful-followup'].get('original_reader_seen') is True
     and by_name['actual-original-cancel-with-useful-followup'].get('cancelled_result_released') is False
@@ -66,7 +75,7 @@ def project(report,build,expected,exit_code):
  metadata=report.get('execution_records');require(isinstance(metadata,list) and len(metadata)==13
     and report.get('original_results')==13,'result_denominator_incomplete')
  for row in metadata:
-    require(set(row)==META and row['contract']=='sw-mcp/verified-original-execution/1'
+    require(isinstance(row,dict) and set(row)==META and row['contract']=='sw-mcp/verified-original-execution/1'
        and row['domain_witness'] is None and type(row['original_result_bytes']) is int
        and 0<row['original_result_bytes']<=1048576,'metadata_shape_invalid')
     require(all(hash_string(row[name]) for name in META if name.endswith('_sha256')),'metadata_digest_invalid')
@@ -78,11 +87,13 @@ def project(report,build,expected,exit_code):
     and len({row['process_generation_sha256'] for row in metadata})==3
     and len({row['channel_generation_sha256'] for row in metadata})==3,'generation_reuse_detected')
  require(len({row['closure_sha256'] for row in metadata})==1,'original_closure_changed')
- require(len(build.get('steps',[]))==5 and all(step.get('status')=='passed' and step.get('exit_code')==0 for step in build.get('steps',[]))
-    and {step.get('label') for step in build['steps']}=={'native-build','native-closure-unit','native-execution-unit','native-owner-unit','native-clippy'},'build_denominator_invalid')
+ steps=build.get('steps')
+ require(isinstance(steps,list) and len(steps)==5 and all(isinstance(step,dict)
+    and step.get('status')=='passed' and step.get('exit_code')==0 for step in steps)
+    and {step.get('label') for step in steps}=={'native-build','native-closure-unit','native-execution-unit','native-owner-unit','native-clippy'},'build_denominator_invalid')
  return {'format':'sou155-native-acceptance/1','status':'passed','acceptance_pass':True,
      'source_commit':expected,'binary_sha256':report['binary_sha256'],'cases':sorted(CASES),
-     'original_results':13,'daemon_generations':3,'cleanup_verified':True,'model_calls':0,
+     'original_results':13,'daemon_generations':3,'process_generations':3,'cleanup_verified':True,'model_calls':0,
      'execution_records':metadata,'policy_or_limits_relaxed':False,'production_relief_enabled':False}
 
 def main():

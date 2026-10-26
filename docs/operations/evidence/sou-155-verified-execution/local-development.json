@@ -588,6 +588,58 @@
       "elapsed_seconds": 17.93,
       "source_after_sha256": "177b4492143355c6a1be2624952ef394db02fbec84b826998943952bcdef4bdf",
       "log_sha256": "f89ca1d4842c1cfb76f97a278d9ab7da228e334b0debca3b4e542315dd636078"
+    },
+    {
+      "label": "actual-alternate-evidence-contract",
+      "source_files_sha256": "8421c835861c358c0cd870bdcad17e7a6ace2e10dbbf89e65ab08cf00e2053e5",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.2,
+      "source_after_sha256": "8421c835861c358c0cd870bdcad17e7a6ace2e10dbbf89e65ab08cf00e2053e5",
+      "log_sha256": "27ed40e0714fe8e6e68b1e06f1a86e600a8a0c8b016dfd8e27e3f5b1c1df54a7"
+    },
+    {
+      "label": "actual-owner-alternate-evidence-contract",
+      "source_files_sha256": "d7fa113b1e1d31b56a2fd726d25bc47a85c26fdac049f1f0df5f3a5514aa5e75",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.25,
+      "source_after_sha256": "d7fa113b1e1d31b56a2fd726d25bc47a85c26fdac049f1f0df5f3a5514aa5e75",
+      "log_sha256": "27ed40e0714fe8e6e68b1e06f1a86e600a8a0c8b016dfd8e27e3f5b1c1df54a7"
+    },
+    {
+      "label": "owner-loss-obligation-evidence-contract",
+      "source_files_sha256": "38e61d5551d5bafdd3c2acb3a554574c2bf9ba61a7e1877a6751a05848b6b25b",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.2,
+      "source_after_sha256": "38e61d5551d5bafdd3c2acb3a554574c2bf9ba61a7e1877a6751a05848b6b25b",
+      "log_sha256": "27ed40e0714fe8e6e68b1e06f1a86e600a8a0c8b016dfd8e27e3f5b1c1df54a7"
+    },
+    {
+      "label": "strict-evidence-shapes",
+      "source_files_sha256": "b430ab8d3bad0a5749d1421c8f64add3d455d895cfa206a2341b864d17237966",
+      "source_read_only": true,
+      "writes": "isolated-scratch-only",
+      "network": "loopback-only",
+      "platform": "macos-arm64",
+      "status": "passed",
+      "exit_code": 0,
+      "elapsed_seconds": 0.2,
+      "source_after_sha256": "b430ab8d3bad0a5749d1421c8f64add3d455d895cfa206a2341b864d17237966",
+      "log_sha256": "f5ec8578e68c7078ce5bc1146d16b0d411ebddf0d22e444934cc72a5608f206f"
     }
   ]
 }

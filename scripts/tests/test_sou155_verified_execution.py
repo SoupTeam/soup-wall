@@ -37,6 +37,11 @@ def complete():
         metadata.append(row)
     cases = [dict(case=name, status='passed') for name in sorted(GATE.CASES)]
     by_name = {row['case']: row for row in cases}
+    by_name['actual-alternate-process-identical-bytes-remains-unattested'].update(
+        byte_identical=True, baseline_release=True, execution_metadata=False)
+    by_name['actual-owner-loss-refuses-old-channel-and-retains-cleanup-obligation'].update(
+        owner_generation_verified=True, old_channel_closed=True, controller_cleanup_verified=False,
+        host_relaunch_refused=True, observer_generations_stopped=True, owned_budget_removed=True)
     by_name['concurrent-original-call-correlation']['calls'] = 4
     by_name['actual-original-cancel-with-useful-followup'].update(
         original_reader_seen=True, cancelled_result_released=False, effects_rolled_back=False)
@@ -86,6 +91,17 @@ class NativeEvidence(unittest.TestCase):
                 report['cases'].append(copy.deepcopy(report['cases'][0]))
             with self.assertRaises(ValueError):
                 GATE.project(report, build, SOURCE, 0)
+
+    def test_malformed_candidate_rows_are_explicit_incomplete_errors(self):
+        for field in ('cases', 'execution_records'):
+            report, build = complete()
+            report[field][0] = 'not an evidence record'
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                GATE.project(report, build, SOURCE, 0)
+        report, build = complete()
+        build['steps'][0] = 'not a build record'
+        with self.assertRaises(ValueError):
+            GATE.project(report, build, SOURCE, 0)
 
     def test_crossed_source_binary_exit_and_cleanup_do_not_pass(self):
         for field, value in (('source_commit', 'd' * 40), ('binary_sha256', 'e' * 64),
