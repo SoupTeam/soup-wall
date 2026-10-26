@@ -493,3 +493,24 @@ fn native_same_sealed_view_withdraws_after_ref_or_object_rename_even_if_restored
         );
     }
 }
+
+#[test]
+fn ambiguous_wire_keys_never_create_or_complete_a_witness() {
+    let f = Fixture::new();
+    let p = Producer::new(context()).unwrap();
+    let req = request(1, "HEAD");
+    let bad = String::from_utf8(req.clone())
+        .unwrap()
+        .replace("\"id\":1", "\"id\":9,\"id\":1");
+    assert!(p.begin(f.snapshot(), bad.as_bytes()).is_err());
+    let ticket = p.begin(f.snapshot(), &req).unwrap();
+    let result = response(1, "owned");
+    let bad = String::from_utf8(result)
+        .unwrap()
+        .replace("\"id\":1", "\"id\":9,\"id\":1");
+    assert!(p.complete(&ticket, bad.as_bytes()).is_err());
+    assert!(
+        p.complete(&ticket, &response(1, "owned")).is_err(),
+        "ambiguous completion spends slot"
+    );
+}

@@ -296,10 +296,30 @@ pub struct Snapshot {
     profile: String,
 }
 
+impl std::fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Snapshot")
+            .field("profile", &self.profile)
+            .finish_non_exhaustive()
+    }
+}
+
 impl Snapshot {
     #[cfg(target_os = "linux")]
     pub fn capture(workspace: &std::fs::File, profile: &str) -> anyhow::Result<Arc<Self>> {
         linux::capture(workspace, profile)
+    }
+
+    /// Recheck sticky source withdrawal while the execution result is held.
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
+        self.valid()
+    }
+
+    pub(crate) fn show_target(&self, revision: &str) -> anyhow::Result<ShowTarget> {
+        self.valid()?;
+        let target = self.repository.resolve(revision)?;
+        self.valid()?;
+        Ok(target)
     }
 
     fn valid(&self) -> anyhow::Result<()> {
@@ -419,7 +439,7 @@ fn frame(bytes: &[u8], limit: usize) -> anyhow::Result<Value> {
         !bytes[..bytes.len() - 1].contains(&b'\n'),
         "witness requires one original wire line"
     );
-    let value: Value = serde_json::from_slice(bytes)?;
+    let crate::mcp::admission::Strict(value) = serde_json::from_slice(bytes)?;
     ensure!(value["jsonrpc"] == "2.0", "witness JSON-RPC version");
     ensure!(
         value["id"].as_i64().is_some()
