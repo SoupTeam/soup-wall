@@ -167,12 +167,39 @@ struct Repository {
 
 impl Repository {
     fn images(images: BTreeMap<String, Vec<u8>>) -> anyhow::Result<Self> {
+        Self::images_inner(images, false)
+    }
+
+    fn tracked_images(images: BTreeMap<String, Vec<u8>>) -> anyhow::Result<Self> {
+        Self::images_inner(images, true)
+    }
+
+    fn images_inner(images: BTreeMap<String, Vec<u8>>, tracked: bool) -> anyhow::Result<Self> {
+        if tracked {
+            super::super::git_local_clone::validate_config(
+                images
+                    .get(".git/config")
+                    .context("Git tracked witness config missing")?,
+            )?;
+        }
         let mut manifest = Vec::new();
         let mut total = 0usize;
         let mut objects = BTreeMap::new();
         let mut refs = BTreeMap::new();
+        let mut origins = BTreeMap::new();
         if let Some(bytes) = images.get(".git/packed-refs") {
-            refs = super::shallow_view::packed_references(bytes)?.refs;
+            let packed = if tracked {
+                super::shallow_view::tracked_packed_references(bytes)?
+            } else {
+                super::shallow_view::packed_references(bytes)?
+            };
+            for (name, id) in packed.refs {
+                if tracked && super::shallow_view::is_origin_reference(&name) {
+                    origins.insert(name, super::shallow_view::OriginTarget::Object(id));
+                } else {
+                    refs.insert(name, id);
+                }
+            }
         }
         for (path, bytes) in &images {
             total = total
@@ -189,14 +216,24 @@ impl Repository {
             manifest.extend_from_slice(bytes);
             if let Some(name) = path.strip_prefix(".git/refs/") {
                 let name = format!("refs/{name}");
+                if tracked && super::shallow_view::is_origin_reference(&name) {
+                    origins.insert(
+                        name.clone(),
+                        super::shallow_view::origin_target(&name, bytes)?,
+                    );
+                } else {
+                    ensure!(
+                        super::is_local_reference(&name),
+                        "Git witness reference unsupported"
+                    );
+                    let id = std::str::from_utf8(bytes)?;
+                    let id = oid(id.strip_suffix('\n').unwrap_or(id))?;
+                    refs.insert(name, id);
+                }
                 ensure!(
-                    super::is_local_reference(&name),
-                    "Git witness reference unsupported"
+                    refs.len() + origins.len() <= 64,
+                    "Git witness reference bound"
                 );
-                let id = std::str::from_utf8(bytes)?;
-                let id = oid(id.strip_suffix('\n').unwrap_or(id))?;
-                refs.insert(name, id);
-                ensure!(refs.len() <= 64, "Git witness reference bound");
             }
             if let Some(name) = path.strip_prefix(".git/objects/") {
                 let (prefix, suffix) = name.split_once('/').context("Git object image path")?;
@@ -212,6 +249,7 @@ impl Repository {
                 );
             }
         }
+        super::shallow_view::validate_origin_references(&origins)?;
         let head = std::str::from_utf8(
             images
                 .get(".git/HEAD")
@@ -283,6 +321,8 @@ impl Repository {
 enum Source {
     #[cfg(target_os = "linux")]
     Native(Arc<super::shallow_view::View>),
+    #[cfg(target_os = "linux")]
+    FileRevisions(Arc<super::revision_view::View>),
     #[cfg(test)]
     Memory(std::sync::atomic::AtomicBool),
 }
@@ -305,6 +345,11 @@ impl std::fmt::Debug for Snapshot {
 }
 
 impl Snapshot {
+    #[cfg(all(test, target_os = "linux"))]
+    pub(crate) fn transport_test_snapshot() -> Arc<Self> {
+        tests::transport_snapshot()
+    }
+
     #[cfg(target_os = "linux")]
     pub fn capture(workspace: &std::fs::File, profile: &str) -> anyhow::Result<Arc<Self>> {
         linux::capture(workspace, profile)
@@ -324,10 +369,21 @@ impl Snapshot {
         Ok(target)
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) fn validate_call(&self, tool: &str, args: &Value) -> anyhow::Result<()> {
+        self.valid()?;
+        if let Source::FileRevisions(view) = &self.source {
+            view.validate_call(tool, args)?;
+        }
+        self.valid()
+    }
+
     fn valid(&self) -> anyhow::Result<()> {
         match &self.source {
             #[cfg(target_os = "linux")]
             Source::Native(view) => view.object_witness_valid(),
+            #[cfg(target_os = "linux")]
+            Source::FileRevisions(view) => view.object_witness_valid(),
             #[cfg(test)]
             Source::Memory(live) => {
                 ensure!(
@@ -350,6 +406,7 @@ impl Snapshot {
         self.valid()?;
         match &self.source {
             Source::Native(view) => view.mount(command, pins),
+            Source::FileRevisions(view) => view.mount(command, pins),
             #[cfg(test)]
             Source::Memory(_) => anyhow::bail!("test memory view cannot be mounted"),
         }

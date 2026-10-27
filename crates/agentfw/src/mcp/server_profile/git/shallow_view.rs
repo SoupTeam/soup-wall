@@ -132,6 +132,16 @@ pub(super) struct PackedReferences {
 
 #[cfg(any(target_os = "linux", test))]
 pub(super) fn packed_references(bytes: &[u8]) -> anyhow::Result<PackedReferences> {
+    packed_references_inner(bytes, false)
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(super) fn tracked_packed_references(bytes: &[u8]) -> anyhow::Result<PackedReferences> {
+    packed_references_inner(bytes, true)
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn packed_references_inner(bytes: &[u8], tracked: bool) -> anyhow::Result<PackedReferences> {
     ensure!(bytes.len() <= 65_536, "Git packed references exceed limit");
     ensure!(
         (bytes.is_empty() || bytes.ends_with(b"\n"))
@@ -164,7 +174,7 @@ pub(super) fn packed_references(bytes: &[u8]) -> anyhow::Result<PackedReferences
             .split_once(' ')
             .context("Git packed reference invalid")?;
         ensure!(
-            is_metadata_reference(name),
+            is_metadata_reference(name) || tracked && is_origin_reference(name),
             "Git packed namespace unsupported"
         );
         ensure!(
@@ -178,6 +188,58 @@ pub(super) fn packed_references(bytes: &[u8]) -> anyhow::Result<PackedReferences
         can_peel = Some(name.to_owned());
     }
     Ok(packed)
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(super) fn is_origin_reference(name: &str) -> bool {
+    name.strip_prefix("refs/remotes/origin/")
+        .is_some_and(super::super::git_local_clone::reference)
+}
+
+#[derive(Clone, Debug)]
+#[cfg(any(target_os = "linux", test))]
+pub(super) enum OriginTarget {
+    Object(String),
+    Symbolic(String),
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(super) fn origin_target(name: &str, bytes: &[u8]) -> anyhow::Result<OriginTarget> {
+    ensure!(
+        is_origin_reference(name) && bytes.len() <= 256,
+        "Git origin reference unsupported"
+    );
+    let text = std::str::from_utf8(bytes)?;
+    let text = text.strip_suffix('\n').unwrap_or(text);
+    if let Some(target) = text.strip_prefix("ref: ") {
+        ensure!(
+            name == "refs/remotes/origin/HEAD" && is_origin_reference(target) && target != name,
+            "Git origin symbolic reference unsupported"
+        );
+        Ok(OriginTarget::Symbolic(target.to_owned()))
+    } else {
+        Ok(OriginTarget::Object(oid(text)?))
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(super) fn validate_origin_references(
+    refs: &BTreeMap<String, OriginTarget>,
+) -> anyhow::Result<()> {
+    for target in refs.values() {
+        match target {
+            OriginTarget::Object(id) => {
+                oid(id)?;
+            }
+            OriginTarget::Symbolic(name) => {
+                ensure!(
+                    matches!(refs.get(name), Some(OriginTarget::Object(_))),
+                    "Git origin symbolic target missing or cyclic"
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", test))]

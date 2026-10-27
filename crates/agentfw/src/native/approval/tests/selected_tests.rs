@@ -172,6 +172,8 @@ fn fixture(format: &str) -> (Env, String, Value, String, SelectedInvocation) {
         json!({"path":"/workspace/approved.txt","content":"approved café 🥣"})
     } else if name == "read_text_file" {
         json!({"path":"/workspace/notes.txt"})
+    } else if format == crate::mcp::server_profile::git::FILE_READS_FORMAT {
+        json!({"repo_path":"/workspace","revision":"HEAD:docs/機能 notes.txt"})
     } else if format == crate::mcp::server_profile::git::LOCAL_REFS_FORMAT {
         json!({"repo_path":"/workspace","revision":"refs/heads/feature/機能"})
     } else {
@@ -308,7 +310,9 @@ const FORMATS: &[&str] = &[
     crate::mcp::server_profile::FORMAT,
     crate::mcp::server_profile::git::FORMAT,
     crate::mcp::server_profile::git::LOCAL_REFS_FORMAT,
+    crate::mcp::server_profile::git::FILE_READS_FORMAT,
     crate::mcp::server_profile::git::SHALLOW_FORMAT,
+    crate::mcp::server_profile::git_tracked_symlinks::FORMAT,
     #[cfg(target_os = "linux")]
     crate::mcp::server_profile::filesystem_create::FORMAT,
 ];

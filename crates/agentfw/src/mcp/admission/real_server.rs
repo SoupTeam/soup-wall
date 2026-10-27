@@ -826,8 +826,10 @@ fn validate_registry(
             .unwrap_or(server_profile::git::FORMAT),
         server_profile::git::FORMAT
         | server_profile::git::LOCAL_REFS_FORMAT
+        | server_profile::git::FILE_READS_FORMAT
         | server_profile::git::SHALLOW_FORMAT
-        | server_profile::git_local_clone::FORMAT => server_profile::FORMAT,
+        | server_profile::git_local_clone::FORMAT
+        | server_profile::git_tracked_symlinks::FORMAT => server_profile::FORMAT,
         server_profile::filesystem_create::FORMAT => server_profile::git::FORMAT,
         _ => bail!("unsupported selected registry profile"),
     };
@@ -1274,7 +1276,7 @@ where
                         };
                         if git_view.is_some_and(|view| view.validate_call(name, &args).is_err()) {
                             write(host, &error(request_id, -32602,
-                                "Git local reference unavailable, unsupported, or its source changed")).await?;
+                                "Git local reference or file revision unavailable, unsupported, or its source changed")).await?;
                             continue;
                         }
                         // One original mutator at a time. Each selected
@@ -1630,8 +1632,18 @@ where
                         let call = calls
                             .remove(&key)
                             .context("unbound native result completion")?;
+                        // A fresh daemon worker must not turn withdrawal of
+                        // the original collector-held view into an uncorrelated
+                        // transport failure. Keep the same sticky refusal even
+                        // when that worker also refused its source snapshot.
+                        let source_withdrawn = git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err());
+                        if source_withdrawn && !call.cancelled {
+                            write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
+                        }
+                        // Preserve fatal retirement on transport/auth/audit or
+                        // cleanup uncertainty, even after the correlated refusal.
                         let result = result?;
-                        if !call.cancelled {
+                        if !call.cancelled && !source_withdrawn {
                             if let Some(release) = result {
                                 if git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
                                     write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
