@@ -82,9 +82,15 @@ indeterminate. Recovery must inspect actual target identity/content first.
 
 ## Qualification
 
-Current status: implementation in progress. Native Ubuntu stdio/daemon effect
-witnesses and exact-source evidence are required before declaring qualification.
-macOS development checks are not Linux execution evidence.
+The focused native Ubuntu 22.04 qualification passed all 22 production
+stdio/daemon effect cases, 31 Rust executor/authority controls, nine finite
+evidence controls, strict Clippy and fmt at source
+`4cdd671476f813f6e661a2a45a6c6b4a14d566a2`. The retained
+[evidence and qualification limits](evidence/sou-159/README.md) include exact
+source/binary/config/policy/approval hashes and the original failed attempts.
+macOS development checks are recorded separately. This component remains in
+one Draft PR; the task's final Ready/shared admission and main delivery are
+TL-owned. A green Draft admission receipt is not full merge qualification.
 
 ## Explicit installation and operator use
 

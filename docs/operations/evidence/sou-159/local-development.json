@@ -327,12 +327,39 @@
       "log_sha256": "2635ca9ac49d5a8196b2ec402f8a5d2bba4b0516605f68839fe0b191fe0c498e",
       "elapsed_seconds": 19.83,
       "kind": "local-development"
+    },
+    {
+      "label": "final-evidence",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "python3 -B -c 'import importlib.util,json;from pathlib import Path;p=Path(\"scripts/verify-sou159-replace-file.py\");s=importlib.util.spec_from_file_location(\"sou159\",p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.validate(json.loads(Path(\"docs/operations/evidence/sou-159/native-runtime.json\").read_bytes())))' && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && python3 -B scripts/check_docs.py && cargo fmt --all --check"
+      ],
+      "exit_code": 1,
+      "source_sha256": "37a7d1b4ecda665a05d1b4181c72e5f39b3fc630880d763d8772ed2d96f35da1",
+      "log_sha256": "8c7ffb70d2cb611a13675c834976f83bf30dfb05ad1bef0d66f0995c0f3afc2c",
+      "elapsed_seconds": 2.29,
+      "kind": "local-development"
+    },
+    {
+      "label": "final-tracked-evidence",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "python3 -B -c 'import importlib.util,json;from pathlib import Path;s=importlib.util.spec_from_file_location(\"sou159\",Path(\"scripts/verify-sou159-replace-file.py\"));m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.validate(json.loads(Path(\"docs/operations/evidence/sou-159/native-runtime.json\").read_bytes())))' && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && /usr/bin/env GIT_INDEX_FILE=/private/tmp/sou159-qualification/scratch/docs-index python3 -B scripts/check_docs.py && cargo fmt --all --check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "7c0f3e0684115e4212166e7659aee7007ff7dd4a07646a87808ac629c026ee12",
+      "log_sha256": "0a673b6a061ecc0338c44dfc6cd79b53b4496efe536f3d85cbd22cc4d4f05093",
+      "elapsed_seconds": 3.22,
+      "kind": "local-development"
     }
   ],
   "limits": [
     "Linux-specific executor and HTTP controls require native qualification.",
     "One existing lifecycle unit failed in a concurrent workspace run and passed isolated; environment-variable hypothesis was separately disproved.",
     "Initial read-only harness and SDK cache failures are retained; no production security boundary was relaxed.",
-    "The complete current production Rust workspace subsequently passed serially: 1875 passed, 13 existing ignored, 74 suites, zero warnings. Native Linux qualification is still separate."
+    "The complete current production Rust workspace subsequently passed serially: 1875 passed, 13 existing ignored, 74 suites, zero warnings. Native Linux qualification is still separate.",
+    "The first final documentation check used a stale source-copy Git index and rejected links to newly tracked evidence. The unchanged files passed with the real staged index; finite runtime validation, nine controls, all 1019 links and fmt passed."
   ]
 }
