@@ -20,6 +20,20 @@
       "stage": "Python driver preflight after successful four builds, Rust tests, strict Clippy and fmt",
       "reason": "Shared installer uses hashlib.file_digest, unavailable on runner-default Python 3.10. Pin Python 3.12 identically to the accepted original lane and run driver preflight before builds. This is an environment setup failure, not a latency measurement.",
       "additional_build_control_failure": "Independent artifact inspection found identical old/candidate dev and release hashes; candidate Cargo build logs reported 0.17 s with no compilation. Shared-target freshness cannot prove a candidate build. Replaced it with distinct output roots and explicit manifest paths before any trial; the failed setup supplies no old/candidate measurements."
+    },
+    {
+      "run_id": 40564915880,
+      "source": "1f09bf1716b9918d309b113b3861c4bf76a06b32",
+      "status": "failed",
+      "artifact_id": 12763437278,
+      "artifact_sha256": "f52eb647733d7a23735c5d0db4d3b476dde41b6e376638d480ce845d3e9c5468",
+      "planned_trials": 18,
+      "attempted_trials": 18,
+      "passed": 0,
+      "failed": 18,
+      "incomplete": 0,
+      "stage": "startup before any burst; both full inventories also failed before first case",
+      "reason": "Both independent old/candidate binaries refuse with mcp_owner_startup_failed inside outer namespace. No latency comparison exists. Diagnose enclosing isolation without changing product guards."
     }
   ]
 }
