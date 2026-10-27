@@ -98,9 +98,12 @@ class InterpreterEvidence(unittest.TestCase):
         self.assertEqual(row["version_probe"], {"status": "not_run", "reason": "unprotected_interpreter"})
 
     def test_protected_interpreter_probe_is_fixed_and_environment_free(self):
-        python = Path(sys.executable).resolve()
-        with patch.object(QUAL.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"cpython 3 12 3\n", b"")) as run:
-            row = QUAL.interpreter_diagnostic(python)
+        with tempfile.TemporaryDirectory() as temporary:
+            python = Path(temporary) / "python"
+            python.write_text("owned fixture; subprocess is mocked")
+            python.chmod(0o755)
+            with patch.object(QUAL.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"cpython 3 12 3\n", b"")) as run:
+                row = QUAL.interpreter_diagnostic(python)
         self.assertEqual(row["canonical"], str(python))
         self.assertEqual(row["version_probe"]["exit"], 0)
         self.assertEqual(run.call_args.kwargs["env"], {})
@@ -110,8 +113,12 @@ class InterpreterEvidence(unittest.TestCase):
                                                 "import sys;print(sys.implementation.name, *sys.version_info[:3])"])
 
     def test_probe_timeout_is_an_unavailable_observation_not_success(self):
-        with patch.object(QUAL.subprocess, "run", side_effect=subprocess.TimeoutExpired([], 5)):
-            row = QUAL.interpreter_diagnostic(Path(sys.executable).resolve())
+        with tempfile.TemporaryDirectory() as temporary:
+            python = Path(temporary) / "python"
+            python.write_text("owned fixture; subprocess is mocked")
+            python.chmod(0o755)
+            with patch.object(QUAL.subprocess, "run", side_effect=subprocess.TimeoutExpired([], 5)):
+                row = QUAL.interpreter_diagnostic(python)
         self.assertEqual(row["version_probe"]["status"], "timeout")
 
 
