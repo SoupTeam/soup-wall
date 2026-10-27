@@ -1,0 +1,84 @@
+{
+  "artifact_id": 12643464691,
+  "artifact_sha256": "82c06fdeb0820cec827167e55fbb1022ee3ea1344e4f8e38c67bd66479699ef7",
+  "cleanup": {
+    "unit_exit_code": 1,
+    "unit_removed": true
+  },
+  "report": {
+    "cases": [
+      {
+        "case": "two-simultaneous-recorded-runs",
+        "count": 2,
+        "no_effects": true,
+        "status": "passed",
+        "trace_sha256": "f4473deb874793023b869c9c7de9eeb49b2ad799a7cbadbb402390b32e320b90"
+      },
+      {
+        "accepted_diagnostic_projection": true,
+        "case": "two-authenticated-original-runs",
+        "count": 2,
+        "probe_provider_requests": 0,
+        "settings_unchanged": true,
+        "status": "passed",
+        "trace_sha256": "623edbf2acafb68cba35110074f27382103be8a80a6d549e4904512374f7b354"
+      },
+      {
+        "case": "active-run-removal-refused",
+        "excluded": 2,
+        "status": "passed"
+      },
+      {
+        "case": "foreign-process-refused",
+        "status": "passed",
+        "unrelated_survived": true
+      },
+      {
+        "case": "daemon-loss",
+        "entry_status": "failed",
+        "observed_roles": {
+          "collector": 2,
+          "host": 1,
+          "owner": 2,
+          "pid1": 2
+        },
+        "owned_processes_stopped": true,
+        "status": "passed",
+        "trace_sha256": "fc5b332ff8e507ad52229a84c022aa0a15c8eeb93f549907cb694cda9c36871c"
+      }
+    ],
+    "environment": {
+      "kernel": "6.17.0-1022-azure",
+      "non_root": true,
+      "private_loopback": true,
+      "ubuntu": "24.04"
+    },
+    "format": "sw-prepared-run-native-qualification/1",
+    "native_acceptance": false,
+    "paid_provider_calls": 0,
+    "provider": "owned-scripted-loopback",
+    "reason": "operations_restart_or_peer_probe_failed",
+    "selected_sha256": {
+      "agentfw": "0dd4b91ecc60e2b8045c5b128fef7b8f3fbc365fcb40dec980df433edcd42d34",
+      "bwrap": "66ebf78691944f2c286bfb23c78792c3129e04f6869199b89a3e1b05395bb849",
+      "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "git": "bdb2da1f06481effeddefc918dfbc11d9b632a7862e7e78d744609e1b9c5aa4a",
+      "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+      "git_launcher": "0c392d88069983f5992f0ae72fbec2aa7146906f31defaac4050b653e6c734dc",
+      "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+      "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+      "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+      "sandbox_tests": "43ad57495430446fe019d67b726177d62f1bd2a15367af58703023c51c2e2d87"
+    },
+    "source_before": {
+      "commit": "24984e30f9588dc4b8ef8e4137fd360f54a8a531",
+      "dirty": false,
+      "files_sha256": "ea32014e9524094c522ae8bc764e51d1cb43066da542877f69cc76a75a5bd20b",
+      "tree": "d9318ebfd2ac5e88266bba26da5e2b262a9a3ee9"
+    },
+    "status": "failed"
+  },
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/40307651300"
+}
