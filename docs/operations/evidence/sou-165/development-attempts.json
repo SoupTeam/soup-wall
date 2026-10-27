@@ -34,6 +34,26 @@
       "incomplete": 0,
       "stage": "startup before any burst; both full inventories also failed before first case",
       "reason": "Both independent old/candidate binaries refuse with mcp_owner_startup_failed inside outer namespace. No latency comparison exists. Diagnose enclosing isolation without changing product guards."
+    },
+    {
+      "run_id": 40570524980,
+      "source": "8050dc6dbeb851e758865219a7e9fc08d15735a4",
+      "status": "failed",
+      "artifact_id": 12766311464,
+      "artifact_sha256": "1b5547947f7cdcff858afad53bce161c8e0081218bf26c3c8814990e168e7695",
+      "planned_trials": 18,
+      "attempted_trials": 18,
+      "passed": 12,
+      "failed": 6,
+      "incomplete": 0,
+      "cause": "Actual debug timeout reproduced on both variants. Baseline dev3/6 pass and candidate dev3/6 pass; release3/3 each. Provenance arithmetic alone reduced tracking work but did not stabilize complete unoptimized scanner/evidence work under5s. Candidate full inventory passed21cases, baseline failed after19cases. All original outputs/refusals retained; no claim this first correction fixed the burst."
+    }
+  ],
+  "local_failures": [
+    {
+      "qualification": "optimized-dev-qualification",
+      "log_sha256": "33ea3f797d3675e1a8b79f785af72369b4d78162520cf8d8c2ba84bbbec5af75",
+      "result": "Existing offline_replay_cli positive loopback control accepted nonblocking receiver immediately after connect and hit macOS WouldBlock at line293. This was not a scanner or native admission assertion. Focused recheck and interrupted full qualification are retained separately; no source test or guard weakened."
     }
   ]
 }

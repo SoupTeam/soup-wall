@@ -24,7 +24,7 @@ changed. The source, compiler, binary hashes, CPU affinity, load, all failures,
 refusals and unattempted denominator are retained. No universal latency claim
 or attribution of the historical failure to a source regression is justified.
 
-The candidate replaces full-width remainder in the rolling provenance hash
+The first candidate replaces full-width remainder in the rolling provenance hash
 with mathematically equivalent Mersenne folds and avoids repeating identical
 adjacent set insertions. It still computes every rolling window and retains
 exactly the same sorted fingerprint set. An independent legacy implementation
@@ -44,3 +44,18 @@ only owned scratch is writable. Kernel-virtual procfs operations needed to
 construct child namespaces do not modify host configuration. No host sysctl,
 AppArmor profile or product sandbox guard changes. An actual original-MCP
 startup/read/cleanup smoke now precedes the remaining expensive paired builds.
+
+The first actual paired comparison reproduced the debug timeout: both baseline
+and arithmetic-only candidate passed 3/6 dev bursts and 3/3 distribution bursts.
+The complete candidate inventory passed; the baseline closed after 19 cases.
+The complete finite denominator and every trial's stage observations are retained
+in `first-candidate-measurements.json`. That candidate was not stable enough.
+
+Complete evidence and detector scans dominated the remaining dev work. The
+measured correction therefore also compiles the same pure `soup-wall-core` and
+`soup-wall-agent` crates at opt-level 3 in the dev profile, like the existing
+same-FD SHA-256 dev optimization. Debug assertions and overflow checks remain
+explicitly enabled. The daemon/transport profile, exact original-byte scanners,
+policy/thresholds, lock ordering, provenance retention and every lifetime remain
+unchanged. A fresh full paired comparison must qualify this corrected source;
+the earlier successful inventory is not substituted for it.
