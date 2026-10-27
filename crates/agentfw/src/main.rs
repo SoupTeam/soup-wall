@@ -538,7 +538,13 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(status);
     }
     let cli = Cli::parse();
-    match cli.cmd {
+    dispatch(cli.cmd)
+}
+
+// Keep command execution's large async temporaries out of Clap's startup stack.
+#[inline(never)]
+fn dispatch(command: Cmd) -> anyhow::Result<()> {
+    match command {
         Cmd::AuditRetentionRecover { home } => {
             let home = home.unwrap_or(Config::home_path()?);
             let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
