@@ -286,7 +286,8 @@ def load_inputs(path, limits):
     for case_id, mapping in injections.items():
         if not isinstance(mapping, dict) or not all(isinstance(v, str) for v in mapping.values()):
             raise Rejected("invalid_inputs_bundle", f"injections for {case_id[:80]!r} must map vectors to strings")
-    if bundle["case_manifest"] is not None and bundle["case_manifest"] not in files:
+    case_manifest = bundle["case_manifest"]
+    if case_manifest is not None and (not isinstance(case_manifest, str) or case_manifest not in files):
         raise Rejected("invalid_inputs_bundle", "case_manifest must be null or the path of a bundled src/ file")
     return bundle, protocol.digest(raw)
 

@@ -10,6 +10,7 @@ import math
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -873,6 +874,58 @@ class EvidenceBundle(unittest.TestCase):
 
 
 class Command(Fixture):
+    def invoke_cli(self, inputs, out):
+        improved = self.controls / "improved"
+        return subprocess.run(
+            [sys.executable, "-B", str(Path(pr.__file__)),
+             "--baseline-plan", str(self.controls / "baseline-plan.json"),
+             "--baseline-run", str(self.controls / "baseline-run.json"),
+             "--candidate-plan", str(improved / "candidate-plan.json"),
+             "--candidate-run", str(improved / "candidate-run.json"),
+             "--inputs", str(inputs), "--out-dir", str(out)],
+            capture_output=True, text=True, check=False)
+
+    def test_cli_rejects_non_string_case_manifest_with_structured_artifacts(self):
+        for value in ([], {}, 17, True):
+            with self.subTest(case_manifest=value):
+                directory = Path(tempfile.mkdtemp(dir=self.temp))
+                bundle = controls.bundle()
+                bundle["case_manifest"] = value
+                inputs = write(directory, "inputs.json", bundle)
+                out = directory / "report"
+                completed = self.invoke_cli(inputs, out)
+                self.assertEqual(completed.returncode, pr.EXIT_INVALID, completed.stderr)
+                self.assertNotIn("Traceback", completed.stderr)
+                result = json.loads((out / "comparison.json").read_text(encoding="utf-8"))
+                self.assertEqual(result["input_validity"]["status"], "invalid")
+                self.assertEqual([(error["role"], error["code"])
+                                  for error in result["input_validity"]["errors"]],
+                                 [("inputs", "invalid_inputs_bundle")])
+                self.assertEqual(result["comparability"]["status"], "non_comparable")
+                self.assertIsNone(result["outcomes"])
+                self.assertIsNone(result["units"])
+                self.assertIsNone(result["readiness_verdict"])
+                self.assertIn("invalid_inputs_bundle", (out / "report.md").read_text(encoding="utf-8"))
+                self.assertFalse((out / "units.csv").exists())
+
+    def test_cli_preserves_null_and_bundled_string_case_manifest(self):
+        for value, status in ((None, "conditionally_comparable"),
+                              (controls.MANIFEST, "verified_comparable")):
+            with self.subTest(case_manifest=value):
+                directory = Path(tempfile.mkdtemp(dir=self.temp))
+                bundle = controls.bundle()
+                bundle["case_manifest"] = value
+                inputs = write(directory, "inputs.json", bundle)
+                out = directory / "report"
+                completed = self.invoke_cli(inputs, out)
+                self.assertEqual(completed.returncode, pr.EXIT_COMPARABLE, completed.stderr)
+                self.assertNotIn("Traceback", completed.stderr)
+                result = json.loads((out / "comparison.json").read_text(encoding="utf-8"))
+                self.assertEqual(result["input_validity"], {"status": "valid", "errors": []})
+                self.assertEqual(result["comparability"]["status"], status)
+                self.assertTrue(result["units"])
+                self.assertTrue((out / "units.csv").exists())
+
     def test_cli_writes_comparison_and_refuses_a_non_empty_out_dir(self):
         improved = self.controls / "improved"
         args = ["--baseline-plan", str(self.controls / "baseline-plan.json"),
