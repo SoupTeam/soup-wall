@@ -72,3 +72,4 @@ scripts/pilot_dossier.py text eol=lf
 scripts/tests/test_pilot_dossier.py text eol=lf
 scripts/pilot_qualification.py text eol=lf
 scripts/benchmarks/agentdojo_protocol.py text eol=lf
+docs/operations/evidence/sou157-nli/protocol.json -text
