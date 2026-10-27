@@ -144,7 +144,10 @@ def run_case(binary, name, libraries):
         action = "deny" if name == "unauthorized-action" else "ask"
         policy = f"agent_policies:\n  - name: exact-replacement\n    when: {{ action_class: destructive }}\n    action: {action}\ndefault: allow\n"
         if name=="result-withheld":
-            policy=policy.replace("agent_policies:\n","agent_policies:\n  - name: refuse-result-release\n    when: { facet: tool_result }\n    action: deny\n",1)
+            # Facet conditions match findings, not every event of that kind.
+            # The original destructive invocation may reach exact Ask, while
+            # the metadata-only result has no action class and must be denied.
+            policy=policy.replace("default: allow", "default: deny")
         (root / "policy.yaml").write_text(policy)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0)); port = sock.getsockname()[1]

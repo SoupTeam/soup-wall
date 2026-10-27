@@ -27,6 +27,21 @@
       "product_cases_executed": 0,
       "linux_controls_passed": 30,
       "fix": "Install Clippy and rustfmt in trusted toolchain preparation before offline sandbox."
+    },
+    {
+      "source": "e1f0520bad3eabc330ef5b636a97a8f520860ac6",
+      "run_id": 40460183550,
+      "result": "failed-runtime-control",
+      "code": "result_refusal_policy_fixture_matched_no_findings",
+      "linux_execution_qualified": false,
+      "product_cases_executed": 22,
+      "product_cases_passed": 21,
+      "linux_controls_passed": 30,
+      "strict_clippy_fmt": "pass",
+      "artifact_id": 12715001316,
+      "artifact_sha256": "0d2ee9028fd97f8ff8c1f89b41761ce3b79e51c95523b162fefd78528c97e23e",
+      "runtime_sha256": "556f3edd57c6a8da480083ba64aeb781c6c8c4ac3f3658382aed14bd193344ed",
+      "fix": "Use default Deny on the no-action-class result while the original destructive invocation still requires exact Ask; facet-only conditions require a finding and were ineffective for a neutral metadata result."
     }
   ]
 }
