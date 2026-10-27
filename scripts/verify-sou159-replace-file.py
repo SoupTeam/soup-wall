@@ -120,6 +120,7 @@ def payload(raw):
 def run_case(binary, name, libraries):
     row = {"case": name, "status": "incomplete", "committed": False}
     daemon = collector = other = None
+    displaced = None
     with tempfile.TemporaryDirectory(prefix="sou159-", dir=Path(tempfile.gettempdir()).resolve()) as tmp:
         root = Path(tmp).resolve()
         home = root / "home"; home.mkdir(mode=0o700)
@@ -143,17 +144,20 @@ def run_case(binary, name, libraries):
         reg = canonical(declarations); (root / "registry.json").write_bytes(reg)
         action = "deny" if name == "unauthorized-action" else "ask"
         policy = f"agent_policies:\n  - name: exact-replacement\n    when: {{ action_class: destructive }}\n    action: {action}\ndefault: allow\n"
-        if name=="result-withheld":
-            # Facet conditions match findings, not every event of that kind.
-            # The original destructive invocation may reach exact Ask, while
-            # the metadata-only result has no action class and must be denied.
-            policy=policy.replace("default: allow", "default: deny")
         (root / "policy.yaml").write_text(policy)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0)); port = sock.getsockname()[1]
         config = {"port": port, "enforce": True, "policy": str(root / "policy.yaml"), "native": {
             "registry_path": str(root / "registry.json"), "registry_sha256": sha(reg),
             "approval": {"ttl_seconds": 1 if name == "ask-expiry" else 30}}}
+        if name=="result-withheld":
+            # Tighten only this disposable daemon's retained-input cap. All
+            # invocation string leaves fit (including the 64-byte old hash),
+            # while the complete committed metadata result does not. This
+            # exercises a real result-recording refusal after publication,
+            # without weakening policy or altering the production defaults.
+            config["provenance"]={"max_input_bytes":96}
+            row["result_refusal_boundary"]="retained_provenance_max_input_96"
         (home / ".agentfw/config.yaml").write_bytes(canonical(config))
         row.update(registry_sha256=sha(reg), policy_sha256=sha(policy.encode()),
                    config_sha256=sha(canonical(config)), classifier_sha256=sha(classifier.read_bytes()),
@@ -213,9 +217,11 @@ def run_case(binary, name, libraries):
                         else:
                             if name == "old-change-pending": target.write_text("changed by operator"); expected=snapshot(target)
                             if name == "target-substitution":
-                                target.rename(root/"previous"); target.write_text("operator replacement"); target.chmod(0o600); expected=snapshot(target)
+                                displaced=root/"previous";target.rename(displaced);row["displaced_before"]=snapshot(displaced)
+                                target.write_text("operator replacement"); target.chmod(0o600); expected=snapshot(target)
                             if name == "root-substitution":
                                 workspace.rename(root/"previous-output"); workspace.mkdir(mode=0o700)
+                                displaced=root/"previous-output/result.txt";row["displaced_before"]=snapshot(displaced)
                                 target.write_text("operator root replacement");target.chmod(0o600);expected=snapshot(target)
                             if name == "new-change-pending":
                                 changed=json.loads(json.dumps(request));changed["id"]="changed";changed["params"]["arguments"]["content"]="different unapproved bytes"
@@ -265,6 +271,12 @@ def run_case(binary, name, libraries):
                         row["followup_read"]=True
                 row["collector_closure"]=collector.close();collector=None
                 if other: row["other_closure"]=other.close();other=None
+                if displaced:
+                    row["displaced_after"]=snapshot(displaced)
+                    require(row["displaced_after"]==row["displaced_before"],"displaced original object mutated")
+                    if name=="root-substitution":
+                        require(sorted(p.name for p in displaced.parent.iterdir())==["result.txt"],"displaced root inventory changed")
+                    row["displaced_unchanged"]=True
                 row["child_dispatches"]=len(ledger.read_bytes().splitlines())
                 if (root/"child2.jsonl").exists():row["child_dispatches"]+=len((root/"child2.jsonl").read_bytes().splitlines())
                 require(row["child_dispatches"]==0,"discovery child was invoked")
@@ -280,6 +292,8 @@ def run_case(binary, name, libraries):
                            staging_entries=sum(1 for _ in workspace.glob(".soup-replace-*")))
                 require(row["outside_unchanged"] and row["staging_entries"]==0,"outside effect or staging residue")
                 require(row["collector_closure"]["reader_joined"] and not row["collector_closure"]["forced_cleanup"],"collector cleanup incomplete")
+                if "other_closure" in row:
+                    require(row["other_closure"]["reader_joined"] and not row["other_closure"]["forced_cleanup"],"competing collector cleanup incomplete")
                 row.update(cleanup_verified=True,status="pass")
         except (OSError,ValueError,KeyError,TypeError,queue.Empty,subprocess.SubprocessError,concurrent.futures.TimeoutError) as error:
             row.update(status="fail",error_type=type(error).__name__,error_code=str(error)[:160])
@@ -304,6 +318,8 @@ def validate(report):
             require(r.get("publication_gates")==1 and r.get("publication_binding_matches") is True,"publication receipt correlation missing")
             require(len(r.get("publication_bindings",[]))==1 and r["publication_bindings"][0] in r.get("approved_bindings",[]),"publication did not match either exact approved call")
         else: require(r["target_unchanged"],"unapproved mutation")
+        if r["case"] in {"target-substitution","root-substitution"}:
+            require(r.get("displaced_unchanged") is True and r.get("displaced_before") and r["displaced_before"]==r.get("displaced_after"),"displaced object preservation missing")
         if r["case"] in FAULT_ERRORS:
             require(r.get("executor_error")==FAULT_ERRORS[r["case"]] and r.get("result_success") is False
                     and len(r.get("fault_library_sha256",""))==64,"wrong/missing fault evidence")

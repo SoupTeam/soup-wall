@@ -41,7 +41,23 @@
       "artifact_id": 12715001316,
       "artifact_sha256": "0d2ee9028fd97f8ff8c1f89b41761ce3b79e51c95523b162fefd78528c97e23e",
       "runtime_sha256": "556f3edd57c6a8da480083ba64aeb781c6c8c4ac3f3658382aed14bd193344ed",
-      "fix": "Use default Deny on the no-action-class result while the original destructive invocation still requires exact Ask; facet-only conditions require a finding and were ineffective for a neutral metadata result."
+      "fix": "Use default Deny on the no-action-class result while the original destructive invocation still requires exact Ask; facet-only conditions require a finding and were ineffective for a neutral metadata result.",
+      "failed_row_limit": "The original result-withheld row retains its pre-assertion committed=false default because the refusal assertion failed. That is not a no-effect claim: the harness had already verified NEW bytes and a changed inode, and the returned result_success was true. This ineffective refusal-policy control is not accepted as qualification."
+    },
+    {
+      "source": "f64da5f9488935ef2edef51a7b00d0bb725d1ad2",
+      "run_id": 40461582139,
+      "result": "failed-runtime-control",
+      "code": "default_deny_also_refused_discovery_handshake",
+      "linux_execution_qualified": false,
+      "product_cases_executed": 22,
+      "product_cases_passed": 21,
+      "linux_controls_passed": 30,
+      "strict_clippy_fmt": "pass",
+      "artifact_id": 12714722554,
+      "artifact_sha256": "c6fd0e9983acfaf08ec5f620942e8b1365c99f48713753402e4c9004c9e2cec1",
+      "runtime_sha256": "087f47874312947670d79bad2f4df8c3e3c49cf5c8999d3f1506d955bc97f9df",
+      "fix": "Use an explicitly stricter retained-input cap only for the disposable result-withheld daemon: invocation leaves fit while the complete committed result cannot be recorded. All production limits/policies remain unchanged."
     }
   ]
 }

@@ -228,6 +228,39 @@
       "log_sha256": "a659283337884d3df99140ed8b90427346de1c6ab84289b280ae64fcb08cd370",
       "elapsed_seconds": 0.12,
       "kind": "local-development"
+    },
+    {
+      "label": "focused-ci-controls",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p \"test_ci*.py\" -v && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "ad236b954d5b3eeec5a6f8aee91dfe9b7080d1e6a5f43b4b7abc1fb1ce71de30",
+      "log_sha256": "f7af2da8af01d95ca866d7c8475fe5452c2ddd192157d915868240bb15d490e7",
+      "elapsed_seconds": 0.3,
+      "kind": "local-development"
+    },
+    {
+      "label": "result-refusal-control",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_sou159*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "70011feb0cc03e1ea174b9e194c4276e5c3169c5d0bdc929735d3e6e7b07294c",
+      "log_sha256": "3afc7b7f34dc365d705ef0e5ecb2a1c056e84d349b3f8e42ea46325a23350ddd",
+      "elapsed_seconds": 0.14,
+      "kind": "local-development"
     }
   ],
   "limits": [

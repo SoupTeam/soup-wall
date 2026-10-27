@@ -22,6 +22,8 @@ def seed():
         if case in probe.FAULT_ERRORS:
             row.update(executor_error=probe.FAULT_ERRORS[case],result_success=False,fault_library_sha256="f"*64,staged_bytes=5)
         if case=="result-withheld":row.update(result_withheld=True,refusal_codes=["resource_replacement_committed"])
+        if case in {"target-substitution","root-substitution"}:
+            row.update(displaced_unchanged=True,displaced_before={"inode":1,"sha256":"d"*64},displaced_after={"inode":1,"sha256":"d"*64})
         rows.append(row)
     return {"platform":"Linux","source_commit":"a"*40,"binary_sha256":"b"*64,"cases":rows}
 
@@ -67,6 +69,12 @@ class ReplacementEvidence(unittest.TestCase):
         probe.validate(report)
         row["publication_bindings"]=["c"*64]
         with self.assertRaises(ValueError):probe.validate(report)
+
+    def test_substitution_must_also_preserve_the_displaced_original(self):
+        for case in ["target-substitution","root-substitution"]:
+            report=seed();row=next(r for r in report["cases"] if r["case"]==case)
+            row["displaced_after"]["sha256"]="e"*64
+            with self.subTest(case=case),self.assertRaises(ValueError):probe.validate(report)
 
     def test_committed_error_and_partial_progress_cannot_be_relabelled(self):
         for name,field,value in [("committed-error","committed",False),("committed-error","result_success",True),
