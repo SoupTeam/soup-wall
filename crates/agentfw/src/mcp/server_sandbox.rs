@@ -65,6 +65,8 @@ pub(crate) struct PreparedServerSandbox {
     bwrap_fd: std::os::fd::RawFd,
     #[cfg(target_os = "linux")]
     owner_executable_fd: std::os::fd::RawFd,
+    #[cfg(target_os = "linux")]
+    sealed_closure: Option<super::linux_owner::SealedClosure>,
 }
 
 impl PreparedServerSandbox {
@@ -106,6 +108,7 @@ impl PreparedServerSandbox {
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?;
             let owner = super::linux_owner::spawn(super::linux_owner::LaunchSpec {
+                sealed_closure: self.sealed_closure.take(),
                 bwrap_fd: self.bwrap_fd,
                 owner_executable_fd: self.owner_executable_fd,
                 inherited_fds,
@@ -138,7 +141,7 @@ pub(crate) fn prepare_with_budget(
 ) -> anyhow::Result<PreparedServerSandbox> {
     #[cfg(target_os = "linux")]
     {
-        prepare_linux(profile, selected)
+        prepare_linux(profile, selected, true)
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -147,6 +150,57 @@ pub(crate) fn prepare_with_budget(
             bail!("mcp_budget_platform_unsupported");
         }
         bail!("the selected MCP server profile requires Linux bubblewrap");
+    }
+}
+
+/// Embedded daemon launches receive budget selection explicitly. They never
+/// inherit a project's environment-selected budget or silently fall back to it.
+pub(crate) fn prepare_explicit(
+    profile: &ProfileConfig,
+    selected: Option<&super::linux_budget::BoundConfig>,
+) -> anyhow::Result<PreparedServerSandbox> {
+    #[cfg(target_os = "linux")]
+    {
+        prepare_linux(profile, selected, false)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = profile;
+        if selected.is_some() {
+            bail!("mcp_budget_platform_unsupported");
+        }
+        bail!("the selected MCP server profile requires Linux bubblewrap");
+    }
+}
+
+/// Only a daemon-selected immutable image can use this launch contract.
+pub(crate) fn prepare_verified(
+    profile: &ProfileConfig,
+    selected: Option<&super::linux_budget::BoundConfig>,
+    runtime: &super::verified_closure::Runtime,
+) -> anyhow::Result<PreparedServerSandbox> {
+    anyhow::ensure!(
+        runtime.matches(profile),
+        "verified_execution_profile_changed"
+    );
+    #[cfg(target_os = "linux")]
+    {
+        prepare_linux_command(
+            profile,
+            &[
+                format!("/mcp-server/{SERVER_ENTRYPOINT}"),
+                SANDBOX_WORKSPACE.to_owned(),
+            ],
+            selected,
+            false,
+            false,
+            Some(runtime),
+        )
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = selected;
+        anyhow::bail!("verified_execution_platform_unsupported")
     }
 }
 
@@ -182,6 +236,8 @@ pub(crate) fn prepare_verified_git(
             .map(str::to_owned),
             None,
             false,
+            true,
+            None,
             true,
         )
     }
@@ -227,6 +283,8 @@ pub(crate) fn prepare_create_stage(
             ],
             None,
             true,
+            true,
+            None,
         )
     }
     #[cfg(not(target_os = "linux"))]
@@ -704,6 +762,7 @@ fn require_budget_mount_support(exposed_roots: &[&Path], pins: &[&File]) -> anyh
 fn prepare_linux(
     profile: &ProfileConfig,
     selected: Option<&super::linux_budget::BoundConfig>,
+    inherit_environment: bool,
 ) -> anyhow::Result<PreparedServerSandbox> {
     if super::server_profile::git_selected(&profile.format) {
         return prepare_linux_command(
@@ -719,6 +778,8 @@ fn prepare_linux(
             .map(str::to_owned),
             selected,
             false,
+            inherit_environment,
+            None,
         );
     }
     prepare_linux_command(
@@ -729,6 +790,8 @@ fn prepare_linux(
         ],
         selected,
         false,
+        inherit_environment,
+        None,
     )
 }
 
@@ -738,8 +801,18 @@ fn prepare_linux_command(
     node_args: &[String],
     selected: Option<&super::linux_budget::BoundConfig>,
     writable_owned_stage: bool,
+    inherit_environment: bool,
+    immutable: Option<&super::verified_closure::Runtime>,
 ) -> anyhow::Result<PreparedServerSandbox> {
-    prepare_linux_command_inner(profile, node_args, selected, writable_owned_stage, false)
+    prepare_linux_command_inner(
+        profile,
+        node_args,
+        selected,
+        writable_owned_stage,
+        inherit_environment,
+        immutable,
+        false,
+    )
 }
 
 #[cfg(target_os = "linux")]
@@ -748,6 +821,8 @@ fn prepare_linux_command_inner(
     node_args: &[String],
     selected: Option<&super::linux_budget::BoundConfig>,
     writable_owned_stage: bool,
+    inherit_environment: bool,
+    immutable: Option<&super::verified_closure::Runtime>,
     verified_git: bool,
 ) -> anyhow::Result<PreparedServerSandbox> {
     use std::os::fd::AsRawFd;
@@ -795,13 +870,6 @@ fn prepare_linux_command_inner(
     } else {
         super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?
     };
-    let (package_root, package_pin) = open_directory(&profile.package_root)?;
-    if package_tree_sha256(&descriptor_path(&package_pin).join("."))? != profile.package_tree_sha256
-    {
-        bail!("MCP server installed package tree digest mismatch");
-    }
-    let runtime_pin = open_verified_file(&profile.runtime_path, &profile.runtime_sha256, true)?;
-    let bwrap_pin = open_verified_file(&profile.bwrap_path, &profile.bwrap_sha256, true)?;
     // The trusted namespace PID 1 is this exact running Agent image, never a
     // separately resolved pathname or an executable from the server package.
     #[cfg(not(test))]
@@ -814,20 +882,40 @@ fn prepare_linux_command_inner(
         .context("explicit candidate Agent image required for native owner probe")?;
     let owner_pin = File::open(owner_image).context("mcp_owner_image_unavailable")?;
     let owner_executable_fd = owner_pin.as_raw_fd();
-    let mut pins = vec![workspace_pin, package_pin, runtime_pin, owner_pin];
+    let mut pins = vec![workspace_pin, owner_pin];
     let mut mounts = vec![
         (0, PathBuf::from(SANDBOX_WORKSPACE)),
-        (1, PathBuf::from("/mcp-server")),
-        (
-            2,
+        (1, PathBuf::from("/mcp-runtime/owner")),
+    ];
+    let package_root;
+    let bwrap_pin;
+    if let Some(runtime) = immutable {
+        anyhow::ensure!(
+            runtime.matches(profile) && !git_profile && !writable_owned_stage,
+            "verified_execution_profile_changed"
+        );
+        package_root = profile.package_root.clone();
+        bwrap_pin = runtime.bwrap()?;
+    } else {
+        let (root, pin) = open_directory(&profile.package_root)?;
+        package_root = root;
+        if package_tree_sha256(&descriptor_path(&pin).join("."))? != profile.package_tree_sha256 {
+            bail!("MCP server installed package tree digest mismatch");
+        }
+        mounts.push((pins.len(), PathBuf::from("/mcp-server")));
+        pins.push(pin);
+        let runtime_pin = open_verified_file(&profile.runtime_path, &profile.runtime_sha256, true)?;
+        mounts.push((
+            pins.len(),
             PathBuf::from(if git_profile {
                 super::server_profile::git::PYTHON
             } else {
                 "/mcp-runtime/node"
             }),
-        ),
-        (3, PathBuf::from("/mcp-runtime/owner")),
-    ];
+        ));
+        pins.push(runtime_pin);
+        bwrap_pin = open_verified_file(&profile.bwrap_path, &profile.bwrap_sha256, true)?;
+    }
     if let Some(git) = &profile.git {
         let pin = open_verified_file(&git.path, &git.sha256, true)?;
         mounts.push((
@@ -866,7 +954,7 @@ fn prepare_linux_command_inner(
         bail!("MCP sandbox requires a bounded, explicit library list");
     }
     let mut destinations = std::collections::BTreeSet::new();
-    for library in &profile.libraries {
+    for library in profile.libraries.iter().filter(|_| immutable.is_none()) {
         if !valid_library_destination(&library.path) || !destinations.insert(library.path.clone()) {
             bail!("MCP sandbox library destination is invalid or duplicated");
         }
@@ -922,6 +1010,17 @@ fn prepare_linux_command_inner(
             .arg(pins[index].as_raw_fd().to_string())
             .arg(destination);
     }
+    let sealed_closure = if let Some(runtime) = immutable {
+        let mut images = runtime.mount(&mut command, &mut pins)?;
+        images.push(bwrap_pin.as_raw_fd());
+        Some(super::linux_owner::SealedClosure {
+            format: super::verified_closure::FORMAT.into(),
+            sha256: runtime.digest().into(),
+            images,
+        })
+    } else {
+        None
+    };
     if let Some(snapshot) = &verified_git_snapshot {
         snapshot.mount(&mut command, &mut pins)?;
     } else if let Some(view) = &git_view {
@@ -986,7 +1085,11 @@ fn prepare_linux_command_inner(
         .args([
             "--",
             "/mcp-runtime/owner",
-            "--agentfw-mcp-pid1-v1",
+            if immutable.is_some() {
+                "--agentfw-mcp-pid1-v2"
+            } else {
+                "--agentfw-mcp-pid1-v1"
+            },
             super::linux_owner::LEASE_FD_PLACEHOLDER,
             "--",
         ])
@@ -1006,11 +1109,16 @@ fn prepare_linux_command_inner(
         .process_group(0);
     let budget_config = match selected {
         Some(bound) => Some(bound.config.clone()),
-        None => super::linux_budget::Config::load_from_env()?,
+        None if inherit_environment => super::linux_budget::Config::load_from_env()?,
+        None => None,
     };
     if budget_config.is_some() {
         let budget_pins: Vec<_> = pins.iter().chain(std::iter::once(&bwrap_pin)).collect();
-        require_budget_mount_support(&[&workspace, &package_root], &budget_pins)?;
+        if immutable.is_some() {
+            require_budget_mount_support(&[&workspace], &budget_pins)?;
+        } else {
+            require_budget_mount_support(&[&workspace, &package_root], &budget_pins)?;
+        }
     }
     let budget = match budget_config.as_ref() {
         Some(config) => {
@@ -1039,6 +1147,7 @@ fn prepare_linux_command_inner(
         budget,
         bwrap_fd,
         owner_executable_fd,
+        sealed_closure,
     })
 }
 
@@ -1063,7 +1172,7 @@ mod tests {
         std::fs::rename(&root, temporary.path().join("original")).unwrap();
         std::fs::create_dir(&root).unwrap();
         // Fails on the opened workspace fd, before any other assets or process.
-        let error = prepare_linux_command(&profile, &[], None, false)
+        let error = prepare_linux_command(&profile, &[], None, false, true, None)
             .err()
             .unwrap();
         assert!(error
@@ -1256,7 +1365,7 @@ print(json.dumps(result))
             normal_scheduler = libc::SCHED_OTHER,
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
-        let mut prepared = prepare_linux_command(&profile, &args, None, false).unwrap();
+        let mut prepared = prepare_linux_command(&profile, &args, None, false, true, None).unwrap();
         // Add an owned FIFO after repository validation to prove that read-only
         // mounts alone are insufficient, and that Landlock still blocks IPC.
         let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
@@ -1606,7 +1715,8 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}),probe({{path:'/workspace/eg
             port = address.port()
         );
         let mut prepared =
-            prepare_linux_command(&profile, &["-e".into(), script], None, true).unwrap();
+            prepare_linux_command(&profile, &["-e".into(), script], None, true, true, None)
+                .unwrap();
         prepared
             .command
             .env("SOU83_INHERITED_SECRET", "must-not-reach-stage");
@@ -1797,8 +1907,15 @@ Promise.all([probe({{host:'127.0.0.1',port:{port}}}), probe({{path:'/workspace/e
 "#,
             port = address.port()
         );
-        let mut prepared =
-            prepare_linux_command(&profile, &["-e".to_owned(), script], None, false).unwrap();
+        let mut prepared = prepare_linux_command(
+            &profile,
+            &["-e".to_owned(), script],
+            None,
+            false,
+            true,
+            None,
+        )
+        .unwrap();
         prepared
             .command
             .env("SOU62_INHERITED_SECRET", "must-not-reach-server");

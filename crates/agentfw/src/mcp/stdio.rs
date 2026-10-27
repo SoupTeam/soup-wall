@@ -29,7 +29,7 @@ impl Drop for NonblockingDescriptor {
     }
 }
 
-pub(super) struct Pipe {
+pub(crate) struct Pipe {
     inner: AsyncFd<NonblockingDescriptor>,
 }
 
@@ -70,11 +70,11 @@ impl Pipe {
         })
     }
 
-    pub(super) fn stdin() -> io::Result<Self> {
+    pub(crate) fn stdin() -> io::Result<Self> {
         Self::new(std::io::stdin().as_fd(), Interest::READABLE)
     }
 
-    pub(super) fn stdout() -> io::Result<Self> {
+    pub(crate) fn stdout() -> io::Result<Self> {
         Self::new(std::io::stdout().as_fd(), Interest::WRITABLE)
     }
 }
