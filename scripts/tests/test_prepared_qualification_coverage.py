@@ -6,6 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 FULL = "Qualify owned prepared-selection launch and failures with the original host"
 AUDIT = "Qualify prepared-run audit rotation and failed-store continuation"
+OPERATIONS = "Qualify prepared-run discovery and private archival"
 
 
 def step(text, name):
@@ -24,6 +25,7 @@ def enabled(body, **overrides):
         "github.event.inputs.audit_retention_only": "",
         "github.event.inputs.storage_recovery_only": "",
         "github.event.inputs.operator_results_only": "",
+        "github.event.inputs.prepared_operations_only": "",
     }
     values.update(overrides)
     condition = next(line.strip()[4:] for line in body.splitlines() if line.strip().startswith("if: "))
@@ -91,10 +93,33 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 for selected in ("github.event.inputs.existing_project_only", "github.event.inputs.ask_latency_baseline_sha",
                                  "github.event.inputs.ask_series",
                                  "github.event.inputs.storage_recovery_only",
-                                 "github.event.inputs.operator_results_only"):
+                                 "github.event.inputs.operator_results_only",
+                                 "github.event.inputs.prepared_operations_only"):
                     context = {"github.event_name": "workflow_dispatch", selected: "true"}
                     self.assertFalse(enabled(full, **context))
                     self.assertFalse(enabled(audit, **context))
+
+    def test_operations_dispatch_has_separate_evidence_and_never_replaces_pr_gates(self):
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                body = step(text, OPERATIONS)
+                self.assertFalse(enabled(body))
+                self.assertTrue(enabled(body, **{
+                    "github.event_name": "workflow_dispatch",
+                    "github.event.inputs.prepared_operations_only": "true",
+                }))
+                for selected in ("audit_retention_only", "storage_recovery_only", "operator_results_only"):
+                    self.assertFalse(enabled(body, **{
+                        "github.event_name": "workflow_dispatch",
+                        "github.event.inputs." + selected: "true",
+                    }))
+                self.assertIn("scripts/qualify-prepared-run-operations.py", body)
+                self.assertIn('$RUNNER_TEMP/prepared-run-operations', body)
+                self.assertIn('${{ runner.temp }}/prepared-run-operations/qualification/report.json', text)
+
+    def test_unknown_input_still_requires_review(self):
+        with self.assertRaisesRegex(AssertionError, "Unreviewed qualification condition"):
+            enabled("if: github.event.inputs.unreviewed_input == 'true'")
 
     def test_storage_faults_are_explicit_manual_evidence_with_separate_output(self):
         for name, text in self.workflows():
