@@ -298,6 +298,54 @@ pub fn frozen_binding(
 mod tests {
     use super::*;
     #[test]
+    fn replacement_result_fault_keeps_ask_input_limits_and_refuses_only_retention() {
+        use soup_wall_agent::{
+            AgentEvent, AgentFirewall, AgentPolicySet, EventKind, Provenance, TaintLimits,
+            TrackingFailure, DEFAULT_TAINT_CAP,
+        };
+        let policy=AgentPolicySet::from_yaml("agent_policies:\n  - name: exact-replacement\n    when: { action_class: destructive }\n    action: ask\ndefault: allow\n").unwrap();
+        let limits = TaintLimits {
+            max_source_bytes: 0,
+            ..TaintLimits::default()
+        };
+        let mut fw = AgentFirewall::with_taint_limits(policy, DEFAULT_TAINT_CAP, limits).unwrap();
+        fw.try_register_provenance_context("replacement-fault")
+            .unwrap();
+        let args = json!({"path":"result.txt","content":"new useful bounded result","old_sha256":"a".repeat(64),"old_identity":{"inode":1}});
+        assert!(args.to_string().len() < fw.provenance_limits().max_input_bytes);
+        let mut ev = AgentEvent {
+            session: "replacement-fault".into(),
+            agent: "collector".into(),
+            parent: None,
+            seq: 1,
+            at_ms: 0,
+            kind: EventKind::ToolCall {
+                tool: "replace_result".into(),
+                args,
+            },
+        };
+        let outcome = fw.inspect_native_call(&ev, ActionClass::Destructive, &[]);
+        assert_eq!(outcome.verdict, soup_wall_agent::Verdict::Ask);
+        assert!(!outcome.provenance_incomplete);
+        ev.seq = 2;
+        ev.kind = EventKind::ToolResult {
+            tool: "replace_result".into(),
+            content: "{\"committed\":true}".into(),
+            source: Provenance::Native {
+                registry: "r".repeat(64),
+                tool: "replace_result".into(),
+            },
+        };
+        assert_eq!(
+            fw.preview_native_result(&ev).verdict,
+            soup_wall_agent::Verdict::Allow
+        );
+        assert_eq!(
+            fw.try_admit_native_result(&ev),
+            Err(TrackingFailure::Source)
+        );
+    }
+    #[test]
     fn replacement_selectors_consume_every_argument_without_fallbacks() {
         let pointers = [
             "/spec/path",

@@ -58,6 +58,21 @@
       "artifact_sha256": "c6fd0e9983acfaf08ec5f620942e8b1365c99f48713753402e4c9004c9e2cec1",
       "runtime_sha256": "087f47874312947670d79bad2f4df8c3e3c49cf5c8999d3f1506d955bc97f9df",
       "fix": "Use an explicitly stricter retained-input cap only for the disposable result-withheld daemon: invocation leaves fit while the complete committed result cannot be recorded. All production limits/policies remain unchanged."
+    },
+    {
+      "source": "d3782f5e8d1d49b1fb56a87d6fe819d6d1c8b4e3",
+      "run_id": 40462421253,
+      "result": "failed-runtime-control",
+      "code": "retained_input_cap_also_refused_approval_request",
+      "linux_execution_qualified": false,
+      "product_cases_executed": 22,
+      "product_cases_passed": 21,
+      "linux_controls_passed": 30,
+      "strict_clippy_fmt": "pass",
+      "artifact_id": 12714534084,
+      "artifact_sha256": "c325bc5f8fb02a92b06510eb1e183ed274d0f906f19273be7f365c62661fb8d0",
+      "runtime_sha256": "332bb7efdda54fc6bdb76d82f8bb6d47266255f5adad85b64b4d0de32ee61e18",
+      "fix": "Keep input and policy limits unchanged. Only the disposable result-withheld daemon uses max_source_bytes=0, so a new portable real-engine control proves invocation Ask remains available while native result retention fails with TrackingFailure::Source."
     }
   ]
 }

@@ -151,13 +151,12 @@ def run_case(binary, name, libraries):
             "registry_path": str(root / "registry.json"), "registry_sha256": sha(reg),
             "approval": {"ttl_seconds": 1 if name == "ask-expiry" else 30}}}
         if name=="result-withheld":
-            # Tighten only this disposable daemon's retained-input cap. All
-            # invocation string leaves fit (including the 64-byte old hash),
-            # while the complete committed metadata result does not. This
-            # exercises a real result-recording refusal after publication,
-            # without weakening policy or altering the production defaults.
-            config["provenance"]={"max_input_bytes":96}
-            row["result_refusal_boundary"]="retained_provenance_max_input_96"
+            # Tighten only this disposable daemon's retained-source cap.
+            # Invocation/Ask input limits remain unchanged, while recording
+            # the result's nonempty Native provenance must fail after commit.
+            # Production defaults and execution policies remain unchanged.
+            config["provenance"]={"max_source_bytes":0}
+            row["result_refusal_boundary"]="retained_provenance_max_source_0"
         (home / ".agentfw/config.yaml").write_bytes(canonical(config))
         row.update(registry_sha256=sha(reg), policy_sha256=sha(policy.encode()),
                    config_sha256=sha(canonical(config)), classifier_sha256=sha(classifier.read_bytes()),
@@ -325,7 +324,7 @@ def validate(report):
                     and len(r.get("fault_library_sha256",""))==64,"wrong/missing fault evidence")
         if r["case"]=="stage-fault": require(r.get("staged_bytes")==5,"partial write accounting changed")
         if r["case"]=="result-withheld":
-            require(r.get("result_withheld") is True and "resource_replacement_committed" in r.get("refusal_codes",[]),"withheld commit accounting missing")
+            require(r.get("result_withheld") is True and {"resource_replacement_committed","native_provenance_unrecordable","native_provenance_source"}.issubset(r.get("refusal_codes",[])),"withheld commit accounting missing")
     return {"acceptance_pass":True,"cases":len(rows),"production_stdio":True,"child_dispatches":0}
 
 

@@ -261,6 +261,72 @@
       "log_sha256": "3afc7b7f34dc365d705ef0e5ecb2a1c056e84d349b3f8e42ea46325a23350ddd",
       "elapsed_seconds": 0.14,
       "kind": "local-development"
+    },
+    {
+      "label": "displaced-object-controls",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_sou159*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "85fdc34f3686a136df9c3455a3baa2f0b1f9edace03615989b55e54d7f4ec286",
+      "log_sha256": "9e4cb5048aa1cba68e375172f853b15b1975d19ae8214a37483987da76030d71",
+      "elapsed_seconds": 0.13,
+      "kind": "local-development"
+    },
+    {
+      "label": "final-runtime-controls",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_sou159*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "6d7ea48b734a2c922da53a0c1b9085c5c9fc1dd421363d57bd69166571ad4c2d",
+      "log_sha256": "81e420cc4c71e9dd009a832c402ea6deba595985c445ef7beb2487b578bab287",
+      "elapsed_seconds": 0.13,
+      "kind": "local-development"
+    },
+    {
+      "label": "source-retention-fault",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo test --offline -p agentfw --lib native::resource::replacement -- --nocapture && cargo clippy --offline -p agentfw --all-targets -- -D warnings && cargo fmt --all --check && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v"
+      ],
+      "exit_code": 101,
+      "source_sha256": "9ce4fffcddfeb860c107e94dfcfb1545db3e2ffdfce2f7f9cfc522c37a9c8f97",
+      "log_sha256": "968210f2c489b6bfbf8acee4bb3bee86a9fbeff423a23ae6b394678111318e6c",
+      "elapsed_seconds": 11.51,
+      "kind": "local-development"
+    },
+    {
+      "label": "source-retention-control-fixed",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo test --offline -p agentfw --lib native::resource::replacement -- --nocapture && cargo clippy --offline -p agentfw --all-targets -- -D warnings && cargo fmt --all --check && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "5d16523f2bbfcb62bb306d2925f1f9eeb9e27924b1c486f0a3c57355f8e96313",
+      "log_sha256": "2635ca9ac49d5a8196b2ec402f8a5d2bba4b0516605f68839fe0b191fe0c498e",
+      "elapsed_seconds": 19.83,
+      "kind": "local-development"
     }
   ],
   "limits": [

@@ -21,7 +21,7 @@ def seed():
         row.update(approved_bindings=["a"*64],publication_bindings=["a"*64] if case in probe.COMMITTED else [])
         if case in probe.FAULT_ERRORS:
             row.update(executor_error=probe.FAULT_ERRORS[case],result_success=False,fault_library_sha256="f"*64,staged_bytes=5)
-        if case=="result-withheld":row.update(result_withheld=True,refusal_codes=["resource_replacement_committed"])
+        if case=="result-withheld":row.update(result_withheld=True,refusal_codes=["resource_replacement_committed","native_provenance_unrecordable","native_provenance_source"])
         if case in {"target-substitution","root-substitution"}:
             row.update(displaced_unchanged=True,displaced_before={"inode":1,"sha256":"d"*64},displaced_after={"inode":1,"sha256":"d"*64})
         rows.append(row)
