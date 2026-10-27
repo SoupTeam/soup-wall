@@ -7,7 +7,19 @@
       "status": "cancelled",
       "measured_trials": 0,
       "planned_trials": 18,
-      "reason": "Stopped during runtime preparation after preflight review found driver called send_frames instead of actual Client.send. No native timing measurement exists; not a latency failure or successful trial. Corrected driver is covered by complete trial-interface controls."
+      "reason": "Cancelled during paired-build step after static review found driver called send_frames instead of actual Client.send. No trial began; 18 unattempted planned trials. Corrected driver is covered by complete trial-interface controls."
+    },
+    {
+      "run_id": 40562757891,
+      "source": "9a86e84e167b25c2566215032f2614ee2fffc0ea",
+      "status": "failed",
+      "artifact_id": 12762870437,
+      "artifact_sha256": "cea73383259690d62b4c54e309aaa55c8fcf071fd42cd0f6f0479ca3d62def32",
+      "measured_trials": 0,
+      "planned_trials": 18,
+      "stage": "Python driver preflight after successful four builds, Rust tests, strict Clippy and fmt",
+      "reason": "Shared installer uses hashlib.file_digest, unavailable on runner-default Python 3.10. Pin Python 3.12 identically to the accepted original lane and run driver preflight before builds. This is an environment setup failure, not a latency measurement.",
+      "additional_build_control_failure": "Independent artifact inspection found identical old/candidate dev and release hashes; candidate Cargo build logs reported 0.17 s with no compilation. Shared-target freshness cannot prove a candidate build. Replaced it with distinct output roots and explicit manifest paths before any trial; the failed setup supplies no old/candidate measurements."
     }
   ]
 }

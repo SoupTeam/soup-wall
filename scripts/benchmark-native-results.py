@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import platform
 import statistics
+import signal
 import subprocess
 import sys
 import time
@@ -73,11 +74,16 @@ def trial(args, report, build, condition, variant, repeat, installed, workspace)
     local.agentfw = Path(build['binary'])
     local.output = args.output
     context = {'phases': {}}
-    phase = L.Phase(local, context, label, installed, workspace)
+    phase = None
     loaders = []
     started = time.monotonic()
+    def expired(_signal, _frame):
+        raise TimeoutError('finite trial deadline')
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, 90)
     try:
         row['stage'] = 'startup'
+        phase = L.Phase(local, context, label, installed, workspace)
         phase.start()
         # Fixed warm-up matches the original warmed inspection path. Its audit
         # remains in the logs but it is not one of the nine measured responses.
@@ -128,37 +134,42 @@ def trial(args, report, build, condition, variant, repeat, installed, workspace)
         row['error_type'] = type(error).__name__
         # No exception bodies: a parser error may contain the original bytes.
     finally:
-        for loader in loaders:
-            loader.terminate()
-            loader.wait(timeout=5)
-        try:
-            phase.stop()
-        except Exception as error:
-            row['cleanup_error_type'] = type(error).__name__
-            row['status'] = 'failed'
-        section = context['phases'].get(label, {})
-        row['phase'] = section
-        initial_memory = section.get('memory_after_initialize') or {}
-        final_memory = section.get('memory_final') or {}
-        if (not initial_memory or not final_memory
-                or final_memory['vm_hwm_kib'] - initial_memory['vm_rss_kib'] > 96 * 1024):
-            row['status'] = 'failed'
-        if (not section.get('daemon_cleanup', {}).get('all_stopped')
-                or not section.get('client', {}).get('process_cleanup', {}).get('all_stopped')
-                or section.get('client', {}).get('forced_cleanup') is not False
-                or section.get('client', {}).get('exit_code') != 0
-                or section.get('daemon_exit_code') not in (0, -15)
-                or section.get('cleanup_audit', {}).get('cleanup_verified') is not True):
-            row['status'] = 'failed'
-        row['native_timing'] = timing_rows(phase.root / 'daemon.log', 'native_admission_timing')
-        observed = {r['sha256'] for r in row['responses']}
-        row['burst_result_timing'] = [r for r in row['native_timing']
-                                      if r.get('request_event') == 'result' and r.get('content_sha256') in observed]
-        if row['status'] == 'passed' and (len(row['burst_result_timing']) != 9
-                or any(r.get('release_decision') is not True for r in row['burst_result_timing'])):
-            row['status'] = 'failed'
-        row['transport_timing'] = timing_rows(phase.root / 'collector.log', 'mcp_native_transport_timing')
-        row['delivery_timing'] = timing_rows(phase.root / 'collector.log', 'mcp_original_result_delivery_timing')
+        # Cleanup retains its existing bounded grace after the trial deadline.
+        # This outer diagnostic guard never changes any native/collector timer.
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+        if phase is not None:
+            for loader in loaders:
+                loader.terminate()
+                loader.wait(timeout=5)
+            try:
+                phase.stop()
+            except Exception as error:
+                row['cleanup_error_type'] = type(error).__name__
+                row['status'] = 'failed'
+            section = context['phases'].get(label, {})
+            row['phase'] = section
+            initial_memory = section.get('memory_after_initialize') or {}
+            final_memory = section.get('memory_final') or {}
+            if (not initial_memory or not final_memory
+                    or final_memory['vm_hwm_kib'] - initial_memory['vm_rss_kib'] > 96 * 1024):
+                row['status'] = 'failed'
+            if (not section.get('daemon_cleanup', {}).get('all_stopped')
+                    or not section.get('client', {}).get('process_cleanup', {}).get('all_stopped')
+                    or section.get('client', {}).get('forced_cleanup') is not False
+                    or section.get('client', {}).get('exit_code') != 0
+                    or section.get('daemon_exit_code') not in (0, -15)
+                    or section.get('cleanup_audit', {}).get('cleanup_verified') is not True):
+                row['status'] = 'failed'
+            row['native_timing'] = timing_rows(phase.root / 'daemon.log', 'native_admission_timing')
+            observed = {r['sha256'] for r in row['responses']}
+            row['burst_result_timing'] = [r for r in row['native_timing']
+                                          if r.get('request_event') == 'result' and r.get('content_sha256') in observed]
+            if row['status'] == 'passed' and (len(row['burst_result_timing']) != 9
+                    or any(r.get('release_decision') is not True for r in row['burst_result_timing'])):
+                row['status'] = 'failed'
+            row['transport_timing'] = timing_rows(phase.root / 'collector.log', 'mcp_native_transport_timing')
+            row['delivery_timing'] = timing_rows(phase.root / 'collector.log', 'mcp_original_result_delivery_timing')
         row['workspace_after'] = L.BASE.snapshot(workspace)
         row['elapsed_seconds'] = time.monotonic() - started
         row['load_after'] = list(os.getloadavg())
@@ -176,7 +187,8 @@ def run(args, report):
     report.update(plan=plan, plan_sha256=sha(PLAN), source=L.BASE.source(),
                   environment={'system': platform.system(), 'kernel': platform.release(),
                                'machine': platform.machine(), 'cpus': os.cpu_count(),
-                               'affinity': sorted(os.sched_getaffinity(0)), 'load': list(os.getloadavg())})
+                               'affinity': sorted(os.sched_getaffinity(0)), 'load': list(os.getloadavg())},
+                  python={'version': platform.python_version(), 'sha256': sha(Path(sys.executable).resolve())})
     builds = check_manifest(json.loads(args.manifest.read_text()))
     workspace = args.output / 'workspace'
     workspace.mkdir(mode=0o700)

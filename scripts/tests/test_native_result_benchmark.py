@@ -9,6 +9,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import hashlib
 import json
+import runpy
+import sys
+import os
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('bench', ROOT / 'scripts/benchmark-native-results.py')
@@ -49,7 +52,7 @@ class BenchmarkControls(unittest.TestCase):
     def test_actual_client_interface_and_refused_or_incomplete_bursts(self):
         # Exercise the whole trial with the actual Client method interface;
         # no network, model, daemon or synthetic performance claim.
-        for mode in ('exact', 'refused', 'missing', 'cleanup_failed'):
+        for mode in ('exact', 'refused', 'missing', 'cleanup_failed', 'startup_failed'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
                 root=Path(folder)
                 workspace=root/'workspace'; workspace.mkdir()
@@ -76,6 +79,7 @@ class BenchmarkControls(unittest.TestCase):
                         return self.replies.pop(0)
                 class Phase:
                     def __init__(self,args,context,label,installed,workspace):
+                        if mode=='startup_failed':raise ValueError('owned startup failure')
                         self.root=root/label;self.root.mkdir()
                         self.client=Client();self.count=0;self.sent=False
                         self.section={'memory_after_initialize':{'vm_rss_kib':100},'memory_final':{'vm_hwm_kib':101},
@@ -103,6 +107,34 @@ class BenchmarkControls(unittest.TestCase):
                 if mode=='missing':self.assertEqual(len(row['responses']),8)
                 self.assertEqual(row['planned_responses'],9)
                 self.assertTrue((root/'report.json').is_file())
+
+    def test_builds_cannot_alias_old_and_candidate_cargo_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            scratch=root/'scratch';scratch.mkdir();(scratch/'binaries').mkdir()
+            baseline=root/'baseline';candidate=root/'candidate'
+            baseline.mkdir();candidate.mkdir()
+            observed=[]
+            def checked(command, **options):
+                if command[:2]==['rustc','--version']:return 'rustc owned fixture'
+                if command[:3]==['git','status','--porcelain']:return b''
+                return ('a'*40 if options['cwd']==baseline else 'b'*40)
+            def build(command, **options):
+                target=Path(options['env']['CARGO_TARGET_DIR'])
+                profile=command[command.index('--profile')+1]
+                manifest=Path(command[command.index('--manifest-path')+1])
+                self.assertEqual(manifest,options['cwd']/'Cargo.toml')
+                out=target/('debug' if profile=='dev' else 'release')/'agentfw'
+                out.parent.mkdir(parents=True,exist_ok=True)
+                out.write_bytes((str(options['cwd'])+profile).encode())
+                observed.append((options['cwd'],target))
+            argv=['build-native-result-benchmark.py','--baseline',str(baseline),'--candidate',str(candidate),'--scratch',str(scratch)]
+            with patch.object(sys,'argv',argv),patch('subprocess.check_output',checked),patch('subprocess.run',build):
+                runpy.run_path(str(ROOT/'scripts/build-native-result-benchmark.py'),run_name='__main__')
+            self.assertEqual(len(observed),4)
+            self.assertNotEqual(observed[0][1],observed[2][1])
+            value=json.loads((scratch/'builds.json').read_text())
+            self.assertNotEqual(value['instrumented-baseline']['dev']['binary_sha256'],value['measured-candidate']['dev']['binary_sha256'])
 
 
 if __name__ == '__main__':

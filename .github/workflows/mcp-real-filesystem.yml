@@ -1791,6 +1791,9 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
           fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
         with:
           components: clippy, rustfmt
@@ -1848,14 +1851,15 @@ jobs:
             SOU165_SCRATCH="$task_scratch" SOU165_SOURCE="$GITHUB_WORKSPACE" SOU165_BASELINE="$RUNNER_TEMP/sou165-baseline" CARGO_BUILD_JOBS=4 \
             /bin/bash -euo pipefail <<'BASH'
           cd "$SOU165_SOURCE"
+          python3 -B -m unittest discover -s scripts/tests -p test_native_result_benchmark.py -v
           python3 -B scripts/build-native-result-benchmark.py --baseline "$SOU165_BASELINE" --candidate "$SOU165_SOURCE" --scratch "$SOU165_SCRATCH"
+          export CARGO_TARGET_DIR="$SOU165_SCRATCH/target/measured-candidate"
           cargo test --locked --offline -p soup-wall-agent
           cargo test --locked --offline -p agentfw --lib native::tests
           cargo test --locked --offline -p agentfw --test native_endpoint
           cargo test --locked --offline -p agentfw --test mcp_admission
           cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
-          python3 -B -m unittest discover -s scripts/tests -p test_native_result_benchmark.py -v
           python3 -B scripts/benchmark-native-results.py --manifest "$SOU165_SCRATCH/builds.json" \
             --node "$SOU165_SCRATCH/node/bin/node" --npm "$SOU165_SCRATCH/node/bin/npm" \
             --bwrap "$SOU165_SCRATCH/bwrap-build/bwrap" --strace /usr/bin/strace \
