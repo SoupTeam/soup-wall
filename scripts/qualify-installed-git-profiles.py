@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import platform
 import signal
 import subprocess
 import sys
@@ -47,7 +48,10 @@ def checked(door, command, *extra, status=None, **options):
 
 def qualify(args, report):
     preparation = load("qualification_platform", "prepare-installed-pilot.py")
+    audit = load("qualification_retained_audit", "pilot_audit.py")
     preparation.supported_platform()
+    report["platform"] = {"system": platform.system(), "machine": platform.machine(),
+                          "kernel": platform.release(), "os_release_sha256": BASE.sha(Path("/etc/os-release"))}
     before = preparation.PILOT.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
     report["source_before"] = before
@@ -103,6 +107,9 @@ def qualify(args, report):
             selection = json.loads(selection_path.read_bytes())
             require(selection["format"] == G.SELECTION_V3 and G.from_selection(selection) == name,
                     "prepared_selection_mismatch")
+            report["selections"][name] = {"selection_sha256": BASE.sha(selection_path),
+                "source": selection["source"], "files": selection["files"],
+                "prepared_profiles": selection["prepared_profiles"], "git_selection": selection["git_selection"]}
             require(checked(door, "prepare", "--apply", inputs=False)["status"] == "reused", "reuse_failed")
             status = checked(door, "status", "--state-root", str(args.state_root), inputs=False)
             require(status["protection"] == "configured-not-running"
@@ -128,6 +135,10 @@ def qualify(args, report):
                 refused_indices, useful_indices = (1,), (0, 2)
             label = name.replace("git-", "")
             row, results, outcome = QUAL.run_case(args, door, report, label, proposals)
+            row["launch_outcome"] = outcome
+            if outcome.get("audit", {}).get("directory"):
+                row["audit_export"] = audit.export_run(Path(outcome["audit"]["directory"]),
+                    args.output / (label + ".audit.json"), outcome["audit"]["run_id"])
             require(row["exit"] == 0 and row["process_cleanup"]["all_stopped"], "useful_run_or_cleanup_failed")
             require(row["live_status"]["protection"] == "observed-live", "live_status_not_verified")
             require(outcome["git_selection"] == G.binding(name), "run_selection_mismatch")
@@ -139,7 +150,9 @@ def qualify(args, report):
             require("Owned tracked content" in json.dumps(results[f"toolu_front_{label}_0"]["content"])
                     if name == "git-readonly-file-revisions-v1" else True, "per_file_bytes_missing")
             row.update(passed=True, git_selection=G.binding(name), successful_original_calls=len(useful_indices),
-                       refused_calls=len(refused_indices))
+                       refused_calls=len(refused_indices), observed_identity=outcome["identity"],
+                       selection_sha256=outcome["selection_sha256"], profiles=outcome["profiles"],
+                       resource_budget=outcome["resource_budget"])
             # Preserve both failed and successful attempts; cancellation uses fresh
             # authority, and a separate successful run proves useful restart.
             if name != G.DEFAULT:
@@ -214,7 +227,7 @@ def main():
     args.agent_output = None
     args.output = args.output.resolve()
     report = {"format": "sw-installed-git-profiles-qualification/1", "status": "failed", "cases": [],
-              "stage_failures": [], "skipped": 0, "provider": "owned-scripted-loopback",
+              "stage_failures": [], "selections": {}, "skipped": 0, "provider": "owned-scripted-loopback",
               "unqualified": ["WSL2", "macOS", "Windows"]}
     args.stage_failures = report["stage_failures"]
     try:

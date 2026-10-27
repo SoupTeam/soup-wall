@@ -302,6 +302,15 @@ jobs:
               stream.write('SOU162_BWRAP=' + native['bwrap'] + '\n')
               stream.write('SOU162_GIT=' + native['git'] + '\n')
           PY
+      - name: Provision accepted job-scoped permission for the exact bubblewrap image
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          python3 -B scripts/ci_bwrap_userns.py check
+          python3 -B scripts/ci_bwrap_userns.py install --source "$SOU162_BWRAP" \
+            --sha256 "$(sha256sum "$SOU162_BWRAP" | cut -d ' ' -f1)" \
+            --report "$RUNNER_TEMP/installed-git-apparmor.json"
       - name: Qualify installed original-host scenarios outside checkout
         run: |
           set -euo pipefail
@@ -311,8 +320,14 @@ jobs:
             --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
             --sandbox-tests "$SOU162_SANDBOX_TESTS" --git "$SOU162_GIT" \
             --static-git "$RUNNER_TEMP/git-source/git" \
-            --bwrap "$SOU162_BWRAP" --strace /usr/bin/strace --allow-download \
+            --bwrap "$SOU111_BWRAP" --strace /usr/bin/strace --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-git-profiles.log"
+      - name: Remove only this job's sandbox permission and executable
+        if: always()
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          python3 -B scripts/ci_bwrap_userns.py cleanup --report "$RUNNER_TEMP/installed-git-apparmor-cleanup.json"
       - name: Retain sanitized qualification evidence including unsuccessful attempts
         if: always()
         uses: actions/upload-artifact@v7
@@ -322,5 +337,8 @@ jobs:
             ${{ runner.temp }}/installed-git-focused.log
             ${{ runner.temp }}/installed-git-profiles/report.json
             ${{ runner.temp }}/installed-git-profiles.log
+            ${{ runner.temp }}/installed-git-profiles/*.audit.json
+            ${{ runner.temp }}/installed-git-apparmor.json
+            ${{ runner.temp }}/installed-git-apparmor-cleanup.json
             ${{ runner.temp }}/native-inputs.json
           if-no-files-found: error
