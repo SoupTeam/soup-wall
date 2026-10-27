@@ -29,9 +29,16 @@ def replace_owned_json(path, value):
     os.replace(temporary, path)
 
 
-def identity():
-    data = json.loads((ROOT / "profiles/mcp/git-local-clone-readonly-v1/identity.json").read_text())
-    if data["format"] != FORMAT:
+def selection_parameters(selection=None):
+    return selection or {"format": FORMAT, "registry_id": "git-local-clone-readonly-v1",
+                         "identity": "profiles/mcp/git-local-clone-readonly-v1/identity.json",
+                         "installation": "sou107-profile-installation/1"}
+
+
+def identity(selection=None):
+    selected = selection_parameters(selection)
+    data = json.loads((ROOT / selected["identity"]).read_text())
+    if data["format"] != selected["format"]:
         raise ValueError("local clone profile identity mismatch")
     for relative, digest in data["files"].items():
         path = (ROOT / relative).resolve()
@@ -40,12 +47,13 @@ def identity():
     return data
 
 
-def registry(manifest):
+def registry(manifest, selection=None):
+    selected = selection_parameters(selection)
     value = V1.registry(manifest)
-    value["registry_id"] = "git-local-clone-readonly-v1"
+    value["registry_id"] = selected["registry_id"]
     for tool in value["tools"]:
         if "mcp_result_profile" in tool:
-            tool["mcp_result_profile"] = FORMAT
+            tool["mcp_result_profile"] = selected["format"]
     return value
 
 
@@ -69,44 +77,46 @@ def require_static_git(path):
             raise ValueError("local clone Git must have no ELF interpreter; build pinned Git with LDFLAGS=-static")
 
 
-def install(destination, workspace, git, git_sha256, bwrap, git_launcher):
-    selected = identity()
+def install(destination, workspace, git, git_sha256, bwrap, git_launcher, *, selection=None):
+    parameters = selection_parameters(selection)
+    selected = identity(selection)
     require_static_git(git)
     V1.install(destination, workspace, git, git_sha256, bwrap, git_launcher, static_git=True)
     destination = Path(destination).absolute()
     profile = json.loads((destination / "profile.json").read_text())
-    profile["format"] = FORMAT
+    profile["format"] = parameters["format"]
     replace_owned_json(destination / "profile.json", profile)
     manifest = json.loads((V1.ASSETS / "upstream-tools-list.json").read_text())
-    replace_owned_json(destination / "registry.json", registry(manifest))
+    replace_owned_json(destination / "registry.json", registry(manifest, selection))
     shutil.copyfile(ROOT / "profiles/pilot/linux-readonly-v1/policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
     receipt = json.loads((destination / "installation.json").read_text())
-    receipt.update(format="sou107-profile-installation/1", profile=profile,
+    receipt.update(format=parameters["installation"], profile=profile,
                    selection_identity=selected, profile_sha256=sha(destination / "profile.json"),
                    registry_sha256=sha(destination / "registry.json"), policy_sha256=sha(destination / "policy.yaml"))
     replace_owned_json(destination / "installation.json", receipt)
-    return {"status": "prepared-not-active", "profile": str(destination / "profile.json"), "format": FORMAT}
+    return {"status": "prepared-not-active", "profile": str(destination / "profile.json"), "format": parameters["format"]}
 
 
-def prepare(installation, destination, port, python=None):
+def prepare(installation, destination, port, python=None, *, selection=None):
+    parameters = selection_parameters(selection)
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("local clone profile requires Linux x86-64")
-    selected = identity()
+    selected = identity(selection)
     installation, destination = Path(installation).resolve(strict=True), Path(destination).absolute()
     if destination.exists() or destination.is_symlink() or type(port) is not int or not 1024 <= port <= 65535:
         raise ValueError("new selection destination and bounded port required")
     receipt = json.loads((installation / "installation.json").read_text())
     profile = json.loads((installation / "profile.json").read_text())
     manifest = json.loads((V1.ASSETS / "upstream-tools-list.json").read_text())
-    if receipt.get("format") != "sou107-profile-installation/1" or receipt.get("selection_identity") != selected:
+    if receipt.get("format") != parameters["installation"] or receipt.get("selection_identity") != selected:
         raise ValueError("local clone installation identity mismatch")
-    if profile != receipt["profile"] or profile["format"] != FORMAT:
+    if profile != receipt["profile"] or profile["format"] != parameters["format"]:
         raise ValueError("local clone runtime profile mismatch")
     for filename, key in (("profile.json", "profile_sha256"), ("registry.json", "registry_sha256"), ("policy.yaml", "policy_sha256")):
         if sha(installation / filename) != receipt[key]:
             raise ValueError("local clone installed bytes changed")
-    if json.loads((installation / "registry.json").read_text()) != registry(manifest):
+    if json.loads((installation / "registry.json").read_text()) != registry(manifest, selection):
         raise ValueError("local clone registry authority mismatch")
     policy = ROOT / "profiles/pilot/linux-readonly-v1/policy.yaml"
     if sha(installation / "policy.yaml") != sha(policy):
@@ -123,11 +133,11 @@ def prepare(installation, destination, port, python=None):
                   "registry_path": str(installation / "registry.json"), "registry_sha256": sha(installation / "registry.json")}}
     import sys
     classifier_python = Path(python or sys.executable).resolve(strict=True)
-    selection = {"status": "prepared-not-active", "format": FORMAT, "workspace": str(workspace),
+    selection = {"status": "prepared-not-active", "format": parameters["format"], "workspace": str(workspace),
                  "profile_sha256": sha(installation / "profile.json"), "registry_sha256": sha(installation / "registry.json"),
                  "policy_sha256": sha(policy), "classifier_sha256": sha(classifier),
                  "python_sha256": sha(classifier_python),
-                 "identity_sha256": sha(ROOT / "profiles/mcp/git-local-clone-readonly-v1/identity.json"), "environment": {
+                 "identity_sha256": sha(ROOT / parameters["identity"]), "environment": {
                      "AGENTFW_MCP_SERVER_PROFILE": str(installation / "profile.json"),
                      "AGENTFW_CLASSIFIER_PYTHON": str(classifier_python),
                      "AGENTFW_CLASSIFIER": "rule-baseline",

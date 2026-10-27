@@ -26,6 +26,9 @@ use super::server_profile::ProfileConfig;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "git_local_clone_sandbox_tests.rs"]
 mod git_local_clone_tests;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "git_tracked_symlinks_sandbox_tests.rs"]
+mod git_tracked_symlinks_tests;
 #[cfg(target_os = "linux")]
 use super::server_profile::{package_tree_sha256, SERVER_ENTRYPOINT};
 
@@ -34,7 +37,11 @@ pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
-    if format == super::server_profile::git_local_clone::FORMAT {
+    if format == super::server_profile::git::FILE_READS_FORMAT {
+        "sw-mcp/git-readonly-file-revisions/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git_tracked_symlinks::FORMAT {
+        "sw-mcp/git-tracked-symlinks-readonly/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git_local_clone::FORMAT {
         "sw-mcp/git-local-clone-readonly/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git::SHALLOW_FORMAT {
         "sw-mcp/git-readonly-shallow/linux-bwrap-landlock/1"
@@ -212,7 +219,7 @@ pub(crate) fn prepare_verified_git(
     profile: &ProfileConfig,
 ) -> anyhow::Result<PreparedServerSandbox> {
     anyhow::ensure!(
-        super::server_profile::git::is_profile(&profile.format),
+        super::verified_git::supports_profile(&profile.format),
         "verified execution requires a supported Git profile"
     );
     // Validate constructed configs as strictly as operator file configs.
@@ -845,9 +852,13 @@ fn prepare_linux_command_inner(
     }
     let git_profile = super::server_profile::git_selected(&profile.format);
     let clone_profile = profile.format == super::server_profile::git_local_clone::FORMAT;
+    let link_profile = profile.format == super::server_profile::git_tracked_symlinks::FORMAT;
+    let guarded_profile = clone_profile || link_profile;
     if git_profile {
         let root = descriptor_path(&workspace_pin).join(".");
-        if clone_profile {
+        if link_profile {
+            super::server_profile::git_tracked_symlinks::validate_repository(&root)?;
+        } else if clone_profile {
             super::server_profile::git_local_clone::validate_repository(&root)?;
         } else if profile.format == super::server_profile::git::SHALLOW_FORMAT {
             super::server_profile::git::validate_repository_with_shallow(&root, true)?;
@@ -920,7 +931,7 @@ fn prepare_linux_command_inner(
         let pin = open_verified_file(&git.path, &git.sha256, true)?;
         mounts.push((
             pins.len(),
-            PathBuf::from(if clone_profile {
+            PathBuf::from(if guarded_profile {
                 super::server_profile::git_local_clone::ORIGINAL_GIT
             } else {
                 "/mcp-runtime/git"
@@ -939,13 +950,17 @@ fn prepare_linux_command_inner(
             PathBuf::from("/mcp-runtime/git-profile-launcher"),
         ));
         pins.push(pin);
-        if clone_profile {
+        if guarded_profile {
             // bubblewrap consumes each mount fd, so use a separate verified fd
             // for the same exact launcher image used as the per-Git guard.
             let pin = open_verified_file(&launcher.path, &launcher.sha256, true)?;
             mounts.push((
                 pins.len(),
-                PathBuf::from(super::server_profile::git_local_clone::EXECUTABLE),
+                PathBuf::from(if link_profile {
+                    super::server_profile::git_tracked_symlinks::EXECUTABLE
+                } else {
+                    super::server_profile::git_local_clone::EXECUTABLE
+                }),
             ));
             pins.push(pin);
         }
@@ -1053,7 +1068,14 @@ fn prepare_linux_command_inner(
     ]);
     if git_profile {
         for (name, value) in [
-            ("GIT_PYTHON_GIT_EXECUTABLE", "/mcp-runtime/git"),
+            (
+                "GIT_PYTHON_GIT_EXECUTABLE",
+                if link_profile {
+                    super::server_profile::git_tracked_symlinks::EXECUTABLE
+                } else {
+                    "/mcp-runtime/git"
+                },
+            ),
             ("GIT_CONFIG_NOSYSTEM", "1"),
             ("GIT_CONFIG_GLOBAL", "/dev/null"),
             ("GIT_TERMINAL_PROMPT", "0"),
@@ -1253,6 +1275,18 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires explicit pinned Linux Git/Python profile and bubblewrap"]
     async fn selected_git_sandbox_isolates_real_python_and_git() {
+        git_sandbox_boundary(false).await;
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "requires explicit pinned Linux BASE or file-revision Git profile and bubblewrap"]
+    async fn verified_git_preparation_isolates_real_python_and_git() {
+        git_sandbox_boundary(true).await;
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn git_sandbox_boundary(verified: bool) {
         use std::io::{Read, Write};
         use std::net::{TcpListener, TcpStream};
         use std::os::fd::{AsRawFd, FromRawFd};
@@ -1365,7 +1399,14 @@ print(json.dumps(result))
             normal_scheduler = libc::SCHED_OTHER,
         );
         let args = vec!["-I".into(), "-B".into(), "-c".into(), script];
-        let mut prepared = prepare_linux_command(&profile, &args, None, false, true, None).unwrap();
+        let mut prepared = if verified {
+            assert!(super::super::verified_git::supports_profile(
+                &profile.format
+            ));
+            prepare_linux_command_inner(&profile, &args, None, false, true, None, true).unwrap()
+        } else {
+            prepare_linux_command(&profile, &args, None, false, true, None).unwrap()
+        };
         // Add an owned FIFO after repository validation to prove that read-only
         // mounts alone are insufficient, and that Landlock still blocks IPC.
         let fifo_path = profile.workspace.join(".sou68-runtime-probe.fifo");
@@ -1478,6 +1519,11 @@ print(json.dumps(result))
             std::io::ErrorKind::WouldBlock
         );
         println!("SOU68_SANDBOX_POSITIVE {}", result);
+        if verified {
+            // This is a syscall/confinement probe of the worker preparation
+            // branch; original tools/call bytes are qualified separately.
+            println!("SOU146_VERIFIED_PREPARATION_POSITIVE");
+        }
     }
 
     #[cfg(unix)]

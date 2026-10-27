@@ -19,9 +19,16 @@ pub mod git;
 pub mod git_local_clone;
 #[cfg(test)]
 mod git_local_clone_tests;
+pub mod git_tracked_symlinks;
+#[cfg(test)]
+mod git_tracked_symlinks_tests;
 
 pub fn git_selected(format: &str) -> bool {
-    git::is_profile(format) || format == git_local_clone::FORMAT
+    git::is_profile(format)
+        || matches!(
+            format,
+            git_local_clone::FORMAT | git_tracked_symlinks::FORMAT
+        )
 }
 
 mod read_lease;
@@ -44,8 +51,10 @@ pub fn selected(format: Option<&str>) -> bool {
                 | filesystem_create::FORMAT
                 | git::FORMAT
                 | git::LOCAL_REFS_FORMAT
+                | git::FILE_READS_FORMAT
                 | git::SHALLOW_FORMAT
                 | git_local_clone::FORMAT
+                | git_tracked_symlinks::FORMAT
         )
     )
 }
@@ -459,9 +468,12 @@ pub fn original_manifest() -> Value {
 pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
     match format {
         FORMAT | filesystem_create::FORMAT => Ok(original_manifest()),
-        git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT | git_local_clone::FORMAT => {
-            Ok(git::original_manifest())
-        }
+        git::FORMAT
+        | git::LOCAL_REFS_FORMAT
+        | git::FILE_READS_FORMAT
+        | git::SHALLOW_FORMAT
+        | git_local_clone::FORMAT
+        | git_tracked_symlinks::FORMAT => Ok(git::original_manifest()),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -469,9 +481,12 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
 pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Result<()> {
     match format {
         FORMAT | filesystem_create::FORMAT => validate_initialization(value),
-        git::FORMAT | git::LOCAL_REFS_FORMAT | git::SHALLOW_FORMAT | git_local_clone::FORMAT => {
-            git::validate_initialization(value)
-        }
+        git::FORMAT
+        | git::LOCAL_REFS_FORMAT
+        | git::FILE_READS_FORMAT
+        | git::SHALLOW_FORMAT
+        | git_local_clone::FORMAT
+        | git_tracked_symlinks::FORMAT => git::validate_initialization(value),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -483,9 +498,14 @@ pub fn classify_manifest_for(
     match format {
         FORMAT => classify_manifest(value),
         filesystem_create::FORMAT => filesystem_create::classify_manifest(value),
-        git::FORMAT | git_local_clone::FORMAT => git::classify_manifest(value),
+        git::FORMAT | git_local_clone::FORMAT | git_tracked_symlinks::FORMAT => {
+            git::classify_manifest(value)
+        }
         git::LOCAL_REFS_FORMAT => git::classify_manifest_with_local_refs(value, true),
         git::SHALLOW_FORMAT => git::classify_manifest(value),
+        git::FILE_READS_FORMAT => {
+            git::classify_manifest_with_extension(value, git::ReadExtension::FileRevisions)
+        }
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -511,7 +531,7 @@ pub struct ToolProfile {
     pub output: Option<InputSchema>,
     pub unsupported_reason: Option<&'static str>,
     git_tool: Option<String>,
-    git_local_references: bool,
+    git_extension: git::ReadExtension,
 }
 
 impl ToolProfile {
@@ -521,7 +541,7 @@ impl ToolProfile {
             "MCP tool is unsupported by selected profile"
         );
         if let Some(name) = &self.git_tool {
-            return git::validate_arguments_with_local_refs(name, value, self.git_local_references);
+            return git::validate_arguments_with_extension(name, value, self.git_extension);
         }
         self.input
             .as_ref()
@@ -731,7 +751,7 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
                         output,
                         unsupported_reason,
                         git_tool: None,
-                        git_local_references: false,
+                        git_extension: git::ReadExtension::None,
                     }
                 )
                 .is_none(),
