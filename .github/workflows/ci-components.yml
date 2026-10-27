@@ -3449,7 +3449,7 @@ jobs:
     if: contains(fromJSON(inputs.plan).workflows['sou79-resource-budgets.yml'], 'required-disposable-delegated-linux')
     # This job explicitly prepares ONE disposable, owned delegated service.
     # Other hosted checks retain their existing permissions and prerequisites.
-    runs-on: ${{ github.event.inputs.prepared_focus != '' && github.event.inputs.prepared_focus != 'off' && 'ubuntu-24.04' || 'ubuntu-22.04' }}
+    runs-on: ${{ (github.event.inputs.prepared_focus == '142' || github.event.inputs.prepared_focus == '143') && 'ubuntu-24.04' || 'ubuntu-22.04' }}
     timeout-minutes: ${{ github.event.inputs.prepared_host == 'true' && 65 || 35 }}
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
@@ -3465,11 +3465,136 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.94.1
         with:
           components: clippy
+      - name: Trusted SOU155 dependency fetch without candidate execution
+        if: github.event.inputs.prepared_focus == '155'
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch="$RUNNER_TEMP/sou155-native-build"
+          mkdir -m 700 "$scratch" "$scratch/home" "$scratch/tmp" "$scratch/cargo-home"
+          commit="$(git rev-parse HEAD)"
+          printf 'SOU155_SCRATCH=%s\nSOU155_COMMIT=%s\n' "$scratch" "$commit" >> "$GITHUB_ENV"
+          git rev-parse HEAD > "$scratch/source.txt"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          accepted=3c9cfb08c0f1498676dcc70de131bd2f324dd13b
+          git merge-base --is-ancestor "$accepted" "$commit"
+          python3 - "$accepted" <<'PY'
+          import subprocess,sys
+          from pathlib import Path
+          for raw in subprocess.check_output(['git','ls-files','-z']).split(b'\0'):
+              if not raw:continue
+              name=raw.decode()
+              if name in ('Cargo.toml','Cargo.lock') or name.endswith('/Cargo.toml') or name.startswith('.cargo/'):
+                  if Path(name).read_bytes()!=subprocess.check_output(['git','show',sys.argv[1]+':'+name]):
+                      raise SystemExit('trusted_dependency_inputs_changed')
+          PY
+          cargo="$(rustup which --toolchain 1.94.1 cargo)"
+          env -i PATH="$(dirname "$cargo"):/usr/bin:/bin" HOME="$scratch/home" TMPDIR="$scratch/tmp" \
+            CARGO_HOME="$scratch/cargo-home" RUSTUP_TOOLCHAIN=1.94.1 RUSTUP_AUTO_INSTALL=0 \
+            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null "$cargo" fetch --locked
+          printf 'SOU155_CARGO=%s\n' "$cargo" >> "$GITHUB_ENV"
+      - name: SOU155 offline compiler and kernel controls (not runtime acceptance)
+        if: github.event.inputs.prepared_focus == '155'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou155-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property=PrivateNetwork=yes --property=NoNewPrivileges=yes \
+            --property=ProtectSystem=strict --property="ReadOnlyPaths=$GITHUB_WORKSPACE /sys/fs/cgroup" \
+            --property="ReadWritePaths=$SOU155_SCRATCH" --property=RuntimeMaxSec=30min \
+            --property=KillMode=control-group --property=MemoryMax=6G --property=MemorySwapMax=0 \
+            --property=TasksMax=512 --property=CPUQuota=200% --property=LimitNOFILE=65536 \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env -i PATH=/usr/bin:/bin HOME="$SOU155_SCRATCH/home" TMPDIR="$SOU155_SCRATCH/tmp" \
+            python3 -B scripts/ci/native-verified-execution-build.py \
+            --source "$GITHUB_WORKSPACE" --scratch "$SOU155_SCRATCH" \
+            --cargo "$SOU155_CARGO" --expected-commit "$SOU155_COMMIT"
+      - name: Remove only the owned build unit
+        if: always() && github.event.inputs.prepared_focus == '155'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou155-build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.service"
+          sudo systemctl stop "$unit" || true
+          test ! -d "/sys/fs/cgroup/system.slice/$unit"
+      - name: Retain finite exact-source compiler controls
+        if: always() && github.event.inputs.prepared_focus == '155'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou155-native-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou155-native-build/native-build.json
+            ${{ runner.temp }}/sou155-native-build/source.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Prepare pinned public SOU155 inputs without candidate execution
+        if: github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          inputs="$RUNNER_TEMP/sou155-public-inputs"
+          mkdir -m 700 "$inputs"
+          printf 'SOU155_INPUTS=%s\n' "$inputs" >> "$GITHUB_ENV"
+          python3 -B scripts/ci/verified-original-inputs.py --source "$GITHUB_WORKSPACE" \
+            --output "$inputs" --expected-commit "$SOU155_COMMIT"
+      - name: Actual original SOU155 daemon process and result custody
+        if: github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$RUNNER_TEMP/sou155-native-runtime"
+          mkdir -m 700 "$host"
+          printf 'SOU155_HOST=%s\n' "$host" >> "$GITHUB_ENV"
+          unit="sou155-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          status=0
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property=PrivateNetwork=yes --property=NoNewPrivileges=yes \
+            --property='Delegate=cpu memory pids' \
+            --property="ReadWritePaths=/sys/fs/cgroup/system.slice/$unit.service" \
+            --property=ProtectSystem=strict \
+            --property="ReadOnlyPaths=$GITHUB_WORKSPACE $SOU155_SCRATCH $SOU155_INPUTS /sys/fs/cgroup" \
+            --property="ReadWritePaths=$host" \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 --property=TasksMax=256 \
+            --property=CPUQuota=200% --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --property=LimitNOFILE=65536 --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env -i PATH=/usr/bin:/bin HOME="$host" TMPDIR="$host" \
+            "$pythonLocation/bin/python3" -B scripts/ci/native-verified-execution.py \
+            --source "$GITHUB_WORKSPACE" --scratch "$host" --inputs "$SOU155_INPUTS" \
+            --build "$SOU155_SCRATCH" --expected-commit "$SOU155_COMMIT" --unit="$unit.service" || status=$?
+          # Inspect finite evidence only after the isolated candidate unit exits.
+          # A successful exit or self-reported status alone cannot pass the lane.
+          python3 -B scripts/ci/project-verified-execution.py \
+            --report "$host/native-execution.json" --build "$SOU155_SCRATCH/native-build.json" \
+            --expected-commit "$SOU155_COMMIT" --exit-code "$status" --output "$host/acceptance.json"
+      - name: Remove only the owned SOU155 runtime unit
+        if: always() && github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          unit="sou155-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.service"
+          sudo systemctl stop "$unit" || true
+          test ! -d "/sys/fs/cgroup/system.slice/$unit"
+      - name: Retain finite SOU155 native runtime evidence
+        if: always() && github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou155-native-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou155-public-inputs/setup.json
+            ${{ runner.temp }}/sou155-native-runtime/native-execution.json
+            ${{ runner.temp }}/sou155-native-runtime/acceptance.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Require an explicit reviewed prepared focus for host qualification
         if: github.event.inputs.prepared_host == 'true'
         env:
           PREPARED_FOCUS: ${{ github.event.inputs.prepared_focus }}
-        run: test "$PREPARED_FOCUS" = 142 || test "$PREPARED_FOCUS" = 143
+        run: test "$PREPARED_FOCUS" = 142 || test "$PREPARED_FOCUS" = 143 || test "$PREPARED_FOCUS" = 155
       - uses: Swatinem/rust-cache@v2
         if: github.event.inputs.prepared_focus == '' || github.event.inputs.prepared_focus == 'off'
       - name: Build pinned Node and unprivileged bubblewrap prerequisites
@@ -3562,7 +3687,7 @@ jobs:
           SOU_FOCUS: ${{ github.event.inputs.prepared_focus }}
         run: |
           set -euo pipefail
-          [[ "$SOU_FOCUS" == 142 || "$SOU_FOCUS" == 143 ]]
+          [[ "$SOU_FOCUS" == 142 || "$SOU_FOCUS" == 143 || "$SOU_FOCUS" == 155 ]]
 
 
       - name: Trusted dependency download without candidate execution

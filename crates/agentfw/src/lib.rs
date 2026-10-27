@@ -103,6 +103,10 @@ pub fn app_with_diagnostics(
                 .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
         )
         .route(
+            native::execution::ENDPOINT,
+            post(native::execution::transport::handler),
+        )
+        .route(
             native::verified_git::ENDPOINT,
             post(native::verified_git::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
         )

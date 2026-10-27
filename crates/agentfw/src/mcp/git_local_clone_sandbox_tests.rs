@@ -69,6 +69,8 @@ print(json.dumps({{'helper_exec_denied':True,'network_denied':True,'write_denied
         &["-I".into(), "-B".into(), "-c".into(), script],
         None,
         false,
+        true,
+        None,
     )
     .unwrap();
     let (mut child, mut budget, mut owner, _pid) = prepared.spawn().await.unwrap();

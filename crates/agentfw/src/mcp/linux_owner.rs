@@ -20,7 +20,9 @@ pub(crate) const HEARTBEAT_MILLIS: u64 = 100;
 pub(crate) const LEASE_MILLIS: u64 = 1_500;
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{spawn, BudgetPrepare, CleanupSpec, LaunchSpec, OwnerGuard};
+pub(crate) use linux::{
+    spawn, BudgetPrepare, CleanupSpec, ExecutionLiveness, LaunchSpec, OwnerGuard, SealedClosure,
+};
 
 #[cfg(not(target_os = "linux"))]
 pub(crate) struct OwnerGuard;
@@ -90,9 +92,26 @@ mod linux {
 
     const OWNER_ARG: &str = "--agentfw-mcp-owner-v1";
     const PID1_ARG: &str = "--agentfw-mcp-pid1-v1";
+    const SEALED_PID1_ARG: &str = "--agentfw-mcp-pid1-v2";
     const MAX_PACKET: usize = 65_536;
     const MAX_ARGS: usize = 2_048;
     const MAX_FDS: usize = 128;
+    // Separate opt-in sealed-image launch capsule; control/SCM packets and
+    // legacy launches keep their existing bounds.
+    const MAX_SEALED_STARTUP: usize = 1024 * 1024;
+    // Pinned bubblewrap limits total parsed argc to 9000, including the
+    // outside owner's additional --info-fd pair. Never raise the vendor cap.
+    const MAX_SEALED_ARGS: usize = 8998;
+    const MAX_SEALED_ARG_BYTES: usize = 768 * 1024;
+    const MAX_SEALED_FDS: usize = super::super::verified_closure::MAX_ENTRIES + 64;
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(crate) struct SealedClosure {
+        pub format: String,
+        pub sha256: String,
+        pub images: Vec<RawFd>,
+    }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -126,6 +145,8 @@ mod linux {
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub(crate) struct LaunchSpec {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub sealed_closure: Option<SealedClosure>,
         pub bwrap_fd: RawFd,
         pub owner_executable_fd: RawFd,
         pub inherited_fds: Vec<RawFd>,
@@ -145,6 +166,24 @@ mod linux {
         budget_transfer_fd: Option<RawFd>,
     }
 
+    /// Namespace-relative identity is paired with the pinned PID-1 generation.
+    /// The trusted PID 1 retains/reaps this exact child until namespace teardown.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct OriginalGeneration {
+        namespace_pid: u32,
+        start_ticks: u64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct SealedStarted {
+        format: String,
+        instance: String,
+        action: String,
+        original: OriginalGeneration,
+    }
+
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Ready {
@@ -156,6 +195,8 @@ mod linux {
         sandbox_start_ticks: u64,
         pid1_pid: u32,
         pid1_start_ticks: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        original: Option<OriginalGeneration>,
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -256,6 +297,21 @@ mod linux {
         monitor: Option<tokio::task::JoinHandle<()>>,
     }
 
+    /// Separate pinned observations for the verified execution boundary. A
+    /// monitor's publication latency must not revive a dead owner generation.
+    pub(crate) struct ExecutionLiveness {
+        generations: [File; 3],
+    }
+
+    impl ExecutionLiveness {
+        pub(crate) fn check(&self) -> anyhow::Result<()> {
+            for process in &self.generations {
+                ensure!(!readable(process.as_raw_fd())?, "mcp_owner_lost");
+            }
+            Ok(())
+        }
+    }
+
     fn failure(code: &'static str) -> anyhow::Error {
         anyhow::anyhow!(code)
     }
@@ -270,6 +326,22 @@ mod linux {
             "mcp_owner_parent_lost" => Some("mcp_owner_parent_lost"),
             "mcp_owner_startup_failed" => Some("mcp_owner_startup_failed"),
             _ => None,
+        }
+    }
+
+    fn startup_failure_code(value: &str) -> Option<&'static str> {
+        match value {
+            "mcp_owner_launch_invalid" => Some("mcp_owner_launch_invalid"),
+            "mcp_owner_sealed_closure_invalid" => Some("mcp_owner_sealed_closure_invalid"),
+            "mcp_owner_process_identity_unavailable" => {
+                Some("mcp_owner_process_identity_unavailable")
+            }
+            "mcp_owner_namespace_identity_invalid" => Some("mcp_owner_namespace_identity_invalid"),
+            "mcp_owner_sandbox_identity_invalid" => Some("mcp_owner_sandbox_identity_invalid"),
+            "mcp_owner_original_spawn_failed" => Some("mcp_owner_original_spawn_failed"),
+            "mcp_owner_private_lease_unavailable" => Some("mcp_owner_private_lease_unavailable"),
+            "mcp_owner_parent_death_unavailable" => Some("mcp_owner_parent_death_unavailable"),
+            _ => failure_code(value),
         }
     }
 
@@ -712,7 +784,12 @@ mod linux {
         ensure!(raw >= 0, "mcp_owner_launch_unavailable");
         let mut file = unsafe { File::from_raw_fd(raw) };
         let packet = serde_json::to_vec(startup)?;
-        ensure!(packet.len() <= MAX_PACKET, "mcp_owner_launch_invalid");
+        let limit = if startup.launch.sealed_closure.is_some() {
+            MAX_SEALED_STARTUP
+        } else {
+            MAX_PACKET
+        };
+        ensure!(packet.len() <= limit, "mcp_owner_launch_invalid");
         file.write_all(&packet)?;
         ensure!(
             unsafe {
@@ -739,21 +816,41 @@ mod linux {
             unsafe { libc::fcntl(fd, libc::F_GET_SEALS) } == expected,
             "mcp_owner_launch_invalid"
         );
-        let bytes = pinned_text(fd)?;
-        decode(bytes.as_bytes())
+        use std::os::unix::fs::FileExt;
+        let file = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(fd) });
+        let size = usize::try_from(file.metadata()?.len()).context("mcp_owner_launch_invalid")?;
+        ensure!(
+            size > 0 && size <= MAX_SEALED_STARTUP,
+            "mcp_owner_launch_invalid"
+        );
+        let mut bytes = vec![0u8; size];
+        file.read_exact_at(&mut bytes, 0)?;
+        let startup: Startup = decode(&bytes)?;
+        ensure!(
+            startup.launch.sealed_closure.is_some() || size <= MAX_PACKET,
+            "mcp_owner_launch_invalid"
+        );
+        Ok(startup)
     }
 
     fn validate(spec: &LaunchSpec) -> anyhow::Result<()> {
+        let sealed = spec.sealed_closure.is_some();
         ensure!(
-            spec.bwrap_args.len() <= MAX_ARGS && !spec.bwrap_args.is_empty(),
+            spec.bwrap_args.len() <= if sealed { MAX_SEALED_ARGS } else { MAX_ARGS }
+                && !spec.bwrap_args.is_empty(),
             "mcp_owner_launch_invalid"
         );
         ensure!(
-            spec.bwrap_args.iter().map(String::len).sum::<usize>() <= MAX_PACKET / 2,
+            spec.bwrap_args.iter().map(String::len).sum::<usize>()
+                <= if sealed {
+                    MAX_SEALED_ARG_BYTES
+                } else {
+                    MAX_PACKET / 2
+                },
             "mcp_owner_launch_invalid"
         );
         ensure!(
-            spec.inherited_fds.len() <= MAX_FDS,
+            spec.inherited_fds.len() <= if sealed { MAX_SEALED_FDS } else { MAX_FDS },
             "mcp_owner_launch_invalid"
         );
         let fds: BTreeSet<_> = spec.inherited_fds.iter().copied().collect();
@@ -777,6 +874,22 @@ mod linux {
                     == 2,
             "mcp_owner_launch_invalid"
         );
+        if let Some(closure) = &spec.sealed_closure {
+            let images: BTreeSet<_> = closure.images.iter().copied().collect();
+            let seals =
+                libc::F_SEAL_SEAL | libc::F_SEAL_SHRINK | libc::F_SEAL_GROW | libc::F_SEAL_WRITE;
+            ensure!(
+                closure.format == super::super::verified_closure::FORMAT
+                    && crate::native::is_digest(&closure.sha256)
+                    && !images.is_empty()
+                    && images.len() <= super::super::verified_closure::MAX_ENTRIES
+                    && images.len() == closure.images.len()
+                    && images.contains(&spec.bwrap_fd)
+                    && images.iter().all(|fd| fds.contains(fd)
+                        && unsafe { libc::fcntl(*fd, libc::F_GET_SEALS) } == seals),
+                "mcp_owner_sealed_closure_invalid"
+            );
+        }
         if let Some(fd) = spec.budget_attach_fd {
             ensure!(fds.contains(&fd), "mcp_owner_launch_invalid");
         }
@@ -906,6 +1019,10 @@ mod linux {
                     && budget_instance
                         .as_ref()
                         .is_none_or(|instance| *instance == ready.instance)
+                    && (spec.sealed_closure.is_some() == ready.original.is_some())
+                    && ready.original.as_ref().is_none_or(
+                        |original| original.namespace_pid > 1 && original.start_ticks > 0
+                    )
                     && Some(ready.owner_pid) == child.id()
                     && process_ticks(ready.owner_pid)? == ready.owner_start_ticks
                     && process_ticks(ready.sandbox_pid)? == ready.sandbox_start_ticks
@@ -915,35 +1032,101 @@ mod linux {
             let owner_pidfd = pidfd(ready.owner_pid)?;
             Ok::<_, anyhow::Error>((reader, ready, owner_pidfd))
         };
-        let (reader, ready, owner_pidfd) =
-            match tokio::time::timeout(Duration::from_millis(STARTUP_MILLIS), started).await {
-                Ok(Ok(value)) => value,
-                _ => {
-                    // EOF is the owner's unconditional cleanup request. Do not kill
-                    // it before it can verify its own resources.
-                    let _ = parent.shutdown(std::net::Shutdown::Both);
-                    let owner_status = tokio::time::timeout(
-                        Duration::from_millis(CLEANUP_MILLIS + 500),
-                        child.wait(),
-                    )
-                    .await
-                    .ok()
-                    .and_then(Result::ok);
-                    let killed_before_handback = spec.budget_prepare.is_some()
-                        && prepared_budget.is_none()
-                        && owner_status
-                            .as_ref()
-                            .is_some_and(|status| status.signal() == Some(libc::SIGKILL));
-                    let _ = child.start_kill();
-                    let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
-                    if killed_before_handback {
-                        // No leaf descriptor was received. A same-name child of
-                        // the delegated root is not authority to sweep it.
-                        bail!("mcp_budget_owner_lost_before_handback_unsupported");
+        let startup_started = std::time::Instant::now();
+        let (reader, ready, owner_pidfd) = match tokio::time::timeout(
+            Duration::from_millis(STARTUP_MILLIS),
+            started,
+        )
+        .await
+        {
+            Ok(Ok(value)) => value,
+            failed_startup => {
+                let timed_out = failed_startup.is_err();
+                let error_code = match &failed_startup {
+                    Ok(Err(error)) => error
+                        .chain()
+                        .find_map(|cause| startup_failure_code(&cause.to_string())),
+                    _ => None,
+                };
+                let elapsed_ms = startup_started.elapsed().as_millis();
+                // EOF is the owner's unconditional cleanup request. Do not kill
+                // it before it can verify its own resources.
+                let _ = parent.shutdown(std::net::Shutdown::Both);
+                let owner_status =
+                    tokio::time::timeout(Duration::from_millis(CLEANUP_MILLIS + 500), child.wait())
+                        .await
+                        .ok()
+                        .and_then(Result::ok);
+                let killed_before_handback = spec.budget_prepare.is_some()
+                    && prepared_budget.is_none()
+                    && owner_status
+                        .as_ref()
+                        .is_some_and(|status| status.signal() == Some(libc::SIGKILL));
+                let _ = child.start_kill();
+                let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
+                if spec.sealed_closure.is_some() {
+                    use tokio::io::AsyncReadExt;
+                    let mut bytes = Vec::new();
+                    if let Some(stderr) = child.stderr.take() {
+                        let mut stderr = stderr.take(8192);
+                        let _ = tokio::time::timeout(
+                            Duration::from_millis(100),
+                            stderr.read_to_end(&mut bytes),
+                        )
+                        .await;
                     }
-                    bail!("mcp_owner_startup_failed");
+                    let text = String::from_utf8_lossy(&bytes);
+                    let helper_codes: BTreeSet<_> = text
+                        .lines()
+                        .filter_map(|line| {
+                            line.strip_prefix("agentfw-owner-error:")
+                                .and_then(startup_failure_code)
+                        })
+                        .collect();
+                    let diagnostic = if text.contains("execvp") {
+                        "mcp_owner_image_exec_failed"
+                    } else if text.contains("Permission denied") {
+                        "mcp_owner_image_permission_failed"
+                    } else if text.contains("Unknown option") {
+                        "mcp_owner_image_option_failed"
+                    } else if text.contains("No such file or directory") {
+                        "mcp_owner_image_path_failed"
+                    } else if text.contains("Can't create") {
+                        "mcp_owner_image_create_failed"
+                    } else if text.contains("Can't mount") || text.contains("Can't bind mount") {
+                        "mcp_owner_image_mount_failed"
+                    } else {
+                        "mcp_owner_image_failure_unclassified"
+                    };
+                    let step = text
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("agentfw-owner-step:")
+                                .and_then(|value| value.parse::<u8>().ok())
+                        })
+                        .filter(|step| *step <= 8);
+                    let os_error = text
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("agentfw-owner-errno:")
+                                .and_then(|value| value.parse::<i32>().ok())
+                        })
+                        .filter(|code| (1..=4095).contains(code));
+                    eprintln!(
+                        "{}",
+                        serde_json::json!({"event":"mcp_owner_startup_diagnostic",
+                            "timed_out":timed_out,"elapsed_ms":elapsed_ms,"error_code":error_code,
+                                "helper_codes":helper_codes,"image_code":diagnostic,"setup_step":step,"os_error":os_error})
+                    );
                 }
-            };
+                if killed_before_handback {
+                    // No leaf descriptor was received. A same-name child of
+                    // the delegated root is not authority to sweep it.
+                    bail!("mcp_budget_owner_lost_before_handback_unsupported");
+                }
+                bail!("mcp_owner_startup_failed");
+            }
+        };
         let writer = tokio::net::UnixStream::from_std(parent)?;
         let failed = Arc::new(AtomicBool::new(false));
         let complete = Arc::new(AtomicBool::new(false));
@@ -1129,6 +1312,36 @@ mod linux {
     }
 
     impl OwnerGuard {
+        pub(crate) fn execution_liveness(&self) -> anyhow::Result<ExecutionLiveness> {
+            self.check()?;
+            ensure!(
+                self.ready.original.is_some(),
+                "mcp_owner_namespace_identity_invalid"
+            );
+            let identities = [
+                (self.ready.owner_pid, self.ready.owner_start_ticks),
+                (self.ready.sandbox_pid, self.ready.sandbox_start_ticks),
+                (self.ready.pid1_pid, self.ready.pid1_start_ticks),
+            ];
+            let mut generations = Vec::with_capacity(3);
+            for (pid, ticks) in identities {
+                let process = pidfd(pid)?;
+                ensure!(
+                    process_ticks(pid)? == ticks,
+                    "mcp_owner_process_identity_invalid"
+                );
+                generations.push(process);
+            }
+            let pinned = ExecutionLiveness {
+                generations: generations
+                    .try_into()
+                    .map_err(|_| failure("mcp_owner_process_identity_invalid"))?,
+            };
+            pinned.check()?;
+            self.check()?;
+            Ok(pinned)
+        }
+
         pub(crate) fn failed(&self) -> Arc<AtomicBool> {
             Arc::clone(&self.failed)
         }
@@ -1238,6 +1451,7 @@ mod linux {
                 "owner_pid":self.ready.owner_pid,"owner_start_ticks":self.ready.owner_start_ticks,
                 "sandbox_pid":self.ready.sandbox_pid,"sandbox_start_ticks":self.ready.sandbox_start_ticks,
                 "pid1_pid":self.ready.pid1_pid,"pid1_start_ticks":self.ready.pid1_start_ticks,
+                "original":self.ready.original,
                 "startup_bound_ms":STARTUP_MILLIS,"poll_ms":POLL_MILLIS,"cleanup_bound_ms":CLEANUP_MILLIS,
                 "heartbeat_ms":HEARTBEAT_MILLIS,"lease_ms":LEASE_MILLIS,
                 "reason":state.reason,"sandbox_exit":state.sandbox_exit,
@@ -1287,7 +1501,7 @@ mod linux {
     pub(super) fn early_dispatch() -> Option<i32> {
         let args: Vec<_> = std::env::args_os().collect();
         let kind = args.get(1)?.to_str()?;
-        if kind != OWNER_ARG && kind != PID1_ARG {
+        if kind != OWNER_ARG && kind != PID1_ARG && kind != SEALED_PID1_ARG {
             return None;
         }
         // Raw writes are required under the unchanged filesystem seccomp
@@ -1314,9 +1528,21 @@ mod linux {
                     "mcp_owner_launch_invalid"
                 );
                 let command = args[4..].to_vec();
-                namespace_pid1(inherited_socket(fd)?, &command)
+                namespace_pid1(inherited_socket(fd)?, &command, kind == SEALED_PID1_ARG)
             }
         })();
+        if let Err(error) = &result {
+            let code = error
+                .chain()
+                .find_map(|cause| startup_failure_code(&cause.to_string()))
+                .unwrap_or("mcp_owner_startup_failed");
+            let message = format!("agentfw-owner-error:{code}\n");
+            // No formatting of raw errors/paths and no stderr panic under the
+            // unchanged seccomp filter; this is private startup diagnostics.
+            unsafe {
+                libc::write(2, message.as_ptr().cast(), message.len());
+            }
+        }
         Some(if result.is_ok() { 0 } else { 1 })
     }
 
@@ -1589,6 +1815,7 @@ mod linux {
         drop(info_writer);
         let sandbox_pid = child.id();
         let mut namespace = None;
+        let mut setup_step = 1_u8;
         let setup = (|| {
             let mut bytes = Vec::new();
             let mut byte = [0];
@@ -1603,18 +1830,21 @@ mod linux {
                 }
             }
             let value: Value = decode(&bytes)?;
+            setup_step = 2;
             let pid1_pid = value
                 .get("child-pid")
                 .and_then(Value::as_u64)
                 .and_then(|pid| u32::try_from(pid).ok())
                 .context("mcp_owner_sandbox_identity_invalid")?;
             namespace = Some(pidfd(pid1_pid)?);
+            setup_step = 3;
             let hello = Control {
                 format: FORMAT.to_owned(),
                 instance: instance.clone(),
                 action: "prepare".to_owned(),
             };
             send(&mut lease, &hello)?;
+            setup_step = 4;
             let prepared: Control = receive(&mut lease)?;
             ensure!(
                 prepared.format == FORMAT
@@ -1624,6 +1854,7 @@ mod linux {
             );
             ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
             ensure!(child.try_wait()?.is_none(), "mcp_owner_sandbox_lost");
+            setup_step = 5;
             send(
                 &mut lease,
                 &Control {
@@ -1631,13 +1862,29 @@ mod linux {
                     ..hello
                 },
             )?;
-            let started: Control = receive(&mut lease)?;
-            ensure!(
-                started.format == FORMAT
-                    && started.instance == instance
-                    && started.action == "started",
-                "mcp_owner_namespace_identity_invalid"
-            );
+            setup_step = 6;
+            let original = if spec.sealed_closure.is_some() {
+                let started: SealedStarted = receive(&mut lease)?;
+                ensure!(
+                    started.format == FORMAT
+                        && started.instance == instance
+                        && started.action == "started"
+                        && started.original.namespace_pid > 1
+                        && started.original.start_ticks > 0,
+                    "mcp_owner_namespace_identity_invalid"
+                );
+                Some(started.original)
+            } else {
+                let started: Control = receive(&mut lease)?;
+                ensure!(
+                    started.format == FORMAT
+                        && started.instance == instance
+                        && started.action == "started",
+                    "mcp_owner_namespace_identity_invalid"
+                );
+                None
+            };
+            setup_step = 7;
             let owner_pid = unsafe { libc::getpid() } as u32;
             let ready = Ready {
                 format: FORMAT.to_owned(),
@@ -1648,9 +1895,31 @@ mod linux {
                 sandbox_start_ticks: process_ticks(sandbox_pid)?,
                 pid1_pid,
                 pid1_start_ticks: process_ticks(pid1_pid)?,
+                original,
             };
+            setup_step = 8;
             send(&mut control, &ready)
         })();
+        if spec.sealed_closure.is_some() {
+            if let Err(error) = &setup {
+                let code = error
+                    .chain()
+                    .find_map(|cause| startup_failure_code(&cause.to_string()))
+                    .unwrap_or("mcp_owner_startup_failed");
+                let os_error = error
+                    .chain()
+                    .find_map(|cause| {
+                        cause
+                            .downcast_ref::<std::io::Error>()
+                            .and_then(std::io::Error::raw_os_error)
+                    })
+                    .unwrap_or(0);
+                let message=format!("agentfw-owner-error:{code}\nagentfw-owner-step:{setup_step}\nagentfw-owner-errno:{os_error}\n");
+                unsafe {
+                    libc::write(2, message.as_ptr().cast(), message.len());
+                }
+            }
+        }
         let mut reason = if setup.is_ok() {
             "mcp_owner_stop_requested"
         } else {
@@ -1963,7 +2232,11 @@ mod linux {
         }
     }
 
-    fn namespace_pid1(mut lease: UnixStream, command: &[std::ffi::OsString]) -> anyhow::Result<()> {
+    fn namespace_pid1(
+        mut lease: UnixStream,
+        command: &[std::ffi::OsString],
+        sealed: bool,
+    ) -> anyhow::Result<()> {
         ensure!(
             unsafe { libc::getpid() } == 1,
             "mcp_owner_namespace_required"
@@ -2028,13 +2301,28 @@ mod linux {
         let mut child = original
             .spawn()
             .context("mcp_owner_original_spawn_failed")?;
-        send(
-            &mut lease,
-            &Control {
-                action: "started".to_owned(),
-                ..hello
-            },
-        )?;
+        if sealed {
+            send(
+                &mut lease,
+                &SealedStarted {
+                    format: hello.format.clone(),
+                    instance: hello.instance.clone(),
+                    action: "started".into(),
+                    original: OriginalGeneration {
+                        namespace_pid: child.id(),
+                        start_ticks: process_ticks(child.id())?,
+                    },
+                },
+            )?;
+        } else {
+            send(
+                &mut lease,
+                &Control {
+                    action: "started".into(),
+                    ..hello
+                },
+            )?;
+        }
         close_stdio();
         nonblocking(lease.as_raw_fd())?;
         // Absolute CLOCK_MONOTONIC deadlines prevent a buffered old heartbeat
@@ -2219,6 +2507,7 @@ mod linux {
             let file = File::open("/dev/null").unwrap();
             let fd = file.as_raw_fd();
             let mut spec = LaunchSpec {
+                sealed_closure: None,
                 bwrap_fd: fd,
                 owner_executable_fd: fd,
                 inherited_fds: vec![fd],
@@ -2254,6 +2543,27 @@ mod linux {
             assert!(!readable(process.as_raw_fd()).unwrap());
             let file = File::open("/dev/null").unwrap();
             assert!(inherited_socket(file.as_raw_fd()).is_err());
+        }
+
+        #[test]
+        fn execution_liveness_observes_exit_without_waiting_for_monitor_publication() {
+            for dead in 0..3 {
+                let mut child = std::process::Command::new("/bin/sleep")
+                    .arg("30")
+                    .spawn()
+                    .unwrap();
+                let mut generations = [
+                    pidfd(std::process::id()).unwrap(),
+                    pidfd(std::process::id()).unwrap(),
+                    pidfd(std::process::id()).unwrap(),
+                ];
+                generations[dead] = pidfd(child.id()).unwrap();
+                let pinned = ExecutionLiveness { generations };
+                pinned.check().unwrap();
+                child.kill().unwrap();
+                child.wait().unwrap();
+                assert_eq!(pinned.check().unwrap_err().to_string(), "mcp_owner_lost");
+            }
         }
 
         #[test]
@@ -2315,6 +2625,7 @@ mod linux {
             let fd = file.as_raw_fd();
             let startup = Startup {
                 launch: LaunchSpec {
+                    sealed_closure: None,
                     bwrap_fd: fd,
                     owner_executable_fd: fd,
                     inherited_fds: vec![fd],

@@ -236,6 +236,18 @@ enum Cmd {
         #[arg(last = true, required = true)]
         command: Vec<String>,
     },
+    /// Forward MCP bytes to a daemon-selected verified original runtime (Linux).
+    /// No upstream command, project profile or credentials are forwarded.
+    McpVerified {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        host_session: Option<String>,
+        #[arg(long)]
+        child_authority: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
+    },
     /// Manage authenticated child authority grants.
     ChildAuthority {
         #[command(subcommand)]
@@ -865,6 +877,51 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
+        Cmd::McpVerified {
+            id,
+            host_session,
+            child_authority,
+            home,
+        } => {
+            let host = host_session
+                .or_else(|| std::env::var("AGENTFW_HOST_SESSION").ok())
+                .filter(|value| !value.is_empty())
+                .context("--host-session is required")?;
+            let authority = child_authority
+                .or_else(|| std::env::var("AGENTFW_CHILD_AUTHORITY").ok())
+                .filter(|value| !value.is_empty())
+                .context("--child-authority is required")?;
+            let home = home
+                .or_else(|| std::env::var_os("AGENTFW_HOME").map(PathBuf::from))
+                .map(Ok)
+                .unwrap_or_else(Config::home)?;
+            let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
+            let selected = cfg
+                .native
+                .as_ref()
+                .and_then(|native| native.execution.as_ref())
+                .context("verified original execution is not installed")?;
+            let path = home.join("native-token");
+            anyhow::ensure!(path.is_file(), "existing native token required");
+            let token = agentfw::token::load_or_create(&path)?;
+            let preamble = agentfw::native::execution::transport::Preamble {
+                contract: agentfw::native::execution::FORMAT.into(),
+                catalogue_sha256: selected.catalogue_sha256.clone(),
+                server_id: id,
+                host_session: host,
+                child_authority: authority,
+            };
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            let result = runtime.block_on(agentfw::native::execution::transport::run_client(
+                cfg.endpoint_url(agentfw::native::execution::ENDPOINT),
+                token,
+                preamble,
+            ));
+            runtime.shutdown_timeout(Duration::from_millis(100));
+            result
+        }
         Cmd::Mcp {
             id,
             host_session,
@@ -1355,6 +1412,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
                 let state = agentfw::native::NativeState::load(native, native_token)?
+                    .with_execution(native)?
                     .with_policy_barrier(&home)?
                     .with_continuity(&home, &mut firewall)?;
                 match &native.approval {
