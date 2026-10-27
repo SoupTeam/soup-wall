@@ -41,6 +41,24 @@
       "completed_cases": 22,
       "required_cases": 22,
       "scope_correction": "Preserved unmodified intermediate report. Its old postcommit-result-loss name establishes host interruption after successful tool-result delivery, not missing/withheld tool results. Current qualifier names/scopes this explicitly and adds hardlink refusal and typed lifecycle diagnostics per review."
+    },
+    {
+      "attempt": 4,
+      "run_id": 40530682811,
+      "source_commit": "c6ab0da5a8c84f22a717de7140629fc5ea3f3a8e",
+      "artifact_id": 12745483978,
+      "artifact_sha256": "7f9564834e02730e9dcc36480d57b83711ada57d805a0edcc15629cc0eb32565",
+      "status": "failed",
+      "completed_cases": 8,
+      "required_cases": 23,
+      "inventory": {
+        "expected": 23,
+        "attempted": 9,
+        "passed": 8,
+        "failed": 1,
+        "incomplete": 14
+      },
+      "reason": "The typed closed inspection was correctly retained as exit 1/run_ended, and its successful earlier inspection satisfied redaction. The reconciliation incorrectly required an Ask-valued native_call; classifier-origin Ask can create authenticated pending before that call exists. The revised witness uses the daemon-written inspected verdict matched to the exact audited pending binding and retains reconciliation data before asserting, without relaxing zero effects, approval lifetimes or successful redaction checks."
     }
   ]
 }

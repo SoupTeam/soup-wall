@@ -263,7 +263,11 @@ class Suite:
                             require(code == 0, 'inspect_failed')
                             require(isinstance(inspected, dict) and inspected.get('arguments_redacted') is True
                                     and 'args' not in inspected and NEW not in json.dumps(inspected), 'inspect_exposed_arguments')
-                            diagnostic['redaction'] = 'passed'
+                            require(inspected.get('pending_id') == row['pending_id']
+                                    and inspected.get('binding_sha256') == row['binding_sha256'], 'inspect_binding_changed')
+                            require(inspected.get('verdict') in ('allow', 'ask', 'deny', 'escalate'), 'inspect_verdict_invalid')
+                            diagnostic.update(redaction='passed', verdict=inspected['verdict'],
+                                              binding_sha256=row['binding_sha256'])
                             seen.add(row['pending_id'])
                             inspected_seen.add(row['pending_id'])
                             if mode in ('no-approval', 'cancel-pending', 'daemon-loss'):
@@ -313,13 +317,27 @@ class Suite:
                   and str(r.get('tool', '')).startswith(('create_output_', 'replace_output_'))]
         publications = [r for r in audit if r.get('event') == 'native_publish' and r.get('released') is True]
         call_verdicts = sorted({r.get('verdict') for r in audit if r.get('event') == 'native_call' and r.get('verdict')})
+        requests = [r for r in audit if r.get('event') == 'native_approval_requested']
+        observations = self.active.get('inspect_observations', [])
+        matched = [d for d in observations if any(sha(str(r.get('approval_id', '')).encode()) == d['pending_id_sha256']
+                   and r.get('binding_sha256') == d.get('binding_sha256') for r in requests)]
+        approval_verdicts = sorted({d['verdict'] for d in matched})
         closed_inspection = None
         if mode in ('no-approval', 'cancel-pending', 'daemon-loss'):
             require(inspected_seen and snapshot(target) == before and not writes, 'ended_run_effect_not_reconciled')
             code, _ = self.ask(run, 'inspect', next(iter(inspected_seen)))
             closed_inspection = dict(self.last_cli)
             expected_reason = 'run_not_live' if mode == 'daemon-loss' else 'run_ended'
-            require(code != 0 and closed_inspection['reason'] == expected_reason and 'ask' in call_verdicts,
+            self.active['lifecycle_reconciliation'] = {
+                'before': before, 'after': snapshot(target), 'write_admissions': len(writes),
+                'native_call_verdicts': call_verdicts, 'approval_verdicts': approval_verdicts,
+                'matched_inspections': len(matched), 'closed_inspection': closed_inspection,
+                'processes_stopped': cleanup['all_stopped']}
+            # Classifier Ask can queue an authenticated native approval before
+            # native_call. Reconcile the actual daemon-written verdict with the
+            # audited exact pending binding, never invent a missing call.
+            require(code != 0 and closed_inspection['reason'] == expected_reason
+                    and len(matched) == len(inspected_seen) and approval_verdicts == ['ask'],
                     'ended_inspection_not_typed_or_verdict_changed')
         approved = {d['binding_sha256'] for d in decisions if d['action'] == 'approve'}
         require(all(r.get('binding_sha256') in approved for r in [*writes, *publications]), 'publication_not_bound_to_approval')
@@ -329,6 +347,7 @@ class Suite:
                 'process_cleanup': cleanup, 'terminal': terminal, 'audit_sha256': sha(native), 'root_inventory': inventory,
                 'inspect_observations': self.active.get('inspect_observations', []),
                 'closed_inspection': closed_inspection, 'native_call_verdicts': call_verdicts,
+                'approval_verdicts': approval_verdicts, 'matched_inspections': len(matched),
                 'write_admissions': len(writes), 'publication_gates': len(publications), 'bindings_match_approved': True,
                 'adapter_mutation_dispatches': 0, 'changed_control': changed, 'retired_epoch_refused': restart_refused}, observed, live_config
 

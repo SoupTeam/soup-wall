@@ -8,7 +8,8 @@ Attempt 1 did not retain the failing typed inspect reply. Its exact cause cannot
 be recovered, and `inspect_exposed_arguments` does not by itself establish a
 content disclosure. The current qualifier separates nonzero inspection exits from
 successful-response redaction checks, retains only bounded finite diagnostics,
-and explicitly reconciles ended-run inspection with the actual Ask verdict and
+and explicitly reconciles ended-run inspection with the daemon-written Ask verdict,
+its exact audited pending binding and
 zero admitted writes/target effects. Arbitrary inspection failures remain failed
 qualification, never a passing redaction result. Existing lifetimes and caps are
 unchanged.
@@ -31,3 +32,10 @@ handling. Actual grant nonces were already randomly issued. Each run now uses a
 fresh generated private home identity, records it in run metadata and verifies
 that it is an exact child of the selected run. No security alert was dismissed
 or query suppressed; the final aggregate CodeQL result must independently pass.
+
+Attempt 4 retained the safe `run_ended` diagnostic and full 23-case inventory.
+Its reconciliation wrongly expected `native_call: ask`, although classifier-origin
+Ask creates native pending before `native_call`. The corrected witness matches
+the inspected daemon verdict to `native_approval_requested` by pending identity
+and binding, retains this finite reconciliation before assertions, and continues
+to require zero admitted writes and unchanged target bytes.
