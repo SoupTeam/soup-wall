@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+pub mod replacement;
+
 use crate::mcp::admission::Invocation;
 use crate::mcp::resources::{
     extract, ExecutorContext, Resource, ResourceEvidence, ResourceProfile,
@@ -257,6 +259,7 @@ impl NetworkBinding {
 pub enum ExecutionOperation {
     CreateFile,
     ReadDocument,
+    ReplaceFile,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -270,6 +273,8 @@ pub enum ExecutionAction {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionPolicy {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<replacement::Policy>,
     pub operation: ExecutionOperation,
     pub action: ExecutionAction,
     pub max_content_bytes: usize,
@@ -308,7 +313,9 @@ pub struct ToolBinding {
 impl ToolBinding {
     pub fn to_execution_policy(&self) -> ExecutionPolicy {
         let action = self.action.unwrap_or(match self.operation {
-            ExecutionOperation::CreateFile => ExecutionAction::Write,
+            ExecutionOperation::CreateFile | ExecutionOperation::ReplaceFile => {
+                ExecutionAction::Write
+            }
             ExecutionOperation::ReadDocument => ExecutionAction::Read,
         });
         let executor_profile =
@@ -316,16 +323,22 @@ impl ToolBinding {
                 .clone()
                 .unwrap_or_else(|| match self.operation {
                     ExecutionOperation::CreateFile => CREATE_FILE_EXECUTOR_PROFILE.to_string(),
+                    ExecutionOperation::ReplaceFile => {
+                        crate::mcp::replace_file::PROFILE.to_string()
+                    }
                     ExecutionOperation::ReadDocument => READ_DOCUMENT_EXECUTOR_PROFILE.to_string(),
                 });
         let max_content_bytes = self.max_content_bytes.unwrap_or(match self.operation {
-            ExecutionOperation::CreateFile => CREATE_FILE_MAX_CONTENT,
+            ExecutionOperation::CreateFile | ExecutionOperation::ReplaceFile => {
+                CREATE_FILE_MAX_CONTENT
+            }
             ExecutionOperation::ReadDocument => match self.executor_profile.as_deref() {
                 Some(MACOS_READ_EXECUTOR_PROFILE) => MACOS_READ_MAX_CONTENT,
                 _ => super::MAX_CONTENT,
             },
         });
         ExecutionPolicy {
+            replacement: None,
             operation: self.operation,
             action,
             max_content_bytes,
@@ -340,6 +353,8 @@ impl ToolBinding {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionBinding {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<replacement::Binding>,
     pub operation: ExecutionOperation,
     pub action: ExecutionAction,
     pub max_content_bytes: usize,
@@ -352,6 +367,15 @@ pub struct ExecutionBinding {
 
 impl ExecutionPolicy {
     fn supported(&self) -> bool {
+        if self.operation == ExecutionOperation::ReplaceFile {
+            return self.replacement.is_some()
+                && self.action == ExecutionAction::Write
+                && self.max_content_bytes == crate::mcp::replace_file::MAX_BYTES
+                && self.executor_profile == crate::mcp::replace_file::PROFILE;
+        }
+        if self.replacement.is_some() {
+            return false;
+        }
         (self.operation == ExecutionOperation::CreateFile
             && self.action == ExecutionAction::Write
             && self.max_content_bytes == CREATE_FILE_MAX_CONTENT
@@ -374,6 +398,26 @@ impl ExecutionPolicy {
 
 impl ExecutionBinding {
     fn valid(&self) -> bool {
+        if self.operation == ExecutionOperation::ReplaceFile {
+            return self.action == ExecutionAction::Write
+                && self.max_content_bytes == crate::mcp::replace_file::MAX_BYTES
+                && self.executor_profile == crate::mcp::replace_file::PROFILE
+                && self
+                    .replacement
+                    .as_ref()
+                    .is_some_and(|r| r.valid() && r.new_sha256 == self.content_sha256)
+                && [
+                    &self.policy_sha256,
+                    &self.args_sha256,
+                    &self.content_sha256,
+                    &self.workspace_sha256,
+                ]
+                .iter()
+                .all(|d| super::is_digest(d));
+        }
+        if self.replacement.is_some() {
+            return false;
+        }
         self.operation == ExecutionOperation::CreateFile
             && self.action == ExecutionAction::Write
             && self.max_content_bytes == CREATE_FILE_MAX_CONTENT
@@ -444,6 +488,13 @@ pub struct Admission {
 
 impl Admission {
     pub fn contract(&self) -> &'static str {
+        if self
+            .execution
+            .as_ref()
+            .is_some_and(|e| e.operation == ExecutionOperation::ReplaceFile)
+        {
+            return replacement::CONTRACT;
+        }
         if self.post.is_some() {
             POST_CONTRACT
         } else if self.windows_read.is_some() {
@@ -531,6 +582,11 @@ impl Admission {
 }
 
 impl Policy {
+    pub fn is_replace_file(&self) -> bool {
+        self.execution
+            .as_ref()
+            .is_some_and(|e| e.operation == ExecutionOperation::ReplaceFile)
+    }
     pub fn effective_execution(&self) -> Option<ExecutionPolicy> {
         match (&self.binding, &self.execution) {
             (Some(binding), None) => Some(binding.to_execution_policy()),
@@ -540,6 +596,9 @@ impl Policy {
     }
 
     pub fn contract(&self) -> &'static str {
+        if self.is_replace_file() {
+            return replacement::CONTRACT;
+        }
         if self.post.is_some() {
             POST_CONTRACT
         } else if self.is_windows_read() {
@@ -708,11 +767,18 @@ impl Policy {
         );
         if let Some(binding) = &self.binding {
             anyhow::ensure!(
+                binding.operation != ExecutionOperation::ReplaceFile,
+                "replacement requires its explicit versioned execution contract"
+            );
+            anyhow::ensure!(
                 binding.contract_version == BINDING_CONTRACT,
                 "unsupported tool binding contract version"
             );
             if let Some(action) = binding.action {
                 match binding.operation {
+                    ExecutionOperation::ReplaceFile => {
+                        anyhow::bail!("unsupported implicit replacement binding")
+                    }
                     ExecutionOperation::CreateFile => anyhow::ensure!(
                         action == ExecutionAction::Write,
                         "create_file binding requires write action"
@@ -723,6 +789,16 @@ impl Policy {
                     ),
                 }
             }
+        }
+        if let Some(execution) = &self.execution {
+            anyhow::ensure!(
+                execution.operation == ExecutionOperation::ReplaceFile
+                    || execution.replacement.is_none(),
+                "replacement authority on unrelated operation"
+            );
+        }
+        if self.is_replace_file() {
+            replacement::validate(self, tool)?;
         }
         if let Some(read) = &self.windows_read {
             anyhow::ensure!(
@@ -1381,6 +1457,7 @@ pub(crate) fn windows_create_binding_with_identity(
 ) -> Result<ExecutionBinding, &'static str> {
     let (_, _, content) = windows_create_arguments(policy, args)?;
     Ok(ExecutionBinding {
+        replacement: None,
         operation: ExecutionOperation::CreateFile,
         action: ExecutionAction::Write,
         max_content_bytes: CREATE_FILE_MAX_CONTENT,
@@ -1609,6 +1686,7 @@ pub(crate) fn macos_create_binding_with_identity(
 ) -> Result<ExecutionBinding, &'static str> {
     let (_, _, content) = macos_create_arguments(policy, args)?;
     Ok(ExecutionBinding {
+        replacement: None,
         operation: ExecutionOperation::CreateFile,
         action: ExecutionAction::Write,
         max_content_bytes: CREATE_FILE_MAX_CONTENT,
@@ -1761,6 +1839,9 @@ pub fn create_file_binding(
     policy: &Policy,
     args: &Value,
 ) -> Result<ExecutionBinding, &'static str> {
+    if policy.is_replace_file() {
+        return replacement::binding(policy, args);
+    }
     if policy.is_windows_create() {
         return windows_create_binding(policy, args);
     }
@@ -1854,6 +1935,7 @@ pub fn create_file_binding(
         return Err("native_resource_not_allowed");
     }
     Ok(ExecutionBinding {
+        replacement: None,
         operation: execution.operation,
         action: execution.action,
         max_content_bytes: execution.max_content_bytes,
@@ -2185,6 +2267,7 @@ mod windows_read_contract_tests {
             );
         }
         admission.execution = Some(ExecutionBinding {
+            replacement: None,
             operation: ExecutionOperation::CreateFile,
             action: ExecutionAction::Write,
             max_content_bytes: CREATE_FILE_MAX_CONTENT,
@@ -2330,6 +2413,7 @@ mod macos_read_contract_tests {
             );
         }
         admission.execution = Some(ExecutionBinding {
+            replacement: None,
             operation: ExecutionOperation::CreateFile,
             action: ExecutionAction::Write,
             max_content_bytes: CREATE_FILE_MAX_CONTENT,

@@ -312,6 +312,7 @@ async fn admit(
             &call.args,
             installed.action_class,
             ClassificationAuthority {
+                replacement: false,
                 egress_declared: false,
                 create_file_profile: creating.then_some(server_profile::filesystem_create::FORMAT),
                 https_get: false,
@@ -473,6 +474,7 @@ async fn admit(
                     &call.args,
                     installed.action_class,
                     ClassificationAuthority {
+                        replacement: false,
                         egress_declared: false,
                         create_file_profile: creating
                             .then_some(server_profile::filesystem_create::FORMAT),
