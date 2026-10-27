@@ -2374,7 +2374,10 @@ where
                         let mut prepared_macos_read = None;
                         #[cfg(any(target_os = "linux", windows, all(target_os = "macos", target_arch = "aarch64")))]
                         let mut prepared_create = None;
-                        let mut prepared_replacement = None;
+                        #[cfg(unix)]
+                        let mut prepared_replacement: Option<super::replace_file::Prepared> = None;
+                        #[cfg(not(unix))]
+                        let prepared_replacement: Option<super::replace_file::Prepared> = None;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
                             #[cfg(windows)]
                             if policy.is_windows_handles() {
