@@ -86,3 +86,28 @@ selection file was unchanged.
 No exact-pin local build, no WSL2 run, no other platform, no live-model
 effectiveness, readiness certification or kit inclusion (SOU-87 owns the
 offline candidate kit).
+
+## Retained native failure and forward-only qualification setup
+
+[Native run 40478300828](https://github.com/SoupTeam/soup-wall/actions/runs/40478300828)
+on clean `ac130d6545cdafebaac5297c0c12d379d3ec336e` passed all six Rust component
+tests, then failed with `component_install_failed` before any of the installed
+host cases completed. Artifact `12723162609` has ZIP SHA-256
+`3243d39f8039aa592a48253d2aa3f10aaa3c06478cafa11f7fedfdc743656e8e`.
+Its report and log did not retain the install exit/output diagnostics, so the
+specific cause is not established. This failed run remains a failure.
+
+The next native Ubuntu 24.04 qualification explicitly selects the protected OS
+CPython `/usr/bin/python3.12` for the installed component, independently of the
+Actions toolcache interpreter running the driver. This is a qualification input
+choice, not a diagnosis of the earlier failure. Product interpreter permissions,
+the cleared probe environment and support for explicitly selected protected
+CPython paths are unchanged; no PATH or loader-environment fallback is added.
+
+Failed install evidence now retains its exit, bounded structured output, at most
+4 KiB of UTF-8 stderr with truncation flags, and canonical interpreter metadata
+plus a bounded environment-free version probe in the private report. Unprotected
+interpreters are not executed for diagnostics. The new focused controls exercise
+normal success, malformed/non-object output, diagnostic bounds, the refusal to
+probe group-writable files, and the actual workflow invocation under a synthetic
+hosted driver. They do not replace a fresh exact-source native host qualification.

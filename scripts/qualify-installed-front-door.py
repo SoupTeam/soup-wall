@@ -30,6 +30,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 
@@ -51,6 +52,57 @@ INPUT_NAMES = tuple(name for name in QUAL.INPUT_NAMES if name != "agent_output")
 HOSTILE = """from pathlib import Path
 Path({marker!r}).write_text("ambient helper executed")
 """
+DIAGNOSTIC_LIMIT = 4096
+COMPONENT_STDOUT_LIMIT = 64 * 1024
+
+
+def diagnostic_text(raw, limit=DIAGNOSTIC_LIMIT):
+    """Bound UTF-8 bytes even when replacement characters expand bad input."""
+    encoded = raw[:limit].decode("utf-8", "replace").encode("utf-8")
+    return encoded[:limit].decode("utf-8", "ignore"), len(raw) > limit or len(encoded) > limit
+
+
+def component_output(raw):
+    """Only a bounded JSON object can satisfy a component result check."""
+    if len(raw) > COMPONENT_STDOUT_LIMIT:
+        return {}, "oversized"
+    if not raw.strip():
+        return {}, "empty"
+    try:
+        value = json.loads(raw)
+        json.dumps(value, allow_nan=False)
+    except (ValueError, RecursionError):
+        return {}, "invalid_json"
+    if not isinstance(value, dict):
+        return {}, "non_object"
+    return value, "object"
+
+
+def interpreter_diagnostic(path):
+    """Private failure evidence; never execute an unprotected interpreter."""
+    result = {"selected": str(path), "version_probe": {"status": "not_run"}}
+    try:
+        canonical = path.resolve(strict=True)
+        info = canonical.stat()
+        result.update(canonical=str(canonical), mode=oct(stat.S_IMODE(info.st_mode)), uid=info.st_uid,
+                      regular=stat.S_ISREG(info.st_mode))
+        if (not path.is_absolute() or not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022
+                or info.st_uid not in (0, os.geteuid())):
+            result["version_probe"]["reason"] = "unprotected_interpreter"
+            return result
+        probe = subprocess.run([str(canonical), "-I", "-S", "-c",
+                                "import sys;print(sys.implementation.name, *sys.version_info[:3])"],
+                               cwd="/", env={}, stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
+        out, out_cut = diagnostic_text(probe.stdout, 512)
+        err, err_cut = diagnostic_text(probe.stderr, 512)
+        result["version_probe"] = {"status": "completed", "exit": probe.returncode,
+                                   "stdout": out, "stdout_truncated": out_cut,
+                                   "stderr": err, "stderr_truncated": err_cut}
+    except subprocess.TimeoutExpired:
+        result["version_probe"] = {"status": "timeout"}
+    except (OSError, RuntimeError) as error:
+        result["version_probe"] = {"status": "unavailable", "error_type": type(error).__name__}
+    return result
 
 
 class InstalledDoor(QUAL.FrontDoor):
@@ -66,7 +118,7 @@ class InstalledDoor(QUAL.FrontDoor):
         return [str(self.args.agentfw), "pilot", "--home", str(self.home), *words[3:]]
 
 
-def component(args, home, archive, digest, *extra, env, trace=None):
+def component(args, home, archive, digest, *extra, env, trace=None, diagnostic=None):
     words = [str(args.agentfw), "pilot-component", "--home", str(home), *extra]
     if archive is not None:
         words += [str(archive), "--sha256", digest, "--python", str(args.component_python)]
@@ -74,11 +126,24 @@ def component(args, home, archive, digest, *extra, env, trace=None):
         words = [str(args.strace), "-f", "-qq", "-o", "/dev/null", "-e", "trace=rename",
                  "-e", f"inject=rename:signal=SIGKILL:when={trace}", *words]
     result = subprocess.run(words, cwd=args.work, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=300)
-    try:
-        value = json.loads(result.stdout or b"{}")
-    except ValueError:
-        value = {}
+    value, kind = component_output(result.stdout)
+    if diagnostic is not None:
+        stderr, cut = diagnostic_text(result.stderr)
+        diagnostic.update(exit=result.returncode, stdout_kind=kind,
+                          stdout=value if kind == "object" and len(result.stdout) <= DIAGNOSTIC_LIMIT else None,
+                          stdout_bytes=len(result.stdout), stdout_omitted=len(result.stdout) > DIAGNOSTIC_LIMIT,
+                          stderr=stderr, stderr_truncated=cut)
     return result.returncode, value, result.stderr.decode("utf-8", "replace")
+
+
+def install_component(args, home, archive, digest, expected, env, report):
+    diagnostic = {}
+    code, value, _ = component(args, home, archive, digest, "install", env=env, diagnostic=diagnostic)
+    if code != 0 or value.get("component") != expected:
+        report["component_install_failure"] = dict(
+            diagnostic, selected_python=interpreter_diagnostic(args.component_python))
+    require(code == 0 and value.get("component") == expected, "component_install_failed")
+    return value
 
 
 def build(source_root, output, env):
@@ -182,8 +247,7 @@ def qualify(args, report):
         report["project_before_sha256"] = {key: QUAL.digest(value) for key, value in baseline.items()}
 
         # 1. Install into a clean private Agent home, then verify.
-        code, value, _ = component(args, agent_home, archive, digest, "install", env=env)
-        require(code == 0 and value.get("component") == built["component"], "component_install_failed")
+        value = install_component(args, agent_home, archive, digest, built["component"], env, report)
         code, verified, _ = component(args, agent_home, None, None, "verify", env=env)
         require(code == 0 and verified.get("ok") is True and "protection" not in json.dumps(verified).replace(
             "never reports protection", ""), "component_verify_failed")

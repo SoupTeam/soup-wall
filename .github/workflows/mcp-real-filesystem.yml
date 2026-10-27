@@ -1248,7 +1248,7 @@ jobs:
           # installed `agentfw pilot` of this job's SOU-119 build.
           python3 -B scripts/qualify-installed-front-door.py --run \
             --output "$RUNNER_TEMP/installed-front-door" --expected-commit "$(git rev-parse HEAD)" \
-            --component-python "$(readlink -f "$(command -v python3)")" \
+            --component-python /usr/bin/python3.12 \
             --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
             --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
