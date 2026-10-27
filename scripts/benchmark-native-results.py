@@ -90,6 +90,7 @@ def trial(args, report, build, condition, variant, repeat, installed, workspace)
         row['host_call_ids'] = ids
         frames = [L.BASE.call(i, {'path': '/workspace/k120.txt'}) for i in ids[:8]]
         frames.append(L.BASE.call(ids[8], {'path': '/workspace/m2.txt'}))
+        supported_before, oversized_before = phase.reads('/workspace/k120.txt'), phase.reads('/workspace/m2.txt')
         burst_start = time.monotonic()
         phase.client.send_frames(*frames)
         seen = set()
@@ -108,6 +109,11 @@ def trial(args, report, build, condition, variant, repeat, installed, workspace)
             else:
                 row['oversized_refused'] = value.get('error', {}).get('message') == L.budgets()['frame_message']
         row['burst_ms'] = (time.monotonic() - burst_start) * 1000
+        row['original_read_effects'] = {
+            'supported': phase.reads('/workspace/k120.txt') - supported_before,
+            'oversized': phase.reads('/workspace/m2.txt') - oversized_before}
+        require(row['original_read_effects']['supported'] >= 8 and row['original_read_effects']['oversized'] >= 1,
+                'original server syscall witness missing')
         phase.useful(label)
         row['useful_continuation'] = True
         require(row['supported_exact'] == 8 and row['oversized_refused'], 'burst decisions/bytes changed')
@@ -127,8 +133,16 @@ def trial(args, report, build, condition, variant, repeat, installed, workspace)
             row['status'] = 'failed'
         section = context['phases'].get(label, {})
         row['phase'] = section
+        initial_memory = section.get('memory_after_initialize') or {}
+        final_memory = section.get('memory_final') or {}
+        if (not initial_memory or not final_memory
+                or final_memory['vm_hwm_kib'] - initial_memory['vm_rss_kib'] > 96 * 1024):
+            row['status'] = 'failed'
         if (not section.get('daemon_cleanup', {}).get('all_stopped')
                 or not section.get('client', {}).get('process_cleanup', {}).get('all_stopped')
+                or section.get('client', {}).get('forced_cleanup') is not False
+                or section.get('client', {}).get('exit_code') != 0
+                or section.get('daemon_exit_code') not in (0, -15)
                 or section.get('cleanup_audit', {}).get('cleanup_verified') is not True):
             row['status'] = 'failed'
         row['native_timing'] = timing_rows(phase.root / 'daemon.log', 'native_admission_timing')

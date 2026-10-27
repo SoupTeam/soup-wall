@@ -24,4 +24,11 @@ changed. The source, compiler, binary hashes, CPU affinity, load, all failures,
 refusals and unattempted denominator are retained. No universal latency claim
 or attribution of the historical failure to a source regression is justified.
 
-Native paired measurements and a measured correction are still pending.
+The candidate replaces full-width remainder in the rolling provenance hash
+with mathematically equivalent Mersenne folds and avoids repeating identical
+adjacent set insertions. It still computes every rolling window and retains
+exactly the same sorted fingerprint set. An independent legacy implementation
+checks full-width arithmetic, Unicode and complete inputs through 1 MiB.
+Provenance recording, limits, lifetimes, locks and verdict rules are unchanged.
+Local stage observations (including incidental test executions) are retained
+in `local-stage-observations.json`; native paired measurements are pending.

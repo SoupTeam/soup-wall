@@ -1877,5 +1877,7 @@ jobs:
             ${{ runner.temp }}/sou165-scratch/results/*/collector.log
             ${{ runner.temp }}/sou165-scratch/results/*/daemon.log
             ${{ runner.temp }}/sou165-scratch/results/inventory-*.log
+            ${{ runner.temp }}/sou165-scratch/results/inventory-*/**/collector.log
+            ${{ runner.temp }}/sou165-scratch/results/inventory-*/**/daemon.log
           if-no-files-found: warn
           retention-days: 30
