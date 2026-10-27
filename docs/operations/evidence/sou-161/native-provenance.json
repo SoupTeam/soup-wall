@@ -1,0 +1,37 @@
+{
+  "format": "sw-installed-edit-provenance/1",
+  "qualified_source": "07a5f1d1b2b05162e1d1d7849af577e94b802202",
+  "accepted_base": "d57a8696a78adc39071e1783bcea63632efe21e4",
+  "agentfw_sha256": "9ec4c9dee2de931aaf5b5dacb04e51b861702139ac7f48749478c82a357778ff",
+  "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "native_report_sha256": "3873cfffa5e5cd57c2f9d5c4e0aaee60394e2fb79d8216542dd745903f619dae",
+  "workflow_run": 40533100725,
+  "artifact_id": 12747896293,
+  "artifact_sha256": "89b621d565ab7a4f5c9801f34d13f1de164557ae9178f6e54dda267f93c77850",
+  "artifact_crc_verified": true,
+  "artifact_expected_files": [
+    "source.txt",
+    "binary.txt",
+    "runtime/report.json"
+  ],
+  "inventory": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "linux_focused_rust_tests": 43,
+  "linux_finite_controls": 5,
+  "linux_strict_clippy_and_fmt": "passed, no compiler warnings",
+  "execution_boundary": "read-only checkout; private writable scratch; non-root; private network namespace; owned scripted loopback provider",
+  "paid_inference": false,
+  "claims": {
+    "useful_create_and_replace": "genuine host read -> one exact approved write -> verified read",
+    "hardlink": "selected target and outside alias snapshots independently unchanged; no new run or authority",
+    "lifecycle": "typed ended/unavailable inspection reconciled with daemon Ask verdict, audited pending binding and zero writes",
+    "postcommit_scope": "host interruption after successful tool-result delivery; committed bytes retained",
+    "tool_result_loss": "not claimed",
+    "ready_merge_qualification": "reviewer-owned; not inferred from Draft checks"
+  }
+}

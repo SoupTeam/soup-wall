@@ -327,6 +327,8 @@ enum Cmd {
     },
     /// Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
     PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
+    /// Explicit installed private-output edit session; default pilot stays read-only.
+    EditSession(agentfw::edit_session::Cli),
     /// Read-only inspection using the accepted original-profile workspace validators.
     PilotWorkspaces(agentfw::pilot_launcher::PilotWorkspacesArgs),
     /// Inspect or probe an explicitly selected prepared-pilot Linux budget.
@@ -937,6 +939,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             anyhow::bail!("the installed guided pilot supports native Linux x86_64 only")
         }
         Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
+        Cmd::EditSession(args) => agentfw::edit_session::run(args),
         Cmd::PilotWorkspaces(args) => agentfw::pilot_launcher::inspect_workspaces(args),
         Cmd::PilotApproval(args) if args.output.is_some() => {
             std::process::exit(agentfw::pilot_approval::operator_json(args));

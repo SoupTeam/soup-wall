@@ -1,0 +1,369 @@
+{
+  "agentfw_sha256": "fc8d64404b56f0796a89d4d5ced5ee82af4713493ce4f3e321f6262842d67612",
+  "cases": [
+    {
+      "component": "e8506356fb88bc45015d4dab53fad643b36c88025ff07926fed7726e78dfaca8",
+      "id": "installed-closure",
+      "source": "fd059e21f04576ce2aef86e30b359c7ac399553a",
+      "status": "passed"
+    },
+    {
+      "authority": false,
+      "id": "inert-preview",
+      "plan_created": false,
+      "status": "passed"
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2049,
+        "exists": true,
+        "inode": 9701478,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+        "size": 36
+      },
+      "approved": 1,
+      "audit_sha256": "dbe8150c2569c65e7aa7bbbbfd5b02bca69bbcf4a24032ad849a554856f0c070",
+      "before": {
+        "exists": false
+      },
+      "changed_control": false,
+      "decisions": [
+        {
+          "action": "approve",
+          "binding_sha256": "802f7efd1bc57eaca4da94395db241716a4989c3db7cc65b6d4602bfed7b88bc",
+          "id": "_yTqPbCv7Tu_NtjeZ1niFv-s7HfWvZe7RTYw_YleORI"
+        }
+      ],
+      "exit": 0,
+      "id": "useful-create",
+      "observed_results": 3,
+      "pending_seen": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 7832,
+            "start_time_ticks": 35189
+          },
+          {
+            "parent_process": false,
+            "pid": 7834,
+            "start_time_ticks": 35309
+          },
+          {
+            "parent_process": false,
+            "pid": 7858,
+            "start_time_ticks": 35350
+          },
+          {
+            "parent_process": false,
+            "pid": 7857,
+            "start_time_ticks": 35350
+          },
+          {
+            "parent_process": false,
+            "pid": 7856,
+            "start_time_ticks": 35350
+          },
+          {
+            "parent_process": false,
+            "pid": 7866,
+            "start_time_ticks": 35354
+          },
+          {
+            "parent_process": false,
+            "pid": 7871,
+            "start_time_ticks": 35357
+          }
+        ],
+        "remaining": []
+      },
+      "provider_requests": 4,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "cleanup": {
+          "cleaned": true,
+          "exit_success": true,
+          "failure": null,
+          "graceful_observed": false,
+          "ownership": "unix_process_group",
+          "reaped": true
+        },
+        "daemon_clean": true,
+        "effect_status": "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry",
+        "format": "sw-installed-edit-session/1",
+        "mutation_dispatches": 0,
+        "profile_sha256": "6c668ebce54cbb16d451cb8f8290c1c252559924e529154c8c3a16916d5398c0",
+        "reason": "host_completed",
+        "run": "/home/runner/work/_temp/sou161-scratch/runtime/runs/edit-3aba3fc4-197a-4bce-ad3e-1ac5cbb2b943",
+        "state": "host_completed"
+      }
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2049,
+        "exists": true,
+        "inode": 9701492,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+        "size": 36
+      },
+      "approved": 1,
+      "audit_sha256": "671ddd9503308511726668f476bc03d86bec322fcb9d9c4d612cea7f66e1f4ef",
+      "before": {
+        "device": 2049,
+        "exists": true,
+        "inode": 9701488,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "changed_control": false,
+      "decisions": [
+        {
+          "action": "approve",
+          "binding_sha256": "b2e6548f2569a7670c2eeb9c8e37f07240d417a33fbe204a300208c582981f28",
+          "id": "TJ_LvT4ENMKCRZsnfJtfUgUWvfi4P06AjoEO7P_OltA"
+        }
+      ],
+      "exit": 0,
+      "id": "useful-replace",
+      "observed_results": 3,
+      "pending_seen": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 7912,
+            "start_time_ticks": 35613
+          },
+          {
+            "parent_process": false,
+            "pid": 7914,
+            "start_time_ticks": 35733
+          },
+          {
+            "parent_process": false,
+            "pid": 7937,
+            "start_time_ticks": 35771
+          },
+          {
+            "parent_process": false,
+            "pid": 7936,
+            "start_time_ticks": 35771
+          },
+          {
+            "parent_process": false,
+            "pid": 7935,
+            "start_time_ticks": 35771
+          },
+          {
+            "parent_process": false,
+            "pid": 7945,
+            "start_time_ticks": 35775
+          },
+          {
+            "parent_process": false,
+            "pid": 7951,
+            "start_time_ticks": 35778
+          }
+        ],
+        "remaining": []
+      },
+      "provider_requests": 4,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "cleanup": {
+          "cleaned": true,
+          "exit_success": true,
+          "failure": null,
+          "graceful_observed": false,
+          "ownership": "unix_process_group",
+          "reaped": true
+        },
+        "daemon_clean": true,
+        "effect_status": "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry",
+        "format": "sw-installed-edit-session/1",
+        "mutation_dispatches": 0,
+        "profile_sha256": "12eb34a5142c7ed9e9071ccba7a25848fb1917b76cdee4a1824936a227c23f87",
+        "reason": "host_completed",
+        "run": "/home/runner/work/_temp/sou161-scratch/runtime/runs/edit-c3ea8b07-3e6c-41a5-b595-9b39559346da",
+        "state": "host_completed"
+      }
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2049,
+        "exists": true,
+        "inode": 9961513,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "approved": 0,
+      "audit_sha256": "be7070f502e1c29a8b99f45339dbc5c60a031ff06e60afee6076a63c3b28d786",
+      "before": {
+        "device": 2049,
+        "exists": true,
+        "inode": 9961513,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "changed_control": false,
+      "decisions": [
+        {
+          "action": "reject",
+          "binding_sha256": "ccc5b4e809462f75c5a70913a305ea0be6f3eaafed86d631c4a2ab16a6c271cf",
+          "id": "KTGaOkCV86ST8yUDIlGRNPmJ0TxaZaAN2owvJBawhsk"
+        }
+      ],
+      "exit": 0,
+      "id": "ask-reject",
+      "observed_results": 1,
+      "pending_seen": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "observed": [
+          {
+            "parent_process": true,
+            "pid": 7990,
+            "start_time_ticks": 36023
+          },
+          {
+            "parent_process": false,
+            "pid": 7992,
+            "start_time_ticks": 36159
+          },
+          {
+            "parent_process": false,
+            "pid": 8015,
+            "start_time_ticks": 36197
+          },
+          {
+            "parent_process": false,
+            "pid": 8014,
+            "start_time_ticks": 36197
+          },
+          {
+            "parent_process": false,
+            "pid": 8013,
+            "start_time_ticks": 36197
+          },
+          {
+            "parent_process": false,
+            "pid": 8023,
+            "start_time_ticks": 36201
+          },
+          {
+            "parent_process": false,
+            "pid": 8028,
+            "start_time_ticks": 36204
+          }
+        ],
+        "remaining": []
+      },
+      "provider_requests": 2,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "cleanup": {
+          "cleaned": true,
+          "exit_success": true,
+          "failure": null,
+          "graceful_observed": false,
+          "ownership": "unix_process_group",
+          "reaped": true
+        },
+        "daemon_clean": true,
+        "effect_status": "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry",
+        "format": "sw-installed-edit-session/1",
+        "mutation_dispatches": 0,
+        "profile_sha256": "3d574da2d60551fd2eb53707255f00b2c9016216c02ae3b74d1417c5fca91050",
+        "reason": "host_completed",
+        "run": "/home/runner/work/_temp/sou161-scratch/runtime/runs/edit-670ffea9-4b6d-41bf-824e-ac0f8a73214b",
+        "state": "host_completed"
+      }
+    },
+    {
+      "id": "no-approval",
+      "status": "incomplete"
+    },
+    {
+      "id": "unlisted-tool",
+      "status": "incomplete"
+    },
+    {
+      "id": "outside-target",
+      "status": "incomplete"
+    },
+    {
+      "id": "linked-target",
+      "status": "incomplete"
+    },
+    {
+      "id": "stale-plan",
+      "status": "incomplete"
+    },
+    {
+      "id": "changed-plan",
+      "status": "incomplete"
+    },
+    {
+      "id": "no-exclusion",
+      "status": "incomplete"
+    },
+    {
+      "id": "pending-old-change",
+      "status": "incomplete"
+    },
+    {
+      "id": "pending-new-change",
+      "status": "incomplete"
+    },
+    {
+      "id": "approval-replay",
+      "status": "incomplete"
+    },
+    {
+      "id": "cancel-pending",
+      "status": "incomplete"
+    },
+    {
+      "id": "daemon-loss",
+      "status": "incomplete"
+    },
+    {
+      "id": "restart-authority",
+      "status": "incomplete"
+    },
+    {
+      "id": "postcommit-result-loss",
+      "status": "incomplete"
+    }
+  ],
+  "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "failure": "inspect_exposed_arguments",
+  "failure_type": "ValueError",
+  "format": "sw-installed-edit-qualification/1",
+  "paid_inference": false,
+  "scope": "native-installed-genuine-host-owned-scripted-provider",
+  "source_commit": "fd059e21f04576ce2aef86e30b359c7ac399553a",
+  "status": "failed"
+}
