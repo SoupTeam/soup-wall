@@ -85,7 +85,7 @@ indeterminate. Recovery must inspect actual target identity/content first.
 The focused native Ubuntu 22.04 qualification passed all 22 production
 stdio/daemon effect cases, 31 Rust executor/authority controls, nine finite
 evidence controls, strict Clippy and fmt at source
-`4cdd671476f813f6e661a2a45a6c6b4a14d566a2`. The retained
+`b58af08612bb9aae3d1efae99ab98add3f0fc327`. The retained
 [evidence and qualification limits](evidence/sou-159/README.md) include exact
 source/binary/config/policy/approval hashes and the original failed attempts.
 macOS development checks are recorded separately. This component remains in

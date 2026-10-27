@@ -366,6 +366,19 @@
       "log_sha256": "80dfe625e535d98ee757b0e181351a54970372182076384ccb5b0be40658732e",
       "elapsed_seconds": 9.38,
       "kind": "local-development"
+    },
+    {
+      "label": "security-fixture-final-evidence",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "python3 -B -c 'import importlib.util,json;from pathlib import Path;s=importlib.util.spec_from_file_location(\"sou159\",Path(\"scripts/verify-sou159-replace-file.py\"));m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.validate(json.loads(Path(\"docs/operations/evidence/sou-159/native-runtime.json\").read_bytes())))' && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && /usr/bin/env GIT_INDEX_FILE=/private/tmp/sou159-qualification/scratch/docs-index python3 -B scripts/check_docs.py && cargo fmt --all --check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "f9668044b45df853ac4197b56f2dd60817394d8d273e1f6ebb788997209e08a4",
+      "log_sha256": "773a32c65adca4272917bd95841c42a0f7016dde8ef8853a95174111c6683b9e",
+      "elapsed_seconds": 3.6,
+      "kind": "local-development"
     }
   ],
   "limits": [

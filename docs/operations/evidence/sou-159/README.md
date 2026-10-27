@@ -1,8 +1,8 @@
 # SOU-159 focused native qualification
 
 The production stdio/native path passed **22/22** finite cases on native
-Ubuntu 22.04 in [run 40463425198](https://github.com/SoupTeam/soup-wall/actions/runs/40463425198).
-The exact executable source is `4cdd671476f813f6e661a2a45a6c6b4a14d566a2`.
+Ubuntu 22.04 in [run 40466424290](https://github.com/SoupTeam/soup-wall/actions/runs/40466424290).
+The exact executable source is `b58af08612bb9aae3d1efae99ab98add3f0fc327`.
 The following evidence/documentation commit does not change that executable
 source, its witnesses or its workflow.
 
@@ -25,6 +25,13 @@ The successful Linux run also passed ten executor units, three replacement
 binding/retention units, five native HTTP authority controls, thirteen existing
 create-only controls, nine evidence/classifier controls, strict all-target
 Clippy for agentfw and `cargo fmt --all --check`. No compiler warnings occurred.
+
+The earlier successful [runtime report](attempt-7-runtime.json) and
+[provenance](attempt-7-provenance.json) remain retained. A subsequent
+[CodeQL fixture finding](codeql-fixture.json) was addressed by generating
+independent random fixture paths and authentication tokens. All 31 Linux
+controls and 22 production cases passed again with the same production binary;
+no alert suppression or production code change was used.
 
 ## Effects and negative boundaries
 
