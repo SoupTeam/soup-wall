@@ -25,8 +25,8 @@ def registry(manifest):
     return SHARED.registry(manifest, SELECTION)
 
 
-def install(destination, workspace, git, git_sha256, bwrap, git_launcher):
-    return SHARED.install(destination, workspace, git, git_sha256, bwrap, git_launcher, selection=SELECTION)
+def install(destination, workspace, git, git_sha256, bwrap, git_launcher, **inputs):
+    return SHARED.install(destination, workspace, git, git_sha256, bwrap, git_launcher, selection=SELECTION, **inputs)
 
 
 def prepare(installation, destination, port, python=None):

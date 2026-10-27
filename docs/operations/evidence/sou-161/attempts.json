@@ -1,0 +1,82 @@
+{
+  "format": "sw-installed-edit-attempts/1",
+  "attempts": [
+    {
+      "attempt": 1,
+      "run_id": 40522047924,
+      "source_commit": "fd059e21f04576ce2aef86e30b359c7ac399553a",
+      "artifact_id": 12742766136,
+      "artifact_sha256": "91cd61e30b3737ea5aba0ae172f317977b2770fb6a22c8260785c9afd402666e",
+      "status": "failed",
+      "completed_cases": 5,
+      "required_cases": 19,
+      "reason": "The original failed inspect response was not retained; its exact typed cause cannot be recovered. The combined label did not prove disclosure and is consistent with a list/inspect lifecycle race. Preserve the original incomplete outcome and denominator; the corrected source inspects each request once, retains safe typed diagnostics and keeps successful redaction assertions.",
+      "derived_inventory": {
+        "expected": 19,
+        "attempted": 6,
+        "passed": 5,
+        "incomplete": 14,
+        "basis": "ordered source loop and first failed no-approval control; original report had no attempted flag"
+      }
+    },
+    {
+      "attempt": 2,
+      "run_id": 40524369249,
+      "source_commit": "38e00a29137c01cdbcb2e0e48ba87652596298c8",
+      "artifact_id": 12744165963,
+      "artifact_sha256": "1d018239ba3cfe6a62cdda68896e7d699d67aee0e0843f1329bfc35e5dc07b21",
+      "status": "passed",
+      "completed_cases": 19,
+      "required_cases": 19,
+      "reason": "All original installed cases passed, including genuine host useful effects and hostile ambient workspace. Retained as an intermediate qualified source before adding protected runtime ancestry and three explicit source/runtime controls.",
+      "scope_correction": "The old postcommit-result-loss label proves only host interruption after successful tool-result delivery. It is not evidence of lost/withheld tool results."
+    },
+    {
+      "attempt": 3,
+      "run_id": 40527013106,
+      "source_commit": "b62422f6328d6b49744d776e0ae8cfd452752753",
+      "artifact_id": 12743739467,
+      "artifact_sha256": "ab7426e1931c672799c88faf26902de4f7de55b5dbb29eea9d6db09199963eba",
+      "status": "passed",
+      "completed_cases": 22,
+      "required_cases": 22,
+      "scope_correction": "Preserved unmodified intermediate report. Its old postcommit-result-loss name establishes host interruption after successful tool-result delivery, not missing/withheld tool results. Current qualifier names/scopes this explicitly and adds hardlink refusal and typed lifecycle diagnostics per review."
+    },
+    {
+      "attempt": 4,
+      "run_id": 40530682811,
+      "source_commit": "c6ab0da5a8c84f22a717de7140629fc5ea3f3a8e",
+      "artifact_id": 12745483978,
+      "artifact_sha256": "7f9564834e02730e9dcc36480d57b83711ada57d805a0edcc15629cc0eb32565",
+      "status": "failed",
+      "completed_cases": 8,
+      "required_cases": 23,
+      "inventory": {
+        "expected": 23,
+        "attempted": 9,
+        "passed": 8,
+        "failed": 1,
+        "incomplete": 14
+      },
+      "reason": "The typed closed inspection was correctly retained as exit 1/run_ended, and its successful earlier inspection satisfied redaction. The reconciliation incorrectly required an Ask-valued native_call; classifier-origin Ask can create authenticated pending before that call exists. The revised witness uses the daemon-written inspected verdict matched to the exact audited pending binding and retains reconciliation data before asserting, without relaxing zero effects, approval lifetimes or successful redaction checks."
+    },
+    {
+      "attempt": 5,
+      "run_id": 40533100725,
+      "source_commit": "07a5f1d1b2b05162e1d1d7849af577e94b802202",
+      "artifact_id": 12747896293,
+      "artifact_sha256": "89b621d565ab7a4f5c9801f34d13f1de164557ae9178f6e54dda267f93c77850",
+      "status": "passed",
+      "completed_cases": 23,
+      "required_cases": 23,
+      "inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "reason": "Complete corrected current-source installed qualification. All typed lifecycle, successful inspection redaction, audited pending binding, hardlink dual-snapshot, exact one-use effects and owned cleanup controls passed. Last case explicitly measures interruption after delivered result; no model-facing tool-result-loss claim."
+    }
+  ]
+}

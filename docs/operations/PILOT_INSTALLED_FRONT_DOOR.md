@@ -7,6 +7,10 @@ only those verified bytes with the exact interpreter recorded at install. The
 preview, prepare, run and status semantics are unchanged: the installed command
 runs the same accepted helpers.
 
+To select an existing reviewed extended Git contract, see the
+[Git capability table and operator examples](PILOT_GIT_CAPABILITIES.md).
+The default remains `git-readonly-v1`; combinations refuse.
+
 Supported: native Ubuntu 24.04 x86_64, ordinary (non-root) user, CPython 3.11 to
 3.13 named by an absolute path. Other platforms refuse.
 
