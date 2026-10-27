@@ -105,7 +105,8 @@ class PreparedRunBoundary(unittest.TestCase):
         args = self.args(root)
         args.selection.parent.mkdir(parents=True, mode=0o700)
         args.selection.parent.parent.chmod(0o700)
-        selection = {"source": {"commit": args.expected_commit}, "files": {}}
+        selection = {"format": "sw-installed-pilot-selection/2",
+                     "source": {"commit": args.expected_commit}, "files": {}}
         args.selection.write_text(json.dumps(selection))
         marker = {"format": "sw-pilot-preparation/1", "generation": "a" * 32,
                   "selection_sha256": RUN.PREP.FS.sha(args.selection), "status": "prepared-not-active"}
@@ -264,7 +265,8 @@ class PreparedRunBoundary(unittest.TestCase):
         # Exercise the accepted generation validator, rather than mocking its probe switch.
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "selection.json").write_text(json.dumps({"prepared_profiles": {"filesystem": {}, "git": {}}}))
+            (root / "selection.json").write_text(json.dumps({"format": "sw-installed-pilot-selection/2",
+                "prepared_profiles": {"filesystem": {}, "git": {}}}))
             with patch.object(RUN.PREP.PILOT, "validate_selection", return_value=({}, {"node": Path(sys.executable)})), \
                  patch.object(RUN.PREP, "verify_profile", return_value={}), \
                  patch.object(RUN.PREP.FS, "NODE_SHA256", RUN.PREP.FS.sha(sys.executable)), \
