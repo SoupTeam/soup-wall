@@ -246,6 +246,7 @@ fn audit(call: &Call, state: &str, active: usize, queued: usize) {
         json!({"event":"mcp_real_call","profile":call.profile,
         "host_call_id":call.id,"id_type":if call.id.is_string(){"string"}else{"integer"},
         "state":state,"active":active,"queued":queued,"execution_dispatched":call.dispatched,
+        "enqueue_to_stage_us":Instant::now().saturating_duration_since(call.deadline - super::IO_TIMEOUT).as_micros(),
         "arguments_sha256":sha(canonical(&call.args).to_string().as_bytes())})
     );
 }
@@ -1648,7 +1649,14 @@ where
                                 if git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
                                     write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
                                 } else {
-                                    write(host, &release.raw).await?;
+                                    let delivery_started = Instant::now();
+                                    let delivered = write(host, &release.raw).await;
+                                    diagnostic!("{}", json!({"event":"mcp_original_result_delivery_timing","version":1,
+                                        "host_call_sha256":sha(canonical(&call.id).to_string().as_bytes()),
+                                        "request_sha256":call.request_sha256,"response_sha256":sha(&release.raw),
+                                        "elapsed_us":delivery_started.elapsed().as_micros(),
+                                        "written":delivered.is_ok(),"authority":false}));
+                                    delivered?;
                                 }
                             }
                         }

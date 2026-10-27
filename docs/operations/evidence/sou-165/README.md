@@ -1,0 +1,27 @@
+# SOU-165 result admission measurements
+
+Accepted independent source: `f4937110b58305645b7302acae99325d13354916`.
+The original failed attempt and unchanged successful repeat are both retained
+in `historical-observations.json`; passing a retry is not a causal correction.
+The native workload and finite denominator are frozen in `trial-plan.json`.
+
+The instrumentation-only baseline changes no detectors, policy, grants, scan
+budgets, result bytes, state ordering or deadlines. Native timing rows use
+monotonic microseconds and fixed fields/digests only. `release_decision` is a
+server decision, **not** proof of delivery. Collector transport and actual
+stdio delivery have separate observations. Service `state_and_decode_us`
+includes decoding, validation, state manipulation and small unclassified
+bookkeeping; it does not pretend to be a detector measurement. Enqueue age is
+observed at the existing collector stages; queued time remains inside the
+unchanged call lifetime. No new queue, cache, concurrency or authority exists.
+
+Local in-process stage profiles identify a provenance-work bottleneck but are
+not native Linux acceptance. The opt-in `manual-native-result-profile` job
+builds both immutable sources with Rust 1.94.1, dev and release, then runs
+private-loopback-only native trials with read-only source and owned writable
+scratch. Neither the ordinary required matrix nor runner host protections are
+changed. The source, compiler, binary hashes, CPU affinity, load, all failures,
+refusals and unattempted denominator are retained. No universal latency claim
+or attribution of the historical failure to a source regression is justified.
+
+Native paired measurements and a measured correction are still pending.
