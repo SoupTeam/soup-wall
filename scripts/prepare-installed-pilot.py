@@ -25,6 +25,7 @@ import uuid
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import pilot_capacity as capacity
 from pilot_provider import utility_environment
 MAX_JSON = 65536
 NODE_ARCHIVE_SHA256 = "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
@@ -283,6 +284,7 @@ def sync_directory(path):
 
 
 def publish_marker(output, record):
+    capacity.recheck("before_selection")
     temporary = output / (".current-" + uuid.uuid4().hex)
     write_json(temporary, record)
     try:
@@ -306,6 +308,7 @@ def publish_marker(output, record):
 
 
 def selected_paths(args, generation):
+    capacity.recheck("before_asset_inputs")
     supplied = {role: getattr(args, role) for role in PILOT.ROLES if role not in {"node", "npm"}}
     for role, path in supplied.items():
         require(path is not None, f"missing_{role}: supply --{role.replace('_', '-')}")
@@ -415,6 +418,7 @@ def prepare_locked(args, output, requested):
         return {"status": "reused", "selection": str(selection), "generation": record["generation"]}
     generation = generations / uuid.uuid4().hex
     generation.mkdir(mode=0o700)
+    capacity.bind(generation)
     paths = selected_paths(args, generation)
     fs_workspace, git_workspace = generation / "filesystem-workspace", generation / "git-workspace"
     if requested:
@@ -437,6 +441,7 @@ def prepare_locked(args, output, requested):
         require(npm_cache is not None and args.python_archive is not None and args.wheelhouse is not None,
                 "offline_requires_npm_cache_python_archive_wheelhouse")
     for kind in ("filesystem", "git"):
+        capacity.recheck("before_" + kind + "_install")
         log_path = generation / (kind + "-install.log")
         with log_path.open("xb") as log:
             os.fchmod(log.fileno(), 0o600)
@@ -480,6 +485,7 @@ def prepare_locked(args, output, requested):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    capacity.add_arguments(parser)
     parser.add_argument("--prepare", action="store_true", help="explicitly prepare and select a verified generation")
     parser.add_argument("--rebuild", action="store_true", help="prepare a new generation and retain the old one")
     parser.add_argument("--allow-download", action="store_true", help="permit locked npm/pip and pinned Python download")
@@ -496,6 +502,13 @@ def main():
     for role in PILOT.ROLES:
         parser.add_argument("--" + role.replace("_", "-"), type=Path)
     args = parser.parse_args()
+    if args.capacity_plan:
+        if args.prepare or args.guard_capacity:
+            parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
+        print(json.dumps(capacity.cli_plan("assets", args), sort_keys=True))
+        return 0
+    if args.guard_capacity and not args.prepare:
+        parser.error("--guard-capacity requires --prepare")
     if not args.prepare:
         try:
             workspaces = requested_workspaces(args)
@@ -553,8 +566,12 @@ def main():
         return 0
     try:
         require(re.fullmatch(r"[0-9a-f]{40}", args.expected_commit or ""), "full_expected_commit_required")
-        print(json.dumps(prepare(args)))
+        with capacity.checked("assets", args):
+            print(json.dumps(prepare(args)))
         return 0
+    except capacity.Refusal as error:
+        print(json.dumps(error.report, sort_keys=True))
+        return 2
     except InstallerFailure as error:
         print(json.dumps({"status": "failed", "reason": str(error),
                           "exit_code": error.exit_code, "private_log": error.private_log}))

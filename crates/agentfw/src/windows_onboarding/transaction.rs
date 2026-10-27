@@ -376,6 +376,7 @@ pub(super) async fn apply(
         enforce: true,
         policy: Some(selection.home.join("policy.yaml")),
         native: Some(crate::config::NativeCfg {
+            execution: None,
             git_execution: None,
             registry_path: selection.home.join("registry.json"),
             registry_sha256: selection.registry_sha256.clone(),

@@ -30,6 +30,8 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.dont_write_bytecode = True
+import pilot_capacity as capacity
 from pilot_provider import utility_environment
 import pilot_preparation_lock as coordination
 import pilot_source_identity as SOURCE_IDENTITY
@@ -293,6 +295,7 @@ def bounded_archive(path, kind):
 
 
 def download(kind, destination):
+    capacity.recheck("before_download")
     url = SOURCES[kind][2]
     require(url.startswith("https://"), "unpinned_download_refused", "download")
     limit = SOURCES[kind][4]
@@ -316,6 +319,7 @@ def download(kind, destination):
 
 def extract(archive, destination, kind):
     """Preflight the complete layout before writing any archive member."""
+    capacity.recheck("before_extraction")
     prefix = SOURCES[kind][1]
     with tarfile.open(archive, "r:xz") as bundle:
         members = bundle.getmembers()
@@ -412,6 +416,7 @@ def stop_group(process):
 
 def build(command, *, cwd, env, log, seconds, stage):
     """Drain bounded output and stop the entire owned process group on every exit."""
+    capacity.recheck("before_build")
     cancelled = False
 
     def mark_cancelled(_signum, _frame):
@@ -640,6 +645,7 @@ def prepare(args):
                 {name: {"path": path, "sha256": digest(path)}
                  for name, path in current_tools.items()} == snapshot,
                 "input_changed_while_waiting", "coordination")
+        capacity.recheck("after_coordination")
         generations = output / "generations"
         generations.mkdir(mode=0o700, exist_ok=True)
         private(generations)
@@ -666,6 +672,7 @@ def prepare(args):
         incomplete = sum(1 for _ in itertools.islice(generations.iterdir(), 17)) if not marker.exists() else 0
         require(incomplete <= 16, "retained_incomplete_generation_limit", "coordination")
         generation = private(generations / uuid.uuid4().hex, create=True)
+        capacity.bind(generation)
         (generation / "tmp").mkdir(mode=0o700)
         env = environment(tools, generation, args)
         archives = {}
@@ -706,6 +713,7 @@ def prepare(args):
         verify_generation(generation, source, tools, execution=execution, completed=True)
         current = {"format": "sw-native-pilot-current/1", "generation": generation.name,
                    "receipt_sha256": digest(generation / "receipt.json")}
+        capacity.recheck("before_selection")
         temporary = output / (".current-" + uuid.uuid4().hex)
         write_json(temporary, current)
         claim.verify()
@@ -724,6 +732,7 @@ def prepare(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    capacity.add_arguments(parser)
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--wait-seconds", type=float, default=0,
@@ -737,11 +746,22 @@ def main():
     parser.add_argument("--pkg-config-sysroot", type=Path)
     parser.add_argument("--meson-pythonpath", type=Path)
     args = parser.parse_args()
+    if args.capacity_plan:
+        if args.prepare or args.guard_capacity:
+            parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
+        print(json.dumps(capacity.cli_plan("native", args), sort_keys=True))
+        return 0
+    if args.guard_capacity and not args.prepare:
+        parser.error("--guard-capacity requires --prepare")
     try:
         coordination.bounded_wait(args.wait_seconds)
         require(args.prepare or args.wait_seconds == 0, "wait_requires_prepare")
-        print(json.dumps(prepare(args)))
+        with capacity.checked("native", args):
+            print(json.dumps(prepare(args)))
         return 0 if not args.prepare or not platform_missing() else 2
+    except capacity.Refusal as error:
+        print(json.dumps(error.report, sort_keys=True))
+        return 2
     except coordination.Busy as error:
         print(json.dumps({"status": "busy", "reason": error.reason,
                           "waited_seconds": error.waited_seconds,

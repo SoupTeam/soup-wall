@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::extract::State;
@@ -22,6 +22,7 @@ use crate::handlers::Shared;
 pub mod approval;
 pub mod child_authority;
 pub mod continuity;
+pub mod execution;
 mod invocation;
 pub mod liveness;
 pub mod pilot_cleanup;
@@ -552,6 +553,7 @@ pub struct NativeState {
     pub registry_sha256: String,
     pub token: String,
     instance_id: String,
+    pub(crate) execution: Option<Arc<execution::Service>>,
     pub(crate) continuity: Option<continuity::Continuity>,
     pub(crate) sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
@@ -720,6 +722,7 @@ impl NativeState {
             registry_sha256: expected.into(),
             token,
             instance_id: crate::token::generate(),
+            execution: None,
             continuity: None,
             sessions: Mutex::default(),
             approval: None,
@@ -771,6 +774,33 @@ impl NativeState {
 
     /// Public runtime identifier, authenticated by the native transport endpoint.
     /// Scoped grant nonces bind to it without changing the HMAC wire encoding.
+    /// Only the daemon startup attaches execution custody. Collector registry
+    /// loads never initialize this authority or read the server's catalogue.
+    pub fn with_execution(mut self, config: &NativeCfg) -> anyhow::Result<Self> {
+        self.execution = config
+            .execution
+            .as_ref()
+            .map(execution::Service::load)
+            .transpose()?;
+        Ok(self)
+    }
+
+    pub(crate) fn collector_view(&self) -> Self {
+        Self {
+            git_execution: None,
+            registry: self.registry.clone(),
+            registry_sha256: self.registry_sha256.clone(),
+            token: self.token.clone(),
+            instance_id: crate::token::generate(),
+            execution: None,
+            continuity: None,
+            sessions: Mutex::default(),
+            approval: None,
+            test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
+            policy_barrier: self.policy_barrier.clone(),
+        }
+    }
+
     pub fn instance_id(&self) -> &str {
         &self.instance_id
     }
@@ -1216,6 +1246,8 @@ fn parse(body: &str) -> Result<Request, &'static str> {
 #[derive(Serialize)]
 struct Response {
     #[serde(skip_serializing_if = "Option::is_none")]
+    execution: Option<execution::Metadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
     contract_version: &'static str,
     registry_sha256: String,
@@ -1588,33 +1620,43 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
         Ok(value) => value.unwrap_or_default(),
         Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
     };
-    (
-        StatusCode::OK,
-        Json(json!({
-            "instance_id": native.instance_id(),
-            "registry_sha256": native.registry_sha256,
-            "bindings": bindings,
-            "pilot_collectors": pilot_collectors,
-            "pilot_cleanup": sessions.pilot_cleanup.iter().map(|(digest, row)| json!({
-                "authority_sha256":digest,"host_session":row.host_session,
-                "server_id":row.server_id,"verified":row.verified
-            })).collect::<Vec<_>>(),
-            "pilot_pending": pilot_pending,
-            "approval_enabled": native.approval.is_some(),
-            "liveness_enabled": st.config.native.as_ref().and_then(|n| n.liveness.as_ref()).is_some(),
-            "provenance": {
-                "accounting_revision": "sw-provenance-storage/1",
-                "limits": firewall.provenance_limits(),
-                "usage": firewall.provenance_usage(),
-            }
-        })),
-    )
+    let mut description = json!({
+        "instance_id": native.instance_id(),
+        "registry_sha256": native.registry_sha256,
+        "bindings": bindings,
+        "pilot_collectors": pilot_collectors,
+        "pilot_cleanup": sessions.pilot_cleanup.iter().map(|(digest, row)| json!({
+            "authority_sha256":digest,"host_session":row.host_session,
+            "server_id":row.server_id,"verified":row.verified
+        })).collect::<Vec<_>>(),
+        "pilot_pending": pilot_pending,
+        "approval_enabled": native.approval.is_some(),
+        "liveness_enabled": st.config.native.as_ref().and_then(|n| n.liveness.as_ref()).is_some(),
+        "provenance": {
+            "accounting_revision": "sw-provenance-storage/1",
+            "limits": firewall.provenance_limits(),
+            "usage": firewall.provenance_usage(),
+        }
+    });
+    if let Some(service) = &native.execution {
+        description["execution_service"] = service.metadata();
+    }
+    (StatusCode::OK, Json(description))
 }
 
 pub async fn handler(
     State(st): State<Shared>,
     headers: HeaderMap,
     body: String,
+) -> (StatusCode, Json<Value>) {
+    handle_with_evidence(st, headers, body, None).await
+}
+
+async fn handle_with_evidence(
+    st: Shared,
+    headers: HeaderMap,
+    body: String,
+    evidence: Option<execution::OriginalResult>,
 ) -> (StatusCode, Json<Value>) {
     let Some(native) = &st.native else {
         return failure("native_disabled", StatusCode::SERVICE_UNAVAILABLE);
@@ -1639,6 +1681,12 @@ pub async fn handler(
         Ok(request) => request,
         Err(code) => return failure(code, StatusCode::BAD_REQUEST),
     };
+    if evidence.is_some() && !mcp_host_result(&request) {
+        return failure(
+            "verified_execution_result_required",
+            StatusCode::BAD_REQUEST,
+        );
+    }
     if request.registry_sha256 != native.registry_sha256 {
         return failure("native_registry_mismatch", StatusCode::CONFLICT);
     }
@@ -1679,7 +1727,7 @@ pub async fn handler(
             StatusCode::BAD_REQUEST,
         );
     }
-    match inspect_bound(&st, native, request, identity.as_ref()) {
+    match inspect_bound(&st, native, request, identity.as_ref(), evidence) {
         Ok(response) => (
             StatusCode::OK,
             Json(serde_json::to_value(response).expect("native response serializes")),
@@ -1886,7 +1934,7 @@ fn reap_lost_sessions(st: &Shared, native: &NativeState, now: Instant, now_ms: u
 
 #[cfg(test)]
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
-    inspect_bound(st, native, request, None)
+    inspect_bound(st, native, request, None, None)
 }
 
 fn inspect_bound(
@@ -1894,10 +1942,12 @@ fn inspect_bound(
     native: &NativeState,
     request: Request,
     identity: Option<&liveness::CollectorIdentity>,
+    evidence: Option<execution::OriginalResult>,
 ) -> Result<Response, &'static str> {
-    inspect_bound_with_execution(st, native, request, identity, None)
+    inspect_bound_complete(st, native, request, identity, None, evidence)
 }
 
+#[cfg(target_os = "linux")]
 fn inspect_bound_with_execution(
     st: &Shared,
     native: &NativeState,
@@ -1905,6 +1955,20 @@ fn inspect_bound_with_execution(
     identity: Option<&liveness::CollectorIdentity>,
     execution: Option<verified_git::OwnedResult>,
 ) -> Result<Response, &'static str> {
+    inspect_bound_complete(st, native, request, identity, execution, None)
+}
+
+fn inspect_bound_complete(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+    execution: Option<verified_git::OwnedResult>,
+    evidence: Option<execution::OriginalResult>,
+) -> Result<Response, &'static str> {
+    if execution.is_some() && evidence.is_some() {
+        return Err("verified_execution_source_mismatch");
+    }
     if request.event == "session_start"
         && request.host_session.is_none()
         && native
@@ -1939,6 +2003,7 @@ fn inspect_bound_with_execution(
         session.calls.retain(|_, call| call.expires > now);
     }
     let mut response = Response {
+        execution: None,
         managed_policy: firewall.active_managed_policy(),
         contract_version: match request.contract_version.as_str() {
             resource::CONTRACT => resource::CONTRACT,
@@ -2765,6 +2830,9 @@ fn inspect_bound_with_execution(
     {
         return Err("native_call_binding_mismatch");
     }
+    if let Some(evidence) = evidence {
+        response.execution = Some(evidence.consume(native, session, &request, &call, now)?);
+    }
     // A previously dispatched effect cannot be undone. Its result is a new
     // release boundary: a changed policy must authorize the original action
     // again, without reusing an old Ask approval, before inspecting its content.
@@ -3172,6 +3240,9 @@ fn audit(
     {
         record["mcp_result_evidence"] = json!({"complete":false,"reason":"finite evidence budget exhausted","limits":{"findings":256,"audit_reason_bytes":65536,"charged_scan_bytes":33554432,"decoded_input_bytes":1048576}});
     }
+    if let Some(execution) = &response.execution {
+        record["execution"] = json!(execution);
+    }
     if let Some(policy) = &response.managed_policy {
         record["managed_policy"] = json!(policy);
     }
@@ -3256,6 +3327,35 @@ mod tests {
                 scope_contains(&parent.to_string_lossy(), &child.to_string_lossy()),
                 allowed
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn sou155_execution_auth_and_disabled_refusals_read_zero_body_chunks() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        for authorized in [false, true] {
+            let polls = Arc::new(AtomicUsize::new(0));
+            let observed = polls.clone();
+            let body = axum::body::Body::from_stream(futures_util::stream::once(async move {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok::<_, std::io::Error>("untrusted body")
+            }));
+            let mut headers = HeaderMap::new();
+            if authorized {
+                headers.insert("authorization", "Bearer native-unit-key".parse().unwrap());
+            }
+            let response = execution::transport::handler(State(st.clone()), headers, body).await;
+            assert_eq!(
+                response.status(),
+                if authorized {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::UNAUTHORIZED
+                }
+            );
+            assert_eq!(polls.load(Ordering::SeqCst), 0);
         }
     }
 
