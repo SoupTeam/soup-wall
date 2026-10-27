@@ -126,6 +126,9 @@ process cleanup. This is development qualification, not a live-model efficacy or
 production-readiness claim. The registered `linux-installed-edit` job runs with
 read-only source, private writable scratch and no external network.
 
-Current qualification evidence belongs under
+The corrected native qualification passed 23/23 cases, 43 focused Rust controls,
+5 finite/classifier controls and strict Linux Clippy/fmt on implementation source
+`07a5f1d1b2b05162e1d1d7849af577e94b802202`. Source/binary/artifact correlation and
+all original attempts are retained under
 [`evidence/sou-161/`](evidence/sou-161/README.md). Final shared Ready qualification,
 admission and merge remain with the reviewer.

@@ -59,6 +59,24 @@
         "incomplete": 14
       },
       "reason": "The typed closed inspection was correctly retained as exit 1/run_ended, and its successful earlier inspection satisfied redaction. The reconciliation incorrectly required an Ask-valued native_call; classifier-origin Ask can create authenticated pending before that call exists. The revised witness uses the daemon-written inspected verdict matched to the exact audited pending binding and retains reconciliation data before asserting, without relaxing zero effects, approval lifetimes or successful redaction checks."
+    },
+    {
+      "attempt": 5,
+      "run_id": 40533100725,
+      "source_commit": "07a5f1d1b2b05162e1d1d7849af577e94b802202",
+      "artifact_id": 12747896293,
+      "artifact_sha256": "89b621d565ab7a4f5c9801f34d13f1de164557ae9178f6e54dda267f93c77850",
+      "status": "passed",
+      "completed_cases": 23,
+      "required_cases": 23,
+      "inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "reason": "Complete corrected current-source installed qualification. All typed lifecycle, successful inspection redaction, audited pending binding, hardlink dual-snapshot, exact one-use effects and owned cleanup controls passed. Last case explicitly measures interruption after delivered result; no model-facing tool-result-loss claim."
     }
   ]
 }
