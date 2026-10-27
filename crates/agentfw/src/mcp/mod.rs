@@ -22,6 +22,7 @@ pub mod profile_author;
 pub mod profile_lifecycle;
 pub mod profile_upgrade;
 pub mod proxy;
+pub mod replace_file;
 pub mod resources;
 pub mod server_profile;
 pub mod server_sandbox;

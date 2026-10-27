@@ -289,6 +289,16 @@ enum Cmd {
         #[command(subcommand)]
         command: agentfw::mcp::profile_author::Command,
     },
+    /// Read-only preview for the separately installed constrained replacement.
+    ReplaceFilePreview {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        target: PathBuf,
+        /// Read at most 4096 UTF-8 bytes; raw content is never printed.
+        #[arg(long)]
+        content_file: PathBuf,
+    },
     /// Manage one explicitly selected Claude Code stdio MCP entry.
     McpConnection {
         #[command(subcommand)]
@@ -772,6 +782,42 @@ fn main() -> anyhow::Result<()> {
                 .read_to_end(&mut bytes)?;
             let inventory = agentfw::mcp::input::inspect_host_config(&bytes)?;
             println!("{}", serde_json::to_string_pretty(&inventory)?);
+            Ok(())
+        }
+        Cmd::ReplaceFilePreview {
+            workspace,
+            target,
+            content_file,
+        } => {
+            use std::io::Read;
+            anyhow::ensure!(cfg!(target_os = "linux"), "replace_platform_unsupported");
+            let mut options = std::fs::OpenOptions::new();
+            options.read(true);
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+            }
+            let file = options
+                .open(content_file)
+                .map_err(|_| anyhow::anyhow!("replace_content_unavailable"))?;
+            let metadata = file.metadata()?;
+            anyhow::ensure!(
+                metadata.is_file()
+                    && metadata.len() <= agentfw::mcp::replace_file::MAX_BYTES as u64,
+                "replace_content_file_unsupported"
+            );
+            let mut bytes = Vec::with_capacity(agentfw::mcp::replace_file::MAX_BYTES + 1);
+            file.take((agentfw::mcp::replace_file::MAX_BYTES + 1) as u64)
+                .read_to_end(&mut bytes)?;
+            anyhow::ensure!(
+                bytes.len() <= agentfw::mcp::replace_file::MAX_BYTES,
+                "replace_content_over_cap"
+            );
+            let content = std::str::from_utf8(&bytes)
+                .map_err(|_| anyhow::anyhow!("replace_content_not_utf8"))?;
+            let preview = agentfw::mcp::replace_file::preview(&workspace, &target, content)?;
+            println!("{}", serde_json::to_string_pretty(&preview)?);
             Ok(())
         }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),

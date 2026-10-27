@@ -1,0 +1,185 @@
+{
+  "platform": "macOS",
+  "native_linux_qualified": false,
+  "attempts": [
+    {
+      "label": "replacement-initial",
+      "command": [
+        "cargo",
+        "check",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--all-targets"
+      ],
+      "exit_code": 101,
+      "source_sha256": "ed54a6691c67ed2b806f9ab6075a06d9285c85554d187b07ea596d18b9191092",
+      "log_sha256": "680f5eac1bfa1b817ce1d31268d0057a6152e930c4489550e460ad6b039bc7ba",
+      "elapsed_seconds": 56.95,
+      "kind": "local-development"
+    },
+    {
+      "label": "replacement-second",
+      "command": [
+        "cargo",
+        "check",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--all-targets"
+      ],
+      "exit_code": 0,
+      "source_sha256": "df6a6cb46632bf00a738a21a6b59b4942ac460c4f523b318610efc32504dfbab",
+      "log_sha256": "4de081e66491c990faba2373e38d0a70ac5b1bef5c70401099681f509d448d0b",
+      "elapsed_seconds": 10.98,
+      "kind": "local-development"
+    },
+    {
+      "label": "format-copy",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all"
+      ],
+      "exit_code": 1,
+      "source_sha256": "888d2c92e6e900fe69d562d0acfa1a25c4c9ad0a3d7d25ec4f8c4be7ac7b8bbd",
+      "log_sha256": "1f0b7b8b2a48efc4d7260e9658730a33c038a1163b50c4020afc27557fcda018",
+      "elapsed_seconds": 1.0,
+      "kind": "local-development"
+    },
+    {
+      "label": "replacement-portable-controls",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--lib",
+        "replacement",
+        "--",
+        "--nocapture"
+      ],
+      "exit_code": 101,
+      "source_sha256": "888d2c92e6e900fe69d562d0acfa1a25c4c9ad0a3d7d25ec4f8c4be7ac7b8bbd",
+      "log_sha256": "401bba1b90e14a521e1ae953124551b928eaa845763fc202223dea45b6b553c7",
+      "elapsed_seconds": 48.52,
+      "kind": "local-development"
+    },
+    {
+      "label": "replacement-portable-check",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 101,
+      "source_sha256": "428b06c2a85f332ec07928403e8af8c0d38e867468b0a951e689075e16d161d1",
+      "log_sha256": "b4e6db29c1da391e52f8728681a2d4e36dd1b7aaeb5d47b0a5f279d983283281",
+      "elapsed_seconds": 10.83,
+      "kind": "local-development"
+    },
+    {
+      "label": "replacement-controls-clippy",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo test --offline -p agentfw --lib replacement -- --nocapture && cargo clippy --offline -p agentfw --all-targets -- -D warnings && cargo fmt --all --check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "41b1171ef350b7388756c404997e2d74a48b285a020bbe7eba056bdfc3f18a1c",
+      "log_sha256": "df81c8094770101269fc71558b0af07bf25caa58c029983e77921434121718ca",
+      "elapsed_seconds": 35.18,
+      "kind": "local-development"
+    },
+    {
+      "label": "generation-and-portable",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "python3 -B -c 'import sys;sys.path.insert(0,\"scripts\");import ci_components;from pathlib import Path;Path(\"/private/tmp/sou159-qualification/scratch/ci-components.yml\").write_text(ci_components.generated())' && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && cargo test --offline --workspace && cargo clippy --offline --workspace --all-targets -- -D warnings && cargo fmt --all --check"
+      ],
+      "exit_code": 101,
+      "source_sha256": "7a3bcee483b56079c981901c058a94bb45b0be8f37340b9a4740d5dba0294d9d",
+      "log_sha256": "834a23a5ee62cbceede8fd3644f21cb96112a88c72fbafbffe123691428eef7c",
+      "elapsed_seconds": 262.5,
+      "kind": "local-development"
+    },
+    {
+      "label": "local-final-pre-native",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo test --offline --workspace && cargo clippy --offline --workspace --all-targets -- -D warnings && cargo fmt --all --check && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && python3 -B -m unittest discover -s scripts/tests -p \"test_ci*.py\" -v && python3 -B scripts/check-doc-links.py"
+      ],
+      "exit_code": 101,
+      "source_sha256": "860955ae765a97b727dd3695ec5ea029b98188e0ca1eb2154c24224be51e2421",
+      "log_sha256": "5cbe31dab681042a4375c5faa08f43f7077360f7e7eeff1bc24d09a185ca2520",
+      "elapsed_seconds": 57.37,
+      "kind": "local-development"
+    },
+    {
+      "label": "lifecycle-and-final-gates",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo test --offline -p agentfw --lib mcp::profile_lifecycle::tests::install_works_with_nonexistent_relative_home -- --nocapture && cargo test --offline -p soup-wall-adapter --test attack_scenarios && cargo clippy --offline --workspace --all-targets -- -D warnings && cargo fmt --all --check && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && python3 -B -m unittest discover -s scripts/tests -p \"test_ci*.py\" -v && python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "860955ae765a97b727dd3695ec5ea029b98188e0ca1eb2154c24224be51e2421",
+      "log_sha256": "ecdb2344948ad8612e305284c9dd84908c50cc4664a2b397bdb25f68e1bea898",
+      "elapsed_seconds": 86.41,
+      "kind": "local-development"
+    },
+    {
+      "label": "precommit-current",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo test --offline -p agentfw --lib replacement -- --nocapture && cargo clippy --offline --workspace --all-targets -- -D warnings && cargo fmt --all --check && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && python3 -B -m unittest discover -s scripts/tests -p \"test_ci*.py\" -v && python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "446b64c9feb2829da1da3dfa54e4fc547b5d3aef4d55d2616ecfdb102a6a2d22",
+      "log_sha256": "4666bb4bc8fd0fbe8df81dd65c12b5412f5274fd6dc6785c022ad4d075f1c37c",
+      "elapsed_seconds": 27.41,
+      "kind": "local-development"
+    },
+    {
+      "label": "deadline-and-classifier",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo test --offline -p agentfw --lib replacement -- --nocapture && cargo clippy --offline --workspace --all-targets -- -D warnings && cargo fmt --all --check && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "61fca10c80338e1a5a33bd381d997810a1c73e8669f5f0ce0d135957af50ace8",
+      "log_sha256": "f21af4cbe8c5dabccf32055a15da390f219b5baf93774a865347ed5c01fcc185",
+      "elapsed_seconds": 21.23,
+      "kind": "local-development"
+    },
+    {
+      "label": "current-contract-preflight",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo test --offline -p agentfw --lib replacement -- --nocapture && cargo clippy --offline --workspace --all-targets -- -D warnings && cargo fmt --all --check && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "729227b4cc3cf4ebf53c5e24e339f8164b8b13e1d70e11aaefa9eae7a09c71ad",
+      "log_sha256": "05c5e11cb35f5a92b849b1283aed32aea89b004f9ededd66554134e49b907f18",
+      "elapsed_seconds": 21.07,
+      "kind": "local-development"
+    }
+  ],
+  "limits": [
+    "Linux-specific executor and HTTP controls require native qualification.",
+    "One existing lifecycle unit failed in a concurrent workspace run and passed isolated; environment-variable hypothesis was separately disproved.",
+    "Initial read-only harness and SDK cache failures are retained; no production security boundary was relaxed."
+  ]
+}
