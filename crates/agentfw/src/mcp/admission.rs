@@ -2523,10 +2523,9 @@ where
                                         continue;
                                     }
                                 }
-                            } else if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
+                            } else if let Some(agentfw_ws) = collector.selected_workspace.clone().or_else(|| std::env::var_os("AGENTFW_WORKSPACE").map(std::path::PathBuf::from)) {
                                 let policy_ws_canon = policy.workspace.canonicalize().ok();
-                                let agentfw_ws_canon =
-                                    std::path::PathBuf::from(agentfw_ws).canonicalize().ok();
+                                let agentfw_ws_canon = agentfw_ws.canonicalize().ok();
                                 let same_workspace = matches!((&policy_ws_canon, &agentfw_ws_canon),
                                     (Some(policy), Some(actual)) if policy == actual);
                                 let known_mismatch = policy_ws_canon.is_some()

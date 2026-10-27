@@ -94,7 +94,8 @@ class Suite:
         self.state = args.output / 'runs'
         self.state.mkdir(mode=0o700)
         self.env = {'PATH': '/usr/bin:/bin', 'HOME': str(args.output), 'LANG': 'C.UTF-8',
-                    'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null'}
+                    'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': '/dev/null',
+                    'AGENTFW_WORKSPACE': str(self.work)}
         self.sentinel = args.output / 'unrelated.txt'
         self.sentinel.write_text('Owned unrelated witness.\n')
         self.sentinel.chmod(0o600)
@@ -174,7 +175,7 @@ class Suite:
                  '--state', str(self.state), '--prompt-file', str(prompt), '--timeout-seconds', str(timeout)]
         output = self.work / (label + '-stdout.private')
         errors = self.work / (label + '-stderr.private')
-        decisions = []; run = None; stopped = False; live_config = None; seen = set(); pending_seen = set()
+        decisions = []; run = None; stopped = False; live_config = None; seen = set(); pending_seen = set(); inspected_seen = set()
         with output.open('wb') as out, errors.open('wb') as err:
             process = subprocess.Popen(words, cwd=self.work, env=env, stdin=subprocess.DEVNULL,
                                        stdout=out, stderr=err, start_new_session=True)
@@ -215,6 +216,8 @@ class Suite:
                             code, inspected = self.ask(run, 'inspect', row['pending_id'])
                             require(code == 0 and inspected.get('arguments_redacted') is True and 'args' not in inspected
                                     and NEW not in json.dumps(inspected), 'inspect_exposed_arguments')
+                            seen.add(row['pending_id'])
+                            inspected_seen.add(row['pending_id'])
                             if mode in ('no-approval', 'cancel-pending', 'daemon-loss'):
                                 if mode != 'no-approval' and not stopped:
                                     process.send_signal(signal.SIGINT if mode == 'cancel-pending' else signal.SIGKILL)
@@ -222,7 +225,6 @@ class Suite:
                                 continue
                             if mode == 'pending-old-change':
                                 target.write_text('Operator superseding version.\n');changed = True
-                            seen.add(row['pending_id'])
                             if mode == 'pending-new-change':
                                 # Ask authority includes the exact argument digest. A different
                                 # inspected binding cannot approve this already pending call.
@@ -252,14 +254,23 @@ class Suite:
         terminal = json.loads((run / 'terminal.json').read_text()) if run and (run / 'terminal.json').exists() else None
         if run and mode != 'daemon-loss':
             code, rows = self.ask(run, 'list');require(code == 0 and rows == [], 'stale_pending_remains')
+        inventory = sorted(p.name for p in root.iterdir())
+        require(not any(name.startswith('.soup-') for name in inventory), 'owned_staging_inventory_remains')
         diagnostics = errors.read_bytes()
         require(b'"mutation_dispatches":1' not in diagnostics and b'edit_adapter_mutation_dispatch' not in diagnostics,
                 'adapter_received_mutation')
         native = (run / 'agent/audit.jsonl').read_bytes() if run else b''
+        audit = [json.loads(line) for line in native.splitlines() if line.strip()]
+        writes = [r for r in audit if r.get('event') == 'native_call' and r.get('released') is True
+                  and str(r.get('tool', '')).startswith(('create_output_', 'replace_output_'))]
+        publications = [r for r in audit if r.get('event') == 'native_publish' and r.get('released') is True]
+        approved = {d['binding_sha256'] for d in decisions if d['action'] == 'approve'}
+        require(all(r.get('binding_sha256') in approved for r in [*writes, *publications]), 'publication_not_bound_to_approval')
         return {'id': label, 'status': 'passed', 'exit': process.returncode, 'before': before, 'after': snapshot(target),
                 'approved': len([d for d in decisions if d['action'] == 'approve']), 'decisions': decisions,
-                'pending_seen': len(pending_seen), 'provider_requests': len(model.requests), 'observed_results': len(observed),
-                'process_cleanup': cleanup, 'terminal': terminal, 'audit_sha256': sha(native),
+                'pending_seen': len(pending_seen), 'inspected_seen': len(inspected_seen), 'provider_requests': len(model.requests), 'observed_results': len(observed),
+                'process_cleanup': cleanup, 'terminal': terminal, 'audit_sha256': sha(native), 'root_inventory': inventory,
+                'write_admissions': len(writes), 'publication_gates': len(publications), 'bindings_match_approved': True,
                 'adapter_mutation_dispatches': 0, 'changed_control': changed, 'retired_epoch_refused': restart_refused}, observed, live_config
 
 
@@ -325,9 +336,11 @@ def qualify(args, report):
         mode = label if label in ('ask-reject', 'no-approval', 'pending-old-change', 'pending-new-change', 'cancel-pending', 'daemon-loss', 'postcommit-result-loss', 'restart-authority') else 'approve'
         row, observed, config = suite.host(label, root, target, plan, prepared, proposals, mode, 12 if label == 'no-approval' else 40)
         if mode not in ('approve',) or label in ('useful-create', 'useful-replace', 'approval-replay'):
-            require(row['pending_seen'] > 0, 'actual_pending_approval_missing_' + label)
+            require(row['pending_seen'] > 0 and row['inspected_seen'] > 0, 'actual_pending_approval_missing_' + label)
         if label in ('useful-create', 'useful-replace', 'approval-replay', 'postcommit-result-loss', 'restart-authority'):
-            require(target.read_text() == NEW and row['approved'] == 1, 'exact_effect_missing_' + label)
+            require(target.read_text() == NEW and row['approved'] == 1 and row['write_admissions'] == 1, 'exact_effect_missing_' + label)
+            if replacing:
+                require(row['publication_gates'] == 1, 'exact_publication_gate_missing_' + label)
             if label.startswith('useful-'):
                 require(len(observed) == 3 and all(not r['is_error'] for r in observed.values()), 'useful_read_edit_read_incomplete_' + label)
                 require(NEW.strip() in json.dumps(observed['toolu_edit_2']['content']), 'verified_final_read_missing')
