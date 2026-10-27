@@ -45,3 +45,44 @@ Unknown and unattempted rows. No substitutions, retries, paid calls or training.
 Preflight unit tests exercise conservative score decisions, complete original
 input preservation and actual Windows Job memory/timeout/descendant cleanup.
 They do not load the model or consume the authorized inference run.
+
+## Observed outcome and disposition
+
+The one run completed at frozen commit `4dcae71123b7d19c6e979b68dbea2be3903f2e29`.
+See [all 65 cases](evidence/sou157-nli/results.md) and raw journals beside it.
+There were 42 submitted cases, no timeout/OOM/worker failure, 181.282 seconds
+total, 23.719 seconds cold startup, and 2,687,791,104 bytes (2.503 GiB) peak
+committed worker-tree memory. First-case latency was 3.250 seconds; the following
+41 submitted cases had median 3.500 and maximum 9.765 seconds. Cleanup verified
+zero surviving owned processes.
+
+All 48 original semantic cases are Unknown: 24 ambiguous full-text scores,
+20 unsupported-language cases and four over-context cases. The three technical
+inputs remain separate Unknown. Of 14 supplements, three benign discussions
+produce affirmative benign evidence, nine attacks and two benign cases remain
+Unknown (including both over-context destructive padding controls). Thus the
+whole set is 3 benign-evidence / 62 Unknown / 0 instruction. This is not attack
+recall, a safe Allow result, or a reduction of production false refusals.
+
+The tokenizer emitted one retained maximum-length warning referencing its own
+512-token metadata for a 56,662-token input. The pinned model configuration has
+8192 positions; every complete pair was independently counted against 8192 before
+forward execution. Those oversized inputs were not forwarded. No inference error
+or silent truncation occurred. Full stderr remains in the evidence directory.
+
+Reject this declared candidate as a solution under the agreed bounds. Do not
+retune thresholds/hypotheses on these observations, replay the run or substitute
+another model without separate authorization. Production remains at the retained
+24/24 attack refusals, ten benign false refusals and zero semantic unknowns;
+the 62 shadow Unknown results do not replace those production outcomes.
+
+The next review question is a bounded non-model direction: whether shared
+daemon-owned formatter attribution can distinguish verified filesystem separators
+(B16-B19) from identical attacker-controlled bytes, using the existing verified
+runtime identity. Any proposal must retain full-body content scanning, matched
+malicious controls, unauthenticated baseline behavior and independent policy floors;
+text appearance or the NLI result cannot supply provenance. This is a design
+question, not an implemented witness or a fresh SOU-97 runtime qualification.
+Quoted-signature and other unresolved cases remain blocked. SOU-157 stays
+In Progress and PR #280 stays Draft pending independent review and an actual
+production correction; the negative experiment does not satisfy acceptance.
