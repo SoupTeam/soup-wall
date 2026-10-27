@@ -312,6 +312,7 @@ const FORMATS: &[&str] = &[
     crate::mcp::server_profile::git::LOCAL_REFS_FORMAT,
     crate::mcp::server_profile::git::FILE_READS_FORMAT,
     crate::mcp::server_profile::git::SHALLOW_FORMAT,
+    crate::mcp::server_profile::git_tracked_symlinks::FORMAT,
     #[cfg(target_os = "linux")]
     crate::mcp::server_profile::filesystem_create::FORMAT,
 ];

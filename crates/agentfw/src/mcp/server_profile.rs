@@ -19,9 +19,16 @@ pub mod git;
 pub mod git_local_clone;
 #[cfg(test)]
 mod git_local_clone_tests;
+pub mod git_tracked_symlinks;
+#[cfg(test)]
+mod git_tracked_symlinks_tests;
 
 pub fn git_selected(format: &str) -> bool {
-    git::is_profile(format) || format == git_local_clone::FORMAT
+    git::is_profile(format)
+        || matches!(
+            format,
+            git_local_clone::FORMAT | git_tracked_symlinks::FORMAT
+        )
 }
 
 mod read_lease;
@@ -47,6 +54,7 @@ pub fn selected(format: Option<&str>) -> bool {
                 | git::FILE_READS_FORMAT
                 | git::SHALLOW_FORMAT
                 | git_local_clone::FORMAT
+                | git_tracked_symlinks::FORMAT
         )
     )
 }
@@ -464,7 +472,8 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
         | git::SHALLOW_FORMAT
-        | git_local_clone::FORMAT => Ok(git::original_manifest()),
+        | git_local_clone::FORMAT
+        | git_tracked_symlinks::FORMAT => Ok(git::original_manifest()),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -476,7 +485,8 @@ pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Resul
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
         | git::SHALLOW_FORMAT
-        | git_local_clone::FORMAT => git::validate_initialization(value),
+        | git_local_clone::FORMAT
+        | git_tracked_symlinks::FORMAT => git::validate_initialization(value),
         _ => anyhow::bail!("unsupported MCP profile"),
     }
 }
@@ -488,7 +498,9 @@ pub fn classify_manifest_for(
     match format {
         FORMAT => classify_manifest(value),
         filesystem_create::FORMAT => filesystem_create::classify_manifest(value),
-        git::FORMAT | git_local_clone::FORMAT => git::classify_manifest(value),
+        git::FORMAT | git_local_clone::FORMAT | git_tracked_symlinks::FORMAT => {
+            git::classify_manifest(value)
+        }
         git::LOCAL_REFS_FORMAT => git::classify_manifest_with_local_refs(value, true),
         git::SHALLOW_FORMAT => git::classify_manifest(value),
         git::FILE_READS_FORMAT => {

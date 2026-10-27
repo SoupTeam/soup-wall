@@ -26,6 +26,9 @@ use super::server_profile::ProfileConfig;
 #[cfg(all(test, target_os = "linux"))]
 #[path = "git_local_clone_sandbox_tests.rs"]
 mod git_local_clone_tests;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "git_tracked_symlinks_sandbox_tests.rs"]
+mod git_tracked_symlinks_tests;
 #[cfg(target_os = "linux")]
 use super::server_profile::{package_tree_sha256, SERVER_ENTRYPOINT};
 
@@ -36,6 +39,8 @@ pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap
 pub(crate) fn profile_name(format: &str) -> &'static str {
     if format == super::server_profile::git::FILE_READS_FORMAT {
         "sw-mcp/git-readonly-file-revisions/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git_tracked_symlinks::FORMAT {
+        "sw-mcp/git-tracked-symlinks-readonly/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git_local_clone::FORMAT {
         "sw-mcp/git-local-clone-readonly/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git::SHALLOW_FORMAT {
@@ -847,9 +852,13 @@ fn prepare_linux_command_inner(
     }
     let git_profile = super::server_profile::git_selected(&profile.format);
     let clone_profile = profile.format == super::server_profile::git_local_clone::FORMAT;
+    let link_profile = profile.format == super::server_profile::git_tracked_symlinks::FORMAT;
+    let guarded_profile = clone_profile || link_profile;
     if git_profile {
         let root = descriptor_path(&workspace_pin).join(".");
-        if clone_profile {
+        if link_profile {
+            super::server_profile::git_tracked_symlinks::validate_repository(&root)?;
+        } else if clone_profile {
             super::server_profile::git_local_clone::validate_repository(&root)?;
         } else if profile.format == super::server_profile::git::SHALLOW_FORMAT {
             super::server_profile::git::validate_repository_with_shallow(&root, true)?;
@@ -922,7 +931,7 @@ fn prepare_linux_command_inner(
         let pin = open_verified_file(&git.path, &git.sha256, true)?;
         mounts.push((
             pins.len(),
-            PathBuf::from(if clone_profile {
+            PathBuf::from(if guarded_profile {
                 super::server_profile::git_local_clone::ORIGINAL_GIT
             } else {
                 "/mcp-runtime/git"
@@ -941,13 +950,17 @@ fn prepare_linux_command_inner(
             PathBuf::from("/mcp-runtime/git-profile-launcher"),
         ));
         pins.push(pin);
-        if clone_profile {
+        if guarded_profile {
             // bubblewrap consumes each mount fd, so use a separate verified fd
             // for the same exact launcher image used as the per-Git guard.
             let pin = open_verified_file(&launcher.path, &launcher.sha256, true)?;
             mounts.push((
                 pins.len(),
-                PathBuf::from(super::server_profile::git_local_clone::EXECUTABLE),
+                PathBuf::from(if link_profile {
+                    super::server_profile::git_tracked_symlinks::EXECUTABLE
+                } else {
+                    super::server_profile::git_local_clone::EXECUTABLE
+                }),
             ));
             pins.push(pin);
         }
@@ -1055,7 +1068,14 @@ fn prepare_linux_command_inner(
     ]);
     if git_profile {
         for (name, value) in [
-            ("GIT_PYTHON_GIT_EXECUTABLE", "/mcp-runtime/git"),
+            (
+                "GIT_PYTHON_GIT_EXECUTABLE",
+                if link_profile {
+                    super::server_profile::git_tracked_symlinks::EXECUTABLE
+                } else {
+                    "/mcp-runtime/git"
+                },
+            ),
             ("GIT_CONFIG_NOSYSTEM", "1"),
             ("GIT_CONFIG_GLOBAL", "/dev/null"),
             ("GIT_TERMINAL_PROMPT", "0"),

@@ -12,7 +12,9 @@ use std::ops::Range;
 pub(crate) fn supports_profile(format: &str) -> bool {
     matches!(
         format,
-        super::server_profile::git::FORMAT | super::server_profile::git::FILE_READS_FORMAT
+        super::server_profile::git::FORMAT
+            | super::server_profile::git::FILE_READS_FORMAT
+            | super::server_profile::git_tracked_symlinks::FORMAT
     )
 }
 

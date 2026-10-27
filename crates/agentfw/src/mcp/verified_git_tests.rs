@@ -160,6 +160,44 @@ fn execution_profiles_are_finite_and_file_grammar_stays_separate() {
     }
 }
 #[test]
+fn tracked_execution_allowlist_preserves_the_original_argument_contract() {
+    for format in [git::FORMAT, server_profile::git_tracked_symlinks::FORMAT] {
+        let mut p = profile();
+        p.format = format.into();
+        assert!(supports_profile(format));
+        assert!(request(&p, &show()).is_ok());
+        for revision in [
+            "HEAD:notes.txt",
+            "refs/heads/main",
+            "refs/remotes/origin/main",
+            "refs/remotes/origin/HEAD",
+            "HEAD~1",
+            "../outside",
+        ] {
+            assert!(request(
+                &p,
+                &wire(
+                    json!(1),
+                    "git_show",
+                    json!({"repo_path":"/workspace","revision":revision})
+                )
+            )
+            .is_err());
+        }
+    }
+    for format in [
+        git::LOCAL_REFS_FORMAT,
+        git::SHALLOW_FORMAT,
+        server_profile::git_local_clone::FORMAT,
+        server_profile::FORMAT,
+    ] {
+        let mut p = profile();
+        p.format = format.into();
+        assert!(!supports_profile(format));
+        assert!(request(&p, &show()).is_err());
+    }
+}
+#[test]
 fn request_rejects_duplicate_keys_malformed_frames_and_unapproved_tools() {
     let p = profile();
     let valid = show();
@@ -349,7 +387,7 @@ fn fixture(format: &str) -> (tempfile::TempDir, Value, Arc<Snapshot>) {
 #[test]
 fn completion_binds_entire_original_text_and_retains_sticky_snapshot() {
     use base64::Engine;
-    for format in [git::FORMAT, git::FILE_READS_FORMAT] {
+    for format in [git::FORMAT, git::FILE_READS_FORMAT, server_profile::git_tracked_symlinks::FORMAT] {
         let (root, data, snapshot) = fixture(format);
         let raw = base64::engine::general_purpose::STANDARD
             .decode(data["original_response_base64"].as_str().unwrap())
@@ -425,7 +463,11 @@ async fn actual_owned_original_git_commit_and_blob_keep_exact_kind_boundary() {
         let text = value["result"]["content"][0]["text"].as_str().unwrap();
         assert_eq!(completion.formatter_span(text).is_some(), eligible);
     }
-    println!("SOU146_REAL_WORKER_KIND_BOUNDARY format={}", p.format);
+    match p.format.as_str() {
+        git::FILE_READS_FORMAT => println!("SOU146_REAL_WORKER_KIND_BOUNDARY format={}", p.format),
+        server_profile::git_tracked_symlinks::FORMAT => println!("SOU150_REAL_WORKER_KIND_BOUNDARY format={}", p.format),
+        _ => println!("SOU156_REAL_WORKER_KIND_BOUNDARY format={}", p.format),
+    }
 }
 
 #[test]
