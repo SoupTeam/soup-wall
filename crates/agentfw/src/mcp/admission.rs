@@ -1059,6 +1059,10 @@ impl std::error::Error for DaemonSizeLimit {}
 
 pub struct Collector<'a> {
     config: &'a AdmissionCfg,
+    // Only a daemon-owned installed edit profile can set this. Existing CLI
+    // collectors retain their current explicit environment/cwd selection.
+    selected_workspace: Option<std::path::PathBuf>,
+    selected_root: Option<super::replace_file::RootIdentity>,
     host_session: Option<String>,
     child_authority: Option<String>,
     prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
@@ -1092,6 +1096,8 @@ impl<'a> Collector<'a> {
         }
         Ok(Self {
             config,
+            selected_workspace: None,
+            selected_root: None,
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
             prepared_budget: None,
@@ -2332,6 +2338,10 @@ where
                     }
                     "ping" => { keys(&params, &[])?; Pending::Ping(request_id.clone()) }
                     "tools/call" => {
+                        if let Some(root) = &collector.selected_root {
+                            let workspace = collector.selected_workspace.as_deref().context("edit_workspace_absent")?;
+                            ensure!(super::replace_file::inspect_workspace(workspace).as_ref().ok()==Some(root),"edit_root_changed");
+                        }
                         ensure!(ready, "MCP call before operator-pinned manifest");
                         keys(&params, &["name","arguments","_meta"])?;
                         if let Some(metadata) = params.get("_meta") { call_metadata(metadata)?; }
@@ -2500,9 +2510,9 @@ where
                                     // Match run()'s actual operator-selected session root,
                                     // including its cwd fallback when no override exists.
                                     // Handle profiles checked exact spelling without DOS I/O.
-                                    let actual_workspace = std::env::var_os("AGENTFW_WORKSPACE")
+                                    let actual_workspace = collector.selected_workspace.clone().or_else(|| std::env::var_os("AGENTFW_WORKSPACE")
                                         .map(std::path::PathBuf::from)
-                                        .or_else(|| std::env::current_dir().ok())
+                                        .or_else(|| std::env::current_dir().ok()))
                                         .and_then(|path| path.canonicalize().ok());
                                     let configured_workspace = policy.workspace.canonicalize().ok();
                                     if !matches!((&configured_workspace, &actual_workspace),
@@ -3799,6 +3809,99 @@ where
         Some(execution),
     )
     .await
+}
+
+/// An in-daemon declaration adapter for the separately installed edit profile.
+/// Every call still goes through the SAME resource/classifier/native/Ask relay.
+/// The adapter has no filesystem API and treats forwarded tools/call as failure.
+pub(crate) async fn run_builtin_streams<R, W, F>(
+    config: AdmissionCfg,
+    selection: (std::path::PathBuf, super::replace_file::RootIdentity),
+    declarations: Value,
+    client: &mut R,
+    host: W,
+    shutdown: F,
+    dispatches: Arc<std::sync::atomic::AtomicUsize>,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = ()>,
+{
+    ensure!(
+        config.host_session.is_some() && config.liveness_url.is_some(),
+        "edit_bound_owner_required"
+    );
+    let mut collector =
+        Collector::with_session(&config, format!("mcp:{}", crate::token::generate()))?;
+    collector.selected_workspace = Some(selection.0);
+    collector.selected_root = Some(selection.1);
+    let (stop, renewal) =
+        enroll_session(&mut collector, true, config.liveness_lease_seconds).await?;
+    let (broker, adapter) = tokio::io::duplex(16384);
+    let (server, mut child) = tokio::io::split(broker);
+    let mut server = BufReader::new(server);
+    let mut adapter_task = tokio::spawn(async move {
+        let (input, mut output) = tokio::io::split(adapter);
+        let mut input = BufReader::new(input);
+        let mut partial = Vec::new();
+        while let Some(raw) = line(&mut input, &mut partial).await? {
+            let request = parse(&raw)?;
+            let result = match request["method"].as_str() {
+                Some("notifications/initialized") => continue,
+                Some("initialize") => {
+                    json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"soup-installed-private-output","version":"1"}})
+                }
+                Some("tools/list") => json!({"tools":declarations}),
+                Some("ping") => json!({}),
+                Some("tools/call") => {
+                    dispatches.fetch_add(1, Ordering::AcqRel);
+                    bail!("edit_adapter_mutation_dispatch");
+                }
+                _ => bail!("edit_adapter_method"),
+            };
+            let mut raw =
+                serde_json::to_vec(&json!({"jsonrpc":"2.0","id":request["id"],"result":result}))?;
+            raw.push(b'\n');
+            write(&mut output, &raw).await?;
+        }
+        Ok::<_, anyhow::Error>(())
+    });
+    let mut host = DiagnosticOutput {
+        inner: host,
+        failed: Arc::new(AtomicBool::new(false)),
+        budget: None,
+        liveness: collector.liveness.clone(),
+    };
+    let operation = tokio::select! {
+        biased;
+        _=shutdown=>Err(anyhow::anyhow!("edit_session_cancelled")),
+        result=relay(&collector,client,&mut host,&mut server,&mut child)=>result,
+    };
+    drop(server);
+    drop(child);
+    let adapter_result = match tokio::time::timeout(Duration::from_secs(1), &mut adapter_task).await
+    {
+        Ok(result) => result.map_err(anyhow::Error::new).and_then(|r| r),
+        Err(_) => {
+            adapter_task.abort();
+            let _ = adapter_task.await;
+            Err(anyhow::anyhow!("edit_adapter_cleanup_timeout"))
+        }
+    };
+    if let Some(stop) = stop {
+        let _ = stop.send(true);
+    }
+    let retired = match &collector.liveness {
+        Some(lease) => lease.retire().await.map(|_| ()),
+        None => Err(anyhow::anyhow!("edit_liveness_missing")),
+    };
+    if let Some(task) = renewal {
+        task.await?;
+    }
+    operation?;
+    adapter_result?;
+    retired
 }
 
 /// Run the accepted selected-server relay against explicit host streams.

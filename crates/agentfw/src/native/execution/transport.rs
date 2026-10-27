@@ -68,6 +68,13 @@ impl Drop for HostPermit {
 async fn read_preamble(
     stream: &mut (impl Stream<Item = Result<Bytes, axum::Error>> + Unpin),
 ) -> anyhow::Result<(Preamble, Vec<u8>)> {
+    read_preamble_for(stream, FORMAT).await
+}
+
+pub(crate) async fn read_preamble_for(
+    stream: &mut (impl Stream<Item = Result<Bytes, axum::Error>> + Unpin),
+    contract: &'static str,
+) -> anyhow::Result<(Preamble, Vec<u8>)> {
     let mut prefix = Vec::new();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
@@ -87,7 +94,7 @@ async fn read_preamble(
             let crate::mcp::admission::Strict(value) = serde_json::from_slice(&prefix)?;
             let request: Preamble = serde_json::from_value(value)?;
             ensure!(
-                request.contract == FORMAT
+                request.contract == contract
                     && super::super::identifier(&request.host_session)
                     && !request.child_authority.is_empty()
                     && request.child_authority.len() <= PREAMBLE_BYTES,
@@ -256,9 +263,24 @@ pub async fn handler(State(st): State<Shared>, headers: HeaderMap, body: Body) -
         drop(slot);
         let _ = done_tx.send(result.is_ok());
     });
+    (
+        [(axum::http::header::CONTENT_TYPE, MEDIA_TYPE)],
+        framed_body(outgoing, done_rx, cancelled, FORMAT),
+    )
+        .into_response()
+}
+
+/// Shared finite framing only. The caller supplies its own constant protocol
+/// and private lifetime guard; this helper cannot grant execution custody.
+pub(crate) fn framed_body<C: Send + 'static>(
+    outgoing: tokio::io::DuplexStream,
+    done_rx: oneshot::Receiver<bool>,
+    cancelled: C,
+    contract: &'static str,
+) -> Body {
     let frames = futures_util::stream::try_unfold(
         (outgoing, Some(done_rx), Some(cancelled)),
-        |(mut reader, mut done, cancel)| async move {
+        move |(mut reader, mut done, cancel)| async move {
             let mut buffer = vec![0u8; CHUNK_BYTES];
             let count = reader.read(&mut buffer).await?;
             if count > 0 {
@@ -271,7 +293,7 @@ pub async fn handler(State(st): State<Shared>, headers: HeaderMap, body: Body) -
             }
             if let Some(done) = done.take() {
                 let complete = done.await.unwrap_or(false);
-                let raw = serde_json::to_vec(&json!({"contract":FORMAT,"complete":complete}))
+                let raw = serde_json::to_vec(&json!({"contract":contract,"complete":complete}))
                     .expect("finite receipt");
                 let mut frame = Vec::with_capacity(raw.len() + 5);
                 frame.push(2);
@@ -282,11 +304,7 @@ pub async fn handler(State(st): State<Shared>, headers: HeaderMap, body: Body) -
             Ok(None)
         },
     );
-    (
-        [(axum::http::header::CONTENT_TYPE, MEDIA_TYPE)],
-        Body::from_stream(frames),
-    )
-        .into_response()
+    Body::from_stream(frames)
 }
 
 fn input_stream<R: AsyncRead + Unpin + Send + 'static>(
@@ -306,6 +324,9 @@ fn input_stream<R: AsyncRead + Unpin + Send + 'static>(
 
 /// Pure destination validation, before any client or request body is created.
 fn local_daemon_url(url: &str) -> anyhow::Result<reqwest::Url> {
+    local_daemon_url_for(url, ENDPOINT)
+}
+fn local_daemon_url_for(url: &str, endpoint: &str) -> anyhow::Result<reqwest::Url> {
     let parsed = reqwest::Url::parse(url)?;
     let loopback = parsed
         .host_str()
@@ -322,25 +343,27 @@ fn local_daemon_url(url: &str) -> anyhow::Result<reqwest::Url> {
             && parsed.password().is_none()
             && parsed.query().is_none()
             && parsed.fragment().is_none()
-            && parsed.path() == ENDPOINT,
+            && parsed.path() == endpoint,
         "verified_execution_local_daemon_required"
     );
     Ok(parsed)
 }
 
 /// Forwarder only: no local upstream command, classifier, snapshot or evidence.
-async fn client<R, W>(
+async fn client_for<R, W>(
     url: String,
     token: String,
     preamble: Preamble,
     input: R,
     mut output: W,
+    protocol: (&'static str, &'static str, &'static str),
 ) -> anyhow::Result<()>
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin,
 {
-    let url = local_daemon_url(&url)?;
+    let (contract, endpoint, media) = protocol;
+    let url = local_daemon_url_for(&url, endpoint)?;
     let mut prefix = serde_json::to_vec(&preamble)?;
     ensure!(
         prefix.len() <= PREAMBLE_BYTES,
@@ -358,7 +381,7 @@ where
     let response = client
         .post(url)
         .bearer_auth(token)
-        .header("content-type", MEDIA_TYPE)
+        .header("content-type", media)
         .body(reqwest::Body::wrap_stream(stream))
         .send()
         .await?;
@@ -371,7 +394,7 @@ where
             .headers()
             .get("content-type")
             .and_then(|v| v.to_str().ok())
-            == Some(MEDIA_TYPE),
+            == Some(media),
         "verified_execution_transport_contract"
     );
     let mut chunks = response.bytes_stream();
@@ -416,7 +439,7 @@ where
                         serde_json::from_slice(&pending[5..])?;
                     ensure!(
                         value.as_object().is_some_and(|fields| fields.len() == 2)
-                            && value["contract"] == FORMAT
+                            && value["contract"] == contract
                             && value["complete"] == true,
                         "verified_execution_incomplete"
                     );
@@ -432,6 +455,65 @@ where
         "verified_execution_terminal_missing"
     );
     Ok(())
+}
+
+async fn client<R, W>(
+    url: String,
+    token: String,
+    preamble: Preamble,
+    input: R,
+    output: W,
+) -> anyhow::Result<()>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin,
+{
+    // Preserve original validation and error contract for every existing caller.
+    local_daemon_url(&url)?;
+    client_for(
+        url,
+        token,
+        preamble,
+        input,
+        output,
+        (FORMAT, ENDPOINT, MEDIA_TYPE),
+    )
+    .await
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn run_edit_client(
+    url: String,
+    token: String,
+    preamble: Preamble,
+) -> anyhow::Result<()> {
+    // A forwarder is never allowed to outlive the genuine host that owns its
+    // stdin/stdout, including abrupt owner SIGKILL. Check the registration race.
+    let parent = unsafe { libc::getppid() };
+    ensure!(
+        parent > 1
+            && unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) } == 0
+            && unsafe { libc::getppid() } == parent,
+        "edit_host_owner_lost"
+    );
+    ensure!(
+        preamble.contract == crate::edit_session::FORMAT
+            && preamble.server_id == crate::edit_session::SERVER,
+        "edit_transport_contract"
+    );
+    client_for(
+        url,
+        token,
+        preamble,
+        crate::mcp::stdio::Pipe::stdin()?,
+        crate::mcp::stdio::Pipe::stdout()?,
+        (
+            crate::edit_session::FORMAT,
+            crate::edit_session::ENDPOINT,
+            crate::edit_session::transport::MEDIA_TYPE,
+        ),
+    )
+    .await
 }
 
 pub async fn run_client(url: String, token: String, preamble: Preamble) -> anyhow::Result<()> {
