@@ -31,7 +31,7 @@ exactly the same sorted fingerprint set. An independent legacy implementation
 checks full-width arithmetic, Unicode and complete inputs through 1 MiB.
 Provenance recording, limits, lifetimes, locks and verdict rules are unchanged.
 Local stage observations (including incidental test executions) are retained
-in `local-stage-observations.json`; native paired measurements are pending.
+in `local-stage-observations.json`; the completed native comparison is recorded below.
 
 The original enclosing `bwrap --proc` masked procfs submounts and prevented the
 unchanged nested product sandbox from mounting its own procfs. All 18 startup
@@ -57,5 +57,29 @@ measured correction therefore also compiles the same pure `soup-wall-core` and
 same-FD SHA-256 dev optimization. Debug assertions and overflow checks remain
 explicitly enabled. The daemon/transport profile, exact original-byte scanners,
 policy/thresholds, lock ordering, provenance retention and every lifetime remain
-unchanged. A fresh full paired comparison must qualify this corrected source;
+unchanged. This corrected source was qualified by a fresh full paired comparison;
 the earlier successful inventory is not substituted for it.
+
+Final targeted run `40574476228` at clean source
+`929b863abbade7e7dd9c035a7e387d39fde59283` is independently verified.
+The corrected candidate passed all 9/9 trials and the unchanged full 21-case
+inventory, including the genuine Claude scripted-provider sequence. The baseline
+passed 8/9 trials, with its remaining contended-debug timeout retained, and its
+full inventory passed. Total denominator is 18 attempted, 17 passed, 1 failed,
+0 incomplete; this is not represented as an 18/18 success. The candidate's 81
+result HTTP observations were at most 3.126115 seconds under the unchanged
+5-second request deadline. Build time is reported separately. No universal
+latency claim follows from this finite run.
+
+`native-summary.json` contains environment, source/binary identities, complete
+denominators, per-stage medians, independent checks and support limits.
+`native-trials.json` retains every response digest and native/transport/delivery
+observation, including the baseline failure and verified process cleanup.
+`native-inventories.json` retains both complete existing original inventories.
+The full raw reports/logs remain correlated to artifact `12767717781`, archive
+SHA-256 `4b289bdfa00fd97137dac20fcde620a1ea43fdda550bf596df2d2d52242361ae`.
+
+Native Rust checks: 525 passed, 0 failed, 0 ignored; strict Clippy and fmt passed.
+Local workspace: 1907 passed, 13 existing ignored; strict Clippy and fmt passed.
+The earlier local socket calibration failure remains in the development history.
+Final shared Ready qualification, admission and merge remain TL-owned.

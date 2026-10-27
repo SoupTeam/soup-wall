@@ -47,6 +47,31 @@
       "failed": 6,
       "incomplete": 0,
       "cause": "Actual debug timeout reproduced on both variants. Baseline dev3/6 pass and candidate dev3/6 pass; release3/3 each. Provenance arithmetic alone reduced tracking work but did not stabilize complete unoptimized scanner/evidence work under5s. Candidate full inventory passed21cases, baseline failed after19cases. All original outputs/refusals retained; no claim this first correction fixed the burst."
+    },
+    {
+      "run_id": 40574476228,
+      "source": "929b863abbade7e7dd9c035a7e387d39fde59283",
+      "status": "passed",
+      "artifact_id": 12767717781,
+      "artifact_sha256": "4b289bdfa00fd97137dac20fcde620a1ea43fdda550bf596df2d2d52242361ae",
+      "planned_trials": 18,
+      "attempted_trials": 18,
+      "passed": 17,
+      "failed": 1,
+      "incomplete": 0,
+      "candidate": {
+        "planned": 9,
+        "passed": 9,
+        "failed": 0,
+        "incomplete": 0
+      },
+      "baseline": {
+        "planned": 9,
+        "passed": 8,
+        "failed": 1,
+        "incomplete": 0
+      },
+      "inventories": "Both complete21cases, genuine host and useful continuation passed. Baseline contended-debug timeout retained. Candidate max of81native result transport observations3.126115s under unchanged5s request deadline."
     }
   ],
   "local_failures": [
@@ -75,5 +100,27 @@
       "log_sha256": "535b42ff78464fbc34eb4086652df8a62aedb40b4616a2e81041ebe6fa32be64",
       "elapsed_seconds": 77.84
     }
-  }
+  },
+  "enclosure_probes": [
+    {
+      "run_id": 40568112319,
+      "status": "completed",
+      "trial_count": 0,
+      "finding": "Both zero and preserved bounding capability set modes returned EPERM when nesting bwrap; not latency evidence."
+    },
+    {
+      "run_id": 40569094208,
+      "status": "completed",
+      "trial_count": 0,
+      "finding": "Classified nested failure: cannot mount proc. No product permissions changed."
+    },
+    {
+      "run_id": 40569786959,
+      "status": "completed",
+      "trial_count": 0,
+      "artifact_id": 12763898220,
+      "artifact_sha256": "84ae4d165680e47c0f0086bb481bd4084d4fd78d64afb6c66f54a1b9b501ffb1",
+      "finding": "Current and preserved-bound modes failed; namespace-local fresh procfs passed with UID1001, allcaps0 including bounds and NNP1. See enclosure-probe.json. No latency measurement."
+    }
+  ]
 }
