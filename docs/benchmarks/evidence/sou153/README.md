@@ -51,8 +51,8 @@ All synthetic controls compare 12 invented user tasks × (benign + attacked) × 
 | `all_unknown` | conditionally_comparable (gap: `unknown_outcomes_declared_overlay`) | partial | 48 candidate units unknown, 0 evaluable, 0 paired. Candidate bounds [0, 1]. No transitions. |
 | `missing_case` | non_comparable: `case_missing_in_candidate`, `input_binding_failed`, `run_settings_mismatch` | per side only | The candidate plan omits the last user task. |
 | `substituted_task_input` | non_comparable: `upstream_mismatch`, `input_binding_failed` | per side only | The candidate ran against source with a different prompt for one user task. |
-| `public_identity_no_change` | non_comparable: `input_identity_unverified` | per side only | Public SOU-36 run compared with itself; no outcomes. |
-| `public_dev_vs_fresh` | non_comparable: `plan_set_mismatch`, `run_settings_mismatch`, `input_identity_unverified` | per side only | Public SOU-36 development run vs fresh-evaluation run of the same revision; no outcomes. A labelled negative control, **not** a two-revision comparison. |
+| `public_identity_no_change` | non_comparable: `input_identity_unverified` | per side only | Public SOU-36 scripted-fixture run compared with itself; no outcomes. |
+| `public_dev_vs_fresh` | non_comparable: `plan_set_mismatch`, `run_settings_mismatch`, `input_identity_unverified` | per side only | Public SOU-36 scripted-fixture development run vs fresh-evaluation run of the same revision; no outcomes. A labelled negative control, **not** a two-revision comparison. |
 
 No readiness verdict is produced, and security and useful-behaviour metrics are never merged.
 
@@ -122,6 +122,13 @@ it is not evidence that any candidate is effective.
 Both public examples read the existing [`sou36/controlled`](../sou36/controlled) plan and
 runs in place, without copying or changing them.
 
+- **They are scripted fixture runs, not live AgentDojo runs.** SOU-36 produced them
+  through the production `run_live` path, but with:
+  - a scripted loopback model that always makes the same tool call;
+  - a neutral suite defined in test code;
+  - a test policy (`default: deny`) instead of the shipped policy.
+
+  Their outcomes exercise the protocol and measure no revision's behaviour.
 - No source bundle exists for those runs, and their neutral task is defined in test code
   outside any inventoried source.
 - Input identity therefore stays `declared_unverified`, and both results are negative
@@ -158,19 +165,68 @@ A test runs this command and checks that the output is byte-identical to the ret
 
 ### Public report inventory
 
-These are all public AgentDojo reports in the repository. None forms a verified
-two-revision matched/1 pair, so none could be compared without fabricating plans,
-outcomes or input bindings. None was converted.
+These are all public AgentDojo reports in the repository. The search covered every
+commit reachable from all 245 remote branches (2026-10-28). The matched/1 protocol
+string was only ever added by SOU-36 (`6fe98d71`) and the SOU-153 commits. None of
+these reports forms a verified two-revision matched/1 pair, so none could be compared
+without fabricating plans, outcomes or input bindings. None was converted.
 
 | Report | Source revision | Format | Usable as a comparison side |
 |---|---|---|---|
-| [`sou36/controlled`](../sou36/controlled) plan, `development-run.json`, `fresh-run.json` | `neutral-fixture` (base `290e043b`, modified working tree; agent binary `05de4e82…`) | matched/1 plan and run reports (schema 2) | Yes, but this is the only revision; used by both public controls |
+| [`sou36/controlled`](../sou36/controlled) plan, `development-run.json`, `fresh-run.json` | `neutral-fixture` (base `290e043b`, modified working tree; agent binary `05de4e82…`) | matched/1 plan and run reports (schema 2) from a **scripted fixture run** (loopback model, neutral test suite, test policy); not a live AgentDojo run | Yes, but this is the only revision; used by both public controls |
 | [`agentdojo-sou36-workspace.plan.json`](../../../../scripts/benchmarks/agentdojo-sou36-workspace.plan.json) | `290e043b` | matched/1 plan for the real `workspace` suite | No run exists: both live attempts were refused at the live gate ([development](../sou36/workspace-live-blocked-development.json), [fresh](../sou36/workspace-live-blocked-fresh_evaluation.json)) |
 | `agentdojo-fallback-after-native-2026-10-05.json`, `agentdojo-fallback-after-review-2026-10-05.json`, `agentdojo-live-fixture-2026-10-05.json`, `agentdojo-native-after-review-2026-10-05.json` | `e259b76b`, `0c333cd8`, `38de3fda`, `0c333cd8` | Schema-1 fixture and native test reports | No: pass/fail checks, no plan and no per-case outcomes |
 | [`sou85`](../sou85) report and attempts | `ad41af50` | Schema-1 offline acceptance; attempts incomplete | No |
 | `agentdojo-history-2026-10-04.json` | n/a | Historical import summary | No |
 
 No public report has a source bundle, a case manifest or frozen semantic families.
+
+### Two-revision availability assessment
+
+**Strongest candidate pair:**
+
+- **Baseline:** `6fe98d71fc2b806d996ec0ca493f20f4d9da2202` (SOU-36). It is the first commit with the matched/1 producer, and uses the fallback adapter.
+- **Candidate:** `ad41af500710450e8f1697da57eafdf5571301fa` (SOU-85). It uses the native adapter with the pinned workspace profile.
+
+These two share the frozen workspace plan, the protocol, the dependency lock and the
+shipped policy. Changes that cannot reach the AgentDojo adapters were rejected, such as
+#275's MCP-only result-directive detector.
+
+| Requirement | `6fe98d71` (baseline) | `ad41af50` (candidate) | Status |
+|---|---|---|---|
+| Frozen plan | `agentdojo-sou36-workspace.plan.json`, SHA-256 `42513a67…ad24a`, byte-identical at both commits | same file | Exists, but it freezes **one** candidate identity: source `290e043b`, fallback adapter, `agent_binary_sha256` null, model unset, access `not_selected`/`not_approved`. Neither revision can run against it unchanged: the binary is unfrozen, and the native adapter fails the producer's identity check. A plan per revision would be needed, and none exists. |
+| matched/1 run report | none; both live attempts refused at the gate with 0 model calls | none; the SOU-85 report is schema 1, `workspace-offline`, with 185 pass/fail checks, no case IDs and no plan binding | **Missing on both sides.** The comparator cannot be invoked. |
+| Upstream source | `089ed468`, inventory `f030c2fc…49a4` | the same inventory in the SOU-85 report | **Verified.** A public clone of `ethz-spylab/agentdojo` at `089ed468` reproduces `f030c2fc…49a4` over 112 `src/` files, with both the producer's `verify_checkout` and the comparator's `source_inventory_sha256`. |
+| Cases and expected labels | 16 development cases (8 user tasks; each benign plus attacked) | same plan | Reproduced from upstream at freeze time ([`workspace-plan-check.json`](../sou36/workspace-plan-check.json): `reproduced: true`, no errors). Labels follow the plan. |
+| Per-case input, label and family link | none: upstream AgentDojo ships no case manifest | none | **Unverifiable** without changing the upstream source, which would change its inventory. At best `conditionally_comparable`. |
+| Semantic families | none | none | **Missing**; no mapping exists in any branch. Not invented. |
+| Policy | `8b2bfb66…` | `8b2bfb66…` | Identical shipped bytes. |
+| Agent binary / adapter | not frozen; fallback | `31c6a416…` in the SOU-85 report; `sw-native/1`, profile `452cf47a…`, registry `cd8a16f5…` | Differs, as a revision pair should. Shown as pins, not a comparability failure. |
+
+**Statistical ceiling.** On this development set every metric has 8 planned units in 6
+dependency clusters of sizes 1, 1, 1, 1, 1 and 3. That is at most 64/14 ≈ 4.57 effective
+clusters, below the approved minimum of 10. Families can only merge clusters. Even
+complete genuine runs on both revisions would report `insufficient_clusters`, with no
+interval and no established change.
+
+**Missing evidence, invalid input and a real `non_comparable` result:**
+
+| Case | Outcome |
+|---|---|
+| `6fe98d71` → `ad41af50` | **Missing evidence.** No run reports exist, so the comparator has nothing to compare. |
+| SOU-36 controlled development run bound to the workspace plan | **Invalid input:** exit 2, `plan_hash_mismatch`. The comparator refuses a run that was not produced against the supplied plan. |
+| SOU-36 development vs fresh (`public_dev_vs_fresh`) | **Comparator-produced `non_comparable`** (exit 1), on the SOU-36 scripted-fixture reports of one revision. Retained as a negative control, not a two-revision comparison. |
+
+**To reproduce the upstream inventory check**, clone `https://github.com/ethz-spylab/agentdojo.git`,
+check out `089ed468cf3ed0322acc66b0211f26d9d90dbf60`, then run from the repository root:
+
+```powershell
+python -I -c "import sys; sys.path.insert(0, 'scripts/benchmarks'); import agentdojo_live as a; from pathlib import Path; print(a.verify_checkout(Path(sys.argv[1]))['source_inventory_sha256'])" <upstream-checkout>
+```
+
+It should print `f030c2fce6daf25a5206270f9bcfff789decf4f0421143199003c703f42349a4`.
+A test checks the plan, plan-binding, report-format and cluster facts in this section
+against the committed files.
 
 ### Unknown outcomes from a supplementary annotation
 
@@ -221,10 +277,25 @@ durations are generator constants, not measurements.
 
 ## Remaining
 
+- **Status of the SOU-153 deliverables.** The original deliverables are implemented and
+  validated here:
+  - the comparator, run on existing public development reports and on synthetic
+    controls, with no live model access or inference;
+  - family-aware uncertainty;
+  - the unknown contract;
+  - outputs and controls.
+
+  The additional requirement for an actual two-revision, source-bound comparison with
+  frozen families is **not met** and stays subject to TL acceptance.
 - **For TL review: no genuine two-revision comparison.** No public pair of matched/1
   reports from two source revisions exists (see the
-  [inventory](#public-report-inventory)), so the comparator has only been applied to
-  synthetic controls and to one public revision. The retained public results are negative
-  controls. They do not satisfy the two-revision requirement. That needs two recorded
-  matched/1 runs of one frozen plan, with a source bundle and frozen families.
+  [inventory](#public-report-inventory)). The comparator has only been applied to
+  synthetic controls and to the SOU-36 scripted-fixture reports of one revision. The
+  retained public results are negative controls, and they do not satisfy the two-revision
+  requirement. For the strongest pair (`6fe98d71` → `ad41af50`), the evidence is
+  **missing**, not a comparator-produced result; see the
+  [assessment](#two-revision-availability-assessment). A real comparison needs one
+  recorded matched/1 run per revision, each with its own frozen plan with identical
+  cases, plus a source bundle and frozen families. On the committed workspace development
+  set it still could not give an interval.
 - Latency remains descriptive, with no interval and no speed claim.

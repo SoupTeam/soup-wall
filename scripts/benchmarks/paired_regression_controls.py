@@ -463,8 +463,9 @@ def write_evidence(out_dir: Path) -> list[str]:
     if code != pr.EXIT_NON_COMPARABLE:
         problems.append(f"public_identity_no_change: exit {code}")
     pr.write_result(out_dir / "results" / "public_identity_no_change", result)
-    # Negative comparability control on genuine public reports: one source revision, development vs
-    # fresh evaluation. It does not satisfy a two-revision comparison; none exists in public evidence.
+    # Negative comparability control on the public SOU-36 scripted-fixture reports: one source revision,
+    # development vs fresh evaluation. It does not satisfy a two-revision comparison; none exists in public
+    # evidence.
     result, code = pr.compare(PUBLIC / "plan.json", PUBLIC / "development-run.json",
                               PUBLIC / "plan.json", PUBLIC / "fresh-run.json")
     if code != pr.EXIT_NON_COMPARABLE:

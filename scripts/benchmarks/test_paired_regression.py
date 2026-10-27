@@ -907,6 +907,82 @@ class EvidenceBundle(unittest.TestCase):
                 self.assertIn("not available (undistinguished)", report)
 
 
+class TwoRevisionAvailability(unittest.TestCase):
+    """Facts stated in the evidence README's two-revision availability assessment, checked against
+    committed files only (no Git history, network or upstream checkout)."""
+    PLAN = controls.REPO / "scripts/benchmarks/agentdojo-sou36-workspace.plan.json"
+    PLAN_SHA256 = "42513a67175813db00307a99e24f2eb823263a2a8d3d6b3bf1ae1adee33ad24a"
+    INVENTORY = "f030c2fce6daf25a5206270f9bcfff789decf4f0421143199003c703f42349a4"
+
+    def test_the_frozen_workspace_plan_freezes_one_unrunnable_candidate_identity(self):
+        raw = self.PLAN.read_bytes()
+        plan = json.loads(raw)
+        self.assertEqual(protocol.digest(raw), self.PLAN_SHA256)
+        self.assertEqual(plan["identities"]["candidate"],
+                         {"source_revision": "290e043bee52b7d97682577af2d3fd09e715e13e", "agent_binary_sha256": None,
+                          "adapter": "existing-hook-native-name-fallback-v1", "native_semantics_registry_sha256": None})
+        self.assertEqual((plan["access"]["model_access"]["status"], plan["access"]["budget_approval"]["status"]),
+                         ("not_selected", "not_approved"))
+        self.assertTrue(protocol.live_gate(plan, "development"))
+        self.assertEqual(plan["upstream"]["source_inventory_sha256"], self.INVENTORY)
+
+    def test_no_committed_matched_run_is_bound_to_the_workspace_plan(self):
+        bound = []
+        for path in (controls.REPO / "docs").rglob("*.json"):
+            try:
+                value = json.loads(path.read_bytes())
+            except ValueError:
+                continue
+            if isinstance(value, dict) and value.get("protocol") == protocol.PROTOCOL and "cases" in value \
+                    and value.get("schema_version") == protocol.RUN_SCHEMA and "plan_sha256" in value:
+                bound.append((path.relative_to(controls.REPO).as_posix(), value["plan_sha256"]))
+        self.assertNotIn(self.PLAN_SHA256, [sha for _, sha in bound])
+        # Apart from the SOU-153 synthetic control inputs, the only matched/1 run reports are the
+        # SOU-36 controlled runs of one revision.
+        synthetic = "docs/benchmarks/evidence/sou153/inputs/"
+        self.assertTrue(any(name.startswith(synthetic) for name, _ in bound))
+        self.assertEqual(sorted(name for name, _ in bound if not name.startswith(synthetic)),
+                         ["docs/benchmarks/evidence/sou36/controlled/development-run.json",
+                          "docs/benchmarks/evidence/sou36/controlled/fresh-run.json"])
+        # Those runs are a scripted fixture, not live AgentDojo runs.
+        fixture = json.loads((controls.PUBLIC / "plan.json").read_text(encoding="utf-8"))
+        self.assertEqual((fixture["upstream"]["suite"], fixture["identities"]["model"]["model_id"],
+                          fixture["access"]["model_access"]["kind"], fixture["identities"]["candidate"]["source_revision"]),
+                         ("neutral_protocol", "neutral-fixture", "local-fixture", "neutral-fixture"))
+
+    def test_the_sou85_report_has_no_per_case_outcomes(self):
+        report = json.loads((controls.REPO / "docs/benchmarks/evidence/sou85/report.json").read_text(encoding="utf-8"))
+        self.assertEqual((report["schema_version"], report["mode"], report["source_revision"]),
+                         (1, "workspace-offline", "ad41af500710450e8f1697da57eafdf5571301fa"))
+        self.assertEqual(report["upstream"]["source_inventory_sha256"], self.INVENTORY)
+        text = json.dumps(report)
+        for absent in ('"case_id"', '"injection_success"', '"plan_sha256"'):
+            self.assertNotIn(absent, text)
+
+    def test_the_development_set_cannot_reach_the_cluster_minimum(self):
+        cases = json.loads(self.PLAN.read_bytes())["sets"]["development"]["cases"]
+        injections = Counter(case["injection_task_id"] for case in cases if case["injection_task_id"])
+        self.assertEqual((len({case["user_task_id"] for case in cases}), len(injections)), (8, 6))
+        self.assertEqual({name: count for name, count in injections.items() if count > 1}, {"injection_task_9": 3})
+        grouping, dependency, _, _ = pr.grouping(cases, None)
+        self.assertEqual(grouping["dependency_clusters"]["count"], 6)
+        for attacked in (True, False):
+            sizes = list(Counter(dependency[case["case_id"]] for case in cases
+                                 if (case["injection_task_id"] is not None) == attacked).values())
+            effective = sum(sizes) ** 2 / sum(size * size for size in sizes)
+            self.assertEqual(sorted(sizes), [1, 1, 1, 1, 1, 3])
+            self.assertAlmostEqual(effective, 64 / 14)
+            self.assertLess(effective, pr.MIN_EFFECTIVE_CLUSTERS)
+
+    def test_binding_the_controlled_run_to_the_workspace_plan_is_invalid_input(self):
+        controlled = controls.PUBLIC
+        result, code = pr.compare(controlled / "plan.json", controlled / "development-run.json",
+                                  self.PLAN, controlled / "development-run.json")
+        self.assertEqual(code, pr.EXIT_INVALID)
+        self.assertEqual([(error["role"], error["code"]) for error in result["input_validity"]["errors"]],
+                         [("candidate_run", "plan_hash_mismatch")])
+
+
 class Command(Fixture):
     def invoke_cli(self, inputs, out):
         improved = self.controls / "improved"

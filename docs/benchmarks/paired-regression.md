@@ -182,8 +182,10 @@ The comparator verifies input identity, not execution. Genuine upstream AgentDoj
 case manifest, so its case link stays unverified.
 
 **Public examples.** The only public matched/1 reports are the SOU-36 controlled plan with
-its development and fresh runs. They come from one source revision, have no source
-bundle, and their neutral task is defined in test code outside any inventoried source.
+its development and fresh runs. These are **scripted fixture runs, not live AgentDojo
+runs**: the production `run_live` path with a scripted loopback model, a neutral test
+suite and a test policy. They come from one source revision, have no source bundle, and
+their neutral task is defined in test code outside any inventoried source.
 Both public examples are retained negative controls, and neither is a two-revision
 comparison:
 
@@ -360,8 +362,12 @@ a gate.
 
 - **Dependency clusters.** Connected components of cases that share a `user_task_id`, an
   `injection_task_id` or a non-empty `injections_sha256`. They record known statistical
-  dependencies and are not semantic families. The committed workspace plan shares seven
-  injection tasks among eight development user tasks.
+  dependencies and are not semantic families. The committed workspace plan's 8
+  development user tasks use 6 distinct injection tasks (`injection_task_9` is shared by
+  three of them), giving 6 dependency clusters. Each metric then has 8 planned units in 6
+  clusters of sizes 1, 1, 1, 1, 1 and 3, so at most 64/14 ≈ 4.57 effective clusters.
+  That is below the minimum of 10, so no family-cluster interval is possible on this
+  plan, whatever families are declared: families can only merge clusters.
 - **Semantic families.** These come from the verified case manifest
   (`bound_by_source_inventory`) or from `--families` (`declared_unbound`, listed as a gap).
   Families never carry or change expected labels.
@@ -456,19 +462,27 @@ generated to test the comparator's accounting, and the provenance says so.
 | all_unknown | `conditionally_comparable`; every candidate outcome unknown, 0 evaluable, bounds [0, 1] |
 | missing_case, changed_input, substituted_task_input, settings_mismatch, unverified_inputs | exit 1 with the matching reasons |
 | unknowns_wrong_run, tampered_plan, tampered_row, duplicate_case_id, incompatible_contract, non_finite, overflowing_number | exit 2 with the matching codes |
-| public_identity_no_change, public_dev_vs_fresh | exit 1, `input_identity_unverified` (negative controls on genuine public reports; both retained in the evidence bundle; not a two-revision comparison) |
+| public_identity_no_change, public_dev_vs_fresh | exit 1, `input_identity_unverified` (negative controls on the public SOU-36 scripted-fixture reports; both retained in the evidence bundle; not a two-revision comparison) |
 
 The tests also substitute a task prompt, an expected label or a family on one side, and
 consistently on both sides.
 
 ## Remaining work
 
-- **Two-revision public comparison (open, for TL review).** No verified pair of
-  matched/1 reports from two source revisions exists in public evidence. Only one public
+- **Two-revision public comparison (open, for TL review).** The original SOU-153
+  deliverables are implemented. The additional requirement for an actual two-revision,
+  source-bound comparison with frozen families is not met, and stays subject to TL
+  acceptance. No verified pair of matched/1 reports from two source revisions exists in
+  public evidence. For the strongest candidate pair the evidence is missing; this is not
+  a comparator-produced result. Only one public
   revision has matched/1 reports; the others have schema-1 test reports without per-case
   outcomes. No public run has a source bundle, case manifest or frozen semantic families.
-  A real comparison needs two recorded matched/1 runs of one frozen plan, with a source
-  bundle. Converting legacy reports is not a substitute.
+  A real comparison needs one recorded matched/1 run per revision. Because a plan freezes
+  one candidate identity, each run needs its own frozen plan with identical cases.
+  Converting legacy reports is not a substitute. On the committed workspace development
+  set, even such runs could give no interval, as explained under [grouping](#grouping).
+  The [two-revision availability assessment](evidence/sou153/README.md#two-revision-availability-assessment)
+  records what was verified for the strongest candidate pair.
 - **Coverage.** The approved constants are fixed, but the limits under
   [family-aware uncertainty](#family-aware-uncertainty) still apply. Intervals just above
   the minimum are optimistic.
