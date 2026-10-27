@@ -1,0 +1,42 @@
+{
+  "environment": "WSL",
+  "format": "sw-pilot-capacity-evidence/1",
+  "result": {
+    "host_disk_filled": false,
+    "low_space_zero_work": true,
+    "mount_limit_bytes": 16777216,
+    "observation_uid": 1000,
+    "prior_files_unchanged": true,
+    "scope": "private tmpfs observation; no downloads or real compiler build",
+    "small_budget_observation": {
+      "admitted": false,
+      "filesystems": [
+        {
+          "available_bytes": 16769024,
+          "declared_bytes": 4096,
+          "filesystem_id": "87",
+          "filesystem_type": "tmpfs",
+          "quota": "unknown",
+          "required_bytes": 1052672,
+          "reserve_bytes": 1048576,
+          "roles": [
+            "build"
+          ]
+        }
+      ],
+      "format": "sw-pilot-capacity/1",
+      "reason": "unknown_quota",
+      "space_reserved": false,
+      "status": "unknown"
+    },
+    "status": "passed"
+  },
+  "source_files_sha256": {
+    "build-native-pilot-inputs.py": "6d2e63d808e22f1cc50c1302d4cf765c4a0b7f6d799e163679e5e653e42623c2",
+    "pilot_capacity.py": "9790963d41eaeb8892eddd1e9f92b9b6124407b27b3069c8753f40234f323034",
+    "prepare-installed-pilot.py": "51958ecdb77bba75d4ae64e4fdabc4e15c8c3b24ebbb6dc7000e1b598887757d",
+    "prepare-native-pilot-prerequisites.py": "3a1a833444df488cf44f17a635a1a4b81a3334ebb3b38286900b180ebfaa4e96",
+    "test-pilot-capacity.py": "b5a535822e20e6c457e1f2f89f58e1a454fc466276a89a38e906f5c99afd45cb",
+    "tests/test_pilot_capacity.py": "a241baff9d08fa950854e3aac5a46e1e31f7eee25e798938914974186ac237c6"
+  }
+}

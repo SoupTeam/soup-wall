@@ -30,6 +30,8 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.dont_write_bytecode = True
+import pilot_capacity as capacity
 from pilot_provider import utility_environment
 import pilot_preparation_lock as coordination
 PIN = "1.94.1"  # The checked-in native Ubuntu CI toolchain; never `stable`.
@@ -238,6 +240,7 @@ def target_within_limit(target):
 
 def bounded_cargo(command, *, root, env, target, log, stage):
     """Use SOU-115's owned-group reaper, with an aggregate target quota."""
+    capacity.recheck("before_cargo")
     cancelled = False
 
     def cancel(_signum, _frame):
@@ -404,6 +407,7 @@ def build_generation(root, generation, tools):
         found.update(artifacts(log, ("agentfw", "git_launcher") if stage == "bins" else
                                ("sandbox_tests",), package_root, package_version))
     copied = 0
+    capacity.recheck("before_artifact_copy")
     for role in ROLES:
         source = found[role].resolve(strict=True)
         require(source.is_relative_to(target.resolve(strict=True)),
@@ -471,6 +475,7 @@ def run_build(root, output, expected_commit, *, rebuild=False, wait_seconds=0):
                 source_identity(root, expected_commit) == source and
                 tool_identity(current_plan["tools"]) == tools,
                 "input_changed_while_waiting", "coordination")
+        capacity.recheck("after_coordination")
         generations = output / "generations"
         generations.mkdir(mode=0o700, exist_ok=True)
         native.private(generations)
@@ -494,6 +499,7 @@ def run_build(root, output, expected_commit, *, rebuild=False, wait_seconds=0):
             output / "current.json").exists() else 0
         require(incomplete <= 16, "retained_incomplete_generation_limit", "coordination")
         generation = native.private(generations / uuid.uuid4().hex, create=True)
+        capacity.bind(generation)
         seconds = build_generation(root, generation, current_plan["tools"])
         require(source_identity(root, expected_commit) == source,
                 "candidate_source_changed_during_build", "source")
@@ -512,6 +518,7 @@ def run_build(root, output, expected_commit, *, rebuild=False, wait_seconds=0):
         verify_receipt(generation, source, tools, completed=True)
         marker = {"format": CURRENT_FORMAT, "generation": generation.name,
                   "receipt_sha256": native.digest(generation / "receipt.json")}
+        capacity.recheck("before_selection")
         temporary = output / (".current-" + uuid.uuid4().hex)
         native.write_json(temporary, marker)
         claim.verify()
@@ -529,6 +536,7 @@ def run_build(root, output, expected_commit, *, rebuild=False, wait_seconds=0):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    capacity.add_arguments(parser)
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--wait-seconds", type=float, default=0,
@@ -536,15 +544,26 @@ def main(argv=None):
     parser.add_argument("--output", type=Path)
     parser.add_argument("--expected-commit")
     args = parser.parse_args(argv)
+    if args.capacity_plan:
+        if args.build or args.guard_capacity:
+            parser.error("--capacity-plan is read-only; use it without --build or --guard-capacity")
+        print(json.dumps(capacity.cli_plan("source", args), sort_keys=True))
+        return 0
+    if args.guard_capacity and not args.build:
+        parser.error("--guard-capacity requires --build")
     try:
         require(not args.rebuild or args.build, "rebuild_requires_build")
         coordination.bounded_wait(args.wait_seconds)
         require(args.build or args.wait_seconds == 0, "wait_requires_build")
-        value = (run_build(ROOT, args.output, args.expected_commit,
-                           rebuild=args.rebuild, wait_seconds=args.wait_seconds)
-                 if args.build else inventory(ROOT, args.output, args.expected_commit))
-        print(json.dumps(value, sort_keys=True))
+        with capacity.checked("source", args):
+            value = (run_build(ROOT, args.output, args.expected_commit,
+                               rebuild=args.rebuild, wait_seconds=args.wait_seconds)
+                     if args.build else inventory(ROOT, args.output, args.expected_commit))
+            print(json.dumps(value, sort_keys=True))
         return 0
+    except capacity.Refusal as error:
+        print(json.dumps(error.report, sort_keys=True))
+        return 2
     except coordination.Busy as error:
         print(json.dumps({"status": "busy", "reason": error.reason,
                           "waited_seconds": error.waited_seconds,

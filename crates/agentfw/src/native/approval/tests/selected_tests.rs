@@ -265,6 +265,7 @@ fn call_selected(
         env.native(),
         crate::native::parse(&request.to_string()).unwrap(),
         Some(&identity(env, session)),
+        None,
     )
 }
 

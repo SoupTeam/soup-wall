@@ -398,6 +398,31 @@ fn read_binding(
     host_session: Option<&str>,
     server_id: &str,
 ) -> Result<VerifiedSelection> {
+    let actual = std::env::var_os(crate::mcp::linux_budget::ENVIRONMENT)
+        .ok_or_else(|| anyhow::anyhow!("pilot_budget_selection_missing"))?;
+    read_binding_inner(path, host_session, server_id, Some(Path::new(&actual)))
+}
+
+pub(crate) fn verify_daemon_launch(
+    path: &Path,
+    expected: &str,
+    host: &str,
+    server: &str,
+) -> Result<VerifiedSelection> {
+    let selected = read_binding_inner(path, Some(host), server, None)?;
+    ensure!(
+        expected == selected.binding.budget_sha256,
+        "pilot_budget_selection_changed"
+    );
+    Ok(selected)
+}
+
+fn read_binding_inner(
+    path: &Path,
+    host_session: Option<&str>,
+    server_id: &str,
+    environmental: Option<&Path>,
+) -> Result<VerifiedSelection> {
     let binding: Binding = private_json(path)?;
     ensure!(
         binding.format == FORMAT
@@ -405,10 +430,8 @@ fn read_binding(
             && matches!(server_id, "filesystem" | "git"),
         "pilot_budget_run_mismatch"
     );
-    let actual = std::env::var_os(crate::mcp::linux_budget::ENVIRONMENT)
-        .ok_or_else(|| anyhow::anyhow!("pilot_budget_selection_missing"))?;
     ensure!(
-        Path::new(&actual) == binding.config,
+        environmental.is_none_or(|actual| actual == binding.config),
         "pilot_budget_selection_changed"
     );
     let config = Config::load_file(&binding.config)?;
