@@ -218,14 +218,21 @@ impl Profile {
 
 #[cfg(test)]
 pub(super) fn fixture() -> Profile {
+    let absolute = |name: &str| {
+        if cfg!(windows) {
+            PathBuf::from(r"C:\owned").join(name)
+        } else {
+            PathBuf::from("/owned").join(name)
+        }
+    };
     let pin = || Pin {
-        path: std::path::PathBuf::from("/owned/runtime"),
+        path: absolute("runtime"),
         sha256: replace_file::content_sha256(crate::token::generate().as_bytes()),
     };
     Profile {
         format: super::FORMAT.into(),
         exclusion: replace_file::EXCLUSION.into(),
-        root: "/owned/output".into(),
+        root: absolute("output"),
         root_identity: RootIdentity {
             device: 1,
             inode: 2,
@@ -233,7 +240,7 @@ pub(super) fn fixture() -> Profile {
         agent: pin(),
         claude: pin(),
         component: Component {
-            home: "/owned/agent".into(),
+            home: absolute("agent"),
             id: replace_file::content_sha256(crate::token::generate().as_bytes()),
             source_commit: "a".repeat(40),
             source_tree: "b".repeat(40),

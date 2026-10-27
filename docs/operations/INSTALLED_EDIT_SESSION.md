@@ -17,7 +17,8 @@ child, one link, private metadata, fixed old identity and SHA-256, and at most
 Install the reviewed Agent and its verified pilot component first; see
 [the installed pilot guide](PILOT_INSTALLED_FRONT_DOOR.md). Select the repository
 pinned genuine Claude Code 2.1.251 Linux executable. All runtime paths must be
-canonical, protected regular files. Preparation records the installed component,
+canonical, protected regular files, with protected owned ancestors. Writable
+non-sticky runtime parents are refused. Preparation records the installed component,
 source identity, interpreter, classifier, Agent and Claude digests. Changed
 inputs require a fresh explicit preparation.
 
@@ -113,7 +114,8 @@ Prepare a new plan after independently inspecting an uncertain target.
 qualification installs exact Agent/Claude bytes outside the checkout, installs
 the verified component, then uses the genuine restricted host with an owned
 scripted provider. It independently checks useful read/create/read and
-read/replace/read, Ask decisions, stale inputs, links, changed bindings, replay,
+read/replace/read, Ask decisions, changed host/component bytes, writable runtime parents, stale
+inputs, links, changed bindings, replay,
 cancellation, daemon loss, fresh epochs and postcommit interruption. It checks
 output bytes/inodes, an unrelated sentinel, discovery mutation dispatch and owned
 process cleanup. This is development qualification, not a live-model efficacy or

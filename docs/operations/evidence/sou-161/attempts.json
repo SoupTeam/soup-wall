@@ -1,4 +1,27 @@
 {
   "format": "sw-installed-edit-attempts/1",
-  "attempts": [{"attempt": 1, "run_id": 40522047924, "source_commit": "fd059e21f04576ce2aef86e30b359c7ac399553a", "artifact_id": 12742766136, "artifact_sha256": "91cd61e30b3737ea5aba0ae172f317977b2770fb6a22c8260785c9afd402666e", "status": "failed", "completed_cases": 5, "required_cases": 19, "reason": "The no-approval witness repeatedly inspected the same pending request until the run ended; an unavailable request was mislabelled as exposed arguments. Preserve this incomplete outcome. Inspection redaction itself is unconditional, and create, replacement and reject controls already passed. Inspect each exact request once; a separate production delta makes explicit workspace override ambient AGENTFW_WORKSPACE for reads too."}]
+  "attempts": [
+    {
+      "attempt": 1,
+      "run_id": 40522047924,
+      "source_commit": "fd059e21f04576ce2aef86e30b359c7ac399553a",
+      "artifact_id": 12742766136,
+      "artifact_sha256": "91cd61e30b3737ea5aba0ae172f317977b2770fb6a22c8260785c9afd402666e",
+      "status": "failed",
+      "completed_cases": 5,
+      "required_cases": 19,
+      "reason": "The no-approval witness repeatedly inspected the same pending request until the run ended; an unavailable request was mislabelled as exposed arguments. Preserve this incomplete outcome. Inspection redaction itself is unconditional, and create, replacement and reject controls already passed. Inspect each exact request once; a separate production delta makes explicit workspace override ambient AGENTFW_WORKSPACE for reads too."
+    },
+    {
+      "attempt": 2,
+      "run_id": 40524369249,
+      "source_commit": "38e00a29137c01cdbcb2e0e48ba87652596298c8",
+      "artifact_id": 12744165963,
+      "artifact_sha256": "1d018239ba3cfe6a62cdda68896e7d699d67aee0e0843f1329bfc35e5dc07b21",
+      "status": "passed",
+      "completed_cases": 19,
+      "required_cases": 19,
+      "reason": "All original installed cases passed, including genuine host useful effects and hostile ambient workspace. Retained as an intermediate qualified source before adding protected runtime ancestry and three explicit source/runtime controls."
+    }
+  ]
 }

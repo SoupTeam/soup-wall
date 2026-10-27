@@ -40,7 +40,19 @@ fn file(path: &Path, cap: u64) -> Result<File> {
         "edit_absolute_path_required"
     );
     for p in path.ancestors() {
-        ensure!(!fs::symlink_metadata(p)?.is_symlink(), "edit_linked_input");
+        let metadata = fs::symlink_metadata(p)?;
+        ensure!(!metadata.is_symlink(), "edit_linked_input");
+        if p != path {
+            // A protected leaf inside a replaceable directory is not a pin.
+            // Sticky owned ancestors (e.g. /tmp) protect the already owned next
+            // entry; otherwise no group/other writer may redirect the path.
+            ensure!(
+                metadata.is_dir()
+                    && (metadata.uid() == 0 || metadata.uid() == unsafe { libc::geteuid() })
+                    && (metadata.mode() & 0o022 == 0 || metadata.mode() & libc::S_ISVTX != 0),
+                "edit_input_ancestry"
+            );
+        }
     }
     ensure!(
         path.canonicalize()?.as_os_str() == path.as_os_str(),
@@ -61,6 +73,7 @@ fn file(path: &Path, cap: u64) -> Result<File> {
     );
     Ok(file)
 }
+
 pub(super) fn bytes(path: &Path, cap: u64) -> Result<Vec<u8>> {
     let file = file(path, cap)?;
     let mut bytes = Vec::new();
@@ -472,4 +485,26 @@ pub(super) fn command(action: Action) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    #[test]
+    fn protected_runtime_leaf_cannot_borrow_authority_from_a_writable_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path().canonicalize().unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let shared = dir.join("shared");
+        fs::create_dir(&shared).unwrap();
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = shared.join("runtime");
+        write(&path, b"owned runtime", 0o500).unwrap();
+        file(&path, 128).unwrap();
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(file(&path, 128).is_err());
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(bytes(&path, 128).unwrap(), b"owned runtime");
+    }
 }

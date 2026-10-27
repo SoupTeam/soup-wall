@@ -26,7 +26,7 @@ import time
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = 'sw-installed-edit-qualification/1'
-CASES = ('installed-closure', 'inert-preview', 'useful-create', 'useful-replace',
+CASES = ('installed-closure', 'inert-preview', 'changed-runtime', 'changed-component', 'writable-runtime-parent', 'useful-create', 'useful-replace',
          'ask-reject', 'no-approval', 'unlisted-tool', 'outside-target', 'linked-target',
          'stale-plan', 'changed-plan', 'no-exclusion', 'pending-old-change',
          'pending-new-change', 'approval-replay', 'cancel-pending', 'daemon-loss',
@@ -305,6 +305,36 @@ def qualify(args, report):
             setrow(label, {'status': 'passed', 'authority': False});continue
         require(code == 0 and prepared['status'] == 'prepared-not-active' and prepared['authority'] is False, 'prepare_failed_' + label)
         before = snapshot(target)
+        if label in ('changed-runtime', 'changed-component', 'writable-runtime-parent'):
+            before_runs = sorted(p.name for p in suite.state.iterdir())
+            damaged = suite.claude if label == 'changed-runtime' else None
+            if label == 'changed-component':
+                damaged = Path(prepared['profile']['component']['classifier']['path'])
+            parent_mode = stat.S_IMODE(suite.binary.parent.stat().st_mode)
+            original_size = damaged.stat().st_size if damaged else None
+            original_mode = stat.S_IMODE(damaged.stat().st_mode) if damaged else None
+            try:
+                if damaged:
+                    damaged.chmod(0o600)
+                    with damaged.open('ab') as stream:
+                        stream.write(b'\n# changed owned runtime witness\n')
+                    damaged.chmod(original_mode)
+                else:
+                    suite.binary.parent.chmod(0o777)
+                prompt = suite.work / (label + '-prompt');prompt.write_text('Bounded edit.');prompt.chmod(0o600)
+                code, _ = suite.cli('run', '--plan', plan, '--sha256', prepared['profile_sha256'], '--state', suite.state, '--prompt-file', prompt)
+                require(code != 0 and snapshot(target) == before
+                        and sorted(p.name for p in suite.state.iterdir()) == before_runs, 'changed_runtime_started_' + label)
+            finally:
+                if damaged:
+                    damaged.chmod(0o600)
+                    with damaged.open('r+b') as stream:
+                        stream.truncate(original_size)
+                    damaged.chmod(original_mode)
+                suite.binary.parent.chmod(parent_mode)
+            require(sha(suite.claude.read_bytes()) == CLAUDE, 'restored_claude_digest')
+            setrow(label, {'status': 'passed', 'authority': False, 'new_runs': 0, 'target_preserved': True})
+            continue
         if label in ('linked-target', 'stale-plan', 'changed-plan'):
             if label == 'linked-target':
                 target.unlink();target.symlink_to(suite.sentinel)
