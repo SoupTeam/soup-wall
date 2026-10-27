@@ -53,6 +53,9 @@ pub struct PilotWorkspacesArgs {
     pub workspace: PathBuf,
     #[arg(long)]
     pub git_workspace: PathBuf,
+    /// One reviewed profile format; never infer capabilities from repository data.
+    #[arg(long, default_value = "sw-mcp/git-readonly/1")]
+    pub git_profile_format: String,
 }
 
 pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
@@ -70,11 +73,12 @@ pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
                 "owned workspace without shared write access required"
             );
         }
-        crate::mcp::server_profile::git::validate_repository(&args.git_workspace)
+        validate_selected_git_workspace(&args.git_workspace, &args.git_profile_format)
             .context("unsupported Git layout; use a supported standalone repository; do not repair the project")?;
         println!(
             "{}",
-            serde_json::json!({"status":"supported-read-only", "executed":false})
+            serde_json::json!({"status":"supported-read-only", "executed":false,
+                               "git_profile_format":args.git_profile_format})
         );
         Ok(())
     }
@@ -82,6 +86,20 @@ pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
     {
         let _ = args;
         bail!("native Linux required for original pilot workspace validation")
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_selected_git_workspace(root: &Path, format: &str) -> Result<()> {
+    use crate::mcp::server_profile::{git, git_local_clone, git_tracked_symlinks};
+    match format {
+        git::FORMAT | git::FILE_READS_FORMAT | git::LOCAL_REFS_FORMAT => {
+            git::validate_repository(root)
+        }
+        git::SHALLOW_FORMAT => git::validate_repository_with_shallow(root, true),
+        git_local_clone::FORMAT => git_local_clone::validate_repository(root),
+        git_tracked_symlinks::FORMAT => git_tracked_symlinks::validate_repository(root),
+        _ => bail!("unsupported Git profile; select one reviewed variant"),
     }
 }
 
@@ -2006,6 +2024,27 @@ fn terminal_exit_code(
 
 #[cfg(test)]
 mod tests {
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn selected_workspace_validation_keeps_default_and_refuses_capability_union() {
+        use super::validate_selected_git_workspace;
+        use crate::mcp::server_profile::git;
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        std::fs::create_dir_all(root.join(".git/hooks")).unwrap();
+        let config = b"[core]\nbare = false\nrepositoryformatversion = 0\n";
+        std::fs::write(root.join(".git/config"), config).unwrap();
+        for format in [git::FORMAT, git::FILE_READS_FORMAT, git::LOCAL_REFS_FORMAT] {
+            assert!(validate_selected_git_workspace(root, format).is_ok());
+        }
+        assert!(validate_selected_git_workspace(root, "sw-mcp/git-readonly/1+file-revisions").is_err());
+        std::fs::write(root.join(".git/shallow"), b"a\n").unwrap();
+        assert!(validate_selected_git_workspace(root, git::FORMAT).is_err());
+        assert!(validate_selected_git_workspace(root, git::FILE_READS_FORMAT).is_err());
+        assert_eq!(std::fs::read(root.join(".git/config")).unwrap(), config);
+        assert_eq!(std::fs::read(root.join(".git/shallow")).unwrap(), b"a\n");
+    }
 
     #[cfg(target_os = "macos")]
     #[test]

@@ -250,6 +250,7 @@ def stage_words(args, inputs, paths, commit):
 
 def prepare_words(args, inputs, paths, commit, produced):
     words = ["scripts/prepare-installed-pilot.py", "--output", paths["preparation"], "--expected-commit", commit]
+    words += ["--git-profile", getattr(args, "git_profile", None) or PREP.GIT_PROFILES.DEFAULT]
     selected = dict(produced)
     for name in ("agentfw", "git_launcher", "sandbox_tests", "git", "bwrap", "claude", "python", "node", "npm"):
         if name in inputs:
@@ -260,7 +261,8 @@ def prepare_words(args, inputs, paths, commit, produced):
         if name in inputs:
             words += ["--" + name.replace("_", "-"), inputs[name]]
     words += ["--filesystem-classifier", ROOT / "rule_baseline/rule_baseline.py",
-              "--git-classifier", ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py",
+              "--git-classifier", PREP.GIT_PROFILES.classifier_path(
+                  getattr(args, "git_profile", None) or PREP.GIT_PROFILES.DEFAULT),
               "--policy", paths["inputs"] / "policy.yaml"]
     if args.allow_download:
         words.append("--allow-download")
@@ -289,6 +291,9 @@ def plan(args):
     # operator's earlier download permission; reuse never downloads anything.
     args.allow_download = bool(args.allow_download or (state or {}).get("allow_download"))
     inputs = recorded_inputs(args, state)
+    args.git_profile = getattr(args, "git_profile", None) or (state or {}).get(
+        "git_profile", PREP.GIT_PROFILES.DEFAULT)
+    report["git_selection"] = PREP.GIT_PROFILES.binding(args.git_profile)
     paths = layout(prefix, inputs)
     native, agent = stage_words(args, inputs, paths, current["commit"])
     stages = []
@@ -335,6 +340,7 @@ def plan(args):
                    "sha256": hashlib.sha256(PREP.PILOT.PILOT_POLICY.encode("utf-8")).hexdigest()})
     words = prepare_words(args, inputs, paths, current["commit"], {})
     code, value = child(words, timeout=PLAN_SECONDS, cwd=ROOT)
+    require(code == 0 and value.get("status") == "plan", value.get("reason") or "selection_plan_failed", "selection")
     missing = [item for item in value.get("missing", []) if not any(
         item.startswith(prefix_) for prefix_ in ("--agentfw", "--git-launcher", "--sandbox-tests", "--git ", "--bwrap",
                                                  "--claude", "--node-archive", "provide existing absolute --policy"))]
@@ -429,6 +435,7 @@ def prepare(args):
     record = {"format": FORMAT, "commit": commit, "tree": report["source"]["tree"], "selection": str(selection),
               "selection_sha256": sha(selection), "status": value["status"],
               "allow_download": bool(args.allow_download),
+              "git_profile": args.git_profile,
               "inputs": {name: str(path) for name, path in inputs.items()}}
     write_state(prefix, record)
     report.update(status=value["status"], selection=str(selection),
@@ -726,7 +733,7 @@ def status(args):
                              "--expected-commit", state["commit"]], timeout=PLAN_SECONDS, cwd=ROOT)
         if code == 0 and value.get("status") == "plan":
             report["selection"] = {"state": "configured", "path": state["selection"], "commit": state["commit"],
-                                   "workspaces": value.get("workspaces")}
+                                   "workspaces": value.get("workspaces"), "git_selection": value.get("git_selection")}
             selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
             expected = expected_identity(state, selection)
         else:
@@ -753,6 +760,7 @@ def human(report):
         platform = report["platform"]
         lines.append("Platform: " + ("supported" if platform["supported"] else "NOT supported (" + str(platform["reason"]) + ")"))
         lines.append("Source: " + report["source"]["commit"] + (" (dirty)" if report["source"]["dirty"] else " (clean)"))
+        lines.append("Git profile: " + report["git_selection"]["id"] + " (configured capability; runtime use is separate)")
         lines.append("Prefix: " + report["prefix"]["path"] + (" (exists)" if report["prefix"]["exists"] else " (will be created)"))
         workspaces = report["workspaces"]
         lines.append("Roots: " + ("generated demo workspaces" if workspaces["mode"] == "generated-demo" else
@@ -789,6 +797,8 @@ def parser():
     inputs = argparse.ArgumentParser(add_help=False)
     inputs.add_argument("--expected-commit", help="assert the clean checkout commit")
     inputs.add_argument("--allow-download", action="store_true", help="prepare may download pinned public inputs")
+    inputs.add_argument("--git-profile", action=PREP.GIT_PROFILES.SingleProfile,
+                        help="exactly one reviewed Git registry id; default git-readonly-v1")
     for name in EXECUTABLE_INPUTS + FILE_INPUTS + DIR_INPUTS:
         inputs.add_argument("--" + name.replace("_", "-"), type=Path)
     for name in ("preview", "prepare"):

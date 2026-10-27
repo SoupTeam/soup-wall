@@ -516,7 +516,8 @@ class Preview(unittest.TestCase):
         with mock.patch.object(M, "plan", lambda args: calls.append("plan") or {"command": "preview", "missing": [],
                                "next": "n", "stages": [], "platform": {"supported": True, "reason": None},
                                "source": clean_source(), "prefix": {"path": "/p", "exists": False},
-                               "workspaces": {"mode": "generated-demo"}}), \
+                               "workspaces": {"mode": "generated-demo"},
+                               "git_selection": {"id": "git-readonly-v1"}}), \
                 mock.patch.object(M, "prepare", side_effect=AssertionError("applied")), \
                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.assertEqual(M.main(["prepare", "--prefix", "/tmp/x"]), 0)

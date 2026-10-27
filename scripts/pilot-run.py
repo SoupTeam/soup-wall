@@ -118,7 +118,7 @@ PUBLIC_FAILURE_CODES = frozenset({
     'private_assets_inside_workspace',
     'profile_workspace_identity_mismatch',
     'unsupported_existing_git_layout_use_supported_standalone_repository',
-})
+}) | PREP.GIT_PROFILES.FAILURES
 
 
 class Failure(Exception):
@@ -161,8 +161,9 @@ def selected(args):
                        "selection_sha256": PREP.FS.sha(selection_path), "status": "prepared-not-active"},
             "preparation_marker_mismatch")
     _, paths = PREP.PILOT.validate_selection(selection, args.expected_commit)
+    git_profile = PREP.GIT_PROFILES.from_selection(selection)
     require(paths["git_classifier"].read_bytes() ==
-            (ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py").read_bytes(),
+            PREP.GIT_PROFILES.classifier_path(git_profile).read_bytes(),
             "accepted_two_server_classifier_required")
     require(0 <= args.ask_wait_seconds <= 25 and 1 <= args.timeout_seconds <= 3600,
             "pilot_deadline_out_of_range")
@@ -369,6 +370,9 @@ def run(args, report):
         native = {"registry_path": str(registry), "registry_sha256": registry_sha,
                   "liveness": {"default_lease_seconds": 4, "max_lease_seconds": 4,
                                "maintenance_interval_ms": 250}}
+        if PREP.GIT_PROFILES.from_selection(selection) in PREP.GIT_PROFILES.DAEMON_EXECUTION:
+            native["git_execution"] = {"profile_path": profiles["git"]["profile"]["path"],
+                                       "profile_sha256": profiles["git"]["profile"]["sha256"], "server_id": "git"}
         if args.ask_wait_seconds:
             native["approval"] = {"ttl_seconds": 120}
         retention, audit_receipt = AUDIT.selection(private, args.expected_commit,
@@ -571,12 +575,16 @@ def main():
             with SELECTION_LOCK.hold(args.selection.parent.parent.parent, exclusive=False):
                 selection, _, profiles = selected(args)
                 report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
+                              git_selection=selection.get("git_selection", {"id": PREP.GIT_PROFILES.DEFAULT,
+                                  "selection_version": "legacy-default-only"}),
                               workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}),
                               audit_retention=AUDIT.LIMITS)
                 run(args, report)
         else:
             selection, _, profiles = selected(args)
             report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
+                          git_selection=selection.get("git_selection", {"id": PREP.GIT_PROFILES.DEFAULT,
+                              "selection_version": "legacy-default-only"}),
                           workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}),
                               audit_retention=AUDIT.LIMITS)
     except Exception as error:

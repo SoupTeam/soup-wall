@@ -45,11 +45,14 @@ SCRIPTS = (
     "scripts/build-native-pilot-inputs.py",
     "scripts/install-sou62-filesystem-profile.py",
     "scripts/install-sou68-git-profile.py",
+    "scripts/install-sou107-git-profile.py",
+    "scripts/install-sou150-git-profile.py",
     "scripts/install-sou83-filesystem-create-profile.py",
     "scripts/mcp-admission-demo.py",
     "scripts/pilot-run.py",
     "scripts/pilot-selection-lock.py",
     "scripts/pilot.py",
+    "scripts/pilot_git_profiles.py",
     "scripts/pilot_audit.py",
     "scripts/pilot_capacity.py",
     "scripts/pilot_policy.py",
@@ -67,11 +70,15 @@ SCRIPTS = (
 )
 DATA_FILES = (
     "rule_baseline/git_readonly_v1/rule_baseline.py",
+    "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py",
+    "rule_baseline/git_readonly_local_refs_v1/rule_baseline.py",
     "rule_baseline/rule_baseline.py",
 )
 DATA_DIRECTORIES = (
     "profiles/mcp/filesystem-readonly-v1",
     "profiles/mcp/git-readonly-v1",
+    "profiles/mcp/git-local-clone-readonly-v1",
+    "profiles/mcp/git-tracked-symlinks-readonly-v1",
     "profiles/pilot/linux-readonly-v1",
 )
 

@@ -2860,7 +2860,7 @@ jobs:
 
   mcp-real-git--required-linux-git:
     name: "mcp-real-git / required-linux-git"
-    if: contains(fromJSON(inputs.plan).workflows['mcp-real-git.yml'], 'required-linux-git')
+    if: contains(fromJSON(inputs.plan).workflows['mcp-real-git.yml'], 'required-linux-git') && !inputs.installed_profiles_only
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:

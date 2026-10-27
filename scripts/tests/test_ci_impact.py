@@ -93,6 +93,8 @@ class ImpactTests(unittest.TestCase):
             auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             if filename == "mcp-real-filesystem.yml":
                 auxiliary.add("manual-long-session")
+            if filename == "mcp-real-git.yml":
+                auxiliary.add("manual-installed-git-profiles")
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
