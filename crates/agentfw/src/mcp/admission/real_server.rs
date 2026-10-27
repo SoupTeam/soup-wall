@@ -8,6 +8,7 @@ use std::sync::{Arc, Weak};
 
 use anyhow::{bail, ensure, Context};
 use futures_util::stream::{FuturesUnordered, StreamExt};
+use futures_util::FutureExt;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::time::Instant;
@@ -49,6 +50,8 @@ macro_rules! diagnostic {
 }
 
 struct Grant {
+    source: Option<Box<crate::native::execution::Dispatch>>,
+    original_result: Option<Box<crate::native::execution::OriginalResult>>,
     call_id: Value,
     binding: Value,
     boundary: Option<crate::policy_transition::Boundary>,
@@ -411,9 +414,16 @@ async fn admit(
         // Bind same-FD verified input observations before publishing a pending
         // request. Only kernel-enforced immutable bytes may be reused later.
         // This state belongs to this exact Ask, never a global authority cache.
-        let frozen = profile.clone();
-        let verified_assets =
-            tokio::task::spawn_blocking(move || frozen.capture_verified_assets()).await??;
+        let verified_assets = if let Some(runtime) = collector.runtime() {
+            ensure!(
+                runtime.matches(profile),
+                "verified_execution_profile_changed"
+            );
+            None
+        } else {
+            let frozen = profile.clone();
+            Some(tokio::task::spawn_blocking(move || frozen.capture_verified_assets()).await??)
+        };
         let approval_id =
             match wait_approval(collector, call, source, &installed.schema_sha256, &context).await?
             {
@@ -422,12 +432,24 @@ async fn admit(
             };
         let mut timing = ContinuationTiming::new();
         let resumed = async {
-            let frozen = profile.clone();
-            let verified =
+            let verified = if let Some(verified_assets) = verified_assets {
+                let frozen = profile.clone();
                 tokio::task::spawn_blocking(move || frozen.revalidate_assets(&verified_assets))
-                    .await;
-            timing.record(call, "profile_and_assets", matches!(&verified, Ok(Ok(()))));
-            verified??;
+                    .await?
+            } else {
+                match collector.runtime() {
+                    Some(runtime) if runtime.matches(profile) => {
+                        if let Some(context) = &collector.execution {
+                            context.check()
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    _ => Err(anyhow::anyhow!("verified_execution_profile_changed")),
+                }
+            };
+            timing.record(call, "profile_and_assets", verified.is_ok());
+            verified?;
             #[cfg(target_os = "linux")]
             if let Some(expected) = &context.original_create {
                 let workspace = call
@@ -503,6 +525,8 @@ async fn admit(
         )));
     }
     Ok(Decision::Allowed(Grant {
+        source: None,
+        original_result: None,
         call_id: receipt["call_id"].clone(),
         binding: receipt["binding_sha256"].clone(),
         boundary,
@@ -649,29 +673,35 @@ async fn inspect(
         "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})
     };
     let content = std::str::from_utf8(&raw).context("selected MCP result is not UTF-8")?;
-    let (raw, receipt, _original_inspected) =
-        match collector.event("result", fields(kind, content)).await {
-            Ok(receipt) => (raw, receipt, true),
-            Err(failure) => {
-                // A size refusal leaves the grant unspent at the daemon. Spend it
-                // with a small correlated error instead of ending the session.
-                let limit = failure
-                    .downcast_ref::<DaemonSizeLimit>()
-                    .copied()
-                    .ok_or(failure)?;
-                diagnostic!(
-                    "{}",
-                    json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
+    let (raw, receipt, _original_inspected) = match collector
+        .event_inner(
+            "result",
+            fields(kind, content),
+            grant.original_result.take().map(|result| *result),
+        )
+        .await
+    {
+        Ok(receipt) => (raw, receipt, true),
+        Err(failure) => {
+            // A size refusal leaves the grant unspent at the daemon. Spend it
+            // with a small correlated error instead of ending the session.
+            let limit = failure
+                .downcast_ref::<DaemonSizeLimit>()
+                .copied()
+                .ok_or(failure)?;
+            diagnostic!(
+                "{}",
+                json!({"event":"mcp_real_result_withheld","host_call_id":call.id,
                     "limit":limit.code(),"observed_bytes":raw.len(),"released":false})
-                );
-                let replacement = error(&call.id, -32603, limit.message());
-                let content = std::str::from_utf8(&replacement).expect("fixed UTF-8 error");
-                let receipt = collector.event("result", fields("error", content)).await?;
-                // Allowing this correlated error to reach the host does not
-                // authorize publication of an uninspected original create result.
-                (replacement, receipt, false)
-            }
-        };
+            );
+            let replacement = error(&call.id, -32603, limit.message());
+            let content = std::str::from_utf8(&replacement).expect("fixed UTF-8 error");
+            let receipt = collector.event("result", fields("error", content)).await?;
+            // Allowing this correlated error to reach the host does not
+            // authorize publication of an uninspected original create result.
+            (replacement, receipt, false)
+        }
+    };
     if let Some(timing) = &mut grant.continuation {
         timing.record(call, "result_inspection", receipt["release"] == true);
     }
@@ -1408,6 +1438,11 @@ where
                                         }));
                                         continue;
                                     }
+                                    if let Some(context)=&collector.execution {
+                                        grant.source=Some(Box::new(context.dispatched(&collector.session,
+                                            grant.call_id.as_str().context("private native call")?,
+                                            grant.binding.as_str().context("private native binding")?,&call.raw)?));
+                                    }
                                     write(child, &call.raw).await?;
                                     call.dispatched = true;
                                     if let Some(timing) = &mut grant.continuation {
@@ -1876,12 +1911,15 @@ where
                     .validate_result(&value)
                     .map(str::to_owned);
                 match validated {
-                    Ok(kind) => workers.push(Box::pin(async move {
-                        WorkEvent::Inspected(
-                            worker_key,
-                            inspect(collector, &input, grant, raw, &kind).await,
-                        )
-                    })),
+                    Ok(kind) => {
+                        if let Some(source)=grant.source.take() {
+                            grant.original_result=Some(Box::new((*source).response(&raw)?));
+                        }
+                        workers.push(Box::pin(async move {
+                            WorkEvent::Inspected(worker_key,
+                                inspect(collector,&input,grant,raw,&kind).await)
+                        }));
+                    },
                     Err(failure) => {
                         // Unsupported output is never partially released. A local
                         // error completes this reservation and leaves other calls usable.
@@ -2116,13 +2154,54 @@ pub(super) async fn run(
     profile: &server_profile::ProfileConfig,
     workspace: &std::path::Path,
 ) -> anyhow::Result<()> {
-    // The host may TERM its MCP children during normal shutdown, including
-    // after their namespace owners have finished but before the authenticated
-    // cleanup acknowledgement. Install interception before creating an owner;
-    // later TERM must not abruptly kill the completion path.
+    #[cfg(unix)]
+    let client = BufReader::new(crate::mcp::stdio::Pipe::stdin()?);
+    #[cfg(unix)]
+    let host = crate::mcp::stdio::Pipe::stdout()?;
+    #[cfg(not(unix))]
+    let client = BufReader::new(tokio::io::stdin());
+    #[cfg(not(unix))]
+    let host = tokio::io::stdout();
+    // Legacy stdio owns the process-level termination handlers. An embedded
+    // daemon session must use its own connection lifetime instead.
     #[cfg(unix)]
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("install selected collector termination handler")?;
+    let shutdown = async {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => "native_mcp_interrupted",
+            _ = async {
+                #[cfg(unix)]
+                sigterm.recv().await;
+                #[cfg(not(unix))]
+                std::future::pending::<()>().await;
+            } => "native_mcp_terminated",
+        }
+    };
+    run_streams(collector, profile, workspace, client, host, shutdown, true).await
+}
+
+/// One selected-server transport with explicitly owned host streams. This is
+/// transport plumbing only: it does not authenticate a launch or mint evidence.
+/// Shutdown still reaches the same owner, budget, process and stderr cleanup.
+pub(super) async fn run_streams<R, W, F>(
+    collector: &Collector<'_>,
+    profile: &server_profile::ProfileConfig,
+    workspace: &std::path::Path,
+    mut client: R,
+    host: W,
+    shutdown: F,
+    inherit_environment: bool,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = &'static str>,
+{
+    tokio::pin!(shutdown);
+    if let Some(reason) = shutdown.as_mut().now_or_never() {
+        bail!(reason);
+    }
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
     let selected_budget = collector.prepared_budget.as_ref();
     if collector
@@ -2142,7 +2221,9 @@ pub(super) async fn run(
         "prepared budgets do not support the original-create profile"
     );
     ensure!(
-        selected_budget.is_some() || std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
+        !inherit_environment
+            || selected_budget.is_some()
+            || std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
         "pilot_budget_binding_required"
     );
     let mut budget_record = selected_budget
@@ -2161,10 +2242,16 @@ pub(super) async fn run(
     if let Some(owner) = cleanup_owner {
         owner.pilot_cleanup("begin").await?;
     }
-    let prepared = match server_sandbox::prepare_with_budget(
-        profile,
-        selected_budget.map(crate::pilot_budget::VerifiedSelection::bound),
-    ) {
+    let bound = selected_budget.map(crate::pilot_budget::VerifiedSelection::bound);
+    let prepared = match if let Some(reason) = shutdown.as_mut().now_or_never() {
+        Err(anyhow::anyhow!(reason))
+    } else if let Some(runtime) = collector.runtime() {
+        server_sandbox::prepare_verified(profile, bound, runtime)
+    } else if inherit_environment {
+        server_sandbox::prepare_with_budget(profile, bound)
+    } else {
+        server_sandbox::prepare_explicit(profile, bound)
+    } {
         Ok(prepared) => prepared,
         Err(error) => {
             if let Some(owner) = cleanup_owner {
@@ -2177,8 +2264,22 @@ pub(super) async fn run(
         prepared.workspace() == workspace,
         "selected sandbox workspace changed"
     );
+    if let Some(reason) = shutdown.as_mut().now_or_never() {
+        if let Some(owner) = cleanup_owner {
+            owner.pilot_cleanup("finish").await?;
+        }
+        bail!(reason);
+    }
     let git_view = prepared.git_view();
+    if let Some(context) = &collector.execution {
+        context.preparing();
+    }
     let (mut process, mut budget, mut owner, sandbox_pid) = prepared.spawn().await?;
+    let context_bound = collector
+        .execution
+        .as_ref()
+        .map(|context| context.bind(&owner))
+        .unwrap_or(Ok(()));
     let attached = if let Some(budget) = budget.as_mut() {
         budget.verify_attached(sandbox_pid)
     } else {
@@ -2216,7 +2317,11 @@ pub(super) async fn run(
     let operation = {
         let transport = async {
             attached?;
+            context_bound?;
             owner.check()?;
+            if let Some(context) = &collector.execution {
+                context.check()?;
+            }
             if let (Some(record), Some(budget)) = (&mut budget_record, &budget) {
                 record.record(budget.metadata(), false)?;
             }
@@ -2235,14 +2340,6 @@ pub(super) async fn run(
                     .take()
                     .context("selected server stdout missing")?,
             );
-            #[cfg(unix)]
-            let mut client = BufReader::new(crate::mcp::stdio::Pipe::stdin()?);
-            #[cfg(unix)]
-            let host = crate::mcp::stdio::Pipe::stdout()?;
-            #[cfg(not(unix))]
-            let mut client = BufReader::new(tokio::io::stdin());
-            #[cfg(not(unix))]
-            let host = tokio::io::stdout();
             // The monitor publishes failure before waking its select arm. An
             // already pending host write must observe the same withdrawal;
             // cancelling the relay alone does not provide that ordering.
@@ -2252,11 +2349,21 @@ pub(super) async fn run(
                 failed: Arc::clone(&boundary_failed),
                 liveness: None,
             };
-            let mut host = super::DiagnosticOutput {
+            let host = super::DiagnosticOutput {
                 budget: None,
                 inner: host,
                 failed: Arc::clone(&owner_failed),
                 liveness: collector.liveness.clone(),
+            };
+            let mut host = super::DiagnosticOutput {
+                budget: None,
+                inner: host,
+                liveness: None,
+                failed: collector
+                    .execution
+                    .as_ref()
+                    .map(|context| context.withdrawn.clone())
+                    .unwrap_or_else(|| Arc::new(std::sync::atomic::AtomicBool::new(false))),
             };
             let result = {
                 let exchange = relay(
@@ -2324,13 +2431,7 @@ pub(super) async fn run(
                 Err(error) => Err(error),
                 Ok(()) => Err(anyhow::anyhow!("mcp_budget_monitor_stopped")),
             },
-            _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("native_mcp_interrupted")),
-            _ = async {
-                #[cfg(unix)]
-                sigterm.recv().await;
-                #[cfg(not(unix))]
-                std::future::pending::<()>().await;
-            } => Err(anyhow::anyhow!("native_mcp_terminated")),
+            reason = shutdown => Err(anyhow::anyhow!(reason)),
             result = &mut transport => result,
         }
     };
@@ -2419,6 +2520,11 @@ pub(super) async fn run(
     } else {
         Err(anyhow::anyhow!("pilot_cleanup_unconfirmed"))
     };
+    if cleanup_confirmation.is_ok() {
+        if let Some(context) = &collector.execution {
+            context.cleaned();
+        }
+    }
     cleanup_confirmation?;
     record_result?;
     operation?;

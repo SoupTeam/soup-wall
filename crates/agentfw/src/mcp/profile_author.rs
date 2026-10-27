@@ -939,6 +939,7 @@ pub fn compiled_bundle_files(
     // Complete typed, inert Agent config fragment. Registry path names the
     // FINAL no-clobber directory, not temporary publication staging.
     let native = crate::config::NativeCfg {
+        execution: None,
         git_execution: None,
         registry_path: out.join("registry.json"),
         registry_sha256: p.profile.registry_sha256.clone(),

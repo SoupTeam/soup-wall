@@ -97,9 +97,9 @@ print(json.dumps({{'late_link_contained':True,'useful_read':True}}))
         // reads directly; neither the Rust parser nor the Git guard can refuse.
         let args = ["-I".into(), "-B".into(), "-c".into(), script];
         let prepared = if verified {
-            prepare_linux_command_inner(&profile, &args, None, false, true)
+            prepare_linux_command_inner(&profile, &args, None, false, true, None, true)
         } else {
-            prepare_linux_command(&profile, &args, None, false)
+            prepare_linux_command(&profile, &args, None, false, true, None)
         }
         .unwrap();
         std::fs::remove_file(&link).unwrap();
