@@ -1880,8 +1880,9 @@ jobs:
           task_scratch="$RUNNER_TEMP/sou165-scratch"
           sudo -- "$task_scratch/bwrap-build/bwrap" --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / --bind "$task_scratch" "$task_scratch" --proc /proc --dev /dev --cap-drop ALL \
-            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
-            --chdir / /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP --cap-add CAP_SYS_ADMIN \
+            --chdir / /bin/bash -euc 'mount -t proc -o nosuid,nodev,noexec proc /proc; exec "$@"' bash \
+            /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
             --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
             /usr/bin/env -i PATH="$task_scratch/node/bin:$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.94.1 \
             HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
@@ -1889,6 +1890,26 @@ jobs:
             SOU165_SCRATCH="$task_scratch" SOU165_SOURCE="$GITHUB_WORKSPACE" SOU165_BASELINE="$RUNNER_TEMP/sou165-baseline" CARGO_BUILD_JOBS=4 \
             /bin/bash -euo pipefail <<'BASH'
           cd "$SOU165_SOURCE"
+          python3 - <<'PYCODE'
+          import os,pathlib,socket,errno,json
+          status=pathlib.Path('/proc/self/status').read_text()
+          caps={line.split(':')[0]:line.split(':')[1].strip() for line in status.splitlines() if line.startswith(('Cap','NoNewPrivs:'))}
+          assert os.geteuid()!=0 and all(int(caps[k],16)==0 for k in ('CapEff','CapPrm','CapInh','CapBnd','CapAmb')) and caps['NoNewPrivs']=='1'
+          try:
+              fd=os.open(pathlib.Path(os.environ['SOU165_SOURCE'])/'Cargo.toml',os.O_WRONLY|os.O_CLOEXEC)
+          except OSError as error:
+              assert error.errno==errno.EROFS
+          else:
+              os.close(fd)
+              raise AssertionError('source write-open was permitted; no write attempted')
+          scratch=pathlib.Path(os.environ['SOU165_SCRATCH'])
+          (scratch/'write-probe').write_bytes(b'owned scratch only')
+          (scratch/'write-probe').unlink()
+          probe=socket.socket();probe.bind(('127.0.0.1',0));probe.close()
+          rows=pathlib.Path('/proc/net/route').read_text().splitlines()[1:]
+          assert not any(row.split()[0]!='lo' for row in rows)
+          (scratch/'enclosure.json').write_text(json.dumps({'uid':os.geteuid(),'caps':caps,'source_write_open_refused':True,'scratch_writable':True,'only_loopback_routes':True,'procfs':'private_pid_namespace_nosuid_nodev_noexec'},indent=2)+'\n')
+          PYCODE
           python3 -B -m unittest discover -s scripts/tests -p test_native_result_benchmark.py -v
           python3 -B scripts/build-native-result-benchmark.py --baseline "$SOU165_BASELINE" --candidate "$SOU165_SOURCE" --scratch "$SOU165_SCRATCH"
           export CARGO_TARGET_DIR="$SOU165_SCRATCH/target/measured-candidate"
@@ -1913,6 +1934,10 @@ jobs:
             ${{ runner.temp }}/sou165-scratch/source.txt
             ${{ runner.temp }}/sou165-scratch/probe-*.json
             ${{ runner.temp }}/sou165-scratch/builds.json
+            ${{ runner.temp }}/sou165-scratch/enclosure.json
+            ${{ runner.temp }}/sou165-scratch/startup-smoke/report.json
+            ${{ runner.temp }}/sou165-scratch/startup-smoke/*/collector.log
+            ${{ runner.temp }}/sou165-scratch/startup-smoke/*/daemon.log
             ${{ runner.temp }}/sou165-scratch/build-*.log
             ${{ runner.temp }}/sou165-scratch/build-*-timing.json
             ${{ runner.temp }}/sou165-scratch/results/report.json

@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
+import sys
 
 p = argparse.ArgumentParser(description=__doc__)
 for key in ('baseline', 'candidate', 'scratch'):
@@ -38,5 +39,13 @@ for variant, source in (('instrumented-baseline', a.baseline), ('measured-candid
                                    'rustc': subprocess.check_output(['rustc', '--version'], text=True).strip()}
         (a.scratch / f'build-{variant}-{profile}-timing.json').write_text(json.dumps({'elapsed_seconds': time.monotonic() - started}))
         (a.scratch / 'builds.json').write_text(json.dumps(builds, indent=2) + '\n')
+        if variant == 'instrumented-baseline' and profile == 'dev':
+            command=[sys.executable,'-B',str(a.candidate/'scripts/benchmark-native-results.py'),'--startup-only',
+                '--agentfw',str(binary),'--node',str(a.scratch/'node/bin/node'),'--npm',str(a.scratch/'node/bin/npm'),
+                '--bwrap',str(a.scratch/'bwrap-build/bwrap'),'--strace','/usr/bin/strace',
+                '--claude',str(a.scratch/'host/node_modules/@anthropic-ai/claude-code-linux-x64/claude'),
+                '--npm-cache',str(a.scratch/'npm-cache'),'--output',str(a.scratch/'startup-smoke')]
+            subprocess.run(command,cwd=a.candidate,env=environment,check=True)
+
 
 assert builds['instrumented-baseline']['dev']['binary_sha256'] != builds['measured-candidate']['dev']['binary_sha256'], 'independent dev variants unexpectedly identical'

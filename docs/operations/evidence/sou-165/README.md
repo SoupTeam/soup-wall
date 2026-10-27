@@ -32,3 +32,15 @@ checks full-width arithmetic, Unicode and complete inputs through 1 MiB.
 Provenance recording, limits, lifetimes, locks and verdict rules are unchanged.
 Local stage observations (including incidental test executions) are retained
 in `local-stage-observations.json`; native paired measurements are pending.
+
+The original enclosing `bwrap --proc` masked procfs submounts and prevented the
+unchanged nested product sandbox from mounting its own procfs. All 18 startup
+refusals remain in the development history. `enclosure-probe.json` establishes
+the cause with a separate bounded `/bin/true` probe, not a latency claim.
+The trusted enclosing setup now mounts a fresh `nosuid,nodev,noexec` procfs in
+its private PID/mount namespace, then drops to UID 1001, all capabilities zero
+(including bounds), and NoNewPrivs=1. Source/filesystem writes remain refused;
+only owned scratch is writable. Kernel-virtual procfs operations needed to
+construct child namespaces do not modify host configuration. No host sysctl,
+AppArmor profile or product sandbox guard changes. An actual original-MCP
+startup/read/cleanup smoke now precedes the remaining expensive paired builds.

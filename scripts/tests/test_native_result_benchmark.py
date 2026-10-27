@@ -120,6 +120,9 @@ class BenchmarkControls(unittest.TestCase):
                 if command[:3]==['git','status','--porcelain']:return b''
                 return ('a'*40 if options['cwd']==baseline else 'b'*40)
             def build(command, **options):
+                if '--startup-only' in command:
+                    self.assertIn(str(scratch/'binaries/instrumented-baseline-dev'),command)
+                    return
                 target=Path(options['env']['CARGO_TARGET_DIR'])
                 profile=command[command.index('--profile')+1]
                 manifest=Path(command[command.index('--manifest-path')+1])

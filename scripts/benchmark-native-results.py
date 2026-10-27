@@ -244,24 +244,55 @@ def summarize(trials):
     return rows
 
 
+def startup(args, report):
+    """Cheap actual original-server preflight before three remaining builds."""
+    require(platform.system() == 'Linux' and platform.machine() == 'x86_64' and os.geteuid() != 0,
+            'native Linux x86-64 non-root required')
+    require(args.agentfw is not None, 'startup binary required')
+    workspace=args.output/'workspace'; workspace.mkdir(mode=0o700)
+    L.make_workspace(workspace, L.budgets()['text_bytes'])
+    installed=args.output/'installed'
+    L.BASE.INSTALL.install(installed,workspace,args.node,args.bwrap,args.npm,npm_cache=args.npm_cache,offline=True)
+    report.update(phases={},binary_sha256=sha(args.agentfw))
+    phase=L.Phase(args,report,'startup',installed,workspace)
+    try:
+        phase.start()
+        phase.useful('startup')
+        require(phase.reads('/workspace/notes.txt')>=1, 'original startup read witness missing')
+    finally:
+        phase.stop()
+    section=report['phases']['startup']
+    require(section['client']['exit_code']==0 and section['client']['forced_cleanup'] is False
+            and section['client']['process_cleanup']['all_stopped'] and section['daemon_cleanup']['all_stopped']
+            and section['cleanup_audit']['cleanup_verified'] is True, 'startup cleanup not verified')
+    report['status']='passed'
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    for key in ('manifest', 'node', 'npm', 'bwrap', 'strace', 'claude', 'npm-cache', 'output'):
+    p.add_argument('--manifest', type=Path)
+    p.add_argument('--agentfw', type=Path)
+    p.add_argument('--startup-only', action='store_true')
+    for key in ('node', 'npm', 'bwrap', 'strace', 'claude', 'npm-cache', 'output'):
         p.add_argument('--' + key, type=Path, required=True)
     args = p.parse_args()
     args.output = args.output.resolve()
     require(not args.output.exists() and not args.output.is_relative_to(ROOT), 'new scratch output outside checkout required')
     args.output.mkdir(mode=0o700, parents=True)
-    report = {'format': 'sw-native-result-paired-benchmark/1', 'status': 'incomplete', 'trials': [], 'inventories': []}
+    report = {'format': 'sw-native-result-startup/1' if args.startup_only else 'sw-native-result-paired-benchmark/1', 'status': 'incomplete', 'trials': [], 'inventories': []}
     try:
-        run(args, report)
+        if args.startup_only:
+            startup(args, report)
+        else:
+            require(args.manifest is not None, 'paired build manifest required')
+            run(args, report)
     except Exception as error:
         report['error_type'] = type(error).__name__
     finally:
-        report['denominator'] = {'planned': 18, 'attempted': len(report['trials']),
+        report['denominator'] = {'planned': 0 if args.startup_only else 18, 'attempted': len(report['trials']),
             'passed': sum(r['status'] == 'passed' for r in report['trials']),
             'failed': sum(r['status'] == 'failed' for r in report['trials']),
-            'incomplete': 18 - len(report['trials']) + sum(r['status'] == 'incomplete' for r in report['trials'])}
+            'incomplete': (0 if args.startup_only else 18) - len(report['trials']) + sum(r['status'] == 'incomplete' for r in report['trials'])}
         write(args.output / 'report.json', report)
     print(json.dumps({k: report.get(k) for k in ('status', 'denominator', 'error_type')}))
     return 0 if report['status'] == 'passed' else 1
