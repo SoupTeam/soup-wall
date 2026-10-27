@@ -24,6 +24,8 @@ pub mod native;
 pub mod onboarding;
 pub mod pilot_approval;
 pub mod pilot_budget;
+#[cfg(target_os = "linux")]
+pub mod pilot_component;
 pub mod pilot_doctor;
 mod pilot_host;
 pub mod pilot_launcher;

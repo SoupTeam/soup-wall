@@ -471,6 +471,7 @@ fn policy_for(
                     canonical: path.to_string_lossy().to_string(),
                 }],
                 execution: Some(resource::ExecutionPolicy {
+                    replacement: None,
                     operation: resource::ExecutionOperation::CreateFile,
                     action: resource::ExecutionAction::Write,
                     max_content_bytes,

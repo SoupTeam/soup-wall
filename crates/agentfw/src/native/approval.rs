@@ -912,7 +912,16 @@ pub fn operator_list(home: &Path) -> Vec<Value> {
 
 /// Full record, including the raw arguments, for the owning operator only.
 pub fn operator_inspect(home: &Path, id: &str) -> anyhow::Result<Value> {
-    read_pending(home, id)
+    let mut record = read_pending(home, id)?;
+    if record["resource_details"]["operation"] == "replace_file" {
+        // Keep the privately frozen original arguments for redemption, but
+        // inspection of replacements shows identities/digests, never content.
+        if let Some(object) = record.as_object_mut() {
+            object.remove("args");
+        }
+        record["arguments_redacted"] = json!(true);
+    }
+    Ok(record)
 }
 
 fn claim(home: &Path, id: &str) -> anyhow::Result<()> {

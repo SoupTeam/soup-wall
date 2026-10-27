@@ -85,6 +85,17 @@ def load(name, filename):
 
 
 PREP = load("front_door_preparation", "prepare-installed-pilot.py")
+SOURCE_IDENTITY = load("front_door_source_identity", "pilot_source_identity.py")
+# Inside a component verified by `agentfw pilot` there is no Git
+# checkout: the identity is the recorded clean commit of the component.
+INSTALLED = SOURCE_IDENTITY.installed(ROOT) is not None
+PROG = "agentfw pilot" if INSTALLED else "pilot.py"
+# An installed helper starts accepted helpers in isolated mode: no PYTHON*
+# variables, user site or working-directory imports.
+PYTHON_FLAGS = ["-I", "-B"] if INSTALLED else ["-B"]
+HINTS = {key: re.sub(r"(?<![-\w])pilot\.py", PROG, value) for key, value in HINTS.items()}
+AGENT_NOT_BUILT = ("--agentfw, --git-launcher and --sandbox-tests built from commit {commit} (the installed front door "
+                   "never builds from source; build them in a checkout with scripts/build-native-pilot-inputs.py)")
 
 
 class Failure(Exception):
@@ -205,7 +216,7 @@ def describe(path, kind="file"):
 
 def child(words, *, timeout=None, cwd=None):
     """Run one accepted script; its last stdout line is its JSON result."""
-    command = [sys.executable, "-B", *[str(word) for word in words]]
+    command = [sys.executable, *PYTHON_FLAGS, *[str(word) for word in words]]
     try:
         # Never let a toolchain manager install anything as a side effect.
         env = dict(os.environ, RUSTUP_AUTO_INSTALL="0", PYTHONDONTWRITEBYTECODE="1")
@@ -294,6 +305,9 @@ def plan(args):
     if all(name in inputs for name in ("agentfw", "git_launcher", "sandbox_tests")):
         stages.append({"stage": "agent", "action": "use supplied Agent executables",
                        "inputs": {name: describe(inputs[name]) for name in ("agentfw", "git_launcher", "sandbox_tests")}})
+    elif INSTALLED:
+        stages.append({"stage": "agent", "action": "supply Agent executables built from the component commit",
+                       "missing": [AGENT_NOT_BUILT.format(commit=current["commit"])]})
     else:
         code, value = child(agent, timeout=PLAN_SECONDS, cwd=ROOT)
         stages.append({"stage": "agent", "action": "build Agent executables from this commit into " + str(paths["agent"]),
@@ -345,8 +359,8 @@ def plan(args):
         *(["download pinned public archives and locked packages"] if args.allow_download else []),
         *[row["action"] for row in stages],
         "record the selected generation in " + str(paths["state"]),
-        "no daemon, host or server starts; protection starts only with `pilot.py run`"]
-    report["next"] = ("pilot.py prepare --apply with the same options" if not report["missing"]
+        "no daemon, host or server starts; protection starts only with `" + PROG + " run`"]
+    report["next"] = (PROG + " prepare --apply with the same options" if not report["missing"]
                       else "resolve the missing items, then preview again")
     return report
 
@@ -418,7 +432,7 @@ def prepare(args):
               "inputs": {name: str(path) for name, path in inputs.items()}}
     write_state(prefix, record)
     report.update(status=value["status"], selection=str(selection),
-                  next="pilot.py run --prefix " + str(prefix) + " (protection starts only then)")
+                  next=PROG + " run --prefix " + str(prefix) + " (protection starts only then)")
     return report
 
 
@@ -496,7 +510,7 @@ def verified_state(prefix):
 def run(args):
     """Delegate to the accepted entry point; exact status and signals are kept."""
     state = verified_state(args.prefix)
-    words = [sys.executable, "-B", str(RUNNER), "--run", "--selection", state["selection"],
+    words = [sys.executable, *PYTHON_FLAGS, str(RUNNER), "--run", "--selection", state["selection"],
              "--expected-commit", state["commit"], "--timeout-seconds", str(args.timeout_seconds),
              "--ask-wait-seconds", str(args.ask_wait_seconds), "--port", str(args.port)]
     if args.state_root is not None:
@@ -766,7 +780,7 @@ def human(report):
 
 
 def parser():
-    top = argparse.ArgumentParser(prog="pilot.py", description=__doc__,
+    top = argparse.ArgumentParser(prog=PROG, description=re.sub(r"(?<![-\w])pilot\.py", PROG, __doc__),
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = top.add_subparsers(dest="command")
     shared = argparse.ArgumentParser(add_help=False)

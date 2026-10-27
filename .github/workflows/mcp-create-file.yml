@@ -2,6 +2,11 @@ name: Constrained MCP file creation
 
 on:
   workflow_dispatch:
+    inputs:
+      replacement_only:
+        description: Focus only on the additive SOU-159 qualification
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,7 +22,7 @@ jobs:
       workflow: mcp-create-file.yml
   linux-create-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file') && github.event.inputs.replacement_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -80,5 +85,78 @@ jobs:
             ${{ runner.temp }}/sou54-*.jsonl
             ${{ runner.temp }}/sou54-*.txt
             ${{ runner.temp }}/sou54-*.log
+          if-no-files-found: warn
+          retention-days: 30
+  linux-replace-file:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-replace-file')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Prepare isolated offline qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          cargo fetch --locked
+          mkdir -p "$RUNNER_TEMP/sou159-scratch"/{home,cargo-home,tmp,faults}
+          ln -s "$HOME/.cargo/registry" "$RUNNER_TEMP/sou159-scratch/cargo-home/registry"
+          git rev-parse HEAD > "$RUNNER_TEMP/sou159-scratch/source.txt"
+      - name: Read-only source and private loopback runtime qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_scratch="$RUNNER_TEMP/sou159-scratch"
+          # Trusted sandbox setup, then drop ALL capabilities and the root UID.
+          # No host sysctl, cgroup delegation or shared-runner setting changes.
+          sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
+            --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --proc /proc --dev /dev --cap-drop ALL \
+            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
+            --chdir / /usr/bin/setpriv \
+            --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            /usr/bin/env -i \
+            PATH="$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
+            HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
+            CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
+            SOU159_SCRATCH="$task_scratch" SOU159_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
+            /bin/bash -euo pipefail <<'BASH'
+          cd "$SOU159_SOURCE"
+          cargo build --locked --offline -p agentfw --bin agentfw
+          cargo test --locked --offline -p agentfw --lib replace_file -- --nocapture
+          cargo test --locked --offline -p agentfw --lib resource::replacement -- --nocapture
+          cargo test --locked --offline -p agentfw --test replace_file -- --nocapture
+          cargo test --locked --offline -p agentfw --lib create_file -- --nocapture
+          cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
+          cargo fmt --all --check
+          python3 -B -m unittest discover -s scripts/tests -p 'test_sou159*.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=1 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/stage-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=2 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/publication-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=3 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/committed-error.so"
+          sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU159_SCRATCH/binary.txt"
+          python3 -B scripts/verify-sou159-replace-file.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+            --fault-libraries "$SOU159_SCRATCH/faults" --output "$SOU159_SCRATCH/runtime.json"
+          BASH
+      - name: Retain current-source finite evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou159-replacement-evidence
+          path: |
+            ${{ runner.temp }}/sou159-scratch/source.txt
+            ${{ runner.temp }}/sou159-scratch/binary.txt
+            ${{ runner.temp }}/sou159-scratch/runtime.json
           if-no-files-found: warn
           retention-days: 30
