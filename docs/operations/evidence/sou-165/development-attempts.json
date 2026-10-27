@@ -55,5 +55,25 @@
       "log_sha256": "33ea3f797d3675e1a8b79f785af72369b4d78162520cf8d8c2ba84bbbec5af75",
       "result": "Existing offline_replay_cli positive loopback control accepted nonblocking receiver immediately after connect and hit macOS WouldBlock at line293. This was not a scanner or native admission assertion. Focused recheck and interrupted full qualification are retained separately; no source test or guard weakened."
     }
-  ]
+  ],
+  "draft_ci_control": {
+    "run_id": 40574464276,
+    "job_id": 122437045065,
+    "source": "929b863abbade7e7dd9c035a7e387d39fde59283",
+    "failure": "Manual-only native profiler omitted from auxiliary-job inventory in test_ci_impact. Product/runtime CI registration was already excluded correctly; new test inventory and explicit manual-only guard fix the missing declaration without changing required jobs.",
+    "log_sha256": "f6fb0b896ab795bc4c6b44fb3d469f322cdcc1059619f627243553abf10adb7d",
+    "local_recheck": {
+      "label": "complete-draft-fast-controls",
+      "command": [
+        "/bin/bash",
+        "-e",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p \"test_ci_*.py\" -v\npython3 -B scripts/ci_components.py --check\npython3 -B -m unittest discover -s scripts/tests -p test_check_docs.py -v\npython3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "88647e6bb66404ec2ed11bdaeeaa102f3aada16594edac8e4328246fd76e1103",
+      "log_sha256": "535b42ff78464fbc34eb4086652df8a62aedb40b4616a2e81041ebe6fa32be64",
+      "elapsed_seconds": 77.84
+    }
+  }
 }

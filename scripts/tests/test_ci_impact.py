@@ -92,7 +92,7 @@ class ImpactTests(unittest.TestCase):
                                         text.split("jobs:\n", 1)[1]))
             auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             if filename == "mcp-real-filesystem.yml":
-                auxiliary.add("manual-long-session")
+                auxiliary.update({"manual-long-session", "manual-native-result-profile"})
             if filename == "mcp-real-git.yml":
                 auxiliary.add("manual-installed-git-profiles")
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
@@ -101,6 +101,15 @@ class ImpactTests(unittest.TestCase):
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
                 self.assertIn("needs: impact", body, (filename, job))
                 self.assertIn("needs.impact.outputs.jobs", body, (filename, job))
+
+    def test_native_result_profile_remains_explicit_manual_only(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  manual-native-result-profile:\n", 1)[1]
+        self.assertIn("github.event_name == 'workflow_dispatch'", body)
+        self.assertIn("github.event.inputs.native_result_profile_only == 'true'", body)
+        self.assertNotIn("manual-native-result-profile", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        central = (ROOT / ".github/workflows/ci-components.yml").read_text()
+        self.assertNotIn("manual-native-result-profile", central)
 
     def test_supplemental_vps_is_outside_pr_admission_only_while_main_only(self):
         text = (ROOT / '.github/workflows/vps-ci.yml').read_text(encoding='utf-8')
