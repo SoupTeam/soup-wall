@@ -307,7 +307,8 @@ def run(args, report):
                 raise Failure("occupied_port_refused") from None
     selection, paths, profiles = selected(args)
     if "prepared_workspaces" in selection:
-        PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent))
+        PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent),
+                                          PREP.GIT_PROFILES.from_selection(selection))
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -28,6 +29,7 @@ def load(name, file):
 PREP = load("profile_test_preparation", "prepare-installed-pilot.py")
 DOOR = load("profile_test_door", "pilot.py")
 BUILD = load("profile_test_builder", "build-pilot-front-door.py")
+RUN = load("profile_test_run", "pilot-run.py")
 
 
 class Selection(unittest.TestCase):
@@ -126,6 +128,33 @@ class InstalledClosure(unittest.TestCase):
                 cwd=root, env={"PATH": "/usr/bin:/bin", "HOME": str(root)}, capture_output=True, timeout=60)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse((root / "tamper").exists())
+
+
+class LaunchPreflight(unittest.TestCase):
+    def test_actual_run_preflight_uses_verified_selection_before_any_process(self):
+        for name in G.PROFILES:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                args = SimpleNamespace(port=0, selection=root / "generation/selection.json")
+                selection = {"format": G.SELECTION_V3, "git_selection": G.binding(name),
+                             "prepared_workspaces": {"owned": "fixture"}}
+                roots = {"filesystem": root / "project", "git": root / "repository"}
+                paths = {"agentfw": root / "agentfw"}
+
+                def validate(actual_paths, actual_roots, selected_profile=G.DEFAULT):
+                    self.assertEqual((actual_paths, actual_roots, selected_profile), (paths, roots, name))
+                    raise ValueError("selected_preflight_reached")
+
+                with patch.object(RUN.PREP, "supported_platform"), \
+                     patch.object(RUN.PROVIDER, "selected"), patch.object(RUN.PROVIDER, "require_access"), \
+                     patch.object(RUN, "selected", return_value=(selection, paths, {})), \
+                     patch.object(RUN.PREP, "workspace_paths", return_value=roots), \
+                     patch.object(RUN.PREP, "validate_existing_workspaces", side_effect=validate), \
+                     patch.object(RUN.subprocess, "Popen") as spawn:
+                    with self.assertRaisesRegex(ValueError, "selected_preflight_reached"):
+                        RUN.run(args, {})
+                    spawn.assert_not_called()
+                self.assertEqual(list(root.iterdir()), [])
 
 
 class ProfileBytes(unittest.TestCase):
