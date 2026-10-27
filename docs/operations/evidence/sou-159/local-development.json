@@ -175,11 +175,45 @@
       "log_sha256": "05c5e11cb35f5a92b849b1283aed32aea89b004f9ededd66554134e49b907f18",
       "elapsed_seconds": 21.07,
       "kind": "local-development"
+    },
+    {
+      "label": "complete-workspace-serial",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--workspace",
+        "--",
+        "--test-threads=1"
+      ],
+      "exit_code": 0,
+      "source_sha256": "5ef94a9b8e80a50206480c6ec0545872606bd7068ea66844de0ae81664ee51aa",
+      "log_sha256": "04124c2ef5deaf9e54d549289c04291c351fddc8e17dc452d61c422ec7d05b3f",
+      "elapsed_seconds": 309.15,
+      "kind": "local-development",
+      "passed": 1875,
+      "ignored": 13,
+      "suites": 74,
+      "warnings": 0
+    },
+    {
+      "label": "final-source-draft",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo clippy --offline -p agentfw --all-targets -- -D warnings && cargo fmt --all --check && python3 -B -m unittest discover -s scripts/tests -p \"test_sou159*.py\" -v && python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "1350539fc81fac0d9263df143dc5571140c7dab2d7a7aa88a3c708b304ae5b35",
+      "log_sha256": "4e8dcdd0061462456f7ff18a50b3a219a99e9fdd3830c1e0e2408fa0c5fed8ca",
+      "elapsed_seconds": 14.57,
+      "kind": "local-development"
     }
   ],
   "limits": [
     "Linux-specific executor and HTTP controls require native qualification.",
     "One existing lifecycle unit failed in a concurrent workspace run and passed isolated; environment-variable hypothesis was separately disproved.",
-    "Initial read-only harness and SDK cache failures are retained; no production security boundary was relaxed."
+    "Initial read-only harness and SDK cache failures are retained; no production security boundary was relaxed.",
+    "The complete current production Rust workspace subsequently passed serially: 1875 passed, 13 existing ignored, 74 suites, zero warnings. Native Linux qualification is still separate."
   ]
 }

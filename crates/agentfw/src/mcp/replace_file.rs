@@ -743,7 +743,7 @@ mod linux {
 }
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{create_writer_lock, writer_lock};
+pub(crate) use linux::create_writer_lock;
 
 /// Read-only plan. This is deliberately independent of installation or policy.
 pub fn preview(workspace: &Path, target: &Path, content: &str) -> Result<Preview, Error> {

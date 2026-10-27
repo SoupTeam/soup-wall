@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import platform
 import queue
+import re
 import socket
 import stat
 import subprocess
@@ -32,8 +33,8 @@ CASES = ("exact-replacement", "stale-digest", "stale-identity", "unauthorized-ac
          "ask-reject", "ask-expiry", "ask-replay", "old-change-pending", "new-change-pending",
          "target-substitution", "root-substitution", "symlink", "hardlink", "special-file",
          "no-exclusion", "cancellation", "daemon-restart", "competing-same-version",
-         "stage-fault", "publication-fault", "committed-error")
-COMMITTED = {"exact-replacement", "ask-replay", "competing-same-version", "committed-error"}
+         "stage-fault", "publication-fault", "committed-error", "result-withheld")
+COMMITTED = {"exact-replacement", "ask-replay", "competing-same-version", "committed-error", "result-withheld"}
 FAULT_ERRORS = {"stage-fault":"replace_stage_write_failed", "publication-fault":"replace_publish_failed",
                 "committed-error":"replace_committed_directory_sync_failed"}
 
@@ -142,6 +143,8 @@ def run_case(binary, name, libraries):
         reg = canonical(declarations); (root / "registry.json").write_bytes(reg)
         action = "deny" if name == "unauthorized-action" else "ask"
         policy = f"agent_policies:\n  - name: exact-replacement\n    when: {{ action_class: destructive }}\n    action: {action}\ndefault: allow\n"
+        if name=="result-withheld":
+            policy=policy.replace("agent_policies:\n","agent_policies:\n  - name: refuse-result-release\n    when: { facet: tool_result }\n    action: deny\n",1)
         (root / "policy.yaml").write_text(policy)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0)); port = sock.getsockname()[1]
@@ -223,6 +226,15 @@ def run_case(binary, name, libraries):
                             elif name != "new-change-pending": operator(binary, env, "approve", record)
                     raw=future.result(timeout=15)
                     data=payload(raw)
+                    row["response_sha256"]=sha(raw or b"")
+                    row["refusal_codes"]=[]
+                    if raw:
+                        for item in base.strict_json(raw).get("result",{}).get("content",[]):
+                            text=item.get("text","")
+                            if text.startswith("Soup Wall withheld MCP "):
+                                codes=re.search(r"\(([^()]*)\)$",text)
+                                if codes:
+                                    row["refusal_codes"]=[c.strip() for c in codes[1].split(",") if re.fullmatch(r"[a-zA-Z0-9_:-]{1,128}",c.strip())]
                     if data:
                         row.update(result_success=data.get("success"), executor_error=data.get("error"), staged_bytes=data.get("staged_bytes"))
                     if name=="competing-same-version":
@@ -231,14 +243,17 @@ def run_case(binary, name, libraries):
                     success=name in COMMITTED
                     if success:
                         require(target.read_text()==NEW and target.stat().st_ino!=plan["old_identity"]["inode"],"exact replacement effect missing")
-                        if name!="competing-same-version":require(data and data.get("committed") is True,"committed outcome missing")
+                        if name not in {"competing-same-version","result-withheld"}:require(data and data.get("committed") is True,"committed outcome missing")
                         if name=="committed-error": require(data.get("success") is False,"post-commit fault reported success")
+                        if name=="result-withheld":
+                            require("resource_replacement_committed" in row["refusal_codes"],"withheld result lost the committed distinction")
+                            row["result_withheld"]=True
                         row["committed"]=True
                     else: require(snapshot(target)==expected,"denied/unapproved target mutated")
                     if name=="ask-replay":
                         again=collector.send(base.frame("replace-replay","replace_result",args))
                         require(payload(again) is None or payload(again).get("committed") is not True,"replayed old version committed")
-                    if name not in {"cancellation","daemon-restart","new-change-pending","root-substitution","special-file","symlink","hardlink"}:
+                    if name not in {"cancellation","daemon-restart","new-change-pending","root-substitution","special-file","symlink","hardlink","result-withheld"}:
                         follow=collector.send(base.frame("follow","read_document",{"path":str(target)}))
                         require(follow and not base.strict_json(follow).get("result",{}).get("isError",False)
                                 and target.read_text().strip().encode() in follow,"useful follow-up refused")
@@ -248,6 +263,12 @@ def run_case(binary, name, libraries):
                 row["child_dispatches"]=len(ledger.read_bytes().splitlines())
                 if (root/"child2.jsonl").exists():row["child_dispatches"]+=len((root/"child2.jsonl").read_bytes().splitlines())
                 require(row["child_dispatches"]==0,"discovery child was invoked")
+                audit=base.json_lines((home/".agentfw/audit.jsonl").read_bytes())
+                publications=[r for r in audit if r.get("event")=="native_publish" and r.get("tool")=="replace_result" and r.get("released") is True]
+                row["publication_gates"]=len(publications)
+                row["publication_binding_matches"]=all(r.get("binding_sha256")==row.get("binding_sha256") for r in publications)
+                if name in COMMITTED or name=="publication-fault":
+                    require(row["publication_gates"]==1 and row["publication_binding_matches"],"missing/crossed native publication gate")
                 row.update(after=snapshot(target),target_unchanged=snapshot(target)==expected,
                            outside_unchanged=snapshot(sentinel)==row["outside_before"],
                            staging_entries=sum(1 for _ in workspace.glob(".soup-replace-*")))
@@ -274,11 +295,14 @@ def validate(report):
         require(r["committed"] is (r["case"] in COMMITTED),"missing/wrong expected effect")
         if r["committed"]:
             require(r["after"]["sha256"]==sha(NEW.encode()) and r["after"]["inode"]!=r["old"]["inode"],"wrong committed effect")
+            require(r.get("publication_gates")==1 and r.get("publication_binding_matches") is True,"publication receipt correlation missing")
         else: require(r["target_unchanged"],"unapproved mutation")
         if r["case"] in FAULT_ERRORS:
             require(r.get("executor_error")==FAULT_ERRORS[r["case"]] and r.get("result_success") is False
                     and len(r.get("fault_library_sha256",""))==64,"wrong/missing fault evidence")
         if r["case"]=="stage-fault": require(r.get("staged_bytes")==5,"partial write accounting changed")
+        if r["case"]=="result-withheld":
+            require(r.get("result_withheld") is True and "resource_replacement_committed" in r.get("refusal_codes",[]),"withheld commit accounting missing")
     return {"acceptance_pass":True,"cases":len(rows),"production_stdio":True,"child_dispatches":0}
 
 

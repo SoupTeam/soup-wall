@@ -8,6 +8,15 @@
       "linux_execution_qualified": false,
       "product_cases_executed": 0,
       "fix": "Use trusted setpriv after mount/network isolation; run target as original runner UID with no capabilities and no-new-privs."
+    },
+    {
+      "source": "b3413f45f83df8e8294f46fc589b1dd819a60795",
+      "run_id": 40458138701,
+      "result": "failed-before-build",
+      "code": "bwrap_chdir_before_runner_uid_drop",
+      "product_cases_executed": 0,
+      "linux_execution_qualified": false,
+      "fix": "Enter / during trusted namespace setup; only the deprivileged process enters the read-only source directory."
     }
   ]
 }

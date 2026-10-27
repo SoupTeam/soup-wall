@@ -17,6 +17,12 @@ unprovable exclusive-writer boundary are unsupported. Linux DAC, directory mode
 0700, file mode 0600, exact uid/gid, no ACL/xattrs, descriptor-relative no-follow
 resolution, and local supported filesystems are independently checked.
 
+This includes the explicitly selected generic discovery command: it must be a
+reviewed host program that does not independently mutate the output directory.
+Discovery descriptions and read-only annotations cannot establish that fact.
+Running an untrusted same-user native executable is outside this operation's
+exclusion boundary; this resource profile does not attest or sandbox that program.
+
 Every cooperating Soup replacement uses a nonblocking exclusive `flock` on a
 separately opened descriptor of the pinned directory inode. Linux create-only
 writers take the conflicting shared lock: their existing parallel, atomic

@@ -185,6 +185,28 @@ async fn replacement_session_end_revokes_publication() {
         StatusCode::OK
     );
 }
+
+#[tokio::test]
+async fn replacement_new_hard_deny_revokes_already_admitted_publication() {
+    let f = Fixture::new("allow");
+    f.start().await;
+    let (_, call) = f.post("/native/v1", f.call()).await;
+    assert_eq!(call["release"], true);
+    *f.state.firewall.lock().unwrap()=AgentFirewall::new(AgentPolicySet::from_yaml(
+        "agent_policies:\n  - name: changed-hard-deny\n    when: { action_class: destructive }\n    action: deny\ndefault: allow\n").unwrap(),DEFAULT_TAINT_CAP);
+    assert_ne!(
+        f.post("/native/v1", f.publish(&call["call_id"])).await.0,
+        StatusCode::OK
+    );
+    assert_ne!(
+        f.post("/native/v1", f.publish(&call["call_id"])).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        std::fs::read_to_string(&f.target).unwrap(),
+        "old useful bytes\n"
+    );
+}
 #[tokio::test]
 async fn replacement_ask_freezes_digests_redacts_content_and_cannot_rescue_deny() {
     for action in ["ask", "deny"] {

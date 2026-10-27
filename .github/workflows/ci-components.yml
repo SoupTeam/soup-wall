@@ -1073,15 +1073,16 @@ jobs:
             --ro-bind / / --bind "$task_scratch" "$task_scratch" \
             --proc /proc --dev /dev --cap-drop ALL \
             --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
-            --chdir "$GITHUB_WORKSPACE" /usr/bin/setpriv \
+            --chdir / /usr/bin/setpriv \
             --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
             --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
             /usr/bin/env -i \
             PATH="$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
             HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
             CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
-            SOU159_SCRATCH="$task_scratch" CARGO_BUILD_JOBS=4 \
+            SOU159_SCRATCH="$task_scratch" SOU159_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
             /bin/bash -euo pipefail <<'BASH'
+          cd "$SOU159_SOURCE"
           cargo build --locked --offline -p agentfw --bin agentfw
           cargo test --locked --offline -p agentfw --lib replace_file -- --nocapture
           cargo test --locked --offline -p agentfw --lib resource::replacement -- --nocapture

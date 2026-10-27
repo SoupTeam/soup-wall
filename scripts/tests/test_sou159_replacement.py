@@ -17,8 +17,10 @@ def seed():
         row={"case":case,"status":"pass","committed":case in probe.COMMITTED,
              "child_dispatches":0,"outside_unchanged":True,"cleanup_verified":True,"target_unchanged":True,
              "old":{"inode":1},"after":{"inode":2,"sha256":probe.sha(probe.NEW.encode())}}
+        row.update(publication_gates=1 if case in probe.COMMITTED else 0,publication_binding_matches=True)
         if case in probe.FAULT_ERRORS:
             row.update(executor_error=probe.FAULT_ERRORS[case],result_success=False,fault_library_sha256="f"*64,staged_bytes=5)
+        if case=="result-withheld":row.update(result_withheld=True,refusal_codes=["resource_replacement_committed"])
         rows.append(row)
     return {"platform":"Linux","source_commit":"a"*40,"binary_sha256":"b"*64,"cases":rows}
 
@@ -36,7 +38,7 @@ class ReplacementEvidence(unittest.TestCase):
         self.assertFalse(prediction["unknown"])
 
     def test_complete_finite_projection(self):
-        self.assertEqual(probe.validate(seed())["cases"],21)
+        self.assertEqual(probe.validate(seed())["cases"],22)
 
     def test_no_actual_replacement_cannot_pass(self):
         report=seed()
