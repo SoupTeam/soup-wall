@@ -1071,8 +1071,12 @@ jobs:
           # No host sysctl, cgroup delegation or shared-runner setting changes.
           sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / --bind "$task_scratch" "$task_scratch" \
-            --proc /proc --dev /dev --uid "$(id -u)" --gid "$(id -g)" --cap-drop ALL \
-            --chdir "$GITHUB_WORKSPACE" /usr/bin/env -i \
+            --proc /proc --dev /dev --cap-drop ALL \
+            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
+            --chdir "$GITHUB_WORKSPACE" /usr/bin/setpriv \
+            --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            /usr/bin/env -i \
             PATH="$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
             HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
             CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \

@@ -1,0 +1,13 @@
+{
+  "attempts": [
+    {
+      "source": "3f7ce9be3eb8e156353dd6cfd871035a054de220",
+      "run_id": 40457706977,
+      "result": "failed-before-build",
+      "code": "bwrap_uid_requires_userns",
+      "linux_execution_qualified": false,
+      "product_cases_executed": 0,
+      "fix": "Use trusted setpriv after mount/network isolation; run target as original runner UID with no capabilities and no-new-privs."
+    }
+  ]
+}
