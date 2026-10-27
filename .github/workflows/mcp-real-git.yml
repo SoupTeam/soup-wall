@@ -300,6 +300,7 @@ jobs:
           assert native['status'] in ('prepared-not-qualified', 'reused'), native
           with open(os.environ['GITHUB_ENV'], 'a') as stream:
               stream.write('SOU162_BWRAP=' + native['bwrap'] + '\n')
+              stream.write('SOU162_GIT=' + native['git'] + '\n')
           PY
       - name: Qualify installed original-host scenarios outside checkout
         run: |
@@ -308,7 +309,8 @@ jobs:
             --output "$RUNNER_TEMP/installed-git-profiles" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 --python /usr/bin/python3.12 \
             --agentfw "$PWD/target/debug/agentfw" --git-launcher "$PWD/target/debug/agentfw-git-sandbox" \
-            --sandbox-tests "$SOU162_SANDBOX_TESTS" --git "$RUNNER_TEMP/git-source/git" \
+            --sandbox-tests "$SOU162_SANDBOX_TESTS" --git "$SOU162_GIT" \
+            --static-git "$RUNNER_TEMP/git-source/git" \
             --bwrap "$SOU162_BWRAP" --strace /usr/bin/strace --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-git-profiles.log"
       - name: Retain sanitized qualification evidence including unsuccessful attempts

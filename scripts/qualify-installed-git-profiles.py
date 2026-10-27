@@ -38,6 +38,8 @@ VARIANTS = (G.DEFAULT, "git-readonly-file-revisions-v1", "git-tracked-symlinks-r
 
 def checked(door, command, *extra, status=None, **options):
     code, value, _ = door.call(command, *extra, **options)
+    if code != 0:
+        door.args.stage_failures.append({"command": command, "exit": code, "report": value})
     require(code == 0 and (status is None or value.get("status") == status),
             command + "_failed:" + str(value.get("reason") or value.get("missing")))
     return value
@@ -49,6 +51,7 @@ def qualify(args, report):
     before = preparation.PILOT.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit, "exact_clean_source_required")
     report["source_before"] = before
+    normal_git = args.git
     home = args.output / "operator-home"
     home.mkdir(mode=0o700)
     QUAL.user_config(home)
@@ -73,6 +76,7 @@ def qualify(args, report):
         args.other_prefix = args.output / "unused-other-prefix"
         baseline_home = QUAL.snapshot(home)
         for name in VARIANTS:
+            args.git = args.static_git if name == "git-tracked-symlinks-readonly-v1" else normal_git
             args.prefix = args.output / name
             args.state_root = args.output / (name + "-runs")
             args.state_root.mkdir(mode=0o700)
@@ -200,6 +204,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--component-python", type=Path, required=True)
+    parser.add_argument("--static-git", type=Path, required=True,
+                        help="separate pinned static Git input for the accepted tracked-link installer")
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     for name in INSTALLED.INPUT_NAMES:
@@ -208,11 +214,13 @@ def main():
     args.agent_output = None
     args.output = args.output.resolve()
     report = {"format": "sw-installed-git-profiles-qualification/1", "status": "failed", "cases": [],
-              "skipped": 0, "provider": "owned-scripted-loopback", "unqualified": ["WSL2", "macOS", "Windows"]}
+              "stage_failures": [], "skipped": 0, "provider": "owned-scripted-loopback",
+              "unqualified": ["WSL2", "macOS", "Windows"]}
+    args.stage_failures = report["stage_failures"]
     try:
         require(not args.output.exists() and not args.output.is_relative_to(ROOT), "new_output_outside_checkout_required")
         args.output.mkdir(mode=0o700)
-        report["inputs_sha256"] = {name: BASE.sha(getattr(args, name)) for name in INSTALLED.INPUT_NAMES
+        report["inputs_sha256"] = {name: BASE.sha(getattr(args, name)) for name in (*INSTALLED.INPUT_NAMES, "static_git")
                                    if getattr(args, name) is not None and getattr(args, name).is_file()}
         qualify(args, report)
         report["status"] = "passed"
