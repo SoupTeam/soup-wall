@@ -2038,7 +2038,9 @@ mod tests {
         for format in [git::FORMAT, git::FILE_READS_FORMAT, git::LOCAL_REFS_FORMAT] {
             assert!(validate_selected_git_workspace(root, format).is_ok());
         }
-        assert!(validate_selected_git_workspace(root, "sw-mcp/git-readonly/1+file-revisions").is_err());
+        assert!(
+            validate_selected_git_workspace(root, "sw-mcp/git-readonly/1+file-revisions").is_err()
+        );
         std::fs::write(root.join(".git/shallow"), b"a\n").unwrap();
         assert!(validate_selected_git_workspace(root, git::FORMAT).is_err());
         assert!(validate_selected_git_workspace(root, git::FILE_READS_FORMAT).is_err());

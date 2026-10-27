@@ -260,6 +260,7 @@ jobs:
       - name: Focused selection, integrity and lifecycle regressions
         run: |
           set -euo pipefail
+          exec > >(tee "$RUNNER_TEMP/installed-git-focused.log") 2>&1
           cargo fmt --all -- --check
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_git_profiles.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py -v
@@ -316,6 +317,7 @@ jobs:
         with:
           name: installed-git-profiles-${{ github.sha }}-${{ github.run_attempt }}
           path: |
+            ${{ runner.temp }}/installed-git-focused.log
             ${{ runner.temp }}/installed-git-profiles/report.json
             ${{ runner.temp }}/installed-git-profiles.log
             ${{ runner.temp }}/native-inputs.json
