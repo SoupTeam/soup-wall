@@ -78,7 +78,11 @@ protection; only `agentfw pilot status` reports it, with the same meanings.
 A failed install (wrong digest, damaged archive, unsupported interpreter) leaves
 the selected component unchanged. After an interruption every `agentfw pilot`
 call refuses until `recover`. Removal touches only `pilot-front-door/`: prepared
-selections, host settings and projects stay. A new component from another commit
+selections, host settings and projects stay. `remove` and `recover` open every
+parent from `/` without following links, require `pilot-front-door` and
+`components` to be private directories of the current user, and delete only
+through those descriptors: a linked or redirected parent is refused before
+anything is removed, and a linked entry is removed as a link, never followed. A new component from another commit
 does not accept selections prepared from the old commit (`stale_source`); prepare
 again or roll back.
 

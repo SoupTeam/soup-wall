@@ -16,7 +16,8 @@ during and after a run; one useful original read and Git history call with
 witnessed refused write, reset and send; Ctrl-C cancellation with owned
 cleanup; tampered helper and interpreter
 refusals; interrupted update recovery; failed update keeping the previous
-component; update and rollback; owned removal. Project, repository and user
+component; update and rollback; removal refusing a redirected parent; owned
+removal. Project, repository and user
 configuration witnesses must stay unchanged. Raw traces stay private.
 """
 from __future__ import annotations
@@ -354,7 +355,30 @@ def qualify(args, report):
         report["cases"].append({"case": "update-and-rollback", "passed": True, "update": update_row["component"],
                                 "update_status_reason": "stale_source", "rolled_back_to": built["component"]})
 
-        # 11. Owned removal: only component state; selections and user state stay.
+        # 11. A pre-existing redirected `components` parent: removal refuses
+        #     and an owned external tree shaped like the component stays.
+        external = args.output / "external-components"
+        (external / update_row["component"] / "tree/scripts").mkdir(parents=True, mode=0o700)
+        (external / update_row["component"] / "manifest.json").write_text("external manifest\n")
+        (external / update_row["component"] / "tree/scripts/pilot.py").write_text("external bytes\n")
+        (external / "sentinel").write_text("must stay\n")
+        external_before = QUAL.snapshot(external)
+        components = agent_home / "pilot-front-door/components"
+        components.rename(components.with_name("components.real"))
+        components.symlink_to(external)
+        try:
+            code, value, stderr = component(args, agent_home, None, None, "remove", "--component",
+                                            update_row["component"], env=env)
+            require(code != 0 and "components directory" in stderr, "redirected_parent_removal_not_refused")
+            require(QUAL.snapshot(external) == external_before, "redirected_parent_removal_changed_external_state")
+        finally:
+            components.unlink()
+            components.with_name("components.real").rename(components)
+        require(QUAL.snapshot(external) == external_before, "external_state_changed")
+        report["cases"].append({"case": "redirected-parent-removal", "passed": True, "refused": True,
+                                "external_unchanged": True})
+
+        # 12. Owned removal: only component state; selections and user state stay.
         prepared = {name: QUAL.snapshot(path) for name, path in (("prefix", args.prefix), ("other", args.other_prefix))}
         code, value, _ = component(args, agent_home, None, None, "remove", "--component", update_row["component"], env=env)
         require(code == 0, "remove_unselected_failed")

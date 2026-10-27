@@ -20,8 +20,9 @@
 
 use std::collections::BTreeSet;
 use std::io::Read;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::{bail, ensure, Context};
 use serde::{Deserialize, Serialize};
@@ -542,6 +543,177 @@ fn check_ancestors(root: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ------------------------------------------- descriptor-anchored removal
+
+const MAX_REMOVE_DEPTH: usize = 32;
+const MAX_REMOVE_ENTRIES: usize = 4096;
+
+fn c_name(name: &str) -> anyhow::Result<std::ffi::CString> {
+    ensure!(
+        !name.is_empty() && name != "." && name != ".." && !name.contains('/'),
+        "unsupported path component"
+    );
+    Ok(std::ffi::CString::new(name)?)
+}
+
+fn owned(fd: libc::c_int, what: &str) -> anyhow::Result<OwnedFd> {
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("cannot open {what} without following links"));
+    }
+    // SAFETY: `fd` was just returned by open/openat and is owned only here.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+/// Open the directory `name` below `parent`; a link is never followed.
+fn open_dir_at(parent: &OwnedFd, name: &str) -> anyhow::Result<OwnedFd> {
+    let cname = c_name(name)?;
+    // SAFETY: valid descriptor and NUL-terminated name; the result is checked.
+    let fd = unsafe {
+        libc::openat(
+            parent.as_raw_fd(),
+            cname.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    owned(fd, name)
+}
+
+fn stat_fd(fd: &OwnedFd) -> anyhow::Result<libc::stat> {
+    // SAFETY: zeroed is a valid initial value for the plain C struct.
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    // SAFETY: valid descriptor and out pointer.
+    ensure!(
+        unsafe { libc::fstat(fd.as_raw_fd(), &mut st) } == 0,
+        "cannot inspect an opened directory"
+    );
+    Ok(st)
+}
+
+/// `name` below `parent`, inspected without following a link.
+fn stat_at(parent: &OwnedFd, name: &str) -> anyhow::Result<Option<libc::stat>> {
+    let cname = c_name(name)?;
+    // SAFETY: zeroed is a valid initial value for the plain C struct.
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    // SAFETY: valid descriptor, name and out pointer.
+    let code = unsafe {
+        libc::fstatat(
+            parent.as_raw_fd(),
+            cname.as_ptr(),
+            &mut st,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    };
+    if code != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.kind() == std::io::ErrorKind::NotFound {
+            return Ok(None);
+        }
+        return Err(error).with_context(|| format!("cannot inspect {name}"));
+    }
+    Ok(Some(st))
+}
+
+fn is_dir(st: &libc::stat) -> bool {
+    st.st_mode & libc::S_IFMT == libc::S_IFDIR
+}
+
+fn require_private_fd(fd: &OwnedFd, what: &str) -> anyhow::Result<()> {
+    let st = stat_fd(fd)?;
+    // SAFETY: geteuid has no preconditions.
+    let uid = unsafe { libc::geteuid() };
+    ensure!(
+        is_dir(&st) && st.st_uid == uid && st.st_mode & 0o077 == 0,
+        "{what} is not a private directory of the current user; refusing to delete through it"
+    );
+    Ok(())
+}
+
+/// Open an absolute directory one component at a time from `/`. Every
+/// component, including each parent, is opened without following a link.
+fn open_path_nofollow(path: &Path) -> anyhow::Result<OwnedFd> {
+    ensure!(
+        path.is_absolute(),
+        "the component location must be absolute"
+    );
+    // SAFETY: constant NUL-terminated path; the result is checked.
+    let mut fd = owned(
+        unsafe {
+            libc::open(
+                c"/".as_ptr(),
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+            )
+        },
+        "/",
+    )?;
+    for component in path.components() {
+        match component {
+            Component::RootDir => {}
+            Component::Normal(name) => {
+                let name = name.to_str().context("non-UTF-8 component location")?;
+                fd = open_dir_at(&fd, name).with_context(|| {
+                    format!(
+                        "{} has a linked or missing parent; refusing a redirected component location",
+                        path.display()
+                    )
+                })?;
+            }
+            _ => bail!("the component location must be a plain absolute path"),
+        }
+    }
+    Ok(fd)
+}
+
+fn unlink_at(parent: &OwnedFd, name: &str, flags: libc::c_int) -> anyhow::Result<()> {
+    let cname = c_name(name)?;
+    // SAFETY: valid descriptor and NUL-terminated name; the result is checked.
+    if unsafe { libc::unlinkat(parent.as_raw_fd(), cname.as_ptr(), flags) } != 0 {
+        return Err(std::io::Error::last_os_error())
+            .with_context(|| format!("cannot remove {name}"));
+    }
+    Ok(())
+}
+
+/// Remove `name` below the open directory `parent`. Descent happens only
+/// through descriptors opened without following links, and each opened
+/// directory must be the inspected one; a link is removed as a link.
+fn remove_tree_at(
+    parent: &OwnedFd,
+    name: &str,
+    depth: usize,
+    budget: &mut usize,
+) -> anyhow::Result<()> {
+    ensure!(depth <= MAX_REMOVE_DEPTH, "component tree is too deep");
+    let st = stat_at(parent, name)?.with_context(|| format!("{name} disappeared"))?;
+    if !is_dir(&st) {
+        return unlink_at(parent, name, 0);
+    }
+    let dir = open_dir_at(parent, name)?;
+    let opened = stat_fd(&dir)?;
+    ensure!(
+        opened.st_dev == st.st_dev && opened.st_ino == st.st_ino,
+        "{name} changed during removal"
+    );
+    let mut names = Vec::new();
+    // The descriptor's own directory, not a path lookup.
+    for entry in std::fs::read_dir(format!("/proc/self/fd/{}", dir.as_raw_fd()))? {
+        let entry = entry?;
+        names.push(
+            entry
+                .file_name()
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("non-UTF-8 name in the component tree"))?,
+        );
+    }
+    for child in names {
+        *budget = budget
+            .checked_sub(1)
+            .context("the component tree has too many entries")?;
+        remove_tree_at(&dir, &child, depth + 1, budget)?;
+    }
+    unlink_at(parent, name, libc::AT_REMOVEDIR)
+}
+
 // ------------------------------------------------------------------- store
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -586,9 +758,37 @@ pub struct Store {
 
 impl Store {
     pub fn new(home: &Path) -> Self {
+        let home = if home.is_absolute() {
+            home.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .map(|cwd| cwd.join(home))
+                .unwrap_or_else(|_| home.to_path_buf())
+        };
         Self {
             root: home.join(DIR_NAME),
         }
+    }
+
+    /// The Agent home, opened from `/` without following any link.
+    fn open_home(&self) -> anyhow::Result<OwnedFd> {
+        open_path_nofollow(self.root.parent().context("component root has no parent")?)
+    }
+
+    /// The private component root, or None when nothing is installed. Every
+    /// parent is resolved through no-follow descriptors.
+    fn open_root(&self) -> anyhow::Result<Option<(OwnedFd, OwnedFd)>> {
+        let home = self.open_home()?;
+        let Some(st) = stat_at(&home, DIR_NAME)? else {
+            return Ok(None);
+        };
+        ensure!(
+            is_dir(&st),
+            "the component directory is linked or not a directory; refusing to delete through it"
+        );
+        let root = open_dir_at(&home, DIR_NAME)?;
+        require_private_fd(&root, "the component directory")?;
+        Ok(Some((home, root)))
     }
 
     pub fn root(&self) -> &Path {
@@ -870,8 +1070,16 @@ impl Store {
             }
             Err(error) => {
                 // Selection changes only in the final atomic rename; clean what was staged.
-                let _ = std::fs::remove_dir_all(&staging);
-                let _ = std::fs::remove_file(self.journal_path());
+                if let (Ok(Some((_, root))), Some(name)) = (
+                    self.open_root(),
+                    staging.file_name().and_then(|n| n.to_str()),
+                ) {
+                    if matches!(stat_at(&root, name), Ok(Some(_))) {
+                        let mut budget = MAX_REMOVE_ENTRIES;
+                        let _ = remove_tree_at(&root, name, 0, &mut budget);
+                    }
+                    let _ = unlink_at(&root, "journal.json", 0);
+                }
                 Err(error.context("install failed; the previous selection is unchanged"))
             }
         }
@@ -918,36 +1126,31 @@ impl Store {
             "previous":current.map(|c| c.component)}))
     }
 
-    fn ensure_root_not_linked(&self) -> anyhow::Result<bool> {
-        let metadata = match std::fs::symlink_metadata(&self.root) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-            Err(error) => return Err(error).context("cannot inspect the component directory"),
-        };
-        ensure!(
-            metadata.file_type().is_dir() && private_ok(&metadata),
-            "the component directory is linked or not private; refusing to delete through it"
-        );
-        check_ancestors(&self.root)?;
-        Ok(true)
-    }
-
     /// Clear leftovers of an interrupted install. The selection never changes here.
     pub fn recover(&self) -> anyhow::Result<Value> {
         let mut removed = Vec::new();
-        if self.ensure_root_not_linked()? {
-            for entry in std::fs::read_dir(&self.root)? {
-                let entry = entry?;
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if name.starts_with("staging-") && entry.file_type()?.is_dir() {
-                    std::fs::remove_dir_all(entry.path())?;
+        let mut had_journal = false;
+        if let Some((_, root)) = self.open_root()? {
+            let mut names = Vec::new();
+            for entry in std::fs::read_dir(format!("/proc/self/fd/{}", root.as_raw_fd()))? {
+                names.push(entry?.file_name().to_string_lossy().into_owned());
+            }
+            names.sort();
+            for name in names {
+                if !name.starts_with("staging-") {
+                    continue;
+                }
+                // A linked staging entry is never followed; only owned directories go.
+                if stat_at(&root, &name)?.is_some_and(|st| is_dir(&st)) {
+                    let mut budget = MAX_REMOVE_ENTRIES;
+                    remove_tree_at(&root, &name, 0, &mut budget)?;
                     removed.push(name);
                 }
             }
-        }
-        let had_journal = self.interrupted();
-        if had_journal {
-            std::fs::remove_file(self.journal_path())?;
+            if stat_at(&root, "journal.json")?.is_some() {
+                unlink_at(&root, "journal.json", 0)?;
+                had_journal = true;
+            }
         }
         let selected = self
             .read_pointer(&self.current_path())?
@@ -960,15 +1163,21 @@ impl Store {
 
     /// Remove one non-selected component, or everything this module owns with
     /// `all`. Prepared pilot selections, host settings and projects live
-    /// elsewhere and are never touched.
+    /// elsewhere and are never touched. Every parent is resolved from `/`
+    /// through no-follow descriptors, `pilot-front-door` and `components`
+    /// must be private directories of the current user, and deletion only
+    /// descends through those descriptors, so a redirected parent is refused
+    /// before anything is removed.
     pub fn remove(&self, component: Option<&str>, all: bool) -> anyhow::Result<Value> {
         ensure!(
             component.is_some() != all,
             "give exactly one of --component <id> or --all"
         );
-        ensure!(self.ensure_root_not_linked()?, "nothing is installed");
+        let (home, root) = self.open_root()?.context("nothing is installed")?;
+        let mut budget = MAX_REMOVE_ENTRIES;
         if all {
-            std::fs::remove_dir_all(&self.root)?;
+            drop(root);
+            remove_tree_at(&home, DIR_NAME, 0, &mut budget)?;
             return Ok(json!({"action":"remove","all":true,"root":self.root}));
         }
         let id = component.expect("checked");
@@ -978,16 +1187,18 @@ impl Store {
             selected.as_ref().map(|p| p.component.as_str()) != Some(id),
             "that component is selected; roll back first or use --all"
         );
-        let dir = self.components().join(id);
-        let metadata = std::fs::symlink_metadata(&dir).context("component is not installed")?;
         ensure!(
-            metadata.file_type().is_dir(),
-            "component entry is not a directory"
+            stat_at(&root, "components")?.is_some_and(|st| is_dir(&st)),
+            "the components directory is linked or missing; refusing to delete through it"
         );
-        std::fs::remove_dir_all(&dir)?;
+        let components = open_dir_at(&root, "components")?;
+        require_private_fd(&components, "the components directory")?;
+        let entry = stat_at(&components, id)?.context("component is not installed")?;
+        ensure!(is_dir(&entry), "component entry is not a directory");
+        remove_tree_at(&components, id, 0, &mut budget)?;
         if let Some(previous) = self.read_pointer(&self.previous_path())? {
             if previous.component == id {
-                std::fs::remove_file(self.previous_path())?;
+                unlink_at(&root, "previous.json", 0)?;
             }
         }
         Ok(json!({"action":"remove","component":id}))
@@ -1318,6 +1529,113 @@ mod tests {
             store.current().unwrap_err().reason,
             "front_door_component_not_installed"
         );
+    }
+
+    /// Every file below `root` with its bytes, without following links.
+    fn snapshot(root: &Path) -> Vec<(String, Vec<u8>)> {
+        let mut rows = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap() {
+                let entry = entry.unwrap();
+                let kind = entry.file_type().unwrap();
+                let name = entry
+                    .path()
+                    .strip_prefix(root)
+                    .unwrap()
+                    .display()
+                    .to_string();
+                if kind.is_dir() {
+                    rows.push((name + "/", Vec::new()));
+                    stack.push(entry.path());
+                } else {
+                    rows.push((name, std::fs::read(entry.path()).unwrap()));
+                }
+            }
+        }
+        rows.sort();
+        rows
+    }
+
+    /// An owned external tree shaped like an installed component.
+    fn external_fixture(base: &Path, id: &str) -> PathBuf {
+        let external = base.join("external");
+        std::fs::create_dir_all(external.join(id).join("tree/scripts")).unwrap();
+        std::fs::write(
+            external.join(id).join("manifest.json"),
+            b"external manifest",
+        )
+        .unwrap();
+        std::fs::write(
+            external.join(id).join("tree/scripts/pilot.py"),
+            b"external bytes",
+        )
+        .unwrap();
+        std::fs::write(external.join("sentinel"), b"must stay").unwrap();
+        external
+    }
+
+    #[test]
+    fn removal_refuses_a_redirected_components_parent_and_keeps_external_state() {
+        let base = tempfile::tempdir().unwrap();
+        let home = base.path().join("home");
+        std::fs::create_dir(&home).unwrap();
+        let store = Store::new(&home);
+        let first = archive();
+        let second = archive_for("89abcdef0123456789abcdef0123456789abcdef");
+        store.install(&second, &sha(&second), &python()).unwrap();
+        let installed = store.install(&first, &sha(&first), &python()).unwrap();
+        let unselected = installed["previous"].as_str().unwrap().to_string();
+        let external = external_fixture(base.path(), &unselected);
+        let before = snapshot(&external);
+        // A pre-existing linked intermediate `components` parent.
+        let components = store.root().join("components");
+        std::fs::rename(&components, store.root().join("components.real")).unwrap();
+        std::os::unix::fs::symlink(&external, &components).unwrap();
+        let error = store.remove(Some(&unselected), false).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("components directory"),
+            "{error:#}"
+        );
+        assert_eq!(snapshot(&external), before);
+        assert!(store.current().is_err(), "a linked parent must not verify");
+        // Removing everything unlinks the link itself and never follows it.
+        store.remove(None, true).unwrap();
+        assert!(!store.root().exists());
+        assert_eq!(snapshot(&external), before);
+    }
+
+    #[test]
+    fn removal_and_recovery_refuse_redirected_ancestors_and_linked_staging() {
+        let base = tempfile::tempdir().unwrap();
+        let real = base.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let store = Store::new(&real);
+        let first = archive();
+        let id = store.install(&first, &sha(&first), &python()).unwrap()["component"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let external = external_fixture(base.path(), &id);
+        let before = snapshot(&external);
+        // A linked staging entry is never followed by recovery.
+        std::os::unix::fs::symlink(&external, store.root().join("staging-linked")).unwrap();
+        std::fs::write(store.journal_path(), b"{}").unwrap();
+        store.recover().unwrap();
+        assert_eq!(snapshot(&external), before);
+        assert!(std::fs::symlink_metadata(store.root().join("staging-linked")).is_ok());
+        std::fs::remove_file(store.root().join("staging-linked")).unwrap();
+        // The same home reached through a linked ancestor is refused.
+        let link = base.path().join("linked");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let redirected = Store::new(&link);
+        assert!(redirected.remove(None, true).is_err());
+        assert!(redirected.recover().is_err());
+        assert!(store.current().is_ok(), "the owned component must stay");
+        // The normal owned removal still works.
+        store.remove(None, true).unwrap();
+        assert!(!store.root().exists());
+        assert_eq!(snapshot(&external), before);
     }
 
     #[test]
