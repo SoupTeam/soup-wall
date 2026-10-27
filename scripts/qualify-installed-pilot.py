@@ -35,9 +35,12 @@ import uuid
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pilot_provider import utility_environment
 from pilot_qualification import CASES, LIMITS, Failure, canonical, digest, measure, new_report, require, sha, write_report
 import wsl_preflight
 import wsl_qualification
+
+import pilot_source_identity as SOURCE_IDENTITY
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -92,8 +95,13 @@ def strict_json(raw):
 
 
 def source():
+    # An installed front-door component carries the verified identity of the
+    # clean commit it was built from; a checkout answers with Git.
+    installed = SOURCE_IDENTITY.installed(ROOT)
+    if installed is not None:
+        return installed
     result = BASE.source()
-    files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT, timeout=15).split(b"\0")
+    files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT, timeout=15, env=utility_environment()).split(b"\0")
     result["files_sha256"] = digest({os.fsdecode(name): sha(ROOT / os.fsdecode(name)) for name in files if name})
     return result
 
@@ -581,7 +589,7 @@ class Pilot:
                 "original_write_observed": True, "receiver_positive_observed": True,
                 "original_evidence": original_evidence, **self.preserve()}
 
-    def host(self, label, batches, before_batch=None, host=None, proofs=None):
+    def host(self, label, batches, before_batch=None, host=None, proofs=None, command_prefix=(), *, direct=False):
         """Run the actual selected host. A batch is one provider parallel proposal.
 
         The local provider observes the original returned tool results. It does
@@ -596,16 +604,26 @@ class Pilot:
         wrapper = directory / "collector.py"
         wrapper.write_text("import os,sys\nos.dup2(os.open(sys.argv[1],os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),2)\n"
                            "os.chdir(sys.argv[2])\nos.execve(sys.argv[3],sys.argv[3:],dict(os.environ))\n")
-        proofs = proofs or {kind: self.mint(host, kind, label + "-" + kind) for kind in TOOLS}
+        proofs = {} if direct else (proofs or {kind: self.mint(host, kind, label + "-" + kind) for kind in TOOLS})
         config = directory / "mcp.json"
         private_json(config, {"mcpServers": {kind: {"command": str(self.paths["python"]),
-            "args": ["-I", str(wrapper), str(directory / (kind + ".log")), str(self.workspace_for(kind)), *self.command(kind)],
-            "env": self.collector_env(kind, host, proofs[kind])} for kind in TOOLS}})
+            "args": ["-I", str(wrapper), str(directory / (kind + ".log")), str(self.workspace_for(kind)), *self.command(kind, direct)],
+            "env": self.env if direct else self.collector_env(kind, host, proofs[kind])} for kind in TOOLS}})
         expected, index = [], 0
         for batch in batches:
             proposals = []
             for kind, tool, arguments in batch:
                 arguments = {"repo_path": "/workspace", **arguments} if kind == "git" else arguments
+                if direct:
+                    def relocate(value):
+                        if isinstance(value, str) and (value == "/workspace" or value.startswith("/workspace/")):
+                            return str(self.workspace_for(kind)) + value[len("/workspace"):]
+                        if isinstance(value, list):
+                            return [relocate(item) for item in value]
+                        if isinstance(value, dict):
+                            return {key: relocate(item) for key, item in value.items()}
+                        return value
+                    arguments = relocate(arguments)
                 proposals.append({"type": "tool_use", "id": f"toolu_pilot_{index}",
                                   "name": f"mcp__{kind}__{tool}", "input": arguments})
                 index += 1
@@ -614,6 +632,7 @@ class Pilot:
         model.requests = BoundedRequests()
         offered, callbacks, provider_errors = set(), set(), []
         latencies, proposed_at = {}, {}
+        first_proposal_at = []
         lock = threading.Lock()
         def next_step(body):
             with lock:
@@ -639,6 +658,8 @@ class Pilot:
                         if before_batch and batch_index not in callbacks:
                             before_batch(batch_index, model.results)
                             callbacks.add(batch_index)
+                        if not first_proposal_at:
+                            first_proposal_at.append(time.monotonic())
                         for identifier in identifiers:
                             proposed_at.setdefault(identifier, time.monotonic())
                         offered.update(identifiers)
@@ -663,7 +684,8 @@ class Pilot:
         timed_out = False
         started = time.monotonic()
         try:
-            process = subprocess.Popen(command, cwd=project, env=env, stdin=subprocess.DEVNULL,
+            host_cwd = self.workspace if getattr(self, "matched_workload", False) else project
+            process = subprocess.Popen([*command_prefix, *command], cwd=host_cwd, env=env, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             witness = BASE.ProcessWitness(process.pid)
             stdout, stderr = BoundedStream(process.stdout), BoundedStream(process.stderr)
@@ -689,6 +711,8 @@ class Pilot:
             uses = [block for row in messages if row.get("type") == "assistant"
                     for block in row.get("message", {}).get("content", []) if block.get("type") == "tool_use"]
             evidence = {"host_session": host, "exit_code": process.returncode, "timed_out": timed_out,
+                "arm": "control" if direct else "protected",
+                "host_start_ms": round((first_proposal_at[0] - started) * 1000, 3) if first_proposal_at else None,
                 "elapsed_ms": round((time.monotonic() - started) * 1000, 3), "tool_proposals": len(uses),
                 "parallel_proposal_batches": sum(len(batch) > 1 for batch in batches),
                 "proposal_sha256": digest(uses), "returned_results_sha256": digest(model.results),
@@ -837,12 +861,14 @@ class Pilot:
                 "client_wire_file": f"client-{self.clients.index(client):02d}-wire.json"}
         return {**evidence, **self.preserve()}
 
-    def collector_recovery(self):
+    def collector_recovery(self, before_crash=None, after_reconnect=None):
         host = str(uuid.uuid4())
         with self.client("git", host, "surviving-git") as sibling:
             with self.client("filesystem", host, "interrupted-filesystem") as client:
                 response, _ = client.exchange(frame(10, "filesystem", "read_text_file", {"path": "/workspace/guide.txt"}))
                 require(BASE.result_text(response) == BASE.TEXT, "collector_precrash_useful_missing")
+                if before_crash:
+                    before_crash(client)
                 starts = [r for r in self.audit() if r.get("event") == "native_session_start" and r.get("host_session") == host
                           and r.get("agent_id") == "interrupted-filesystem"]
                 require(len(starts) == 1, "collector_epoch_ambiguous")
@@ -876,6 +902,8 @@ class Pilot:
                 new_starts = [r for r in self.audit() if r.get("event") == "native_session_start" and r.get("host_session") == host
                               and r.get("agent_id") == "interrupted-filesystem"]
                 require(len(new_starts) == 2 and new_starts[-1]["session"] != epoch, "collector_epoch_resurrected")
+                if after_reconnect:
+                    after_reconnect(replacement)
         return {"signal": "SIGKILL", "session_end_sent": False, "reclaimed_ms": reclaimed_ms,
                 "old_epoch_sha256": digest(epoch), "new_epoch_sha256": digest(new_starts[-1]["session"]),
                 "process_cleanup": process_cleanup, "surviving_sibling_useful": True,
@@ -1014,7 +1042,7 @@ class Pilot:
             retained.append({"file": target.name, "sha256": sha(target), "complete": complete})
         for index, client in enumerate(self.clients):
             retained.append(self.retain_json(f"client-{index:02d}-wire.json", client.transcript()))
-        require(len(retained) <= 64 and all(row["complete"] for row in retained), "owned_evidence_incomplete")
+        require(len(retained) <= getattr(self, "retained_limit", 64) and all(row["complete"] for row in retained), "owned_evidence_incomplete")
         return retained
 
 
@@ -1160,6 +1188,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
+    parser.add_argument("--matched-development", action="store_true", help="Run the frozen SOU-106 workload on both actual-host paths")
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
@@ -1170,8 +1199,8 @@ def main():
     parser.add_argument("--fault", choices=("bad-candidate", "missing-sandbox", "changed-asset"), help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.wsl_preflight:
-        if args.run or not args.wsl_root:
-            parser.error("--wsl-preflight requires --wsl-root and cannot be combined with --run")
+        if args.run or args.matched_development or not args.wsl_root:
+            parser.error("--wsl-preflight requires --wsl-root and cannot be combined with --run or --matched-development")
         if bool(args.selection) != bool(args.expected_commit):
             parser.error("Supply --selection and --expected-commit together")
         paths = None
@@ -1194,12 +1223,21 @@ def main():
                            "evidence": {}}]}
         print(json.dumps(report, indent=2))
         return 0 if report["status"] == "ready" else 1
+
+    if not args.run and args.matched_development:
+        from pilot_measurement import load_workload
+        workload = load_workload(ROOT)
+        print(json.dumps({"status": "plan", "executed": False, "workload_sha256": digest(workload), "workload": workload}))
+        return 0
     if not args.run:
         print(json.dumps({"status": "plan", "executed": False, "cases": CASES, "limits": LIMITS,
                           "live_provider": False, "runtime_downloads": "existing-pinned-profile-installers-only"}))
         return 0
     if not all((args.selection, args.expected_commit, args.output)):
         parser.error("--run requires --selection, --expected-commit and --output")
+    if args.matched_development:
+        from pilot_measurement import run_matched
+        return run_matched(sys.modules[__name__], args)
     return run(args)
 
 

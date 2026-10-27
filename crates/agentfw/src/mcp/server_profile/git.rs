@@ -9,7 +9,66 @@ use serde_json::Value;
 
 use super::ToolProfile;
 
+pub(crate) mod reference_view;
+pub(crate) mod revision_view;
+pub(crate) mod selected_view;
+pub(crate) mod shallow_view;
+pub(crate) use selected_view::SelectedView;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ReadExtension {
+    #[default]
+    None,
+    LocalReferences,
+    FileRevisions,
+}
+/// Independently testable local object facts; no daemon attestation or relief.
+#[cfg(any(target_os = "linux", test))]
+pub mod object_witness;
+
 pub const FORMAT: &str = "sw-mcp/git-readonly/1";
+/// Explicitly selected local-reference contract; the original v1 stays narrow.
+pub const SHALLOW_FORMAT: &str = "sw-mcp/git-readonly-shallow/1";
+pub const FILE_READS_FORMAT: &str = "sw-mcp/git-readonly-file-revisions/1";
+pub const LOCAL_REFS_FORMAT: &str = "sw-mcp/git-readonly-local-refs/1";
+pub const MAX_LOCAL_REF_BYTES: usize = 255;
+
+pub fn is_profile(format: &str) -> bool {
+    matches!(
+        format,
+        FORMAT | LOCAL_REFS_FORMAT | FILE_READS_FORMAT | SHALLOW_FORMAT
+    )
+}
+
+/// A literal, fully qualified local name, never a Git revision expression.
+/// Keep this finite grammar in sync with the separately selected classifier.
+pub fn is_local_reference(reference: &str) -> bool {
+    let Some(name) = reference
+        .strip_prefix("refs/heads/")
+        .or_else(|| reference.strip_prefix("refs/tags/"))
+    else {
+        return false;
+    };
+    reference.len() <= MAX_LOCAL_REF_BYTES
+        && !name.is_empty()
+        && name.split('/').count() <= 8
+        && !name.contains("..")
+        && !name.contains("@{")
+        && name.chars().all(|c| {
+            let scalar = c as u32;
+            c.is_ascii_alphanumeric()
+                || matches!(c, '/' | '-' | '_' | '.' | '@' | '+')
+                || (scalar >= 0xa1
+                    && !matches!(scalar, 0x1680 | 0x180e | 0x2000..=0x200f | 0x2028..=0x202f
+                        | 0x205f..=0x206f | 0x3000 | 0xfeff | 0xe0000..=0xe0fff))
+        })
+        && name.split('/').all(|part| {
+            !part.is_empty()
+                && !part.starts_with(['.', '-'])
+                && !part.ends_with('.')
+                && !part.ends_with(".lock")
+        })
+}
 pub const PYTHON: &str = "/mcp-server/python/bin/python3.11";
 const MANIFEST: &str =
     include_str!("../../../../../profiles/mcp/git-readonly-v1/upstream-tools-list.json");
@@ -30,6 +89,27 @@ pub fn validate_initialization(value: &Value) -> anyhow::Result<()> {
 }
 
 pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
+    classify_manifest_with_local_refs(value, false)
+}
+
+pub fn classify_manifest_with_local_refs(
+    value: &Value,
+    local_references: bool,
+) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
+    classify_manifest_with_extension(
+        value,
+        if local_references {
+            ReadExtension::LocalReferences
+        } else {
+            ReadExtension::None
+        },
+    )
+}
+
+pub fn classify_manifest_with_extension(
+    value: &Value,
+    extension: ReadExtension,
+) -> anyhow::Result<BTreeMap<String, ToolProfile>> {
     ensure!(
         value == &original_manifest(),
         "Git discovery differs from pin"
@@ -53,6 +133,7 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
                 output: None,
                 unsupported_reason: (!supported).then_some("selected_git_operation_unsupported"),
                 git_tool: Some(name.to_owned()),
+                git_extension: extension,
             },
         );
     }
@@ -60,6 +141,30 @@ pub fn classify_manifest(value: &Value) -> anyhow::Result<BTreeMap<String, ToolP
 }
 
 pub fn validate_arguments(name: &str, value: &Value) -> anyhow::Result<()> {
+    validate_arguments_with_local_refs(name, value, false)
+}
+
+pub fn validate_arguments_with_local_refs(
+    name: &str,
+    value: &Value,
+    local_references: bool,
+) -> anyhow::Result<()> {
+    validate_arguments_with_extension(
+        name,
+        value,
+        if local_references {
+            ReadExtension::LocalReferences
+        } else {
+            ReadExtension::None
+        },
+    )
+}
+
+pub fn validate_arguments_with_extension(
+    name: &str,
+    value: &Value,
+    extension: ReadExtension,
+) -> anyhow::Result<()> {
     let allowed: &[&str] = match name {
         "git_status" => &["repo_path"],
         "git_log" => &["repo_path", "max_count"],
@@ -90,61 +195,26 @@ pub fn validate_arguments(name: &str, value: &Value) -> anyhow::Result<()> {
         let reference = reference.as_str().context("Git revision required")?;
         ensure!(
             reference == "HEAD"
-                || (reference.len() == 40 && reference.bytes().all(|c| c.is_ascii_hexdigit())),
-            "only HEAD or a full SHA-1 revision is supported"
+                || (reference.len() == 40 && reference.bytes().all(|c| c.is_ascii_hexdigit()))
+                || (extension == ReadExtension::LocalReferences && is_local_reference(reference))
+                || (extension == ReadExtension::FileRevisions
+                    && name == "git_show"
+                    && revision_view::file_revision(reference).is_some()),
+            "{}",
+            if extension != ReadExtension::None {
+                "Git revision violates the selected local-reference contract"
+            } else {
+                "only HEAD or a full SHA-1 revision is supported"
+            }
         );
     }
     Ok(())
 }
 
-/// Refuse unsupported repository machinery without running Git or altering it.
-/// All inspection is repeated at protected startup on the fd-pinned directory.
 #[cfg(any(target_os = "linux", test))]
-pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
-    use std::io::Read;
-    ensure!(
-        fs::symlink_metadata(root.join(".git"))?.is_dir(),
-        "Git requires a standalone non-bare repository"
-    );
-    ensure!(
-        fs::symlink_metadata(root.join(".git/config"))?.is_file(),
-        "Git config must be a regular file, not a link or special file"
-    );
-    for path in [
-        ".gitmodules",
-        ".gitattributes",
-        ".git/commondir",
-        ".git/gitdir",
-        ".git/config.worktree",
-        ".git/worktrees",
-        ".git/modules",
-        ".git/objects/info/alternates",
-        ".git/objects/info/http-alternates",
-        ".git/info/attributes",
-        ".git/shallow",
-    ] {
-        ensure!(
-            fs::symlink_metadata(root.join(path))
-                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
-            "unsupported Git repository indirection or attributes"
-        );
-    }
-    let mut config = Vec::new();
-    let mut options = fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    let file = options.open(root.join(".git/config"))?;
-    ensure!(
-        file.metadata()?.is_file(),
-        "Git config changed to a special file"
-    );
-    file.take(8193).read_to_end(&mut config)?;
+pub(super) fn validate_configuration(config: &[u8]) -> anyhow::Result<()> {
     ensure!(config.len() <= 8192, "Git config exceeds limit");
-    let config = std::str::from_utf8(&config)?;
+    let config = std::str::from_utf8(config)?;
     let mut core = false;
     for raw in config.lines() {
         let line = raw.trim();
@@ -174,6 +244,73 @@ pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
             "unsupported Git configuration"
         );
     }
+    Ok(())
+}
+
+/// Refuse unsupported repository machinery without running Git or altering it.
+/// All inspection is repeated at protected startup on the fd-pinned directory.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
+    validate_repository_with_shallow(root, false)
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> anyhow::Result<()> {
+    use std::io::Read;
+    ensure!(
+        fs::symlink_metadata(root.join(".git"))?.is_dir(),
+        "Git requires a standalone non-bare repository"
+    );
+    ensure!(
+        fs::symlink_metadata(root.join(".git/config"))?.is_file(),
+        "Git config must be a regular file, not a link or special file"
+    );
+    for path in [
+        ".gitmodules",
+        ".gitattributes",
+        ".git/commondir",
+        ".git/gitdir",
+        ".git/config.worktree",
+        ".git/worktrees",
+        ".git/modules",
+        ".git/objects/info/alternates",
+        ".git/objects/info/http-alternates",
+        ".git/info/attributes",
+    ] {
+        ensure!(
+            fs::symlink_metadata(root.join(path))
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
+            "unsupported Git repository indirection or attributes"
+        );
+    }
+    if !shallow {
+        ensure!(
+            fs::symlink_metadata(root.join(".git/shallow"))
+                .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
+            "shallow repositories require explicit opt-in"
+        );
+    } else if let Ok(metadata) = fs::symlink_metadata(root.join(".git/shallow")) {
+        ensure!(
+            metadata.is_file(),
+            "Git shallow boundary must be a regular file"
+        );
+    }
+    let mut config = Vec::new();
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(root.join(".git/config"))?;
+    ensure!(
+        file.metadata()?.is_file(),
+        "Git config changed to a special file"
+    );
+    file.take(8193).read_to_end(&mut config)?;
+    ensure!(config.len() <= 8192, "Git config exceeds limit");
+    validate_configuration(&config)?;
     fn walk(path: &Path, depth: usize, count: &mut usize) -> anyhow::Result<()> {
         ensure!(depth <= 32, "Git repository depth limit");
         for entry in fs::read_dir(path)? {
@@ -257,6 +394,64 @@ mod tests {
     }
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn local_reference_names_are_literal_bounded_and_explicit() {
+        for reference in [
+            "refs/heads/main",
+            "refs/heads/topic/nested",
+            "refs/heads/機能/読取",
+            "refs/heads/café",
+            "refs/heads/cafe\u{301}",
+            "refs/heads/owned-🦀",
+            "refs/tags/lightweight",
+            "refs/tags/releases/annotated",
+        ] {
+            assert!(is_local_reference(reference), "{reference}");
+            // The existing profile must continue refusing named references.
+            for (tool, key) in [("git_show", "revision"), ("git_diff", "target")] {
+                let args = json!({"repo_path":"/workspace", key:reference});
+                assert!(validate_arguments(tool, &args).is_err(), "{reference}");
+            }
+        }
+        for reference in [
+            "main",
+            "HEAD",
+            "refs/remotes/origin/main",
+            "refs/heads/",
+            "refs/tags/",
+            "refs/heads/-option",
+            "refs/heads/.hidden",
+            "refs/heads/a.lock",
+            "refs/heads/a..b",
+            "refs/heads/a.",
+            "refs/heads/a//b",
+            "refs/heads/a/",
+            "refs/heads/a@{1}",
+            "refs/heads/a~1",
+            "refs/heads/a^",
+            "refs/heads/a:file",
+            "refs/heads/a b",
+            "refs/heads/a\n",
+            "refs/heads/a\\b",
+            "refs/tags/a?",
+            "refs/heads/a;echo",
+            "refs/heads/a$(echo)",
+            "refs/heads/a\u{202e}",
+        ] {
+            assert!(!is_local_reference(reference), "{reference:?}");
+        }
+        let prefix = "refs/heads/";
+        assert!(is_local_reference(&format!(
+            "{prefix}{}",
+            "a".repeat(255 - prefix.len())
+        )));
+        assert!(!is_local_reference(&format!(
+            "{prefix}{}",
+            "a".repeat(256 - prefix.len())
+        )));
+        assert!(!is_local_reference("refs/heads/a/b/c/d/e/f/g/h/i"));
+    }
 
     #[test]
     fn git_keeps_upstream_tools_but_bounds_repository_and_arguments() {
@@ -422,4 +617,34 @@ mod tests {
             "[core]\nbare = false\n"
         );
     }
+}
+#[test]
+fn local_reference_contract_matches_the_reviewed_classifier_fixture() {
+    let contract: Value = serde_json::from_str(include_str!(
+        "../../../../../profiles/mcp/git-readonly-local-refs-v1/contract.json"
+    ))
+    .unwrap();
+    for reference in contract["accepted"].as_array().unwrap() {
+        let reference = reference.as_str().unwrap();
+        assert!(is_local_reference(reference), "{reference}");
+        for (tool, key) in [("git_show", "revision"), ("git_diff", "target")] {
+            let args = serde_json::json!({"repo_path": "/workspace", key: reference});
+            assert!(validate_arguments_with_local_refs(tool, &args, true).is_ok());
+            assert!(validate_arguments(tool, &args).is_err());
+        }
+    }
+    for reference in contract["rejected"].as_array().unwrap() {
+        assert!(
+            !is_local_reference(reference.as_str().unwrap()),
+            "{reference}"
+        );
+    }
+    assert!(!is_local_reference(&format!(
+        "refs/heads/{}",
+        "é".repeat(123)
+    )));
+    assert!(!is_local_reference(&format!(
+        "refs/heads/{}",
+        ["a"; 9].join("/")
+    )));
 }

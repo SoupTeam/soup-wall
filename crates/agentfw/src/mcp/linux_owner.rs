@@ -20,7 +20,9 @@ pub(crate) const HEARTBEAT_MILLIS: u64 = 100;
 pub(crate) const LEASE_MILLIS: u64 = 1_500;
 
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{spawn, CleanupSpec, LaunchSpec, OwnerGuard};
+pub(crate) use linux::{
+    spawn, BudgetPrepare, CleanupSpec, ExecutionLiveness, LaunchSpec, OwnerGuard, SealedClosure,
+};
 
 #[cfg(not(target_os = "linux"))]
 pub(crate) struct OwnerGuard;
@@ -69,7 +71,7 @@ mod linux {
     use std::io::{Read, Write};
     use std::os::fd::{AsRawFd, FromRawFd, RawFd};
     use std::os::unix::fs::MetadataExt;
-    use std::os::unix::net::UnixStream;
+    use std::os::unix::net::{UnixDatagram, UnixStream};
     use std::os::unix::process::CommandExt;
     use std::os::unix::process::ExitStatusExt;
     use std::process::{Command, Stdio};
@@ -90,9 +92,42 @@ mod linux {
 
     const OWNER_ARG: &str = "--agentfw-mcp-owner-v1";
     const PID1_ARG: &str = "--agentfw-mcp-pid1-v1";
+    const SEALED_PID1_ARG: &str = "--agentfw-mcp-pid1-v2";
     const MAX_PACKET: usize = 65_536;
     const MAX_ARGS: usize = 2_048;
     const MAX_FDS: usize = 128;
+    // Separate opt-in sealed-image launch capsule; control/SCM packets and
+    // legacy launches keep their existing bounds.
+    const MAX_SEALED_STARTUP: usize = 1024 * 1024;
+    // Pinned bubblewrap limits total parsed argc to 9000, including the
+    // outside owner's additional --info-fd pair. Never raise the vendor cap.
+    const MAX_SEALED_ARGS: usize = 8998;
+    const MAX_SEALED_ARG_BYTES: usize = 768 * 1024;
+    const MAX_SEALED_FDS: usize = super::super::verified_closure::MAX_ENTRIES + 64;
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(crate) struct SealedClosure {
+        pub format: String,
+        pub sha256: String,
+        pub images: Vec<RawFd>,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    pub(crate) struct BudgetPrepare {
+        pub config: super::super::linux_budget::Config,
+        pub root: (u64, u64),
+        pub root_fd: RawFd,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct BudgetPrepared {
+        format: String,
+        instance: String,
+        budget: super::super::linux_budget::PreparedBudget,
+    }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -110,12 +145,15 @@ mod linux {
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[serde(deny_unknown_fields)]
     pub(crate) struct LaunchSpec {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub sealed_closure: Option<SealedClosure>,
         pub bwrap_fd: RawFd,
         pub owner_executable_fd: RawFd,
         pub inherited_fds: Vec<RawFd>,
         pub bwrap_args: Vec<String>,
         pub budget_attach_fd: Option<RawFd>,
         pub budget_cleanup: Option<CleanupSpec>,
+        pub budget_prepare: Option<BudgetPrepare>,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -125,6 +163,25 @@ mod linux {
         collector_pid: u32,
         collector_start_ticks: u64,
         collector_pidfd: RawFd,
+        budget_transfer_fd: Option<RawFd>,
+    }
+
+    /// Namespace-relative identity is paired with the pinned PID-1 generation.
+    /// The trusted PID 1 retains/reaps this exact child until namespace teardown.
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct OriginalGeneration {
+        namespace_pid: u32,
+        start_ticks: u64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct SealedStarted {
+        format: String,
+        instance: String,
+        action: String,
+        original: OriginalGeneration,
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -138,6 +195,8 @@ mod linux {
         sandbox_start_ticks: u64,
         pid1_pid: u32,
         pid1_start_ticks: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        original: Option<OriginalGeneration>,
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -225,6 +284,7 @@ mod linux {
         pub child: Child,
         pub sandbox_pid: u32,
         pub guard: OwnerGuard,
+        pub budget: Option<super::super::linux_budget::OwnedBudget>,
     }
 
     pub(crate) struct OwnerGuard {
@@ -235,6 +295,21 @@ mod linux {
         changed: Arc<tokio::sync::Notify>,
         writer: tokio::sync::Mutex<tokio::net::UnixStream>,
         monitor: Option<tokio::task::JoinHandle<()>>,
+    }
+
+    /// Separate pinned observations for the verified execution boundary. A
+    /// monitor's publication latency must not revive a dead owner generation.
+    pub(crate) struct ExecutionLiveness {
+        generations: [File; 3],
+    }
+
+    impl ExecutionLiveness {
+        pub(crate) fn check(&self) -> anyhow::Result<()> {
+            for process in &self.generations {
+                ensure!(!readable(process.as_raw_fd())?, "mcp_owner_lost");
+            }
+            Ok(())
+        }
     }
 
     fn failure(code: &'static str) -> anyhow::Error {
@@ -251,6 +326,22 @@ mod linux {
             "mcp_owner_parent_lost" => Some("mcp_owner_parent_lost"),
             "mcp_owner_startup_failed" => Some("mcp_owner_startup_failed"),
             _ => None,
+        }
+    }
+
+    fn startup_failure_code(value: &str) -> Option<&'static str> {
+        match value {
+            "mcp_owner_launch_invalid" => Some("mcp_owner_launch_invalid"),
+            "mcp_owner_sealed_closure_invalid" => Some("mcp_owner_sealed_closure_invalid"),
+            "mcp_owner_process_identity_unavailable" => {
+                Some("mcp_owner_process_identity_unavailable")
+            }
+            "mcp_owner_namespace_identity_invalid" => Some("mcp_owner_namespace_identity_invalid"),
+            "mcp_owner_sandbox_identity_invalid" => Some("mcp_owner_sandbox_identity_invalid"),
+            "mcp_owner_original_spawn_failed" => Some("mcp_owner_original_spawn_failed"),
+            "mcp_owner_private_lease_unavailable" => Some("mcp_owner_private_lease_unavailable"),
+            "mcp_owner_parent_death_unavailable" => Some("mcp_owner_parent_death_unavailable"),
+            _ => failure_code(value),
         }
     }
 
@@ -305,6 +396,315 @@ mod linux {
             offset += count as usize;
         }
         Ok(())
+    }
+
+    fn send_budget_fds(
+        socket: &UnixDatagram,
+        prepared: &BudgetPrepared,
+        files: &[File],
+    ) -> anyhow::Result<()> {
+        ensure!(
+            files.len() == super::super::linux_budget::PREPARED_FDS,
+            "mcp_owner_budget_packet_invalid"
+        );
+        send_descriptor_packet(socket, serde_json::to_vec(prepared)?, files)
+    }
+
+    fn send_descriptor_packet(
+        socket: &UnixDatagram,
+        mut bytes: Vec<u8>,
+        files: &[File],
+    ) -> anyhow::Result<()> {
+        ensure!(
+            !bytes.is_empty() && bytes.len() <= MAX_PACKET && files.len() <= MAX_FDS,
+            "mcp_owner_budget_packet_invalid"
+        );
+        let descriptors: Vec<_> = files.iter().map(AsRawFd::as_raw_fd).collect();
+        let descriptor_bytes = std::mem::size_of_val(descriptors.as_slice());
+        let control_size = unsafe { libc::CMSG_SPACE(descriptor_bytes as u32) } as usize;
+        // usize storage supplies cmsghdr alignment; byte arrays do not.
+        let mut control = vec![0_usize; control_size.div_ceil(std::mem::size_of::<usize>())];
+        let mut iov = libc::iovec {
+            iov_base: bytes.as_mut_ptr().cast(),
+            iov_len: bytes.len(),
+        };
+        let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
+        message.msg_iov = &mut iov;
+        message.msg_iovlen = 1;
+        message.msg_control = control.as_mut_ptr().cast();
+        message.msg_controllen = control_size;
+        unsafe {
+            let header = libc::CMSG_FIRSTHDR(&message);
+            ensure!(!header.is_null(), "mcp_owner_budget_packet_invalid");
+            (*header).cmsg_level = libc::SOL_SOCKET;
+            (*header).cmsg_type = libc::SCM_RIGHTS;
+            (*header).cmsg_len = libc::CMSG_LEN(descriptor_bytes as u32) as usize;
+            std::ptr::copy_nonoverlapping(
+                descriptors.as_ptr().cast::<u8>(),
+                libc::CMSG_DATA(header),
+                descriptor_bytes,
+            );
+        }
+        let sent = unsafe { libc::sendmsg(socket.as_raw_fd(), &message, libc::MSG_NOSIGNAL) };
+        ensure!(
+            sent == bytes.len() as isize,
+            "mcp_owner_budget_transfer_failed"
+        );
+        Ok(())
+    }
+
+    fn receive_budget_fds(socket: &UnixDatagram) -> std::io::Result<(BudgetPrepared, Vec<File>)> {
+        let invalid = || {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "mcp_owner_budget_packet_invalid",
+            )
+        };
+        let mut bytes = vec![0_u8; MAX_PACKET];
+        let descriptor_bytes =
+            super::super::linux_budget::PREPARED_FDS * std::mem::size_of::<RawFd>();
+        let control_size = unsafe { libc::CMSG_SPACE(descriptor_bytes as u32) } as usize;
+        let mut control = vec![0_usize; control_size.div_ceil(std::mem::size_of::<usize>())];
+        let mut iov = libc::iovec {
+            iov_base: bytes.as_mut_ptr().cast(),
+            iov_len: bytes.len(),
+        };
+        let mut message: libc::msghdr = unsafe { std::mem::zeroed() };
+        message.msg_iov = &mut iov;
+        message.msg_iovlen = 1;
+        message.msg_control = control.as_mut_ptr().cast();
+        message.msg_controllen = control_size;
+        let count =
+            unsafe { libc::recvmsg(socket.as_raw_fd(), &mut message, libc::MSG_CMSG_CLOEXEC) };
+        if count < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let mut files = Vec::new();
+        let mut valid_headers = 0;
+        let mut headers_valid = true;
+        // Take ownership of every delivered SCM_RIGHTS handle before checking
+        // framing, so rejection/truncation cannot leak received descriptors.
+        unsafe {
+            let mut header = libc::CMSG_FIRSTHDR(&message);
+            while !header.is_null() {
+                let minimum = libc::CMSG_LEN(0) as usize;
+                let offset = header
+                    .cast::<u8>()
+                    .offset_from(message.msg_control.cast::<u8>());
+                if offset < 0
+                    || (*header).cmsg_len < minimum
+                    || (*header).cmsg_len > message.msg_controllen.saturating_sub(offset as usize)
+                {
+                    headers_valid = false;
+                    break;
+                }
+                if (*header).cmsg_level == libc::SOL_SOCKET
+                    && (*header).cmsg_type == libc::SCM_RIGHTS
+                {
+                    valid_headers += 1;
+                    let length = (*header).cmsg_len - minimum;
+                    headers_valid &= length.is_multiple_of(std::mem::size_of::<RawFd>());
+                    for index in 0..length / std::mem::size_of::<RawFd>() {
+                        let descriptor = std::ptr::read_unaligned(
+                            libc::CMSG_DATA(header).cast::<RawFd>().add(index),
+                        );
+                        if descriptor < 0 {
+                            headers_valid = false;
+                        } else {
+                            files.push(File::from_raw_fd(descriptor));
+                        }
+                    }
+                } else {
+                    headers_valid = false;
+                }
+                header = libc::CMSG_NXTHDR(&message, header);
+            }
+        }
+        if count == 0
+            || message.msg_flags & (libc::MSG_TRUNC | libc::MSG_CTRUNC) != 0
+            || !headers_valid
+            || valid_headers != 1
+            || files.len() != super::super::linux_budget::PREPARED_FDS
+        {
+            return Err(invalid());
+        }
+        let prepared = serde_json::from_slice(&bytes[..count as usize]).map_err(|_| invalid())?;
+        Ok((prepared, files))
+    }
+
+    async fn adopt_budget(
+        socket: UnixDatagram,
+        requested: &BudgetPrepare,
+    ) -> anyhow::Result<(super::super::linux_budget::OwnedBudget, String)> {
+        socket.set_nonblocking(true)?;
+        // SAFETY: socket is uniquely owned by adopt_budget and not shared or concurrently closed.
+        let socket = unsafe { tokio::io::unix::AsyncFd::register(socket) }?;
+        let (prepared, files) = loop {
+            let mut readable = socket.readable().await?;
+            match readable.try_io(|socket| receive_budget_fds(socket.get_ref())) {
+                Ok(result) => break result?,
+                Err(_) => continue,
+            }
+        };
+        ensure!(
+            prepared.format == FORMAT
+                && prepared.instance.len() == 32
+                && prepared
+                    .instance
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit()),
+            "mcp_owner_budget_packet_invalid"
+        );
+        #[cfg(test)]
+        budget_adoption_barrier(&prepared.budget)?;
+        let budget = super::super::linux_budget::OwnedBudget::adopt_prepared(
+            &super::super::linux_budget::BoundConfig {
+                config: requested.config.clone(),
+                root: requested.root,
+            },
+            &prepared.budget,
+            files,
+        )?;
+        let acknowledgement = serde_json::to_vec(&Control {
+            format: FORMAT.to_owned(),
+            instance: prepared.instance.clone(),
+            action: "budget-adopted".to_owned(),
+        })?;
+        loop {
+            let mut writable = socket.writable().await?;
+            match writable.try_io(|socket| socket.get_ref().send(&acknowledgement)) {
+                Ok(result) => {
+                    ensure!(
+                        result? == acknowledgement.len(),
+                        "mcp_owner_budget_transfer_failed"
+                    );
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+        Ok((budget, prepared.instance))
+    }
+
+    fn await_budget_adoption(
+        transfer: &UnixDatagram,
+        collector: &File,
+        instance: &str,
+    ) -> anyhow::Result<()> {
+        let deadline = Instant::now() + Duration::from_millis(STARTUP_MILLIS);
+        loop {
+            ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+            ensure!(
+                Instant::now() < deadline,
+                "mcp_owner_budget_adoption_unverified"
+            );
+            let mut descriptors = [
+                libc::pollfd {
+                    fd: transfer.as_raw_fd(),
+                    events: libc::POLLIN | libc::POLLHUP,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: collector.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            let result = unsafe {
+                libc::poll(
+                    descriptors.as_mut_ptr(),
+                    descriptors.len() as libc::nfds_t,
+                    POLL_MILLIS as i32,
+                )
+            };
+            if result < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) {
+                continue;
+            }
+            ensure!(result >= 0, "mcp_owner_budget_adoption_unverified");
+            if descriptors[0].revents & libc::POLLIN != 0 {
+                let mut bytes = [0_u8; 1024];
+                let count = unsafe {
+                    libc::recv(
+                        transfer.as_raw_fd(),
+                        bytes.as_mut_ptr().cast(),
+                        bytes.len(),
+                        libc::MSG_TRUNC,
+                    )
+                };
+                ensure!(
+                    count > 0 && count as usize <= bytes.len(),
+                    "mcp_owner_budget_adoption_unverified"
+                );
+                let adopted: Control = decode(&bytes[..count as usize])?;
+                ensure!(
+                    adopted.format == FORMAT
+                        && adopted.instance == instance
+                        && adopted.action == "budget-adopted",
+                    "mcp_owner_budget_adoption_unverified"
+                );
+                ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+                return Ok(());
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn budget_adoption_barrier(
+        prepared: &super::super::linux_budget::PreparedBudget,
+    ) -> anyhow::Result<()> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let Some(path) = std::env::var_os("SOU142_TEST_HANDOFF_BARRIER") else {
+            return Ok(());
+        };
+        let path = std::path::PathBuf::from(path);
+        let staged = path.with_extension("staged");
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&staged)?;
+        file.write_all(&serde_json::to_vec(prepared)?)?;
+        file.sync_all()?;
+        std::fs::rename(staged, &path)?;
+        // This test-only barrier pauses the collector after the real owner has
+        // created its leaf, before adoption ACK can release a sandbox process.
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !path.with_extension("cancel").exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        bail!("mcp_owner_test_handoff_cancelled")
+    }
+
+    // The ordinary collector clears the owner's environment. Only the native
+    // fault controller in a test build passes this private barrier through the
+    // sealed owner launch. It pauses after leaf creation but before SCM_RIGHTS
+    // handback, so SIGKILL exercises the otherwise unobservable custody gap.
+    fn owner_pre_handback_barrier(
+        prepared: &super::super::linux_budget::PreparedBudget,
+    ) -> anyhow::Result<()> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let Some(path) = std::env::var_os("SOU142_TEST_OWNER_BEFORE_HANDBACK") else {
+            return Ok(());
+        };
+        let path = std::path::PathBuf::from(path);
+        let staged = path.with_extension("staged");
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&staged)?;
+        let bytes = serde_json::to_vec(prepared)?;
+        ensure!(bytes.len() <= MAX_PACKET, "mcp_owner_test_barrier_invalid");
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        std::fs::rename(staged, &path)?;
+        let deadline = Instant::now() + Duration::from_millis(STARTUP_MILLIS);
+        while Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(POLL_MILLIS));
+        }
+        bail!("mcp_owner_test_barrier_expired")
     }
 
     fn nonblocking(fd: RawFd) -> anyhow::Result<()> {
@@ -384,7 +784,12 @@ mod linux {
         ensure!(raw >= 0, "mcp_owner_launch_unavailable");
         let mut file = unsafe { File::from_raw_fd(raw) };
         let packet = serde_json::to_vec(startup)?;
-        ensure!(packet.len() <= MAX_PACKET, "mcp_owner_launch_invalid");
+        let limit = if startup.launch.sealed_closure.is_some() {
+            MAX_SEALED_STARTUP
+        } else {
+            MAX_PACKET
+        };
+        ensure!(packet.len() <= limit, "mcp_owner_launch_invalid");
         file.write_all(&packet)?;
         ensure!(
             unsafe {
@@ -411,21 +816,41 @@ mod linux {
             unsafe { libc::fcntl(fd, libc::F_GET_SEALS) } == expected,
             "mcp_owner_launch_invalid"
         );
-        let bytes = pinned_text(fd)?;
-        decode(bytes.as_bytes())
+        use std::os::unix::fs::FileExt;
+        let file = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(fd) });
+        let size = usize::try_from(file.metadata()?.len()).context("mcp_owner_launch_invalid")?;
+        ensure!(
+            size > 0 && size <= MAX_SEALED_STARTUP,
+            "mcp_owner_launch_invalid"
+        );
+        let mut bytes = vec![0u8; size];
+        file.read_exact_at(&mut bytes, 0)?;
+        let startup: Startup = decode(&bytes)?;
+        ensure!(
+            startup.launch.sealed_closure.is_some() || size <= MAX_PACKET,
+            "mcp_owner_launch_invalid"
+        );
+        Ok(startup)
     }
 
     fn validate(spec: &LaunchSpec) -> anyhow::Result<()> {
+        let sealed = spec.sealed_closure.is_some();
         ensure!(
-            spec.bwrap_args.len() <= MAX_ARGS && !spec.bwrap_args.is_empty(),
+            spec.bwrap_args.len() <= if sealed { MAX_SEALED_ARGS } else { MAX_ARGS }
+                && !spec.bwrap_args.is_empty(),
             "mcp_owner_launch_invalid"
         );
         ensure!(
-            spec.bwrap_args.iter().map(String::len).sum::<usize>() <= MAX_PACKET / 2,
+            spec.bwrap_args.iter().map(String::len).sum::<usize>()
+                <= if sealed {
+                    MAX_SEALED_ARG_BYTES
+                } else {
+                    MAX_PACKET / 2
+                },
             "mcp_owner_launch_invalid"
         );
         ensure!(
-            spec.inherited_fds.len() <= MAX_FDS,
+            spec.inherited_fds.len() <= if sealed { MAX_SEALED_FDS } else { MAX_FDS },
             "mcp_owner_launch_invalid"
         );
         let fds: BTreeSet<_> = spec.inherited_fds.iter().copied().collect();
@@ -449,8 +874,32 @@ mod linux {
                     == 2,
             "mcp_owner_launch_invalid"
         );
+        if let Some(closure) = &spec.sealed_closure {
+            let images: BTreeSet<_> = closure.images.iter().copied().collect();
+            let seals =
+                libc::F_SEAL_SEAL | libc::F_SEAL_SHRINK | libc::F_SEAL_GROW | libc::F_SEAL_WRITE;
+            ensure!(
+                closure.format == super::super::verified_closure::FORMAT
+                    && crate::native::is_digest(&closure.sha256)
+                    && !images.is_empty()
+                    && images.len() <= super::super::verified_closure::MAX_ENTRIES
+                    && images.len() == closure.images.len()
+                    && images.contains(&spec.bwrap_fd)
+                    && images.iter().all(|fd| fds.contains(fd)
+                        && unsafe { libc::fcntl(*fd, libc::F_GET_SEALS) } == seals),
+                "mcp_owner_sealed_closure_invalid"
+            );
+        }
         if let Some(fd) = spec.budget_attach_fd {
             ensure!(fds.contains(&fd), "mcp_owner_launch_invalid");
+        }
+        if let Some(requested) = &spec.budget_prepare {
+            ensure!(
+                spec.budget_attach_fd.is_none()
+                    && spec.budget_cleanup.is_none()
+                    && fds.contains(&requested.root_fd),
+                "mcp_owner_budget_request_invalid"
+            );
         }
         if let Some(cleanup) = &spec.budget_cleanup {
             ensure!(
@@ -486,12 +935,19 @@ mod linux {
             UnixStream::pair().context("mcp_owner_control_unavailable")?;
         parent.set_nonblocking(true)?;
         let control_fd = child_control.as_raw_fd();
+        let (mut budget_parent, budget_child) = if spec.budget_prepare.is_some() {
+            let (parent, child) = UnixDatagram::pair()?;
+            (Some(parent), Some(child))
+        } else {
+            (None, None)
+        };
         let collector = pidfd(std::process::id())?;
         let startup = sealed_startup(&Startup {
             launch: spec.clone(),
             collector_pid: std::process::id(),
             collector_start_ticks: process_ticks(std::process::id())?,
             collector_pidfd: collector.as_raw_fd(),
+            budget_transfer_fd: budget_child.as_ref().map(AsRawFd::as_raw_fd),
         })?;
         let startup_fd = startup.as_raw_fd();
         let mut command =
@@ -507,10 +963,15 @@ mod linux {
             .stderr(Stdio::piped())
             .kill_on_drop(false)
             .process_group(0);
+        #[cfg(test)]
+        if let Some(path) = std::env::var_os("SOU142_TEST_OWNER_BEFORE_HANDBACK") {
+            command.env("SOU142_TEST_OWNER_BEFORE_HANDBACK", path);
+        }
         let mut fds = spec.inherited_fds.clone();
         fds.push(control_fd);
         fds.push(startup_fd);
         fds.push(collector.as_raw_fd());
+        fds.extend(budget_child.as_ref().map(AsRawFd::as_raw_fd));
         unsafe {
             command.pre_exec(move || {
                 if libc::syscall(libc::SYS_close_range, 3_u32, u32::MAX, 4_u32) != 0 {
@@ -526,7 +987,22 @@ mod linux {
         }
         let mut child = command.spawn().context("mcp_owner_spawn_failed")?;
         drop(child_control);
+        drop(budget_child);
+        let mut prepared_budget = None;
         let started = async {
+            let budget_instance = if let Some(requested) = &spec.budget_prepare {
+                let (budget, instance) = adopt_budget(
+                    budget_parent
+                        .take()
+                        .context("mcp_owner_budget_transfer_failed")?,
+                    requested,
+                )
+                .await?;
+                prepared_budget = Some(budget);
+                Some(instance)
+            } else {
+                None
+            };
             let stream = tokio::net::UnixStream::from_std(parent.try_clone()?)?;
             let mut reader = stream;
             use tokio::io::AsyncReadExt;
@@ -540,6 +1016,13 @@ mod linux {
             let ready: Ready = decode(&packet)?;
             ensure!(
                 ready.format == FORMAT
+                    && budget_instance
+                        .as_ref()
+                        .is_none_or(|instance| *instance == ready.instance)
+                    && (spec.sealed_closure.is_some() == ready.original.is_some())
+                    && ready.original.as_ref().is_none_or(
+                        |original| original.namespace_pid > 1 && original.start_ticks > 0
+                    )
                     && Some(ready.owner_pid) == child.id()
                     && process_ticks(ready.owner_pid)? == ready.owner_start_ticks
                     && process_ticks(ready.sandbox_pid)? == ready.sandbox_start_ticks
@@ -549,23 +1032,101 @@ mod linux {
             let owner_pidfd = pidfd(ready.owner_pid)?;
             Ok::<_, anyhow::Error>((reader, ready, owner_pidfd))
         };
-        let (reader, ready, owner_pidfd) =
-            match tokio::time::timeout(Duration::from_millis(STARTUP_MILLIS), started).await {
-                Ok(Ok(value)) => value,
-                _ => {
-                    // EOF is the owner's unconditional cleanup request. Do not kill
-                    // it before it can verify its own resources.
-                    let _ = parent.shutdown(std::net::Shutdown::Both);
-                    let _ = tokio::time::timeout(
-                        Duration::from_millis(CLEANUP_MILLIS + 500),
-                        child.wait(),
-                    )
-                    .await;
-                    let _ = child.start_kill();
-                    let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
-                    bail!("mcp_owner_startup_failed");
+        let startup_started = std::time::Instant::now();
+        let (reader, ready, owner_pidfd) = match tokio::time::timeout(
+            Duration::from_millis(STARTUP_MILLIS),
+            started,
+        )
+        .await
+        {
+            Ok(Ok(value)) => value,
+            failed_startup => {
+                let timed_out = failed_startup.is_err();
+                let error_code = match &failed_startup {
+                    Ok(Err(error)) => error
+                        .chain()
+                        .find_map(|cause| startup_failure_code(&cause.to_string())),
+                    _ => None,
+                };
+                let elapsed_ms = startup_started.elapsed().as_millis();
+                // EOF is the owner's unconditional cleanup request. Do not kill
+                // it before it can verify its own resources.
+                let _ = parent.shutdown(std::net::Shutdown::Both);
+                let owner_status =
+                    tokio::time::timeout(Duration::from_millis(CLEANUP_MILLIS + 500), child.wait())
+                        .await
+                        .ok()
+                        .and_then(Result::ok);
+                let killed_before_handback = spec.budget_prepare.is_some()
+                    && prepared_budget.is_none()
+                    && owner_status
+                        .as_ref()
+                        .is_some_and(|status| status.signal() == Some(libc::SIGKILL));
+                let _ = child.start_kill();
+                let _ = tokio::time::timeout(Duration::from_secs(1), child.wait()).await;
+                if spec.sealed_closure.is_some() {
+                    use tokio::io::AsyncReadExt;
+                    let mut bytes = Vec::new();
+                    if let Some(stderr) = child.stderr.take() {
+                        let mut stderr = stderr.take(8192);
+                        let _ = tokio::time::timeout(
+                            Duration::from_millis(100),
+                            stderr.read_to_end(&mut bytes),
+                        )
+                        .await;
+                    }
+                    let text = String::from_utf8_lossy(&bytes);
+                    let helper_codes: BTreeSet<_> = text
+                        .lines()
+                        .filter_map(|line| {
+                            line.strip_prefix("agentfw-owner-error:")
+                                .and_then(startup_failure_code)
+                        })
+                        .collect();
+                    let diagnostic = if text.contains("execvp") {
+                        "mcp_owner_image_exec_failed"
+                    } else if text.contains("Permission denied") {
+                        "mcp_owner_image_permission_failed"
+                    } else if text.contains("Unknown option") {
+                        "mcp_owner_image_option_failed"
+                    } else if text.contains("No such file or directory") {
+                        "mcp_owner_image_path_failed"
+                    } else if text.contains("Can't create") {
+                        "mcp_owner_image_create_failed"
+                    } else if text.contains("Can't mount") || text.contains("Can't bind mount") {
+                        "mcp_owner_image_mount_failed"
+                    } else {
+                        "mcp_owner_image_failure_unclassified"
+                    };
+                    let step = text
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("agentfw-owner-step:")
+                                .and_then(|value| value.parse::<u8>().ok())
+                        })
+                        .filter(|step| *step <= 8);
+                    let os_error = text
+                        .lines()
+                        .find_map(|line| {
+                            line.strip_prefix("agentfw-owner-errno:")
+                                .and_then(|value| value.parse::<i32>().ok())
+                        })
+                        .filter(|code| (1..=4095).contains(code));
+                    eprintln!(
+                        "{}",
+                        serde_json::json!({"event":"mcp_owner_startup_diagnostic",
+                            "timed_out":timed_out,"elapsed_ms":elapsed_ms,"error_code":error_code,
+                                "helper_codes":helper_codes,"image_code":diagnostic,"setup_step":step,"os_error":os_error})
+                    );
                 }
-            };
+                if killed_before_handback {
+                    // No leaf descriptor was received. A same-name child of
+                    // the delegated root is not authority to sweep it.
+                    bail!("mcp_budget_owner_lost_before_handback_unsupported");
+                }
+                bail!("mcp_owner_startup_failed");
+            }
+        };
         let writer = tokio::net::UnixStream::from_std(parent)?;
         let failed = Arc::new(AtomicBool::new(false));
         let complete = Arc::new(AtomicBool::new(false));
@@ -589,6 +1150,7 @@ mod linux {
         Ok(OwnerProcess {
             sandbox_pid: ready.sandbox_pid,
             child,
+            budget: prepared_budget,
             guard: OwnerGuard {
                 ready,
                 failed,
@@ -750,6 +1312,36 @@ mod linux {
     }
 
     impl OwnerGuard {
+        pub(crate) fn execution_liveness(&self) -> anyhow::Result<ExecutionLiveness> {
+            self.check()?;
+            ensure!(
+                self.ready.original.is_some(),
+                "mcp_owner_namespace_identity_invalid"
+            );
+            let identities = [
+                (self.ready.owner_pid, self.ready.owner_start_ticks),
+                (self.ready.sandbox_pid, self.ready.sandbox_start_ticks),
+                (self.ready.pid1_pid, self.ready.pid1_start_ticks),
+            ];
+            let mut generations = Vec::with_capacity(3);
+            for (pid, ticks) in identities {
+                let process = pidfd(pid)?;
+                ensure!(
+                    process_ticks(pid)? == ticks,
+                    "mcp_owner_process_identity_invalid"
+                );
+                generations.push(process);
+            }
+            let pinned = ExecutionLiveness {
+                generations: generations
+                    .try_into()
+                    .map_err(|_| failure("mcp_owner_process_identity_invalid"))?,
+            };
+            pinned.check()?;
+            self.check()?;
+            Ok(pinned)
+        }
+
         pub(crate) fn failed(&self) -> Arc<AtomicBool> {
             Arc::clone(&self.failed)
         }
@@ -859,6 +1451,7 @@ mod linux {
                 "owner_pid":self.ready.owner_pid,"owner_start_ticks":self.ready.owner_start_ticks,
                 "sandbox_pid":self.ready.sandbox_pid,"sandbox_start_ticks":self.ready.sandbox_start_ticks,
                 "pid1_pid":self.ready.pid1_pid,"pid1_start_ticks":self.ready.pid1_start_ticks,
+                "original":self.ready.original,
                 "startup_bound_ms":STARTUP_MILLIS,"poll_ms":POLL_MILLIS,"cleanup_bound_ms":CLEANUP_MILLIS,
                 "heartbeat_ms":HEARTBEAT_MILLIS,"lease_ms":LEASE_MILLIS,
                 "reason":state.reason,"sandbox_exit":state.sandbox_exit,
@@ -908,7 +1501,7 @@ mod linux {
     pub(super) fn early_dispatch() -> Option<i32> {
         let args: Vec<_> = std::env::args_os().collect();
         let kind = args.get(1)?.to_str()?;
-        if kind != OWNER_ARG && kind != PID1_ARG {
+        if kind != OWNER_ARG && kind != PID1_ARG && kind != SEALED_PID1_ARG {
             return None;
         }
         // Raw writes are required under the unchanged filesystem seccomp
@@ -935,9 +1528,21 @@ mod linux {
                     "mcp_owner_launch_invalid"
                 );
                 let command = args[4..].to_vec();
-                namespace_pid1(inherited_socket(fd)?, &command)
+                namespace_pid1(inherited_socket(fd)?, &command, kind == SEALED_PID1_ARG)
             }
         })();
+        if let Err(error) = &result {
+            let code = error
+                .chain()
+                .find_map(|cause| startup_failure_code(&cause.to_string()))
+                .unwrap_or("mcp_owner_startup_failed");
+            let message = format!("agentfw-owner-error:{code}\n");
+            // No formatting of raw errors/paths and no stderr panic under the
+            // unchanged seccomp filter; this is private startup diagnostics.
+            unsafe {
+                libc::write(2, message.as_ptr().cast(), message.len());
+            }
+        }
         Some(if result.is_ok() { 0 } else { 1 })
     }
 
@@ -974,6 +1579,7 @@ mod linux {
 
     struct LeafFallback {
         spec: Option<CleanupSpec>,
+        _pins: Vec<File>,
         armed: bool,
     }
 
@@ -1027,10 +1633,11 @@ mod linux {
         );
         set_cloexec(startup.collector_pidfd, true)?;
         let collector = unsafe { File::from_raw_fd(startup.collector_pidfd) };
-        let spec = startup.launch;
+        let mut spec = startup.launch;
         validate(&spec)?;
         let mut leaf_fallback = LeafFallback {
             spec: spec.budget_cleanup.clone(),
+            _pins: Vec::new(),
             armed: true,
         };
         if readable(collector.as_raw_fd())? {
@@ -1042,6 +1649,62 @@ mod linux {
             "mcp_owner_parent_identity_invalid"
         );
         let instance = format!("{:032x}", rand::random::<u128>());
+        ensure!(
+            startup.budget_transfer_fd.is_some() == spec.budget_prepare.is_some(),
+            "mcp_owner_budget_request_invalid"
+        );
+        let mut owned_budget = None;
+        let mut budget_root = None;
+        if let Some(requested) = &spec.budget_prepare {
+            let transfer_fd = startup
+                .budget_transfer_fd
+                .context("mcp_owner_budget_request_invalid")?;
+            ensure!(
+                transfer_fd >= 3
+                    && !spec.inherited_fds.contains(&transfer_fd)
+                    && transfer_fd != control.as_raw_fd()
+                    && transfer_fd != collector.as_raw_fd(),
+                "mcp_owner_budget_request_invalid"
+            );
+            set_cloexec(transfer_fd, true)?;
+            let transfer = unsafe { UnixDatagram::from_raw_fd(transfer_fd) };
+            transfer.set_read_timeout(Some(Duration::from_millis(STARTUP_MILLIS)))?;
+            transfer.set_write_timeout(Some(Duration::from_millis(STARTUP_MILLIS)))?;
+            budget_root = Some(unsafe { File::from_raw_fd(requested.root_fd) });
+            ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+            let budget = super::super::linux_budget::OwnedBudget::prepare_pinned(
+                &super::super::linux_budget::BoundConfig {
+                    config: requested.config.clone(),
+                    root: requested.root,
+                },
+                budget_root
+                    .as_ref()
+                    .context("mcp_owner_budget_request_invalid")?,
+            )?;
+            let (cleanup, pins) = budget.crash_cleanup()?;
+            leaf_fallback.spec = Some(cleanup.clone());
+            leaf_fallback._pins = pins;
+            let (prepared, descriptors) = budget.export_prepared()?;
+            owned_budget = Some(budget);
+            ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
+            owner_pre_handback_barrier(&prepared)?;
+            send_budget_fds(
+                &transfer,
+                &BudgetPrepared {
+                    format: FORMAT.to_owned(),
+                    instance: instance.clone(),
+                    budget: prepared,
+                },
+                &descriptors,
+            )?;
+            await_budget_adoption(&transfer, &collector, &instance)?;
+            spec.budget_attach_fd = owned_budget.as_ref().map(|budget| budget.attach_fd());
+            spec.budget_cleanup = Some(cleanup);
+        }
+        // Keep all owner capabilities alive through startup and cleanup. The
+        // wrapper inherits none of the root, cleanup or handback descriptors.
+        let _budget_root = budget_root;
+        let _owned_budget = owned_budget;
         let (mut lease, inner_lease) = UnixStream::pair()?;
         lease.set_read_timeout(Some(Duration::from_millis(STARTUP_MILLIS)))?;
         lease.set_write_timeout(Some(Duration::from_millis(STARTUP_MILLIS)))?;
@@ -1077,6 +1740,10 @@ mod linux {
             .copied()
             .filter(|fd| {
                 *fd != spec.bwrap_fd
+                    && spec
+                        .budget_prepare
+                        .as_ref()
+                        .is_none_or(|request| request.root_fd != *fd)
                     && Some(*fd) != spec.budget_attach_fd
                     && !spec.budget_cleanup.as_ref().is_some_and(|cleanup| {
                         [
@@ -1148,6 +1815,7 @@ mod linux {
         drop(info_writer);
         let sandbox_pid = child.id();
         let mut namespace = None;
+        let mut setup_step = 1_u8;
         let setup = (|| {
             let mut bytes = Vec::new();
             let mut byte = [0];
@@ -1162,18 +1830,21 @@ mod linux {
                 }
             }
             let value: Value = decode(&bytes)?;
+            setup_step = 2;
             let pid1_pid = value
                 .get("child-pid")
                 .and_then(Value::as_u64)
                 .and_then(|pid| u32::try_from(pid).ok())
                 .context("mcp_owner_sandbox_identity_invalid")?;
             namespace = Some(pidfd(pid1_pid)?);
+            setup_step = 3;
             let hello = Control {
                 format: FORMAT.to_owned(),
                 instance: instance.clone(),
                 action: "prepare".to_owned(),
             };
             send(&mut lease, &hello)?;
+            setup_step = 4;
             let prepared: Control = receive(&mut lease)?;
             ensure!(
                 prepared.format == FORMAT
@@ -1183,6 +1854,7 @@ mod linux {
             );
             ensure!(!readable(collector.as_raw_fd())?, "mcp_owner_parent_lost");
             ensure!(child.try_wait()?.is_none(), "mcp_owner_sandbox_lost");
+            setup_step = 5;
             send(
                 &mut lease,
                 &Control {
@@ -1190,13 +1862,29 @@ mod linux {
                     ..hello
                 },
             )?;
-            let started: Control = receive(&mut lease)?;
-            ensure!(
-                started.format == FORMAT
-                    && started.instance == instance
-                    && started.action == "started",
-                "mcp_owner_namespace_identity_invalid"
-            );
+            setup_step = 6;
+            let original = if spec.sealed_closure.is_some() {
+                let started: SealedStarted = receive(&mut lease)?;
+                ensure!(
+                    started.format == FORMAT
+                        && started.instance == instance
+                        && started.action == "started"
+                        && started.original.namespace_pid > 1
+                        && started.original.start_ticks > 0,
+                    "mcp_owner_namespace_identity_invalid"
+                );
+                Some(started.original)
+            } else {
+                let started: Control = receive(&mut lease)?;
+                ensure!(
+                    started.format == FORMAT
+                        && started.instance == instance
+                        && started.action == "started",
+                    "mcp_owner_namespace_identity_invalid"
+                );
+                None
+            };
+            setup_step = 7;
             let owner_pid = unsafe { libc::getpid() } as u32;
             let ready = Ready {
                 format: FORMAT.to_owned(),
@@ -1207,9 +1895,31 @@ mod linux {
                 sandbox_start_ticks: process_ticks(sandbox_pid)?,
                 pid1_pid,
                 pid1_start_ticks: process_ticks(pid1_pid)?,
+                original,
             };
+            setup_step = 8;
             send(&mut control, &ready)
         })();
+        if spec.sealed_closure.is_some() {
+            if let Err(error) = &setup {
+                let code = error
+                    .chain()
+                    .find_map(|cause| startup_failure_code(&cause.to_string()))
+                    .unwrap_or("mcp_owner_startup_failed");
+                let os_error = error
+                    .chain()
+                    .find_map(|cause| {
+                        cause
+                            .downcast_ref::<std::io::Error>()
+                            .and_then(std::io::Error::raw_os_error)
+                    })
+                    .unwrap_or(0);
+                let message=format!("agentfw-owner-error:{code}\nagentfw-owner-step:{setup_step}\nagentfw-owner-errno:{os_error}\n");
+                unsafe {
+                    libc::write(2, message.as_ptr().cast(), message.len());
+                }
+            }
+        }
         let mut reason = if setup.is_ok() {
             "mcp_owner_stop_requested"
         } else {
@@ -1522,7 +2232,11 @@ mod linux {
         }
     }
 
-    fn namespace_pid1(mut lease: UnixStream, command: &[std::ffi::OsString]) -> anyhow::Result<()> {
+    fn namespace_pid1(
+        mut lease: UnixStream,
+        command: &[std::ffi::OsString],
+        sealed: bool,
+    ) -> anyhow::Result<()> {
         ensure!(
             unsafe { libc::getpid() } == 1,
             "mcp_owner_namespace_required"
@@ -1587,13 +2301,28 @@ mod linux {
         let mut child = original
             .spawn()
             .context("mcp_owner_original_spawn_failed")?;
-        send(
-            &mut lease,
-            &Control {
-                action: "started".to_owned(),
-                ..hello
-            },
-        )?;
+        if sealed {
+            send(
+                &mut lease,
+                &SealedStarted {
+                    format: hello.format.clone(),
+                    instance: hello.instance.clone(),
+                    action: "started".into(),
+                    original: OriginalGeneration {
+                        namespace_pid: child.id(),
+                        start_ticks: process_ticks(child.id())?,
+                    },
+                },
+            )?;
+        } else {
+            send(
+                &mut lease,
+                &Control {
+                    action: "started".into(),
+                    ..hello
+                },
+            )?;
+        }
         close_stdio();
         nonblocking(lease.as_raw_fd())?;
         // Absolute CLOCK_MONOTONIC deadlines prevent a buffered old heartbeat
@@ -1699,11 +2428,86 @@ mod linux {
             );
             assert_eq!(decode::<Control>(&encoded[4..]).unwrap().action, "stop");
         }
+
+        fn prepared_packet() -> BudgetPrepared {
+            BudgetPrepared {
+                format: FORMAT.to_owned(),
+                instance: "a".repeat(32),
+                budget: super::super::super::linux_budget::PreparedBudget {
+                    budget_sha256: "b".repeat(64),
+                    leaf: format!("agentfw-mcp-{}", "c".repeat(32)),
+                    device: 1,
+                    inode: 2,
+                    started_monotonic_nanos: 1,
+                },
+            }
+        }
+
+        #[test]
+        fn prepared_descriptor_packet_is_exact_and_cloexec() {
+            let (sender, receiver) = UnixDatagram::pair().unwrap();
+            let files = (0..super::super::super::linux_budget::PREPARED_FDS)
+                .map(|_| File::open("/dev/null").unwrap())
+                .collect::<Vec<_>>();
+            send_budget_fds(&sender, &prepared_packet(), &files).unwrap();
+            let (prepared, received) = receive_budget_fds(&receiver).unwrap();
+            assert_eq!(prepared.budget.budget_sha256, "b".repeat(64));
+            assert_eq!(received.len(), files.len());
+            for file in received {
+                assert_ne!(
+                    unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFD) } & libc::FD_CLOEXEC,
+                    0
+                );
+            }
+        }
+
+        #[test]
+        fn rejected_descriptor_packets_close_all_delivered_capabilities() {
+            for (count, malformed) in [(7, false), (8, true), (9, false)] {
+                let (sender, receiver) = UnixDatagram::pair().unwrap();
+                let (mut observer, capability) = UnixStream::pair().unwrap();
+                observer
+                    .set_read_timeout(Some(Duration::from_secs(1)))
+                    .unwrap();
+                let capability: std::os::fd::OwnedFd = capability.into();
+                let capability = File::from(capability);
+                let files = (0..count)
+                    .map(|_| capability.try_clone().unwrap())
+                    .collect::<Vec<_>>();
+                let bytes = if malformed {
+                    b"{".to_vec()
+                } else {
+                    serde_json::to_vec(&prepared_packet()).unwrap()
+                };
+                send_descriptor_packet(&sender, bytes, &files).unwrap();
+                drop(files);
+                drop(capability);
+                assert!(receive_budget_fds(&receiver).is_err());
+                let mut byte = [0];
+                assert_eq!(
+                    observer.read(&mut byte).unwrap(),
+                    0,
+                    "rejected SCM_RIGHTS must close every delivered duplicate"
+                );
+            }
+        }
+
+        #[test]
+        fn prepared_descriptor_packet_requires_rights_and_rejects_body_truncation() {
+            let (sender, receiver) = UnixDatagram::pair().unwrap();
+            sender
+                .send(&serde_json::to_vec(&prepared_packet()).unwrap())
+                .unwrap();
+            assert!(receive_budget_fds(&receiver).is_err());
+            sender.send(&vec![b' '; MAX_PACKET + 1]).unwrap();
+            assert!(receive_budget_fds(&receiver).is_err());
+        }
         #[test]
         fn only_owned_leaf_names_and_descriptor_sets_are_accepted() {
             let file = File::open("/dev/null").unwrap();
             let fd = file.as_raw_fd();
             let mut spec = LaunchSpec {
+                sealed_closure: None,
                 bwrap_fd: fd,
                 owner_executable_fd: fd,
                 inherited_fds: vec![fd],
@@ -1715,6 +2519,7 @@ mod linux {
                 ],
                 budget_attach_fd: None,
                 budget_cleanup: None,
+                budget_prepare: None,
             };
             validate(&spec).unwrap();
             spec.inherited_fds.push(fd);
@@ -1738,6 +2543,27 @@ mod linux {
             assert!(!readable(process.as_raw_fd()).unwrap());
             let file = File::open("/dev/null").unwrap();
             assert!(inherited_socket(file.as_raw_fd()).is_err());
+        }
+
+        #[test]
+        fn execution_liveness_observes_exit_without_waiting_for_monitor_publication() {
+            for dead in 0..3 {
+                let mut child = std::process::Command::new("/bin/sleep")
+                    .arg("30")
+                    .spawn()
+                    .unwrap();
+                let mut generations = [
+                    pidfd(std::process::id()).unwrap(),
+                    pidfd(std::process::id()).unwrap(),
+                    pidfd(std::process::id()).unwrap(),
+                ];
+                generations[dead] = pidfd(child.id()).unwrap();
+                let pinned = ExecutionLiveness { generations };
+                pinned.check().unwrap();
+                child.kill().unwrap();
+                child.wait().unwrap();
+                assert_eq!(pinned.check().unwrap_err().to_string(), "mcp_owner_lost");
+            }
         }
 
         #[test]
@@ -1799,16 +2625,19 @@ mod linux {
             let fd = file.as_raw_fd();
             let startup = Startup {
                 launch: LaunchSpec {
+                    sealed_closure: None,
                     bwrap_fd: fd,
                     owner_executable_fd: fd,
                     inherited_fds: vec![fd],
                     bwrap_args: Vec::new(),
                     budget_attach_fd: None,
                     budget_cleanup: None,
+                    budget_prepare: None,
                 },
                 collector_pid: std::process::id(),
                 collector_start_ticks: process_ticks(std::process::id()).unwrap(),
                 collector_pidfd: collector.as_raw_fd(),
+                budget_transfer_fd: None,
             };
             let mut sealed = sealed_startup(&startup).unwrap();
             assert!(sealed.write_all(b"tamper").is_err());

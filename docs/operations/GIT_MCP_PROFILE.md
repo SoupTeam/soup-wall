@@ -210,3 +210,218 @@ physical request retains its slot and original deadline until it completes. A
 nonresponding withdrawn request still terminates the transport at that deadline.
 Filesystem's existing finite best-effort wire cancellation remains unchanged.
 See the [upstream cancellation report](https://github.com/modelcontextprotocol/python-sdk/issues/2610).
+
+
+## Opt-in strict shallow repositories (SOU-147)
+
+`sw-mcp/git-readonly-shallow/1` is a separate Linux x86-64 profile for a prepared,
+owned standalone repository that satisfies the existing strict repository
+contract and has local shallow boundary metadata. The default v1 profile still
+refuses `.git/shallow`. This selection does not enable named-reference or
+per-file syntax. Unqualified combined identities and simultaneous installer
+options refuse; none falls back to another profile.
+
+```sh
+python3 scripts/install-sou68-git-profile.py --run --shallow-repository \
+  --destination /absolute/private/git-shallow \
+  --workspace /absolute/owned/strict-shallow-project --git /absolute/pinned/git \
+  --git-sha256 REVIEWED_GIT_SHA256 --bwrap /absolute/pinned/bwrap \
+  --git-launcher /absolute/pinned/agentfw-git-sandbox
+```
+
+Use that installation's `profile.json` as `AGENTFW_MCP_SERVER_PROFILE`, and its
+`registry.json` and digest in the enforcing daemon. Keep the accepted
+`rule_baseline/git_readonly_v1/rule_baseline.py` classifier. The original tool
+names, schemas and arguments remain unchanged. `git_show`/`git_diff` still accept
+only HEAD or a full local SHA; status/log/staged/unstaged diff keep their accepted
+bounds. No fetch, deepen, repair, helper or second Git executor is introduced.
+A missing ancestor stays missing and yields an original error or correlated
+explicit refusal; a later safe local read remains usable.
+
+Existing strict **core-only configuration and heads/tags metadata** restrictions
+remain. General clone remote/branch configuration, remote-reference layouts,
+alternates, worktrees, submodules, attributes, active hooks and promisor/partial
+clones are unsupported. A normal clone carrying those features is refused; the
+installer never strips user configuration or changes source data. This task's
+local clone fixtures normalize only their newly generated owned metadata to
+that accepted strict layout. Do not mistake that fixture preparation for an
+automatic conversion command for an existing project.
+
+A present boundary file must contain 1–64 unique lowercase SHA-1 IDs, each an
+exact 40-byte line ending in LF, within 2624 bytes. Every boundary must be an
+available local commit. Blank/duplicate/CRLF/NUL/truncated/oversized records,
+links, hard links, shared writable or unowned inputs and unsupported object
+formats refuse before starting the original server. An ordinary repository with
+no boundary file is also supported as a control; no boundary is synthesized.
+
+The new view reuses same-FD read leases and sealed metadata images. It captures
+at most 128 loose or packed objects, each bounded to 262144 bytes, within a
+16 MiB total image and existing process/descriptor/resource limits. Pack v2,
+index v2 and optional reverse-index v1 have checked count, SHA-1 identity,
+checksums, offsets, fanout/order and CRC framing. Delta records, auxiliary pack
+formats, large-offset indexes and duplicate loose/packed storage are explicitly
+unsupported in this finite profile. The original pinned Git remains the only
+executor. See [Git's pack specification](https://git-scm.com/docs/gitformat-pack).
+
+Read leases reject existing writers/mappings and permanently withdraw a view on
+a later write-open. Directory watches also cover replacement/removal. The
+collector checks withdrawal before admission, before dispatch after Ask and
+before result release. Restoring metadata bytes never reactivates a withdrawn
+session. Current policy/classifier admission, exact single-use Ask, result
+inspection, cancellation, isolation and cleanup remain mandatory; the accepted
+five-second first-pending observation and broker/runtime budgets are unchanged.
+
+The pinned upstream GitPython `git_show` implementation compares a commit with
+its parent. In a depth-one clone it can therefore return its own `fatal: bad
+object` error for HEAD, despite status/log/working-tree diff remaining useful.
+The protected server preserves that original error and permits a later safe
+read. It never fetches the parent or substitutes another implementation.
+Qualification retains this depth-one case and separately checks successful
+byte-identical show output from a shallow fixture with a local parent. Original
+error strings can contain different executable paths outside/inside the fixed
+namespace; both raw errors and hashes are retained without rewriting output.
+
+Run **Real Git MCP profile** on the exact source branch and select **Run only
+opt-in SOU-147 shallow Git acceptance**. The retained
+`sou68-real-git-mcp-evidence` artifact includes ordinary/shallow original-server
+byte comparisons, missing-ancestor calibration and continuation, malformed and
+unsafe metadata refusals, boundary and pack mapped write/restore, in-flight
+withdrawal, Ask/replay/cancel/Deny, calibrated helper/outside/receiver witnesses,
+source identity and process cleanup. Missing native prerequisites fail rather
+than becoming passing skips. Preserve failed/incomplete attempts.
+
+
+## Opt-in per-file revision reads (SOU-146)
+
+The default `sw-mcp/git-readonly/1` contract remains unchanged. An operator may
+prepare a **separate installation** with `--file-revisions` to select
+`sw-mcp/git-readonly-file-revisions/1`. Use the same pinned Linux x86-64 Git,
+Python, bubblewrap and Agent launcher as above; `--ro-bind-data` support is
+required. Preparation never changes the source repository.
+
+```sh
+python3 scripts/install-sou68-git-profile.py --run --file-revisions \
+  --destination /absolute/private/git-file-revisions \
+  --workspace /absolute/owned/project --git /absolute/pinned/git \
+  --git-sha256 REVIEWED_GIT_SHA256 --bwrap /absolute/pinned/bwrap \
+  --git-launcher /absolute/pinned/agentfw-git-sandbox
+```
+
+Install that directory's `registry.json` and its digest in the enforcing daemon,
+and select its `profile.json` with `AGENTFW_MCP_SERVER_PROFILE`. Explicitly select
+`rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py` with
+`AGENTFW_RULE_BASELINE` and `AGENTFW_CLASSIFIER=rule-baseline`. Do not reuse another
+profile's registry or classifier as an implicit fallback. This development
+extension is not a combined local-reference, shallow or installed-pilot preset.
+Unknown combined profile identities refuse at startup; named refs and shallow
+repositories remain unsupported by this selection.
+
+To execute whole-commit and diff reads with daemon-owned formatter attribution,
+explicitly configure `native.git_execution.profile_path` to this installation's
+absolute `profile.json`, `profile_sha256` to its SHA-256, and `server_id` to the
+collector's exact server ID. Keep its workspace identity pinned and use the
+authenticated host/child-authority and liveness configuration documented for
+daemon Git execution. Execution accepts exactly the BASE and file-revision
+formats; it does not enable local-reference or shallow combinations. The worker
+retains the same revision View for its sealed mount and typed object facts and
+rechecks its path proof immediately before writing the original request. The
+collector independently retains its original View throughout a pending Ask.
+File payloads (`HEAD:path` or full-SHA plus path) receive full baseline result
+inspection, including payloads that look like commit headers. No result text or
+serialized receipt can manufacture formatter origin. Missing execution opt-in
+preserves the original inspection route and may withhold a whole-commit result.
+
+The original upstream `git_show` name, schema and arguments are preserved. Its
+`revision` accepts `HEAD:notes.txt` or `FULL_40_HEX_COMMIT_SHA:docs/機能 notes.txt`.
+The path is a literal UTF-8 relative path: at most 1024 bytes, 16 components and
+255 bytes per component. ASCII letters, digits, dot, underscore, dash and spaces
+plus bounded Unicode are supported. Empty components, dot/dot-dot, absolute
+paths, option-like components, NUL/control/format characters, revision magic,
+backslashes, colons, wildcards and Git metadata/attribute components refuse.
+`git_diff` retains its original HEAD/full-SHA grammar. A per-file target must
+resolve through a commit and trees to a regular blob; trees, tags, symlinks,
+gitlinks, missing objects and missing paths receive a correlated refusal.
+
+This profile captures at most 128 loose objects, each at most 262144 compressed
+and inflated bytes, within a 16 MiB total image. Packed object stores refuse;
+packed reference metadata may resolve HEAD but grants no named-reference
+capability. Existing ownership, configuration, hook, alternate, submodule,
+standalone-repository and resource constraints still apply. No helper, Git
+revision expansion, fetch, repair or network operation is used to validate a
+path. The original server executes the original request on sealed metadata and
+object images and its result passes the existing inspection gate unchanged.
+
+Retained same-FD read leases reject pre-existing writers/mappings and permanently
+withdraw on a later writer. Directory watches cover replacement, creation and
+removal. Source validity is checked before admission, after approval before
+dispatch, and before result release. A write/restore does not revive a session;
+start a new protected session after restoring the owned source. Each call still
+requires current classifier/policy admission and a separate single-use Ask when
+configured. The first-pending observation remains five seconds including cold
+preparation; broker TTLs and resource budgets are unchanged.
+
+The ordinary required Ready Git job runs this qualifier alongside the separately
+selected local-reference and shallow qualifiers. For a focused reproduction, run
+the **Real Git MCP profile** workflow on the exact branch and select
+**Run only opt-in SOU-146 per-file revision acceptance**. Its retained
+`sou68-real-git-mcp-evidence` artifact includes `sou146-acceptance/report.json`,
+source identity, original/protected response hashes, grammar/type refusals,
+source replacement and mapped write/restore, Ask/replay/cancel/Deny, actual
+in-flight source withdrawal, calibrated helper/outside/receiver controls and
+independent process cleanup. A missing Linux prerequisite is a failure, never a
+passing skip. Preserve incomplete and failed reports alongside a later pass.
+The report distinguishes collector and verified-worker confinement probes,
+actual daemon-worker preparation/stop barriers, and a private libtest barrier
+after the real original `tools/call` write. The latter proves source restoration
+cannot create a Completion after withdrawal; it adds no production hook. A known
+withdrawn collector View receives its correlated refusal before any worker error
+propagates. Incomplete execution still retires the uncertain old session; a fresh
+protected session must pass after restoring the owned source.
+
+Healthy qualification sessions explicitly request and verify the production
+default ten-second liveness lease. The earlier [run #185](https://github.com/SoupTeam/soup-wall/actions/runs/40355477933)
+requested two seconds and failed on `native_liveness_uncertain` after FILE ID10;
+FILE IDs20/21 were not reached. That failed short-lease workload remains evidence,
+and healthy execution with a two-second lease is not claimed. Request/response
+timing does not establish its full cause. Production liveness code/defaults,
+the five-second worker/first-pending bounds and approval TTLs are unchanged.
+
+A separate negative requests and verifies a two-second lease, pauses its owned
+collector through a pinned pidfd, and requires `native_session_expired` for that
+exact session and epoch. It requires zero worker reservations/new original
+results, actual host EOF and independently observed cleanup. Terminal grading
+accepts either confirmed owner cleanup with `native_liveness_uncertain`, or the
+exact combined native-expiry/1500 ms namespace-owner guard with
+`pilot_cleanup_unconfirmed`. The combined branch requires matching owner instance
+and process start identities, `mcp_owner_liveness_expired`, and complete independent
+descendant observation. It retains the production receipt's unconfirmed cleanup;
+it does not establish isolated native-denial behavior. Any other failure refuses.
+Namespace-owner termination alone is not native-expiry evidence. A new ten-second
+session must return the original bytes; the expired session is never revived.
+
+[Run #186](https://github.com/SoupTeam/soup-wall/actions/runs/40364573818) remains
+failed/incomplete: all twelve FILE frames and BASE ID200 matched the originals,
+but its qualifier rejected the combined guard before the fresh-session and Ask
+controls. Those controls require a new complete qualification run.
+
+[Run #188](https://github.com/SoupTeam/soup-wall/actions/runs/40371827297) also
+remains failed/incomplete. Its twelve positive frames passed, but the combined
+long session reached the unchanged 120-second child-authority deadline before
+all 64 refusal/continuation pairs finished. The new short-lease and Ask controls
+were not reached. Qualification now uses a separate positive-read session and
+four preplanned independent sessions of sixteen refusal/continuation pairs.
+Each pair retains its useful continuation on the same client, with separate
+raw transcripts, verified ten-second leases and complete observed collector and
+new daemon-worker cleanup. No expired session is retried or revived, and the
+120-second child authority, liveness and worker/approval bounds are unchanged.
+
+[Run #191](https://github.com/SoupTeam/soup-wall/actions/runs/40376739547) remains
+failed/incomplete after all four sixteen-pair batches, short-lease/fresh-session
+and source-withdrawal controls passed. Its first Ask approved the original call
+and created a distinct second pending ID, but the qualifier incorrectly charged
+the completed authorized call's repository opens to the second pending window.
+The corrected window records/drains those completed effects before sending the
+second request, then checks its exact binding, distinct pending ID and zero new
+repository opens, worker reservations/workers or original result events before
+approval and after rejection. Events are never reset after the second send.
+All five Ask cases and the existing timing bounds still require qualification.

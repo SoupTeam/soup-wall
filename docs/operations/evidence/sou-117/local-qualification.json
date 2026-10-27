@@ -1,0 +1,63 @@
+{
+  "actual_host_linux": "full_linux_workflow_39812694632_passed_at_35f9c23; six_project_cases_and_14_existing_ask_cases_passed",
+  "all_python": {
+    "failed": 0,
+    "note": "59 existing environment/platform/optional skips plus 3 existing Linux /proc controls explicitly inapplicable on macOS; Linux CI retains them unchanged.",
+    "run": 1076,
+    "skipped": 62
+  },
+  "ask_scheduling_controls": 4,
+  "bench_python": {
+    "failed": 0,
+    "run": 66,
+    "skipped": 19
+  },
+  "build_cache": "Distinct SOU-117 target directory; workspace crates cleaned before rebuilding. All three pilot_host tests independently verified in the actual test output. Earlier shared-cache integration result superseded.",
+  "current_main_ci_probe": {
+    "ask": "filesystem_approve_pending_expired_during_independent_startup",
+    "head": "4d5a23d5f611b033005cfbb6c4c18ea04db399fc",
+    "isolation": "six_cases_passed",
+    "production_timers": "unchanged",
+    "run": 39819798077
+  },
+  "docs": "Checked 237 Markdown files and 893 local links; 0 errors.",
+  "final_manual_linux_run": 39812694632,
+  "first_linux_run": 39809941017,
+  "format": "passed",
+  "full_workspace": {
+    "failed": 0,
+    "ignored": 13,
+    "note": "Current accepted main 5cbdcdb; 13 existing optional/environment/helper/benchmark ignores. Strict macOS sandbox emitted Xcode cache-write diagnostics.",
+    "passed": 1656
+  },
+  "generated_workflow": "passed",
+  "logs_sha256": {
+    "all-python.log": "46aff03fa425a3cb44fee7b7d9aac7c66b507652032a064aebeddaa575e5ad49",
+    "bench-python.log": "8ea2d79dec75df60411eb542b5141dce5e9509561c27a9f9c43fc26e2400f4fb",
+    "docs.log": "54fa4c15cc4542b87ffe40f4219aa102a658ab36188d5efd95e154de044ebfa3",
+    "fixture-controls.log": "9294a346209757e5b5575cdfe126068f108aaf6c7928623b5b6c8955deff8f27",
+    "focused-clippy.log": "b6cf6ea24ba31be1823c349d32d2f277d24450cd38247db490806f39deeba4e0",
+    "focused-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "focused-launcher-tests.log": "6defb7d7dcd6a7fee5187c2e49d7d3d4d528b07ef897c6f91754cf872b48beb8",
+    "focused-preparation.log": "1138fc9b5018c088ea39f329555910eea83063cab9f1a6ef6a372fdf049007bc",
+    "focused-python.log": "84e1ec09de2fe154309d688bcd46b29ed0e8979915276a642e7f5553c82ec2a2",
+    "focused-workflows.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ready-local-clippy.log": "4b9c8e5326a5f277c9391e8e39b877061b3cb3ea5b8c0f5429690783d4b6bfe2",
+    "ready-local-tests.log": "a0e4c0e56c37228cf3dfec672b95ad947509f6bd6bb9b145df08a5e5019f4b8b"
+  },
+  "pilot_unit_controls": 21,
+  "python_evidence_controls": 5,
+  "receiver_calibration": "GET command marker and POST provider transport; five evidence controls passed",
+  "second_linux_run": 39810842378,
+  "source_sha256": {
+    "crates/agentfw/src/pilot_host.rs": "b77465c59725785cbfb9e83086e39e2326601511affc7b726a4b74582449c4b5",
+    "crates/agentfw/src/pilot_launcher.rs": "c3ac40c3ec3961039474437380ffe691703c0c734c246a3d7f06f2ad0ac4f8bc",
+    "scripts/qualify-pilot-ask.py": "ad75d9d1d158a791ac4df52969e48bea92ef9b26a1ba28b5f860684cc37b5b61",
+    "scripts/qualify-project-isolation.py": "1165a5dc5e2332a439e8bf868d1446660d12866e34399196857e84ab365c09d1",
+    "scripts/tests/test_pilot_ask_scheduling.py": "afa13a90a5412f6fc2d2955aff90680c6955a801dfdeec1e05963cd7184b6be4"
+  },
+  "status": "current_main_local_passed; actual_host_isolation_passed; repaired_ask_qualification_pending",
+  "strict_clippy": "passed_zero_warnings",
+  "task": "SOU-117",
+  "windows_compiler_probe": "unused_mut fixed without suppression; final Windows CI pending"
+}

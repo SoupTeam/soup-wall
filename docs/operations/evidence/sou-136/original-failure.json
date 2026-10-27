@@ -1,0 +1,35 @@
+{
+  "format": "sou136-retained-membership-failure/1",
+  "ci_run": 40070626603,
+  "job": 120803093822,
+  "artifact": 12551851795,
+  "report_sha256": "e77523b813cc76b46b62c7b1f1c530a3c474a96347e9bd8add839fec8af9cc6d",
+  "source": "29e6db856bd8ea0e7972c597cb83b8b4284f3c22",
+  "accepted_base": "8485a5195d916aa6e7c1f04b6b3a94130937a2d2",
+  "shared_budget_git_blob": "cf9d893122de7505be762c67d9117ddafa1c32ab",
+  "module_identical_to_accepted_base": true,
+  "initial_checks_completed": 6,
+  "completed_churn_clients": 123,
+  "failed_client": "churn-git-53",
+  "stage": "initialize_before_correlated_response",
+  "error_code": "collector_closed_before_correlated_response",
+  "client_exit_code": 1,
+  "forced_cleanup": false,
+  "membership_failure": {
+    "phase": "member_open",
+    "errno": 3
+  },
+  "budget_counters": {
+    "memory_oom": 0,
+    "memory_oom_kill": 0,
+    "pids_max_events": 0
+  },
+  "budget_cleanup_verified": true,
+  "identities": {
+    "binary_sha256": "63c0c51cd33cd991140df107179fd33157cea9f041559cc351a41a19984f5ed5",
+    "driver_sha256": "1d46572cb1548ee277807292b344e0d5a288ed5a1238bffd7522168cbb58152c",
+    "config_sha256": "f9060f562b9e20d9b1771382ec9a096ad33f6eb2d8f91f42f9bce6645b890e5c",
+    "git_config_sha256": "9bdabb75bffb2b6ff5027ea7af82902e8d418d8204e10ae89a1945f8b0ec6926"
+  },
+  "scope": "Original member lifetime race is a concrete lead. Accepted decision/kernel boundary reproduction and corrected native proof remain separate; this failed run is never relabelled passed."
+}

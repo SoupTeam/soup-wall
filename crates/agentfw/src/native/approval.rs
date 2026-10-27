@@ -47,6 +47,10 @@ pub struct SelectedInvocation {
     pub snapshot_sha256: String,
     pub definition_sha256: String,
     pub input_sha256: String,
+    /// Exact create-only observation, bound by the existing signed grant. It
+    /// never grants a built-in executor, arbitrary writes, overwrite or egress.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_create: Option<crate::mcp::server_profile::filesystem_create::CreateResource>,
 }
 
 impl SelectedInvocation {
@@ -56,12 +60,28 @@ impl SelectedInvocation {
                 super::selected_host_id(&self.host_call_id)
                     && super::identifier(&self.server_id)
                     && tool.mcp_result_profile.as_deref() == Some(self.profile.as_str())
-                    && tool.action_class == soup_wall_agent::ActionClass::ReadOnly
                     && tool.resource_policy.is_none()
                     && tool.workspace_profile.is_none()
                     && tool.egress.is_empty(),
                 "unsupported selected approval"
             );
+            match &self.original_create {
+                Some(resource) => {
+                    anyhow::ensure!(
+                        cfg!(target_os = "linux")
+                            && self.profile
+                                == crate::mcp::server_profile::filesystem_create::FORMAT
+                            && tool.name == "write_file"
+                            && tool.action_class == soup_wall_agent::ActionClass::SideEffecting,
+                        "unsupported selected create approval"
+                    );
+                    resource.validate(args)?;
+                }
+                None => anyhow::ensure!(
+                    tool.action_class == soup_wall_agent::ActionClass::ReadOnly,
+                    "selected mutation requires exact create resource"
+                ),
+            }
             for digest in [
                 &self.request_sha256,
                 &self.profile_sha256,
@@ -784,6 +804,9 @@ fn open_bound(
     }
     if let Some(context) = &request.selected_invocation {
         file["selected_invocation"] = json!(context);
+        if let Some(resource) = &context.original_create {
+            file["resource_details"] = json!(resource);
+        }
     }
     // Audit first and fail closed; the audit line never carries raw arguments.
     audit(
@@ -848,9 +871,15 @@ fn safe_id(id: &str) -> anyhow::Result<()> {
 }
 
 fn read_pending(home: &Path, id: &str) -> anyhow::Result<Value> {
-    safe_id(id)?;
-    let text = std::fs::read_to_string(pending_dir(home).join(format!("{id}.json")))
-        .map_err(|_| anyhow::anyhow!("no such pending approval (decided, expired or restarted)"))?;
+    use crate::pilot_approval::result::{tag, Reason};
+    safe_id(id).map_err(|error| tag(error, Reason::InvalidInput))?;
+    let text =
+        std::fs::read_to_string(pending_dir(home).join(format!("{id}.json"))).map_err(|_| {
+            tag(
+                anyhow::anyhow!("no such pending approval (decided, expired or restarted)"),
+                Reason::PendingUnavailable,
+            )
+        })?;
     let value: Value = serde_json::from_str(&text)?;
     anyhow::ensure!(
         value["pending_id"] == id && value["scope"] == "native-mcp/approval/v1",
@@ -883,16 +912,31 @@ pub fn operator_list(home: &Path) -> Vec<Value> {
 
 /// Full record, including the raw arguments, for the owning operator only.
 pub fn operator_inspect(home: &Path, id: &str) -> anyhow::Result<Value> {
-    read_pending(home, id)
+    let mut record = read_pending(home, id)?;
+    if record["resource_details"]["operation"] == "replace_file" {
+        // Keep the privately frozen original arguments for redemption, but
+        // inspection of replacements shows identities/digests, never content.
+        if let Some(object) = record.as_object_mut() {
+            object.remove("args");
+        }
+        record["arguments_redacted"] = json!(true);
+    }
+    Ok(record)
 }
 
 fn claim(home: &Path, id: &str) -> anyhow::Result<()> {
+    use crate::pilot_approval::result::{tag, Reason};
     let dir = pending_dir(home);
     std::fs::rename(
         dir.join(format!("{id}.json")),
         dir.join(format!("{id}.deciding")),
     )
-    .map_err(|_| anyhow::anyhow!("pending approval was already decided or is gone"))
+    .map_err(|_| {
+        tag(
+            anyhow::anyhow!("pending approval was already decided or is gone"),
+            Reason::DecisionConflict,
+        )
+    })
 }
 
 /// Approve exactly one pending call. `binding` must equal the digest shown by
@@ -918,6 +962,17 @@ pub(crate) fn operator_approve_for_session(
     approve_scoped(home, hook_token, id, binding, Some((session, epoch)))
 }
 
+pub(crate) fn operator_submit_for_session(
+    home: &Path,
+    hook_token: &str,
+    id: &str,
+    binding: &str,
+    session: &str,
+    epoch: &str,
+) -> anyhow::Result<()> {
+    submit_scoped(home, hook_token, id, binding, Some((session, epoch)), true)
+}
+
 fn approve_scoped(
     home: &Path,
     hook_token: &str,
@@ -925,20 +980,41 @@ fn approve_scoped(
     binding: &str,
     scope: Option<(&str, &str)>,
 ) -> anyhow::Result<()> {
+    submit_scoped(home, hook_token, id, binding, scope, false)
+}
+
+fn submit_scoped(
+    home: &Path,
+    hook_token: &str,
+    id: &str,
+    binding: &str,
+    scope: Option<(&str, &str)>,
+    require_submission: bool,
+) -> anyhow::Result<()> {
+    use crate::pilot_approval::result::{tag, Reason};
     let record = read_pending(home, id)?;
     if let Some((session, epoch)) = scope {
-        anyhow::ensure!(
-            record["session_id"] == session && record["session_epoch"] == epoch,
-            "pending call no longer belongs to this collector"
-        );
+        if record["session_id"] != session || record["session_epoch"] != epoch {
+            return Err(tag(
+                anyhow::anyhow!("pending call no longer belongs to this collector"),
+                Reason::BindingChanged,
+            ));
+        }
     }
     let now = now_ms();
     let expires = record["expires_at_ms"].as_u64().unwrap_or(0);
-    anyhow::ensure!(expires > now, "pending approval has expired");
-    anyhow::ensure!(
-        is_digest(binding) && record["binding_sha256"] == binding,
-        "binding digest does not match the pending call"
-    );
+    if expires <= now {
+        return Err(tag(
+            anyhow::anyhow!("pending approval has expired"),
+            Reason::PendingExpired,
+        ));
+    }
+    if !is_digest(binding) || record["binding_sha256"] != binding {
+        return Err(tag(
+            anyhow::anyhow!("binding digest does not match the pending call"),
+            Reason::BindingChanged,
+        ));
+    }
     claim(home, id)?;
     let action = ActionRef {
         session: record["session_epoch"].as_str().unwrap_or("").to_string(),
@@ -954,6 +1030,13 @@ fn approve_scoped(
             return Err(error.into());
         }
     };
+    if require_submission && now_ms() >= expires {
+        store.discard(&issued);
+        return Err(tag(
+            anyhow::anyhow!("approval expired before submission could be confirmed"),
+            Reason::Unknown,
+        ));
+    }
     let dir = pending_dir(home);
     if std::fs::rename(
         dir.join(format!("{id}.deciding")),
@@ -965,6 +1048,12 @@ fn approve_scoped(
         // Never leave an orphan grant on disk. Redemption may also have won
         // already; discarding its now-absent file cannot undo that action.
         store.discard(&issued);
+        if require_submission {
+            return Err(tag(
+                anyhow::anyhow!("approval submission was not confirmed"),
+                Reason::Unknown,
+            ));
+        }
     }
     Ok(())
 }
@@ -1015,6 +1104,126 @@ mod tests {
     use std::sync::Arc;
 
     const HOOK: &str = "hook-unit-key";
+
+    #[test]
+    fn operator_errors_have_producer_codes_without_parsing_messages() {
+        use crate::pilot_approval::result::{reason, Reason};
+        let home = tempfile::tempdir().unwrap();
+        let missing = read_pending(home.path(), "missing").unwrap_err();
+        assert!(matches!(reason(&missing), Reason::PendingUnavailable));
+        let invalid = read_pending(home.path(), "../foreign").unwrap_err();
+        assert!(matches!(reason(&invalid), Reason::InvalidInput));
+        std::fs::create_dir(pending_dir(home.path())).unwrap();
+        let pending_id = format!("{:032x}", rand::random::<u128>());
+        let path = pending_dir(home.path()).join(format!("{pending_id}.json"));
+        std::fs::write(
+            &path,
+            json!({"pending_id":pending_id, "scope":"native-mcp/approval/v1",
+            "expires_at_ms":0})
+            .to_string(),
+        )
+        .unwrap();
+        let expired =
+            operator_approve(home.path(), HOOK, &pending_id, &"a".repeat(64)).unwrap_err();
+        assert!(matches!(reason(&expired), Reason::PendingExpired));
+        let missing_claim = claim(home.path(), "missing").unwrap_err();
+        assert!(matches!(reason(&missing_claim), Reason::DecisionConflict));
+    }
+
+    #[test]
+    fn interrupted_submission_remains_unknown_without_changing_legacy_exit() {
+        use crate::pilot_approval::result::{reason, Reason};
+        for structured in [false, true] {
+            let home = tempfile::tempdir().unwrap();
+            let directory = pending_dir(home.path());
+            std::fs::create_dir(&directory).unwrap();
+            let pending_id = format!("{:032x}", rand::random::<u128>());
+            std::fs::create_dir(directory.join(format!("{pending_id}.approved"))).unwrap();
+            let binding = "a".repeat(64);
+            std::fs::write(
+                directory.join(format!("{pending_id}.json")),
+                json!({"pending_id":pending_id,
+                "scope":"native-mcp/approval/v1", "session_id":"owned", "session_epoch":"epoch",
+                "tool":"read_text_file", "binding_sha256":binding,
+                "expires_at_ms":now_ms() + 30_000})
+                .to_string(),
+            )
+            .unwrap();
+            let result = if structured {
+                operator_submit_for_session(
+                    home.path(),
+                    HOOK,
+                    &pending_id,
+                    &binding,
+                    "owned",
+                    "epoch",
+                )
+            } else {
+                operator_approve_for_session(
+                    home.path(),
+                    HOOK,
+                    &pending_id,
+                    &binding,
+                    "owned",
+                    "epoch",
+                )
+            };
+            if structured {
+                assert!(matches!(reason(&result.unwrap_err()), Reason::Unknown));
+            } else {
+                assert!(result.is_ok());
+            }
+            assert!(GrantStore::new(&grants_dir(home.path()))
+                .pending()
+                .is_empty());
+        }
+    }
+
+    #[test]
+    fn structured_submission_does_not_claim_a_grant_that_expired_during_issuance() {
+        use crate::pilot_approval::result::{reason, Reason};
+        let home = tempfile::tempdir().unwrap();
+        let directory = pending_dir(home.path());
+        std::fs::create_dir(&directory).unwrap();
+        let lock = std::fs::File::create(home.path().join("approval-policy-epoch.lock")).unwrap();
+        lock.lock().unwrap();
+        let pending_id = format!("{:032x}", rand::random::<u128>());
+        let expiry = now_ms() + 500;
+        let binding = "a".repeat(64);
+        std::fs::write(
+            directory.join(format!("{pending_id}.json")),
+            json!({"pending_id":pending_id,
+            "scope":"native-mcp/approval/v1", "session_id":"owned", "session_epoch":"epoch",
+            "tool":"read_text_file", "binding_sha256":binding, "expires_at_ms":expiry})
+            .to_string(),
+        )
+        .unwrap();
+        let selected = home.path().to_path_buf();
+        let worker_id = pending_id.clone();
+        let worker = std::thread::spawn(move || {
+            operator_submit_for_session(&selected, HOOK, &worker_id, &binding, "owned", "epoch")
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !directory.join(format!("{pending_id}.deciding")).exists()
+            && Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let claimed = directory.join(format!("{pending_id}.deciding")).exists();
+        while now_ms() <= expiry {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        drop(lock);
+        let result = worker.join().unwrap();
+        assert!(
+            claimed,
+            "submission did not reach the controlled issuance barrier"
+        );
+        assert!(matches!(reason(&result.unwrap_err()), Reason::Unknown));
+        assert!(GrantStore::new(&grants_dir(home.path()))
+            .pending()
+            .is_empty());
+    }
     const POLICY: &str = "agent_policies:\n  - name: unit-destructive-ask\n    when: { action_class: destructive }\n    action: ask\n  - name: unit-side-effecting-ask\n    when: { action_class: side_effecting }\n    action: ask\n  - name: unit-privilege-deny\n    when: { action_class: privilege_changing }\n    action: deny\ndefault: allow\n";
 
     struct Env {

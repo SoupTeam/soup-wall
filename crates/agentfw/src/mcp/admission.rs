@@ -12,7 +12,7 @@ use std::task::{Context as TaskContext, Poll};
 use std::time::Duration;
 
 use anyhow::{bail, ensure, Context};
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
@@ -91,6 +91,15 @@ pub trait InvocationClassifier: Send + Sync {
     fn source(&self) -> &'static str;
     fn revision(&self) -> Option<&str> {
         None
+    }
+    /// Whether protected calls must be preceded by `prepare` (pilot mode). Off by default.
+    fn requires_preparation(&self) -> bool {
+        false
+    }
+    /// Make the classifier ready before a protected call; no tool is called and nothing
+    /// is classified. Failure means the call must not reach the original server.
+    fn prepare(&self) -> anyhow::Result<()> {
+        Ok(())
     }
     fn classify(&self, invocation: &Invocation) -> anyhow::Result<Classification>;
 }
@@ -200,6 +209,12 @@ pub(crate) fn parse_classifier_reply(bytes: &[u8]) -> anyhow::Result<Classificat
     Ok(reply.classification)
 }
 
+/// `AGENTFW_CLASSIFIER_PREPARE=1` selects the prepared pilot path explicitly; anything
+/// else (including unset) keeps the existing lazy-start behavior.
+fn prepare_requested() -> bool {
+    std::env::var("AGENTFW_CLASSIFIER_PREPARE").is_ok_and(|value| value.trim() == "1")
+}
+
 /// Select a real classifier explicitly; test doubles remain debug-only.
 pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifier>>> {
     match std::env::var("AGENTFW_CLASSIFIER") {
@@ -246,12 +261,75 @@ pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifi
             );
             // Only the verified installed package; no path, no PATH lookup, no fallback.
             let home = crate::config::Config::home()?;
-            Ok(Some(Arc::new(
-                crate::classifier_runtime::worker::PackagedClassifier::from_home(&home)?,
-            )))
+            let classifier =
+                crate::classifier_runtime::worker::PackagedClassifier::from_home(&home)?;
+            // Explicit pilot opt-in: prepare the worker now, before any protected call is
+            // accepted. A failure ends startup with an actionable error and dispatches nothing.
+            if prepare_requested() {
+                let classifier = classifier.prepared();
+                let readiness = classifier.prepare_worker().context(
+                    "the classifier is not ready: its verified worker could not be prepared",
+                )?;
+                eprintln!(
+                    "{}",
+                    json!({"event":"mcp_classifier_ready","readiness":readiness})
+                );
+                return Ok(Some(Arc::new(classifier)));
+            }
+            Ok(Some(Arc::new(classifier)))
         }
         _ => bail!("unsupported classifier setting"),
     }
+}
+
+/// Explicit operator inputs for an embedded collector; never project env.
+pub(crate) fn explicit_rule_baseline(
+    script: &std::path::Path,
+    expected: &str,
+    python: &std::path::Path,
+    python_expected: &str,
+) -> anyhow::Result<Arc<dyn InvocationClassifier>> {
+    use std::io::Read;
+    ensure!(
+        script.is_absolute()
+            && python.is_absolute()
+            && crate::native::is_digest(expected)
+            && crate::native::is_digest(python_expected),
+        "verified_execution_classifier_invalid"
+    );
+    let mut bytes = Vec::new();
+    std::fs::File::open(script)?
+        .take(1024 * 1024 + 1)
+        .read_to_end(&mut bytes)?;
+    ensure!(
+        bytes.len() <= 1024 * 1024 && sha(&bytes) == expected,
+        "verified_execution_classifier_changed"
+    );
+    let mut file = std::fs::File::open(python)?;
+    let mut hash = Sha256::new();
+    let mut total = 0usize;
+    let mut buffer = [0u8; 65536];
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        total += n;
+        ensure!(
+            total <= 256 * 1024 * 1024,
+            "verified_execution_classifier_limit"
+        );
+        hash.update(&buffer[..n]);
+    }
+    ensure!(
+        format!("{:x}", hash.finalize()) == python_expected,
+        "verified_execution_classifier_changed"
+    );
+    Ok(Arc::new(RuleBaseline {
+        script: script.to_owned(),
+        python: python.as_os_str().to_owned(),
+        digest: expected.into(),
+    }))
 }
 
 struct ReadTestDouble;
@@ -290,6 +368,10 @@ struct FixtureTestDouble;
 impl InvocationClassifier for FixtureTestDouble {
     fn source(&self) -> &'static str {
         "test-double/fixture-v1"
+    }
+    fn revision(&self) -> Option<&str> {
+        // Identifies only this explicit synthetic classifier, not a real model.
+        Some("0092d562da04f992b185a8f57a3c3bd1e390b3a39d6730f8450b934f6ff24112")
     }
     fn classify(&self, invocation: &Invocation) -> anyhow::Result<Classification> {
         let values: Vec<&str> = invocation
@@ -387,6 +469,8 @@ pub struct ClassifiedAssessment {
     pub ambiguous_or_unknown: bool,
     /// Selected read-only approval cannot rescue an empty or mixed assessment.
     pub known_read_only: bool,
+    /// Exact known write semantics; the installed create profile is still required.
+    pub known_create: bool,
 }
 
 impl ClassifiedAssessment {
@@ -395,6 +479,7 @@ impl ClassifiedAssessment {
             verdict: ProductionVerdict::Allow,
             ambiguous_or_unknown: false,
             known_read_only: true,
+            known_create: false,
         }
     }
 }
@@ -915,12 +1000,69 @@ struct ClassificationAuthority {
     egress_declared: bool,
     create_file_profile: Option<&'static str>,
     https_get: bool,
+    replacement: bool,
 }
+
+/// The native daemon refused a request for its size. The daemon checks these
+/// limits before it reads or changes any call state, so the same grant can
+/// still be completed with a small correlated error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DaemonSizeLimit(pub(crate) &'static str);
+
+impl DaemonSizeLimit {
+    fn from_refusal(status: reqwest::StatusCode, body: &[u8]) -> Option<Self> {
+        let code = serde_json::from_slice::<Value>(body)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("error_code")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            });
+        match code.as_deref() {
+            Some("native_record_over_cap") => Some(Self("native_record_over_cap")),
+            Some("native_content_over_cap") => Some(Self("native_content_over_cap")),
+            Some("native_body_over_cap") => Some(Self("native_body_over_cap")),
+            // A route body limit answers 413 without a native receipt body.
+            _ if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE => {
+                Some(Self("native_body_over_cap"))
+            }
+            _ => None,
+        }
+    }
+
+    pub(crate) fn code(self) -> &'static str {
+        self.0
+    }
+
+    /// Fixed host-visible text; never derived from daemon or server bytes.
+    pub(crate) fn message(self) -> &'static str {
+        match self.0 {
+            "native_record_over_cap" => "MCP result withheld: the native daemon record limit (native_record_over_cap) refused its size; the original call may have executed",
+            "native_content_over_cap" => "MCP result withheld: the native daemon content limit (native_content_over_cap) refused its size; the original call may have executed",
+            _ => "MCP result withheld: the native daemon body limit (native_body_over_cap) refused its size; the original call may have executed",
+        }
+    }
+}
+
+impl std::fmt::Display for DaemonSizeLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MCP admission request rejected: native daemon size limit ({})",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for DaemonSizeLimit {}
 
 pub struct Collector<'a> {
     config: &'a AdmissionCfg,
     host_session: Option<String>,
     child_authority: Option<String>,
+    prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
+    execution: Option<Arc<crate::native::execution::SessionContext>>,
     client: reqwest::Client,
     session: String,
     pub liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
@@ -935,6 +1077,14 @@ impl<'a> Collector<'a> {
     }
 
     fn new(config: &'a AdmissionCfg) -> anyhow::Result<Self> {
+        let session = std::env::var("AGENTFW_MCP_SESSION")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("mcp:{}", crate::token::generate()));
+        Self::with_session(config, session)
+    }
+
+    fn with_session(config: &'a AdmissionCfg, session: String) -> anyhow::Result<Self> {
         if config.host_session.is_some() != config.child_authority.is_some() {
             anyhow::bail!(
                 "both host_session and child_authority must be provided together for authenticated binding"
@@ -944,17 +1094,20 @@ impl<'a> Collector<'a> {
             config,
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
+            prepared_budget: None,
+            execution: None,
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(Duration::from_secs(5))
                 .build()?,
-            session: std::env::var("AGENTFW_MCP_SESSION")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| format!("mcp:{}", crate::token::generate())),
+            session,
             liveness: None,
         })
+    }
+
+    fn runtime(&self) -> Option<&Arc<super::verified_closure::Runtime>> {
+        self.execution.as_ref().map(|execution| execution.runtime())
     }
 
     pub fn is_uncertain(&self) -> bool {
@@ -1005,6 +1158,27 @@ impl<'a> Collector<'a> {
         let Some(classifier) = self.config.classifier.clone() else {
             return Ok(Ok(ClassifiedAssessment::allow()));
         };
+        // Pilot path: a lost or outdated worker is replaced before this call is classified.
+        // Preparation and classification share the one outer deadline, so a replacement
+        // never extends it. Not prepared means refused, never dispatched.
+        let began = std::time::Instant::now();
+        let prepared_path = classifier.requires_preparation();
+        if prepared_path {
+            let preparing = classifier.clone();
+            let outcome = tokio::time::timeout(
+                CLASSIFIER_TIMEOUT,
+                tokio::task::spawn_blocking(move || preparing.prepare()),
+            )
+            .await;
+            if !matches!(outcome, Ok(Ok(Ok(())))) {
+                eprintln!(
+                    "{}",
+                    json!({"event":"mcp_classifier_not_ready","host_call_id":host_call_id,
+                    "server_id":self.config.server_id,"tool":name})
+                );
+                return Ok(Err("classifier_not_ready"));
+            }
+        }
         let tool = snapshot
             .tools
             .get(name)
@@ -1041,7 +1215,12 @@ impl<'a> Collector<'a> {
         let task = tokio::task::spawn_blocking(move || classifier.classify(&input));
         // ponytail: a timed-out classifier thread is abandoned, not killed; an
         // out-of-process classifier would be needed to reclaim it.
-        let (result, mapped) = match tokio::time::timeout(CLASSIFIER_TIMEOUT, task).await {
+        let remaining = if prepared_path {
+            CLASSIFIER_TIMEOUT.saturating_sub(began.elapsed())
+        } else {
+            CLASSIFIER_TIMEOUT
+        };
+        let (result, mapped) = match tokio::time::timeout(remaining, task).await {
             Err(_) => (None, Err("classifier_timeout")),
             Ok(Err(_)) => (None, Err("classifier_crash")),
             Ok(Ok(Err(_))) => (None, Err("classifier_error")),
@@ -1073,10 +1252,26 @@ impl<'a> Collector<'a> {
                     authority.create_file_profile.is_some(),
                 )
             };
+            let eval = eval.map(|verdict| {
+                if !authority.replacement || verdict == ProductionVerdict::Deny {
+                    return verdict;
+                }
+                if ambiguous_or_unknown {
+                    return ProductionVerdict::Ask;
+                }
+                if baseline == ActionClass::Destructive && res.actions.as_slice() == ["write"] {
+                    // Explicit replacement never inherits the create-only
+                    // write exception. Known replacement is still single-use Ask.
+                    ProductionVerdict::Ask
+                } else {
+                    ProductionVerdict::Deny
+                }
+            });
             eval.map(|verdict| ClassifiedAssessment {
                 verdict,
                 ambiguous_or_unknown,
                 known_read_only: !ambiguous_or_unknown && res.actions.as_slice() == ["read"],
+                known_create: !ambiguous_or_unknown && res.actions.as_slice() == ["write"],
             })
         } else {
             Err(mapped.err().unwrap_or("classifier_unavailable"))
@@ -1124,11 +1319,154 @@ impl<'a> Collector<'a> {
         }
     }
 
+    async fn execute_original_git(
+        &self,
+        call_id: &Value,
+        binding: &Value,
+        profile: &crate::mcp::server_profile::ProfileConfig,
+    ) -> anyhow::Result<Value> {
+        ensure!(
+            !self.is_uncertain() && self.liveness.is_some(),
+            "daemon Git execution requires authenticated live collector"
+        );
+        ensure!(
+            self.prepared_budget.is_none(),
+            "daemon Git execution cannot add a process to a prepared budget"
+        );
+        let mut url = reqwest::Url::parse(&self.config.daemon_url)?;
+        url.set_path(crate::native::verified_git::ENDPOINT);
+        url.set_query(None);
+        url.set_fragment(None);
+        let body = json!({
+            "contract_version":crate::native::verified_git::CONTRACT_EXECUTE,
+            "registry_sha256":self.config.native.registry_sha256, "session_id":self.session,
+            "call_id":call_id, "binding_sha256":binding
+        });
+        let reply = self
+            .post_bounded(
+                url.as_str(),
+                &self.config.native.token,
+                &body,
+                crate::native::verified_git::MAX_RESPONSE,
+                true,
+            )
+            .await?;
+        keys(
+            &reply,
+            &[
+                "contract_version",
+                "profile_sha256",
+                "completed",
+                "receipt",
+                "frame",
+            ],
+        )?;
+        ensure!(
+            reply.as_object().is_some_and(|o| o.len() == 5)
+                && reply["contract_version"] == crate::native::verified_git::CONTRACT_EXECUTE
+                && reply["completed"].is_boolean()
+                && reply["profile_sha256"]
+                    == crate::native::canonical_digest(&serde_json::to_value(profile)?),
+            "daemon Git execution profile/correlation mismatch"
+        );
+        let receipt = &reply["receipt"];
+        keys(
+            receipt,
+            &[
+                "contract_version",
+                "registry_sha256",
+                "session_id",
+                "event",
+                "verdict",
+                "enforced",
+                "release",
+                "call_id",
+                "binding_sha256",
+                "content_sha256",
+                "reason_codes",
+                "managed_policy",
+                "instance_id",
+                "owner_token",
+            ],
+        )?;
+        let required = [
+            "contract_version",
+            "registry_sha256",
+            "session_id",
+            "event",
+            "verdict",
+            "enforced",
+            "release",
+            "call_id",
+            "binding_sha256",
+            "content_sha256",
+            "reason_codes",
+        ];
+        ensure!(
+            receipt
+                .as_object()
+                .is_some_and(|o| required.iter().all(|k| o.contains_key(*k)))
+                && receipt["contract_version"] == CONTRACT
+                && receipt["registry_sha256"] == self.config.native.registry_sha256
+                && receipt["session_id"] == self.session
+                && receipt["event"] == "result"
+                && receipt["enforced"] == true
+                && receipt["call_id"] == *call_id
+                && receipt["binding_sha256"] == *binding
+                && receipt["content_sha256"]
+                    .as_str()
+                    .is_some_and(crate::native::is_digest)
+                && receipt["reason_codes"]
+                    .as_array()
+                    .is_some_and(|codes| codes.len() <= 256
+                        && codes
+                            .iter()
+                            .all(|v| v.as_str().is_some_and(|s| s.len() <= 256))),
+            "daemon Git execution receipt mismatch"
+        );
+        let verdict = receipt["verdict"]
+            .as_str()
+            .context("execution verdict missing")?;
+        ensure!(
+            matches!(verdict, "allow" | "ask" | "deny")
+                && receipt["release"].as_bool() == Some(verdict == "allow"),
+            "daemon Git execution verdict inconsistent"
+        );
+        if verdict == "allow" {
+            let raw = reply["frame"]
+                .as_str()
+                .context("execution release missing frame")?;
+            ensure!(
+                raw.len() <= crate::mcp::server_profile::RESULT_FRAME_BYTES
+                    && receipt["content_sha256"] == sha(raw.as_bytes()),
+                "daemon Git execution content binding mismatch"
+            );
+        } else {
+            ensure!(
+                reply["frame"].is_null(),
+                "withheld execution leaked content"
+            );
+        }
+        Ok(reply)
+    }
+
     async fn post(&self, url: &str, token: &str, body: &Value) -> anyhow::Result<Value> {
+        self.post_bounded(url, token, body, 16 * 1024, url == self.config.daemon_url)
+            .await
+    }
+
+    async fn post_bounded(
+        &self,
+        url: &str,
+        token: &str,
+        body: &Value,
+        limit: usize,
+        native_identity: bool,
+    ) -> anyhow::Result<Value> {
         let mut request = self.client.post(url).bearer_auth(token).json(body);
         // Owner capabilities belong only to the native daemon, never the
         // separate manifest inspector or an MCP server.
-        if url == self.config.daemon_url {
+        if native_identity {
             request = self.bind_liveness_request(request).await?;
         }
         let response = request.send().await.context("MCP admission unavailable")?;
@@ -1138,17 +1476,42 @@ impl<'a> Collector<'a> {
         while let Some(chunk) = chunks.next().await {
             let chunk = chunk?;
             ensure!(
-                bytes.len() + chunk.len() <= 16 * 1024,
+                bytes.len() + chunk.len() <= limit,
                 "MCP admission response exceeds limit"
             );
             bytes.extend_from_slice(&chunk);
         }
-        ensure!(
-            status.is_success(),
-            "MCP admission request rejected: status {}, body: {}",
-            status,
-            String::from_utf8_lossy(&bytes)
-        );
+        if let Some(limit) = DaemonSizeLimit::from_refusal(status, &bytes) {
+            return Err(limit.into());
+        }
+        if !status.is_success() {
+            let status = status.as_u16();
+            // Log only the daemon's stable, low-entropy failure code.
+            // Never echo request arguments, tokens or a raw response body.
+            let body = &bytes;
+            let reason = if body.len() <= 1024 {
+                serde_json::from_slice::<Value>(body)
+                    .ok()
+                    .and_then(|reply| {
+                        reply
+                            .get("error_code")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .filter(|code| {
+                        code.len() <= 96
+                            && code
+                                .bytes()
+                                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
+                    })
+            } else {
+                None
+            };
+            anyhow::bail!(
+                "MCP admission request rejected: status={status} code={}",
+                reason.as_deref().unwrap_or("unavailable")
+            );
+        }
         let Strict(reply) =
             serde_json::from_slice(&bytes).context("malformed MCP admission receipt")?;
         Ok(reply)
@@ -1381,6 +1744,15 @@ impl<'a> Collector<'a> {
     }
 
     async fn event(&self, event: &str, fields: Value) -> anyhow::Result<Value> {
+        self.event_inner(event, fields, None).await
+    }
+
+    async fn event_inner(
+        &self,
+        event: &str,
+        fields: Value,
+        original: Option<crate::native::execution::OriginalResult>,
+    ) -> anyhow::Result<Value> {
         if event != "session_end" && self.is_uncertain() {
             anyhow::bail!("native_liveness_uncertain");
         }
@@ -1405,6 +1777,7 @@ impl<'a> Collector<'a> {
                     | crate::native::resource::WINDOWS_CREATE_CONTRACT
                     | crate::native::resource::MACOS_READ_CONTRACT
                     | crate::native::resource::MACOS_CREATE_CONTRACT
+                    | crate::native::resource::replacement::CONTRACT
             ),
             "unsupported native receipt contract"
         );
@@ -1425,10 +1798,37 @@ impl<'a> Collector<'a> {
                 })
                 .map(|(key, value)| (key.clone(), value.clone())),
         );
-        let reply = self
-            .post(&self.config.daemon_url, &self.config.native.token, &body)
-            .await?;
+        let expected_execution = original
+            .as_ref()
+            .map(|source| serde_json::to_value(source.metadata()).expect("source metadata"));
+        let reply = if let Some(source) = original {
+            let identity = self
+                .liveness
+                .as_ref()
+                .context("verified_execution_liveness_required")?
+                .admission_identity()
+                .await?;
+            let (status, reply) = source.inspect(&body, identity).await?;
+            if !status.is_success() {
+                if let Some(limit) =
+                    DaemonSizeLimit::from_refusal(status, &serde_json::to_vec(&reply)?)
+                {
+                    return Err(limit.into());
+                }
+                bail!("verified_execution_native_result_refused");
+            }
+            reply
+        } else {
+            self.post(&self.config.daemon_url, &self.config.native.token, &body)
+                .await?
+        };
+        ensure!(
+            reply.get("execution") == expected_execution.as_ref(),
+            "verified_execution_receipt_mismatch"
+        );
         let allowed = [
+            "publication_ttl_ms",
+            "execution",
             "contract_version",
             "registry_sha256",
             "session_id",
@@ -1446,6 +1846,10 @@ impl<'a> Collector<'a> {
             "managed_policy",
         ];
         keys(&reply, &allowed)?;
+        ensure!(
+            event == "publish" || reply.get("publication_ttl_ms").is_none(),
+            "unexpected publication deadline on another receipt"
+        );
         let required = [
             "contract_version",
             "registry_sha256",
@@ -1466,7 +1870,9 @@ impl<'a> Collector<'a> {
                         required.contains(&k.as_str())
                             || matches!(
                                 k.as_str(),
-                                "resources_sha256"
+                                "execution"
+                                    | "publication_ttl_ms"
+                                    | "resources_sha256"
                                     | "instance_id"
                                     | "owner_token"
                                     | "managed_policy"
@@ -1534,6 +1940,20 @@ impl<'a> Collector<'a> {
             ensure!(
                 reply["content_sha256"].is_null(),
                 "unexpected MCP call content hash"
+            );
+        } else if event == "publish" {
+            ensure!(
+                reply["call_id"] == fields["call_id"]
+                    && reply["binding_sha256"] == fields["expected_binding_sha256"]
+                    && reply["content_sha256"].is_null()
+                    && reply.get("resources_sha256").is_none(),
+                "MCP publication receipt changed invocation"
+            );
+            ensure!(
+                reply["publication_ttl_ms"]
+                    .as_u64()
+                    .is_some_and(|ms| ms > 0 && ms <= crate::native::TTL.as_millis() as u64),
+                "MCP publication deadline missing or invalid"
             );
         } else if event == "result" {
             ensure!(
@@ -1934,6 +2354,10 @@ where
                                 &withheld(request_id, "invocation", &json!(["resource_https_profile_required"]))).await?;
                             continue;
                         }
+                        if name == "replace_file" && !installed.resource_policy.as_ref().is_some_and(|p|p.is_replace_file()) {
+                            write_resource_reply(client,host,true,&withheld(request_id,"invocation",&json!(["replace_profile_required"]))).await?;
+                            continue;
+                        }
                         if name == "create_file"
                             && !installed.resource_policy.as_ref().is_some_and(|policy| policy.is_create_file())
                         {
@@ -1950,6 +2374,10 @@ where
                         let mut prepared_macos_read = None;
                         #[cfg(any(target_os = "linux", windows, all(target_os = "macos", target_arch = "aarch64")))]
                         let mut prepared_create = None;
+                        #[cfg(unix)]
+                        let mut prepared_replacement: Option<super::replace_file::Prepared> = None;
+                        #[cfg(not(unix))]
+                        let prepared_replacement: Option<super::replace_file::Prepared> = None;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
                             #[cfg(windows)]
                             if policy.is_windows_handles() {
@@ -2055,7 +2483,7 @@ where
                                     prepared_macos_read = Some(prepared);
                                 }
                             }
-                            if (policy.is_create_file()
+                            if (policy.is_create_file() || policy.is_replace_file()
                                 || policy.is_https_get()
                                 || policy.is_https_post()
                                 || policy.is_windows_handles()
@@ -2067,7 +2495,7 @@ where
                                     &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
                                 continue;
                             }
-                            if policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors() {
+                            if policy.is_create_file() || policy.is_replace_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors() {
                                 if !policy.is_windows_handles() && !policy.is_macos_descriptors() {
                                     // Match run()'s actual operator-selected session root,
                                     // including its cwd fallback when no override exists.
@@ -2100,7 +2528,7 @@ where
                                     continue;
                                 }
                             }
-                            if (policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors())
+                            if (policy.is_create_file() || policy.is_replace_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors())
                                 && collector.config.classifier.as_ref()
                                     .and_then(|classifier| classifier.revision())
                                     != Some(policy.classifier_sha256.as_str())
@@ -2240,7 +2668,12 @@ where
                                 &serde_json::to_value(&policy.profile)
                                     .context("profile serializes")?,
                             );
-                            let execution = if policy.is_create_file() {
+                            let execution = if policy.is_replace_file() {
+                                match crate::native::resource::replacement::binding(policy,&args) {
+                                    Ok(binding) => Some(binding),
+                                    Err(code) => { write_resource_reply(client,host,true,&withheld(request_id,"invocation",&json!([code]))).await?; continue; }
+                                }
+                            } else if policy.is_create_file() {
                                 #[cfg(windows)]
                                 let create_binding = if policy.is_windows_create() {
                                     let prepared = prepared_create.as_ref()
@@ -2330,6 +2763,7 @@ where
                                 }),
                             https_get: installed.resource_policy.as_ref()
                                 .is_some_and(|policy| policy.is_https_get()),
+                            replacement: installed.resource_policy.as_ref().is_some_and(|policy|policy.is_replace_file()),
                         };
                         if collector.config.classifier.is_some() {
                             let snapshot = admitted_snapshot
@@ -2485,7 +2919,8 @@ where
                                 }
                             } else {
                                 let creating = policy.is_create_bound_or_named(name);
-                                if creating && !cfg!(target_os = "linux") {
+                                let replacing = policy.is_replace_file();
+                                if (creating || replacing) && !cfg!(target_os = "linux") {
                                     let reasons = json!(["resource_create_platform_unsupported"]);
                                     write_resource_reply(client, host, resource_reply,
                                         &withheld(request_id, "invocation", &reasons)).await?;
@@ -2494,7 +2929,7 @@ where
                                 if !((installed.action_class == ActionClass::ReadOnly
                                     && policy.is_read_bound_or_named(name))
                                     || (installed.action_class == ActionClass::SideEffecting
-                                        && creating))
+                                        && creating) || (installed.action_class == ActionClass::Destructive && replacing))
                                 {
                                     let reasons = json!(["resource_executor_unsupported"]);
                                     write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
@@ -2524,7 +2959,12 @@ where
                                     write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                                     continue;
                                 }
-                                if creating {
+                                if replacing {
+                                    match crate::native::resource::replacement::prepare(policy,&args) {
+                                        Ok(prepared) => prepared_replacement=Some(prepared),
+                                        Err(code) => { write_resource_reply(client,host,true,&withheld(request_id,"invocation",&json!([code]))).await?; continue; }
+                                    }
+                                } else if creating {
                                     #[cfg(target_os = "linux")]
                                     {
                                         let content_ptr = policy.content_selector();
@@ -2690,6 +3130,66 @@ where
                                 &withheld(request_id, "invocation", &receipt["reason_codes"]),
                             )
                             .await?;
+                            continue;
+                        }
+                        if let Some(prepared) = prepared_replacement {
+                            let policy=installed.resource_policy.as_ref().expect("replacement policy");
+                            let bound=resource_admission.as_ref().and_then(|(a,_)| a.execution.as_ref()).context("replacement binding missing")?;
+                            let staging=tokio::task::spawn_blocking(move || prepared.stage());
+                            let staged=without_resource_overlap(client,true,async { staging.await.context("replacement staging worker failed") }).await?;
+                            let replacement=match staged {
+                                Err(error) => Err(error),
+                                Ok(staged) => {
+                                    let unchanged=crate::native::resource::replacement::frozen_binding(policy,&args)
+                                        .is_ok_and(|current| &current==bound);
+                                    if !unchanged {
+                                        drop(staged);
+                                        Err(super::replace_file::Error { code:"replace_binding_changed",committed:false,staged_bytes:0,cleanup_unresolved:false })
+                                    } else {
+                                        let publication_started=std::time::Instant::now();
+                                        let gate=without_resource_overlap(client,true,collector.event("publish",json!({
+                                            "expected_contract_version":contract_version,"tool":name,"args":args,
+                                            "call_id":receipt["call_id"],"expected_binding_sha256":receipt["binding_sha256"]
+                                        }))).await?;
+                                        if gate["release"]!=true {
+                                            drop(staged);
+                                            write_resource_reply(client,host,true,&withheld(request_id,"publication",&gate["reason_codes"])).await?;
+                                            continue;
+                                        }
+                                        without_resource_overlap(client,true,async {
+                                            eprintln!("{}",json!({"event":"mcp_replace_file_publication_intent","host_call_id":request_id,
+                                                "outcome":"indeterminate_until_completion"}));
+                                            let deadline=publication_started+Duration::from_millis(gate["publication_ttl_ms"].as_u64().context("publication deadline missing")?);
+                                            Ok(staged.publish_before(deadline))
+                                        }).await?
+                                    }
+                                }
+                            };
+                            let (payload,committed,result_kind)=match replacement {
+                                Ok(commit)=>(json!({"success":true,"replaced":true,"committed":true,
+                                    "bytes_written":commit.bytes_written,"file_synced":commit.file_synced,
+                                    "directory_synced":commit.directory_synced}),true,"value"),
+                                Err(error)=>(json!({"success":false,"replaced":error.committed,"committed":error.committed,
+                                    "error":error.code,"staged_bytes":error.staged_bytes,
+                                    "committed_bytes":if error.committed {error.staged_bytes}else{0},
+                                    "cleanup_unresolved":error.cleanup_unresolved}),error.committed,"error"),
+                            };
+                            eprintln!("{}",json!({"event":"mcp_replace_file_execution","host_call_id":request_id,
+                                "committed":committed,"result_kind":result_kind,"error":payload.get("error")}));
+                            let response=json!({"jsonrpc":"2.0","id":request_id,"result":{"isError":result_kind=="error",
+                                "content":[{"type":"text","text":payload.to_string()}]}});
+                            let mut raw=response.to_string().into_bytes();raw.push(b'\n');
+                            let result_gate=without_resource_overlap(client,true,collector.event("result",json!({
+                                "expected_contract_version":contract_version,"tool":name,"args":args,"call_id":receipt["call_id"],
+                                "result_kind":result_kind,"delivery":"mcp_host","content":std::str::from_utf8(&raw)?,
+                                "expected_binding_sha256":receipt["binding_sha256"]
+                            }))).await?;
+                            if result_gate["release"]==true {write_resource_reply(client,host,true,&raw).await?;}
+                            else {
+                                let mut reasons=result_gate["reason_codes"].as_array().cloned().unwrap_or_default();
+                                if committed {reasons.push(json!("resource_replacement_committed"));}
+                                write_resource_reply(client,host,true,&withheld(request_id,"result",&json!(reasons))).await?;
+                            }
                             continue;
                         }
                         if https_get {
@@ -3215,20 +3715,17 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
     }
 }
 
-pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
-    let mut collector = Collector::new(&config)?;
-    let env_liveness_flag = std::env::var("AGENTFW_NATIVE_LIVENESS").ok().map(|v| {
-        let v = v.trim().to_ascii_lowercase();
-        v != "0" && v != "false" && v != "no" && v != "off"
-    });
-    let env_lease_seconds = std::env::var("AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS")
-        .ok()
-        .and_then(|v| v.trim().parse::<u64>().ok());
-    let liveness_opt_in = config.liveness_url.is_some()
-        && (env_liveness_flag.unwrap_or(false)
-            || config.liveness_lease_seconds.is_some()
-            || env_lease_seconds.is_some());
+type Renewal = (
+    Option<tokio::sync::watch::Sender<bool>>,
+    Option<tokio::task::JoinHandle<()>>,
+);
 
+async fn enroll_session(
+    collector: &mut Collector<'_>,
+    liveness_opt_in: bool,
+    lease_seconds: Option<u64>,
+) -> anyhow::Result<Renewal> {
+    let config = collector.config;
     let mut start_fields = json!({});
     if let (Some(host_session), Some(child_authority)) =
         (&collector.host_session, &collector.child_authority)
@@ -3242,7 +3739,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
     }
     let start_reply = collector.event("session_start", start_fields).await?;
 
-    let (renewal_stop_tx, liveness_task) = if liveness_opt_in {
+    if liveness_opt_in {
         let daemon_instance_id =
             if let Some(id) = start_reply.get("instance_id").and_then(|v| v.as_str()) {
                 id.to_string()
@@ -3262,7 +3759,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
             daemon_instance_id,
             owner_token,
         ));
-        let requested_lease = config.liveness_lease_seconds.or(env_lease_seconds);
+        let requested_lease = lease_seconds;
         if let Err(enroll_err) = client.enroll(requested_lease).await {
             // Never close by physical ID alone: a failed old enrollment may
             // already have been replaced by a fresh collector owner.
@@ -3272,10 +3769,151 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
         let task = client.clone().spawn_renewal_task(stop_rx);
         collector.liveness = Some(client);
-        (Some(stop_tx), Some(task))
+        Ok((Some(stop_tx), Some(task)))
     } else {
-        (None, None)
+        Ok((None, None))
+    }
+}
+
+pub(crate) async fn run_daemon_streams<R, W, F>(
+    config: AdmissionCfg,
+    profile: super::server_profile::ProfileConfig,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+    client: R,
+    host: W,
+    shutdown: F,
+    execution: Arc<crate::native::execution::SessionContext>,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = ()>,
+{
+    run_selected_inner(
+        config,
+        profile,
+        selected,
+        client,
+        host,
+        shutdown,
+        Some(execution),
+    )
+    .await
+}
+
+/// Run the accepted selected-server relay against explicit host streams.
+/// This API alone is not verified execution provenance. The daemon-owned launch
+/// and immutable closure must independently establish custody before minting it.
+/// Host-stream EOF and shutdown use the existing bounded cleanup path.
+#[cfg(test)]
+async fn run_selected_streams<R, W, F>(
+    config: AdmissionCfg,
+    profile: super::server_profile::ProfileConfig,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+    client: R,
+    host: W,
+    shutdown: F,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = ()>,
+{
+    run_selected_inner(config, profile, selected, client, host, shutdown, None).await
+}
+
+async fn run_selected_inner<R, W, F>(
+    config: AdmissionCfg,
+    profile: super::server_profile::ProfileConfig,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+    client: R,
+    host: W,
+    shutdown: F,
+    execution: Option<Arc<crate::native::execution::SessionContext>>,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = ()>,
+{
+    tokio::pin!(shutdown);
+    if shutdown.as_mut().now_or_never().is_some() {
+        bail!("native_mcp_terminated");
+    }
+    let mut collector =
+        Collector::with_session(&config, format!("mcp:{}", crate::token::generate()))?;
+    collector.prepared_budget = selected;
+    collector.execution = execution;
+    ensure!(
+        collector.execution.is_none()
+            || (collector.host_session.is_some() && config.liveness_url.is_some()),
+        "verified_execution_bound_owner_required"
+    );
+    let (stop, task) = enroll_session(
+        &mut collector,
+        config.liveness_url.is_some(),
+        config.liveness_lease_seconds,
+    )
+    .await?;
+    let operation = real_server::run_streams(
+        &collector,
+        &profile,
+        &profile.workspace,
+        client,
+        host,
+        async {
+            shutdown.await;
+            "native_mcp_terminated"
+        },
+        false,
+    )
+    .await;
+    // Even startup/transport refusal must retire only this authenticated owner.
+    let retired = if let Some(stop) = stop {
+        let _ = stop.send(true);
+        let result = match &collector.liveness {
+            Some(lease) => lease.retire().await.map(|_| ()),
+            None => Err(anyhow::anyhow!("native_liveness_unavailable")),
+        };
+        if let Some(task) = task {
+            task.await?;
+        }
+        result
+    } else {
+        collector.event("session_end", json!({})).await.map(|_| ())
     };
+    operation?;
+    retired
+}
+
+pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
+    run_with_budget(config, None).await
+}
+
+pub async fn run_with_budget(
+    config: AdmissionCfg,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+) -> anyhow::Result<()> {
+    let mut collector = Collector::new(&config)?;
+    collector.prepared_budget = selected;
+    let env_liveness_flag = std::env::var("AGENTFW_NATIVE_LIVENESS").ok().map(|v| {
+        let v = v.trim().to_ascii_lowercase();
+        v != "0" && v != "false" && v != "no" && v != "off"
+    });
+    let env_lease_seconds = std::env::var("AGENTFW_NATIVE_LIVENESS_LEASE_SECONDS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok());
+    let liveness_opt_in = config.liveness_url.is_some()
+        && (env_liveness_flag.unwrap_or(false)
+            || config.liveness_lease_seconds.is_some()
+            || env_lease_seconds.is_some());
+
+    let (renewal_stop_tx, liveness_task) = enroll_session(
+        &mut collector,
+        liveness_opt_in,
+        config.liveness_lease_seconds.or(env_lease_seconds),
+    )
+    .await?;
     // Fail closed before spawning the server if the native daemon cannot admit a session.
     let operation = async {
         let cwd = std::env::current_dir()?;
@@ -3472,6 +4110,7 @@ pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
         let clean_exit_required = config.native.registry.tools.iter().any(|tool| {
             tool.resource_policy.as_ref().is_some_and(|policy| {
                 policy.is_create_file()
+                    || policy.is_replace_file()
                     || policy.is_https_get()
                     || policy.is_https_post()
                     || policy.is_windows_handles()
@@ -3577,6 +4216,167 @@ mod input_identity_tests {
         let result = json!({"tools":[{"name":"inventory_lookup","description":description,
             "inputSchema":schema,"annotations":{"title":"Synthetic","readOnlyHint":true}}]});
         (native, result, json!({"name":"fixture","version":"1"}))
+    }
+
+    struct UnreadStream(Arc<std::sync::atomic::AtomicUsize>);
+
+    impl tokio::io::AsyncRead for UnreadStream {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+            _: &mut tokio::io::ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Poll::Ready(Ok(()))
+        }
+    }
+    impl AsyncBufRead for UnreadStream {
+        fn poll_fill_buf(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+        ) -> Poll<std::io::Result<&[u8]>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Poll::Ready(Ok(&[]))
+        }
+        fn consume(self: Pin<&mut Self>, _: usize) {}
+    }
+
+    fn explicit_stream_config(server: &wiremock::MockServer) -> AdmissionCfg {
+        let (native, _, _) = discovered("fixture");
+        AdmissionCfg {
+            host_session: None,
+            child_authority: None,
+            daemon_url: format!("{}/native/v1", server.uri()),
+            manifest_url: format!("{}/mcp", server.uri()),
+            manifest_token: "fixture".into(),
+            server_id: "filesystem".into(),
+            native,
+            command: "deliberately-unselected-command".into(),
+            args: Vec::new(),
+            classifier: None,
+            resource_profiles: BTreeMap::new(),
+            approval: None,
+            liveness_url: None,
+            liveness_lease_seconds: None,
+        }
+    }
+
+    fn unused_stream_profile() -> super::super::server_profile::ProfileConfig {
+        super::super::server_profile::ProfileConfig {
+            format: super::super::server_profile::FORMAT.into(),
+            workspace: "/workspace".into(),
+            workspace_identity: None,
+            runtime_path: "/never-opened/runtime".into(),
+            runtime_sha256: "a".repeat(64),
+            package_root: "/never-opened/package".into(),
+            package_tree_sha256: "b".repeat(64),
+            bwrap_path: "/never-opened/bwrap".into(),
+            bwrap_sha256: "c".repeat(64),
+            libraries: Vec::new(),
+            git: None,
+            git_launcher: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn sou155_cancelled_owned_stream_never_enrolls_or_reads() {
+        let server = wiremock::MockServer::start().await;
+        let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let error = run_selected_streams(
+            explicit_stream_config(&server),
+            unused_stream_profile(),
+            None,
+            UnreadStream(reads.clone()),
+            tokio::io::sink(),
+            std::future::ready(()),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.to_string(), "native_mcp_terminated");
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+        assert!(server.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn sou155_owned_streams_refuse_auth_before_reading_or_launching() {
+        use wiremock::{
+            matchers::{method, path},
+            Mock, ResponseTemplate,
+        };
+        let server = wiremock::MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/native/v1"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let error = run_selected_streams(
+            explicit_stream_config(&server),
+            unused_stream_profile(),
+            None,
+            UnreadStream(reads.clone()),
+            tokio::io::sink(),
+            std::future::pending::<()>(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+        assert!(error.to_string().contains("401"));
+    }
+
+    #[tokio::test]
+    async fn sou155_owned_streams_close_exact_session_after_startup_refusal() {
+        use wiremock::{
+            matchers::{method, path},
+            Mock, Request, ResponseTemplate,
+        };
+        let server = wiremock::MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/native/v1"))
+            .respond_with(|request: &Request| {
+                let body: Value = serde_json::from_slice(&request.body).unwrap();
+                ResponseTemplate::new(200).set_body_json(json!({
+                    "contract_version": CONTRACT, "registry_sha256": body["registry_sha256"],
+                    "session_id": body["session_id"], "event": body["event"],
+                    "verdict":"allow", "enforced":true, "release":true,
+                    "call_id":null, "binding_sha256":null, "content_sha256":null,
+                    "reason_codes":[],
+                }))
+            })
+            .expect(4)
+            .mount(&server)
+            .await;
+        let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for _ in 0..2 {
+            let error = run_selected_streams(
+                explicit_stream_config(&server),
+                unused_stream_profile(),
+                None,
+                UnreadStream(reads.clone()),
+                tokio::io::sink(),
+                std::future::pending::<()>(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "MCP command differs from selected runtime"
+            );
+        }
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+        let requests = server.received_requests().await.unwrap();
+        let rows = requests
+            .iter()
+            .map(|r| serde_json::from_slice::<Value>(&r.body).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 4);
+        for pair in rows.as_chunks::<2>().0 {
+            assert_eq!(pair[0]["event"], "session_start");
+            assert_eq!(pair[1]["event"], "session_end");
+            assert_eq!(pair[0]["session_id"], pair[1]["session_id"]);
+        }
+        assert_ne!(rows[0]["session_id"], rows[2]["session_id"]);
     }
 
     #[test]

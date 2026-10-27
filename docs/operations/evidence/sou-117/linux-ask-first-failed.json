@@ -1,0 +1,61 @@
+{
+  "contract_version": "sw-pilot-ask-acceptance/1",
+  "status": "failed",
+  "real_host_executed": false,
+  "scripted_owned_provider": true,
+  "paid_api_calls": 0,
+  "physical_human_presence_proven": false,
+  "source": {
+    "commit": "6a6ba651b76aa1c8e7783a202f6fb3ef04672717",
+    "tree": "905cd6bd3c6fa6ea8aa5016828ccd661ff9171d5",
+    "dirty": false
+  },
+  "selected_sha256": {
+    "agentfw": "f2ade234197775cacecf15d336300266efd497d018a6ca884eed88d6f71d3836",
+    "git_launcher": "f1cab944e0ce7540d4f68106bf2185a0936e4ef52e226817e38bd349c3129ea7",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "bwrap": "05ea79a4760092d08756604bd7670ecb62834eff7df8b550da5db58e82587c9a",
+    "git": "efdebf1bbe90a2e7a84f35a843491895fa5405a88f11ea4d0ea1c0e83605ee39",
+    "strace": "38a5c75cb29dd85ddd7780d54f5bf595554d7a1b5c42524b23065f5dc4c4b01d"
+  },
+  "profiles": {
+    "filesystem": {
+      "profile_sha256": "6f7b617a736db62219a3a24dd542f63d8661e39063fb89765431ba187f6e3c98",
+      "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+      "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+      "format": "sw-mcp/filesystem-readonly/1"
+    },
+    "git": {
+      "profile_sha256": "f481be671a28ad1f1b7a36904a5488bb4b01ffc191daaf2e0b15e6da58e77d0a",
+      "package_tree_sha256": "9a8612eefeb85f4a0008de60a2dc78faa71cf6bdd156b55ceee6f74584ebebae",
+      "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
+      "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "format": "sw-mcp/git-readonly/1"
+    }
+  },
+  "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+  "cases": [],
+  "error_type": "ValueError",
+  "error_location": [
+    {
+      "function": "main",
+      "line": 468
+    },
+    {
+      "function": "qualify",
+      "line": 304
+    },
+    {
+      "function": "__init__",
+      "line": 165
+    },
+    {
+      "function": "until",
+      "line": 80
+    }
+  ],
+  "error": "run_metadata_missing"
+}

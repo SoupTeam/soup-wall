@@ -616,6 +616,7 @@ native:
                 # 1. Negative control: operator selects policy_b but daemon enforces policy_a
                 proc_mismatch = self.run_pilot([
                     "--claude", str(claude),
+                    "--allow-command-fixtures",  # Explicit synthetic executables; policy checks remain real.
                     "--workspace", str(ws),
                     "--fs-profile", str(fs_installed),
                     "--git-profile", str(git_installed),
@@ -632,6 +633,7 @@ native:
                 # 2. Positive control: operator selects policy_a matching daemon
                 proc_match = self.run_pilot([
                     "--claude", str(claude),
+                    "--allow-command-fixtures",  # Explicit synthetic executables; policy checks remain real.
                     "--workspace", str(ws),
                     "--fs-profile", str(fs_installed),
                     "--git-profile", str(git_installed),

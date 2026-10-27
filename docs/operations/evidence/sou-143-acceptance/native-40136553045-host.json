@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "case": "plan",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "3516aa8cdbf83145f2828030bbbd41ca04a147b79d3f6a4958a039bfb8f65e97"
+    },
+    {
+      "case": "occupied-port",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "843dda5e560f744cd5742ad450acd0c0e4028daccfbb97b55aabf4375f195b88"
+    },
+    {
+      "case": "stale-source",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "13ebe5bb000f87e117c059a74babd90742468ea7e8dfa7a3a0a18f98a6cc914c"
+    },
+    {
+      "case": "changed-selection",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "663a5c331a7cf00318cc49513dc5f277392b2cb78a4853f510cd91a8007f02a6"
+    },
+    {
+      "case": "provider-unavailable",
+      "selected_execution": 0,
+      "status": "passed",
+      "trace_sha256": "dcc6dc1bbc88c878c8e51e15305ec05fc00f43fc6f497f233eeedd3cd4de7db0"
+    }
+  ],
+  "emergency_stop": [],
+  "format": "sou143-prepared-host-public/1",
+  "original_report_status": "failed",
+  "paid_api_calls": 0,
+  "private_report_sha256": "6e833a17a2d35aaa491702a1a158d687114305ede646e89833d8a95e18798544",
+  "provider": "owned-scripted-loopback",
+  "qualifier_exit_code": 1,
+  "raw_environments_or_logs_exported": false,
+  "raw_process_metadata_exported": false,
+  "selected_sha256": {
+    "agentfw": "b8da65946a814687cbad6faa7d46ef1b635675ae410b5fc955826572e9c59435",
+    "bwrap": "3970ab274258223a8a42fca4181c449bcd1653acb6ed27ff249fa3db807696c2",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "7ce841b8068a448434d17a6214863048380856cf4058cf80980448394e30b05e",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "22ce08923328e6342282c8103d6dc4a87f593db444ef52895552ba9dba6b16eb",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "45aaee7003e8ad10396b05c8303bee1c5a37ea3a2ab58ad65f23bac3ae4cbb8d"
+  },
+  "source": {
+    "commit": "b4fd62750da7c46587a4fe1f191624779d5cb14c",
+    "files_sha256": "b26598d8484efdd4f7102aff81ffabeda1ea20110fb242dec298cfb7b4a1679f"
+  },
+  "source_commit": "b4fd62750da7c46587a4fe1f191624779d5cb14c",
+  "status": "failed",
+  "verification_errors": [
+    "emergency_stop_evidence_unproven",
+    "inventory_preservation_unproven",
+    "provider_classifier_unobserved",
+    "qualifier_not_completed_successfully"
+  ],
+  "workflow_run": 40136553045
+}

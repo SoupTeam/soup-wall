@@ -13,7 +13,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 import urllib.error
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -118,6 +118,36 @@ class RuntimeBoundaryControls(unittest.TestCase):
             self.assertEqual(report["required"], 12)
             self.assertEqual(report["counts"]["passed"], 0)
             self.assertEqual(report["host_runs"], [])
+
+    def test_host_launch_combines_tracing_with_matched_control_modes(self):
+        for matched, direct, prefix in ((False, False, ()), (True, False, ("owned-trace",)),
+                                       (True, True, ("owned-trace",))):
+            with self.subTest(matched=matched, direct=direct), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                pilot = PILOT.Pilot.__new__(PILOT.Pilot)
+                pilot.private, pilot.workspace = root, root / "workspace"
+                pilot.workspace.mkdir()
+                pilot.paths = {"python": Path(sys.executable), "claude": Path("/owned/claude")}
+                pilot.env, pilot.matched_workload = {"OWNED": "control"}, matched
+                pilot.workspace_for = lambda kind: pilot.workspace
+                pilot.command = lambda kind, direct=False: [f"/owned/{'original' if direct else 'collector'}-{kind}"]
+                pilot.mint = Mock(return_value="owned-proof")
+                pilot.collector_env = Mock(return_value={"OWNED": "protected"})
+                model = SimpleNamespace(url="http://127.0.0.1:1", close=Mock())
+                with patch.object(PILOT.BASE.DEMO, "ScriptedModel", return_value=model), \
+                        patch.object(PILOT.subprocess, "Popen", side_effect=ValueError("owned_spawn_boundary")) as spawn:
+                    with self.assertRaisesRegex(ValueError, "^owned_spawn_boundary$"):
+                        pilot.host("combined", [[("filesystem", "read_text_file", {"path": "/workspace/guide.txt"})]],
+                                   command_prefix=prefix, direct=direct)
+                self.assertEqual(spawn.call_args.args[0][:len(prefix) + 1], [*prefix, "/owned/claude"])
+                self.assertEqual(spawn.call_args.kwargs["cwd"],
+                                 pilot.workspace if matched else root / "host-combined/project")
+                config = json.loads((root / "host-combined/mcp.json").read_text())["mcpServers"]
+                for kind in PILOT.TOOLS:
+                    self.assertEqual(config[kind]["args"][-1], f"/owned/{'original' if direct else 'collector'}-{kind}")
+                    self.assertEqual(config[kind]["env"], {"OWNED": "control" if direct else "protected"})
+                self.assertEqual(pilot.mint.call_count, 0 if direct else len(PILOT.TOOLS))
+                model.close.assert_called_once()
 
     def selection(self, executable):
         before = {"commit": "a" * 40, "tree": "b" * 40, "dirty": False, "files_sha256": "c" * 64}

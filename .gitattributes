@@ -58,3 +58,17 @@ rule_baseline/git_readonly_v1/rule_baseline.py text eol=lf
 
 # The reviewed CDLA notice is checked by its exact raw-byte digest on Windows too.
 policy/third-party-notices/webpki-roots-1.0.10/LICENSE text eol=lf
+
+# Frozen SOU-106 workload bytes are identical on Windows and Linux.
+scripts/benchmarks/installed-pilot-workload-v1.json text eol=lf
+scripts/benchmarks/installed-pilot-workload-v2.json text eol=lf
+
+# SOU-129 selections bind published evidence by byte hash on every platform.
+docs/operations/evidence/sou106/*.json text eol=lf
+docs/operations/evidence/sou-112/linux-qualification.json text eol=lf
+docs/operations/evidence/sou-116/linux-prepared-run.json text eol=lf
+docs/operations/evidence/sou129/** text eol=lf
+scripts/pilot_dossier.py text eol=lf
+scripts/tests/test_pilot_dossier.py text eol=lf
+scripts/pilot_qualification.py text eol=lf
+scripts/benchmarks/agentdojo_protocol.py text eol=lf

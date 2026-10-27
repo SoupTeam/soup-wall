@@ -23,13 +23,20 @@ pub mod mcp;
 pub mod native;
 pub mod onboarding;
 pub mod pilot_approval;
+pub mod pilot_budget;
+#[cfg(target_os = "linux")]
+pub mod pilot_component;
+pub mod pilot_doctor;
+mod pilot_host;
 pub mod pilot_launcher;
+pub mod pilot_observation;
 pub mod policy_transition;
 pub use native::child_authority;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub(crate) mod macos_create;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub(crate) mod macos_read;
+pub mod offline_replay;
 pub mod preflight;
 #[cfg(windows)]
 mod private_file_windows;
@@ -88,14 +95,32 @@ pub fn app_with_diagnostics(
         )
         .route(
             "/native/v1",
-            post(native::handler).layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
+            post(native::handler).layer(axum::extract::DefaultBodyLimit::max(
+                native::MAX_MCP_RESULT_BODY,
+            )),
         )
         .route(
             "/native/liveness/v1",
             post(native::liveness::handler)
                 .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
         )
+        .route(
+            native::execution::ENDPOINT,
+            post(native::execution::transport::handler),
+        )
+        .route(
+            native::verified_git::ENDPOINT,
+            post(native::verified_git::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
         .route("/native/v1/instance", get(native::instance))
+        .route(
+            native::pilot_cleanup::ENDPOINT,
+            post(native::pilot_cleanup::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
+        .route(
+            native::pilot_stop::ENDPOINT,
+            post(native::pilot_stop::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
         .route(
             native::continuity::BARRIER,
             post(native::continuity::barrier),

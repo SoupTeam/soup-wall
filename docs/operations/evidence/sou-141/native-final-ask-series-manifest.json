@@ -1,0 +1,38 @@
+{
+  "cold_ask_trials_claimed": false,
+  "cold_definition": "page cache dropped with sync + drop_caches immediately before the run, unqualified when the drop cannot be shown. This is a pre-run condition only: the qualifier then prepares the original launch (hashes and copies the selected binaries, installs and hashes both profiles) and reads the same pages again before any timed approval, so no individual Ask trial is claimed cold. The first trial per profile is reported apart from the repetitions.",
+  "cold_scope": "pre_run_cache_drop_only",
+  "declared_at": "2026-10-26T15:17:19Z",
+  "format": "sw-ask-series/1",
+  "kernel": "6.17.0-1022-azure",
+  "machine": "x86_64",
+  "metric": "operator_attempt_to_correlated_original_result_monotonic",
+  "plan": [
+    "cold",
+    "warm",
+    "cold",
+    "warm"
+  ],
+  "platform_kind": "native_linux",
+  "require_verified_reuse": true,
+  "samples_per_profile": 20,
+  "selected_sha256": {
+    "agentfw": "995bbc240d1908e1a6626f2c7a9d040e5551aa0c97ffc908e693ad232325685e",
+    "bwrap": "5e59dde511adb95e974b93e559d6cefe942d340140bbbbe93d9b4fbfc5674363",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "git": "f345902d1f8d23d5ead793016958818e172e11aed198e0ab1d5b0c48a241056e",
+    "git_launcher": "f83825091d90a259198a9f158eae4dca74e0e187325c30fc3b6a7804546e52a0",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+  },
+  "source": {
+    "commit": "4b99b6efee6bfd3e603b207d841015d179962977",
+    "dirty": false,
+    "files_sha256": "e81c2fd13be1e7e4ee9702b6558ad0a6b95beaddd62db5cddcbafdd0a12392d7",
+    "tree": "5db4a81ee8e65e389663c974abb690d5fb34ed6a"
+  },
+  "target_ms": 3000,
+  "warm_definition": "run started right after the previous complete run, no cache drop",
+  "wsl_note": null
+}

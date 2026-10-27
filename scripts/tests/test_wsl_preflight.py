@@ -48,6 +48,26 @@ class WslPreflightControls(unittest.TestCase):
         self.assertTrue(WSL.supported_path("/home/user/private", "ext4", "stage_root"))
         self.assertTrue(WSL.supported_path("/usr/bin/node", "ext4", "node"))
 
+    def test_preflight_and_matched_development_do_not_mask_each_other(self):
+        import tempfile
+        driver = Path(__file__).resolve().parents[1] / "qualify-installed-pilot.py"
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory) / "never-created"
+            result = subprocess.run(
+                [sys.executable, "-B", str(driver), "--wsl-preflight",
+                 "--wsl-root", str(stage), "--matched-development"],
+                capture_output=True, text=True, timeout=20)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("cannot be combined", result.stderr)
+            self.assertEqual(result.stdout, "")
+            self.assertFalse(stage.exists())
+        result = subprocess.run(
+            [sys.executable, "-B", str(driver), "--matched-development"],
+            capture_output=True, text=True, check=True, timeout=20)
+        report = json.loads(result.stdout)
+        self.assertFalse(report["executed"])
+        self.assertIn("workload_sha256", report)
+
     @unittest.skipIf(WSL.kernel_kind(WSL.platform.system(), WSL.platform.release()) == "wsl2",
                      "This refusal control requires a non-WSL host")
     def test_actual_preflight_cli_refuses_non_wsl_without_creating_stage(self):

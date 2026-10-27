@@ -1,0 +1,322 @@
+{
+  "format": "sou155-native-attempts/1",
+  "acceptance_pass": false,
+  "attempts": [
+    {
+      "source_commit": "88e0a1ec5a4a0fa8ebf64e2a09b2056f7285672b",
+      "run": 40299292213,
+      "status": "failed",
+      "production_build": "passed",
+      "failed_stage": "native-closure-unit",
+      "runtime_execution_observed": false,
+      "artifact": 12639722045,
+      "artifact_sha256": "fd8b308962ad655d75a27850a2d1a3e9c29d92c2bbec2fa0a59e9ad3b6ba3745",
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "02463a9bb10f7bf75cc1ac97960ee5d45ed2a9f0",
+      "run": 40300286692,
+      "status": "failed",
+      "production_build": "passed",
+      "failed_stage": "native-closure-unit",
+      "cause": "five-linux-test-calls-used-old-internal-function-signature",
+      "runtime_execution_observed": false,
+      "artifact": 12639873100,
+      "artifact_sha256": "ec17b933fc2a56a658b5629013d8dde99a2886b8369ba5d00c383284ec84771d",
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "59e1efa88b2f5f388c9218dc5446453cf5e42ced",
+      "run": 40301227443,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "failed_stage": "runtime-driver-preconditions",
+      "cause": "system-python-3.10-lacks-hashlib-file-digest",
+      "runtime_execution_observed": false,
+      "artifacts": [
+        {
+          "id": 12641050989,
+          "sha256": "a2fef0bcf3782f76848a1f3a2591b9d9bd5f48e2426abbb2fe206e5e162d38e3"
+        },
+        {
+          "id": 12640094379,
+          "sha256": "47f2ca021bdf1f5f717397c4a57de61ee49a3e1ae46d80566c7d70aaeae49497"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "d750d58fde53d9eed0c79b1c1c8d62fae4216ae2",
+      "run": 40302279883,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "failed_stage": "runtime-driver-preconditions",
+      "cause": "driver-regex-required-public-format-but-binding-format-is-private",
+      "runtime_execution_observed": false,
+      "artifacts": [
+        {
+          "id": 12641231687,
+          "sha256": "0f24adb20f40861a0187c4fc9e31a83c89e39f36ab9c32b272c3f94d1b0bdd6a"
+        },
+        {
+          "id": 12641880051,
+          "sha256": "2d70b5d530a564dc8ffef4178a63176cdb114d3e2311908451429ad3560c1c91"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "fdb82103409315e7840575c9a174100e561441bc",
+      "run": 40306976101,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "failed_stage": "runtime-driver-preconditions",
+      "cause": "driver-read-native-token-before-configured-serve-created-it",
+      "runtime_execution_observed": false,
+      "artifacts": [
+        {
+          "id": 12643102885,
+          "sha256": "204be731b0e67ed14078073c15e7c78f178fd65541f1f15ba8e2af5884ebf149"
+        },
+        {
+          "id": 12643367394,
+          "sha256": "b51661572b546f42edfc90031cbb1e2aa9a8cb15b1bf6726f85a26de9d64fac2"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "a6e564cf04414ef2acfbc19d38c762ce2bc5e217",
+      "run": 40308057599,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "daemon_healthy": true,
+      "failed_stage": "original-transport-initialization",
+      "cause": "unclassified-client-transport-refusal-needs-bounded-diagnostics",
+      "original_result_observed": false,
+      "runtime_execution_observed": "unverified",
+      "artifacts": [
+        {
+          "id": 12643636955,
+          "sha256": "095a1a8a7ab618a5685507ccf94995f9fbaf7c711b0440fe1619c4cea61a0ac3"
+        },
+        {
+          "id": 12643199868,
+          "sha256": "e1d9bbbceb24cebf73273f036e543c45effdbf1f94ea2d1e073a37f249bc29ad"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "bf911e5a20f171c4c0fd5ad641d13eddae3c514f",
+      "run": 40311748794,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "daemon_healthy": true,
+      "failed_stage": "outside-owner-startup-handshake",
+      "diagnostic_codes": [
+        "mcp_owner_startup_failed",
+        "verified_execution_incomplete"
+      ],
+      "original_result_observed": false,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12645671638,
+          "sha256": "e086b369108e4f05ad653465672324f1d172405f7d08cbb3891a26828aa538ca"
+        },
+        {
+          "id": 12645975536,
+          "sha256": "5cb427195fdcec4f16c265d0ffe137b0590a5d71b0c7112de610db0e3639569d"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "093517e576a418521c2d6fab371b896e2f9c6ce7",
+      "run": 40313794868,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "public_input_setup": "passed",
+      "failed_stage": "outside-owner-startup-handshake",
+      "startup_elapsed_ms": 49,
+      "startup_timed_out": false,
+      "startup_error_code": "mcp_owner_control_invalid",
+      "original_result_observed": false,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12646790550,
+          "sha256": "95dc7c29d0502f08770ffe544df182cb2644b2c38b5f8cf1893449ca4d35d47b"
+        },
+        {
+          "id": 12645677705,
+          "sha256": "249dbd8125ab2d1731507f61d1513d55daa970d11e0d41201f4ee911eb5bf220"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "f9e201dbe0a05b9e1ae73053769d18e282b859e0",
+      "run": 40315138618,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "failed_stage": "bubblewrap-before-namespace-info",
+      "startup_elapsed_ms": 54,
+      "startup_timed_out": false,
+      "setup_step": 1,
+      "startup_error_code": "mcp_owner_sandbox_identity_invalid",
+      "root_cause": "pinned-bubblewrap-9000-argument-cap-exceeded-before-clone",
+      "original_result_observed": false,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12646503335,
+          "sha256": "d1ee0fc9b7040710f8140f29dd57a12d492931cc844677a160873927ad49fca6"
+        },
+        {
+          "id": 12647275599,
+          "sha256": "18674630b95b19a182db963588abf3dd0c4e8141600fd81b286265a3af2bba84"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "eb9bcd56c462efd6f5ab68acf25c97a3a12152c0",
+      "run": 40317299420,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "actual_original_useful_read": "passed",
+      "private_call_result_custody": "observed",
+      "failed_stage": "alternate-process-baseline-control",
+      "cause": "driver-used-native-1-instead-of-registry-sw-native-1",
+      "original_results_observed": 1,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12647328598,
+          "sha256": "1f7abb6e00cf45ad19b1ca20521a546c847a0bae553b10013e162abe7fcbc3d3"
+        },
+        {
+          "id": 12648130536,
+          "sha256": "afd8d3c04163bfd5a33aaaf3b8a51b2beb8f162bccacf4ef0832599b4799858d"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "bce2a706573c8245fcfda941313d52197541a442",
+      "run": 40318175433,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "actual_cases_passed": 5,
+      "failed_stage": "strong-body-refusal-control",
+      "cause": "driver-expected-jsonrpc-error-instead-of-documented-mcp-result-isError",
+      "original_response_custody_observed": true,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12648147396,
+          "sha256": "633fc1848d7c580fbacc4da6002b31328bd8c112d4c1c6b7c9046e75169f9386"
+        },
+        {
+          "id": 12648925191,
+          "sha256": "e47407f41cfe9c6079b1af070655abec76dec96aed5e2c8a91b7949f37dd0c6d"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "f0cf66346de236c133ede5eeed4302cc8af8bafd",
+      "run": 40319425828,
+      "status": "failed",
+      "build_units_clippy": "passed",
+      "runtime_acceptance_pass": true,
+      "actual_cases_passed": 15,
+      "original_results": 13,
+      "daemon_generations": 3,
+      "process_generations": 3,
+      "failed_stage": "old-full-host-focus-validation-after-native-acceptance",
+      "cause": "older-selector-allowed-142-and-143-but-not-155",
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12648812673,
+          "sha256": "71bd48ac56775e66d86327a6be6e35d91bd7270589f423c0a2e051f1ba9a918c"
+        },
+        {
+          "id": 12648602161,
+          "sha256": "f7424a00738e391a00b4876d0b21a005937ccea73e48b3a70e664f6bcc15696d"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "4a73894001e11c42a7c8b64d441c7c506e5b8439",
+      "run": 40321182772,
+      "status": "passed",
+      "build_units_clippy": "passed",
+      "runtime_acceptance_pass": true,
+      "actual_cases_passed": 15,
+      "original_results": 13,
+      "daemon_generations": 3,
+      "process_generations": 3,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12649830572,
+          "sha256": "449309aa1fffa4f090eb9d712a330b8355098e71af053bea330d2bcf0015ac8d"
+        },
+        {
+          "id": 12649680683,
+          "sha256": "8e4b17c7aef649f4b4d9404cbf2b0d0d2821420a509435483f927b86c55e0bbf"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "9d2429d4437b9ea5511825b18094f9674f8e84c6",
+      "run": 40324889224,
+      "status": "passed",
+      "build_units_clippy": "passed",
+      "runtime_acceptance_pass": true,
+      "actual_cases_passed": 15,
+      "original_results": 13,
+      "daemon_generations": 3,
+      "process_generations": 3,
+      "owned_root_empty_final": true,
+      "artifacts": [
+        {
+          "id": 12650014846,
+          "sha256": "0344908766de95f5df93cd1c3095984af9928af2cbd7dba8e10aab973f5887b5"
+        },
+        {
+          "id": 12649934886,
+          "sha256": "cba583d31425dd045af96bfae88ae5bcd94df8852c3872e6d55dd47433e705a1"
+        }
+      ],
+      "zip_crc_verified": true
+    },
+    {
+      "source_commit": "45dda69f2bad1268b9c27b2d5aa21f0bdbda40ac",
+      "run": 40336754532,
+      "status": "failed",
+      "failed_stage": "native-closure-unit",
+      "cause": "two-new-main-Linux-only-test-callers-missing-explicit-optional-FS-evidence",
+      "native_product_build": "passed",
+      "runtime_qualification": false,
+      "artifacts": [
+        {
+          "id": 12658250246,
+          "sha256": "230e0becaedac477dda0df5c0a8d448570ef6b1d88329aba8774fe3edb79cf73"
+        }
+      ],
+      "zip_crc_verified": true
+    }
+  ]
+}

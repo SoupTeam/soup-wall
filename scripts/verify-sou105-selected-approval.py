@@ -13,9 +13,11 @@ import json
 import os
 from pathlib import Path
 import platform
+import queue
 import re
 import signal
 import shutil
+import stat
 import subprocess
 import time
 import urllib.request
@@ -37,6 +39,26 @@ FORMAT = "sw-mcp/selected-approval-acceptance/1"
 CASES = ("approve", "reject", "expire", "timeout", "cancel", "wrong_binding", "classifier_change", "profile_change",
          "disconnect", "collector_death", "restart", "default", "deny")
 
+TRACE_LIMIT = 32 * 1024 * 1024
+
+
+def read_private_trace(path):
+    """Read a bounded regular witness before parsing, including live snapshots.
+
+    An unavailable/oversized witness is never evidence of zero execution.
+    Keep the existing total bound; no tail reads, rotation or prefix acceptance.
+    """
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        require(stat.S_ISREG(before.st_mode), "private_trace_not_regular")
+        require(before.st_size <= TRACE_LIMIT, "private_trace_limit")
+        raw = stream.read(TRACE_LIMIT + 1)
+        require(len(raw) <= TRACE_LIMIT and os.fstat(stream.fileno()).st_size <= TRACE_LIMIT,
+                "private_trace_limit")
+    return raw
+
 
 def trace_effects(path, kind, git_path=None, target="/workspace/notes.txt", evidence=None, git_revision=None):
     """Kernel syscall witness, independent of daemon/collector verdict logging.
@@ -46,8 +68,7 @@ def trace_effects(path, kind, git_path=None, target="/workspace/notes.txt", evid
     execution (not launcher attempts, failed searches or returned payloads).
     FS counts successful read-only opens of the exact synthetic target.
     """
-    raw = path.read_bytes() if path.exists() else b""
-    require(len(raw) <= 32 * 1024 * 1024, "syscall witness exceeded bound")
+    raw = read_private_trace(path)
     rows, unfinished = [], {}
     for line in raw.decode("utf-8", errors="strict").splitlines():
         entry = re.match(r"\s*(\d+)\s+(.*)", line)
@@ -117,6 +138,20 @@ def refused_response(client, timeout=8):
     return type(response.get("id")) is int and response["id"] == 50 and BASE.refused(response)
 
 
+def approved_response(client, evidence):
+    # Match the common independent client's 35-second observation budget.
+    # Approval has already been explicitly decided: this does not extend the
+    # collector's 25-second pending wait, broker TTL or any negative-case bound.
+    evidence["approved_response_budget_ms"] = 35000
+    started = time.monotonic()
+    try:
+        return client.receive(timeout=35)
+    except queue.Empty:
+        raise ValueError("approved original response not observed within 35 seconds") from None
+    finally:
+        evidence["approved_response_elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
+
+
 def inspected_output(text, pending_id, binding):
     # The accepted CLI prints one JSON record followed by its exact operator
     # command hint. Keep that interface and reject arbitrary trailing output.
@@ -155,8 +190,10 @@ class Rig:
         else:
             self.workspace.mkdir(mode=0o700)
             (self.workspace / "notes.txt").write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
-            (self.workspace / self.target).write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
-            BASE.INSTALL.install(self.installed, self.workspace, args.node, args.bwrap, args.npm)
+            if kind != "create":
+                (self.workspace / self.target).write_text("SOU105 synthetic useful inventory: 7 red widgets\n")
+            installer = BASE.SOU83_INSTALL if kind == "create" else BASE.INSTALL
+            installer.install(self.installed, self.workspace, args.node, args.bwrap, args.npm)
         command(args, self.env, "install")
         self.profile = json.loads((self.installed / "profile.json").read_text())
         self.registry = self.installed / "registry.json"
@@ -173,7 +210,8 @@ class Rig:
 
     def start(self, deny=False):
         sensitive = ", touches_sensitive_path: true" if self.kind == "filesystem" and not deny else ""
-        self.policy.write_text("agent_policies:\n  - name: sou105-reviewed-read\n    when: { action_class: read_only" + sensitive + " }\n    action: "
+        action = "side_effecting" if self.kind == "create" else "read_only"
+        self.policy.write_text("agent_policies:\n  - name: selected-reviewed-action\n    when: { action_class: " + action + sensitive + " }\n    action: "
                                + ("deny" if deny else "ask") + "\ndefault: allow\n")
         out = (self.root / f"daemon-{len(self.daemons)}.stdout.log").open("wb")
         err = (self.root / f"daemon-{len(self.daemons)}.stderr.log").open("wb")
@@ -227,7 +265,7 @@ class Rig:
         trace = self.trace_root / (label + ".syscalls.log")
         stderr = self.root / (label + ".stderr.log")
         with stderr.open("wb") as log:
-            client = BASE.Client([str(self.args.strace), "-f", "-qq", "-s", "4096", "-e", "trace=openat,execve",
+            client = BASE.Client([str(self.args.strace), "-f", "--seccomp-bpf", "-qq", "-s", "4096", "-e", "trace=openat,execve",
                                   "-o", str(trace), "--", *actual], env, self.workspace, log, label)
         self.clients.append(client)
         # Git's protocol pin differs from the older filesystem negotiated pin.
@@ -314,7 +352,7 @@ def qualify(rig, report):
             row["broker_ttl_ms"] = inspected["expires_at_ms"] - inspected["created_at_ms"]
             if case == "approve":
                 command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"])
-                response, raw = client.receive(timeout=10)
+                response, raw = approved_response(client, row)
                 require(raw == original_raw and not BASE.refused(response), "original admitted bytes changed / useful approval refused")
                 require(rig.effects(trace) == 1, "approved invocation did not dispatch exactly once")
                 command(args, rig.env, "native-approval", "approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
@@ -413,7 +451,9 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     args = parser.parse_args()
-    report = {"format": FORMAT, "status": "failed", "families": {}, "physical_human_presence_proved": False}
+    report = {"format": FORMAT, "status": "failed", "families": {}, "physical_human_presence_proved": False,
+              "trace_requested": {"mode": "seccomp-bpf", "fallback_possible": True,
+                                  "syscalls": "openat,execve"}}
     output = args.output.resolve(); output.mkdir(mode=0o700, parents=True, exist_ok=False)
     try:
         require(platform.system() == "Linux" and platform.machine() == "x86_64", "required native Linux x86-64 unavailable; no fallback")

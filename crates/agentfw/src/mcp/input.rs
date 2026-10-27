@@ -13,6 +13,49 @@ pub const MAX_ITEMS: usize = 256;
 pub const MAX_SCHEMA_NODES: usize = 1024;
 const DEFAULT_STRING_BYTES: usize = 16 * 1024;
 const MAX_STRING_CHARACTERS: usize = 65_536;
+/// Reviewed budget for one decoded result string (a text content block or a
+/// structured string) of a selected original server. It is deliberately
+/// separate from argument validation, which keeps `DEFAULT_STRING_BYTES`.
+/// Equal to the default native record cap and provenance input limit, so a
+/// supported result never relies on raising either of them.
+pub const RESULT_STRING_BYTES: usize = 262_144;
+
+/// Which side of a call a schema validates. The role only selects the default
+/// byte budget of strings without an explicit `maxLength`; explicit original
+/// constraints and type checks are identical for both roles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    Arguments,
+    Result,
+}
+
+impl Role {
+    fn default_string_bytes(self) -> usize {
+        match self {
+            Role::Arguments => DEFAULT_STRING_BYTES,
+            Role::Result => RESULT_STRING_BYTES,
+        }
+    }
+}
+
+/// A result string exceeded its byte budget. Typed so the transport can
+/// report the specific limit instead of a generic shape refusal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResultBudgetExceeded {
+    pub limit: usize,
+}
+
+impl std::fmt::Display for ResultBudgetExceeded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MCP result string exceeds the {}-byte budget",
+            self.limit
+        )
+    }
+}
+
+impl std::error::Error for ResultBudgetExceeded {}
 
 #[derive(Debug)]
 enum Shape {
@@ -26,6 +69,7 @@ enum Shape {
         min_chars: usize,
         max_chars: Option<usize>,
         max_bytes: usize,
+        role: Role,
     },
     Integer,
     Number,
@@ -47,18 +91,24 @@ impl InputSchema {
             value["type"] == "object",
             "MCP input profile requires an object"
         );
-        Self::node(value, 0, &mut 0, false)
+        Self::node(value, 0, &mut 0, false, Role::Arguments)
     }
 
     /// The selected real-server profile preserves its original open schemas,
     /// but deliberately accepts only declared fields. Unknown arguments are
     /// refused rather than stripped by the upstream SDK.
     pub fn read_selected(value: &Value) -> anyhow::Result<Self> {
+        Self::read_selected_role(value, Role::Arguments)
+    }
+
+    /// Selected original schema in an explicit validation role. Use
+    /// `Role::Result` only for a server's `outputSchema`.
+    pub fn read_selected_role(value: &Value, role: Role) -> anyhow::Result<Self> {
         ensure!(
             value["type"] == "object",
             "MCP input profile requires an object"
         );
-        Self::node(value, 0, &mut 0, true)
+        Self::node(value, 0, &mut 0, true, role)
     }
 
     fn node(
@@ -66,6 +116,7 @@ impl InputSchema {
         depth: usize,
         nodes: &mut usize,
         selected: bool,
+        role: Role,
     ) -> anyhow::Result<Self> {
         *nodes += 1;
         ensure!(
@@ -122,7 +173,7 @@ impl InputSchema {
                 for (name, schema) in properties {
                     fields.insert(
                         name.clone(),
-                        Self::node(schema, depth + 1, nodes, selected)?,
+                        Self::node(schema, depth + 1, nodes, selected, role)?,
                     );
                 }
                 let mut required = BTreeSet::new();
@@ -159,6 +210,7 @@ impl InputSchema {
                         depth + 1,
                         nodes,
                         selected,
+                        role,
                     )?),
                     min_items,
                     max_items,
@@ -188,11 +240,14 @@ impl InputSchema {
                 // JSON Schema lengths count Unicode scalar values. An explicit
                 // bound permits at most four UTF-8 bytes per scalar; operation
                 // authority independently applies its tighter byte limit.
-                let max_bytes = max_chars.map_or(DEFAULT_STRING_BYTES, |max| max * 4);
+                // An explicit original bound keeps its own byte limit in
+                // either role; the role budget applies only without one.
+                let max_bytes = max_chars.map_or(role.default_string_bytes(), |max| max * 4);
                 Shape::String {
                     min_chars,
                     max_chars,
                     max_bytes,
+                    role,
                 }
             }
             "integer" => Shape::Integer,
@@ -303,6 +358,7 @@ impl InputSchema {
                 min_chars,
                 max_chars,
                 max_bytes,
+                role: _,
             } => value.as_str().is_some_and(|text| {
                 if text.len() > *max_bytes {
                     return false;
@@ -315,7 +371,22 @@ impl InputSchema {
             Shape::Boolean => value.is_boolean(),
             Shape::Null => value.is_null(),
         };
-        ensure!(valid, "MCP argument type or size mismatch");
+        if !valid {
+            if let (
+                Shape::String {
+                    max_bytes,
+                    role: Role::Result,
+                    ..
+                },
+                Some(text),
+            ) = (&self.shape, value.as_str())
+            {
+                if text.len() > *max_bytes {
+                    return Err(ResultBudgetExceeded { limit: *max_bytes }.into());
+                }
+            }
+            bail!("MCP argument type or size mismatch");
+        }
         Ok(())
     }
 }

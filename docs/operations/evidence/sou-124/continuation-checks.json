@@ -1,0 +1,45 @@
+{
+  "format": "sw-sou124-continuation-checks/1",
+  "base_head": "42c69b7e5e2790a29c5ac97d69fdb37427d294c7",
+  "source_files_sha256": {
+    ".github/workflows/ci-components.yml": "bd80fa67cbbd241b4362067e1b52f6c436aa79c5633681e41dd37f54ec8dee6d",
+    ".github/workflows/mcp-real-filesystem.yml": "8770dc8e98fdb790f1d17df0912e9337091140dd9d4361ba6e1b5d8ef19c903e",
+    "crates/agentfw/src/mcp/server_profile/read_lease.rs": "d080215a62024edecab2dd6d3ce2f413241ca76a94d6ee43af3d4f6598f85da6",
+    "crates/agentfw/src/mcp/server_profile/read_lease/native_tests.rs": "44f0d52d7630e3e3b6a44f0c1fb7519fc49fbb2b477227879f70ae46f3387d55",
+    "crates/agentfw/src/mcp/server_profile/verified_inputs.rs": "b4e810fa126d4983029fc91e3e37cfd0fbd28a4ea04f672635cdad731c224213",
+    "docs/operations/PILOT_ASK_LATENCY.md": "d71f415f4ff20204d38f3882cf92b01b4c584c5a911590830bcef716f92d9c40",
+    "scripts/build-native-pilot-inputs.py": "b3d6a3fa5cd62d49ba20e2aa2aae8da68470e8a1e1074bc5d546dca95eba51f6",
+    "scripts/pilot_ask_latency.py": "73d1a18f9b25b498dde44d34be81f4ec16f1cf3587ac3136a379ff21bd4439a3",
+    "scripts/qualify-pilot-ask.py": "3f4569ea7befa88620ee447860273a2b6d34ac4829020e08e3962c81a6e9b1eb",
+    "scripts/tests/test_build_native_pilot_inputs.py": "bb9c77ccbc83030caca3c4624a2741d202c4cfe809d4db286decd196c03896d0",
+    "scripts/tests/test_pilot_ask_latency.py": "57055c762facc7e1b825c670f006f28f5c11dca6d7636d5e55b74001339f5925",
+    "scripts/qualify-pilot-ask-comparison.py": "e60664edb2b2aa92ea79a832c68fe07dffbbade10ece58a132305f781c48880b",
+    "scripts/tests/test_pilot_ask_comparison.py": "c6ac6d32017695601e73ba6b2ff4fa2bdf3599acc77fc0c638723fa4485e1a7f"
+  },
+  "local_platform": "macOS arm64",
+  "rust_workspace": {
+    "passed": 1694,
+    "failed": 0,
+    "ignored": 13,
+    "log_sha256": "4d71c6c6a0c1cae322f12495dd2d10f478bfd916775cc43dbd735585e992aea9"
+  },
+  "clippy_all_targets_warnings_denied": "passed",
+  "python": {
+    "run": 1172,
+    "passed": 1108,
+    "skipped": 64,
+    "failed": 0,
+    "log_sha256": "810b49560f1ac660d2402adda9436caf39c1e12e19093cb7d98093c4190eceb5"
+  },
+  "native_linux": "pending_actual_run",
+  "first_attempts_retained": [
+    {
+      "reason": "signed system ps cannot inherit Seatbelt; precise read-only utility exception added",
+      "log_sha256": "e317775d677ceb89cf6b83959234d7e6feb7eaa0901935eba67b58386f32d402"
+    },
+    {
+      "reason": "generated attack report needed scratch destination; source code stayed read-only",
+      "log_sha256": "690c52a3000f79b4562dfa636fbaf529d4fe043e291412ac5ca7b93aa256c44a"
+    }
+  ]
+}

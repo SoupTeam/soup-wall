@@ -1,9 +1,13 @@
 """One planner must retain every original component's executable acceptance."""
 from pathlib import Path
 import json
+import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -29,7 +33,7 @@ class SharedComponents(unittest.TestCase):
         expected = {f"{wf.removesuffix('.yml')}--{job}" for wf, jobs in WORKFLOW_JOBS.items()
                     if wf != "ci.yml" for job in jobs}
         self.assertEqual(set(actual), expected)
-        self.assertEqual(len(actual), 44)
+        self.assertEqual(len(actual), 45)
         self.assertIn("gateway-sdk--official-sdk", actual)
         self.assertIn("mcp-https-post--linux-https-post", actual)
         self.assertIn("mcp-real-filesystem--native-ubuntu-2404", actual)
@@ -47,6 +51,27 @@ class SharedComponents(unittest.TestCase):
         self.assertIsNotNone(name)
         self.assertEqual(("Components / " + json.loads(name[1]),),
                          component_names(workflow, [job]))
+
+    @unittest.skipUnless(shutil.which("bash"), "Bash is required for native CI preparation")
+    def test_native_source_build_failure_preserves_record_and_reports_reason(self):
+        job = blocks((ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text())["native-ubuntu-2404"]
+        helper = re.search(r"(?ms)^          source_build\(\) \{\n.*?^          \}", job)
+        self.assertIsNotNone(helper, "native source failures must be visible without downloading an artifact")
+        helper = textwrap.dedent(helper[0])
+        for code in (0, 2):
+            with self.subTest(exit_code=code), tempfile.TemporaryDirectory() as temporary:
+                record = Path(temporary) / "result.json"
+                row = {"status": "built-not-qualified" if code == 0 else "failed",
+                       "reason": None if code == 0 else "missing_inputs: fixture"}
+                script = ("set -euo pipefail\npython3() { printf '%s\\n' \"$FIXTURE\"; return \"$CODE\"; }\n"
+                          + helper + '\nsource_build "$RECORD" --build\n')
+                result = subprocess.run([shutil.which("bash"), "-c", script],
+                                        env={**os.environ, "FIXTURE": json.dumps(row),
+                                             "CODE": str(code), "RECORD": str(record)},
+                                        capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, code, result.stderr)
+                self.assertEqual(json.loads(record.read_text()), row)
+                self.assertEqual(result.stdout, "" if code == 0 else json.dumps(row) + "\n")
 
     def test_runtime_steps_and_platform_controls_are_not_replaced_by_summaries(self):
         central = blocks(TARGET.read_text())
