@@ -441,6 +441,39 @@ class Unknowns(Fixture):
         self.assertEqual(code, pr.EXIT_INVALID)
         self.assertIn("invalid_unknowns", self.codes(result))
 
+    def test_unknown_units_keep_producer_booleans_for_audit_only(self):
+        result = self.result("all_unknown")
+        recorded = {(row["case_id"], row["repetition"]): row for row in json.loads(
+            (self.controls / "all_unknown" / "candidate-run.json").read_text(encoding="utf-8"))["cases"]
+            if row["defended"]}
+        for unit in result["units"]:
+            candidate, row = unit["candidate"], recorded[(unit["case_id"], unit["repetition"])]
+            with self.subTest(case=unit["case_id"], repetition=unit["repetition"]):
+                self.assertEqual(candidate["status"], "unknown")
+                self.assertEqual(candidate["evaluator_outcomes"], "withheld")
+                self.assertNotIn("utility", candidate)
+                self.assertNotIn("injection_success", candidate)
+                audit = candidate["producer_recorded_audit"]
+                self.assertEqual((audit["utility"], audit["injection_success"]),
+                                 (row["utility"], row["injection_success"]))
+                self.assertIn("audit only", audit["use"])
+                self.assertEqual((candidate["deny"], candidate["approval_required"]),
+                                 (row["deny"], row["approval_required"]))
+        # The audited Booleans feed nothing: no evaluable, paired, transition or interval value exists.
+        for name in ("security", "utility", "utility_under_attack", "benign_interruption"):
+            metric = result["outcomes"][name]
+            self.assertEqual((metric["denominators"]["candidate_evaluable"], metric["paired_conditional"]["n"],
+                              sum(metric["transitions"].values()), metric["family_uncertainty"]["status"]),
+                             (0, 0, 0, "zero_denominator"))
+            self.assertEqual(metric["candidate"]["missing_outcome_bounds"], [0.0, 1.0])
+        import csv as csv_module
+        with (self.temp / "out" / "results" / "all_unknown" / "units.csv").open(encoding="utf-8", newline="") as handle:
+            rows = list(csv_module.DictReader(handle))
+        self.assertEqual({(row["candidate_utility"], row["candidate_injection_success"]) for row in rows}, {("", "")})
+        self.assertEqual({row["security_transition"] or row["utility_transition"] for row in rows}, {"not_paired"})
+        self.assertTrue(all("producer_recorded_audit" not in unit["candidate"]
+                            for unit in self.result("improved")["units"]))
+
     def test_without_an_annotation_unknown_is_unavailable(self):
         self.assertEqual(self.result("improved")["unknown"]["availability"], "unavailable")
 
@@ -862,6 +895,7 @@ class EvidenceBundle(unittest.TestCase):
             "improved_fine_families": ("verified_comparable", "complete"),
             "incomplete_hard_cases_dropped": ("verified_comparable", "partial"),
             "missing_case": ("non_comparable", "per_side_only"),
+            "public_dev_vs_fresh": ("non_comparable", "per_side_only"),
             "public_identity_no_change": ("non_comparable", "per_side_only"),
             "regressed": ("verified_comparable", "complete"),
             "regressed_fine_families": ("verified_comparable", "complete"),
@@ -925,6 +959,25 @@ class Command(Fixture):
                 self.assertEqual(result["comparability"]["status"], status)
                 self.assertTrue(result["units"])
                 self.assertTrue((out / "units.csv").exists())
+
+    def test_public_dev_vs_fresh_cli_output_matches_the_retained_evidence(self):
+        public = controls.PUBLIC
+        out = Path(tempfile.mkdtemp(dir=self.temp)) / "report"
+        completed = subprocess.run(
+            [sys.executable, "-B", str(Path(pr.__file__)), "--baseline-plan", str(public / "plan.json"),
+             "--baseline-run", str(public / "development-run.json"), "--candidate-plan", str(public / "plan.json"),
+             "--candidate-run", str(public / "fresh-run.json"), "--out-dir", str(out)],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(completed.returncode, pr.EXIT_NON_COMPARABLE, completed.stderr)
+        self.assertEqual(completed.stdout.splitlines()[0],
+                         "exit 1: comparability=non_comparable validity=valid completeness=per_side_only "
+                         "reasons=[plan_set_mismatch, run_settings_mismatch, input_identity_unverified] gaps=[none]")
+        retained = controls.EVIDENCE / "results" / "public_dev_vs_fresh"
+        for name in ("comparison.json", "report.md"):
+            self.assertEqual((out / name).read_bytes(), (retained / name).read_bytes(), name)
+        self.assertFalse((out / "units.csv").exists())
+        result = json.loads((out / "comparison.json").read_text(encoding="utf-8"))
+        self.assertEqual((result["outcomes"], result["uncertainty"]["status"]), (None, "not_computed"))
 
     def test_cli_writes_comparison_and_refuses_a_non_empty_out_dir(self):
         improved = self.controls / "improved"

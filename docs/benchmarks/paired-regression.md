@@ -1,11 +1,31 @@
 # Paired development regression (SOU-153)
 
-> **Status: implementation complete, pending review.** Implemented: the input contract,
-> comparability, per-case input binding, completeness, paired transitions, missing-outcome
-> bounds, [family-aware uncertainty](#family-aware-uncertainty), declared unknown outcomes,
-> descriptive latency, CSV/Markdown output, controls and a reproducible
-> [evidence bundle](evidence/sou153/README.md). Open questions are listed under
-> [remaining work](#remaining-work).
+> **Status: implementation complete; methodology approved for exploratory development
+> diagnostics only ([DEC-SOU153-20261027](#approved-scope-dec-sou153-20261027)).**
+> Implemented: the input contract, comparability, per-case input binding, completeness,
+> paired transitions, missing-outcome bounds, [family-aware uncertainty](#family-aware-uncertainty),
+> supplementary unknown outcomes, descriptive latency, CSV/Markdown output, controls and a
+> reproducible [evidence bundle](evidence/sou153/README.md). No verified two-revision public
+> comparison exists yet; see [remaining work](#remaining-work).
+
+## Approved scope (DEC-SOU153-20261027)
+
+The TL decision DEC-SOU153-20261027 approves the methodology and the supplementary unknown
+contract below for **exploratory development diagnostics only**:
+
+- **Uncertainty:** a [paired cluster bootstrap](#family-aware-uncertainty) over frozen
+  semantic families. The constants are fixed: a minimum of 10 effective clusters, seed
+  153 and B = 2000.
+- **Intervals:** nominal 95% percentile intervals. They are exploratory diagnostics, not
+  calibrated confidence statements.
+- **Claims:** no result supports held-out efficacy, safety or pilot-readiness claims. An
+  `improved` or `regressed` statement describes the recorded development set only.
+- **Metrics:** security, useful-behaviour utility, utility under attack, benign
+  interruption and latency stay separate, and are never merged into one verdict.
+- **Unknown outcomes:** the [supplementary unknown contract](#unknown-outcomes) is accepted
+  as SHA-bound diagnostic censoring.
+
+Changing an estimator constant, or using results beyond this scope, needs a new decision.
 
 [`paired_regression.py`](../../scripts/benchmarks/paired_regression.py) compares two
 recorded runs of the [matched AgentDojo protocol](agentdojo-matched-protocol.md) offline.
@@ -161,13 +181,18 @@ Expected labels still come from the plan; the manifest can only confirm them.
 The comparator verifies input identity, not execution. Genuine upstream AgentDojo ships no
 case manifest, so its case link stays unverified.
 
-**Public examples.** The SOU-36 controlled run has no source bundle, and its neutral task is
-defined in test code outside any inventoried source. Both public examples are negative
-controls:
+**Public examples.** The only public matched/1 reports are the SOU-36 controlled plan with
+its development and fresh runs. They come from one source revision, have no source
+bundle, and their neutral task is defined in test code outside any inventoried source.
+Both public examples are retained negative controls, and neither is a two-revision
+comparison:
 
 - the identity/no-change self-comparison;
 - development vs fresh evaluation, which also reports `plan_set_mismatch` and
   `run_settings_mismatch`.
+
+The [evidence README](evidence/sou153/README.md#public-report-inventory) lists every public
+AgentDojo report and why none forms a verified two-revision pair.
 
 ## Completeness and outcomes
 
@@ -256,27 +281,46 @@ incomplete; there, pairing like extremes would wrongly exclude zero.
 
 ### Unknown outcomes
 
-matched/1 rows carry Boolean evaluator outputs only. Without an annotation, `unknown` is
-`unavailable`.
+matched/1 rows carry Boolean evaluator outputs only, and the producer never emits an
+unknown outcome. Without an annotation, `unknown` is `unavailable`.
 
-A `soup-wall-paired-regression-unknowns/1` annotation has the fields `schema`,
-`run_report_sha256`, `provenance` (`kind`, `assigned_by`, `basis`) and `trajectories`
-(`case_id`, `repetition`, `reason`). It binds to one run report by SHA-256 and may name
-only recorded enforced trajectories.
+**Accepted contract (DEC-SOU153-20261027).** A supplementary
+`soup-wall-paired-regression-unknowns/1` annotation is **diagnostic censoring bound by
+SHA-256**. It is not a producer outcome and is never reported as one.
+
+It has these fields:
+
+- `schema`;
+- `run_report_sha256`, the SHA-256 of the one run report it applies to;
+- `provenance`: `kind`, `assigned_by` and `basis`;
+- `trajectories`: `case_id`, `repetition` and `reason`.
+
+It may name only recorded enforced trajectories of that report. An annotation bound to
+another report, or naming a stopped or unrun unit, is rejected
+(`unknowns_binding_failed`).
 
 For each named unit:
 
-- the recorded evaluator Booleans are withheld;
-- the unit counts as attempted and `unknown`, not evaluable;
-- the missing-outcome bounds treat it as missing, so it is never a success or a prevented
-  attack.
+- **Excluded from outcomes.** The producer's evaluator Booleans are withheld from every
+  rate, transition, bound and interval. The unit counts as attempted and `unknown`, not
+  evaluable, and the CSV outcome cells stay empty.
+- **Counted as missing.** The missing-outcome bounds treat it as missing, so it is never
+  a success or a prevented attack.
+- **Original outcome kept for audit.** `units[].<side>.producer_recorded_audit` keeps the
+  producer-recorded `utility` and `injection_success`. Each metric's
+  `unknown_annotation_audit` counts the excluded units and the transitions the producer
+  recorded there. Neither is used in any estimate.
+- **Ask and Deny stay visible.** The observed `deny` and `approval_required` stay on the
+  unit and in `policy_decisions`.
 
-The overlay is always listed as a gap, because the producer did not report it. It can only
-remove outcomes, never add or change one. So that it cannot silently hide a recorded
-change, each metric's `unknown_annotation_audit` counts the units it withholds and the
-transitions the producer recorded there. Those counts are never used in a rate, bound or
-interval. The comparator checks that each named unit is a recorded enforced trajectory of
-the bound run. It cannot check that the annotation's `reason` is true.
+**What the report always shows.** The annotation is always listed as the comparability
+gap `unknown_outcomes_declared_overlay`, so a comparison that uses one is never
+`verified_comparable` and never establishes a change. `unknown.availability` is
+`declared_overlay`, with the annotation's SHA-256 and provenance. The excluded units
+appear in the completeness denominators.
+
+**What the comparator cannot check.** It verifies the binding and the unit set. It cannot
+verify that the annotation's `reason` is true.
 
 ## Latency
 
@@ -412,18 +456,21 @@ generated to test the comparator's accounting, and the provenance says so.
 | all_unknown | `conditionally_comparable`; every candidate outcome unknown, 0 evaluable, bounds [0, 1] |
 | missing_case, changed_input, substituted_task_input, settings_mismatch, unverified_inputs | exit 1 with the matching reasons |
 | unknowns_wrong_run, tampered_plan, tampered_row, duplicate_case_id, incompatible_contract, non_finite, overflowing_number | exit 2 with the matching codes |
-| public_identity_no_change, public_dev_vs_fresh | exit 1, `input_identity_unverified` (negative controls) |
+| public_identity_no_change, public_dev_vs_fresh | exit 1, `input_identity_unverified` (negative controls on genuine public reports; both retained in the evidence bundle; not a two-revision comparison) |
 
 The tests also substitute a task prompt, an expected label or a family on one side, and
 consistently on both sides.
 
 ## Remaining work
 
-- **Review of the statistical choices.** The minimum of 10 effective clusters, the
-  percentile interval and B = 2000 need review. A stricter minimum or a bias-corrected
-  interval would be a reviewed change of these constants.
-- **Public data.** No public run has a source bundle or case manifest, so no public
-  comparison is verified and no public semantic families are declared.
-- **Unknown outcomes.** These rely on the declared annotation contract. No existing
-  producer emits it, and the task owner has not yet confirmed that it satisfies the
-  requirement.
+- **Two-revision public comparison (open, for TL review).** No verified pair of
+  matched/1 reports from two source revisions exists in public evidence. Only one public
+  revision has matched/1 reports; the others have schema-1 test reports without per-case
+  outcomes. No public run has a source bundle, case manifest or frozen semantic families.
+  A real comparison needs two recorded matched/1 runs of one frozen plan, with a source
+  bundle. Converting legacy reports is not a substitute.
+- **Coverage.** The approved constants are fixed, but the limits under
+  [family-aware uncertainty](#family-aware-uncertainty) still apply. Intervals just above
+  the minimum are optimistic.
+- **Unknown outcomes.** The accepted annotation is supplementary. No existing producer
+  emits it.

@@ -463,6 +463,13 @@ def write_evidence(out_dir: Path) -> list[str]:
     if code != pr.EXIT_NON_COMPARABLE:
         problems.append(f"public_identity_no_change: exit {code}")
     pr.write_result(out_dir / "results" / "public_identity_no_change", result)
+    # Negative comparability control on genuine public reports: one source revision, development vs
+    # fresh evaluation. It does not satisfy a two-revision comparison; none exists in public evidence.
+    result, code = pr.compare(PUBLIC / "plan.json", PUBLIC / "development-run.json",
+                              PUBLIC / "plan.json", PUBLIC / "fresh-run.json")
+    if code != pr.EXIT_NON_COMPARABLE:
+        problems.append(f"public_dev_vs_fresh: exit {code}")
+    pr.write_result(out_dir / "results" / "public_dev_vs_fresh", result)
     files = sorted(path for path in out_dir.rglob("*") if path.is_file())
     sums = "".join(f"{protocol.digest(path.read_bytes())}  {path.relative_to(out_dir).as_posix()}\n" for path in files)
     (out_dir / "SHA256SUMS").write_text(sums, encoding="utf-8", newline="\n")

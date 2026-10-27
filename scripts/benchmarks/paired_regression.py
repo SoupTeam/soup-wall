@@ -996,8 +996,13 @@ def _unit_view(state):
         view.update(reason=state["reason"], error_type=state["error_type"])
     elif state["status"] == "unknown":
         row = state["decision_row"]
+        # The producer's Booleans stay visible for audit under their own key; nothing reads them as
+        # outcomes, and the CSV outcome cells (top-level utility/injection_success) stay empty.
         view.update(reason=state["reason"], evaluator_outcomes="withheld", deny=row["deny"],
-                    approval_required=row["approval_required"])
+                    approval_required=row["approval_required"],
+                    producer_recorded_audit={"utility": row["utility"], "injection_success": row["injection_success"],
+                                             "use": "audit only; excluded from every outcome, transition, "
+                                                    "bound and interval"})
     if _measured(state) is not None:
         view.update({field: _measured(state)[field] for field in LATENCY_FIELDS})
     return view

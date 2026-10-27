@@ -2,8 +2,13 @@
 
 Offline evidence for the [paired development regression comparator](../../paired-regression.md),
 including its [family-aware uncertainty](../../paired-regression.md#family-aware-uncertainty).
-No model, provider, evaluator, upstream checkout or private data was used. Open review
-questions are listed under [remaining](#remaining).
+No model, provider, evaluator, upstream checkout or private data was used.
+
+The methodology is approved for **exploratory development diagnostics only**
+([DEC-SOU153-20261027](../../paired-regression.md#approved-scope-dec-sou153-20261027)).
+Nothing here is held-out efficacy, safety or pilot-readiness evidence. No verified
+two-revision public comparison exists; see the
+[public report inventory](#public-report-inventory) and [remaining](#remaining).
 
 ## Reproduce
 
@@ -47,6 +52,7 @@ All synthetic controls compare 12 invented user tasks × (benign + attacked) × 
 | `missing_case` | non_comparable: `case_missing_in_candidate`, `input_binding_failed`, `run_settings_mismatch` | per side only | The candidate plan omits the last user task. |
 | `substituted_task_input` | non_comparable: `upstream_mismatch`, `input_binding_failed` | per side only | The candidate ran against source with a different prompt for one user task. |
 | `public_identity_no_change` | non_comparable: `input_identity_unverified` | per side only | Public SOU-36 run compared with itself; no outcomes. |
+| `public_dev_vs_fresh` | non_comparable: `plan_set_mismatch`, `run_settings_mismatch`, `input_identity_unverified` | per side only | Public SOU-36 development run vs fresh-evaluation run of the same revision; no outcomes. A labelled negative control, **not** a two-revision comparison. |
 
 No readiness verdict is produced, and security and useful-behaviour metrics are never merged.
 
@@ -113,33 +119,80 @@ it is not evidence that any candidate is effective.
 
 ### Public example limits
 
-`public_identity_no_change` reads the existing
-[`sou36/controlled`](../sou36/controlled) plan and development run in place, without
-copying them.
+Both public examples read the existing [`sou36/controlled`](../sou36/controlled) plan and
+runs in place, without copying or changing them.
 
-- No source bundle exists for that run, and its neutral task is defined in test code
+- No source bundle exists for those runs, and their neutral task is defined in test code
   outside any inventoried source.
-- Input identity therefore stays `declared_unverified`, and the result is a negative
-  control.
-- It is a self-comparison (identity/no-change), not a comparison of two revisions.
+- Input identity therefore stays `declared_unverified`, and both results are negative
+  controls.
+- Neither compares two revisions. `public_identity_no_change` is a self-comparison.
+  `public_dev_vs_fresh` compares two plan sets of one revision.
 - No public semantic families are declared.
 
-### Unknown outcomes from an additional annotation
+`public_dev_vs_fresh` is the exact output of this command, run from the repository root:
+
+```powershell
+python scripts/benchmarks/paired_regression.py `
+  --baseline-plan docs/benchmarks/evidence/sou36/controlled/plan.json `
+  --baseline-run docs/benchmarks/evidence/sou36/controlled/development-run.json `
+  --candidate-plan docs/benchmarks/evidence/sou36/controlled/plan.json `
+  --candidate-run docs/benchmarks/evidence/sou36/controlled/fresh-run.json `
+  --out-dir <new-directory>
+```
+
+It exits 1 and prints this line, followed by the path written:
+
+```text
+exit 1: comparability=non_comparable validity=valid completeness=per_side_only reasons=[plan_set_mismatch, run_settings_mismatch, input_identity_unverified] gaps=[none]
+```
+
+| Reason | Detail |
+|---|---|
+| `plan_set_mismatch` | baseline `development` vs candidate `fresh_evaluation` |
+| `run_settings_mismatch` | differs in `selection.repetitions` and `budget.max_calls` |
+| `input_identity_unverified` | no source bundle: task, environment and injection identities are plan declarations |
+
+A test runs this command and checks that the output is byte-identical to the retained
+`comparison.json` and `report.md`.
+
+### Public report inventory
+
+These are all public AgentDojo reports in the repository. None forms a verified
+two-revision matched/1 pair, so none could be compared without fabricating plans,
+outcomes or input bindings. None was converted.
+
+| Report | Source revision | Format | Usable as a comparison side |
+|---|---|---|---|
+| [`sou36/controlled`](../sou36/controlled) plan, `development-run.json`, `fresh-run.json` | `neutral-fixture` (base `290e043b`, modified working tree; agent binary `05de4e82…`) | matched/1 plan and run reports (schema 2) | Yes, but this is the only revision; used by both public controls |
+| [`agentdojo-sou36-workspace.plan.json`](../../../../scripts/benchmarks/agentdojo-sou36-workspace.plan.json) | `290e043b` | matched/1 plan for the real `workspace` suite | No run exists: both live attempts were refused at the live gate ([development](../sou36/workspace-live-blocked-development.json), [fresh](../sou36/workspace-live-blocked-fresh_evaluation.json)) |
+| `agentdojo-fallback-after-native-2026-10-05.json`, `agentdojo-fallback-after-review-2026-10-05.json`, `agentdojo-live-fixture-2026-10-05.json`, `agentdojo-native-after-review-2026-10-05.json` | `e259b76b`, `0c333cd8`, `38de3fda`, `0c333cd8` | Schema-1 fixture and native test reports | No: pass/fail checks, no plan and no per-case outcomes |
+| [`sou85`](../sou85) report and attempts | `ad41af50` | Schema-1 offline acceptance; attempts incomplete | No |
+| `agentdojo-history-2026-10-04.json` | n/a | Historical import summary | No |
+
+No public report has a source bundle, a case manifest or frozen semantic families.
+
+### Unknown outcomes from a supplementary annotation
 
 matched/1 reports no unknown outcome. `all_unknown` applies a
-`soup-wall-paired-regression-unknowns/1` annotation, which is bound to the candidate run
-report by SHA-256 and marks every enforced trajectory unknown.
+`soup-wall-paired-regression-unknowns/1` annotation. It is bound to the candidate run
+report by SHA-256 and marks every enforced trajectory unknown. The contract is accepted
+as diagnostic censoring by DEC-SOU153-20261027. It is never reported as a producer
+outcome, and no existing producer emits it.
 
 For those units:
 
-- the recorded evaluator Booleans are withheld;
-- the units count as attempted but not evaluable;
+- the recorded evaluator Booleans are excluded from every outcome, transition, bound and
+  interval;
+- the units count as attempted but not evaluable, and the CSV outcome cells are empty;
 - the missing-outcome bounds treat them as missing;
-- observed Deny/Ask remain visible as policy decisions.
+- each unit keeps the producer-recorded `utility` and `injection_success` under
+  `producer_recorded_audit`, for audit only;
+- the observed Deny/Ask stay on each unit and in `policy_decisions`;
+- the comparison is `conditionally_comparable`, with gap `unknown_outcomes_declared_overlay`.
 
-This annotation contract is a proposal of SOU-153. Its acceptance as the way to
-satisfy the unknown requirement has not been confirmed by the task owner, and no existing
-producer emits it.
+Only `results/all_unknown/comparison.json` carries the audit field. It was added after
+DEC-SOU153-20261027, and removing it leaves the previous file byte for byte.
 
 ### Missing, stopped and timeout outcomes
 
@@ -168,8 +221,10 @@ durations are generator constants, not measurements.
 
 ## Remaining
 
-- Review of the statistical constants: the minimum of 10 effective clusters, the
-  percentile interval and B = 2000.
-- A decision on whether the unknown annotation contract satisfies the requirement.
-- A public comparison with two revisions, a source bundle and declared families. None
-  exists, so no public result is comparable.
+- **For TL review: no genuine two-revision comparison.** No public pair of matched/1
+  reports from two source revisions exists (see the
+  [inventory](#public-report-inventory)), so the comparator has only been applied to
+  synthetic controls and to one public revision. The retained public results are negative
+  controls. They do not satisfy the two-revision requirement. That needs two recorded
+  matched/1 runs of one frozen plan, with a source bundle and frozen families.
+- Latency remains descriptive, with no interval and no speed claim.
