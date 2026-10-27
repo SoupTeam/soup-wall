@@ -30,9 +30,34 @@ PREP = load("profile_test_preparation", "prepare-installed-pilot.py")
 DOOR = load("profile_test_door", "pilot.py")
 BUILD = load("profile_test_builder", "build-pilot-front-door.py")
 RUN = load("profile_test_run", "pilot-run.py")
+QUALIFY = load("profile_test_qualification", "qualify-installed-git-profiles.py")
 
 
 class Selection(unittest.TestCase):
+    def test_native_qualification_requires_useful_payloads_beyond_success_envelopes(self):
+        cases = {G.DEFAULT: {0: QUALIFY.QUAL.COMMIT_MESSAGE},
+                 "git-readonly-file-revisions-v1": {index: "Owned tracked content" for index in (0, 1, 3)},
+                 "git-tracked-symlinks-readonly-v1": {
+                     1: "Owned changed tracked content", 2: "Owned changed tracked content",
+                     3: "Owned staged tracked content", 4: "Owned bounded tracked link",
+                     5: "Owned bounded tracked link"}}
+        for name, expected in cases.items():
+            results = {f"toolu_front_case_{index}": {"is_error": False, "content": marker}
+                       for index, marker in expected.items()}
+            with self.subTest(name=name):
+                self.assertTrue(QUALIFY.useful_payloads(name, "case", results)["all_matched"])
+                for index in expected:
+                    bad = copy.deepcopy(results)
+                    bad[f"toolu_front_case_{index}"]["content"] = ""
+                    with self.assertRaisesRegex(ValueError, "useful_original_payload_missing"):
+                        QUALIFY.useful_payloads(name, "case", bad)
+
+    def test_native_tracked_proposals_match_all_six_pinned_original_read_tools(self):
+        registry = G.registry("git-tracked-symlinks-readonly-v1")
+        original = {tool["name"] for tool in registry["tools"] if tool.get("mcp_result_profile")}
+        self.assertEqual({name for name, _ in QUALIFY.TRACKED_READS}, original)
+        self.assertEqual(len(QUALIFY.TRACKED_READS), 6)
+
     def test_only_one_reviewed_declaration_and_exact_original_schemas(self):
         upstream = json.loads((ROOT / G.ASSETS / "upstream-tools-list.json").read_bytes())["result"]["tools"]
         original = G.registry(G.DEFAULT)

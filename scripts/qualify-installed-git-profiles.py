@@ -35,6 +35,23 @@ INSTALLED = load("git_profiles_installed", "qualify-installed-front-door.py")
 QUAL, BASE = INSTALLED.QUAL, INSTALLED.BASE
 require = BASE.require
 VARIANTS = (G.DEFAULT, "git-readonly-file-revisions-v1", "git-tracked-symlinks-readonly-v1")
+TRACKED_READS = (("git_status", {}), ("git_diff", {"target": "HEAD"}),
+                 ("git_diff_unstaged", {}), ("git_diff_staged", {}),
+                 ("git_log", {"max_count": 3}), ("git_show", {"revision": "HEAD"}))
+
+
+def useful_payloads(profile, label, results):
+    """A non-error envelope alone cannot establish a useful original result."""
+    expected = ({0: QUAL.COMMIT_MESSAGE} if profile == G.DEFAULT else
+                {index: "Owned tracked content" for index in (0, 1, 3)}
+                if profile == "git-readonly-file-revisions-v1" else
+                {1: "Owned changed tracked content", 2: "Owned changed tracked content",
+                 3: "Owned staged tracked content", 4: "Owned bounded tracked link",
+                 5: "Owned bounded tracked link"})
+    for index, marker in expected.items():
+        require(marker in json.dumps(results[f"toolu_front_{label}_{index}"]["content"]),
+                "useful_original_payload_missing")
+    return {"matched_fixture_payloads": sorted(expected), "all_matched": True}
 
 
 def checked(door, command, *extra, status=None, **options):
@@ -90,6 +107,12 @@ def qualify(args, report):
                 for words in (("add", "tracked-link.txt"), ("commit", "-qm", "Owned bounded tracked link")):
                     subprocess.run([str(args.git), "-C", str(args.repository), *words], env=env,
                                    check=True, capture_output=True, timeout=15)
+                # Deliberate owned fixture setup precedes the protected baseline.
+                # Nonempty original diffs must survive installed host execution.
+                (args.repository / "tracked.txt").write_text("Owned staged tracked content\n")
+                subprocess.run([str(args.git), "-C", str(args.repository), "add", "tracked.txt"],
+                               env=env, check=True, capture_output=True, timeout=15)
+                (args.repository / "tracked.txt").write_text("Owned changed tracked content\n")
             baseline = {"project": QUAL.snapshot(args.project), "repository": QUAL.snapshot(args.repository),
                         "sentinel": sentinel.read_bytes()}
             door = INSTALLED.InstalledDoor(args, env, work, agent_home)
@@ -122,9 +145,8 @@ def qualify(args, report):
                                               "refs/heads/main:tracked.txt", "HEAD:tracked.txt")]
                 refused_indices, useful_indices = (2,), (0, 1, 3)
             elif name == "git-tracked-symlinks-readonly-v1":
-                proposals = [("mcp__git__" + tool, {"repo_path": "/workspace", **arguments}) for tool, arguments in (
-                    ("git_status", {}), ("git_diff", {"target": "HEAD"}), ("git_diff_untracked", {}),
-                    ("git_diff_staged", {}), ("git_log", {"max_count": 3}), ("git_show", {"revision": "HEAD"}))]
+                proposals = [("mcp__git__" + tool, {"repo_path": "/workspace", **arguments})
+                             for tool, arguments in TRACKED_READS]
                 proposals += [("mcp__git__git_status", {"repo_path": str(sentinel.parent)}),
                               ("mcp__git__git_status", {"repo_path": "/workspace"})]
                 refused_indices, useful_indices = (6,), (0, 1, 2, 3, 4, 5, 7)
@@ -147,8 +169,7 @@ def qualify(args, report):
                 require(results[f"toolu_front_{label}_{index}"]["is_error"] is False, "useful_original_call_refused")
             for index in refused_indices:
                 require(results[f"toolu_front_{label}_{index}"]["is_error"] is True, "unsupported_call_released")
-            require("Owned tracked content" in json.dumps(results[f"toolu_front_{label}_0"]["content"])
-                    if name == "git-readonly-file-revisions-v1" else True, "per_file_bytes_missing")
+            row["useful_payloads"] = useful_payloads(name, label, results)
             row.update(passed=True, git_selection=G.binding(name), successful_original_calls=len(useful_indices),
                        refused_calls=len(refused_indices), observed_identity=outcome["identity"],
                        selection_sha256=outcome["selection_sha256"], profiles=outcome["profiles"],
