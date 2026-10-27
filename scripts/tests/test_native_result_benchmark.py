@@ -5,6 +5,10 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+import hashlib
+import json
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('bench', ROOT / 'scripts/benchmark-native-results.py')
@@ -41,6 +45,64 @@ class BenchmarkControls(unittest.TestCase):
                 with self.assertRaises(ValueError): B.check_manifest(broken)
             binary.write_bytes(b'changed fixture')
             with self.assertRaises(ValueError): B.check_manifest(value)
+
+    def test_actual_client_interface_and_refused_or_incomplete_bursts(self):
+        # Exercise the whole trial with the actual Client method interface;
+        # no network, model, daemon or synthetic performance claim.
+        for mode in ('exact', 'refused', 'missing', 'cleanup_failed'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as folder:
+                root=Path(folder)
+                workspace=root/'workspace'; workspace.mkdir()
+                payload=b'owned public fixture'
+                (workspace/'k120.txt').write_bytes(payload)
+                recorded=[]
+                class Client:
+                    # Only the real Client's methods are exposed here.
+                    def send(self, *frames):
+                        self.replies=[]
+                        for i, frame in enumerate(frames):
+                            ident=frame['id']
+                            value=({'jsonrpc':'2.0','id':ident,'result':{'content':[{'type':'text','text':payload.decode()}],
+                                    'structuredContent':{'content':payload.decode()}}} if i<8 else
+                                   {'jsonrpc':'2.0','id':ident,'error':{'code':-32603,'message':B.L.budgets()['frame_message']}})
+                            if mode=='refused' and i==3:value={'jsonrpc':'2.0','id':ident,'error':{'code':-32603,'message':'refused'}}
+                            raw=json.dumps(value).encode()+b'\n'
+                            self.replies.append((value,raw))
+                            recorded.append({'request_event':'result','content_sha256':hashlib.sha256(raw).hexdigest(),
+                                             'release_decision':True,'tracking_us':100})
+                        if mode=='missing':self.replies.pop()
+                    def receive(self, timeout):
+                        if not self.replies:raise TimeoutError()
+                        return self.replies.pop(0)
+                class Phase:
+                    def __init__(self,args,context,label,installed,workspace):
+                        self.root=root/label;self.root.mkdir()
+                        self.client=Client();self.count=0;self.sent=False
+                        self.section={'memory_after_initialize':{'vm_rss_kib':100},'memory_final':{'vm_hwm_kib':101},
+                            'client':{'exit_code':0,'forced_cleanup':False,'process_cleanup':{'all_stopped':True}},
+                            'daemon_cleanup':{'all_stopped':True},'daemon_exit_code':0,
+                            'cleanup_audit':{'cleanup_verified':mode!='cleanup_failed'}}
+                        context['phases'][label]=self.section
+                    def start(self):pass
+                    def stop(self):pass
+                    def exchange(self,*args):
+                        return 0,{'result':{'content':[{'type':'text','text':payload.decode()}],
+                                           'structuredContent':{'content':payload.decode()}}},b'',[],[]
+                    def ident(self):self.count+=1;return self.count
+                    def reads(self,path):
+                        return (8 if path.endswith('k120.txt') else 1) if recorded else 0
+                    def useful(self,label):return True
+                for method in ('send','receive'):
+                    self.assertTrue(hasattr(B.L.BASE.Client,method))
+                report={'trials':[]}
+                with patch.object(B.L,'Phase',Phase),patch.object(B,'timing_rows',lambda path,event: recorded if event=='native_admission_timing' else []):
+                    B.trial(SimpleNamespace(output=root),report,{'binary':'/owned-fixture'},
+                            {'name':'debug-idle','owned_cpu_loaders':0},'measured-candidate',0,root,workspace)
+                row=report['trials'][0]
+                self.assertEqual(row['status'],'passed' if mode=='exact' else 'failed')
+                if mode=='missing':self.assertEqual(len(row['responses']),8)
+                self.assertEqual(row['planned_responses'],9)
+                self.assertTrue((root/'report.json').is_file())
 
 
 if __name__ == '__main__':

@@ -77,9 +77,11 @@ def trial(args, report, build, condition, variant, repeat, installed, workspace)
     loaders = []
     started = time.monotonic()
     try:
+        row['stage'] = 'startup'
         phase.start()
         # Fixed warm-up matches the original warmed inspection path. Its audit
         # remains in the logs but it is not one of the nine measured responses.
+        row['stage'] = 'warmup'
         _, warm, _, _, _ = phase.exchange('read_text_file', {'path': '/workspace/k120.txt'})
         require(L.response_text(warm).encode() == (workspace / 'k120.txt').read_bytes(), 'warmup bytes')
         for _ in range(condition['owned_cpu_loaders']):
@@ -92,7 +94,8 @@ def trial(args, report, build, condition, variant, repeat, installed, workspace)
         frames.append(L.BASE.call(ids[8], {'path': '/workspace/m2.txt'}))
         supported_before, oversized_before = phase.reads('/workspace/k120.txt'), phase.reads('/workspace/m2.txt')
         burst_start = time.monotonic()
-        phase.client.send_frames(*frames)
+        row['stage'] = 'burst'
+        phase.client.send(*frames)
         seen = set()
         for _ in ids:
             value, raw = phase.client.receive(timeout=max(0.1, 90 - (time.monotonic() - burst_start)))
@@ -114,10 +117,12 @@ def trial(args, report, build, condition, variant, repeat, installed, workspace)
             'oversized': phase.reads('/workspace/m2.txt') - oversized_before}
         require(row['original_read_effects']['supported'] >= 8 and row['original_read_effects']['oversized'] >= 1,
                 'original server syscall witness missing')
+        row['stage'] = 'useful_continuation'
         phase.useful(label)
         row['useful_continuation'] = True
         require(row['supported_exact'] == 8 and row['oversized_refused'], 'burst decisions/bytes changed')
         row['status'] = 'passed'
+        row['stage'] = 'complete'
     except Exception as error:
         row['status'] = 'failed'
         row['error_type'] = type(error).__name__

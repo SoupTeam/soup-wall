@@ -1,0 +1,13 @@
+{
+  "format": "sw-native-result-development-attempts/1",
+  "attempts": [
+    {
+      "run_id": 40562441250,
+      "source": "c36488a09187be210f1c5d8c857fa7d9aaee783d",
+      "status": "cancelled",
+      "measured_trials": 0,
+      "planned_trials": 18,
+      "reason": "Stopped during runtime preparation after preflight review found driver called send_frames instead of actual Client.send. No native timing measurement exists; not a latency failure or successful trial. Corrected driver is covered by complete trial-interface controls."
+    }
+  ]
+}
