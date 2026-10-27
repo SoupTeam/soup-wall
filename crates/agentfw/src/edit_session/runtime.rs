@@ -19,6 +19,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 pub(super) struct RunRecord {
     pub format: String,
     pub run: PathBuf,
+    pub home: PathBuf,
     profile_sha256: String,
     host_session: String,
     pub(super) instance_id: String,
@@ -110,7 +111,7 @@ async fn owned(
     let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
     let run = parent.join(format!("edit-{}", crate::pilot_launcher::random_uuid_v4()));
     fs::DirBuilder::new().mode(0o700).create(&run)?;
-    let home = run.join("agent");
+    let home = run.join(crate::token::generate());
     fs::DirBuilder::new().mode(0o700).create(&home)?;
     let token = crate::token::generate();
     let native_token = crate::token::generate();
@@ -157,6 +158,7 @@ async fn owned(
     let record = RunRecord {
         format: FORMAT.into(),
         run: run.clone(),
+        home: home.clone(),
         profile_sha256: digest.clone(),
         host_session: host.clone(),
         instance_id: native.instance_id().into(),

@@ -115,8 +115,12 @@ qualification installs exact Agent/Claude bytes outside the checkout, installs
 the verified component, then uses the genuine restricted host with an owned
 scripted provider. It independently checks useful read/create/read and
 read/replace/read, Ask decisions, changed host/component bytes, writable runtime parents, stale
-inputs, links, changed bindings, replay,
-cancellation, daemon loss, fresh epochs and postcommit interruption. It checks
+inputs, symlinks and hardlinks (both names independently retained), changed bindings, replay,
+cancellation, daemon loss, fresh epochs and interruption after successful tool-result
+delivery. This last case does not claim loss or withholding of the tool result.
+Failed inspection exits have bounded typed diagnostics; a closed-run refusal is
+reconciled with the actual Ask verdict and zero effects, while successful
+inspection still must satisfy every redaction assertion. It checks
 output bytes/inodes, an unrelated sentinel, discovery mutation dispatch and owned
 process cleanup. This is development qualification, not a live-model efficacy or
 production-readiness claim. The registered `linux-installed-edit` job runs with

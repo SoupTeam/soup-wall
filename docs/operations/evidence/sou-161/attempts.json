@@ -10,7 +10,14 @@
       "status": "failed",
       "completed_cases": 5,
       "required_cases": 19,
-      "reason": "The no-approval witness repeatedly inspected the same pending request until the run ended; an unavailable request was mislabelled as exposed arguments. Preserve this incomplete outcome. Inspection redaction itself is unconditional, and create, replacement and reject controls already passed. Inspect each exact request once; a separate production delta makes explicit workspace override ambient AGENTFW_WORKSPACE for reads too."
+      "reason": "The original failed inspect response was not retained; its exact typed cause cannot be recovered. The combined label did not prove disclosure and is consistent with a list/inspect lifecycle race. Preserve the original incomplete outcome and denominator; the corrected source inspects each request once, retains safe typed diagnostics and keeps successful redaction assertions.",
+      "derived_inventory": {
+        "expected": 19,
+        "attempted": 6,
+        "passed": 5,
+        "incomplete": 14,
+        "basis": "ordered source loop and first failed no-approval control; original report had no attempted flag"
+      }
     },
     {
       "attempt": 2,
@@ -21,7 +28,19 @@
       "status": "passed",
       "completed_cases": 19,
       "required_cases": 19,
-      "reason": "All original installed cases passed, including genuine host useful effects and hostile ambient workspace. Retained as an intermediate qualified source before adding protected runtime ancestry and three explicit source/runtime controls."
+      "reason": "All original installed cases passed, including genuine host useful effects and hostile ambient workspace. Retained as an intermediate qualified source before adding protected runtime ancestry and three explicit source/runtime controls.",
+      "scope_correction": "The old postcommit-result-loss label proves only host interruption after successful tool-result delivery. It is not evidence of lost/withheld tool results."
+    },
+    {
+      "attempt": 3,
+      "run_id": 40527013106,
+      "source_commit": "b62422f6328d6b49744d776e0ae8cfd452752753",
+      "artifact_id": 12743739467,
+      "artifact_sha256": "ab7426e1931c672799c88faf26902de4f7de55b5dbb29eea9d6db09199963eba",
+      "status": "passed",
+      "completed_cases": 22,
+      "required_cases": 22,
+      "scope_correction": "Preserved unmodified intermediate report. Its old postcommit-result-loss name establishes host interruption after successful tool-result delivery, not missing/withheld tool results. Current qualifier names/scopes this explicitly and adds hardlink refusal and typed lifecycle diagnostics per review."
     }
   ]
 }

@@ -382,7 +382,6 @@ pub(super) fn command(action: Action) -> Result<()> {
         } => super::runtime::run(plan, sha256, state, prompt_file, timeout_seconds, model)?,
         Action::Ask { run, action } => {
             private_dir(&run)?;
-            private_dir(&run.join("agent"))?;
             let record: super::runtime::RunRecord =
                 serde_json::from_slice(&bytes(&run.join("run.json"), MAX_PLAN)?)
                     .map_err(|_| anyhow::anyhow!("edit_run_invalid"))?;
@@ -390,7 +389,19 @@ pub(super) fn command(action: Action) -> Result<()> {
                 record.format == FORMAT && record.run == run,
                 "edit_run_identity"
             );
-            let home = run.join("agent");
+            let home = record.home.clone();
+            ensure!(
+                home.parent() == Some(run.as_path())
+                    && home
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .is_some_and(|name| name.len() == 43
+                            && name
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))),
+                "edit_run_home_identity"
+            );
+            private_dir(&home)?;
             if run.join("terminal.json").exists() {
                 ensure!(matches!(action, Ask::List), "edit_run_ended");
                 println!("[]");

@@ -27,10 +27,10 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = 'sw-installed-edit-qualification/1'
 CASES = ('installed-closure', 'inert-preview', 'changed-runtime', 'changed-component', 'writable-runtime-parent', 'useful-create', 'useful-replace',
-         'ask-reject', 'no-approval', 'unlisted-tool', 'outside-target', 'linked-target',
+         'ask-reject', 'no-approval', 'unlisted-tool', 'outside-target', 'linked-target', 'hardlink-target',
          'stale-plan', 'changed-plan', 'no-exclusion', 'pending-old-change',
          'pending-new-change', 'approval-replay', 'cancel-pending', 'daemon-loss',
-         'restart-authority', 'postcommit-result-loss')
+         'restart-authority', 'interruption-after-delivery')
 CLAUDE = 'fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7'
 OLD = 'Original ledger: seven blue containers.\n'
 NEW = 'Revised report: twelve red samples.\n'
@@ -69,16 +69,58 @@ def snapshot(path):
     return row
 
 
+def hardlink_preserved(row):
+    if not isinstance(row, dict):
+        return False
+    target, alias = row.get('target_before'), row.get('outside_alias_before')
+    required = {'exists', 'device', 'inode', 'mode', 'links', 'size', 'sha256'}
+    return (isinstance(target, dict) and isinstance(alias, dict)
+            and required.issubset(target) and required.issubset(alias)
+            and target['exists'] is True and target['links'] == alias['links'] == 2
+            and target['device'] == alias['device'] and target['inode'] == alias['inode']
+            and target['sha256'] == alias['sha256']
+            and target == row.get('target_after') and alias == row.get('outside_alias_after')
+            and row.get('authority') is False and row.get('new_runs') == 0)
+
+
 def passed_report(report):
     return (report.get('format') == FORMAT and report.get('status') == 'passed'
             and [r.get('id') for r in report.get('cases', [])] == list(CASES)
-            and all(r.get('status') == 'passed' for r in report['cases'])
+            and report.get('expected') == list(CASES)
+            and all(r.get('status') == 'passed' and r.get('attempted') is True for r in report['cases'])
+            and hardlink_preserved(next((r for r in report['cases'] if r.get('id') == 'hardlink-target'), None))
             and report.get('claude_sha256') == CLAUDE
             and report.get('paid_inference') is False)
 
 
+def cli_observation(code, stdout, stderr):
+    """Finite diagnostics only: no raw response, arguments, paths or stderr."""
+    known = {'edit_run_ended': 'run_ended', 'edit_run_not_live': 'run_not_live',
+             'pending approval has expired': 'pending_expired',
+             'no such pending approval (decided, expired or restarted)': 'pending_unavailable'}
+    lines = stderr[:131072].decode('utf-8', 'replace').splitlines()
+    reason = 'ok' if code == 0 else 'cli_failed'
+    if code != 0:
+        for text, tag in known.items():
+            if any(line.strip() in (text, 'Error: ' + text) for line in lines):
+                reason = tag;break
+    return {'exit_code': code, 'reason': reason, 'stdout_bytes': len(stdout),
+            'stderr_bytes': len(stderr), 'stdout_sha256': sha(stdout),
+            'raw_retained': False}
+
+
+def run_home(run):
+    record = json.loads((run / 'run.json').read_text())
+    home = Path(record['home'])
+    require(home.parent == run and len(home.name) == 43
+            and all(c.isalnum() or c in '-_' for c in home.name), 'run_home_identity')
+    return home
+
+
 class Suite:
-    def __init__(self, args):
+    def __init__(self, args, report):
+        self.report = report
+        self.active = report["cases"][0]
         self.args = args
         self.binary = args.output / 'installed/bin/agentfw'
         self.binary.parent.mkdir(parents=True, mode=0o700)
@@ -107,6 +149,8 @@ class Suite:
         result = subprocess.run([str(self.binary), 'edit-session', *map(str, words)],
                                 cwd=self.work, env=env or self.env, stdin=subprocess.DEVNULL,
                                 capture_output=True, timeout=timeout)
+        self.last_cli = cli_observation(result.returncode, result.stdout, result.stderr)
+        self.report['last_cli'] = self.last_cli
         require(len(result.stdout) <= 128 * 1024 and len(result.stderr) <= 128 * 1024, 'cli_output_cap')
         lines = result.stdout.splitlines()
         try:
@@ -161,7 +205,7 @@ class Suite:
                     require(identity not in offered, 'host_reissued_request')
                     offered.add(identity)
                     return [{'type': 'tool_use', 'id': identity, 'name': 'mcp__private-output__' + tool, 'input': arguments}]
-            if mode == 'postcommit-result-loss':
+            if mode == 'interruption-after-delivery':
                 time.sleep(60)
             return [{'type': 'text', 'text': 'Owned edit sequence finished.'}]
         model.next = next_step
@@ -191,8 +235,8 @@ class Suite:
                             live_config = json.loads((run / 'mcp.json').read_text())
                             if retired is not None:
                                 import re, urllib.request, urllib.error
-                                port = int(re.search(r'^port: ([0-9]+)$', (run / 'agent/config.yaml').read_text(), re.M)[1])
-                                stale = (retired / 'agent/native-token').read_text()
+                                port = int(re.search(r'^port: ([0-9]+)$', (run_home(run) / 'config.yaml').read_text(), re.M)[1])
+                                stale = (run_home(retired) / 'native-token').read_text()
                                 request = urllib.request.Request(f'http://127.0.0.1:{port}/native/edit-session/v1',
                                     data=b'old authority must not reach the new epoch',
                                     headers={'Authorization': 'Bearer ' + stale}, method='POST')
@@ -214,8 +258,12 @@ class Suite:
                             if row['pending_id'] in seen:
                                 continue
                             code, inspected = self.ask(run, 'inspect', row['pending_id'])
-                            require(code == 0 and inspected.get('arguments_redacted') is True and 'args' not in inspected
-                                    and NEW not in json.dumps(inspected), 'inspect_exposed_arguments')
+                            diagnostic = dict(self.last_cli, pending_id_sha256=sha(row['pending_id'].encode()))
+                            self.active.setdefault('inspect_observations', []).append(diagnostic)
+                            require(code == 0, 'inspect_failed')
+                            require(isinstance(inspected, dict) and inspected.get('arguments_redacted') is True
+                                    and 'args' not in inspected and NEW not in json.dumps(inspected), 'inspect_exposed_arguments')
+                            diagnostic['redaction'] = 'passed'
                             seen.add(row['pending_id'])
                             inspected_seen.add(row['pending_id'])
                             if mode in ('no-approval', 'cancel-pending', 'daemon-loss'):
@@ -239,7 +287,7 @@ class Suite:
                             require(code == 0, 'decision_failed')
                             decisions.append({'id': row['pending_id'], 'binding_sha256': row['binding_sha256'], 'action': action})
                             self.last_record = decisions[-1]
-                        if mode == 'postcommit-result-loss' and target.exists() and target.read_text() == NEW and not stopped:
+                        if mode == 'interruption-after-delivery' and observed.get('toolu_edit_0') and target.exists() and target.read_text() == NEW and not stopped:
                             process.send_signal(signal.SIGINT);stopped = True
                     time.sleep(.025)
                 require(process.poll() is not None, 'host_timeout_outside_bound')
@@ -259,17 +307,28 @@ class Suite:
         diagnostics = errors.read_bytes()
         require(b'"mutation_dispatches":1' not in diagnostics and b'edit_adapter_mutation_dispatch' not in diagnostics,
                 'adapter_received_mutation')
-        native = (run / 'agent/audit.jsonl').read_bytes() if run else b''
+        native = (run_home(run) / 'audit.jsonl').read_bytes() if run else b''
         audit = [json.loads(line) for line in native.splitlines() if line.strip()]
         writes = [r for r in audit if r.get('event') == 'native_call' and r.get('released') is True
                   and str(r.get('tool', '')).startswith(('create_output_', 'replace_output_'))]
         publications = [r for r in audit if r.get('event') == 'native_publish' and r.get('released') is True]
+        call_verdicts = sorted({r.get('verdict') for r in audit if r.get('event') == 'native_call' and r.get('verdict')})
+        closed_inspection = None
+        if mode in ('no-approval', 'cancel-pending', 'daemon-loss'):
+            require(inspected_seen and snapshot(target) == before and not writes, 'ended_run_effect_not_reconciled')
+            code, _ = self.ask(run, 'inspect', next(iter(inspected_seen)))
+            closed_inspection = dict(self.last_cli)
+            expected_reason = 'run_not_live' if mode == 'daemon-loss' else 'run_ended'
+            require(code != 0 and closed_inspection['reason'] == expected_reason and 'ask' in call_verdicts,
+                    'ended_inspection_not_typed_or_verdict_changed')
         approved = {d['binding_sha256'] for d in decisions if d['action'] == 'approve'}
         require(all(r.get('binding_sha256') in approved for r in [*writes, *publications]), 'publication_not_bound_to_approval')
         return {'id': label, 'status': 'passed', 'exit': process.returncode, 'before': before, 'after': snapshot(target),
                 'approved': len([d for d in decisions if d['action'] == 'approve']), 'decisions': decisions,
                 'pending_seen': len(pending_seen), 'inspected_seen': len(inspected_seen), 'provider_requests': len(model.requests), 'observed_results': len(observed),
                 'process_cleanup': cleanup, 'terminal': terminal, 'audit_sha256': sha(native), 'root_inventory': inventory,
+                'inspect_observations': self.active.get('inspect_observations', []),
+                'closed_inspection': closed_inspection, 'native_call_verdicts': call_verdicts,
                 'write_admissions': len(writes), 'publication_gates': len(publications), 'bindings_match_approved': True,
                 'adapter_mutation_dispatches': 0, 'changed_control': changed, 'retired_epoch_refused': restart_refused}, observed, live_config
 
@@ -278,7 +337,8 @@ def qualify(args, report):
     require(platform.system() == 'Linux' and platform.machine() == 'x86_64' and os.geteuid() != 0, 'native_linux_operator_required')
     require(sha(args.claude.read_bytes()) == CLAUDE, 'genuine_pinned_claude_required')
     require(not args.output.is_relative_to(ROOT), 'outside_checkout_required')
-    suite = Suite(args)
+    report['cases'][0]['attempted'] = True
+    suite = Suite(args, report)
     report.update(agentfw_sha256=sha(suite.binary.read_bytes()), claude_sha256=sha(suite.claude.read_bytes()))
     archive = args.output / 'component.tar'
     build = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/build-pilot-front-door.py'), '--out', str(archive)],
@@ -292,12 +352,16 @@ def qualify(args, report):
     report['source_commit'] = built['commit']
     report['cases'][0].update(status='passed', component=built['component'], source=built['commit'])
     def setrow(name, row):
-        report['cases'][CASES.index(name)] = dict(row, id=name)
+        report['cases'][CASES.index(name)] = dict(row, id=name, attempted=True)
+    report['cases'][1]['attempted'] = True
+    suite.active = report['cases'][1]
     root, target, plan, code, prepared = suite.prepare('preview', apply=False)
     require(code == 0 and not plan.exists() and not target.exists() and prepared['authority'] is False,
             'preview_has_effect')
     setrow('inert-preview', {'status': 'passed', 'authority': False, 'plan_created': False})
     for label in CASES[2:]:
+        suite.active = report['cases'][CASES.index(label)]
+        suite.active['attempted'] = True
         replacing = label not in ('useful-create', 'unlisted-tool', 'outside-target', 'no-exclusion')
         root, target, plan, code, prepared = suite.prepare(label, replacing, exclusion=label != 'no-exclusion')
         if label == 'no-exclusion':
@@ -335,6 +399,23 @@ def qualify(args, report):
             require(sha(suite.claude.read_bytes()) == CLAUDE, 'restored_claude_digest')
             setrow(label, {'status': 'passed', 'authority': False, 'new_runs': 0, 'target_preserved': True})
             continue
+        if label == 'hardlink-target':
+            alias = suite.work / 'hardlink-outside-alias.txt'
+            os.link(target, alias)
+            expected_target, expected_alias = snapshot(target), snapshot(alias)
+            require(expected_target['links'] == 2 and expected_target['inode'] == expected_alias['inode'], 'hardlink_not_established')
+            runs_before = sorted(p.name for p in suite.state.iterdir())
+            prompt = suite.work / (label + '-prompt');prompt.write_text('Bounded edit.');prompt.chmod(0o600)
+            code, _ = suite.cli('run', '--plan', plan, '--sha256', prepared['profile_sha256'], '--state', suite.state, '--prompt-file', prompt)
+            row = {'status': 'passed', 'authority': False,
+                   'new_runs': len(list(suite.state.iterdir())) - len(runs_before),
+                   'target_before': expected_target, 'target_after': snapshot(target),
+                   'outside_alias_before': expected_alias, 'outside_alias_after': snapshot(alias),
+                   'refusal': suite.last_cli}
+            require(code != 0 and hardlink_preserved(row)
+                    and sorted(p.name for p in suite.state.iterdir()) == runs_before, 'hardlink_not_refused_or_inventory_changed')
+            setrow(label, row)
+            continue
         if label in ('linked-target', 'stale-plan', 'changed-plan'):
             if label == 'linked-target':
                 target.unlink();target.symlink_to(suite.sentinel)
@@ -363,11 +444,11 @@ def qualify(args, report):
             proposals[0][1]['path'] = '../unrelated.txt'
         elif label == 'approval-replay':
             proposals = [*proposals, (tool, dict(arguments))]
-        mode = label if label in ('ask-reject', 'no-approval', 'pending-old-change', 'pending-new-change', 'cancel-pending', 'daemon-loss', 'postcommit-result-loss', 'restart-authority') else 'approve'
+        mode = label if label in ('ask-reject', 'no-approval', 'pending-old-change', 'pending-new-change', 'cancel-pending', 'daemon-loss', 'interruption-after-delivery', 'restart-authority') else 'approve'
         row, observed, config = suite.host(label, root, target, plan, prepared, proposals, mode, 12 if label == 'no-approval' else 40)
         if mode not in ('approve',) or label in ('useful-create', 'useful-replace', 'approval-replay'):
             require(row['pending_seen'] > 0 and row['inspected_seen'] > 0, 'actual_pending_approval_missing_' + label)
-        if label in ('useful-create', 'useful-replace', 'approval-replay', 'postcommit-result-loss', 'restart-authority'):
+        if label in ('useful-create', 'useful-replace', 'approval-replay', 'interruption-after-delivery', 'restart-authority'):
             require(target.read_text() == NEW and row['approved'] == 1 and row['write_admissions'] == 1, 'exact_effect_missing_' + label)
             if replacing:
                 require(row['publication_gates'] == 1, 'exact_publication_gate_missing_' + label)
@@ -379,8 +460,12 @@ def qualify(args, report):
                 require(row['retired_epoch_refused'] and row['exit'] == 0, 'fresh_epoch_control_failed')
             if label == 'approval-replay':
                 require(observed['toolu_edit_1']['is_error'], 'replayed_replacement_succeeded')
-            if label == 'postcommit-result-loss':
-                require(row['exit'] != 0 and row['terminal']['state'] == 'failed', 'postcommit_interruption_reported_success')
+            if label == 'interruption-after-delivery':
+                require(row['exit'] != 0 and row['terminal']['state'] == 'failed'
+                        and row['observed_results'] == 1 and not observed['toolu_edit_0']['is_error'],
+                        'after_delivery_interruption_not_honest')
+                row['scope'] = 'host-interruption-after-successful-tool-result-delivery'
+                row['tool_result_lost'] = False
         elif label == 'pending-old-change':
             require(target.read_text() == 'Operator superseding version.\n', 'superseding_inventory_overwritten')
         else:
@@ -407,11 +492,18 @@ def main():
     args.output.mkdir(mode=0o700)
     report = {'format': FORMAT, 'status': 'incomplete', 'paid_inference': False,
               'scope': 'native-installed-genuine-host-owned-scripted-provider',
-              'cases': [{'id': name, 'status': 'incomplete'} for name in CASES]}
+              'expected': list(CASES), 'cases': [{'id': name, 'status': 'incomplete', 'attempted': False} for name in CASES]}
     try:
         qualify(args, report)
     except Exception as error:
         report.update(status='failed', failure_type=type(error).__name__, failure=str(error)[:160])
+        current = next((r for r in report['cases'] if r.get('attempted') and r['status'] == 'incomplete'), None)
+        if current is not None:
+            current.update(status='failed', failure=str(error)[:160])
+    report['inventory'] = {'expected': len(CASES), 'attempted': sum(bool(r.get('attempted')) for r in report['cases']),
+                           'passed': sum(r['status'] == 'passed' for r in report['cases']),
+                           'failed': sum(r['status'] == 'failed' for r in report['cases']),
+                           'incomplete': sum(r['status'] == 'incomplete' for r in report['cases'])}
     (args.output / 'report.json').write_text(json.dumps(report, sort_keys=True, indent=2) + '\n')
     print(json.dumps({'format': FORMAT, 'status': report['status'], 'passed': sum(r['status'] == 'passed' for r in report['cases']), 'required': len(CASES)}))
     return 0 if passed_report(report) else 1

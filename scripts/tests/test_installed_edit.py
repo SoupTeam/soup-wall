@@ -13,9 +13,14 @@ spec.loader.exec_module(probe)
 
 class InstalledEditEvidence(unittest.TestCase):
     def seed(self):
-        return {'format': probe.FORMAT, 'status': 'passed', 'paid_inference': False,
+        report = {'format': probe.FORMAT, 'status': 'passed', 'paid_inference': False,
                 'claude_sha256': probe.CLAUDE,
-                'cases': [{'id': name, 'status': 'passed'} for name in probe.CASES]}
+                'expected': list(probe.CASES), 'cases': [{'id': name, 'status': 'passed', 'attempted': True} for name in probe.CASES]}
+        identity = {'exists': True, 'device': 1, 'inode': 2, 'mode': 0o100600, 'links': 2, 'size': 3, 'sha256': probe.sha(b'old')}
+        row = next(r for r in report['cases'] if r['id'] == 'hardlink-target')
+        row.update(authority=False, new_runs=0, target_before=dict(identity), target_after=dict(identity),
+                   outside_alias_before=dict(identity), outside_alias_after=dict(identity))
+        return report
 
     def test_missing_or_failed_control_cannot_be_called_complete(self):
         self.assertTrue(probe.passed_report(self.seed()))
@@ -29,6 +34,29 @@ class InstalledEditEvidence(unittest.TestCase):
         self.assertFalse(probe.passed_report(row))
         row = self.seed();row['cases'].reverse()
         self.assertFalse(probe.passed_report(row))
+
+    def test_inspect_failure_keeps_a_safe_typed_reason_and_never_payload(self):
+        import json
+        secret = b'{"args":{"content":"owned-private-payload"}}'
+        row = probe.cli_observation(1, secret, b'Error: edit_run_ended\n')
+        self.assertEqual(row['exit_code'], 1)
+        self.assertEqual(row['reason'], 'run_ended')
+        self.assertFalse(row['raw_retained'])
+        self.assertNotIn('owned-private-payload', json.dumps(row))
+        self.assertEqual(probe.cli_observation(1, b'', b'Error: arbitrary failure\n')['reason'], 'cli_failed')
+        report = self.seed();report['cases'][0]['attempted'] = False
+        self.assertFalse(probe.passed_report(report))
+
+    def test_hardlink_control_requires_both_independent_alias_snapshots(self):
+        report = self.seed()
+        row = next(r for r in report['cases'] if r['id'] == 'hardlink-target')
+        self.assertTrue(probe.hardlink_preserved(row))
+        row['outside_alias_after']['sha256'] = probe.sha(b'changed')
+        self.assertFalse(probe.passed_report(report))
+        report = self.seed()
+        row = next(r for r in report['cases'] if r['id'] == 'hardlink-target')
+        row.pop('outside_alias_before')
+        self.assertFalse(probe.passed_report(report))
 
     def test_default_command_is_inert(self):
         result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/qualify-installed-edit.py')],
