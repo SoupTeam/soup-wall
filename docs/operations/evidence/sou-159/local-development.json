@@ -208,6 +208,26 @@
       "log_sha256": "4e8dcdd0061462456f7ff18a50b3a219a99e9fdd3830c1e0e2408fa0c5fed8ca",
       "elapsed_seconds": 14.57,
       "kind": "local-development"
+    },
+    {
+      "label": "competition-receipt-evidence",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_sou159*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "ea10c2d80b4bfb0458b6c8653a1a0eaf367af8198ee884a30766ca4fc5539957",
+      "log_sha256": "a659283337884d3df99140ed8b90427346de1c6ab84289b280ae64fcb08cd370",
+      "elapsed_seconds": 0.12,
+      "kind": "local-development"
     }
   ],
   "limits": [

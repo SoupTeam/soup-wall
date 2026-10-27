@@ -17,6 +17,16 @@
       "product_cases_executed": 0,
       "linux_execution_qualified": false,
       "fix": "Enter / during trusted namespace setup; only the deprivileged process enters the read-only source directory."
+    },
+    {
+      "source": "9d0a8debb54eb9576d296e93a95c2f71e9ba7fe5",
+      "run_id": 40459824914,
+      "result": "failed-before-runtime",
+      "code": "toolchain_clippy_component_missing",
+      "linux_execution_qualified": false,
+      "product_cases_executed": 0,
+      "linux_controls_passed": 30,
+      "fix": "Install Clippy and rustfmt in trusted toolchain preparation before offline sandbox."
     }
   ]
 }

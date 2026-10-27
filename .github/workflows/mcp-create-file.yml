@@ -98,6 +98,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           cache-targets: false

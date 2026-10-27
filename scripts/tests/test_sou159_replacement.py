@@ -18,6 +18,7 @@ def seed():
              "child_dispatches":0,"outside_unchanged":True,"cleanup_verified":True,"target_unchanged":True,
              "old":{"inode":1},"after":{"inode":2,"sha256":probe.sha(probe.NEW.encode())}}
         row.update(publication_gates=1 if case in probe.COMMITTED else 0,publication_binding_matches=True)
+        row.update(approved_bindings=["a"*64],publication_bindings=["a"*64] if case in probe.COMMITTED else [])
         if case in probe.FAULT_ERRORS:
             row.update(executor_error=probe.FAULT_ERRORS[case],result_success=False,fault_library_sha256="f"*64,staged_bytes=5)
         if case=="result-withheld":row.update(result_withheld=True,refusal_codes=["resource_replacement_committed"])
@@ -59,6 +60,13 @@ class ReplacementEvidence(unittest.TestCase):
         for field,value in [("sha256","c"*64),("inode",1)]:
             report=seed();report["cases"][0]["after"][field]=value
             with self.assertRaises(ValueError):probe.validate(report)
+
+    def test_competing_publication_must_match_one_of_the_exact_approved_calls(self):
+        report=seed();row=next(r for r in report["cases"] if r["case"]=="competing-same-version")
+        row["approved_bindings"].append("b"*64);row["publication_bindings"]=["b"*64]
+        probe.validate(report)
+        row["publication_bindings"]=["c"*64]
+        with self.assertRaises(ValueError):probe.validate(report)
 
     def test_committed_error_and_partial_progress_cannot_be_relabelled(self):
         for name,field,value in [("committed-error","committed",False),("committed-error","result_success",True),

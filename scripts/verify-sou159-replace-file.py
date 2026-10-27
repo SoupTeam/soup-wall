@@ -195,6 +195,7 @@ def run_case(binary, name, libraries):
                     future = pool.submit(collector.send, request)
                     if not denied_early:
                         record = pending(home); row["binding_sha256"] = record["binding_sha256"]
+                        row["approved_bindings"] = [record["binding_sha256"]]
                         require(snapshot(target)==expected and not list(workspace.glob(".soup-replace-*")), "mutation before approval")
                         details = record["resource_details"]
                         require(details["old_content_sha256"] == plan["old_sha256"] and details["new_content_sha256"] == plan["new_sha256"], "approval changed content")
@@ -222,6 +223,7 @@ def run_case(binary, name, libraries):
                                 while len(list((home/".agentfw/native-pending").glob("*.json")))<2 and time.monotonic()<deadline:time.sleep(.02)
                                 records=[base.strict_json(p.read_bytes()) for p in (home/".agentfw/native-pending").glob("*.json")]
                                 require(len(records)==2,"second pending missing")
+                                row["approved_bindings"] = [r["binding_sha256"] for r in records]
                                 for r in records: operator(binary,env,"approve",r)
                             elif name != "new-change-pending": operator(binary, env, "approve", record)
                     raw=future.result(timeout=15)
@@ -266,7 +268,8 @@ def run_case(binary, name, libraries):
                 audit=base.json_lines((home/".agentfw/audit.jsonl").read_bytes())
                 publications=[r for r in audit if r.get("event")=="native_publish" and r.get("tool")=="replace_result" and r.get("released") is True]
                 row["publication_gates"]=len(publications)
-                row["publication_binding_matches"]=all(r.get("binding_sha256")==row.get("binding_sha256") for r in publications)
+                row["publication_bindings"]=[r.get("binding_sha256") for r in publications]
+                row["publication_binding_matches"]=all(b in row.get("approved_bindings",[]) for b in row["publication_bindings"])
                 if name in COMMITTED or name=="publication-fault":
                     require(row["publication_gates"]==1 and row["publication_binding_matches"],"missing/crossed native publication gate")
                 row.update(after=snapshot(target),target_unchanged=snapshot(target)==expected,
@@ -296,6 +299,7 @@ def validate(report):
         if r["committed"]:
             require(r["after"]["sha256"]==sha(NEW.encode()) and r["after"]["inode"]!=r["old"]["inode"],"wrong committed effect")
             require(r.get("publication_gates")==1 and r.get("publication_binding_matches") is True,"publication receipt correlation missing")
+            require(len(r.get("publication_bindings",[]))==1 and r["publication_bindings"][0] in r.get("approved_bindings",[]),"publication did not match either exact approved call")
         else: require(r["target_unchanged"],"unapproved mutation")
         if r["case"] in FAULT_ERRORS:
             require(r.get("executor_error")==FAULT_ERRORS[r["case"]] and r.get("result_success") is False
