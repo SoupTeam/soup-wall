@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -29,7 +30,10 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.dont_write_bytecode = True
+import pilot_capacity as capacity
 from pilot_provider import utility_environment
+import pilot_preparation_lock as coordination
 SOURCES = {
     "git": ("2.51.2", "git-2.51.2",
             "https://www.kernel.org/pub/software/scm/git/git-2.51.2.tar.xz",
@@ -48,6 +52,8 @@ MAX_LOG = 1024 * 1024
 MAX_ENTRIES = 12000
 MAX_EXPANDED = 512 * 1024 * 1024
 MAX_FILE = 64 * 1024 * 1024
+MAX_DEPENDENCY_ENTRIES = 25000
+MAX_DEPENDENCY_BYTES = 512 * 1024 * 1024
 
 
 class Failure(Exception):
@@ -120,7 +126,10 @@ def output_root(path):
             and (not info.st_mode & 0o022 or info.st_mode & stat.S_ISVTX), "unsafe_output_parent")
     require(not path.is_relative_to(ROOT), "output_inside_checkout")
     require(not path.is_symlink(), "symlink_output_refused")
-    return private(path, create=not path.exists())
+    # Two first owners may reach this mkdir together. Validate the winner's
+    # inode rather than treating FileExistsError as a failed preparation.
+    path.mkdir(mode=0o700, exist_ok=True)
+    return private(path)
 
 
 def platform_missing():
@@ -184,6 +193,77 @@ def optional_directory(path):
     return str(path.resolve(strict=True))
 
 
+def directory_identity(path):
+    """Bound the bytes of an explicitly selected native build dependency."""
+    root = Path(optional_directory(path))
+    summary = hashlib.sha256()
+    entries = total = 0
+
+    def unreadable(_error):
+        raise Failure("dependency_directory_unreadable", "inputs")
+
+    for base, directories, files in os.walk(root, followlinks=False, onerror=unreadable):
+        directories.sort()
+        for name in sorted(directories + files):
+            entry = Path(base) / name
+            info = entry.lstat()
+            entries += 1
+            require(entries <= MAX_DEPENDENCY_ENTRIES,
+                    "dependency_directory_entry_limit", "inputs")
+            require(info.st_uid in (0, os.getuid()) and
+                    (stat.S_ISLNK(info.st_mode) or
+                     not info.st_mode & (stat.S_ISUID | stat.S_ISGID | 0o022)),
+                    "unsafe_dependency_directory_entry", "inputs")
+            if stat.S_ISLNK(info.st_mode):
+                link_text = os.readlink(entry)
+                try:
+                    target = entry.resolve(strict=True)
+                except FileNotFoundError:
+                    # Some pinned development packages contain links into an
+                    # unselected companion package. Preserve that unresolved
+                    # state in the fingerprint, and reject reuse if it changes.
+                    marker = "missing-link:" + link_text
+                else:
+                    require(target.is_relative_to(root), "dependency_link_escape", "inputs")
+                    marker = "link:" + link_text
+            elif stat.S_ISDIR(info.st_mode):
+                marker = "directory"
+            else:
+                require(stat.S_ISREG(info.st_mode), "dependency_special_entry", "inputs")
+                total += info.st_size
+                require(total <= MAX_DEPENDENCY_BYTES, "dependency_directory_byte_limit", "inputs")
+                marker = "file:" + digest(entry)
+            summary.update(entry.relative_to(root).as_posix().encode() + b"\0" +
+                           marker.encode() + b"\0")
+    return {"path": str(root), "tree_sha256": summary.hexdigest(),
+            "entries": entries, "bytes": total}
+
+
+def execution_inputs(args):
+    """Inputs absent from the original receipt fields, including Meson's Python."""
+    try:
+        python = Path(sys.executable).resolve(strict=True)
+    except FileNotFoundError as error:
+        raise Failure("selected_python_missing", "inputs") from error
+    info = python.lstat()
+    require(stat.S_ISREG(info.st_mode) and info.st_uid in (0, os.getuid())
+            and not info.st_mode & (stat.S_ISUID | stat.S_ISGID)
+            and os.access(python, os.X_OK), "unsafe_python_interpreter", "inputs")
+    directories = {}
+    for name in ("pkg_config_libdir", "pkg_config_sysroot", "meson_pythonpath"):
+        selected = getattr(args, name, None)
+        try:
+            directories[name] = directory_identity(selected) if selected else None
+        except FileNotFoundError as error:
+            raise Failure(name + "_entry_missing", "inputs") from error
+    for kind in SOURCES:
+        selected = getattr(args, kind + "_archive")
+        if selected is not None:
+            bounded_archive(selected, kind)
+    return {"python": {"path": str(python), "sha256": digest(python)},
+            "directories": directories}
+
+
 def environment(tools, home, args):
     paths = [str(Path(path).parent) for path in tools.values()]
     paths.extend(("/usr/bin", "/bin"))
@@ -209,6 +289,7 @@ def bounded_archive(path, kind):
 
 
 def download(kind, destination):
+    capacity.recheck("before_download")
     url = SOURCES[kind][2]
     require(url.startswith("https://"), "unpinned_download_refused", "download")
     limit = SOURCES[kind][4]
@@ -232,6 +313,7 @@ def download(kind, destination):
 
 def extract(archive, destination, kind):
     """Preflight the complete layout before writing any archive member."""
+    capacity.recheck("before_extraction")
     prefix = SOURCES[kind][1]
     with tarfile.open(archive, "r:xz") as bundle:
         members = bundle.getmembers()
@@ -328,6 +410,7 @@ def stop_group(process):
 
 def build(command, *, cwd, env, log, seconds, stage):
     """Drain bounded output and stop the entire owned process group on every exit."""
+    capacity.recheck("before_build")
     cancelled = False
 
     def mark_cancelled(_signum, _frame):
@@ -457,7 +540,7 @@ def tree_digest(generation, *, completed=False):
     return overall.hexdigest()
 
 
-def verify_generation(generation, expected, tools, *, completed=False):
+def verify_generation(generation, expected, tools, *, execution=None, completed=False):
     info = generation.lstat()
     require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
             and (not completed or stat.S_IMODE(info.st_mode) == 0o500),
@@ -471,11 +554,15 @@ def verify_generation(generation, expected, tools, *, completed=False):
             and receipt.get("source_commit") == expected
             and receipt.get("flags") == {"git": list(GIT_FLAGS), "bwrap": list(BWRAP_FLAGS)},
             "receipt_identity_changed", "reuse")
+    if execution is not None:
+        require(receipt.get("execution_inputs") == execution,
+                "receipt_execution_inputs_changed", "reuse")
     require(receipt.get("generation_tree_sha256") == tree_digest(generation, completed=completed),
             "generation_tree_changed", "reuse")
     for kind in SOURCES:
         require(receipt["archives"][kind] == {"url": SOURCES[kind][2], "sha256": SOURCES[kind][3]},
                 "archive_identity_changed", "reuse")
+    require(set(receipt["tools"]) == set(tools), "tool_set_changed", "reuse")
     for name, entry in receipt["tools"].items():
         require(name in TOOLS and entry["path"] == tools[name]
                 and digest(entry["path"]) == entry["sha256"],
@@ -509,11 +596,15 @@ def failure_record(output, error):
         if stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() \
                 and stat.S_IMODE(info.st_mode) == 0o700 and not output.is_relative_to(ROOT) \
                 and not (output / "first-failure.json").exists():
-            write_json(output / "first-failure.json", record)
+            try:
+                write_json(output / "first-failure.json", record)
+            except FileExistsError:
+                pass  # Another failed owner retained the first record.
     return record
 
 
 def prepare(args):
+    wait_seconds = coordination.bounded_wait(getattr(args, "wait_seconds", 0))
     missing = platform_missing()
     tools, dependencies = tool_inventory(args)
     missing.extend(f'{item["dependency"]}: install {item["install"]}' for item in dependencies)
@@ -536,72 +627,110 @@ def prepare(args):
                 "next": "supply missing inputs, then --prepare; sandbox and pilot qualification are separate"}
     require(not missing, "missing_prerequisites: " + "; ".join(missing)[:140])
     source = source_identity(args.expected_commit)
+    snapshot = {name: {"path": path, "sha256": digest(path)}
+                for name, path in tools.items()}
+    execution = execution_inputs(args)
     output = output_root(args.output)
-    generations = private(output / "generations", create=not (output / "generations").exists())
-    marker = output / "current.json"
-    if marker.exists() and not args.rebuild:
-        regular(marker)
-        selected = strict_json(marker)
-        require(selected.get("format") == "sw-native-pilot-current/1"
-                and re.fullmatch(r"[0-9a-f]{32}", selected.get("generation", "")),
-                "current_marker_invalid", "reuse")
-        generation = generations / selected["generation"]
-        receipt = verify_generation(generation, source, tools, completed=True)
-        require(digest(generation / "receipt.json") == selected["receipt_sha256"],
-                "current_marker_changed", "reuse")
-        return {"status": "reused", "git": receipt["binaries"]["git"]["path"],
-                "bwrap": receipt["binaries"]["bwrap"]["path"],
-                "receipt": str(generation / "receipt.json"), "active_protection": False}
-    generation = private(generations / uuid.uuid4().hex, create=True)
-    (generation / "tmp").mkdir(mode=0o700)
-    env = environment(tools, generation, args)
-    archives = {}
-    for kind in SOURCES:
-        supplied = getattr(args, kind + "_archive")
-        archives[kind] = bounded_archive(supplied, kind) if supplied else download(
-            kind, generation / (kind + ".tar.xz"))
-    for kind in SOURCES:
-        destination = generation / (kind + "-src")
-        destination.mkdir(mode=0o700)
-        extract(archives[kind], destination, kind)
-    git = generation / "git-src/git"
-    bwrap = generation / "bwrap-build/bwrap"
-    build([tools["make"], *GIT_FLAGS], cwd=generation / "git-src", env=env,
-          log=generation / "git-build.log", seconds=600, stage="git_build")
-    build([tools["meson"], "setup", str(generation / "bwrap-build"),
-           str(generation / "bwrap-src"), *BWRAP_FLAGS], cwd=generation, env=env,
-          log=generation / "bwrap-setup.log", seconds=120, stage="bwrap_setup")
-    build([tools["meson"], "compile", "-C", str(generation / "bwrap-build")],
-          cwd=generation, env=env, log=generation / "bwrap-build.log", seconds=300, stage="bwrap_build")
-    binaries = {kind: verify_binary(kind, path, tools) for kind, path in (("git", git), ("bwrap", bwrap))}
-    receipt = {"format": "sw-native-pilot-prerequisites/1", "source_commit": source,
-               "archives": {kind: {"url": SOURCES[kind][2], "sha256": SOURCES[kind][3]}
-                            for kind in SOURCES},
-               "tools": {name: {"path": path, "sha256": digest(path)} for name, path in tools.items()},
-               "flags": {"git": list(GIT_FLAGS), "bwrap": list(BWRAP_FLAGS)},
-               "binaries": binaries, "generation_tree_sha256": tree_digest(generation),
-               "status": "built-not-qualified"}
-    write_json(generation / "receipt.json", receipt)
-    verify_generation(generation, source, tools)
-    freeze(generation)
-    current = {"format": "sw-native-pilot-current/1", "generation": generation.name,
-               "receipt_sha256": digest(generation / "receipt.json")}
-    temporary = output / (".current-" + uuid.uuid4().hex)
-    write_json(temporary, current)
-    os.replace(temporary, marker)
-    fd = os.open(output, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    return {"status": "prepared-not-qualified", "git": str(git), "bwrap": str(bwrap),
-            "receipt": str(generation / "receipt.json"), "active_protection": False}
+    with coordination.hold(output, wait_seconds=wait_seconds) as claim:
+        current_tools, current_missing = tool_inventory(args)
+        require(not current_missing and current_tools == tools and
+                source_identity(args.expected_commit) == source and
+                execution_inputs(args) == execution and
+                {name: {"path": path, "sha256": digest(path)}
+                 for name, path in current_tools.items()} == snapshot,
+                "input_changed_while_waiting", "coordination")
+        capacity.recheck("after_coordination")
+        generations = output / "generations"
+        generations.mkdir(mode=0o700, exist_ok=True)
+        private(generations)
+        marker = output / "current.json"
+        require(not marker.is_symlink(), "current_marker_symlink", "reuse")
+        if marker.exists():
+            regular(marker)
+            selected = strict_json(marker)
+            require(selected.get("format") == "sw-native-pilot-current/1"
+                    and re.fullmatch(r"[0-9a-f]{32}", selected.get("generation", ""))
+                    and re.fullmatch(r"[0-9a-f]{64}", selected.get("receipt_sha256", "")),
+                    "current_marker_invalid", "reuse")
+            if not args.rebuild:
+                previous = generations / selected["generation"]
+                receipt = verify_generation(previous, source, tools, execution=execution,
+                                            completed=True)
+                require(digest(previous / "receipt.json") == selected["receipt_sha256"],
+                        "current_marker_changed", "reuse")
+                return {"status": "reused", "git": receipt["binaries"]["git"]["path"],
+                        "bwrap": receipt["binaries"]["bwrap"]["path"],
+                        "receipt": str(previous / "receipt.json"),
+                        "waited_seconds": claim.waited_seconds,
+                        "contended": claim.contended, "active_protection": False}
+        incomplete = sum(1 for _ in itertools.islice(generations.iterdir(), 17)) if not marker.exists() else 0
+        require(incomplete <= 16, "retained_incomplete_generation_limit", "coordination")
+        generation = private(generations / uuid.uuid4().hex, create=True)
+        capacity.bind(generation)
+        (generation / "tmp").mkdir(mode=0o700)
+        env = environment(tools, generation, args)
+        archives = {}
+        for kind in SOURCES:
+            supplied = getattr(args, kind + "_archive")
+            archives[kind] = bounded_archive(supplied, kind) if supplied else download(
+                kind, generation / (kind + ".tar.xz"))
+        for kind in SOURCES:
+            destination = generation / (kind + "-src")
+            destination.mkdir(mode=0o700)
+            extract(archives[kind], destination, kind)
+        git = generation / "git-src/git"
+        bwrap = generation / "bwrap-build/bwrap"
+        build([tools["make"], *GIT_FLAGS], cwd=generation / "git-src", env=env,
+              log=generation / "git-build.log", seconds=600, stage="git_build")
+        build([tools["meson"], "setup", str(generation / "bwrap-build"),
+               str(generation / "bwrap-src"), *BWRAP_FLAGS], cwd=generation, env=env,
+              log=generation / "bwrap-setup.log", seconds=120, stage="bwrap_setup")
+        build([tools["meson"], "compile", "-C", str(generation / "bwrap-build")],
+              cwd=generation, env=env, log=generation / "bwrap-build.log", seconds=300, stage="bwrap_build")
+        require(source_identity(args.expected_commit) == source and
+                execution_inputs(args) == execution and
+                {name: {"path": path, "sha256": digest(path)}
+                 for name, path in tools.items()} == snapshot,
+                "build_input_changed", "verify")
+        binaries = {kind: verify_binary(kind, path, tools)
+                    for kind, path in (("git", git), ("bwrap", bwrap))}
+        receipt = {"format": "sw-native-pilot-prerequisites/1", "source_commit": source,
+                   "archives": {kind: {"url": SOURCES[kind][2], "sha256": SOURCES[kind][3]}
+                                for kind in SOURCES},
+                   "tools": snapshot, "execution_inputs": execution,
+                   "flags": {"git": list(GIT_FLAGS), "bwrap": list(BWRAP_FLAGS)},
+                   "binaries": binaries, "generation_tree_sha256": tree_digest(generation),
+                   "status": "built-not-qualified"}
+        write_json(generation / "receipt.json", receipt)
+        verify_generation(generation, source, tools, execution=execution)
+        freeze(generation)
+        verify_generation(generation, source, tools, execution=execution, completed=True)
+        current = {"format": "sw-native-pilot-current/1", "generation": generation.name,
+                   "receipt_sha256": digest(generation / "receipt.json")}
+        capacity.recheck("before_selection")
+        temporary = output / (".current-" + uuid.uuid4().hex)
+        write_json(temporary, current)
+        claim.verify()
+        os.replace(temporary.name, marker.name, src_dir_fd=claim.directory_fd,
+                   dst_dir_fd=claim.directory_fd)
+        claim.verify()
+        os.fsync(claim.directory_fd)
+        answer = {"status": "prepared-not-qualified", "git": str(git), "bwrap": str(bwrap),
+                  "receipt": str(generation / "receipt.json"),
+                  "waited_seconds": claim.waited_seconds, "contended": claim.contended,
+                  "active_protection": False}
+        if incomplete:
+            answer["retained_interrupted_generations"] = incomplete
+        return answer
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    capacity.add_arguments(parser)
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
+    parser.add_argument("--wait-seconds", type=float, default=0,
+                        help="explicit bounded wait for an owned same-root build (max 2700)")
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--expected-commit")
@@ -611,12 +740,33 @@ def main():
     parser.add_argument("--pkg-config-sysroot", type=Path)
     parser.add_argument("--meson-pythonpath", type=Path)
     args = parser.parse_args()
+    if args.capacity_plan:
+        if args.prepare or args.guard_capacity:
+            parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
+        print(json.dumps(capacity.cli_plan("native", args), sort_keys=True))
+        return 0
+    if args.guard_capacity and not args.prepare:
+        parser.error("--guard-capacity requires --prepare")
     try:
-        print(json.dumps(prepare(args)))
+        coordination.bounded_wait(args.wait_seconds)
+        require(args.prepare or args.wait_seconds == 0, "wait_requires_prepare")
+        with capacity.checked("native", args):
+            print(json.dumps(prepare(args)))
         return 0 if not args.prepare or not platform_missing() else 2
-    except (Failure, OSError, ValueError, KeyError, TypeError, tarfile.TarError,
+    except capacity.Refusal as error:
+        print(json.dumps(error.report, sort_keys=True))
+        return 2
+    except coordination.Busy as error:
+        print(json.dumps({"status": "busy", "reason": error.reason,
+                          "waited_seconds": error.waited_seconds,
+                          "active_protection": False}))
+        return 3
+    except (Failure, coordination.Unsafe, OSError, ValueError, KeyError, TypeError, tarfile.TarError,
             subprocess.SubprocessError, urllib.error.URLError) as error:
-        failure = error if isinstance(error, Failure) else Failure(type(error).__name__ + "_failed", "prepare")
+        failure = error if isinstance(error, Failure) else Failure(
+            str(error) if isinstance(error, coordination.Unsafe) else
+            type(error).__name__ + "_failed",
+            "coordination" if isinstance(error, coordination.Unsafe) else "prepare")
         output = args.output if args.prepare else None
         print(json.dumps(failure_record(output, failure)))
         return 2

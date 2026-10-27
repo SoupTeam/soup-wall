@@ -27,6 +27,7 @@ pub mod pilot_budget;
 pub mod pilot_doctor;
 mod pilot_host;
 pub mod pilot_launcher;
+pub mod pilot_observation;
 pub mod policy_transition;
 pub use native::child_authority;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -100,6 +101,14 @@ pub fn app_with_diagnostics(
             "/native/liveness/v1",
             post(native::liveness::handler)
                 .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
+        )
+        .route(
+            native::execution::ENDPOINT,
+            post(native::execution::transport::handler),
+        )
+        .route(
+            native::verified_git::ENDPOINT,
+            post(native::verified_git::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
         )
         .route("/native/v1/instance", get(native::instance))
         .route(

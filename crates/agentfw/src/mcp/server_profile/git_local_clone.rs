@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Explicit bounded ordinary-clone grammar; never a replacement for Git v1.
 use anyhow::{ensure, Context};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, Metadata, OpenOptions};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -10,7 +10,7 @@ pub const FORMAT: &str = "sw-mcp/git-local-clone-readonly/1";
 pub const EXECUTABLE: &str = "/mcp-runtime/git";
 pub const ORIGINAL_GIT: &str = "/mcp-runtime/original/git";
 
-fn reference(value: &str) -> bool {
+pub(super) fn reference(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value
@@ -146,8 +146,23 @@ pub fn validate_attributes(bytes: &[u8]) -> anyhow::Result<()> {
 
 /// Inspect Git's original, NUL-delimited index inventory. No decoded shell text.
 pub fn attribute_objects(listing: &[u8]) -> anyhow::Result<Vec<String>> {
+    Ok(index_entries(listing, false)?
+        .into_iter()
+        .filter(|entry| entry.path.rsplit('/').next() == Some(".gitattributes"))
+        .map(|entry| entry.oid)
+        .collect())
+}
+
+pub(super) struct IndexEntry {
+    pub mode: String,
+    pub oid: String,
+    pub path: String,
+}
+
+pub(super) fn index_entries(listing: &[u8], links: bool) -> anyhow::Result<Vec<IndexEntry>> {
     ensure!(listing.len() <= 4 * 1024 * 1024, "git_clone_index_bounds");
-    let mut blobs = Vec::new();
+    let mut entries = Vec::new();
+    let mut attributes = 0;
     let mut count = 0;
     for record in listing.split(|b| *b == 0).filter(|s| !s.is_empty()) {
         count += 1;
@@ -157,7 +172,7 @@ pub fn attribute_objects(listing: &[u8]) -> anyhow::Result<Vec<String>> {
         let fields: Vec<_> = header.split(' ').collect();
         ensure!(
             fields.len() == 3
-                && matches!(fields[0], "100644" | "100755")
+                && (matches!(fields[0], "100644" | "100755") || links && fields[0] == "120000")
                 && fields[1].len() == 40
                 && fields[1].bytes().all(|b| b.is_ascii_hexdigit())
                 && fields[2] == "0",
@@ -174,14 +189,19 @@ pub fn attribute_objects(listing: &[u8]) -> anyhow::Result<Vec<String>> {
             "git_clone_index_path"
         );
         if path.rsplit('/').next() == Some(".gitattributes") {
-            blobs.push(fields[1].to_owned());
-            ensure!(blobs.len() <= 64, "git_clone_attributes_bounds");
+            attributes += 1;
+            ensure!(attributes <= 64, "git_clone_attributes_bounds");
         }
+        entries.push(IndexEntry {
+            mode: fields[0].into(),
+            oid: fields[1].into(),
+            path: path.into(),
+        });
     }
-    Ok(blobs)
+    Ok(entries)
 }
 
-fn same(a: &Metadata, b: &Metadata) -> bool {
+pub(super) fn same(a: &Metadata, b: &Metadata) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -314,7 +334,32 @@ fn permitted(relative: &str, directory: bool) -> bool {
     true
 }
 
+pub(super) struct Inventory {
+    pub links: BTreeMap<String, Vec<u8>>,
+    pub files: BTreeSet<String>,
+    metadata: BTreeMap<String, Metadata>,
+}
+
+impl Inventory {
+    pub(super) fn unchanged(&self, other: &Self) -> bool {
+        self.links == other.links
+            && self.files == other.files
+            && self.metadata.len() == other.metadata.len()
+            && self.metadata.iter().all(|(path, before)| {
+                other
+                    .metadata
+                    .get(path)
+                    .is_some_and(|after| same(before, after))
+            })
+    }
+}
+
 pub fn validate_repository(root: &Path) -> anyhow::Result<()> {
+    inventory(root, false).map(|_| ())
+}
+
+pub(super) fn inventory(root: &Path, links: bool) -> anyhow::Result<Inventory> {
+    #[allow(clippy::too_many_arguments)] // Existing bounded walk also collects the opt-in link proof.
     fn walk(
         path: &Path,
         relative: &str,
@@ -323,10 +368,16 @@ pub fn validate_repository(root: &Path) -> anyhow::Result<()> {
         attributes: &mut usize,
         bytes: &mut usize,
         controls: &mut BTreeSet<String>,
+        links: bool,
+        inventory: &mut Inventory,
     ) -> anyhow::Result<()> {
         ensure!(depth <= 32, "git_clone_depth_limit");
         let directory = open(path, true)?;
         let before = directory.metadata()?;
+        if links {
+            owned(&before)?;
+            inventory.metadata.insert(relative.into(), before.clone());
+        }
         let anchored = directory_path(&directory, path);
         for entry in fs::read_dir(&anchored)? {
             let entry = entry?;
@@ -344,6 +395,29 @@ pub fn validate_repository(root: &Path) -> anyhow::Result<()> {
                 "git_clone_path_bounds"
             );
             let meta = fs::symlink_metadata(entry.path())?;
+            if links {
+                owned(&meta)?;
+                inventory.metadata.insert(rel.clone(), meta.clone());
+            }
+            if links && meta.is_symlink() {
+                ensure!(
+                    !rel.starts_with(".git/") && permitted(&rel, false),
+                    "git_links_metadata"
+                );
+                let target = fs::read_link(entry.path())?;
+                let target = target
+                    .to_str()
+                    .context("git_links_target_encoding")?
+                    .as_bytes()
+                    .to_vec();
+                ensure!(
+                    same(&meta, &fs::symlink_metadata(entry.path())?),
+                    "git_links_identity_changed"
+                );
+                inventory.links.insert(rel, target);
+                ensure!(inventory.links.len() <= 64, "git_links_count");
+                continue;
+            }
             ensure!(
                 !meta.is_symlink() && (meta.is_dir() || meta.is_file()),
                 "git_clone_file_type"
@@ -364,22 +438,29 @@ pub fn validate_repository(root: &Path) -> anyhow::Result<()> {
                     attributes,
                     bytes,
                     controls,
+                    links,
+                    inventory,
                 )?;
-            } else if rel == ".git/config" {
-                validate_config(&contents(&entry.path())?)?;
-                controls.insert(rel);
-            } else if name == ".gitattributes" {
-                ensure!(!rel.starts_with(".git/"), "git_clone_metadata_unsupported");
-                let data = contents(&entry.path())?;
-                *attributes += 1;
-                *bytes += data.len();
-                ensure!(
-                    *attributes <= 64 && *bytes <= 262144,
-                    "git_clone_attributes_bounds"
-                );
-                validate_attributes(&data)?;
-            } else if rel == ".git/HEAD" {
-                controls.insert(rel);
+            } else {
+                if links && !rel.starts_with(".git/") {
+                    inventory.files.insert(rel.clone());
+                }
+                if rel == ".git/config" {
+                    validate_config(&contents(&entry.path())?)?;
+                    controls.insert(rel);
+                } else if name == ".gitattributes" {
+                    ensure!(!rel.starts_with(".git/"), "git_clone_metadata_unsupported");
+                    let data = contents(&entry.path())?;
+                    *attributes += 1;
+                    *bytes += data.len();
+                    ensure!(
+                        *attributes <= 64 && *bytes <= 262144,
+                        "git_clone_attributes_bounds"
+                    );
+                    validate_attributes(&data)?;
+                } else if rel == ".git/HEAD" {
+                    controls.insert(rel);
+                }
             }
         }
         ensure!(
@@ -389,10 +470,40 @@ pub fn validate_repository(root: &Path) -> anyhow::Result<()> {
         Ok(())
     }
     let mut controls = BTreeSet::new();
-    walk(root, "", 0, &mut 0, &mut 0, &mut 0, &mut controls)?;
+    let mut inventory = Inventory {
+        links: BTreeMap::new(),
+        files: BTreeSet::new(),
+        metadata: BTreeMap::new(),
+    };
+    walk(
+        root,
+        "",
+        0,
+        &mut 0,
+        &mut 0,
+        &mut 0,
+        &mut controls,
+        links,
+        &mut inventory,
+    )?;
     ensure!(
         controls.contains(".git/config") && controls.contains(".git/HEAD"),
         "git_clone_standalone_required"
     );
+    Ok(inventory)
+}
+
+fn owned(metadata: &Metadata) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        ensure!(
+            metadata.uid() == unsafe { libc::geteuid() }
+                && (metadata.is_symlink() || metadata.mode() & 0o022 == 0),
+            "git_links_ownership"
+        );
+    }
+    #[cfg(not(unix))]
+    let _ = metadata;
     Ok(())
 }

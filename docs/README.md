@@ -92,6 +92,7 @@ overview. Choose a guide below for development, operation or evaluation.
 ## Status and retained evidence
 
 - [Read-only Git MCP profile](operations/GIT_MCP_PROFILE.md): original-server pins, bounded operations, private installation and exact-source Linux acceptance.
+- [Tracked symbolic-link Git profile](operations/GIT_TRACKED_SYMLINK_PROFILE.md): separate opt-in subset, refusal diagnostics and targeted native Linux reproduction.
 - [Explicit local Git references](operations/GIT_LOCAL_REFERENCES.md): opt-in bounded branch/tag reads, immutable metadata, source withdrawal and original-server acceptance.
 
 [ROADMAP](ROADMAP.md) records the tagged baseline, product principles,
