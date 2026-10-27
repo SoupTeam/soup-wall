@@ -56,10 +56,13 @@ def main():
         def projection(row):
             return {k: row[k] for k in ('status', 'verdict', 'rule', 'findings')}
         comparisons.append({'source': source, 'same_complete_reported_findings_and_verdict': projection(left) == projection(right)})
+    collision = any(c['same_complete_reported_findings_and_verdict'] for c in comparisons)
     report = {'source': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
               'adapter_sha256': hashlib.sha256(a.adapter.read_bytes()).hexdigest(),
               'script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-              'production_changed': False, 'claim': 'A padding-only discount cannot distinguish these complete benign/attack inputs; no runtime effects tested.',
+              'probe_changes_enforcement': False,
+              'claim': ('At least one benign/attack pair still shares the reported projection.' if collision else
+                        'Reported evidence distinguishes both retained pairs; no release authority or general semantic distinction is established.') + ' No runtime effects tested.',
               'inputs': bindings, 'results': results, 'comparisons': comparisons}
     with a.output.open('x', encoding='utf-8') as out:
         json.dump(report, out, indent=2)

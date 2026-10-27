@@ -4239,13 +4239,26 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .len(),
-            2
+            3
         );
         assert!(evidence["reason"]
             .as_str()
             .unwrap()
             .ends_with("original block 1"));
         assert_eq!(evidence["original_byte_span"], json!({"start":0,"end":15}));
+        let destructive = &record["mcp_result_directive_evidence"][2];
+        assert!(destructive["reason"]
+            .as_str()
+            .unwrap()
+            .contains("destructive action"));
+        assert!(destructive["reason"]
+            .as_str()
+            .unwrap()
+            .ends_with("original block 1"));
+        assert_eq!(
+            destructive["original_byte_span"],
+            json!({"start":47,"end":64})
+        );
         assert!(!audit.contains("private report"));
     }
 

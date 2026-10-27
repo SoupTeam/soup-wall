@@ -1,9 +1,43 @@
 # SOU-157 current-source checkpoint
 
-**Incomplete. No production correction or reduction in false refusals.** This
+**Incomplete. No reduction in false refusals.** This
 checkpoint establishes exact attribution on accepted main `46921f8d` and rejects
 one narrower structural hypothesis before it can become release authority.
 SOU-109 remains closed; its opt-in execution proof is not fabricated for corpus text.
+
+## Follow-up to independent review 5657839044
+
+`fff2d28b` adds bounded positive evidence for unaddressed destructive action/object
+pairs in the existing MCP result recognizer. English delete/erase/wipe/remove and
+explicit Russian imperative forms combine with file/directory/workspace objects.
+Short whitespace splits are supported; every occurrence in the complete original
+body is scanned. Quotes/comments remain unresolved and do not suppress evidence.
+This is deliberately incomplete positive recognition, never a benign classifier.
+No lowering API, threshold change, proof flag or policy change is introduced.
+
+Core 97 and Agent 181 tests pass. Controls cover plain/quoted/comment/long-prefix
+commands, paraphrases, Russian, split original fields with source coordinates, and
+independent secret Deny/Ask/Escalate floors even with an earlier injection-Allow
+rule. An initial whitespace-only field split failed; bounded newline support fixed
+it without changing budgets. All previous count/work/audit guards still pass.
+All 60 native-boundary tests and focused core/agent all-target Clippy with warnings
+denied pass. The first native run had 59 passes and one assertion failure because
+the audit now correctly contains a third finding; the regression now verifies all
+three entries, including the new exact `47..64` destructive-object range. Neither
+the original coordinate assertions nor refusal/continuation checks were removed.
+All 51 original status/verdict/rule tuples remain unchanged; manifest, policy and
+every original payload binding match the retained baseline.
+
+The [current report](evidence/sou157-destructive/report.json) retains the same
+24/24 attacks, ten false refusals and zero unknowns. The
+[current four-input probe](evidence/sou157-destructive/padding-controls.json) now
+distinguishes both destructive bodies through additional positive evidence; all
+four decisions remain Deny. This closes the reviewed positive-evidence gap, not
+the whole contextual problem or the task. Missing a match still grants no authority.
+The first follow-up probe's old hardcoded claim incorrectly said the projection
+was identical despite both comparison booleans being false. Its original output
+is retained as `padding-controls-initial-label-error.json`; the reporter now derives
+the claim from those booleans. No historical observations are repaired or relabelled.
 
 ## Reproduction
 
