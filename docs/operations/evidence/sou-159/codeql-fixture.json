@@ -1,0 +1,13 @@
+{
+  "affected_source": "2793deff8661073707a8bb4dd8213dcb4855e4d1",
+  "check_run_id": 122056531307,
+  "alert": 220,
+  "rule": "rust/hard-coded-cryptographic-value",
+  "classification": "test",
+  "reported_path": "crates/agentfw/tests/replace_file.rs",
+  "reported_line": 56,
+  "reported_flow": "Fixed fixture-home segment was traced to grant nonce file handling.",
+  "fix": "Generate each fixture home segment, native bearer token and hook key token independently with the existing 256-bit token generator. Preserve every authority/expiry/single-use assertion.",
+  "production_change": false,
+  "suppression_or_dismissal": false
+}

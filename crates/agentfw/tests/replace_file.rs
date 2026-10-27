@@ -17,7 +17,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
-const TOKEN: &str = "sou159-native-fixture-token-0123456789";
 struct Fixture {
     _dir: tempfile::TempDir,
     home: PathBuf,
@@ -26,6 +25,8 @@ struct Fixture {
     registry: String,
     policy: Policy,
     args: Value,
+    native_token: String,
+    hook_token: String,
 }
 impl Fixture {
     fn new(action: &str) -> Self {
@@ -53,10 +54,12 @@ impl Fixture {
             "result_provenance":"untrusted","egress":[],"resource_policy":policy_value}]});
         let bytes = serde_json::to_vec(&registry).unwrap();
         let registry = replace_file::content_sha256(&bytes);
-        let home = dir.path().join("home");
+        let home = dir.path().join(agentfw::token::generate());
         std::fs::create_dir(&home).unwrap();
-        let key = agentfw::grant::derive_key("sou159-hook-token");
-        let native = NativeState::from_bytes(&bytes, &registry, TOKEN.into())
+        let native_token = agentfw::token::generate();
+        let hook_token = agentfw::token::generate();
+        let key = agentfw::grant::derive_key(&hook_token);
+        let native = NativeState::from_bytes(&bytes, &registry, native_token.clone())
             .unwrap()
             .with_approval(&home, &key, 60)
             .unwrap();
@@ -80,7 +83,7 @@ impl Fixture {
                 enforce: true,
                 ..Config::default()
             },
-            token: "sou159-hook-token".into(),
+            token: hook_token.clone(),
         });
         Self {
             _dir: dir,
@@ -90,6 +93,8 @@ impl Fixture {
             registry,
             policy,
             args,
+            native_token,
+            hook_token,
         }
     }
     async fn post(&self, path: &str, body: Value) -> (StatusCode, Value) {
@@ -98,7 +103,7 @@ impl Fixture {
                 Request::builder()
                     .method("POST")
                     .uri(path)
-                    .header("authorization", format!("Bearer {TOKEN}"))
+                    .header("authorization", format!("Bearer {}", self.native_token))
                     .header("content-type", "application/json")
                     .body(Body::from(body.to_string()))
                     .unwrap(),
@@ -234,7 +239,7 @@ async fn replacement_ask_freezes_digests_redacts_content_and_cannot_rescue_deny(
         );
         agentfw::native::approval::operator_approve(
             &f.home,
-            "sou159-hook-token",
+            &f.hook_token,
             id,
             pending["binding_sha256"].as_str().unwrap(),
         )

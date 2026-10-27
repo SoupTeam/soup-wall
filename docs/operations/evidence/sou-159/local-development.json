@@ -353,6 +353,19 @@
       "log_sha256": "0a673b6a061ecc0338c44dfc6cd79b53b4496efe536f3d85cbd22cc4d4f05093",
       "elapsed_seconds": 3.22,
       "kind": "local-development"
+    },
+    {
+      "label": "randomized-authority-fixture",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "cargo clippy --offline -p agentfw --all-targets -- -D warnings && cargo fmt --all --check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "24254b8e261b829a0bf815819f5a01587920fe9d9880809e9ee1caa77756ae50",
+      "log_sha256": "80dfe625e535d98ee757b0e181351a54970372182076384ccb5b0be40658732e",
+      "elapsed_seconds": 9.38,
+      "kind": "local-development"
     }
   ],
   "limits": [
