@@ -295,6 +295,29 @@ class PreparedEvidence(unittest.TestCase):
             with self.assertRaises(ValueError):
                 module.prepared_records(root, "a" * 40)
 
+    def test_workflow_retains_records_needed_to_replay_capacity_qualification(self):
+        import fnmatch
+        import shutil
+
+        workflow = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        upload = workflow.split("- name: Retain bounded result and first failure", 1)[1]
+        path_block = upload.split("path: |", 1)[1].split("retention-days:", 1)[0]
+        patterns = [line.strip().removeprefix("${{ runner.temp }}/sou111-assets/")
+                    for line in path_block.splitlines()
+                    if line.strip().startswith("${{ runner.temp }}/sou111-assets/")]
+        module = self.driver()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original, retained = root / "original", root / "retained"
+            original.mkdir()
+            retained.mkdir()
+            self.records(original)
+            for record in original.iterdir():
+                if any(fnmatch.fnmatchcase(record.name, pattern) for pattern in patterns):
+                    shutil.copyfile(record, retained / record.name)
+            self.assertEqual(module.prepared_records(retained, "a" * 40),
+                             module.prepared_records(original, "a" * 40))
+
     def test_unknown_or_falsely_successful_capacity_cannot_be_published_as_pass(self):
         module = self.driver()
         for change in ({"status": "unknown", "admitted": False}, {"admitted": False},

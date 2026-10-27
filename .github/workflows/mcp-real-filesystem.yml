@@ -1460,6 +1460,7 @@ jobs:
             ${{ runner.temp }}/sou111-assets/native-diagnostic.json
             ${{ runner.temp }}/sou111-assets/native-first.json
             ${{ runner.temp }}/sou111-assets/native-reused.json
+            ${{ runner.temp }}/sou111-assets/native-recovered.json
             ${{ runner.temp }}/sou111-assets/source-plan.json
             ${{ runner.temp }}/sou111-assets/source-first.json
             ${{ runner.temp }}/sou111-assets/source-reused.json

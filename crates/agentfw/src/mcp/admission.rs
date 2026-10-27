@@ -12,7 +12,7 @@ use std::task::{Context as TaskContext, Poll};
 use std::time::Duration;
 
 use anyhow::{bail, ensure, Context};
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
@@ -280,6 +280,56 @@ pub fn classifier_from_env() -> anyhow::Result<Option<Arc<dyn InvocationClassifi
         }
         _ => bail!("unsupported classifier setting"),
     }
+}
+
+/// Explicit operator inputs for an embedded collector; never project env.
+pub(crate) fn explicit_rule_baseline(
+    script: &std::path::Path,
+    expected: &str,
+    python: &std::path::Path,
+    python_expected: &str,
+) -> anyhow::Result<Arc<dyn InvocationClassifier>> {
+    use std::io::Read;
+    ensure!(
+        script.is_absolute()
+            && python.is_absolute()
+            && crate::native::is_digest(expected)
+            && crate::native::is_digest(python_expected),
+        "verified_execution_classifier_invalid"
+    );
+    let mut bytes = Vec::new();
+    std::fs::File::open(script)?
+        .take(1024 * 1024 + 1)
+        .read_to_end(&mut bytes)?;
+    ensure!(
+        bytes.len() <= 1024 * 1024 && sha(&bytes) == expected,
+        "verified_execution_classifier_changed"
+    );
+    let mut file = std::fs::File::open(python)?;
+    let mut hash = Sha256::new();
+    let mut total = 0usize;
+    let mut buffer = [0u8; 65536];
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        total += n;
+        ensure!(
+            total <= 256 * 1024 * 1024,
+            "verified_execution_classifier_limit"
+        );
+        hash.update(&buffer[..n]);
+    }
+    ensure!(
+        format!("{:x}", hash.finalize()) == python_expected,
+        "verified_execution_classifier_changed"
+    );
+    Ok(Arc::new(RuleBaseline {
+        script: script.to_owned(),
+        python: python.as_os_str().to_owned(),
+        digest: expected.into(),
+    }))
 }
 
 struct ReadTestDouble;
@@ -1011,6 +1061,7 @@ pub struct Collector<'a> {
     host_session: Option<String>,
     child_authority: Option<String>,
     prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
+    execution: Option<Arc<crate::native::execution::SessionContext>>,
     client: reqwest::Client,
     session: String,
     pub liveness: Option<Arc<crate::native::liveness::CollectorLivenessClient>>,
@@ -1025,6 +1076,14 @@ impl<'a> Collector<'a> {
     }
 
     fn new(config: &'a AdmissionCfg) -> anyhow::Result<Self> {
+        let session = std::env::var("AGENTFW_MCP_SESSION")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("mcp:{}", crate::token::generate()));
+        Self::with_session(config, session)
+    }
+
+    fn with_session(config: &'a AdmissionCfg, session: String) -> anyhow::Result<Self> {
         if config.host_session.is_some() != config.child_authority.is_some() {
             anyhow::bail!(
                 "both host_session and child_authority must be provided together for authenticated binding"
@@ -1035,17 +1094,19 @@ impl<'a> Collector<'a> {
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
             prepared_budget: None,
+            execution: None,
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(Duration::from_secs(5))
                 .build()?,
-            session: std::env::var("AGENTFW_MCP_SESSION")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| format!("mcp:{}", crate::token::generate())),
+            session,
             liveness: None,
         })
+    }
+
+    fn runtime(&self) -> Option<&Arc<super::verified_closure::Runtime>> {
+        self.execution.as_ref().map(|execution| execution.runtime())
     }
 
     pub fn is_uncertain(&self) -> bool {
@@ -1667,6 +1728,15 @@ impl<'a> Collector<'a> {
     }
 
     async fn event(&self, event: &str, fields: Value) -> anyhow::Result<Value> {
+        self.event_inner(event, fields, None).await
+    }
+
+    async fn event_inner(
+        &self,
+        event: &str,
+        fields: Value,
+        original: Option<crate::native::execution::OriginalResult>,
+    ) -> anyhow::Result<Value> {
         if event != "session_end" && self.is_uncertain() {
             anyhow::bail!("native_liveness_uncertain");
         }
@@ -1711,10 +1781,36 @@ impl<'a> Collector<'a> {
                 })
                 .map(|(key, value)| (key.clone(), value.clone())),
         );
-        let reply = self
-            .post(&self.config.daemon_url, &self.config.native.token, &body)
-            .await?;
+        let expected_execution = original
+            .as_ref()
+            .map(|source| serde_json::to_value(source.metadata()).expect("source metadata"));
+        let reply = if let Some(source) = original {
+            let identity = self
+                .liveness
+                .as_ref()
+                .context("verified_execution_liveness_required")?
+                .admission_identity()
+                .await?;
+            let (status, reply) = source.inspect(&body, identity).await?;
+            if !status.is_success() {
+                if let Some(limit) =
+                    DaemonSizeLimit::from_refusal(status, &serde_json::to_vec(&reply)?)
+                {
+                    return Err(limit.into());
+                }
+                bail!("verified_execution_native_result_refused");
+            }
+            reply
+        } else {
+            self.post(&self.config.daemon_url, &self.config.native.token, &body)
+                .await?
+        };
+        ensure!(
+            reply.get("execution") == expected_execution.as_ref(),
+            "verified_execution_receipt_mismatch"
+        );
         let allowed = [
+            "execution",
             "contract_version",
             "registry_sha256",
             "session_id",
@@ -1752,7 +1848,8 @@ impl<'a> Collector<'a> {
                         required.contains(&k.as_str())
                             || matches!(
                                 k.as_str(),
-                                "resources_sha256"
+                                "execution"
+                                    | "resources_sha256"
                                     | "instance_id"
                                     | "owner_token"
                                     | "managed_policy"
@@ -3501,6 +3598,177 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for DiagnosticOutput<W> {
     }
 }
 
+type Renewal = (
+    Option<tokio::sync::watch::Sender<bool>>,
+    Option<tokio::task::JoinHandle<()>>,
+);
+
+async fn enroll_session(
+    collector: &mut Collector<'_>,
+    liveness_opt_in: bool,
+    lease_seconds: Option<u64>,
+) -> anyhow::Result<Renewal> {
+    let config = collector.config;
+    let mut start_fields = json!({});
+    if let (Some(host_session), Some(child_authority)) =
+        (&collector.host_session, &collector.child_authority)
+    {
+        start_fields["host_session"] = json!(host_session);
+        start_fields["child_authority"] = json!(child_authority);
+        start_fields["server_id"] = json!(collector.config.server_id);
+    }
+    if liveness_opt_in {
+        start_fields["liveness"] = json!(crate::native::liveness::LIVENESS_CONTRACT);
+    }
+    let start_reply = collector.event("session_start", start_fields).await?;
+
+    if liveness_opt_in {
+        let daemon_instance_id =
+            if let Some(id) = start_reply.get("instance_id").and_then(|v| v.as_str()) {
+                id.to_string()
+            } else {
+                collector.fetch_daemon_instance_id().await?
+            };
+        let owner_token = start_reply
+            .get("owner_token")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let client = Arc::new(crate::native::liveness::CollectorLivenessClient::new(
+            collector.client.clone(),
+            config.liveness_endpoint(),
+            collector.config.native.token.clone(),
+            collector.config.native.registry_sha256.clone(),
+            collector.session.clone(),
+            daemon_instance_id,
+            owner_token,
+        ));
+        let requested_lease = lease_seconds;
+        if let Err(enroll_err) = client.enroll(requested_lease).await {
+            // Never close by physical ID alone: a failed old enrollment may
+            // already have been replaced by a fresh collector owner.
+            let _ = client.retire().await;
+            return Err(enroll_err);
+        }
+        let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+        let task = client.clone().spawn_renewal_task(stop_rx);
+        collector.liveness = Some(client);
+        Ok((Some(stop_tx), Some(task)))
+    } else {
+        Ok((None, None))
+    }
+}
+
+pub(crate) async fn run_daemon_streams<R, W, F>(
+    config: AdmissionCfg,
+    profile: super::server_profile::ProfileConfig,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+    client: R,
+    host: W,
+    shutdown: F,
+    execution: Arc<crate::native::execution::SessionContext>,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = ()>,
+{
+    run_selected_inner(
+        config,
+        profile,
+        selected,
+        client,
+        host,
+        shutdown,
+        Some(execution),
+    )
+    .await
+}
+
+/// Run the accepted selected-server relay against explicit host streams.
+/// This API alone is not verified execution provenance. The daemon-owned launch
+/// and immutable closure must independently establish custody before minting it.
+/// Host-stream EOF and shutdown use the existing bounded cleanup path.
+#[cfg(test)]
+async fn run_selected_streams<R, W, F>(
+    config: AdmissionCfg,
+    profile: super::server_profile::ProfileConfig,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+    client: R,
+    host: W,
+    shutdown: F,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = ()>,
+{
+    run_selected_inner(config, profile, selected, client, host, shutdown, None).await
+}
+
+async fn run_selected_inner<R, W, F>(
+    config: AdmissionCfg,
+    profile: super::server_profile::ProfileConfig,
+    selected: Option<crate::pilot_budget::VerifiedSelection>,
+    client: R,
+    host: W,
+    shutdown: F,
+    execution: Option<Arc<crate::native::execution::SessionContext>>,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = ()>,
+{
+    tokio::pin!(shutdown);
+    if shutdown.as_mut().now_or_never().is_some() {
+        bail!("native_mcp_terminated");
+    }
+    let mut collector =
+        Collector::with_session(&config, format!("mcp:{}", crate::token::generate()))?;
+    collector.prepared_budget = selected;
+    collector.execution = execution;
+    ensure!(
+        collector.execution.is_none()
+            || (collector.host_session.is_some() && config.liveness_url.is_some()),
+        "verified_execution_bound_owner_required"
+    );
+    let (stop, task) = enroll_session(
+        &mut collector,
+        config.liveness_url.is_some(),
+        config.liveness_lease_seconds,
+    )
+    .await?;
+    let operation = real_server::run_streams(
+        &collector,
+        &profile,
+        &profile.workspace,
+        client,
+        host,
+        async {
+            shutdown.await;
+            "native_mcp_terminated"
+        },
+        false,
+    )
+    .await;
+    // Even startup/transport refusal must retire only this authenticated owner.
+    let retired = if let Some(stop) = stop {
+        let _ = stop.send(true);
+        let result = match &collector.liveness {
+            Some(lease) => lease.retire().await.map(|_| ()),
+            None => Err(anyhow::anyhow!("native_liveness_unavailable")),
+        };
+        if let Some(task) = task {
+            task.await?;
+        }
+        result
+    } else {
+        collector.event("session_end", json!({})).await.map(|_| ())
+    };
+    operation?;
+    retired
+}
+
 pub async fn run(config: AdmissionCfg) -> anyhow::Result<()> {
     run_with_budget(config, None).await
 }
@@ -3523,53 +3791,12 @@ pub async fn run_with_budget(
             || config.liveness_lease_seconds.is_some()
             || env_lease_seconds.is_some());
 
-    let mut start_fields = json!({});
-    if let (Some(host_session), Some(child_authority)) =
-        (&collector.host_session, &collector.child_authority)
-    {
-        start_fields["host_session"] = json!(host_session);
-        start_fields["child_authority"] = json!(child_authority);
-        start_fields["server_id"] = json!(collector.config.server_id);
-    }
-    if liveness_opt_in {
-        start_fields["liveness"] = json!(crate::native::liveness::LIVENESS_CONTRACT);
-    }
-    let start_reply = collector.event("session_start", start_fields).await?;
-
-    let (renewal_stop_tx, liveness_task) = if liveness_opt_in {
-        let daemon_instance_id =
-            if let Some(id) = start_reply.get("instance_id").and_then(|v| v.as_str()) {
-                id.to_string()
-            } else {
-                collector.fetch_daemon_instance_id().await?
-            };
-        let owner_token = start_reply
-            .get("owner_token")
-            .and_then(|v| v.as_str())
-            .map(str::to_string);
-        let client = Arc::new(crate::native::liveness::CollectorLivenessClient::new(
-            collector.client.clone(),
-            config.liveness_endpoint(),
-            collector.config.native.token.clone(),
-            collector.config.native.registry_sha256.clone(),
-            collector.session.clone(),
-            daemon_instance_id,
-            owner_token,
-        ));
-        let requested_lease = config.liveness_lease_seconds.or(env_lease_seconds);
-        if let Err(enroll_err) = client.enroll(requested_lease).await {
-            // Never close by physical ID alone: a failed old enrollment may
-            // already have been replaced by a fresh collector owner.
-            let _ = client.retire().await;
-            return Err(enroll_err);
-        }
-        let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
-        let task = client.clone().spawn_renewal_task(stop_rx);
-        collector.liveness = Some(client);
-        (Some(stop_tx), Some(task))
-    } else {
-        (None, None)
-    };
+    let (renewal_stop_tx, liveness_task) = enroll_session(
+        &mut collector,
+        liveness_opt_in,
+        config.liveness_lease_seconds.or(env_lease_seconds),
+    )
+    .await?;
     // Fail closed before spawning the server if the native daemon cannot admit a session.
     let operation = async {
         let cwd = std::env::current_dir()?;
@@ -3871,6 +4098,167 @@ mod input_identity_tests {
         let result = json!({"tools":[{"name":"inventory_lookup","description":description,
             "inputSchema":schema,"annotations":{"title":"Synthetic","readOnlyHint":true}}]});
         (native, result, json!({"name":"fixture","version":"1"}))
+    }
+
+    struct UnreadStream(Arc<std::sync::atomic::AtomicUsize>);
+
+    impl tokio::io::AsyncRead for UnreadStream {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+            _: &mut tokio::io::ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Poll::Ready(Ok(()))
+        }
+    }
+    impl AsyncBufRead for UnreadStream {
+        fn poll_fill_buf(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+        ) -> Poll<std::io::Result<&[u8]>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Poll::Ready(Ok(&[]))
+        }
+        fn consume(self: Pin<&mut Self>, _: usize) {}
+    }
+
+    fn explicit_stream_config(server: &wiremock::MockServer) -> AdmissionCfg {
+        let (native, _, _) = discovered("fixture");
+        AdmissionCfg {
+            host_session: None,
+            child_authority: None,
+            daemon_url: format!("{}/native/v1", server.uri()),
+            manifest_url: format!("{}/mcp", server.uri()),
+            manifest_token: "fixture".into(),
+            server_id: "filesystem".into(),
+            native,
+            command: "deliberately-unselected-command".into(),
+            args: Vec::new(),
+            classifier: None,
+            resource_profiles: BTreeMap::new(),
+            approval: None,
+            liveness_url: None,
+            liveness_lease_seconds: None,
+        }
+    }
+
+    fn unused_stream_profile() -> super::super::server_profile::ProfileConfig {
+        super::super::server_profile::ProfileConfig {
+            format: super::super::server_profile::FORMAT.into(),
+            workspace: "/workspace".into(),
+            workspace_identity: None,
+            runtime_path: "/never-opened/runtime".into(),
+            runtime_sha256: "a".repeat(64),
+            package_root: "/never-opened/package".into(),
+            package_tree_sha256: "b".repeat(64),
+            bwrap_path: "/never-opened/bwrap".into(),
+            bwrap_sha256: "c".repeat(64),
+            libraries: Vec::new(),
+            git: None,
+            git_launcher: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn sou155_cancelled_owned_stream_never_enrolls_or_reads() {
+        let server = wiremock::MockServer::start().await;
+        let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let error = run_selected_streams(
+            explicit_stream_config(&server),
+            unused_stream_profile(),
+            None,
+            UnreadStream(reads.clone()),
+            tokio::io::sink(),
+            std::future::ready(()),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.to_string(), "native_mcp_terminated");
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+        assert!(server.received_requests().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn sou155_owned_streams_refuse_auth_before_reading_or_launching() {
+        use wiremock::{
+            matchers::{method, path},
+            Mock, ResponseTemplate,
+        };
+        let server = wiremock::MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/native/v1"))
+            .respond_with(ResponseTemplate::new(401))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let error = run_selected_streams(
+            explicit_stream_config(&server),
+            unused_stream_profile(),
+            None,
+            UnreadStream(reads.clone()),
+            tokio::io::sink(),
+            std::future::pending::<()>(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+        assert!(error.to_string().contains("401"));
+    }
+
+    #[tokio::test]
+    async fn sou155_owned_streams_close_exact_session_after_startup_refusal() {
+        use wiremock::{
+            matchers::{method, path},
+            Mock, Request, ResponseTemplate,
+        };
+        let server = wiremock::MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/native/v1"))
+            .respond_with(|request: &Request| {
+                let body: Value = serde_json::from_slice(&request.body).unwrap();
+                ResponseTemplate::new(200).set_body_json(json!({
+                    "contract_version": CONTRACT, "registry_sha256": body["registry_sha256"],
+                    "session_id": body["session_id"], "event": body["event"],
+                    "verdict":"allow", "enforced":true, "release":true,
+                    "call_id":null, "binding_sha256":null, "content_sha256":null,
+                    "reason_codes":[],
+                }))
+            })
+            .expect(4)
+            .mount(&server)
+            .await;
+        let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for _ in 0..2 {
+            let error = run_selected_streams(
+                explicit_stream_config(&server),
+                unused_stream_profile(),
+                None,
+                UnreadStream(reads.clone()),
+                tokio::io::sink(),
+                std::future::pending::<()>(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "MCP command differs from selected runtime"
+            );
+        }
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+        let requests = server.received_requests().await.unwrap();
+        let rows = requests
+            .iter()
+            .map(|r| serde_json::from_slice::<Value>(&r.body).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 4);
+        for pair in rows.as_chunks::<2>().0 {
+            assert_eq!(pair[0]["event"], "session_start");
+            assert_eq!(pair[1]["event"], "session_end");
+            assert_eq!(pair[0]["session_id"], pair[1]["session_id"]);
+        }
+        assert_ne!(rows[0]["session_id"], rows[2]["session_id"]);
     }
 
     #[test]

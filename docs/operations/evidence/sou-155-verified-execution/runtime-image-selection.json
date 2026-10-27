@@ -1,0 +1,20 @@
+{
+  "format": "sou155-runtime-image-selection/1",
+  "status": "data-inspection-only",
+  "native_acceptance": false,
+  "package_lock_sha256": "98afd2e0fe566a9a9ca626953934c96b23411b8feb619ddeb1cadff341b6d693",
+  "complete_manifest_sha256": "31af08a2e46249d45830103cbac141109a6be8b55fe851dbc9a0f95d779d736c",
+  "archives_integrity_verified": 104,
+  "js_assets_inspected": 1447,
+  "literal_source_map_enablement_hits": [],
+  "complete_files_validated": 4079,
+  "mounted_regular_manifest_files": 2439,
+  "omitted_type_declarations": 996,
+  "omitted_source_maps": 644,
+  "mounted_path_set_sha256": "3c8de13e616d453dae246c83d8c4c35824688a40801a974f2d2d5d3edf6461fa",
+  "bubblewrap_total_argv_cap": 9000,
+  "owner_supplied_argv_cap": 8998,
+  "vendor_limit_raised": false,
+  "runtime_code_rewritten": false,
+  "node_options_inherited": false
+}
