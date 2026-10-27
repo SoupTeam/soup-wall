@@ -41,4 +41,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SOU91_SELECTIVE_CI: ${{ vars.SOU91_SELECTIVE_CI }}
+          # Maintainer-controlled rollout. Absent or unknown values keep the
+          # existing full verifier path and status writes.
+          SOU160_ADMISSION_REUSE: ${{ vars.SOU160_ADMISSION_REUSE }}
+          SOU160_VERIFIER_SHA: ${{ github.workflow_sha }}
         run: python3 scripts/ci_admission.py --wait-seconds 12
