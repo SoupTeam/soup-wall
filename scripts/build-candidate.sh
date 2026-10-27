@@ -48,6 +48,7 @@ fi
 cp "$BWRAP_SRC" "$TARGET_DIR/bin/bwrap"
 
 cp scripts/install-sou62-filesystem-profile.py "$TARGET_DIR/scripts/"
+cp -r scripts/pilot_provider* "$TARGET_DIR/scripts/" 2>/dev/null || true
 cp -R profiles/mcp/filesystem-readonly-v1 "$TARGET_DIR/profiles/mcp/"
 cp LICENSE NOTICE README.md "$TARGET_DIR/" 2>/dev/null || true
 

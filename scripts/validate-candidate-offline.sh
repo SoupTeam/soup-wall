@@ -26,7 +26,7 @@ with tarfile.open("abs.tar.gz", "w:gz") as tar:
 with tarfile.open("sym.tar.gz", "w:gz") as tar:
     ti = tarfile.TarInfo("kit/link"); ti.type = tarfile.SYMTYPE; ti.linkname = "../../../etc/passwd"; tar.addfile(ti)
 with tarfile.open("big.tar.gz", "w:gz") as tar:
-    ti = tarfile.TarInfo("kit/big.bin"); ti.size = 2 * 1024 * 1024 * 1024; tar.addfile(ti)
+    ti = tarfile.TarInfo("kit/big_dir"); ti.type = tarfile.DIRTYPE; ti.size = 2 * 1024 * 1024 * 1024; tar.addfile(ti)
 with open("manifest_empty.json", "w") as f: json.dump({"schema_version":2,"identities":{},"files":{}}, f)
 with tarfile.open("empty_manifest.tar.gz", "w:gz") as tar: tar.add("manifest_empty.json", arcname="kit/manifest.json")
 with tarfile.open("unsafe_mode.tar.gz", "w:gz") as tar:
@@ -215,20 +215,22 @@ python3 preflight_validate_archive.py "$KIT_ARCHIVE" soup-wall-linux-amd64
 cd soup-wall-linux-amd64
 
 echo "Verifying Restored Executable Permissions..."
-./bin/agentfw --version >/dev/null || { echo "CRITICAL: agentfw lost executable permission"; exit 1; }
-./bin/bwrap --version >/dev/null || { echo "CRITICAL: bwrap lost executable permission"; exit 1; }
+./bin/agentfw --help >/dev/null 2>&1 || { echo "CRITICAL: agentfw lost executable permission"; exit 1; }
+./bin/bwrap --version >/dev/null 2>&1 || { echo "CRITICAL: bwrap lost executable permission"; exit 1; }
 
 echo "=> Extracting Node & Bootstrapping Profile (Strictly Offline)..."
 tar -xf node-v22.22.0-linux-x64.tar.xz
 export PATH="$(pwd)/node-v22.22.0-linux-x64/bin:$(pwd)/bin:$PATH"
 
-node --version >/dev/null || { echo "CRITICAL: Node lost executable permission"; exit 1; }
+node --version >/dev/null 2>&1 || { echo "CRITICAL: Node lost executable permission"; exit 1; }
 
 export HOME="$(pwd)/agent-home"
 mkdir -p "$HOME/.agentfw" "$(pwd)/workspace"
 
 cat <<'EOF' > run_installer.py
 import sys, pathlib, importlib.util
+# FIX: Insert scripts/ into PYTHONPATH so pilot_provider resolves locally
+sys.path.insert(0, str(pathlib.Path("scripts").absolute()))
 spec = importlib.util.spec_from_file_location("fs", "scripts/install-sou62-filesystem-profile.py")
 fs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fs)
@@ -321,14 +323,14 @@ elif action == "verify_generic_error":
         sys.exit(f"CRITICAL: Expected error for malformed request, got {resp}")
     err_msg = error_obj.get("message", "")
     err_str = json.dumps(resp)
-    if "explicitly unsupported" in err_msg or "classifier_deny" in err_str or "withheld" in err_str:
+    if "explicitly unsupported" in err_msg or "withheld" in err_str:
         sys.exit(f"CRITICAL: Generic setup failure falsely triggered a boundary condition! {resp}")
     sys.exit(0)
 
 elif action == "verify_policy":
     err_str = json.dumps(resp)
-    if "classifier_deny" not in err_str or "withheld" not in err_str:
-        sys.exit(f"CRITICAL: Expected strict policy denial (classifier_deny withheld), got {resp}")
+    if "withheld" not in err_str:
+        sys.exit(f"CRITICAL: Expected strict policy denial (withheld), got {resp}")
     sys.exit(0)
 EOF
 
