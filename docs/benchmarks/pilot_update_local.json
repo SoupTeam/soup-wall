@@ -1,0 +1,60 @@
+{
+  "acceptance": {
+    "active_protection": "not_claimed",
+    "full_ci": "not_run",
+    "native_ubuntu_2404_useful_a_b_a": "not_verified",
+    "ready_for_done": false
+  },
+  "accepted_base": "f4937110b58305645b7302acae99325d13354916",
+  "code_sha256": {
+    "scripts/build-pilot-front-door.py": "46defc5e107fcf9691b580128fb252731bdef7709f2ba71d82ecd486bf412a54",
+    "scripts/pilot.py": "8ffa0605e4f4564e36fd421f60d76e98743fa8374f2cd57b5b506e88484509ad",
+    "scripts/pilot_update.py": "7ab012b4ff02410f324fc921a1c8b002ea56a4cf533362165ec30c02817853a0",
+    "scripts/qualify-pilot-update.py": "7584c3ffe2db91efbb89ffb0d506dbe3c3e129e67cd3f32010c0ce733a35e5ee",
+    "scripts/tests/test_pilot_update.py": "9cb415fc395a89bb2b7dcd7cebe0edddbfff7650539dc6abb6ac57107dd80236"
+  },
+  "date": "2026-10-28",
+  "format": "sw-pilot-update-local-evidence/1",
+  "offline_agent": {
+    "cargo_lock_sha256": "f4bd80d40a0408145a11bae4c91324ff954cdd59ee8172ce1f0a6e22b161f6c2",
+    "compiler": "rustc 1.99.0",
+    "network": "disabled",
+    "new_third_party_dependencies_installed": false,
+    "repository_pin": "1.99.1",
+    "sha256": "c65f89927ab3647d21d7938255983ea9c58aea14f6a939ad1921676bcb40ca18"
+  },
+  "scan_limits": {
+    "binary_scan_error": "hard_byte_limit_exceeded",
+    "binary_scan_exit": 2,
+    "passing_scan_claim": false,
+    "source_coverage_complete": false,
+    "source_scan_exit": 1,
+    "source_yara_findings": 51
+  },
+  "verification": {
+    "container_distribution": "Debian 12",
+    "container_tests": {
+      "failed": 0,
+      "passed": 32,
+      "skipped": 0
+    },
+    "container_uid": 1000,
+    "full_python_discovery": {
+      "errors": 1,
+      "setup_error": "test_pilot_launch.PilotLaunchCliTests: cargo executable absent in WSL",
+      "skipped": 42,
+      "tests_run": 1788
+    },
+    "real_installer_scope": "Production lifecycle/component commands; invalid preparation refused; capacity guard fixture; no useful original-server acceptance",
+    "windows_tests": {
+      "failed": 0,
+      "passed": 2,
+      "skipped": 30
+    },
+    "wsl_tests": {
+      "failed": 0,
+      "passed": 31,
+      "skipped": 1
+    }
+  }
+}
