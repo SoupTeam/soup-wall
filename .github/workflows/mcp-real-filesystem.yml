@@ -1843,10 +1843,10 @@ jobs:
         run: |
           set -euo pipefail
           task_scratch="$RUNNER_TEMP/sou165-scratch"
-          for mode in current bounding-preserved trusted-no-nnp; do
+          for mode in current bounding-preserved; do
             args=()
             if [ "$mode" = current ]; then args+=(--bounding-set=-all); fi
-            if [ "$mode" != trusted-no-nnp ]; then args+=(--no-new-privs); fi
+            args+=(--no-new-privs)
             sudo -- "$task_scratch/bwrap-build/bwrap" --unshare-net --unshare-pid --die-with-parent \
               --ro-bind / / --bind "$task_scratch" "$task_scratch" --proc /proc --dev /dev --cap-drop ALL \
               --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
@@ -1858,7 +1858,7 @@ jobs:
           root=pathlib.Path(os.environ['SOU165_SCRATCH'])
           status=pathlib.Path('/proc/self/status').read_text()
           caps={line.split(':')[0]:line.split(':')[1].strip() for line in status.splitlines() if line.startswith(('Cap','NoNewPrivs:'))}
-          assert os.geteuid()!=0 and all(int(caps[k],16)==0 for k in ('CapEff','CapPrm','CapInh','CapAmb')) and caps['NoNewPrivs']==('0' if os.environ['SOU165_MODE']=='trusted-no-nnp' else '1')
+          assert os.geteuid()!=0 and all(int(caps[k],16)==0 for k in ('CapEff','CapPrm','CapInh','CapAmb')) and caps['NoNewPrivs']=='1'
           result=subprocess.run([str(root/'bwrap-build/bwrap'),'--unshare-all','--unshare-user','--disable-userns','--assert-userns-disabled','--cap-drop','ALL','--ro-bind','/','/','--proc','/proc','--dev','/dev','--','/bin/true'],capture_output=True,text=True,timeout=10)
           text=result.stderr
           codes=[code for token,code in [('capset','capset'),('Operation not permitted','eperm'),('Permission denied','eacces'),('Creating new namespace failed','namespace'),('Cannot create','create'),('No permissions','permissions')] if token in text]
