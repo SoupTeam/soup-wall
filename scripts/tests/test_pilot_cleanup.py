@@ -196,8 +196,10 @@ class PilotCleanupTests(unittest.TestCase):
             self.assertEqual((workspace / "notes.txt").read_text(), "operator notes")
             self.assertFalse((root / "asset").exists())
 
-    def test_runtime_receipts_prune_assets_but_keep_both_workspaces(self):
+    def runtime_receipt_cleanup_control(self, git_profile=None, *, invalid_binding=False):
         cleanup = self.load()
+        git_profiles = cleanup.PREP.GIT_PROFILES
+        selected_git = git_profile or git_profiles.DEFAULT
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             root.chmod(0o700)
@@ -223,28 +225,51 @@ class PilotCleanupTests(unittest.TestCase):
                     python.mkdir(parents=True, mode=0o700)
                     runtime = str(python / "python3.11")
                     Path(runtime).write_bytes(b"synthetic Python runtime")
-                profile = {"format": installer.FORMAT, "workspace": str(workspace),
+                profile = {"format": installer.FORMAT if kind == "filesystem" else git_profiles.selected(selected_git)[0],
+                           "workspace": str(workspace),
                            "packageRoot": str(package), "packageTreeSha256": cleanup.PREP.FS.tree_sha(package),
                            "bwrapPath": executable, "bwrapSha256": paths["bwrap"]["sha256"],
                            "runtimePath": runtime, "runtimeSha256": cleanup.sha(runtime), "libraries": []}
                 if kind == "git":
                     profile.update(git=paths["git"], gitLauncher=paths["git_launcher"])
-                registry = installer.registry(json.loads((installer.ASSETS / "upstream-tools-list.json").read_bytes()))
+                registry = (installer.registry(json.loads((installer.ASSETS / "upstream-tools-list.json").read_bytes()))
+                            if kind == "filesystem" else git_profiles.registry(selected_git))
                 (directory / "profile.json").write_text(json.dumps(profile))
                 (directory / "registry.json").write_text(json.dumps(registry))
-                (directory / "policy.yaml").write_bytes((installer.ASSETS / "policy.yaml").read_bytes())
+                policy = installer.ASSETS / "policy.yaml" if kind == "filesystem" else git_profiles.policy_path(selected_git)
+                (directory / "policy.yaml").write_bytes(policy.read_bytes())
                 receipt = {"format": f"sou{number}-profile-installation/1", "profile": profile,
+                           "upstream_identity": json.loads((installer.ASSETS / "upstream-identity.json").read_bytes()),
                            **{label + "_sha256": cleanup.sha(directory / (label + suffix))
                               for label, suffix in (("profile", ".json"), ("registry", ".json"), ("policy", ".yaml"))}}
+                if kind == "git" and git_profiles.selected(selected_git)[2]:
+                    receipt.update(format="sou150-profile-installation/1" if selected_git == "git-tracked-symlinks-readonly-v1"
+                                   else "sou107-profile-installation/1",
+                                   selection_identity=json.loads((git_profiles.ROOT / git_profiles.selected(selected_git)[2]).read_bytes()))
                 (directory / "installation.json").write_text(json.dumps(receipt))
                 profiles[kind] = {"profile": {"path": str(directory / "profile.json"), "sha256": receipt["profile_sha256"]},
                                   "registry_sha256": receipt["registry_sha256"], "package_tree_sha256": profile["packageTreeSha256"]}
-            selection = {"format": "sw-installed-pilot-selection/2", "source": {"commit": "b" * 40},
+                if git_profile is not None:
+                    profiles[kind].update(format=profile["format"], policy_sha256=receipt["policy_sha256"],
+                                          installation_sha256=cleanup.sha(directory / "installation.json"))
+            selection = {"format": git_profiles.SELECTION_V3 if git_profile is not None else git_profiles.SELECTION_V2,
+                         "source": {"commit": "b" * 40},
                          "files": paths, "prepared_profiles": profiles}
+            if git_profile is not None or invalid_binding:
+                selection["git_selection"] = git_profiles.binding(selected_git)
+            if invalid_binding and git_profile is not None:
+                selection["git_selection"]["registry_id"] = "unreviewed-union"
             (target / "selection.json").write_text(json.dumps(selection))
             (root / "current.json").write_text(json.dumps({"format": "sw-pilot-preparation/1",
                     "generation": "c" * 32, "selection_sha256": "d" * 64, "status": "prepared-not-active"}))
             with patch.object(cleanup, "active_use", return_value=False):
+                if invalid_binding:
+                    with self.assertRaisesRegex(ValueError, "binding_changed|legacy_selection_git_profile_extension_refused"):
+                        cleanup.inspect(root, target.name)
+                    for kind in ("filesystem", "git"):
+                        self.assertEqual((target / (kind + "-workspace/operator.txt")).read_text(), "keep " + kind)
+                        self.assertTrue((target / (kind + "-profile")).exists())
+                    return
                 plan = cleanup.inspect(root, target.name)
                 self.assertEqual(plan["classification"], "inactive")
                 result = cleanup.apply(root, target.name, plan["confirmation"])
@@ -252,6 +277,29 @@ class PilotCleanupTests(unittest.TestCase):
             for kind in ("filesystem", "git"):
                 self.assertEqual((target / (kind + "-workspace/operator.txt")).read_text(), "keep " + kind)
                 self.assertFalse((target / (kind + "-profile")).exists())
+
+    def test_runtime_receipts_prune_assets_but_keep_both_workspaces(self):
+        self.runtime_receipt_cleanup_control()
+
+    def test_selection3_default_profile_prune_preserves_workspaces(self):
+        self.runtime_receipt_cleanup_control("git-readonly-v1")
+
+    def test_selection3_file_profile_prune_preserves_workspaces(self):
+        self.runtime_receipt_cleanup_control("git-readonly-file-revisions-v1")
+
+    def test_selection3_tracked_profile_prune_preserves_workspaces(self):
+        self.runtime_receipt_cleanup_control("git-tracked-symlinks-readonly-v1")
+
+    def test_selection3_other_reviewed_profiles_prune_preserves_workspaces(self):
+        for name in ("git-readonly-local-refs-v1", "git-readonly-shallow-v1", "git-local-clone-readonly-v1"):
+            with self.subTest(profile=name):
+                self.runtime_receipt_cleanup_control(name)
+
+    def test_selection3_changed_binding_refuses_before_prune(self):
+        self.runtime_receipt_cleanup_control("git-readonly-file-revisions-v1", invalid_binding=True)
+
+    def test_selection2_cannot_gain_extended_authority_before_prune(self):
+        self.runtime_receipt_cleanup_control(invalid_binding=True)
 
     def test_confirmation_changes_when_selected_generation_changes(self):
         cleanup = self.load()

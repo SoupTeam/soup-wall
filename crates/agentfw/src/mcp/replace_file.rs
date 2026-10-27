@@ -9,6 +9,20 @@ pub const PROFILE: &str = "sw-native/replace-file/linux-private-root-child/1";
 pub const EXCLUSION: &str = "operator-private-sole-writer+directory-flock/1";
 pub const MAX_BYTES: usize = 4096;
 
+/// Read-only eligibility check shared by installed edit planning. A root
+/// identity is descriptive metadata, never permission to modify a file.
+pub fn inspect_workspace(path: &Path) -> Result<RootIdentity, Error> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::inspect_workspace(path)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = path;
+        Err(Error::new("replace_platform_unsupported"))
+    }
+}
+
 pub fn content_sha256(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     format!("{:x}", Sha256::digest(bytes))
@@ -252,6 +266,35 @@ mod linux {
         // Any attribute, including ACLs and capabilities, is unsupported.
         if unsafe { libc::flistxattr(file.as_raw_fd(), std::ptr::null_mut(), 0) } != 0 {
             return Err(Error::new("replace_metadata_unsupported"));
+        }
+        Ok(())
+    }
+
+    pub(super) fn inspect_workspace(path: &Path) -> Result<RootIdentity, Error> {
+        let pinned = crate::sandbox::PinnedWorkspace::open(path)
+            .map_err(|_| Error::new("replace_workspace_invalid"))?;
+        if pinned.canonical().as_os_str() != path.as_os_str() {
+            return Err(Error::new("replace_workspace_alias"));
+        }
+        let root = trusted_root(path)?;
+        let m = private(&root, true)?;
+        supported_filesystem(&root)?;
+        clean_staging_inventory(&root, None)?;
+        Ok(RootIdentity {
+            device: m.dev(),
+            inode: m.ino(),
+        })
+    }
+
+    fn supported_filesystem(root: &File) -> Result<(), Error> {
+        let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
+        if unsafe { libc::fstatfs(root.as_raw_fd(), &mut stat) } != 0
+            || !matches!(
+                stat.f_type as u64,
+                0xef53 | 0x5846_5342 | 0x9123_683e | 0x0102_1994
+            )
+        {
+            return Err(Error::new("replace_filesystem_unsupported"));
         }
         Ok(())
     }
@@ -500,15 +543,7 @@ mod linux {
             if current.dev() != m.dev() || current.ino() != m.ino() {
                 return Err(Error::new("replace_workspace_substituted"));
             }
-            let mut stat: libc::statfs = unsafe { std::mem::zeroed() };
-            if unsafe { libc::fstatfs(self.root.as_raw_fd(), &mut stat) } != 0
-                || !matches!(
-                    stat.f_type as u64,
-                    0xef53 | 0x5846_5342 | 0x9123_683e | 0x0102_1994
-                )
-            {
-                return Err(Error::new("replace_filesystem_unsupported"));
-            }
+            supported_filesystem(&self.root)?;
             let before = private(&self.old, false)?;
             if identity(&before) != self.identity || before.dev() != m.dev() {
                 return Err(Error::new("replace_old_identity_changed"));

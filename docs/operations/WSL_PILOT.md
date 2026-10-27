@@ -57,6 +57,14 @@ rather than trusting a path prefix. Selected runtimes may reside in Linux
 system directories such as `/usr`; each selected file's mount is checked.
 The ordinary native Linux invocation retains its previous defaults.
 
+This initial WSL qualification covers only `git-readonly-v1`. Legacy selection
+version 2 cannot carry a Git-profile extension; version 3 must retain the exact
+reviewed binding and classifier digest. A valid extended Git-profile selection
+is reported as `unsupported` by WSL preflight, with
+`wsl_extended_git_profile_not_qualified`, rather than receiving a WSL readiness
+claim. The separate extended-profile Linux qualification does not establish WSL
+support. Optional cgroup observations do not establish active resource budgets.
+
 ## Opt-in qualification
 
 Use a clean, reviewed checkout and freshly recorded exact selection:

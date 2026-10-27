@@ -174,6 +174,80 @@ class RuntimeBoundaryControls(unittest.TestCase):
                 with self.assertRaisesRegex(CONTRACT.Failure, "^" + reason + "$"):
                     PILOT.validate_selection(item, "a" * 40)
 
+    def test_legacy_and_versioned_default_selection_keep_exact_authority(self):
+        legacy = self.selection(Path(sys.executable).resolve())
+        versioned = copy.deepcopy(legacy)
+        versioned.update(format=PILOT.GIT_PROFILES.SELECTION_V3,
+                         git_selection=PILOT.GIT_PROFILES.binding(PILOT.GIT_PROFILES.DEFAULT))
+        with patch.object(PILOT, "source", return_value=legacy["source"]):
+            for selected in (legacy, versioned):
+                before, paths = PILOT.validate_selection(selected, "a" * 40)
+                self.assertEqual(before, legacy["source"])
+                self.assertEqual(set(paths), set(PILOT.ROLES))
+            tampered = copy.deepcopy(versioned)
+            tampered["git_selection"]["registry_sha256"] = "0" * 64
+            with self.assertRaisesRegex(CONTRACT.Failure, "^git_profile_binding_changed$"):
+                PILOT.validate_selection(tampered, "a" * 40)
+            extended_legacy = copy.deepcopy(legacy)
+            extended_legacy["git_selection"] = versioned["git_selection"]
+            with self.assertRaisesRegex(CONTRACT.Failure, "^legacy_selection_git_profile_extension_refused$"):
+                PILOT.validate_selection(extended_legacy, "a" * 40)
+            with self.assertRaisesRegex(CONTRACT.Failure, "^selection_invalid$"):
+                PILOT.validate_selection([], "a" * 40)
+
+    def test_wsl_preflight_accepts_exact_default_versions_without_starting_runtime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            selected = self.selection(Path(sys.executable).resolve())
+            for version in (PILOT.GIT_PROFILES.SELECTION_V2, PILOT.GIT_PROFILES.SELECTION_V3):
+                selected["format"] = version
+                if version == PILOT.GIT_PROFILES.SELECTION_V3:
+                    selected["git_selection"] = PILOT.GIT_PROFILES.binding(PILOT.GIT_PROFILES.DEFAULT)
+                path = root / "selection.json"
+                path.write_text(json.dumps(selected))
+                argv = ["qualify-installed-pilot.py", "--wsl-preflight", "--wsl-root", str(root),
+                        "--selection", str(path), "--expected-commit", "a" * 40]
+                ready = {"status": "ready", "scope": "prerequisites_only", "runtime_qualification": "not_executed"}
+                with patch.object(PILOT, "source", return_value=selected["source"]), \
+                     patch.object(PILOT.wsl_preflight, "inspect", return_value=ready) as inspect, \
+                     patch.object(PILOT, "Pilot") as runtime, patch.object(sys, "argv", argv), \
+                     patch("sys.stdout", new_callable=io.StringIO) as output:
+                    self.assertEqual(PILOT.main(), 0)
+                inspect.assert_called_once()
+                runtime.assert_not_called()
+                self.assertEqual(json.loads(output.getvalue()), ready)
+
+    def test_wsl_preflight_refuses_valid_extended_profiles_before_probes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in PILOT.GIT_PROFILES.PROFILES:
+                if name == PILOT.GIT_PROFILES.DEFAULT:
+                    continue
+                with self.subTest(profile=name):
+                    selected = self.selection(Path(sys.executable).resolve())
+                    selected.update(format=PILOT.GIT_PROFILES.SELECTION_V3,
+                                    git_selection=PILOT.GIT_PROFILES.binding(name))
+                    classifier = PILOT.GIT_PROFILES.classifier_path(name)
+                    selected["files"]["git_classifier"] = {"path": str(classifier), "sha256": CONTRACT.sha(classifier)}
+                    path = root / "selection.json"
+                    path.write_text(json.dumps(selected))
+                    argv = ["qualify-installed-pilot.py", "--wsl-preflight", "--wsl-root", str(root),
+                            "--selection", str(path), "--expected-commit", "a" * 40]
+                    with patch.object(PILOT, "source", return_value=selected["source"]), \
+                         patch.object(PILOT.wsl_preflight, "inspect") as inspect, \
+                         patch.object(PILOT, "Pilot") as runtime, patch.object(sys, "argv", argv), \
+                         patch("sys.stdout", new_callable=io.StringIO) as output:
+                        # The general validator accepts this exact reviewed binding;
+                        # this initial WSL qualification intentionally does not.
+                        PILOT.validate_selection(selected, "a" * 40)
+                        self.assertEqual(PILOT.main(), 1)
+                    inspect.assert_not_called()
+                    runtime.assert_not_called()
+                    report = json.loads(output.getvalue())
+                    self.assertEqual(report["status"], "unsupported")
+                    self.assertEqual(report["checks"][0]["reason"], "wsl_extended_git_profile_not_qualified")
+                    self.assertEqual(report["runtime_qualification"], "not_executed")
+
     def test_selected_data_assets_and_refusal_cannot_fall_back_silently(self):
         selection = self.selection(Path(sys.executable).resolve())
         with patch.object(PILOT, "source", return_value=selection["source"]):

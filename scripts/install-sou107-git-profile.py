@@ -77,11 +77,16 @@ def require_static_git(path):
             raise ValueError("local clone Git must have no ELF interpreter; build pinned Git with LDFLAGS=-static")
 
 
-def install(destination, workspace, git, git_sha256, bwrap, git_launcher, *, selection=None):
+def install(destination, workspace, git, git_sha256, bwrap, git_launcher, *, selection=None,
+            python_archive=None, wheelhouse=None, allow_download=True, log=None):
     parameters = selection_parameters(selection)
     selected = identity(selection)
     require_static_git(git)
-    V1.install(destination, workspace, git, git_sha256, bwrap, git_launcher, static_git=True)
+    inputs = {key: value for key, value in (("python_archive", python_archive), ("wheelhouse", wheelhouse),
+              ("log", log)) if value is not None}
+    if not allow_download:
+        inputs["allow_download"] = False
+    V1.install(destination, workspace, git, git_sha256, bwrap, git_launcher, static_git=True, **inputs)
     destination = Path(destination).absolute()
     profile = json.loads((destination / "profile.json").read_text())
     profile["format"] = parameters["format"]

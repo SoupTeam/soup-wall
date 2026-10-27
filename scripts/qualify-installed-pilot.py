@@ -41,6 +41,7 @@ import wsl_preflight
 import wsl_qualification
 
 import pilot_source_identity as SOURCE_IDENTITY
+import pilot_git_profiles as GIT_PROFILES
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -108,7 +109,10 @@ def source():
 
 def validate_selection(selection, expected):
     require(isinstance(selection, dict), "selection_invalid")
-    require(selection.get("format") == "sw-installed-pilot-selection/2", "selection_version")
+    try:
+        git_profile = GIT_PROFILES.from_selection(selection)
+    except ValueError as error:
+        raise Failure(str(error)) from None
     before = source()
     require(not before["dirty"] and before["commit"] == expected
             and selection["source"] == before, "candidate_source_mismatch")
@@ -130,6 +134,9 @@ def validate_selection(selection, expected):
         require(re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) and sha(path) == item["sha256"],
                 changed)
         paths[role] = path
+    if selection["format"] == GIT_PROFILES.SELECTION_V3:
+        require(sha(paths["git_classifier"]) == GIT_PROFILES.binding(git_profile)["classifier_sha256"],
+                "selected_git_classifier_changed")
     return before, paths
 
 
@@ -1089,6 +1096,8 @@ def run(args):
         if args.fault == "missing-sandbox":
             selection["files"]["bwrap"]["path"] = str(args.output / "absent-bwrap")
         before, paths = validate_selection(selection, args.expected_commit)
+        require(GIT_PROFILES.from_selection(selection) == GIT_PROFILES.DEFAULT,
+                "extended_git_selection_use_qualify_installed_git_profiles")
         selected = paths
         report["source_before"] = before
         report["selection_format"] = selection["format"]
@@ -1207,7 +1216,10 @@ def main():
         try:
             if args.selection:
                 require(args.selection.stat().st_size <= 65536, "selection_byte_limit")
-                _, paths = validate_selection(strict_json(args.selection.read_bytes()), args.expected_commit)
+                selection = strict_json(args.selection.read_bytes())
+                _, paths = validate_selection(selection, args.expected_commit)
+                require(GIT_PROFILES.from_selection(selection) == GIT_PROFILES.DEFAULT,
+                        "wsl_extended_git_profile_not_qualified")
             report = wsl_preflight.inspect(args.wsl_root, paths, output=args.output)
         except (Failure, OSError, ValueError, KeyError, TypeError) as error:
             # Selection paths and parser messages may contain private operator data.
@@ -1215,11 +1227,15 @@ def main():
             status = "unavailable" if isinstance(error, OSError) else "incompatible"
             reason = error.code if isinstance(error, Failure) else (
                 "selection_unreadable" if isinstance(error, OSError) else "selection_invalid")
+            if reason == "wsl_extended_git_profile_not_qualified":
+                status = "unsupported"
             report = {"format": "sw-wsl-preflight/1", "scope": "prerequisites_only",
                       "status": status, "active_protection": "not_measured",
                       "runtime_qualification": "not_executed", "checks": [
                           {"id": "runtime_selection", "status": status, "reason": reason,
-                           "next_step": "Supply a readable exact pilot selection for the clean expected commit.",
+                           "next_step": ("Use the exact default git-readonly-v1 selection for WSL; extended Git profiles are not WSL-qualified."
+                                         if status == "unsupported" else
+                                         "Supply a readable exact pilot selection for the clean expected commit."),
                            "evidence": {}}]}
         print(json.dumps(report, indent=2))
         return 0 if report["status"] == "ready" else 1

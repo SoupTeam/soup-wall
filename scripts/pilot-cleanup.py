@@ -140,8 +140,9 @@ def validate_receipt(target, marker):
         return None
     selection = json_input(selection_path)
     require(set(path.name for path in target.iterdir()).issubset(RUNTIME_LAYOUT), "unexpected_preparation_layout")
-    require(selection.get("format") == "sw-installed-pilot-selection/2"
-            and re.fullmatch(r"[0-9a-f]{40}", selection.get("source", {}).get("commit", "")),
+    git_profile = PREP.GIT_PROFILES.from_selection(selection)
+    versioned = selection["format"] == PREP.GIT_PROFILES.SELECTION_V3
+    require(re.fullmatch(r"[0-9a-f]{40}", selection.get("source", {}).get("commit", "")),
             "preparation_selection_changed")
     require(set(selection.get("files", {})) == set(PREP.PILOT.ROLES), "selection_roles_changed")
     paths = {}
@@ -152,8 +153,12 @@ def validate_receipt(target, marker):
     # Cleanup owns only the generation. External roots are data in its receipt,
     # never traversal/deletion targets, and may already have been moved away.
     roots = PREP.workspace_paths(selection, target, revalidate=False)
-    profiles = {kind: PREP.verify_profile(kind, target / (kind + "-profile"), paths,
-                roots[kind]) for kind in ("filesystem", "git")}
+    profiles = {
+        "filesystem": PREP.verify_profile("filesystem", target / "filesystem-profile", paths,
+                                           roots["filesystem"], versioned=versioned),
+        "git": PREP.verify_profile("git", target / "git-profile", paths, roots["git"],
+                                    git_profile, versioned=versioned),
+    }
     require(selection.get("prepared_profiles") == profiles, "preparation_profile_identity_changed")
     return {"format": selection["format"], "sha256": sha(selection_path), "source": selection["source"]["commit"]}
 
@@ -296,7 +301,8 @@ def apply(prefix, generation, confirmation):
                 "removal_target_replaced")
         require(inspect(prefix, generation)["confirmation"] == confirmation, "removal_changed_since_plan")
         no_mounts(target)
-        preserve = {"filesystem-workspace", "git-workspace"} if plan["receipt"]["format"] == "sw-installed-pilot-selection/2" else set()
+        preserve = {"filesystem-workspace", "git-workspace"} if plan["receipt"]["format"] in {
+            PREP.GIT_PROFILES.SELECTION_V2, PREP.GIT_PROFILES.SELECTION_V3} else set()
         erase(directory_fd, info.st_dev, preserve=preserve)
         require(os.stat(generation, dir_fd=parent_fd, follow_symlinks=False).st_ino == info.st_ino,
                 "removal_target_replaced")
