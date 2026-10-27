@@ -1843,14 +1843,17 @@ jobs:
         run: |
           set -euo pipefail
           task_scratch="$RUNNER_TEMP/sou165-scratch"
-          for mode in current bounding-preserved; do
+          for mode in current bounding-preserved raw-proc; do
             args=()
-            if [ "$mode" = current ]; then args+=(--bounding-set=-all); fi
+            extra=()
+            if [ "$mode" != bounding-preserved ]; then args+=(--bounding-set=-all); fi
+            if [ "$mode" = raw-proc ]; then extra+=(--cap-add CAP_SYS_ADMIN); fi
             args+=(--no-new-privs)
             sudo -- "$task_scratch/bwrap-build/bwrap" --unshare-net --unshare-pid --die-with-parent \
               --ro-bind / / --bind "$task_scratch" "$task_scratch" --proc /proc --dev /dev --cap-drop ALL \
-              --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
-              --chdir / /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+              --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP "${extra[@]}" \
+              --chdir / /bin/bash -euc 'mode=$1; shift; if [ "$mode" = raw-proc ]; then mount -t proc -o nosuid,nodev,noexec proc /proc; fi; exec "$@"' bash "$mode" \
+              /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
               --inh-caps=-all --ambient-caps=-all "${args[@]}" \
               /usr/bin/env -i PATH="$PATH" SOU165_SCRATCH="$task_scratch" SOU165_MODE="$mode" \
               python3 - <<'PYCODE'
