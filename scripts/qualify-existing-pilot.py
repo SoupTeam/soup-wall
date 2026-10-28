@@ -40,6 +40,13 @@ RUN, LAUNCH, BASE = PREPARED.RUN, PREPARED.LAUNCH, PREPARED.BASE
 require = BASE.require
 
 
+class ProjectCaseFailure(ValueError):
+    """A measured failed outcome whose original owned cleanup was confirmed."""
+    def __init__(self, evidence):
+        super().__init__(evidence["reason"])
+        self.evidence = evidence
+
+
 def snapshot(root):
     result = BASE.snapshot(root)
     for name, item in result.items():
@@ -142,41 +149,54 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
         result = {"case": case, "status": "passed", "cleanup": outcome["cleanup"],
             "process_cleanup": cleanup, "native_instance": outcome["identity"]["native_instance"],
             "trace_sha256": BASE.sha(trace), "outside_reads": 0, "forbidden_network_deliveries": 0}
-        if not hold:
-            require(len(model.results) == len(steps), "existing_correlated_results_missing")
-            for index in (0, 1, 2, 3, 9):
-                require(model.results[f"toolu_existing_{index}"]["is_error"] is False, "useful_original_result_failed")
-            require(marker_text(case) in json.dumps(model.results["toolu_existing_0"]["content"]),
-                    "current_operator_bytes_missing")
-            require("tracked.txt" in json.dumps(model.results["toolu_existing_1"]["content"])
-                    and "preserved-untracked.txt" in json.dumps(model.results["toolu_existing_1"]["content"]),
-                    "actual_git_state_missing")
-            require("Owned committed project" in json.dumps(model.results["toolu_existing_2"]["content"]),
-                    "original_git_show_missing")
-            require("Owned operator Git edit" in json.dumps(model.results["toolu_existing_3"]["content"]),
-                    "original_git_diff_missing")
-            require(all(model.results[f"toolu_existing_{index}"]["is_error"] is True for index in range(4, 9)),
-                    "forbidden_tool_not_refused")
-            if fixture is not None:
-                require(all(model.results[f"toolu_existing_{index}"]["is_error"] is False for index in (10, 11)),
-                        "ordinary_project_followup_interrupted")
-                require(fixture["read_marker"] in json.dumps(model.results["toolu_existing_10"]["content"]),
-                        "ordinary_project_bytes_missing")
-                require(all(message in json.dumps(model.results["toolu_existing_11"]["content"])
-                            for message in fixture["history_messages"]), "ordinary_local_history_missing")
-            observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
-            forbidden = {"git_reset", "write_file", "Bash"}
-            require(not any(call["tool"] in forbidden for call in observation["calls"]), "forbidden_original_dispatch")
-            require(PREPARED.ASK.SELECTED.trace_effects(trace, "filesystem") == 1, "original_read_effect_missing")
-            git_execs = [row for row in rows if 'execve("/mcp-runtime/git",' in row and row.endswith(" = 0")]
-            require(any('"status"' in row for row in git_execs)
-                    and any('"diff-tree"' in row for row in git_execs)
-                    and any('"diff"' in row for row in git_execs), "original_git_execution_witness_missing")
-            result.update(useful_original_results=5, refused_results=5, original_dispatches=len(observation["calls"]),
-                          git_execution_sha256=digest(git_execs), result_sha256=digest(model.results))
-            if fixture is not None:
-                result.update(useful_original_results=7, ordinary_followup_results=2,
-                              project_fixture_sha256=project_identity(args.project_fixture))
+        result["operations"] = [{"index": i, "server": server, "tool": tool,
+            "result_present": f"toolu_existing_{i}" in model.results,
+            "is_error": model.results.get(f"toolu_existing_{i}", {}).get("is_error"),
+            "result_sha256": digest(model.results.get(f"toolu_existing_{i}")),
+            "native_codes": sorted(set(re.findall(r"native_[a-z_]{1,64}",
+                json.dumps(model.results.get(f"toolu_existing_{i}")))))[:16]}
+            for i, (server, tool, _) in enumerate(steps)]
+        try:
+            if not hold:
+                require(len(model.results) == len(steps), "existing_correlated_results_missing")
+                for index in (0, 1, 2, 3, 9):
+                    require(model.results[f"toolu_existing_{index}"]["is_error"] is False, "useful_original_result_failed")
+                require(marker_text(case) in json.dumps(model.results["toolu_existing_0"]["content"]),
+                        "current_operator_bytes_missing")
+                require("tracked.txt" in json.dumps(model.results["toolu_existing_1"]["content"])
+                        and "preserved-untracked.txt" in json.dumps(model.results["toolu_existing_1"]["content"]),
+                        "actual_git_state_missing")
+                require("Owned committed project" in json.dumps(model.results["toolu_existing_2"]["content"]),
+                        "original_git_show_missing")
+                require("Owned operator Git edit" in json.dumps(model.results["toolu_existing_3"]["content"]),
+                        "original_git_diff_missing")
+                require(all(model.results[f"toolu_existing_{index}"]["is_error"] is True for index in range(4, 9)),
+                        "forbidden_tool_not_refused")
+                if fixture is not None:
+                    require(all(model.results[f"toolu_existing_{index}"]["is_error"] is False for index in (10, 11)),
+                            "ordinary_project_followup_interrupted")
+                    require(fixture["read_marker"] in json.dumps(model.results["toolu_existing_10"]["content"]),
+                            "ordinary_project_bytes_missing")
+                    require(all(message in json.dumps(model.results["toolu_existing_11"]["content"])
+                                for message in fixture["history_messages"]), "ordinary_local_history_missing")
+                observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
+                forbidden = {"git_reset", "write_file", "Bash"}
+                require(not any(call["tool"] in forbidden for call in observation["calls"]), "forbidden_original_dispatch")
+                require(PREPARED.ASK.SELECTED.trace_effects(trace, "filesystem") == 1, "original_read_effect_missing")
+                git_execs = [row for row in rows if 'execve("/mcp-runtime/git",' in row and row.endswith(" = 0")]
+                require(any('"status"' in row for row in git_execs)
+                        and any('"diff-tree"' in row for row in git_execs)
+                        and any('"diff"' in row for row in git_execs), "original_git_execution_witness_missing")
+                result.update(useful_original_results=5, refused_results=5, original_dispatches=len(observation["calls"]),
+                              git_execution_sha256=digest(git_execs), result_sha256=digest(model.results))
+                if fixture is not None:
+                    result.update(useful_original_results=7, ordinary_followup_results=2,
+                                  project_fixture_sha256=project_identity(args.project_fixture))
+        except ValueError as error:
+            code = str(error)
+            result.update(status="failed", reason=code if re.fullmatch(r"[a-z0-9_]{1,100}", code)
+                          else "project_result_validation_failed")
+            raise ProjectCaseFailure(result) from error
         return result
     finally:
         if process is not None and process.poll() is None:
@@ -289,10 +309,16 @@ def qualify(args, private, report):
                 (git / ".gitmodules").write_text("unsupported fixture\n")
             trace = private / (case + ".private")
             try:
+                preflight_env = dict(env, ANTHROPIC_API_KEY="owned-preflight-only",
+                                     ANTHROPIC_BASE_URL="http://127.0.0.1:9")
                 result = subprocess.run([str(args.strace), "-f", "-qq", "-e", "trace=execve", "-o", str(trace),
                     sys.executable, "-B", str(ROOT / "scripts/pilot-run.py"), "--run", "--selection", str(selection_path),
-                    "--expected-commit", args.expected_commit], env=env, cwd=private, capture_output=True, timeout=120)
+                    "--expected-commit", args.expected_commit], env=preflight_env, cwd=private, capture_output=True, timeout=120)
                 value = json.loads(result.stdout)
+                expected_reason = {"moved-root": "existing_workspace_missing_or_moved",
+                    "replaced-root": "selected_workspace_changed", "changed-selection": "preparation_marker_mismatch",
+                    "unsupported-git": "unsupported_existing_git_layout_use_supported_standalone_repository"}[case]
+                require(value.get("reason") == expected_reason, "project_control_did_not_reach_selected_validation")
                 require(result.returncode != 0 and value["executed"] is False, "invalid_existing_selection_executed")
                 rows = LAUNCH.normalized_syscalls(trace.read_text())[0]
                 require(not any('execve(' + json.dumps(str(paths[role])) + ',' in row and row.endswith(" = 0")
@@ -316,7 +342,12 @@ def qualify(args, private, report):
                 (git / "tracked.txt").write_text("Owned operator Git edit v2\n")
             current = {"filesystem": snapshot(fs), "git": snapshot(git)}
             report["active_case"] = case
-            result = run_host(args, selection_path, paths, private, case, marker, receiver, sentinel)
+            try:
+                result = run_host(args, selection_path, paths, private, case, marker, receiver, sentinel)
+            except ProjectCaseFailure as error:
+                result = error.evidence
+                require(result["process_cleanup"]["all_stopped"] and not result["process_cleanup"]["remaining"],
+                        "project_cleanup_unconfirmed_stop_inventory")
             require(current == {"filesystem": snapshot(fs), "git": snapshot(git)}, "selected_project_written")
             instances.append(result["native_instance"])
             result.update(worktree_index_head_config_unchanged=True, untracked_preserved=True)
@@ -334,7 +365,8 @@ def qualify(args, private, report):
                 "outside_state_changed")
         report["source_after"] = RUN.PREP.PILOT.source()
         require(report["source_after"] == seed["source"], "qualification_source_changed")
-        report.update(status="passed", failures=0, skips=0, fresh_run_authority=True,
+        failures = sum(row["status"] != "passed" for row in report["cases"])
+        report.update(status="failed" if failures else "passed", failures=failures, skips=0, fresh_run_authority=True,
                       external_roots_outside_prefix=True, cleanup_external_roots_untouched=True,
                       project_after_sha256={kind: digest(current[kind]) for kind in current})
     finally:

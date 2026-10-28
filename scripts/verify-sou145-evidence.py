@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Reproduce SOU-145 attempt 1 with the existing dossier; no runtime or new gate."""
+"""Verify an explicitly selected SOU-145 archive using pilot_dossier; no runtime or new gate."""
 import argparse
 import os
 from pathlib import Path
@@ -16,16 +16,22 @@ SELECTION = ROOT / "docs/operations/evidence/sou145/attempt-1-selection.json"
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--selection", type=Path, default=SELECTION,
+                        help="Pinned dossier selection; defaults to the retained original attempt")
     parser.add_argument("--archive", type=Path, required=True,
-                        help="Original bounded artifact ZIP from run 40208279919")
+                        help="Original bounded artifact ZIP selected by the manifest")
     parser.add_argument("--output", type=Path, required=True,
                         help="New private directory; parent must already exist")
     args = parser.parse_args(argv)
     try:
-        selection, _ = load_json(SELECTION, 128 * 1024)
+        selection, _ = load_json(args.selection, 128 * 1024)
         dossier.validate_manifest(selection)
         archive = safe_file(args.archive, dossier.MAX_ARCHIVE)
-        reference = selection["evidence"][0]["file"]
+        references = [entry["file"] for entry in selection["evidence"]]
+        require(references and all(ref["member"] is not None for ref in references), "archive_references_required")
+        reference = references[0]
+        require(all(ref["path"] == reference["path"] and ref["sha256"] == reference["sha256"]
+                    for ref in references), "one_explicit_archive_required")
         require(dossier.sha(archive) == reference["sha256"], "original_archive_hash_mismatch")
         for parent in (args.output.absolute().parent, *args.output.absolute().parent.parents):
             require(parent.is_dir() and not parent.is_symlink()
@@ -43,7 +49,7 @@ def main(argv=None):
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             write_private(target.parent, target.name, raw)
         return dossier.main([
-            "--selection", str(SELECTION), "--root", str(args.output),
+            "--selection", str(args.selection), "--root", str(args.output),
             "--repo", str(ROOT), "--candidate", selection["candidate"]["commit"],
             "--output", str(args.output / "dossier"),
         ])

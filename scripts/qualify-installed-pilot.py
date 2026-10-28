@@ -1065,10 +1065,12 @@ def negative_controls(args):
         output = args.output / ("negative-" + name)
         command = [sys.executable, "-B", str(Path(__file__).resolve()), "--run", "--selection", str(args.selection),
                    "--expected-commit", args.expected_commit, "--output", str(output), "--fault", name]
+        if getattr(args, "offline_inputs", None):
+            command.extend(["--offline-inputs", str(args.offline_inputs)])
         if getattr(args, "wsl_root", None):
             command.extend(["--wsl-root", str(args.wsl_root)])
         result = subprocess.run(command,
-            env={key: value for key, value in os.environ.items() if key in ("PATH", "LANG")},
+            env={key: value for key, value in os.environ.items() if key in ("PATH", "LANG", "TMPDIR", "TMP", "TEMP")},
             cwd=ROOT, capture_output=True, timeout=30)
         report = json.loads((output / "report.json").read_text())
         require(result.returncode == 1 and report["status"] == "failed"
