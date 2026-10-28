@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: dfa5366aba631cb8e79d831c3a69946fbdcf26ca
+          ref: 6deafacf3854666cb1e5874d4cfcf152e4f7a6b2
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1.94.1
       - uses: Swatinem/rust-cache@v2
@@ -97,6 +97,7 @@ jobs:
             ${{ runner.temp }}/sou145/results/execution.json
             ${{ runner.temp }}/sou145/results/frozen-plan.json
             ${{ runner.temp }}/sou145/results/*/report.json
+            ${{ runner.temp }}/sou145/results/installed/negative-*/report.json
             ${{ runner.temp }}/sou145/results/*/qualification.json
             ${{ runner.temp }}/sou145/apparmor-provisioning.json
             ${{ runner.temp }}/sou145-apparmor-cleanup.json

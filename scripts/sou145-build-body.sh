@@ -20,7 +20,7 @@ paths=[r['executable'] for r in records if r.get('reason')=='compiler-artifact' 
 assert len(paths)==1
 (s/'library-path.txt').write_text(paths[0]+'\n')
 roles={'agentfw':s/'target/debug/agentfw','git_launcher':s/'target/debug/agentfw-git-sandbox','sandbox_tests':Path(paths[0]),'git':s/'git-source/git','bwrap':s/'bwrap-build/bwrap'}
-assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip()=='dfa5366aba631cb8e79d831c3a69946fbdcf26ca'
-record={'source':'dfa5366aba631cb8e79d831c3a69946fbdcf26ca','tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],cwd=source,text=True).strip(),'source_read_only':True,'network':'private-loopback-only','files':{name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in roles.items()}}
+assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip()=='6deafacf3854666cb1e5874d4cfcf152e4f7a6b2'
+record={'source':'6deafacf3854666cb1e5874d4cfcf152e4f7a6b2','tree':subprocess.check_output(['git','rev-parse','HEAD^{tree}'],cwd=source,text=True).strip(),'source_read_only':True,'network':'private-loopback-only','files':{name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in roles.items()}}
 (s/'build-record.json').write_text(json.dumps(record,indent=2)+'\n')
 PY
