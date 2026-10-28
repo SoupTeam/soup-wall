@@ -27,6 +27,8 @@ pub(crate) struct Service {
     pub host: String,
     pub digest: String,
     used: AtomicBool,
+    closed: watch::Sender<bool>,
+    active: AtomicUsize,
     pub dispatches: Arc<AtomicUsize>,
 }
 impl Service {
@@ -40,8 +42,26 @@ impl Service {
             host,
             digest,
             used: AtomicBool::new(false),
+            closed: watch::channel(false).0,
+            active: AtomicUsize::new(0),
             dispatches: Arc::new(AtomicUsize::new(0)),
         }))
+    }
+    #[cfg(any(test, target_os = "linux"))]
+    pub fn close(&self) {
+        self.used.store(true, Ordering::Release);
+        self.closed.send_replace(true);
+    }
+    #[cfg(any(test, target_os = "linux"))]
+    pub async fn wait_idle(&self) -> bool {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(3);
+        while self.active.load(Ordering::Acquire) != 0 {
+            if tokio::time::Instant::now() >= deadline {
+                return false;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        true
     }
     fn admission(
         &self,
@@ -98,6 +118,12 @@ impl Drop for Cancel {
         let _ = self.0.send(true);
     }
 }
+struct Activity(Arc<Service>);
+impl Drop for Activity {
+    fn drop(&mut self) {
+        self.0.active.fetch_sub(1, Ordering::AcqRel);
+    }
+}
 
 pub(crate) async fn handler(
     State(state): State<crate::Shared>,
@@ -120,13 +146,20 @@ pub(crate) async fn handler(
     if !state.config.enforce || state.config.judge.enabled {
         return refusal(StatusCode::SERVICE_UNAVAILABLE, "edit_enforcement_required");
     }
+    service.active.fetch_add(1, Ordering::AcqRel);
+    let activity = Activity(service.clone());
+    let mut revoked = service.closed.subscribe();
     // Authenticated malformed or interrupted attempts also spend this run's one
     // transport slot. A retry needs a separately selected new run/daemon epoch.
-    if service.used.swap(true, Ordering::AcqRel) {
+    if *revoked.borrow() || service.used.swap(true, Ordering::AcqRel) {
         return refusal(StatusCode::CONFLICT, "edit_run_spent");
     }
     let mut stream = body.into_data_stream();
-    let (request, leftover) = match read_preamble_for(&mut stream, FORMAT).await {
+    let preamble = tokio::select! {biased;
+        _=revoked.changed()=>return refusal(StatusCode::CONFLICT, "edit_run_revoked"),
+        value=read_preamble_for(&mut stream, FORMAT)=>value,
+    };
+    let (request, leftover) = match preamble {
         Ok(value) => value,
         Err(_) => return refusal(StatusCode::BAD_REQUEST, "edit_preamble_invalid"),
     };
@@ -162,6 +195,7 @@ pub(crate) async fn handler(
     });
     let (done_tx, done_rx) = oneshot::channel();
     tokio::spawn(async move {
+        let _activity = activity;
         let mut client = BufReader::new(client);
         let result = crate::mcp::admission::run_builtin_streams(
             config,
@@ -173,8 +207,11 @@ pub(crate) async fn handler(
             &mut client,
             output,
             async move {
-                if !*stop.borrow() {
-                    let _ = stop.changed().await;
+                if !*stop.borrow() && !*revoked.borrow() {
+                    tokio::select! {biased;
+                        _=revoked.changed()=>{},
+                        _=stop.changed()=>{},
+                    }
                 }
             },
             service.dispatches.clone(),
@@ -296,5 +333,46 @@ mod tests {
         }
         assert_eq!(service.dispatches.load(Ordering::Acquire), 0);
         assert!(native.active_host_sessions().is_empty());
+    }
+
+    #[tokio::test]
+    async fn edit_stop_revocation_cancels_a_stalled_preamble_and_spends_unused_authority() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = state(dir.path(), true);
+        let native = state.native.as_ref().unwrap();
+        let service = native.edit.as_ref().unwrap().clone();
+        let request = axum::http::Request::post(super::super::ENDPOINT)
+            .header("authorization", format!("Bearer {}", native.token))
+            .body(Body::from_stream(futures_util::stream::pending::<
+                Result<axum::body::Bytes, std::io::Error>,
+            >()))
+            .unwrap();
+        let task = tokio::spawn(crate::app(state.clone()).oneshot(request));
+        while service.active.load(Ordering::Acquire) == 0 {
+            tokio::task::yield_now().await;
+        }
+        let authority = "e".repeat(64);
+        crate::native::pilot_stop::revoke_selected(
+            &state,
+            "host",
+            &std::collections::BTreeMap::from([(SERVER.into(), authority.clone())]),
+            crate::native::now_ms() + 10000,
+        )
+        .unwrap();
+        service.close();
+        let response = tokio::time::timeout(std::time::Duration::from_secs(1), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert!(service.wait_idle().await);
+        assert!(native
+            .sessions
+            .lock()
+            .unwrap()
+            .spent_authorities
+            .contains_key(&authority));
+        assert_eq!(service.dispatches.load(Ordering::Acquire), 0);
     }
 }

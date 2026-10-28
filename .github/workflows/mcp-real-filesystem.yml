@@ -3,6 +3,18 @@ name: Real filesystem MCP profile
 on:
   workflow_dispatch:
     inputs:
+      native_result_profile_only:
+        description: Opt-in finite SOU-165 paired large-result profile (no final Ready cycle)
+        type: boolean
+        default: false
+      native_result_probe_only:
+        description: Diagnose owned nested namespace startup before any Rust build
+        type: boolean
+        default: false
+      native_result_baseline_sha:
+        description: Full instrumentation-only source SHA for the paired baseline
+        type: string
+        default: ''
       prepared_operations_only:
         description: Focus prepared-run discovery, private archival and interruption recovery
         type: boolean
@@ -70,7 +82,7 @@ concurrency:
 
 jobs:
   impact:
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off'
+    if: github.event.inputs.native_result_profile_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-real-filesystem.yml
@@ -235,6 +247,8 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_wsl_preflight.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_wsl_qualification.py -v
           cargo test --locked -p agentfw --lib selected_registry_shared_daemon | tee "$RUNNER_TEMP/sou100-registry-regressions.log"
           python3 -B - <<'REGISTRY_CONTROLS'
           import os, re
@@ -1773,3 +1787,167 @@ jobs:
             ${{ runner.temp }}/sou62-*-hashes.txt
           if-no-files-found: error
           retention-days: 7
+  manual-native-result-profile:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.native_result_profile_only == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Prepare immutable sources and locked public runtime assets
+        env:
+          BASELINE_SHA: ${{ inputs.native_result_baseline_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYCODE'
+          import os,re
+          assert re.fullmatch('[0-9a-f]{40}',os.environ['BASELINE_SHA']), 'one full baseline SHA required'
+          PYCODE
+          git merge-base --is-ancestor f4937110b58305645b7302acae99325d13354916 "$BASELINE_SHA"
+          git worktree add --detach "$RUNNER_TEMP/sou165-baseline" "$BASELINE_SHA"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq meson ninja-build libcap-dev pkg-config strace
+          cargo fetch --locked
+          task_scratch="$RUNNER_TEMP/sou165-scratch"
+          mkdir -m 700 "$task_scratch"
+          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host,npm-cache,packages,node,bwrap-source,binaries}
+          ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
+          curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz -o "$task_scratch/node.tar.xz"
+          printf '%s  %s\n' 9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37 "$task_scratch/node.tar.xz" | sha256sum --check
+          tar -xJf "$task_scratch/node.tar.xz" -C "$task_scratch/node" --strip-components=1 --no-same-owner --no-same-permissions
+          curl --fail --location --retry 3 https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz -o "$task_scratch/bwrap.tar.xz"
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d "$task_scratch/bwrap.tar.xz" | sha256sum --check
+          tar -xJf "$task_scratch/bwrap.tar.xz" -C "$task_scratch/bwrap-source" --strip-components=1 --no-same-owner --no-same-permissions
+          meson setup "$task_scratch/bwrap-build" "$task_scratch/bwrap-source" -Dtests=false -Dman=disabled -Dselinux=disabled -Dbash_completion=disabled -Dzsh_completion=disabled
+          meson compile -C "$task_scratch/bwrap-build"
+          cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
+          cp profiles/mcp/filesystem-readonly-v1/package*.json "$task_scratch/packages/"
+          PATH="$task_scratch/node/bin:$PATH" npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
+          PATH="$task_scratch/node/bin:$PATH" npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/packages" --cache "$task_scratch/npm-cache"
+          printf '%s  %s\n' fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7 "$task_scratch/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum --check
+          git rev-parse HEAD > "$task_scratch/source.txt"
+      - name: Bounded nested namespace setup probe
+        if: github.event.inputs.native_result_probe_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_scratch="$RUNNER_TEMP/sou165-scratch"
+          for mode in current bounding-preserved raw-proc; do
+            args=()
+            extra=()
+            if [ "$mode" != bounding-preserved ]; then args+=(--bounding-set=-all); fi
+            if [ "$mode" = raw-proc ]; then extra+=(--cap-add CAP_SYS_ADMIN); fi
+            args+=(--no-new-privs)
+            sudo -- "$task_scratch/bwrap-build/bwrap" --unshare-net --unshare-pid --die-with-parent \
+              --ro-bind / / --bind "$task_scratch" "$task_scratch" --proc /proc --dev /dev --cap-drop ALL \
+              --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP "${extra[@]}" \
+              --chdir / /bin/bash -euc 'mode=$1; shift; if [ "$mode" = raw-proc ]; then mount -t proc -o nosuid,nodev,noexec proc /proc; fi; exec "$@"' bash "$mode" \
+              /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+              --inh-caps=-all --ambient-caps=-all "${args[@]}" \
+              /usr/bin/env -i PATH="$PATH" SOU165_SCRATCH="$task_scratch" SOU165_MODE="$mode" \
+              python3 - <<'PYCODE'
+          import subprocess,os,json,pathlib,re
+          root=pathlib.Path(os.environ['SOU165_SCRATCH'])
+          status=pathlib.Path('/proc/self/status').read_text()
+          caps={line.split(':')[0]:line.split(':')[1].strip() for line in status.splitlines() if line.startswith(('Cap','NoNewPrivs:'))}
+          assert os.geteuid()!=0 and all(int(caps[k],16)==0 for k in ('CapEff','CapPrm','CapInh','CapAmb')) and caps['NoNewPrivs']=='1'
+          result=subprocess.run([str(root/'bwrap-build/bwrap'),'--unshare-all','--unshare-user','--disable-userns','--assert-userns-disabled','--cap-drop','ALL','--ro-bind','/','/','--proc','/proc','--dev','/dev','--','/bin/true'],capture_output=True,text=True,timeout=10)
+          text=result.stderr
+          codes=[code for token,code in [('capset','capset'),('Operation not permitted','eperm'),('Permission denied','eacces'),('Creating new namespace failed','namespace'),('Cannot create','create'),('No permissions','permissions')] if token in text]
+          row={'mode':os.environ['SOU165_MODE'],'uid':os.geteuid(),'caps':caps,'exit_code':result.returncode,'stderr_codes':codes,'stderr_bytes':len(text.encode()),'stderr_message':re.sub(r'(/[A-Za-z0-9_.-]+)+','<path>',text)[:256]}
+          (root/('probe-'+os.environ['SOU165_MODE']+'.json')).write_text(json.dumps(row,indent=2)+'\n')
+          print(json.dumps(row))
+          PYCODE
+          done
+      - name: Build paired variants and execute finite original-server trials offline
+        if: github.event.inputs.native_result_probe_only != 'true'
+        env:
+          BASELINE_SHA: ${{ inputs.native_result_baseline_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_scratch="$RUNNER_TEMP/sou165-scratch"
+          sudo -- "$task_scratch/bwrap-build/bwrap" --unshare-net --unshare-pid --die-with-parent \
+            --ro-bind / / --bind "$task_scratch" "$task_scratch" --proc /proc --dev /dev --cap-drop ALL \
+            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP --cap-add CAP_SYS_ADMIN \
+            --chdir / /bin/bash -euc 'mount -t proc -o nosuid,nodev,noexec proc /proc; exec "$@"' bash \
+            /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            /usr/bin/env -i PATH="$task_scratch/node/bin:$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.94.1 \
+            HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
+            CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
+            SOU165_SCRATCH="$task_scratch" SOU165_SOURCE="$GITHUB_WORKSPACE" SOU165_BASELINE="$RUNNER_TEMP/sou165-baseline" CARGO_BUILD_JOBS=4 \
+            /bin/bash -euo pipefail <<'BASH'
+          cd "$SOU165_SOURCE"
+          python3 - <<'PYCODE'
+          import os,pathlib,socket,errno,json
+          status=pathlib.Path('/proc/self/status').read_text()
+          caps={line.split(':')[0]:line.split(':')[1].strip() for line in status.splitlines() if line.startswith(('Cap','NoNewPrivs:'))}
+          assert os.geteuid()!=0 and all(int(caps[k],16)==0 for k in ('CapEff','CapPrm','CapInh','CapBnd','CapAmb')) and caps['NoNewPrivs']=='1'
+          try:
+              fd=os.open(pathlib.Path(os.environ['SOU165_SOURCE'])/'Cargo.toml',os.O_WRONLY|os.O_CLOEXEC)
+          except OSError as error:
+              assert error.errno==errno.EROFS
+          else:
+              os.close(fd)
+              raise AssertionError('source write-open was permitted; no write attempted')
+          scratch=pathlib.Path(os.environ['SOU165_SCRATCH'])
+          (scratch/'write-probe').write_bytes(b'owned scratch only')
+          (scratch/'write-probe').unlink()
+          probe=socket.socket();probe.bind(('127.0.0.1',0));probe.close()
+          rows=pathlib.Path('/proc/net/route').read_text().splitlines()[1:]
+          assert not any(row.split()[0]!='lo' for row in rows)
+          (scratch/'enclosure.json').write_text(json.dumps({'uid':os.geteuid(),'caps':caps,'source_write_open_refused':True,'scratch_writable':True,'only_loopback_routes':True,'procfs':'private_pid_namespace_nosuid_nodev_noexec'},indent=2)+'\n')
+          PYCODE
+          python3 -B -m unittest discover -s scripts/tests -p test_native_result_benchmark.py -v
+          python3 -B scripts/build-native-result-benchmark.py --baseline "$SOU165_BASELINE" --candidate "$SOU165_SOURCE" --scratch "$SOU165_SCRATCH"
+          export CARGO_TARGET_DIR="$SOU165_SCRATCH/target/measured-candidate"
+          cargo test --locked --offline -p soup-wall-agent
+          cargo test --locked --offline -p agentfw --lib native::tests
+          cargo test --locked --offline -p agentfw --test native_endpoint
+          cargo test --locked --offline -p agentfw --test mcp_admission
+          cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
+          cargo fmt --all --check
+          python3 -B scripts/benchmark-native-results.py --manifest "$SOU165_SCRATCH/builds.json" \
+            --node "$SOU165_SCRATCH/node/bin/node" --npm "$SOU165_SCRATCH/node/bin/npm" \
+            --bwrap "$SOU165_SCRATCH/bwrap-build/bwrap" --strace /usr/bin/strace \
+            --claude "$SOU165_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --npm-cache "$SOU165_SCRATCH/npm-cache" --output "$SOU165_SCRATCH/results"
+          BASH
+      - name: Retain all measurements including failures and incomplete rows
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou165-paired-native-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou165-scratch/source.txt
+            ${{ runner.temp }}/sou165-scratch/probe-*.json
+            ${{ runner.temp }}/sou165-scratch/builds.json
+            ${{ runner.temp }}/sou165-scratch/enclosure.json
+            ${{ runner.temp }}/sou165-scratch/startup-smoke/report.json
+            ${{ runner.temp }}/sou165-scratch/startup-smoke/*/collector.log
+            ${{ runner.temp }}/sou165-scratch/startup-smoke/*/daemon.log
+            ${{ runner.temp }}/sou165-scratch/build-*.log
+            ${{ runner.temp }}/sou165-scratch/build-*-timing.json
+            ${{ runner.temp }}/sou165-scratch/results/report.json
+            ${{ runner.temp }}/sou165-scratch/results/*/report.json
+            ${{ runner.temp }}/sou165-scratch/results/*/collector.log
+            ${{ runner.temp }}/sou165-scratch/results/*/daemon.log
+            ${{ runner.temp }}/sou165-scratch/results/inventory-*.log
+            ${{ runner.temp }}/sou165-scratch/results/inventory-*/**/collector.log
+            ${{ runner.temp }}/sou165-scratch/results/inventory-*/**/daemon.log
+          if-no-files-found: warn
+          retention-days: 30

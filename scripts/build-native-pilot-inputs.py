@@ -191,6 +191,11 @@ def build_options(tools):
     paths = {name: entry["path"] for name, entry in tools.items()}
     return {"RUSTUP_TOOLCHAIN": PIN, "RUSTUP_AUTO_INSTALL": "0",
             "CARGO_BUILD_JOBS": "2", "SOURCE_DATE_EPOCH": "0",
+            # Bound the selected executable closure rather than raising its
+            # 512 MiB quota as debug/type metadata grows. Both build stages
+            # record these options in the verified receipt. Runtime assertions,
+            # overflow checks and the existing per-package optimization stay on.
+            "CARGO_PROFILE_DEV_DEBUG": "0", "CARGO_PROFILE_TEST_DEBUG": "0",
             "RUSTC": paths["rustc"],
             "CC": paths["cc"], "CXX": paths["c++"], "AR": paths["ar"],
             "RANLIB": paths["ranlib"], "CMAKE": paths["cmake"]}

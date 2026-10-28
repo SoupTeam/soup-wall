@@ -92,15 +92,34 @@ class ImpactTests(unittest.TestCase):
                                         text.split("jobs:\n", 1)[1]))
             auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             if filename == "mcp-real-filesystem.yml":
-                auxiliary.add("manual-long-session")
+                auxiliary.update({"manual-long-session", "manual-native-result-profile"})
             if filename == "mcp-real-git.yml":
                 auxiliary.add("manual-installed-git-profiles")
+            if filename == "mcp-create-file.yml":
+                auxiliary.update({"reuse-plan", "reuse-qualification"})
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
                 self.assertIn("needs: impact", body, (filename, job))
                 self.assertIn("needs.impact.outputs.jobs", body, (filename, job))
+
+    def test_native_result_profile_remains_explicit_manual_only(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  manual-native-result-profile:\n", 1)[1]
+        self.assertIn("github.event_name == 'workflow_dispatch'", body)
+        self.assertIn("github.event.inputs.native_result_profile_only == 'true'", body)
+        self.assertNotIn("manual-native-result-profile", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        central = (ROOT / ".github/workflows/ci-components.yml").read_text()
+        self.assertNotIn("manual-native-result-profile", central)
+
+    def test_build_producer_is_selected_only_with_compatible_consumers(self):
+        for path, selected in (("README.md", False), ("eval/probe.py", False), ("crates/proxy/src/main.rs", False),
+                               ("crates/agentfw/src/main.rs", True), ("Cargo.lock", True),
+                               (".github/workflows/ci-builds.yml", True)):
+            with self.subTest(path=path):
+                result = plan([path])["workflows"]
+                self.assertEqual(bool(result["ci-builds.yml"]), selected)
 
     def test_supplemental_vps_is_outside_pr_admission_only_while_main_only(self):
         text = (ROOT / '.github/workflows/vps-ci.yml').read_text(encoding='utf-8')
