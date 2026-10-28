@@ -416,8 +416,9 @@ class Witness:
 
 
 class Capture:
-    def __init__(self, stream):
+    def __init__(self, stream, *, protocol_frames=True):
         self.stream, self.data, self.frames, self.error = stream, bytearray(), queue.Queue(maxsize=64), None
+        self.protocol_frames = protocol_frames
         self.thread = threading.Thread(target=self.read, daemon=True)
         self.thread.start()
 
@@ -429,7 +430,11 @@ class Capture:
                     return
                 require(len(line) <= 16384 and len(self.data) + len(line) <= 256 * 1024, "capture_bound")
                 self.data.extend(line)
-                self.frames.put_nowait(line)
+                # Only a protocol consumer drains this finite frame queue.
+                # Log captures must keep draining their pipes up to the same
+                # byte/line bounds instead of stopping at 64 unread log rows.
+                if self.protocol_frames:
+                    self.frames.put_nowait(line)
         except Exception as error:
             self.error = type(error).__name__
 
@@ -543,7 +548,8 @@ class Rig:
         self.server.write_text(SERVER, encoding="utf-8", newline="")
         self.daemon = subprocess.Popen([str(binary), "serve"], env=self.env, cwd=root,
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.daemon_out, self.daemon_err = Capture(self.daemon.stdout), Capture(self.daemon.stderr)
+        self.daemon_out = Capture(self.daemon.stdout, protocol_frames=False)
+        self.daemon_err = Capture(self.daemon.stderr, protocol_frames=False)
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             require(self.daemon.poll() is None, "owned_daemon_start_failed")
@@ -562,7 +568,13 @@ class Rig:
     def close(self):
         self.daemon.kill()
         self.daemon.wait(10)
-        return {"stdout_sha256": sha(self.daemon_out.finish()), "stderr_sha256": sha(self.daemon_err.finish())}
+        stdout, stderr = self.daemon_out.finish(), self.daemon_err.finish()
+        return {"stdout_sha256": sha(stdout), "stderr_sha256": sha(stderr),
+                "stdout_bytes": len(stdout), "stderr_bytes": len(stderr),
+                "stdout_error": self.daemon_out.error, "stderr_error": self.daemon_err.error,
+                "capture_complete": (not self.daemon_out.thread.is_alive()
+                    and not self.daemon_err.thread.is_alive()
+                    and self.daemon_out.error is None and self.daemon_err.error is None)}
 
     def audit(self):
         raw = self.audit_path.read_bytes() if self.audit_path.exists() else b""
@@ -610,7 +622,8 @@ class Client:
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         rig.clients.append(self.process)
         self.witness = Witness(rig.api, self.process)
-        self.out, self.err = Capture(self.process.stdout), Capture(self.process.stderr)
+        self.out = Capture(self.process.stdout)
+        self.err = Capture(self.process.stderr, protocol_frames=False)
         self.useful = False
 
     def send(self, value):
@@ -947,6 +960,8 @@ def run(args):
                     owned.kill()
                     owned.wait(5)
             report["daemon_capture"] = rig.close()
+            if not report["daemon_capture"]["capture_complete"]:
+                cleanup_failure(report, "daemon_capture_incomplete")
         report["not_run"] = [name for name in CASES if name not in {row["case"] for row in report["cases"]}]
         save(root / "results.json", report)
     return 0 if report["status"] == "pass" else 1

@@ -2,6 +2,7 @@
 """Adversarial report grading; these synthetic rows are NOT Windows acceptance."""
 import copy
 import importlib.util
+import io
 import json
 from pathlib import Path
 import unittest
@@ -48,6 +49,27 @@ def memory_controls():
 
 
 class FailureRetention(unittest.TestCase):
+    def test_unconsumed_log_frames_do_not_stall_a_long_lived_daemon_pipe(self):
+        raw = b'{"event":"owned-log"}\n' * 200
+        log = H.Capture(io.BytesIO(raw), protocol_frames=False)
+        self.assertEqual(log.finish(), raw)
+        self.assertIsNone(log.error)
+        self.assertFalse(log.thread.is_alive())
+        self.assertEqual(log.frames.qsize(), 0)
+        # A real protocol queue retains its original finite overflow refusal.
+        protocol = H.Capture(io.BytesIO(raw))
+        self.assertLess(len(protocol.finish()), len(raw))
+        self.assertEqual(protocol.error, "Full")
+        self.assertEqual(protocol.frames.qsize(), 64)
+
+    def test_log_mode_keeps_original_line_and_total_byte_refusals(self):
+        for raw in (b'x' * 16385 + b'\n', (b'x' * 1023 + b'\n') * 257):
+            capture = H.Capture(io.BytesIO(raw), protocol_frames=False)
+            data = capture.finish()
+            self.assertEqual(capture.error, "ValueError")
+            self.assertLessEqual(len(data), 256 * 1024)
+            self.assertFalse(capture.thread.is_alive())
+
     def test_fallback_cleanup_retains_primary_error_and_still_fails(self):
         report = {"status": "fail", "error": "protocol_result_missing",
                   "active_case": "restart-2", "active_phase": "initialize_client"}
