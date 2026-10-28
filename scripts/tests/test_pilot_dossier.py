@@ -330,4 +330,57 @@ class GitIdentityTests(unittest.TestCase):
         self.assertEqual(d.git_tree(ROOT,commit),tree)
 
 
+class LinkedExecutionContext(unittest.TestCase):
+    setUp = DossierTests.setUp
+    put = DossierTests.put
+    add = DossierTests.add
+    matched = DossierTests.matched
+    full_fixture = DossierTests.full_fixture
+    result = DossierTests.result
+
+    def context(self, change=None):
+        self.full_fixture()
+        entry = self.m['evidence'][0]
+        path = self.root / entry['file']['path']
+        report = json.loads(path.read_bytes()); report.pop('environment')
+        entry['file'] = self.put('matched.json', report)
+        context = {'format':'sw-pilot-readiness-execution/1', 'decision':'NOT_READY',
+                   'source_before':report['identity']['source'], 'source_after':report['source_after'],
+                   'environment':self.m['environment'].copy(), 'stages':[{
+                       'id':'matched', 'status':'executed', 'report_sha256':entry['file']['sha256'],
+                       'independent_namespace_cleanup':{'all_stopped':True,'remaining':[]}}]}
+        if change:
+            change(context)
+        entry['context'] = self.put('execution-context.json', context)
+        return entry
+
+    def test_explicit_context_binds_missing_environment_without_rescoring(self):
+        self.context()
+        result = self.result()
+        self.assertEqual(result['status'], 'READY')
+        self.assertIn('execution_context_sha256', result['evidence'][0])
+
+    def test_foreign_source_unconfirmed_cleanup_or_unlinked_report_cannot_pass(self):
+        for change in (lambda c:c['source_after'].update(commit='f'*40),
+                       lambda c:c['stages'][0].update(report_sha256='b'*64),
+                       lambda c:c['stages'][0]['independent_namespace_cleanup'].update(all_stopped=False),
+                       lambda c:c['environment'].update(kernel_release='different-kernel')):
+            # Each subcase is an independent explicit evidence selection.
+            self.m['evidence'] = []
+            self.context(change)
+            self.assertEqual(self.result()['status'], 'NOT_READY')
+
+    def test_context_cannot_replace_conflicting_original_environment(self):
+        entry = self.context()
+        report = json.loads((self.root / entry['file']['path']).read_bytes())
+        report['environment'] = dict(self.m['environment'], kernel_release='another-kernel')
+        entry['file'] = self.put('matched.json', report)
+        context = json.loads((self.root / entry['context']['path']).read_bytes())
+        context['stages'][0]['report_sha256'] = entry['file']['sha256']
+        entry['context'] = self.put('execution-context.json', context)
+        result = self.result()
+        self.assertEqual(result['status'], 'NOT_READY')
+        self.assertIn('invalid_evidence:context_environment_conflict', result['evidence'][0]['blockers'])
+
+
 if __name__ == '__main__': unittest.main()

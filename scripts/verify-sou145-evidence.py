@@ -27,7 +27,8 @@ def main(argv=None):
         selection, _ = load_json(args.selection, 128 * 1024)
         dossier.validate_manifest(selection)
         archive = safe_file(args.archive, dossier.MAX_ARCHIVE)
-        references = [entry["file"] for entry in selection["evidence"]]
+        references = [ref for entry in selection["evidence"] for ref in
+                      ([entry["file"], entry["context"]] if "context" in entry else [entry["file"]])]
         require(references and all(ref["member"] is not None for ref in references), "archive_references_required")
         reference = references[0]
         require(all(ref["path"] == reference["path"] and ref["sha256"] == reference["sha256"]
