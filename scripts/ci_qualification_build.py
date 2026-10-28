@@ -34,8 +34,9 @@ TARGETS = {"agentfw": {"name": "agentfw", "kind": "bin", "test": False},
            "replace_file": {"name": "replace_file", "kind": "test", "test": True}}
 PROFILES = {role: {"opt_level": "0", "debuginfo": 2, "debug_assertions": True,
                    "overflow_checks": True, "test": role != "agentfw"} for role in ROLES}
-ABI_LIBRARIES = {"libc.so.6", "ld-linux-x86-64.so.2", "libgcc_s.so.1", "libstdc++.so.6",
-                 "libssl.so.3", "libcrypto.so.3", "libm.so.6", "libz.so.1"}
+# Actual direct AND transitive ELF closure observed for all four roles. Other
+# dependencies require a reviewed tuple; unrelated installed packages are not ABI.
+ABI_LIBRARIES = {"libc.so.6", "ld-linux-x86-64.so.2", "libgcc_s.so.1", "libm.so.6"}
 COMMANDS = [
     ["build", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw", "--message-format=json"],
     ["test", "--locked", "--offline", "-p", "agentfw", "--lib", "--test", "native_endpoint",
@@ -471,11 +472,14 @@ def runtime_identity(root):
     for name in ("cc", "c++", "ld", "ar", "ranlib", "cmake", "pkg-config", "make", "readelf"):
         path = Path(shutil.which(name) or "/missing").resolve(strict=True)
         tools[name] = {"path": str(path), "sha256": source_builder().native.digest(path)}
-    abi = {}
+    abi, abi_needed = {}, {}
     for name in sorted(ABI_LIBRARIES):
         path = (Path("/lib/x86_64-linux-gnu") / name).resolve(strict=True)
         abi[name] = {"path": str(path), "sha256": source_builder().native.digest(path)}
-    return {"image": image, "tools": tools, "abi": abi, "target": "x86_64-unknown-linux-gnu",
+        dynamic = probe([tools["readelf"]["path"], "-d", str(path)])
+        abi_needed[name] = sorted(set(re.findall(r"\(NEEDED\).*Shared library: \[([^\]]+)\]", dynamic)))
+        require(set(abi_needed[name]) <= ABI_LIBRARIES, "unsupported_transitive_dynamic_library")
+    return {"image": image, "tools": tools, "abi": abi, "abi_needed": abi_needed, "target": "x86_64-unknown-linux-gnu",
             "profile": "dev/test", "features": [], "default_features": True, "flags": [],
             "build_environment": {"CARGO_BUILD_JOBS": "4", "CARGO_INCREMENTAL": "0", "LANG": "C", "LC_ALL": "C",
                                   "RUSTUP_TOOLCHAIN": PIN, "RUSTUP_AUTO_INSTALL": "0"},
@@ -485,6 +489,31 @@ def runtime_identity(root):
 def expected_identity(root, env, attempt=None):
     return {"source": source_builder().source_identity(root, env.get("SOU166_EXPECTED_COMMIT", "")),
             "runtime": runtime_identity(root), "producer": producer_identity(env, attempt)}
+
+
+def bind_producer_image(expected, version):
+    """Bind authenticated producer provenance and independently observed ABI.
+
+    Hosted image updates may change unrelated software (observed: unused zlib).
+    Compatibility still requires byte-identical compiler/tools, the complete
+    required ELF closure, flags, features, source and fixture paths. Both exact
+    image versions remain bound, and the consumer's own image cannot change
+    between preparation and execution.
+    """
+    require(isinstance(version, str) and re.fullmatch(r"[0-9]{8}\.[0-9]+(\.[0-9]+)?", version),
+            "producer_image_provenance_required")
+    observed = expected["runtime"]["image"]
+    require(isinstance(observed, dict) and observed.get("ImageOS") == "ubuntu24", "consumer_image_family_mismatch")
+    expected["consumer_image"] = dict(observed)
+    expected["runtime"]["image"] = {"ImageOS": "ubuntu24", "ImageVersion": version}
+    return expected
+
+
+def validate_consumer_runtime(expected, observed):
+    require(canonical(observed["image"]) == canonical(expected.get("consumer_image", expected["runtime"]["image"])),
+            "consumer_image_changed")
+    bound = {**observed, "image": expected["runtime"]["image"]}
+    require(canonical(bound) == canonical(expected["runtime"]), "consumer_runtime_changed")
 
 
 def cargo_rows(log):
@@ -607,6 +636,7 @@ def build(root, output):
     packing = time.monotonic()
     result = pack(manifest, {role: output / path for role, path in ROLES.items()}, output / "build.tar.gz")
     result.update({"producer_attempt": str(expected["producer"]["run_attempt"]),
+                   "image_version": expected["runtime"]["image"]["ImageVersion"],
                    "pack_seconds": round(time.monotonic() - packing, 3),
                    "total_execution_seconds": round(time.monotonic() - start, 3),
                    "archive_bytes": (output / "build.tar.gz").stat().st_size,
@@ -632,8 +662,8 @@ def verified_role(directory, context, role):
     This is build custody on disposable CI runners, not runtime attestation.
     """
     expected = context["expected"]
-    require(source_builder().source_identity(ROOT, expected["source"]["commit"]) == expected["source"]
-            and runtime_identity(ROOT) == expected["runtime"], "consumer_inputs_changed")
+    require(source_builder().source_identity(ROOT, expected["source"]["commit"]) == expected["source"], "consumer_inputs_changed")
+    validate_consumer_runtime(expected, runtime_identity(ROOT))
     handles, snapshots, selected = [], {}, None
     try:
         root = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
@@ -710,6 +740,7 @@ def command_context():
     directory = Path(os.environ.get("SOU166_BUNDLE", "/missing"))
     context, _ = read_owned_json(os.environ.get("SOU166_CONTEXT", "/missing"))
     require(set(context) == {"expected", "artifact_id", "archive_sha256", "manifest_sha256"}, "context_shape")
+    require(set(context["expected"]) == {"source", "runtime", "producer", "consumer_image"}, "consumer_context_incomplete")
     custody(context["expected"], context["artifact_id"], context["archive_sha256"], context["manifest_sha256"])
     return directory, context
 
@@ -717,6 +748,8 @@ def command_context():
 def dependency_context(env):
     require(env.get("SOU166_PRODUCER_RESULT") == "success", "successful_producer_required")
     producer = producer_identity(env, env.get("SOU166_PRODUCER_ATTEMPT"))
+    require(re.fullmatch(r"[0-9]{8}\.[0-9]+(\.[0-9]+)?", env.get("SOU166_PRODUCER_IMAGE_VERSION", "")),
+            "producer_image_provenance_required")
     require(env.get("SOU166_ARCHIVE_NAME") == "build-r" + producer["run_id"] + "-a" + str(producer["run_attempt"]) + ".tar.gz",
             "producer_archive_name_mismatch")
     return custody({}, env.get("SOU166_ARTIFACT_ID", ""), env.get("SOU166_ARCHIVE_SHA256", ""),
@@ -844,14 +877,16 @@ def main(argv=None):
             (args.output / "build.tar.gz").rename(args.output / result["archive_name"])
             (args.output / "result.json").write_bytes(canonical(result))
             with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-                for key in ("archive_sha256", "manifest_sha256", "producer_attempt", "archive_name"):
+                for key in ("archive_sha256", "manifest_sha256", "producer_attempt", "archive_name", "image_version"):
                     output.write(key + "=" + result[key] + "\n")
             print(canonical(result).decode())
         elif args.command == "prepare":
             began = time.monotonic()
             dependency_context(os.environ)
             require(set(os.listdir(args.archive.parent)) == {os.environ["SOU166_ARCHIVE_NAME"]}, "download_layout_mismatch")
-            context = {"expected": expected_identity(ROOT, os.environ, os.environ.get("SOU166_PRODUCER_ATTEMPT")),
+            expected = bind_producer_image(expected_identity(ROOT, os.environ, os.environ.get("SOU166_PRODUCER_ATTEMPT")),
+                                           os.environ.get("SOU166_PRODUCER_IMAGE_VERSION", ""))
+            context = {"expected": expected,
                        "artifact_id": os.environ.get("SOU166_ARTIFACT_ID", ""),
                        "archive_sha256": os.environ.get("SOU166_ARCHIVE_SHA256", ""),
                        "manifest_sha256": os.environ.get("SOU166_MANIFEST_SHA256", "")}

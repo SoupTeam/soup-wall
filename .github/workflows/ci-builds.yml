@@ -24,6 +24,7 @@ jobs:
       archive_sha256: ${{ steps.build.outputs.archive_sha256 }}
       manifest_sha256: ${{ steps.build.outputs.manifest_sha256 }}
       producer_attempt: ${{ steps.build.outputs.producer_attempt }}
+      image_version: ${{ steps.build.outputs.image_version }}
     steps:
       - uses: actions/checkout@v7
         with:

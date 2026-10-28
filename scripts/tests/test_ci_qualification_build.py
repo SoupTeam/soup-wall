@@ -32,7 +32,8 @@ class Custody(unittest.TestCase):
         self.root = Path(self.tmp.name).resolve()
         self.expected = {
             "source": {"commit": "a" * 40, "tree": "b" * 40, "cargo_lock_sha256": "c" * 64},
-            "runtime": {"image": "20261026.1", "rust": "1.99.1", "libc_sha256": "d" * 64},
+            "runtime": {"image": {"ImageOS": "ubuntu24", "ImageVersion": "20261023.334.3"},
+                        "rust": "1.99.1", "libc_sha256": "d" * 64},
             "producer": {"run_id": "123", "run_attempt": 1, "repository": "SoupTeam/soup-wall",
                          "workflow_ref": "SoupTeam/soup-wall/.github/workflows/ci.yml@refs/pull/1/merge",
                          "workflow_sha": "e" * 40, "producer_job": "ci-builds--agent-default-ubuntu2404"},
@@ -102,7 +103,7 @@ class Custody(unittest.TestCase):
             B.pack(self.manifest, files, self.archive)
         self.assertLessEqual(self.archive.stat().st_size, 128)
 
-    def test_prepare_refusal_retains_observed_image_without_publishing_selection_context(self):
+    def test_prepare_refusal_retains_observed_abi_without_publishing_selection_context(self):
         import contextlib
         archive_sha, manifest_sha = self.write_archive()
         downloaded = self.root / "download"
@@ -111,11 +112,13 @@ class Custody(unittest.TestCase):
         self.archive.rename(archive)
         context = self.root / "expected.json"
         changed = copy.deepcopy(self.expected)
-        changed["runtime"]["image"] = "different-hosted-image"
+        changed["runtime"]["image"]["ImageVersion"] = "20261026.354.1"
+        changed["runtime"]["libc_sha256"] = "f" * 64
         env = {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_REPOSITORY": "SoupTeam/soup-wall",
                "GITHUB_WORKFLOW_REF": self.expected["producer"]["workflow_ref"],
                "GITHUB_WORKFLOW_SHA": self.expected["producer"]["workflow_sha"], "SOU166_PRODUCER_RESULT": "success",
                "SOU166_PRODUCER_ATTEMPT": "1", "SOU166_ARCHIVE_NAME": archive.name, "SOU166_ARTIFACT_ID": "456",
+               "SOU166_PRODUCER_IMAGE_VERSION": "20261023.334.3",
                "SOU166_ARCHIVE_SHA256": archive_sha, "SOU166_MANIFEST_SHA256": manifest_sha}
         with patch.dict(os.environ, env), patch.object(B, "expected_identity", return_value=changed), \
                 contextlib.redirect_stderr(io.StringIO()):
@@ -125,8 +128,8 @@ class Custody(unittest.TestCase):
         self.unpublished()
         observation = json.loads(Path(str(context) + ".metrics.json").read_text())
         self.assertEqual(observation["status"], "failed")
-        self.assertEqual(observation["reason"], "runtime_identity_mismatch:image")
-        self.assertEqual(observation["expected"]["runtime"]["image"], "different-hosted-image")
+        self.assertEqual(observation["reason"], "runtime_identity_mismatch:libc_sha256")
+        self.assertEqual(observation["expected"]["consumer_image"]["ImageVersion"], "20261026.354.1")
 
     def test_source_image_abi_workflow_run_and_superseded_attempt_refuse(self):
         digests = self.write_archive()
@@ -309,6 +312,7 @@ class Dependency(unittest.TestCase):
                     "GITHUB_WORKFLOW_REF": "SoupTeam/soup-wall/.github/workflows/ci.yml@refs/pull/3/merge",
                     "GITHUB_WORKFLOW_SHA": "a" * 40, "SOU166_PRODUCER_RESULT": "success",
                     "SOU166_PRODUCER_ATTEMPT": "1", "SOU166_ARCHIVE_NAME": "build-r123-a1.tar.gz",
+                    "SOU166_PRODUCER_IMAGE_VERSION": "20261023.334.3",
                     "SOU166_ARTIFACT_ID": "456", "SOU166_ARCHIVE_SHA256": "b" * 64, "SOU166_MANIFEST_SHA256": "c" * 64}
 
     def test_retained_producer_and_actual_rerun_have_distinct_immutable_custody(self):
@@ -322,6 +326,7 @@ class Dependency(unittest.TestCase):
                   "SOU166_PRODUCER_ATTEMPT": ["", "0", "3", "-1", "latest", 1],
                   "SOU166_ARTIFACT_ID": ["", "latest", "456,789", "0", "../456"],
                   "SOU166_ARCHIVE_SHA256": ["", "x" * 64], "SOU166_MANIFEST_SHA256": [""],
+                  "SOU166_PRODUCER_IMAGE_VERSION": ["", "latest", "ubuntu22", "1.99.1"],
                   "SOU166_ARCHIVE_NAME": ["build-r123-a2.tar.gz", "../build.tar.gz"],
                   "GITHUB_WORKFLOW_REF": ["SoupTeam/soup-wall/.github/workflows/unrelated.yml@refs/heads/main"],
                   "GITHUB_WORKFLOW_SHA": [""], "GITHUB_REPOSITORY": ["unrelated/repository"]}
@@ -329,6 +334,24 @@ class Dependency(unittest.TestCase):
             for value in values:
                 with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                     B.dependency_context(dict(self.env, **{key: value}))
+
+    def test_distinct_images_need_the_complete_identical_abi_tools_flags_and_fixture_paths(self):
+        observed = {"image": {"ImageOS": "ubuntu24", "ImageVersion": "20261026.354.1"},
+                    "abi": {"libc.so.6": {"sha256": "a" * 64}}, "tools": {"rustc": {"sha256": "b" * 64}},
+                    "flags": [], "source_path": "/exact/fixture/path"}
+        expected = B.bind_producer_image({"runtime": copy.deepcopy(observed)}, "20261023.334.3")
+        B.validate_consumer_runtime(expected, observed)
+        self.assertEqual(expected["consumer_image"], observed["image"])
+        self.assertEqual(expected["runtime"]["image"]["ImageVersion"], "20261023.334.3")
+        for section, changed in (("abi", {"libc.so.6": {"sha256": "c" * 64}}),
+                                  ("tools", {"rustc": {"sha256": "d" * 64}}), ("flags", ["-Copt-level=3"]),
+                                  ("source_path", "/different/path")):
+            with self.subTest(section=section), self.assertRaisesRegex(ValueError, "consumer_runtime_changed"):
+                B.validate_consumer_runtime(expected, {**observed, section: changed})
+        with self.assertRaisesRegex(ValueError, "consumer_image_changed"):
+            B.validate_consumer_runtime(expected, {**observed, "image": {"ImageOS": "ubuntu24", "ImageVersion": "20261027.355.1"}})
+        with self.assertRaisesRegex(ValueError, "consumer_image_family_mismatch"):
+            B.bind_producer_image({"runtime": {"image": {"ImageOS": "ubuntu22"}}}, "20261023.334.3")
 
     def test_only_reviewed_original_commands_can_select_a_role(self):
         valid = ["test", "--locked", "--offline", "-p", "agentfw", "--lib", "create_file", "--", "--nocapture"]

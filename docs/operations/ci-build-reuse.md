@@ -30,9 +30,10 @@ their bytes are not claimed identical to a separate producer build. The common
 tuple records incremental compilation as disabled, and both consumers must pass
 their full original tests and witnesses using that exact produced payload.
 The producer also records each ELF's actual dynamic library names and requires
-the reviewed GNU loader. Unknown dynamic dependencies require a separate review;
-the independently checked ABI set includes libc, loader, GCC/C++ runtime, math,
-zlib and OpenSSL libraries.
+the reviewed GNU loader. The measured direct and transitive closure is libc,
+loader, GCC runtime and math. Both sides independently read every library's
+dynamic dependencies and require their complete closure to stay in this finite
+set. Unknown dynamic dependencies require a separate reviewed tuple.
 
 The versioned manifest binds the clean commit, tree, tracked-file digest,
 lockfile and toolchain file; compiler/tool hashes; target, profiles, features and
@@ -49,8 +50,15 @@ search, cross-run download token, extra token scope or secret is used. The
 official download action is scoped to the current repository and workflow run,
 and digest mismatch is an error.
 
-Each consumer independently checks current source, toolchain, image, ABI and
-fixture paths against that protected producer context. A finite parser accepts
+Each consumer independently checks current source, compiler/build-tool bytes,
+complete required ABI bytes, flags, features and fixture paths. The producer's
+exact hosted image version is also a protected dependency output and must match
+its manifest. The local custody records both exact producer and consumer image
+identities. Different Ubuntu 24.04 image revisions are compatible only when
+every required compiler/tool/library byte and the rest of the tuple match;
+updates to unrelated installed software do not change this build's ABI. The
+consumer's own image and tuple must remain unchanged between preparation and use.
+A finite parser accepts
 only the manifest and four regular files: no extension records, links, traversal,
 extra files, special modes or unbounded declared lengths. The initial limits are
 256 KiB manifest, 320 MiB compressed archive, 320 MiB per file and 1152 MiB
@@ -86,14 +94,16 @@ A consumer-only rerun may use its retained successful dependency's artifact ID,
 hashes and older producer attempt **in the same run**. If the producer actually
 reruns, its dependency outputs select its new immutable ID, hashes and attempt.
 A future attempt, inconsistent filename, missing ID, changed source, workflow
-revision, image or ABI refuses. Do not manually substitute an old ID/hash set or
+revision, unbound producer image or changed required ABI refuses. Do not manually substitute an old ID/hash set or
 delete failed evidence to make a retry pass. A new source requires a new run.
-Hosted labels can temporarily allocate different image versions during rollout.
-The prototype actually refused a `20261025.353.1` consumer for its
-`20261023.334.3` producer. Keep that refusal and compare the recorded identities;
-a controlled retry must satisfy the original exact-image/ABI contract. The
-validator records mismatch fields and the consumer's observed expected context
-even on failure, without publishing a usable selection context.
+Hosted labels can allocate different image revisions during rollout. The initial
+whole-image/superset-library check refused a `20261026.354.1` consumer for a
+`20261023.334.3` producer; retained observations showed the only library change
+was **unlinked zlib**, while all required ELF libraries and build tools matched
+byte for byte. This measurement defined the required closure above. Keep the
+original refusal as development evidence. The validator records mismatch fields
+and observed context on failure without publishing a usable selection context;
+an actual required-library or tool mismatch still refuses before execution.
 
 ## Focused comparison and evidence
 

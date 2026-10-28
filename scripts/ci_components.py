@@ -2,7 +2,8 @@
 """Generate shared component qualification without changing manual job bodies.
 
 The original manually dispatchable workflows remain the editable source of truth.
-Only names and planner dependencies change; commands, artifacts and matrices stay.
+Names, planner/build dependencies and the reviewed execution mode change.
+Commands, artifacts, runtime isolation and matrices stay in the source workflows.
 """
 from __future__ import annotations
 import argparse
@@ -74,9 +75,10 @@ def generated() -> str:
                 body = body.replace(" && github.event.inputs.build_mode != 'shared'", "", 1)
                 body = body.replace("      SOU166_MODE: source\n", "      SOU166_MODE: shared\n", 1)
                 for key, field in {"RESULT": "result", "ATTEMPT": "outputs.producer_attempt",
+                                   "IMAGE_VERSION": "outputs.image_version",
                                    "ARTIFACT_ID": "outputs.artifact_id", "ARCHIVE_NAME": "outputs.archive_name",
                                    "ARCHIVE_SHA256": "outputs.archive_sha256", "MANIFEST_SHA256": "outputs.manifest_sha256"}.items():
-                    variable = "SOU166_PRODUCER_" + key if key in {"RESULT", "ATTEMPT"} else "SOU166_" + key
+                    variable = "SOU166_PRODUCER_" + key if key in {"RESULT", "ATTEMPT", "IMAGE_VERSION"} else "SOU166_" + key
                     old = "      " + variable + ": ''\n"
                     if body.count(old) != 1:
                         raise ValueError("Missing reviewed build dependency output: " + variable)

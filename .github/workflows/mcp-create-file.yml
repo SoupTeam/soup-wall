@@ -44,6 +44,7 @@ jobs:
       SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       SOU166_PRODUCER_RESULT: ''
       SOU166_PRODUCER_ATTEMPT: ''
+      SOU166_PRODUCER_IMAGE_VERSION: ''
       SOU166_ARTIFACT_ID: ''
       SOU166_ARCHIVE_NAME: ''
       SOU166_ARCHIVE_SHA256: ''
@@ -222,6 +223,7 @@ jobs:
       SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       SOU166_PRODUCER_RESULT: ''
       SOU166_PRODUCER_ATTEMPT: ''
+      SOU166_PRODUCER_IMAGE_VERSION: ''
       SOU166_ARTIFACT_ID: ''
       SOU166_ARCHIVE_NAME: ''
       SOU166_ARCHIVE_SHA256: ''

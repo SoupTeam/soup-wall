@@ -294,6 +294,7 @@ jobs:
       archive_sha256: ${{ steps.build.outputs.archive_sha256 }}
       manifest_sha256: ${{ steps.build.outputs.manifest_sha256 }}
       producer_attempt: ${{ steps.build.outputs.producer_attempt }}
+      image_version: ${{ steps.build.outputs.image_version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1027,6 +1028,7 @@ jobs:
       SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       SOU166_PRODUCER_RESULT: ${{ needs.ci-builds--agent-default-ubuntu2404.result }}
       SOU166_PRODUCER_ATTEMPT: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.producer_attempt }}
+      SOU166_PRODUCER_IMAGE_VERSION: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.image_version }}
       SOU166_ARTIFACT_ID: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.artifact_id }}
       SOU166_ARCHIVE_NAME: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_name }}
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
@@ -1207,6 +1209,7 @@ jobs:
       SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
       SOU166_PRODUCER_RESULT: ${{ needs.ci-builds--agent-default-ubuntu2404.result }}
       SOU166_PRODUCER_ATTEMPT: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.producer_attempt }}
+      SOU166_PRODUCER_IMAGE_VERSION: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.image_version }}
       SOU166_ARTIFACT_ID: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.artifact_id }}
       SOU166_ARCHIVE_NAME: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_name }}
       SOU166_ARCHIVE_SHA256: ${{ needs.ci-builds--agent-default-ubuntu2404.outputs.archive_sha256 }}
