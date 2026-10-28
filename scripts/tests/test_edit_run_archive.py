@@ -17,16 +17,18 @@ ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('edit_archive_tested', ROOT / 'scripts/edit-run-archive.py')
 E = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(E)
-SECRET = 'raw-evidence-secret-canary-DO-NOT-EXPORT'
+# Public synthetic bytes, never a credential. Native qualification separately
+# checks that its genuine disposable run tokens never enter the sanitized ZIP.
+RAW_CANARY = 'owned-raw-exclusion-marker-v1'
 
 
 class Projection(unittest.TestCase):
     def test_only_allowlisted_projection_enters_archive(self):
-        raw = E.S.encoded({'event': 'native_call', 'verdict': 'allow', 'shadow': False, 'session': SECRET,
-                          'tool': SECRET, 'args': {'content': SECRET}, 'token': SECRET, 'findings': []}) + b'\n'
+        raw = E.S.encoded({'event': 'native_call', 'verdict': 'allow', 'shadow': False, 'session': RAW_CANARY,
+                          'tool': RAW_CANARY, 'args': {'content': RAW_CANARY}, 'token': RAW_CANARY, 'findings': []}) + b'\n'
         exported = E.projection(raw)
         self.assertEqual(exported['counts'], {'records': 1, 'projected': 1, 'unsupported': 0})
-        self.assertNotIn(SECRET.encode(), E.S.encoded(exported))
+        self.assertNotIn(RAW_CANARY.encode(), E.S.encoded(exported))
         self.assertIs(exported['full_forensic_backup'], False)
         future = json.loads(raw);future['contract_version'] = 'future'
         self.assertEqual(E.projection(E.S.encoded(future) + b'\n')['counts']['unsupported'], 1)
@@ -68,10 +70,10 @@ class CleanupBoundary(unittest.TestCase):
                               '--child-authority', authority, '--profile-sha256', self.record['profile_sha256']]}}}
         self.write(self.run / 'mcp.json', E.S.encoded(transport))
         for name in ('host-settings.json', 'host-bun.toml', 'host-stdout.json', 'host-stderr.json'):
-            self.write(self.run / name, SECRET.encode())
-        self.write(self.home / 'token', SECRET.encode())
+            self.write(self.run / name, RAW_CANARY.encode())
+        self.write(self.home / 'token', RAW_CANARY.encode())
         raw = E.S.encoded({'event': 'native_call', 'verdict': 'allow', 'shadow': False, 'session': 'owned',
-                          'args': {'secret': SECRET}, 'findings': []}) + b'\n'
+                          'args': {'content': RAW_CANARY}, 'findings': []}) + b'\n'
         self.write(self.home / 'audit.jsonl', raw)
         self.target = self.base / 'private-output/result.txt';self.target.parent.mkdir(mode=0o700)
         self.target.write_bytes(b'preserved output')
@@ -91,7 +93,7 @@ class CleanupBoundary(unittest.TestCase):
         self.assertTrue(self.run.is_dir())
         self.assertEqual(E.archive(plan)['outcome'], 'archived_source_retained')
         body = (self.destination / E.archive_name(plan)).read_bytes()
-        self.assertNotIn(SECRET.encode(), body)
+        self.assertNotIn(RAW_CANARY.encode(), body)
         self.assertTrue(self.run.is_dir())
         self.assertEqual(E.cleanup(plan, True)['outcome'], 'archived_and_cleaned')
         self.assertFalse(self.run.exists())
@@ -160,7 +162,7 @@ class CleanupBoundary(unittest.TestCase):
         plan = self.plan();E.archive(plan)
         path = self.destination / E.archive_name(plan)
         raw = path.read_bytes()
-        for bad in (raw + SECRET.encode(), SECRET.encode() + raw):
+        for bad in (raw + RAW_CANARY.encode(), RAW_CANARY.encode() + raw):
             with self.assertRaises(E.S.Refusal): E.verify_archive(bad, plan)
         self.assertTrue(self.run.exists())
 
