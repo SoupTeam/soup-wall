@@ -12,6 +12,16 @@ spec.loader.exec_module(probe)
 
 
 class InstalledEditEvidence(unittest.TestCase):
+    def test_generated_leading_hyphen_pending_ids_are_explicit_positional_arguments(self):
+        suite = object.__new__(probe.Suite)
+        calls = []
+        suite.cli = lambda *words: calls.append(words)
+        for action in ('inspect', 'reject'):
+            suite.ask('owned-run', action, '-pending')
+            self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', action, '--', '-pending'))
+        suite.ask('owned-run', 'approve', '-pending', '--binding', 'a' * 64)
+        self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', 'approve', '--binding', 'a' * 64, '--', '-pending'))
+
     def seed(self):
         report = {'format': probe.FORMAT, 'status': 'passed', 'paid_inference': False,
                 'claude_sha256': probe.CLAUDE,

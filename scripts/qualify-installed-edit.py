@@ -182,6 +182,10 @@ class Suite:
         return root, target, plan, code, value
 
     def ask(self, run, *words):
+        # Native IDs are base64url and may start with '-'. Keep every ID an
+        # explicit positional value, including decisions with --binding.
+        if words and words[0] in ('inspect', 'approve', 'reject'):
+            words = (words[0], *words[2:], '--', words[1])
         return self.cli('ask', '--run', run, *words)
 
     def host(self, label, root, target, plan, prepared, proposals, mode='approve', timeout=40):

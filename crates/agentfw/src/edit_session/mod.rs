@@ -60,6 +60,14 @@ enum Action {
         #[command(subcommand)]
         action: Ask,
     },
+    /// Preview, archive or explicitly clean one completed installed edit run.
+    Archive {
+        /// Agent profile containing the verified installed helper component.
+        #[arg(long)]
+        home: PathBuf,
+        #[command(subcommand)]
+        action: Archive,
+    },
     /// Private host forwarder; never launches an MCP child or grants authority.
     #[command(hide = true)]
     Relay {
@@ -107,6 +115,43 @@ pub enum Ask {
     Reject {
         id: String,
     },
+}
+
+#[derive(Subcommand, Debug)]
+enum Archive {
+    /// Read-only exact inventory and confirmation digest; source stays intact.
+    Preview {
+        #[arg(long)]
+        run: PathBuf,
+        /// Existing private archive directory outside the selected run.
+        #[arg(long)]
+        destination: PathBuf,
+    },
+    /// Publish a sanitized archive; retain all original run state.
+    Apply(ArchivePlan),
+    /// Remove only inventoried run state after verifying the sanitized archive.
+    Cleanup {
+        #[command(flatten)]
+        selected: ArchivePlan,
+        /// Acknowledge irreversible loss of raw evidence excluded from the archive.
+        #[arg(long)]
+        acknowledge_evidence_loss: bool,
+    },
+    /// Read-only inspection of an interrupted cleanup; never resumes deletion.
+    Recover {
+        #[command(flatten)]
+        selected: ArchivePlan,
+        #[arg(long)]
+        journal: String,
+    },
+}
+
+#[derive(Args, Debug)]
+struct ArchivePlan {
+    #[arg(long)]
+    plan: PathBuf,
+    #[arg(long)]
+    confirm: String,
 }
 
 pub fn run(cli: Cli) -> Result<()> {

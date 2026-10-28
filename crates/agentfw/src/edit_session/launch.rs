@@ -351,6 +351,7 @@ pub(super) fn load(path: &Path, expected: &str) -> Result<Profile> {
 }
 pub(super) fn command(action: Action) -> Result<()> {
     match action {
+        Action::Archive { home, action } => archive(&home, action)?,
         Action::Preview(args) => {
             let p = selected(args)?;
             println!(
@@ -496,6 +497,71 @@ pub(super) fn command(action: Action) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn archive(home: &Path, action: super::Archive) -> Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::process::CommandExt;
+    let component = crate::pilot_component::Store::new(home)
+        .current()
+        .map_err(|_| anyhow::anyhow!("edit_archive_verified_component_required"))?;
+    const HELPER: &str = "scripts/edit-run-archive.py";
+    ensure!(
+        component
+            .manifest
+            .files
+            .iter()
+            .any(|entry| entry.path == HELPER),
+        "edit_archive_component_upgrade_required"
+    );
+    let mut words: Vec<OsString> = Vec::new();
+    let mut bound = None;
+    match action {
+        super::Archive::Preview { run, destination } => {
+            words.extend([
+                "preview".into(),
+                "--run".into(),
+                run.into_os_string(),
+                "--destination".into(),
+                destination.into_os_string(),
+            ]);
+        }
+        super::Archive::Apply(selected) => {
+            words.push("archive".into());
+            bound = Some(selected);
+        }
+        super::Archive::Cleanup {
+            selected,
+            acknowledge_evidence_loss,
+        } => {
+            words.push("cleanup".into());
+            if acknowledge_evidence_loss {
+                words.push("--acknowledge-evidence-loss".into());
+            }
+            bound = Some(selected);
+        }
+        super::Archive::Recover { selected, journal } => {
+            words.extend(["recover".into(), "--journal".into(), journal.into()]);
+            bound = Some(selected);
+        }
+    }
+    if let Some(selected) = bound {
+        words.extend([
+            "--plan".into(),
+            selected.plan.into_os_string(),
+            "--confirm".into(),
+            selected.confirm.into(),
+        ]);
+    }
+    let _ = std::process::Command::new(&component.python.path)
+        .args(["-I", "-B"])
+        .arg(component.tree.join(HELPER))
+        .args(words)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("LANG", "C.UTF-8")
+        .exec();
+    anyhow::bail!("edit_archive_verified_helper_start_failed")
 }
 
 #[cfg(test)]

@@ -1137,7 +1137,8 @@ jobs:
           cargo fetch --locked
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           mkdir -m 700 "$task_scratch"
-          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host}
+          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host,low-space}
+          sudo install -o 0 -g 0 -m 600 /dev/null "$task_scratch/foreign-record"
           ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
           cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
           npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
@@ -1151,6 +1152,7 @@ jobs:
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --size 65536 --perms 1777 --tmpfs "$task_scratch/low-space" \
             --proc /proc --dev /dev --cap-drop ALL \
             --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
             --chdir / /usr/bin/setpriv \
@@ -1172,10 +1174,17 @@ jobs:
           cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_run_operations.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_run_archive.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_front_door_component.py' -v
           sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU161_SCRATCH/binary.txt"
           python3 -B scripts/qualify-installed-edit.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
+          python3 -B scripts/qualify-installed-edit-archive.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/archive-runtime" \
+            --low-space "$SOU161_SCRATCH/low-space" --foreign-record "$SOU161_SCRATCH/foreign-record"
           BASH
       - name: Retain finite current-source qualification and build correlation
         if: always()
@@ -1186,6 +1195,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/archive-runtime/report.json
           if-no-files-found: warn
           retention-days: 30
 

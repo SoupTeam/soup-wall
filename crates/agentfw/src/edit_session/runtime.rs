@@ -111,6 +111,18 @@ async fn owned(
     let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
     let run = parent.join(format!("edit-{}", crate::pilot_launcher::random_uuid_v4()));
     fs::DirBuilder::new().mode(0o700).create(&run)?;
+    // Archive selection takes this same directory-inode lock, never a mutable
+    // lock-file pathname. Hold it through durable terminal publication. Existing
+    // accepted run.json and terminal.json schemas stay unchanged.
+    use std::os::{fd::AsRawFd, unix::fs::OpenOptionsExt};
+    let archive_guard = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&run)?;
+    ensure!(
+        unsafe { libc::flock(archive_guard.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
+        "edit_run_lifecycle_lock_unavailable"
+    );
     let home = run.join(crate::token::generate());
     fs::DirBuilder::new().mode(0o700).create(&home)?;
     let token = crate::token::generate();

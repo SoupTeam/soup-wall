@@ -108,6 +108,85 @@ retained, never raw model output or provider credentials. A killed daemon cannot
 approve stale records: Ask requires the matching live authenticated epoch.
 Prepare a new plan after independently inspecting an uncertain target.
 
+## Archive and clean one completed run
+
+SOU-171 adds an explicit installed entry through the verified helper component.
+It operates independently of stop/revoke and read-only incident diagnostics.
+Install the matching reviewed Agent/component first. Use an existing private
+mode-0700 archive directory outside the selected run and a canonical run path:
+
+```sh
+umask 077
+agentfw edit-session archive --home /absolute/agent-home preview \
+  --run /absolute/runs/edit-RUN_ID --destination /absolute/private-archives \
+  > /absolute/private-archives/plan.json
+
+agentfw edit-session archive --home /absolute/agent-home apply \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256
+```
+
+Preview writes only JSON to stdout. It selects one exact completed run and
+enumerates its bounded file/directory inventory, identities, hashes, reclaimable
+bytes, preserved data and excluded evidence. A plan lasts 15 minutes. Apply
+rechecks the exact inventory and destination inode, then exclusively publishes
+and verifies a private sanitized ZIP; all original run state is still retained.
+The archive contains only an allowlisted audit projection and a manifest with
+hashes, finite terminal facts and explicit evidence limitations. It is **not a
+full forensic backup**. Raw audit, prompts, tool payloads, credentials, child
+authority, host state, provider inputs, environment and absolute paths are
+excluded. Unknown audit event types are counted, not presented as complete
+execution evidence. Malformed or partial raw audit refuses archival.
+
+Cleanup requires separate explicit acknowledgement of irreversible raw-evidence
+loss. Independently retain any raw evidence you still need before using it:
+
+```sh
+agentfw edit-session archive --home /absolute/agent-home cleanup \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256 \
+  --acknowledge-evidence-loss
+```
+
+Only the approved run inventory is removed. Output targets, immutable plans,
+projects, shared assets and other runs are never traversed. The accepted
+SOU-149 no-follow descriptors, exclusive staging, file identity checks and
+durable archive guard are reused. A durable private journal precedes detachment;
+completion needs a separate durable create-new commit. A missing source or PID
+does not establish completion. New launchers hold the selected directory inode
+lock until terminal publication, so an active run refuses archival even if a
+terminal file is injected. Existing accepted runs require all consistent terminal
+cleanup facts and transport/run/profile/instance bindings; these are local
+owner-editable evidence, not authenticated execution proof. Failed/interrupted
+runs qualify only if their accepted terminal explicitly confirms process and
+daemon cleanup. Unknown crash state, inconsistent bindings and new or unexpected
+state members refuse and remain intact. No background pruning occurs.
+
+`archived_source_retained`, `archived_and_cleaned`, `already_cleaned`, `refused`
+and `incomplete` distinguish the outcomes. After interruption preserve the
+archive, plan, journal and any quarantine. Inspect without resuming deletion:
+
+```sh
+agentfw edit-session archive --home /absolute/agent-home recover \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256 \
+  --journal edit-cleanup-DISPLAYED_PLAN_SHA256.json
+```
+
+Recovery accepts an expired plan for read-only inspection. It never restores,
+resumes or guesses successful cleanup from absent members. Repeated cleanup
+requires the same verified archive and explicit durable completion commit; an
+interrupted removal remains incomplete. Stop, policy, approval and expiry
+semantics are unchanged. No mutation is automatically retried.
+
+`python3 -B scripts/qualify-installed-edit-archive.py` is inert. Its opt-in
+qualification uses genuine installed completed/interrupted runs, two concurrent
+active roots, independent target/plan/process/sentinel witnesses and fresh
+useful work. A namespace-private 64-KiB tmpfs supplies actual kernel `ENOSPC`;
+trusted setup supplies an empty foreign-owned fixture. Publication/removal
+interruption uses exact installed helper bytes with a qualification-only pause
+and actual SIGKILL. Those controlled fault windows and synthetic parser fixtures
+are distinguished from genuine host/CLI observations. The existing installed
+job retains exact source/binary correlation, the original edit report and the
+new archive report; failed/incomplete attempts are retained.
+
 ## Qualification
 
 `python3 -B scripts/qualify-installed-edit.py` is inert. The explicit `--run`
