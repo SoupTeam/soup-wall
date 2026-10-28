@@ -237,7 +237,7 @@ jobs:
             --classifier-script "$PWD/rule_baseline/pilot_readonly_v1/rule_baseline.py" --classifier-sha256 "$CANDIDATE_SHA256" \
             --output "$RUNNER_TEMP/sou97-git-candidate" 2>&1 | tee "$RUNNER_TEMP/sou97-git-candidate.log"
       - name: SOU-97 diagnostic only (never acceptance) - original Git server cancellation overlap
-        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' && !(inputs.local_refs_only || inputs.shallow_only || inputs.file_revisions_only || inputs.tracked_symlinks_only) }}
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' }}
         continue-on-error: true
         timeout-minutes: 20
         shell: bash
@@ -260,7 +260,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --trials 20 --max-seconds 480 \
             --output "$RUNNER_TEMP/diagnostic-sou97-git" 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git.log"
       - name: Retain SOU-97 diagnostic-only output (never acceptance evidence)
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' && !(inputs.local_refs_only || inputs.shallow_only || inputs.file_revisions_only || inputs.tracked_symlinks_only) }}
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_diagnostic == 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: sou97-git-cancellation-diagnostic
@@ -270,7 +270,7 @@ jobs:
             ${{ runner.temp }}/diagnostic-sou97-git.log
             ${{ runner.temp }}/diagnostic-sou97-git/diagnostic.json
       - name: SOU-97 diagnostic only (never acceptance) - protected Git overlap through sandbox and native relay
-        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_protected_diagnostic == 'true' && !(inputs.local_refs_only || inputs.shallow_only || inputs.file_revisions_only || inputs.tracked_symlinks_only) }}
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_protected_diagnostic == 'true' }}
         continue-on-error: true
         timeout-minutes: 25
         shell: bash
@@ -296,7 +296,7 @@ jobs:
             --sessions 6 --replay-iterations 2 --replay-arm auto --max-seconds 900 \
             --output "$RUNNER_TEMP/diagnostic-sou97-git-protected" 2>&1 | tee "$RUNNER_TEMP/diagnostic-sou97-git-protected.log"
       - name: Retain SOU-97 protected overlap diagnostic output (never acceptance evidence)
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_protected_diagnostic == 'true' && !(inputs.local_refs_only || inputs.shallow_only || inputs.file_revisions_only || inputs.tracked_symlinks_only) }}
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.sou97_git_protected_diagnostic == 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: sou97-git-protected-overlap-diagnostic
