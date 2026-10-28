@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: e296ad2d5fcca35da481fb0a3d9c18c4c357f1bf
+          ref: 561fd091306941e8107948c35df530d94995e578
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
