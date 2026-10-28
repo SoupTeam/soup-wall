@@ -54,7 +54,7 @@ NATIVE_ERROR_MESSAGES = frozenset((
     "Operator-pinned MCP discovery is required",
     "MCP call timed out; dispatched execution may have occurred",
     "Replayed or spent MCP request ID refused",
-    "Git local reference unavailable, unsupported, or its source changed",
+    "Git local reference or file revision unavailable, unsupported, or its source changed",
     "Git local-reference view changed during execution",
     "Git local-reference view changed or target unsupported",
     "An original create operation is already active",
