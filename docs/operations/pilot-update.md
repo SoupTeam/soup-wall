@@ -10,6 +10,8 @@ Keep two complete, reviewed local sets. Each set needs its prepared front-door p
 
 Retain these inputs while a set is selected or retained for rollback. Removing or changing an archive, prefix, interpreter or runtime file invalidates that set. The bootstrap Agent home must contain the reviewed helper that provides `pilot update`; it remains the stable entry point.
 
+Use a separately retained installed bootstrap Agent, with a path distinct from each candidate's runtime Agent. The accepted process observer conservatively treats selected executable paths in live command arguments as busy. The qualification fixture installs this entry through `lifecycle install` and verifies its copied bytes.
+
 Use a separate coordinator prefix outside the checkout and both prepared prefixes. Do not point it at an existing preparation directory.
 
 ```sh

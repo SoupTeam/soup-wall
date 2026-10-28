@@ -481,6 +481,16 @@ class CandidateControls(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "linux", "Linux fixture file modes")
 class QualificationFixtureControls(unittest.TestCase):
+    def test_fixture_reads_complete_json_and_accepts_explicit_lifecycle_text(self):
+        spec = importlib.util.spec_from_file_location("update_fixture_protocol", ROOT / "scripts/prepare-pilot-update-fixture.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        completed = SimpleNamespace(returncode=0, stdout=b'{\n  "component": "owned"\n}\n', stderr=b"")
+        with patch.object(module.subprocess, "run", return_value=completed):
+            self.assertEqual(module.call(["/owned/agent", "pilot-component"], ROOT, {}), {"component": "owned"})
+            completed.stdout = b"Installed Agent coordinator-entry\n"
+            self.assertIsNone(module.call(["/owned/agent", "lifecycle"], ROOT, {}, expect_json=False))
+
     def test_read_only_qualification_prints_both_source_identities(self):
         spec = importlib.util.spec_from_file_location("update_qualification_test", ROOT / "scripts/qualify-pilot-update.py")
         module = importlib.util.module_from_spec(spec)
@@ -514,9 +524,12 @@ class QualificationFixtureControls(unittest.TestCase):
         spec.loader.exec_module(module)
         with tempfile.TemporaryDirectory() as temporary:
             parent = Path(temporary)
+            source_agent = parent / "candidate-agent"
+            source_agent.write_bytes(b"owned Agent fixture")
+            source_agent.chmod(0o700)
             build = parent / "build.json"
-            build.write_text(json.dumps({role: "/owned/" + role for role in
-                                        ("agentfw", "git_launcher", "sandbox_tests")}))
+            build.write_text(json.dumps({"agentfw": str(source_agent),
+                                        "git_launcher": "/owned/git_launcher", "sandbox_tests": "/owned/sandbox_tests"}))
             args = SimpleNamespace(source_a=ROOT, build_a=build, build_b=build,
                                    output=parent / "fixtures", git=Path("/usr/bin/git"),
                                    python=Path("/usr/bin/python3.12"))
@@ -530,7 +543,7 @@ class QualificationFixtureControls(unittest.TestCase):
             front = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(front)
             commands = []
-            def call(words, source, env):
+            def call(words, source, env, **options):
                 words = [str(word) for word in words]
                 commands.append(words)
                 if words[2].endswith("build-pilot-front-door.py"):
@@ -543,16 +556,40 @@ class QualificationFixtureControls(unittest.TestCase):
                     for role in ("python_archive", "npm_cache", "wheelhouse", "agentfw", "sandbox_tests"):
                         self.assertTrue(getattr(parsed, role).is_absolute())
                     return {"status": "prepared-not-active"}
+                if words[1] == "lifecycle":
+                    versions = Path(env["HOME"]) / ".agentfw/versions"
+                    versions.mkdir(mode=0o700)
+                    target = versions / ("agentfw-" + words[3])
+                    shutil.copyfile(words[4], target)
+                    target.chmod(0o700)
+                    return {"version": words[3]}
                 return {"ok": True}
+            value = {"runtime": {"agentfw": {"path": str(source_agent), "mode": "0700",
+                     "sha256": hashlib.sha256(source_agent.read_bytes()).hexdigest(),
+                     "size": source_agent.stat().st_size}}}
             with patch.object(module, "call", call), \
                     patch.object(module.subprocess, "check_output", return_value="a" * 40), \
-                    patch.object(module.UPDATE, "make_inventory", return_value={"fixture": True}):
+                    patch.object(module.UPDATE, "make_inventory", return_value=value):
                 module.prepare(args)
             self.assertFalse(any(words[2].endswith("scripts/pilot.py") for words in commands))
             self.assertEqual(sum(words[1] == "pilot" for words in commands), 2)
             result = json.loads((args.output / "inputs.json").read_text())
             self.assertEqual(result["status"], "prepared-not-qualified")
-            self.assertEqual(result["entry_agent"], "/owned/agentfw")
+            self.assertNotEqual(Path(result["entry_agent"]), source_agent)
+            self.assertEqual(Path(result["entry_agent"]).read_bytes(), source_agent.read_bytes())
+            transition = module.UPDATE.load_helper("fixture_process_observer", ROOT, "switch-prepared-pilot.py")
+            for path, busy in ((source_agent, True), (Path(result["entry_agent"]), False)):
+                with subprocess.Popen([sys.executable, "-c", "import time; time.sleep(10)", str(path)]) as process:
+                    try:
+                        summary = {"agent_path": str(source_agent), "claude_path": "/owned/claude"}
+                        if busy:
+                            with self.assertRaisesRegex(ValueError, "active_or_uncertain_pilot_run"):
+                                transition.require_inactive(summary)
+                        else:
+                            transition.require_inactive(summary)
+                    finally:
+                        process.terminate()
+                        process.wait(timeout=5)
             self.assertEqual(args.npm_cache.stat().st_mode & 0o777, 0o755)
             self.assertEqual((args.output / "npm-cache").stat().st_mode & 0o777, 0o700)
             self.assertEqual((args.output / "npm-cache/cache-entry").read_text(), "Owned cached package")

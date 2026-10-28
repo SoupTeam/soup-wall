@@ -22,13 +22,17 @@ UPDATE = load("update_fixture_coordinator", "pilot_update.py")
 QUAL = load("update_fixture_host", "qualify-pilot-front-door.py")
 
 
-def call(words, cwd, env):
+def call(words, cwd, env, *, expect_json=True):
     result = subprocess.run([str(word) for word in words], cwd=cwd, env=env,
                             stdin=subprocess.DEVNULL, capture_output=True, timeout=1200)
     if result.returncode:
         raise ValueError("fixture_command_failed:" + result.stdout.decode("utf-8", "replace")[-1000:]
                          + result.stderr.decode("utf-8", "replace")[-500:])
-    return json.loads(result.stdout.decode().splitlines()[-1])
+    if not expect_json:
+        return None
+    value = json.loads(result.stdout)
+    UPDATE.require(type(value) is dict, "fixture_json_object_required")
+    return value
 
 
 def prepare(args):
@@ -50,6 +54,7 @@ def prepare(args):
                   ("-C", str(repository), "commit", "-qm", "Owned update history")):
         subprocess.run([str(args.git), *words], env=env, check=True, capture_output=True, timeout=30)
     records = []
+    candidates = []
     for label, source, receipt in (("a", args.source_a, args.build_a), ("b", ROOT, args.build_b)):
         build = json.loads(receipt.read_text())
         commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=source, text=True).strip()
@@ -62,7 +67,7 @@ def prepare(args):
         entry_home.mkdir(mode=0o700)
         call([build["agentfw"], "pilot-component", "--home", entry_home, "install", component,
               "--sha256", built["archive_sha256"], "--python", args.python], home, env)
-        words = [build["agentfw"], "pilot", "--home", entry_home, "prepare", "--apply",
+        words = [build["agentfw"], "pilot", "--home", entry_home, "prepare", "--apply", "--json",
                  "--prefix", prefix, "--expected-commit", commit, "--node-archive", args.node_archive,
                  "--bwrap", args.bwrap, "--git", args.git, "--claude", args.claude,
                  "--python", args.python,
@@ -74,15 +79,25 @@ def prepare(args):
         prepared = call(words, source, env)
         UPDATE.require(prepared["status"] == "prepared-not-active", "fixture_preparation_failed")
         value = UPDATE.make_inventory(prefix, component, built["archive_sha256"], commit, "candidate-" + label)
+        candidates.append(value)
         path = args.output / ("inventory-" + label + ".json")
         with path.open("x") as stream:
             os.fchmod(stream.fileno(), 0o600)
             json.dump(value, stream, sort_keys=True)
             stream.write("\n")
         records.append({"inventory": str(path), "component": built, "prepared": prepared})
-    entry = json.loads(args.build_b.read_text())["agentfw"]
-    entry_home = args.output / "entry-b"
-    result = {"status": "prepared-not-qualified", "sets": records, "entry_agent": entry,
+    bootstrap = args.output / "bootstrap-home"
+    bootstrap.mkdir(mode=0o700)
+    entry_home = bootstrap / ".agentfw"
+    entry_home.mkdir(mode=0o700)
+    agent = candidates[1]["runtime"]["agentfw"]
+    call([agent["path"], "lifecycle", "install", "coordinator-entry", agent["path"],
+          "--sha256", agent["sha256"]], bootstrap, dict(env, HOME=str(bootstrap)), expect_json=False)
+    entry = entry_home / "versions/agentfw-coordinator-entry"
+    UPDATE.checked_file({**agent, "path": str(entry), "mode": "0700"})
+    call([entry, "pilot-component", "--home", entry_home, "install", args.output / "helper-b.tar",
+          "--sha256", records[1]["component"]["archive_sha256"], "--python", args.python], home, env)
+    result = {"status": "prepared-not-qualified", "sets": records, "entry_agent": str(entry),
               "entry_home": str(entry_home), "fixture_root": str(args.output),
               "expected_text": "Owned coordinated update fixture"}
     (args.output / "inputs.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")

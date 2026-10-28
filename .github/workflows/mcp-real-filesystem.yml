@@ -564,7 +564,8 @@ jobs:
           paths = {'development_interpreter': Path(sys.executable).resolve(),
                    'selected_interpreter': selected, 'checkout': Path.cwd(),
                    'scratch': Path(os.environ['RUNNER_TEMP'])}
-          report = {}
+          report = {'operator_uid': os.getuid(), 'os_release': Path('/etc/os-release').read_text(),
+                    'kernel': os.uname().release}
           for role, path in paths.items():
               parents = [path if path.is_dir() else path.parent, *path.parents]
               unsafe = []

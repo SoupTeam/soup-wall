@@ -9,7 +9,7 @@ Accepted base: `144512b3`, a successor of the task's `d57a8696` base. Rust sourc
 | Check | Result | Boundary |
 | --- | --- | --- |
 | Coordinator controls in Linux container, ordinary UID 1000 | 32/32 passed | Includes a locally built real Agent; container is Debian, not native Ubuntu acceptance |
-| Current coordinator and qualification controls in WSL | 33 passed, one conditional integration test skipped | WSL does not establish the supported native environment |
+| Current coordinator and qualification controls in WSL | 34 passed, one conditional integration test skipped | WSL does not establish the supported native environment |
 | Native dispatch isolation and generated workflow controls | 19 passed | Ordinary qualification remains enabled; focused mode has separate evidence |
 | Same controls on Windows | Two portable controls passed, 30 Linux controls skipped | No native Windows support claim |
 | Complete Python test discovery in Linux snapshot | 1,788 tests; one setup error; 42 skips | `test_pilot_launch.PilotLaunchCliTests` cannot start because WSL has no `cargo`; this sweep is not green |
