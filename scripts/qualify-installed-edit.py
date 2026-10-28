@@ -75,6 +75,13 @@ def diagnostics_passed(report):
                     and r.get('sentinel_unchanged') is True for r in actual))
 
 
+def retain_validated_runtime_case(report, name, row):
+    """Keep native witnesses even if the subsequent diagnosis assertion fails."""
+    report['cases'][CASES.index(name)] = dict(
+        row, id=name, attempted=True, status='incomplete',
+        qualification_stage='native_checks_complete_diagnosis_pending')
+
+
 def private_state_witness(run, *, include_audit=True):
     """Finite qualification witness only; the product never crawls state."""
     names = ('run.json', 'profile.json', 'profile.sha256', 'diagnostic-context.json',
@@ -918,6 +925,7 @@ def qualify(args, report):
             if label in ('ask-reject', 'pending-new-change', 'unlisted-tool', 'outside-target'):
                 require(observed and all(r['is_error'] for r in observed.values()), 'refusal_not_observed_' + label)
         if suite.diagnose_enabled:
+            retain_validated_runtime_case(report, label, row)
             run = suite.last_run
             if label in ('useful-create', 'useful-replace'):
                 operation = 'create' if label == 'useful-create' else 'replace'

@@ -58,6 +58,29 @@ fn admitted(row: &Value) -> Result<&'static str> {
     }
     Ok(verdict)
 }
+fn handshake_metadata(row: &Value) -> Result<()> {
+    // handlers::mcp writes the server label and seq=0 using AuditLine. This
+    // record has no native epoch, host binding, call ID or release receipt.
+    // Validate it separately; it can never supply missing native evidence.
+    let object = row.as_object().ok_or("audit_handshake_metadata_invalid")?;
+    let allowed = ["at_ms", "session", "seq", "event", "verdict", "shadow", "rule",
+        "risk_score", "findings", "egress_hosts", "latency_us", "truncated"];
+    if object.keys().any(|key| !allowed.contains(&key.as_str()))
+        || row["session"] != crate::edit_session::SERVER || row["seq"] != 0
+        || row["shadow"] != false || row["truncated"] != false
+        || !matches!(row["verdict"].as_str(),Some("allow"|"ask"|"deny"|"escalate"))
+        || !row["risk_score"].as_u64().is_some_and(|n| n <= 255)
+        || row["latency_us"] != 0 || row["egress_hosts"] != serde_json::json!([])
+        || row.get("rule").is_some_and(|value|!value.as_str().is_some_and(|s|s.len()<=256))
+        || !row["findings"].as_array().is_some_and(|findings|findings.len()<=256 && findings.iter().all(|finding| {
+            finding.as_object().is_some_and(|value|value.keys().all(|key|["detector","severity","owasp","atlas"].contains(&key.as_str()))
+                && ["detector","severity"].iter().all(|key|finding[*key].as_str().is_some_and(|s|!s.is_empty()&&s.len()<=256))
+                && ["owasp","atlas"].iter().all(|key|finding.get(*key).is_none_or(|value|value.as_str().is_some_and(|s|s.len()<=256))))
+        })) {
+        return Err("audit_handshake_metadata_invalid");
+    }
+    Ok(())
+}
 
 pub(super) fn inspect(bytes: &[u8], profile: &Profile, context: &Context, registry: &str) -> Audit {
     let mut report = Audit {
@@ -100,6 +123,9 @@ fn parse(
     let mut calls = BTreeMap::<String, usize>::new();
     let mut approvals = BTreeSet::new();
     let mut cancelled = BTreeSet::new();
+    let mut handshake_seen = false;
+    let mut leases = BTreeMap::<String,(String,u64)>::new();
+    let mut closed = BTreeSet::new();
     for (index, line) in bytes[..bytes.len() - 1].split(|b| *b == b'\n').enumerate() {
         if started.elapsed() > std::time::Duration::from_secs(2) {
             return Err("audit_parse_time_bound");
@@ -130,6 +156,14 @@ fn parse(
             return Err("audit_foreign_run_or_instance");
         }
         let event = row["event"].as_str().ok_or("audit_record_invalid")?;
+        if event == "mcp_handshake" {
+            if handshake_seen || sessions.is_empty() || !report.calls.is_empty() || report.ask_requests != 0 {
+                return Err("audit_handshake_duplicate_or_out_of_order");
+            }
+            handshake_metadata(&row)?;
+            handshake_seen = true;
+            continue;
+        }
         if event == "native_approval_cancelled" {
             let approval = id(&row["approval_id"])?;
             if !approvals.contains(approval)
@@ -156,6 +190,9 @@ fn parse(
         if !sessions.contains_key(session) {
             return Err("audit_missing_or_foreign_session_start");
         }
+        if closed.contains(session) {
+            return Err("audit_event_after_terminal_session");
+        }
         if let Some(seq) = row.get("seq") {
             let seq = seq
                 .as_u64()
@@ -169,26 +206,41 @@ fn parse(
         }
         match event {
             "native_liveness_enrolled" => {
-                if row["instance_id"] != context.instance_id {
+                if row["instance_id"] != context.instance_id || row["released"] != true
+                    || !row["lease_seconds"].as_u64().is_some_and(|n|(1..=60).contains(&n))
+                    || leases.insert(session.into(),(id(&row["session_id"])?.into(),0)).is_some() {
                     return Err("audit_foreign_run_or_instance");
                 }
             }
             "native_liveness_renewed" => {
-                if row["lease_seq"].as_u64().is_none() || row["released"] != true {
+                let sequence=row["lease_seq"].as_u64().ok_or("audit_record_invalid")?;
+                let lease=leases.get_mut(session).ok_or("audit_renewal_without_matching_enrollment")?;
+                if id(&row["session_id"])?!=lease.0 || sequence<=lease.1 || row["released"] != true {
                     return Err("audit_record_invalid");
                 }
+                lease.1=sequence;
             }
             "native_session_end"
             | "native_session_ended"
             | "native_session_expired"
             | "native_session_retired"
-            | "native_session_revoked" => (),
+            | "native_session_revoked" => {
+                if row["host_session"]!=context.host_session || row["registry_sha256"]!=registry
+                    || row["verdict"]!="allow" || row["shadow"]!=false || row.get("seq").is_none()
+                    || row["released"].as_bool()!=Some(event=="native_session_end") {
+                    return Err("audit_terminal_binding_invalid");
+                }
+                if event!="native_session_end" {closed.insert(session.to_string());}
+            }
             "native_approval_requested" => {
                 operation(profile, id(&row["tool"])?)?;
                 digest(&row["binding_sha256"])?;
                 digest(&row["args_sha256"])?;
                 if row["registry_sha256"] != registry
                     || row["released"] != false
+                    || !matches!(row["source"].as_str(),Some("classifier"|"daemon"))
+                    || row["policy_epoch"].as_u64().is_none()
+                    || !row["expires_at_ms"].as_u64().is_some_and(|expiry|expiry>=at && expiry<=at.saturating_add(300_000))
                     || !approvals.insert(id(&row["approval_id"])?.to_string())
                 {
                     return Err("audit_ambiguous_approval");
@@ -325,6 +377,83 @@ mod tests {
             .map(|r| format!("{r}\n"))
             .collect::<String>()
             .into_bytes()
+    }
+    fn installed_create_sequence() -> (Profile, Context, String, Vec<Value>) {
+        // Sanitized shape/order observed in an installed create/read run,
+        // reconciled with native::audit, native::liveness and handlers::mcp.
+        let (mut p,mut c,_,base)=fixtures();
+        p.targets.push(crate::edit_session::profile::Target{name:"source.txt".into(),read:true,create:false,replacement:None});
+        c.profile_sha256=crate::edit_session::profile::digest(&p).unwrap();
+        let registry=crate::edit_session::profile::digest(&p.registry().unwrap()).unwrap();
+        let mut start=base[0].clone();start["registry_sha256"]=json!(registry);
+        let mut call=base[1].clone();call["registry_sha256"]=json!(registry);
+        let session=start["session"].clone();
+        let enrollment=json!({"at_ms":c.started_at_ms,"event":"native_liveness_enrolled","session":session,
+            "session_id":"collector-1","lease_seconds":4,"instance_id":c.instance_id,"released":true});
+        // Exercise the real typed handshake serializer: it omits native host,
+        // registry, release and optional-null fields and uses a server label.
+        let handshake=serde_json::to_value(crate::audit::AuditLine {
+            at_ms:c.started_at_ms,session:crate::edit_session::SERVER.into(),agent_id:None,parent_id:None,seq:0,
+            event:"mcp_handshake".into(),tool:None,verdict:"allow".into(),shadow:false,rule:None,risk_score:0,
+            findings:vec![],taint:None,judge:None,approval:None,egress_hosts:vec![],latency_us:0,truncated:false,raw:None,
+        }).unwrap();
+        let mut read_before=call.clone();read_before["tool"]=json!("read_output_1");read_before["call_id"]=json!("read-before");
+        read_before["binding_sha256"]=json!("b".repeat(64));
+        let result=|call:&Value,seq:u64|{let mut row=call.clone();row["seq"]=json!(seq);row["event"]=json!("native_result");
+            row["delivery"]=json!("mcp_host");row["content_sha256"]=json!("c".repeat(64));row};
+        let renewal=|sequence:u64|json!({"at_ms":c.started_at_ms,"event":"native_liveness_renewed",
+            "session":session,"session_id":"collector-1","lease_seq":sequence,"released":true});
+        let mut ask=call.clone();ask["seq"]=json!(5);ask["verdict"]=json!("ask");ask["released"]=json!(false);
+        ask["call_id"]=Value::Null;ask["binding_sha256"]=Value::Null;
+        let approval=json!({"at_ms":c.started_at_ms,"event":"native_approval_requested","approval_id":"approval-1",
+            "session":session,"tool":"create_output_0","binding_sha256":"a".repeat(64),"args_sha256":"d".repeat(64),
+            "source":"daemon","policy_epoch":0,"expires_at_ms":c.started_at_ms+120000,"registry_sha256":registry,"released":false});
+        call["seq"]=json!(7);
+        let mut read_after=read_before.clone();read_after["seq"]=json!(10);read_after["tool"]=json!("read_output_0");read_after["call_id"]=json!("read-after");
+        let retired=json!({"at_ms":c.started_at_ms,"session":session,"session_id":"collector-1","seq":13,
+            "event":"native_session_retired","verdict":"allow","shadow":false,"released":false,
+            "registry_sha256":registry,"host_session":c.host_session,"agent_id":"agent-1","parent_id":null});
+        let rows=vec![start,enrollment,handshake,read_before.clone(),result(&read_before,4),renewal(1),ask,approval,renewal(2),
+            call.clone(),renewal(3),result(&call,9),read_after.clone(),result(&read_after,12),retired];
+        (p,c,registry,rows)
+    }
+    #[test]
+    fn installed_handshake_liveness_ask_allow_result_and_retirement_remain_separate_evidence() {
+        let(p,c,registry,rows)=installed_create_sequence();
+        let observed=inspect(&bytes(&rows),&p,&c,&registry);
+        assert_eq!(observed.completeness,"selected_bounded_records_only");
+        assert_eq!(observed.records,15);assert_eq!(observed.ask_requests,1);assert_eq!(observed.calls.len(),4);
+        assert_eq!(observed.calls[0].operation,"read");assert_eq!(observed.calls[1].admission,"recorded_ask");
+        assert!(observed.calls[1].call_sha256.is_none());
+        assert_eq!(observed.calls[2].operation,"create");assert_eq!(observed.calls[2].result_release,"recorded_allow");
+        assert_eq!(observed.calls[3].operation,"read");
+        assert!(observed.calls.iter().all(|call|call.commit=="unknown" && call.host_delivery=="unknown"));
+    }
+    #[test]
+    fn foreign_duplicate_or_execution_shaped_metadata_never_supplies_a_native_session() {
+        let(p,c,registry,rows)=installed_create_sequence();let mut variants=vec![];
+        let mut foreign=rows.clone();foreign[2]["session"]=json!("foreign-server");variants.push(foreign);
+        let mut duplicate=rows.clone();duplicate.insert(3,rows[2].clone());variants.push(duplicate);
+        let mut execution=rows.clone();execution[2]["call_id"]=json!("forged-call");variants.push(execution);
+        let mut shadow=rows.clone();shadow[2]["shadow"]=json!(true);variants.push(shadow);
+        let mut native=rows.clone();native[2]["event"]=json!("native_call");variants.push(native);
+        let mut renewal=rows.clone();renewal[8]["lease_seq"]=json!(1);variants.push(renewal);
+        let mut missing=rows.clone();missing.remove(1);variants.push(missing);
+        let mut after=rows.clone();after.push(rows[12].clone());variants.push(after);
+        for variant in variants {let observed=inspect(&bytes(&variant),&p,&c,&registry);
+            assert_eq!(observed.completeness,"incomplete");assert!(observed.calls.is_empty());}
+    }
+    #[test]
+    fn producer_approval_cancellation_and_session_end_are_attributable_without_execution_claim() {
+        let(p,c,registry,full)=installed_create_sequence();
+        let mut end=full[14].clone();end["seq"]=json!(3);end["event"]=json!("native_session_end");end["released"]=json!(true);
+        let mut ended=full[14].clone();ended["seq"]=json!(4);ended["event"]=json!("native_session_ended");
+        let cancelled=json!({"at_ms":c.started_at_ms,"event":"native_approval_cancelled","approval_id":"approval-1","released":false});
+        let mut rows=vec![full[0].clone(),full[1].clone(),full[2].clone(),full[7].clone(),cancelled.clone(),end,ended];
+        let observed=inspect(&bytes(&rows),&p,&c,&registry);
+        assert_eq!(observed.completeness,"selected_bounded_records_only");assert_eq!(observed.ask_requests,1);assert!(observed.calls.is_empty());
+        rows.insert(5,cancelled);let duplicate=inspect(&bytes(&rows),&p,&c,&registry);
+        assert_eq!(duplicate.completeness,"incomplete");
     }
     #[test]
     fn result_release_is_only_recorded_release_never_commit_or_delivery() {

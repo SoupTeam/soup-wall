@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 import importlib.util
+import contextlib
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -9,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('installed_edit', ROOT / 'scripts/qualify-installed-edit.py')
@@ -241,6 +244,35 @@ class InstalledEditEvidence(unittest.TestCase):
             with self.assertRaises(ValueError):
                 probe.retain_diagnostic_response(root, 'pending-ask-status', 'output', response)
             self.assertEqual(list(root.iterdir()), [])
+
+    def test_diagnostic_failure_retains_completed_native_witnesses_without_passing_case(self):
+        native = {'status': 'passed', 'before': {'exists': False},
+                  'after': {'exists': True, 'sha256': probe.sha(probe.NEW.encode())},
+                  'observed_results': 3, 'write_admissions': 1,
+                  'process_cleanup': {'all_stopped': True, 'descendant_count': 3},
+                  'terminal': {'state': 'host_completed'}, 'audit_sha256': 'a' * 64}
+        def completed_native_then_failed_diagnosis(args, report):
+            probe.retain_validated_runtime_case(report, 'useful-create', native)
+            row = next(r for r in report['diagnosis']['cases'] if r['id'] == 'create-read-status')
+            row['attempted'] = True
+            raise ValueError('diagnosis_host_outcome')
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'new-attempt'
+            with mock.patch.object(sys, 'argv', ['qualify-installed-edit.py', '--run', '--diagnose', '--output', str(output)]), \
+                 mock.patch.object(probe, 'qualify', side_effect=completed_native_then_failed_diagnosis), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(probe.main(), 1)
+            saved = json.loads((output / 'report.json').read_bytes())
+            row = next(r for r in saved['cases'] if r['id'] == 'useful-create')
+            self.assertEqual(row['status'], 'failed')
+            self.assertEqual(row['failure'], 'diagnosis_host_outcome')
+            self.assertEqual(row['qualification_stage'], 'native_checks_complete_diagnosis_pending')
+            for key, value in native.items():
+                if key != 'status':
+                    self.assertEqual(row[key], value)
+            self.assertEqual(saved['diagnosis']['cases'][0]['status'], 'failed')
+            self.assertEqual(saved['inventory']['passed'], 0)
+            self.assertFalse(probe.passed_report(saved))
 
     def test_create_and_replace_remain_known_write_in_the_real_classifier(self):
         for tool, description, arguments in (
