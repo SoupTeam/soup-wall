@@ -159,8 +159,9 @@ def main(argv=None):
             if api.source() != source or sha(a.selection) != report["selection_sha256"] or any(
                     sha(path) != report["selected_sha256"][name] for name, path in paths.items()):
                 raise ValueError("source_or_selected_input_changed")
-        report.update(status="executed", source_after=api.source(),
-                      meaning="All original outcomes retained; run pilot_dossier for readiness, never infer GO from execution")
+        complete = all(row["status"] == "executed" for row in report["stages"])
+        report.update(status="executed" if complete else "incomplete", source_after=api.source(),
+                      meaning="Producer invocations attempted; missing original reports remain incomplete. Use pilot_dossier for readiness.")
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         report["reason"] = str(error) if type(error) is ValueError and str(error).replace("_", "").isalnum() else type(error).__name__
     write(destination, report)
