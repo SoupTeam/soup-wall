@@ -335,9 +335,11 @@ elif action == "verify_policy":
     if result.get("isError") is not True:
         sys.exit(f"CRITICAL: Expected strict policy denial (isError=True), got {resp}")
         
-    text_content = result.get("content", [{}])[0].get("text", "").lower()
-    if "withheld" not in text_content:
-        sys.exit(f"CRITICAL: Expected 'withheld' in policy denial text content, got {resp}")
+    text_content = result.get("content", [{}])[0].get("text", "")
+    expected_framing = "Soup Wall withheld MCP result (filesystem-profile-refuse-result-injection)"
+    
+    if expected_framing not in text_content:
+        sys.exit(f"CRITICAL: Expected exact policy denial framing '{expected_framing}' in text content, got {resp}")
     sys.exit(0)
 EOF
 
@@ -354,8 +356,8 @@ export AGENTFW_CLASSIFIER_PYTHON="$(which python3)"
 SECRET_FILE="$(pwd)/workspace/test_secret.txt"
 echo "SOU-87-EXACT-WITNESS-DATA" > "$SECRET_FILE"
 
-echo "Testing Fake Policy Setup Error Negative Control..."
-cat <<'EOF' > mock_agent.py
+echo "Testing Fake Policy Setup Error Negative Control (Raw JSON-RPC)..."
+cat <<'EOF' > mock_agent_raw.py
 import sys, json
 for line in sys.stdin:
     if not line.strip(): continue
@@ -371,10 +373,33 @@ for line in sys.stdin:
     sys.stdout.flush()
 EOF
 
-if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent.py >/dev/null 2>&1; then
-    echo "CRITICAL: Generic setup error containing the word 'withheld' was falsely accepted as a policy denial!"
+if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_raw.py >/dev/null 2>&1; then
+    echo "CRITICAL: Generic raw setup error containing the word 'withheld' was falsely accepted as a policy denial!"
     exit 1
 fi
+
+echo "Testing Fake Policy Setup Error Negative Control (Structured Tool Error)..."
+cat <<'EOF' > mock_agent_structured.py
+import sys, json
+for line in sys.stdin:
+    if not line.strip(): continue
+    req = json.loads(line)
+    mid = req.get("id")
+    method = req.get("method")
+    if method == "initialize":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{}}))
+    elif method == "tools/list":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{"tools":[]}}))
+    elif method == "tools/call":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{"isError":True,"content":[{"type":"text","text":"Cannot open withheld-policy.yaml: missing setup file"}]}}))
+    sys.stdout.flush()
+EOF
+
+if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_structured.py >/dev/null 2>&1; then
+    echo "CRITICAL: Structured setup error containing the word 'withheld' was falsely accepted as a policy denial!"
+    exit 1
+fi
+
 
 echo "Testing Useful Read (Offline)..."
 python3 mcp_test_driver.py "read" "/workspace/test_secret.txt" "" \
