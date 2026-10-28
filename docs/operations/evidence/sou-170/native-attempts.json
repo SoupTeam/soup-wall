@@ -45,6 +45,39 @@
       },
       "runtime_change_since_prior": "none; only driver legacy-format comparison and its regression fixed",
       "independent_verification": "native-verification.json"
+    },
+    {
+      "run": 40697167080,
+      "job": 122847291242,
+      "source": "88c097fc7489749f6abb5e68ee527fd652acc96f",
+      "artifact": 12819544453,
+      "zip_sha256": "c93ee2c3cbd980836afe1d59584f535016b375ae87ed965d368f54ab0782eff8",
+      "result": "failed",
+      "legacy_inventory": {
+        "expected": 23,
+        "attempted": 23,
+        "passed": 23,
+        "failed": 0,
+        "incomplete": 0
+      },
+      "legacy_diagnosis": {
+        "actual_installed": 8,
+        "simulated_retained_state": 6,
+        "passed": 14,
+        "failed": 0,
+        "incomplete": 0
+      },
+      "stop_inventory": {
+        "passed": 1,
+        "failed": 1,
+        "incomplete": 10
+      },
+      "failure": "two-live-exact-stop: Suite.cli parsed only the last line of pretty JSON from status; successful response became None and the checker failed with AttributeError.",
+      "quota_inventory": "not run after Stop checker failure",
+      "refresh_inventory": "not run after Stop checker failure",
+      "correction": "Read the complete bounded JSON document for status only; retain other commands final-line JSON parsing. Reject malformed, null and multiple documents.",
+      "runtime_delta": "none; failed attempt and correction differ only in qualification scripts/tests/evidence",
+      "failure_report": "composition-attempt-1.json"
     }
   ]
 }

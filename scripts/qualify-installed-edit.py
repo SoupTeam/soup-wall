@@ -206,7 +206,7 @@ def retain_diagnostic_response(directory, name, phase, completed):
 
 
 def require_indeterminate_status(value):
-    require(value.get('schema') == DIAGNOSTIC_FORMAT
+    require(isinstance(value, dict) and value.get('schema') == DIAGNOSTIC_FORMAT
             and value.get('effects') == 'indeterminate'
             and value.get('host_delivery') == 'unknown'
             and value.get('model_consumption') == 'unknown', 'diagnosis_overclaimed_outcome')
@@ -576,7 +576,10 @@ class Suite:
         require(len(result.stdout) <= 128 * 1024 and len(result.stderr) <= 128 * 1024, 'cli_output_cap')
         lines = result.stdout.splitlines()
         try:
-            value = json.loads(lines[-1]) if lines else None
+            # Status emits a complete pretty-printed typed JSON document.
+            # Other commands retain their existing final-line JSON contract.
+            raw = result.stdout if words and words[0] == 'status' else (lines[-1] if lines else b'')
+            value = json.loads(raw) if raw else None
         except ValueError:
             value = None
         return result.returncode, value
