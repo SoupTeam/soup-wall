@@ -51,6 +51,134 @@ PRESERVED = ['output_targets', 'immutable_plans', 'project', 'shared_assets', 'o
 CONTROL_FORMATS = {'control.json': 'sw-installed-edit-control/1',
                    'stop-request.json': 'sw-installed-edit-stop-request/1',
                    'stop-receipt.json': 'sw-installed-edit-stop-receipt/1'}
+SNAPSHOTS = {'profile.json', 'profile.sha256', 'diagnostic-context.json', 'host-process.json'}
+
+
+def fields(value, keys, reason='edit_snapshot_schema_invalid'):
+    S.require(type(value) is dict and set(value) == set(keys.split()), reason)
+
+
+def unsigned(value, bits=64, positive=False):
+    return type(value) is int and int(positive) <= value < 2**bits
+
+
+def digest(value):
+    return type(value) is str and S.SHA.fullmatch(value)
+
+
+def absolute(value):
+    return (type(value) is str and 0 < len(value.encode()) <= 4096 and '\x00' not in value
+            and Path(value).is_absolute() and '..' not in Path(value).parts
+            and str(Path(value)) == value)
+
+
+def profile_snapshot(value):
+    """Validate only the accepted descriptive v1 shape, never open its paths.
+
+    This mirrors the bounded serialized Profile/Identity contracts. It grants
+    no authority and deliberately does not re-inspect changed output targets.
+    """
+    S.require(type(value) is dict, 'edit_snapshot_schema_invalid')
+    keys = 'format exclusion root root_identity agent claude component policy_sha256 targets'
+    if 'refreshed_from_sha256' in value:
+        keys += ' refreshed_from_sha256'
+        S.require(digest(value['refreshed_from_sha256']), 'edit_snapshot_lineage_invalid')
+    fields(value, keys)
+    S.require(value['format'] == 'sw-installed-edit-session/1'
+              and value['exclusion'] == 'operator-private-sole-writer+directory-flock/1'
+              and absolute(value['root']) and digest(value['policy_sha256']), 'edit_snapshot_profile_invalid')
+    root = value['root_identity'];fields(root, 'device inode')
+    S.require(unsigned(root['device']) and unsigned(root['inode'], positive=True), 'edit_snapshot_root_invalid')
+    component = value['component']
+    fields(component, 'home id source_commit source_tree python python_version classifier')
+    S.require(absolute(component['home']) and digest(component['id'])
+              and all(type(component[k]) is str and re.fullmatch(r'[0-9a-f]{40}', component[k])
+                      for k in ('source_commit', 'source_tree'))
+              and type(component['python_version']) is str and len(component['python_version'].encode()) <= 256,
+              'edit_snapshot_component_invalid')
+    for pin in (value['agent'], value['claude'], component['python'], component['classifier']):
+        fields(pin, 'path sha256')
+        S.require(absolute(pin['path']) and digest(pin['sha256']), 'edit_snapshot_pin_invalid')
+    targets = value['targets']
+    S.require(type(targets) is list and 1 <= len(targets) <= 8, 'edit_snapshot_targets_invalid')
+    names, mutation = [], False
+    for target in targets:
+        fields(target, 'name read create replacement')
+        name = target['name']
+        S.require(type(name) is str and re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9._-]{0,127}', name)
+                  and type(target['read']) is bool and type(target['create']) is bool,
+                  'edit_snapshot_targets_invalid')
+        names.append(name);baseline = target['replacement']
+        S.require(target['read'] or target['create'] or baseline is not None, 'edit_snapshot_targets_invalid')
+        S.require(not (target['create'] and baseline is not None), 'edit_snapshot_targets_invalid')
+        mutation |= target['create'] or baseline is not None
+        if baseline is not None:
+            fields(baseline, 'identity sha256');identity = baseline['identity']
+            fields(identity, 'device inode size mtime_seconds mtime_nanoseconds ctime_seconds ctime_nanoseconds uid gid mode')
+            S.require(digest(baseline['sha256']) and identity['device'] == root['device']
+                      and unsigned(identity['inode'], positive=True) and unsigned(identity['size']) and identity['size'] <= 4096
+                      and all(unsigned(identity[k], 32 if k in ('uid', 'gid', 'mode') else 64)
+                              for k in ('device', 'uid', 'gid', 'mode'))
+                      and all(type(identity[k]) is int and -2**63 <= identity[k] < 2**63
+                              for k in ('mtime_seconds', 'mtime_nanoseconds', 'ctime_seconds', 'ctime_nanoseconds')),
+                      'edit_snapshot_baseline_invalid')
+    S.require(mutation and names == sorted(set(names)), 'edit_snapshot_targets_invalid')
+
+
+def process_snapshot(value):
+    fields(value, 'pid start_ticks boot_id uid')
+    S.require(unsigned(value['pid'], 32, True) and unsigned(value['start_ticks'], positive=True)
+              and unsigned(value['uid'], 32) and value['uid'] == os.getuid()
+              and type(value['boot_id']) is str
+              and re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', value['boot_id']),
+              'edit_snapshot_process_invalid')
+
+
+def descriptive_snapshots(run, record, home, names):
+    present = names.intersection(SNAPSHOTS)
+    if not present:
+        return {}  # Retain support for the previously accepted legacy layout.
+    S.require(present == SNAPSHOTS, 'edit_snapshot_set_incomplete')
+    # These four exact root members are immutable descriptive copies. The
+    # external plan and every nested plan marker remain outside this exception.
+    bodies, retained = {}, {}
+    for name, cap in [('profile.json', 128 * 1024), ('profile.sha256', 64),
+                      ('diagnostic-context.json', 16384), ('host-process.json', 4096)]:
+        raw, identity = run.read(name, cap)
+        S.require(stat.S_IMODE(identity[3]) == 0o400, 'edit_snapshot_mode_invalid')
+        bodies[name] = raw
+        retained[name] = (raw, identity)
+    profile = S.strict(bodies['profile.json']);profile_snapshot(profile)
+    canonical = json.dumps(profile, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
+    S.require(canonical == bodies['profile.json'] and S.sha(canonical) == record['profile_sha256']
+              and bodies['profile.sha256'] == record['profile_sha256'].encode(), 'edit_snapshot_profile_binding_invalid')
+    transport = run.json('mcp.json')['mcpServers']['private-output']
+    authority = transport['args'][7]
+    claim = S.strict(base64.urlsafe_b64decode(authority + '=' * (-len(authority) % 4)))
+    S.require(profile['agent']['path'] == transport['command']
+              and claim['granted_resources'] == [str(Path(profile['root']) / t['name']) for t in profile['targets']],
+              'edit_snapshot_transport_binding_invalid')
+    context = S.strict(bodies['diagnostic-context.json'])
+    fields(context, 'format run home profile_sha256 host_session instance_id config_sha256 listener started_at_ms owner')
+    S.require(context['format'] == 'sw-installed-edit-diagnostic-context/1'
+              and all(context[k] == record[k] for k in ('run', 'home', 'profile_sha256', 'host_session', 'instance_id'))
+              and digest(context['config_sha256']) and unsigned(context['started_at_ms'], positive=True)
+              and context['started_at_ms'] <= int(time.time() * 1000) + 5000, 'edit_snapshot_context_binding_invalid')
+    process_snapshot(context['owner'])
+    listener = context['listener'];fields(listener, 'fd inode device')
+    S.require(unsigned(listener['fd'], 31) and unsigned(listener['inode'], positive=True)
+              and unsigned(listener['device']), 'edit_snapshot_listener_invalid')
+    host = S.strict(bodies['host-process.json']);process_snapshot(host)
+    S.require(host['boot_id'] == context['owner']['boot_id'] and host['pid'] != context['owner']['pid'],
+              'edit_snapshot_host_binding_invalid')
+    if 'control.json' in names:
+        control = run.json('control.json', 16384)
+        S.require(context['owner']['pid'] == control['launcher_pid']
+                  and context['owner']['start_ticks'] == control['launcher_start'], 'edit_snapshot_owner_binding_invalid')
+    # Do not probe these retained PIDs/listeners or reopen profile-selected
+    # executable, component, output or original-plan paths. Inactivity still
+    # comes exclusively from accepted terminal cleanup plus the held run lock.
+    return retained
 
 
 @contextmanager
@@ -59,14 +187,27 @@ def selected(path):
     with S.Directory(path.parent) as parent, S.Directory(path, file_modes=MODES['file_modes'],
             directory_modes=MODES['directory_modes']) as run:
         S.require(stat.S_IMODE(os.fstat(run.fd).st_mode) == 0o700, 'private_run_required')
-        # New launchers hold this exact inode from creation through terminal
-        # publication. Legacy state still requires every accepted terminal fact.
+        # Serialize archive operations with the accepted short Stop metadata
+        # transactions. The separate daemon-home inode is held for the entire
+        # active lifecycle, leaving this run-directory lock available to Stop.
         try:
             fcntl.flock(run.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise S.Refusal('edit_run_active') from None
         try:
-            yield parent, run
+            record = run.json('run.json')
+            S.require(type(record) is dict and type(record.get('home')) is str, 'edit_home_binding_invalid')
+            home = Path(record['home'])
+            S.require(home.parent == run.path and HOME.fullmatch(home.name), 'edit_home_binding_invalid')
+            with run.child(home.name) as lifecycle:
+                try:
+                    fcntl.flock(lifecycle.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    raise S.Refusal('edit_run_active') from None
+                try:
+                    yield parent, run
+                finally:
+                    fcntl.flock(lifecycle.fd, fcntl.LOCK_UN)
         finally:
             fcntl.flock(run.fd, fcntl.LOCK_UN)
 
@@ -179,15 +320,19 @@ def inventory(run):
                   'host-stdout.json', 'host-stderr.json'}
     root_dirs = {home, 'host-home', 'host-tmp', 'host-path'}
     names = set(run.names(MAX_ENTRIES))
-    S.require(names == root_files | root_dirs | names.intersection(CONTROL_FORMATS), 'unexpected_edit_run_layout')
+    S.require(names == root_files | root_dirs | names.intersection(CONTROL_FORMATS) | names.intersection(SNAPSHOTS),
+              'unexpected_edit_run_layout')
     optional_control(run, record, ended, home, names)
+    snapshots = descriptive_snapshots(run, record, home, names)
     files, dirs, bodies = {}, {'': S.identity(os.fstat(run.fd))}, {}
     total = 0
     def walk(directory, prefix, depth):
         nonlocal total
         S.require(depth <= MAX_DEPTH, 'edit_inventory_depth_limit')
         names = directory.names(MAX_ENTRIES)
-        S.require(not {'.git', 'profile.json', 'profile.sha256'}.intersection(names), 'project_or_immutable_plan_retained')
+        protected = {'.git', 'profile.json', 'profile.sha256'}
+        S.require(not (protected.intersection(names) - (set(snapshots) if prefix == '' else set())),
+                  'project_or_immutable_plan_retained')
         for name in names:
             S.safe_component(name)
             key = prefix + name
@@ -201,6 +346,8 @@ def inventory(run):
                     S.require(S.identity(os.fstat(child.fd)) == dirs[key], 'edit_directory_generation_changed')
             else:
                 body, identity = directory.read(name, MAX_FILE)
+                if prefix == '' and name in snapshots:
+                    S.require((body, identity) == snapshots[name], 'edit_snapshot_changed')
                 total += len(body)
                 S.require(total <= MAX_BYTES, 'edit_inventory_byte_limit')
                 files[key] = {'identity': identity, 'bytes': len(body), 'sha256': S.sha(body)}

@@ -1,0 +1,1490 @@
+{
+  "agentfw_sha256": "c62872d5721bda10939de9fcdd94a30fc2a7de746b482424e1a8d777a9112095",
+  "cases": [
+    {
+      "attempted": true,
+      "id": "installed-closure",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "inert-preview",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "changed-runtime",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "changed-component",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "writable-runtime-parent",
+      "status": "passed"
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 108848,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+        "size": 36
+      },
+      "approved": 1,
+      "attempted": true,
+      "audit_sha256": "4d79a6b2f84ca304e255d90788702700c23c5aa563d313417cde4846602a35b8",
+      "before": {
+        "exists": false
+      },
+      "bindings_match_approved": true,
+      "id": "useful-create",
+      "observed_results": 3,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 1
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 115895,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+        "size": 36
+      },
+      "approved": 1,
+      "attempted": true,
+      "audit_sha256": "5e3005a017aacdb36f7be0f81150270b84b6bb2562e1d8bd523e33b0b04e57e3",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 108872,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "useful-replace",
+      "observed_results": 3,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 1,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 1
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 116001,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "approved": 0,
+      "attempted": true,
+      "audit_sha256": "0b508b329ed8bb22fc87aa08bbea434b1c7fd02b216d2be431cefc0ddce3bcc6",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 116001,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "ask-reject",
+      "observed_results": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 0
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 116077,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "approved": 0,
+      "attempted": true,
+      "audit_sha256": "b19163a5eb62fca52dd4d37e287c38768c662052272f1173de37931ea64d80ab",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 116077,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "no-approval",
+      "observed_results": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 0
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "exists": false
+      },
+      "approved": 0,
+      "attempted": true,
+      "audit_sha256": "067781a436423366383c94d53d1116be0c2940e9b6a5c60ceed78d87df5d5665",
+      "before": {
+        "exists": false
+      },
+      "bindings_match_approved": true,
+      "id": "unlisted-tool",
+      "observed_results": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 0
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "exists": false
+      },
+      "approved": 0,
+      "attempted": true,
+      "audit_sha256": "7ddf3053fd0139076866260623336b7acc7c69fd8c6064aee03138015d9b8ccd",
+      "before": {
+        "exists": false
+      },
+      "bindings_match_approved": true,
+      "id": "outside-target",
+      "observed_results": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 0
+    },
+    {
+      "attempted": true,
+      "id": "linked-target",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "hardlink-target",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "stale-plan",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "changed-plan",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "no-exclusion",
+      "status": "passed"
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 117708,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "2e60d7a211150253b64368871b0e5b9dc5a185ae42ca8220f814965d13b27542",
+        "size": 30
+      },
+      "approved": 1,
+      "attempted": true,
+      "audit_sha256": "adc382fa3e2d02a580d47e522bf07d83065408acc9f6aa35d813b7f7178a6425",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 117708,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "pending-old-change",
+      "observed_results": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 0
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118166,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "approved": 0,
+      "attempted": true,
+      "audit_sha256": "7164f0d8280613d3211c49de61f5c632c37d8e4ebce0f71e3d32041d79937446",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118166,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "pending-new-change",
+      "observed_results": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 0
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118279,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+        "size": 36
+      },
+      "approved": 1,
+      "attempted": true,
+      "audit_sha256": "26b1590e0f249558840143e6090eea7a458acecd8d73e01d4f68458c35954f97",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118228,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "approval-replay",
+      "observed_results": 2,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 1,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 1
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118280,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "approved": 0,
+      "attempted": true,
+      "audit_sha256": "b2102a10cb244ac19c37ff8573b99ab7e42e65da05ed0afe6f717034041ed375",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118280,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "cancel-pending",
+      "observed_results": 0,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "cancelled",
+        "state": "failed"
+      },
+      "write_admissions": 0
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118362,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "approved": 0,
+      "attempted": true,
+      "audit_sha256": "f4e359f6adc9b5ac49e0a9d56a1daa23be75a1bb1db226551386a8edae70e20a",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118362,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "daemon-loss",
+      "observed_results": 0,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 0,
+      "retired_epoch_refused": false,
+      "status": "passed",
+      "write_admissions": 0
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118454,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+        "size": 36
+      },
+      "approved": 1,
+      "attempted": true,
+      "audit_sha256": "84fd51ad7a6efd37fafb2fdf51091ef860913a5fd131eb1d1aedd34eb1aa4cda",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118413,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "restart-authority",
+      "observed_results": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 1,
+      "retired_epoch_refused": true,
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "host_completed",
+        "state": "host_completed"
+      },
+      "write_admissions": 1
+    },
+    {
+      "adapter_mutation_dispatches": 0,
+      "after": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118502,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+        "size": 36
+      },
+      "approved": 1,
+      "attempted": true,
+      "audit_sha256": "2bc48d4729753c192276d3efe87b6134dceab42f9f3b38de02bb7d8d569b0a68",
+      "before": {
+        "device": 2096,
+        "exists": true,
+        "inode": 118459,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "bindings_match_approved": true,
+      "id": "interruption-after-delivery",
+      "observed_results": 1,
+      "process_cleanup": {
+        "all_stopped": true,
+        "descendant_count": 7
+      },
+      "publication_gates": 1,
+      "retired_epoch_refused": false,
+      "scope": "host-interruption-after-successful-tool-result-delivery",
+      "status": "passed",
+      "terminal": {
+        "daemon_clean": true,
+        "mutation_dispatches": 0,
+        "reason": "cancelled",
+        "state": "failed"
+      },
+      "tool_result_lost": false,
+      "write_admissions": 1
+    }
+  ],
+  "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "component_archive_sha256": "b8589880226ad5053cb28a2a58ca5e39446927d0b932123afca663a52c6fe0da",
+  "component_sha256": "03686312bb036238da24519f294296f5700ac6348f07fbf07c33c89d6f4a86c4",
+  "diagnosis": [
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "ebc9cd7c2d82669bf39316eddf02bcee1c2f17961ad30e7db2432e1e6bd3aaa6",
+      "id": "create-read-status",
+      "json_bytes": 4952,
+      "kind": "native-runtime",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "aacf2e35829aa85647d600b0d50bc2265f8a8c69f36f7f561ed3de0c4b42a342",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "015381a05cfdd17dbc498bde9b7428f6f7f0a9ce7cde36d89fcdb65bb4a0c7b8"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "fac4371bee8e83cd4e694cdeadafc793e85c93d85715ae88d8fd4d2d208c15c4",
+      "id": "replace-read-status",
+      "json_bytes": 4500,
+      "kind": "native-runtime",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "493405930b7cd98a8e1ae39b719800dc243d22b03a35722982489ac8908946bf",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "90366bd6545ee990c7b218042c54800d256982a174e0406213aebbcf5c079dc4"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": "efffb886a8e878e0be218b8a6bd6726c4e3fd1a95059371882a52b789bcc30ca",
+      "audit_witness_scope": "exact_prefix_with_only_correlated_liveness_renewals",
+      "default_output_observed": false,
+      "default_report_sha256": "a19ef3d2ad95619c1b11dd9344ed5e1602a0751c57251f79c160f1720c8324d6",
+      "id": "pending-ask-status",
+      "json_bytes": 4028,
+      "kind": "native-runtime",
+      "process_identity_observed": true,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "live_owner_start_ticks",
+      "report_sha256": "b084bd0e16dc12e59b626fe43f1cae0e85c5ff8cfcab5c6e449333e797dd84f0",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "5020eb3bcb375694dc2133c2df2df64f90690ed0bf0264ed1c607a485a6dae46"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": "bc27c9c42d5ae88b2cbbaeb4a5eeea43ca5a93cb79ff9ecf1dc48d08441c5881",
+      "audit_witness_scope": "exact_prefix_with_only_correlated_liveness_renewals",
+      "default_output_observed": false,
+      "default_report_sha256": "cbc1307e23c087d2d69f8dc05fbf42f54877de1087c40ddd463ce68dfa64bcf5",
+      "id": "rejected-ask-status",
+      "json_bytes": 3048,
+      "kind": "native-runtime",
+      "process_identity_observed": true,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "live_owner_start_ticks",
+      "report_sha256": "4283143ab2f5a8380ae9088984ee65230d43bc8e04feba7100c57f3e9bc7741c",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "81b803a3c1d53c97ff8ef5c904e4f664f16b805797d2d73b0f643d3601dfae8f"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "a64f023e01021800b43d5cc7b88c96918464cee1fd7620a439cc068205ab27bb",
+      "id": "cancelled-status",
+      "json_bytes": 2733,
+      "kind": "native-runtime",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "aaea3a41643f151914a070ef045febd1ab366e4ca311631d40128f567a966132",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "e13d8b90a948ebb3be6f1e867bb9c4d6a8c13e393e601f85c17e4855efadb4fb"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "6ded2b753308a35f8f354537034bf854dd712d64c4f6d112ad940d2750fe56cc",
+      "id": "daemon-loss-status",
+      "json_bytes": 2729,
+      "kind": "native-runtime",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "b8cf473cec995049a6fd167d91cc92995ca123455c82adfe21bb9ba34823c0da",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "65e8ee4e74b326e274fc748f18d845c375f7f8410d2184d0c13e80443491ed4e"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": "efffb886a8e878e0be218b8a6bd6726c4e3fd1a95059371882a52b789bcc30ca",
+      "audit_witness_scope": "exact_prefix_with_only_correlated_liveness_renewals",
+      "default_output_observed": false,
+      "default_report_sha256": "451feb52db3a2adf8162392e971728ac25928116ba7bcdd6432e5a6f3a879e9e",
+      "id": "stale-instance-fixture",
+      "json_bytes": 2640,
+      "kind": "simulated-retained-state",
+      "process_identity_observed": true,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "live_owner_start_ticks",
+      "report_sha256": "e2bc0daf8ef265e11c7a3f503d6db279d578571031a912dc44df07a4a3885338",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "68da665729d7bad3494e84b5d88ea45854113508e8a241887e2ec8010e7352e2"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "d2da640473ed4dff3f311abfcf17e1c82569cca8c5a70b31ff9cb512fe233b7b",
+      "id": "missing-audit-fixture",
+      "json_bytes": 2591,
+      "kind": "simulated-retained-state",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "48fbc00318ad32fc761dd228b90466854567da40c12d503bd8b95c868402d38e",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "3b73e53e1c83c254c1eef427cfc5a7fa9ff3db7ddbb792c20ebab6391c066fb7"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "0300fb8833a9e9c7371e9af4c54e5f24cb45f314573208be53f54575c5738c8d",
+      "id": "truncated-audit-fixture",
+      "json_bytes": 2665,
+      "kind": "simulated-retained-state",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "3d897684198473adce5126e011c07d0d415004276f2c37c9c425f0bc1420200b",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "6c0047748b9cb39909d602acbd0cf467b31c031200b52d7dea4a2bf22e81d740"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "15efa8fba85fa6025a9add9f08887845049d1cda1c57679ec66cd3262616507b",
+      "id": "commit-before-result-loss-fixture",
+      "json_bytes": 4494,
+      "kind": "simulated-retained-state",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "c2db9119d21cfe2790ace49ca19962f3c03ece46b92a006fcdf3c41d4c6e37c1",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "bc1931007f2a0e2304e3a997e568c24b103109c45c3ab4f3f5265a7f830b4dd2"
+    },
+    {
+      "actual_result_delivery_observed": true,
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "102bb13e61c9c88343e7ec5982bd53b1f3cb90b08df0ec7e9f97081fa8e0bd3a",
+      "id": "post-publication-interruption-status",
+      "json_bytes": 3326,
+      "kind": "native-runtime",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "publication_gates": 1,
+      "report_sha256": "45dd6c1e03f9bdcf52444ccddde80c9ddd4278e61b612a5dde67c043e8f6a3cf",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+      "target_unchanged": true,
+      "text_sha256": "f517b37cb6089690b1aa342368c156ccc72f8b050dda189bf38b76885f28485d",
+      "tool_result_lost": false
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "003981998d74e81bf42cfc759676519bf695b00c158dc5aa49199486ab766c6e",
+      "id": "tampered-state-fixture",
+      "json_bytes": 1110,
+      "kind": "simulated-retained-state",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "578e4ba71b350ca9f48b49b5b24eefa61620fc03dff1282842c0067cd0e49666",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "f75e49006caed36047dce2a3b1bb7f0c02b1e58e1eb6d506933085b335df4682"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "dc8e9dff4882ecdd7ef4f5b7fb817b9148f051385de2638c1fefb7912c0d70bd",
+      "id": "foreign-run-fixture",
+      "json_bytes": 1104,
+      "kind": "simulated-retained-state",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "b7822c01c804521c70566eb328a4da1e90900c038715f9ed71b5f6b2e3b5e322",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": false,
+      "target_unchanged": true,
+      "text_sha256": "c8feac434bb96f7577c869f93e06bcdacd277fe32ef95f876b29ba1b2c113fcb"
+    },
+    {
+      "attempted": true,
+      "audit_appended_renewals": 0,
+      "audit_prefix_sha256": null,
+      "audit_witness_scope": "entire_audit_immutable",
+      "default_output_observed": false,
+      "default_report_sha256": "4360883e15aadad492cb1ab3db0826a95997952d19c0837f2cf7cfff4f49708e",
+      "id": "secret-canary-export",
+      "json_bytes": 4500,
+      "kind": "native-runtime",
+      "process_identity_observed": false,
+      "process_identity_unchanged": true,
+      "process_witness_scope": "preceding_owned_run_cleanup",
+      "report_sha256": "93dc0dd0757db9309465ffd07b478feffd8c3692c3564971ed0f4f51c4f6907e",
+      "sentinel_unchanged": true,
+      "state_unchanged": true,
+      "status": "passed",
+      "support_export": true,
+      "target_unchanged": true,
+      "text_sha256": "90366bd6545ee990c7b218042c54800d256982a174e0406213aebbcf5c079dc4"
+    }
+  ],
+  "diagnosis_inventory": {
+    "attempted": 14,
+    "expected": 14,
+    "failed": 0,
+    "incomplete": 0,
+    "native_runtime_cases": 8,
+    "passed": 14,
+    "simulated_retained_state_cases": 6
+  },
+  "environment": {
+    "kernel": "6.18.54.1-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "runtime_filesystem": "ext2/ext3",
+    "system": "Linux",
+    "uid": 1000
+  },
+  "failed_attempts": [
+    {
+      "agentfw_sha256": "5c2742aa471a6d4641be8371c4514eb98dbdebe536192e76bb8d274d44e63b4a",
+      "cases": [
+        {
+          "attempted": true,
+          "id": "installed-closure",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "inert-preview",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "changed-runtime",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "changed-component",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "writable-runtime-parent",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "useful-create",
+          "status": "failed"
+        },
+        {
+          "attempted": false,
+          "id": "useful-replace",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "ask-reject",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "no-approval",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "unlisted-tool",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "outside-target",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "linked-target",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "hardlink-target",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "stale-plan",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "changed-plan",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "no-exclusion",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "pending-old-change",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "pending-new-change",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "approval-replay",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "cancel-pending",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "daemon-loss",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "restart-authority",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "interruption-after-delivery",
+          "status": "incomplete"
+        }
+      ],
+      "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "component_archive_sha256": "67074de6e86ac3dd2aca2cfeb1620cdce4de6992bb07c60fd2753b6001b5c341",
+      "component_sha256": "a6d385b4fce036e45cdb8b7db02c8106af3dbad86948dd030d8bbc72b3eca7f2",
+      "component_source": {
+        "commit": "1df096f201362e7cffe2b2e21d8678b5c3fb3e1a",
+        "tree": "fefa7bbe90a902943f02b4c4014c3a491abcc5a9"
+      },
+      "diagnosis_cases": [
+        {
+          "attempted": false,
+          "id": "create-read-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "replace-read-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": true,
+          "id": "pending-ask-status",
+          "kind": "native-runtime",
+          "status": "failed"
+        },
+        {
+          "attempted": false,
+          "id": "rejected-ask-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "cancelled-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "daemon-loss-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "stale-instance-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "missing-audit-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "truncated-audit-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "commit-before-result-loss-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "post-publication-interruption-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "tampered-state-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "foreign-run-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "secret-canary-export",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        }
+      ],
+      "diagnosis_inventory": {
+        "attempted": 1,
+        "expected": 14,
+        "failed": 1,
+        "incomplete": 13,
+        "native_runtime_cases": 8,
+        "passed": 0,
+        "simulated_retained_state_cases": 6
+      },
+      "failure_code": "diagnosis_daemon_outcome",
+      "inventory": {
+        "attempted": 6,
+        "expected": 23,
+        "failed": 1,
+        "incomplete": 17,
+        "passed": 5
+      },
+      "report_sha256": "35958ed7ab2267a7274987843ce391e8d8e1e976200ed184ff2b6e9cecd3f5f6",
+      "source_commit": "1df096f201362e7cffe2b2e21d8678b5c3fb3e1a",
+      "status": "failed"
+    },
+    {
+      "agentfw_sha256": "8ea77fb14ac262b57ee65f68248ecf48a517e74ede152d6f9a095c5d9dbe7491",
+      "cases": [
+        {
+          "attempted": true,
+          "id": "installed-closure",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "inert-preview",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "changed-runtime",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "changed-component",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "writable-runtime-parent",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "useful-create",
+          "status": "failed"
+        },
+        {
+          "attempted": false,
+          "id": "useful-replace",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "ask-reject",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "no-approval",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "unlisted-tool",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "outside-target",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "linked-target",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "hardlink-target",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "stale-plan",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "changed-plan",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "no-exclusion",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "pending-old-change",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "pending-new-change",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "approval-replay",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "cancel-pending",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "daemon-loss",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "restart-authority",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "interruption-after-delivery",
+          "status": "incomplete"
+        }
+      ],
+      "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "component_archive_sha256": "cd6596bdf1aa0f27eee2a4fdf9d115ef494b6982453f3ae290e610ce3f912d0f",
+      "component_sha256": "e20f679e9c60c453c7638cc96cb2fcbd7b8f18fe11b56001826aaf3cf421f91d",
+      "component_source": {
+        "commit": "789a7fec68676161f18d7cdd72ef1938f03aeb3d",
+        "tree": "739f941bf15070f669da760dd7886a4267164c67"
+      },
+      "diagnosis_cases": [
+        {
+          "attempted": true,
+          "id": "create-read-status",
+          "kind": "native-runtime",
+          "status": "failed"
+        },
+        {
+          "attempted": false,
+          "id": "replace-read-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": true,
+          "id": "pending-ask-status",
+          "kind": "native-runtime",
+          "status": "passed"
+        },
+        {
+          "attempted": false,
+          "id": "rejected-ask-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "cancelled-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "daemon-loss-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": true,
+          "id": "stale-instance-fixture",
+          "kind": "simulated-retained-state",
+          "status": "passed"
+        },
+        {
+          "attempted": false,
+          "id": "missing-audit-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "truncated-audit-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "commit-before-result-loss-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "post-publication-interruption-status",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "tampered-state-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "foreign-run-fixture",
+          "kind": "simulated-retained-state",
+          "status": "incomplete"
+        },
+        {
+          "attempted": false,
+          "id": "secret-canary-export",
+          "kind": "native-runtime",
+          "status": "incomplete"
+        }
+      ],
+      "diagnosis_inventory": {
+        "attempted": 3,
+        "expected": 14,
+        "failed": 1,
+        "incomplete": 11,
+        "native_runtime_cases": 8,
+        "passed": 2,
+        "simulated_retained_state_cases": 6
+      },
+      "failure_code": "diagnosis_host_outcome",
+      "inventory": {
+        "attempted": 6,
+        "expected": 23,
+        "failed": 1,
+        "incomplete": 17,
+        "passed": 5
+      },
+      "report_sha256": "2268f42158ffeec77f6f9e56004012668c152c1a8ff3a394c0aa7bdbf7bbc228",
+      "source_commit": "789a7fec68676161f18d7cdd72ef1938f03aeb3d",
+      "status": "failed",
+      "stored_response_hashes": [
+        {
+          "case": "create-read-status",
+          "responses": {
+            "default": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 2365,
+              "stdout_sha256": "3f15f80d752cf6cdb4a52ed285a9e1113bab140117986534ae1b0ec5438651e4"
+            },
+            "output": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 2683,
+              "stdout_sha256": "87aa38484831e6d4a96c6192d0b631d5db822c5a17548a95e511a192f63698e7"
+            },
+            "text": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 695,
+              "stdout_sha256": "fc4e86a6940b34af1321441514285c5ffb773385801f750b0bbddaa8b51d7dfa"
+            }
+          }
+        },
+        {
+          "case": "pending-ask-status",
+          "default_report_sha256": "eca064b29a1d6005baa003a6a15c82a3f573485e33c17940fee9f866f1eff617",
+          "report_sha256": "e5fc4245c7e5e77d059929f92e2fe0095ce2b9bc8c3996fad094dbfe6bc09fdd",
+          "responses": {
+            "default": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 2687,
+              "stdout_sha256": "eca064b29a1d6005baa003a6a15c82a3f573485e33c17940fee9f866f1eff617"
+            },
+            "output": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 2944,
+              "stdout_sha256": "e5fc4245c7e5e77d059929f92e2fe0095ce2b9bc8c3996fad094dbfe6bc09fdd"
+            },
+            "text": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 733,
+              "stdout_sha256": "b15bd9cdd30b97956e8d08dd2a5c8f824ad9fa94bebbc076b6d1324f9f7c606b"
+            }
+          },
+          "text_sha256": "b15bd9cdd30b97956e8d08dd2a5c8f824ad9fa94bebbc076b6d1324f9f7c606b"
+        },
+        {
+          "case": "stale-instance-fixture",
+          "default_report_sha256": "eae533b4fbfc48b8cfce05c36f32ea631b7d0a3da7b224d5e77b35de46d3550c",
+          "report_sha256": "49afa1bafadb559591d0c4b1c9b179d7f045708906195c2b9481e8365328af81",
+          "responses": {
+            "default": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 2383,
+              "stdout_sha256": "eae533b4fbfc48b8cfce05c36f32ea631b7d0a3da7b224d5e77b35de46d3550c"
+            },
+            "output": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 2640,
+              "stdout_sha256": "49afa1bafadb559591d0c4b1c9b179d7f045708906195c2b9481e8365328af81"
+            },
+            "text": {
+              "exit_code": 0,
+              "private_capture_artifacts_declared": true,
+              "stderr_bytes": 0,
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout_bytes": 674,
+              "stdout_sha256": "68da665729d7bad3494e84b5d88ea45854113508e8a241887e2ec8010e7352e2"
+            }
+          },
+          "text_sha256": "68da665729d7bad3494e84b5d88ea45854113508e8a241887e2ec8010e7352e2"
+        }
+      ],
+      "typed_response_observations": [
+        {
+          "audit": {
+            "completeness": "incomplete",
+            "reason_code": "audit_missing_or_foreign_session_start"
+          },
+          "audit_call_count": 0,
+          "authenticated_daemon": "matching_current_epoch",
+          "case": "pending-ask-status",
+          "effects": "indeterminate",
+          "host_delivery": "unknown",
+          "model_consumption": "unknown",
+          "reason_code": "audit_missing_or_foreign_session_start",
+          "recorded_host_outcome": "terminal_not_recorded",
+          "request_states": [
+            "pending"
+          ],
+          "response_sha256": "e5fc4245c7e5e77d059929f92e2fe0095ce2b9bc8c3996fad094dbfe6bc09fdd",
+          "status": "incomplete"
+        },
+        {
+          "audit": {
+            "completeness": "incomplete",
+            "reason_code": "audit_foreign_run_or_instance"
+          },
+          "audit_call_count": 0,
+          "authenticated_daemon": "stale_epoch",
+          "case": "stale-instance-fixture",
+          "effects": "indeterminate",
+          "host_delivery": "unknown",
+          "model_consumption": "unknown",
+          "reason_code": "audit_foreign_run_or_instance",
+          "recorded_host_outcome": "terminal_not_recorded",
+          "request_states": [],
+          "response_sha256": "49afa1bafadb559591d0c4b1c9b179d7f045708906195c2b9481e8365328af81",
+          "status": "incomplete"
+        }
+      ]
+    }
+  ],
+  "format": "sw-installed-edit-diagnostic-evidence/1",
+  "inventory": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "original_report_sha256": "cc360a478b9a32b5fa79c293f503fbdd0be9a2ed92014aed9ffe525a6bb1c5ed",
+  "paid_inference": false,
+  "scope": "Actual installed Linux processes with genuine host and owned scripted provider. Local diagnostic records remain descriptive. Fixture boundaries are explicitly simulated. Raw captures and authority remain private.",
+  "source": {
+    "commit": "a7ec2de899aa55726e7488f5d31bec5044b52307",
+    "tree": "fc1336b4e9ed706d170e52ea181b2fc359f76cc5"
+  },
+  "status": "passed"
+}

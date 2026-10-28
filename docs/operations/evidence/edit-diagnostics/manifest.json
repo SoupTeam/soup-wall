@@ -1,0 +1,80 @@
+{
+  "files": [
+    {
+      "bytes": 4952,
+      "name": "create-read-status.json",
+      "sha256": "aacf2e35829aa85647d600b0d50bc2265f8a8c69f36f7f561ed3de0c4b42a342"
+    },
+    {
+      "bytes": 4500,
+      "name": "replace-read-status.json",
+      "sha256": "493405930b7cd98a8e1ae39b719800dc243d22b03a35722982489ac8908946bf"
+    },
+    {
+      "bytes": 4028,
+      "name": "pending-ask-status.json",
+      "sha256": "b084bd0e16dc12e59b626fe43f1cae0e85c5ff8cfcab5c6e449333e797dd84f0"
+    },
+    {
+      "bytes": 3048,
+      "name": "rejected-ask-status.json",
+      "sha256": "4283143ab2f5a8380ae9088984ee65230d43bc8e04feba7100c57f3e9bc7741c"
+    },
+    {
+      "bytes": 2733,
+      "name": "cancelled-status.json",
+      "sha256": "aaea3a41643f151914a070ef045febd1ab366e4ca311631d40128f567a966132"
+    },
+    {
+      "bytes": 2729,
+      "name": "daemon-loss-status.json",
+      "sha256": "b8cf473cec995049a6fd167d91cc92995ca123455c82adfe21bb9ba34823c0da"
+    },
+    {
+      "bytes": 2640,
+      "name": "stale-instance-fixture.json",
+      "sha256": "e2bc0daf8ef265e11c7a3f503d6db279d578571031a912dc44df07a4a3885338"
+    },
+    {
+      "bytes": 2591,
+      "name": "missing-audit-fixture.json",
+      "sha256": "48fbc00318ad32fc761dd228b90466854567da40c12d503bd8b95c868402d38e"
+    },
+    {
+      "bytes": 2665,
+      "name": "truncated-audit-fixture.json",
+      "sha256": "3d897684198473adce5126e011c07d0d415004276f2c37c9c425f0bc1420200b"
+    },
+    {
+      "bytes": 4494,
+      "name": "commit-before-result-loss-fixture.json",
+      "sha256": "c2db9119d21cfe2790ace49ca19962f3c03ece46b92a006fcdf3c41d4c6e37c1"
+    },
+    {
+      "bytes": 3326,
+      "name": "post-publication-interruption-status.json",
+      "sha256": "45dd6c1e03f9bdcf52444ccddde80c9ddd4278e61b612a5dde67c043e8f6a3cf"
+    },
+    {
+      "bytes": 1110,
+      "name": "tampered-state-fixture.json",
+      "sha256": "578e4ba71b350ca9f48b49b5b24eefa61620fc03dff1282842c0067cd0e49666"
+    },
+    {
+      "bytes": 1104,
+      "name": "foreign-run-fixture.json",
+      "sha256": "b7822c01c804521c70566eb328a4da1e90900c038715f9ed71b5f6b2e3b5e322"
+    },
+    {
+      "bytes": 4500,
+      "name": "secret-canary-export.json",
+      "sha256": "93dc0dd0757db9309465ffd07b478feffd8c3692c3564971ed0f4f51c4f6907e"
+    },
+    {
+      "bytes": 47672,
+      "name": "qualification.json",
+      "sha256": "b3460d0d34f3bb1173b211aba11fec3e330301ea4afaf11bfbb4c1c07fc1f4e1"
+    }
+  ],
+  "format": "sw-installed-edit-diagnostic-evidence-manifest/1"
+}

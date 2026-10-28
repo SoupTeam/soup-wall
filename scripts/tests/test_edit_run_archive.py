@@ -86,6 +86,93 @@ class CleanupBoundary(unittest.TestCase):
     def plan(self):
         return E.preview(self.run, self.destination)
 
+    def snapshots(self):
+        pin = {'path': '/owned/agentfw', 'sha256': 'a' * 64}
+        profile = {'format': self.record['format'], 'exclusion': 'operator-private-sole-writer+directory-flock/1',
+                   'root': str(self.target.parent), 'root_identity': {'device': self.target.stat().st_dev, 'inode': 5},
+                   'agent': pin, 'claude': pin, 'policy_sha256': 'b' * 64,
+                   'component': {'home': '/owned/component', 'id': 'c' * 64, 'source_commit': 'd' * 40,
+                                 'source_tree': 'e' * 40, 'python': pin, 'classifier': pin, 'python_version': '3.12'},
+                   'targets': [{'name': self.target.name, 'read': True, 'create': True, 'replacement': None}]}
+        raw = E.S.encoded(profile)
+        self.record['profile_sha256'] = self.terminal['profile_sha256'] = E.S.sha(raw)
+        self.write(self.run / 'run.json', E.S.encoded(self.record), 0o400)
+        self.write(self.run / 'terminal.json', E.S.encoded(self.terminal), 0o400)
+        transport = json.loads((self.run / 'mcp.json').read_bytes())
+        transport['mcpServers']['private-output']['args'][-1] = self.record['profile_sha256']
+        self.write(self.run / 'mcp.json', E.S.encoded(transport))
+        self.write(self.run / 'profile.json', raw, 0o400)
+        self.write(self.run / 'profile.sha256', self.record['profile_sha256'].encode(), 0o400)
+        owner = {'pid': 123, 'start_ticks': 456, 'boot_id': str(uuid.uuid4()), 'uid': os.getuid()}
+        context = {**self.record, 'format': 'sw-installed-edit-diagnostic-context/1',
+                   'config_sha256': 'f' * 64, 'listener': {'fd': 7, 'inode': 8, 'device': 9},
+                   'started_at_ms': 1, 'owner': owner}
+        self.write(self.run / 'diagnostic-context.json', E.S.encoded(context), 0o400)
+        self.write(self.run / 'host-process.json', E.S.encoded({**owner, 'pid': 124}), 0o400)
+        return profile, context
+
+    def test_current_main_snapshots_are_exact_root_copies_and_external_plan_is_preserved(self):
+        self.snapshots()
+        external = self.base / 'immutable-plan';external.mkdir(mode=0o700)
+        before_target = self.target.read_bytes()
+        for name in ('profile.json', 'profile.sha256'):
+            self.write(external / name, (self.run / name).read_bytes(), 0o400)
+        before = {p.name: (p.read_bytes(), p.stat().st_ino) for p in external.iterdir()}
+        plan = self.plan();self.assertTrue(E.SNAPSHOTS <= set(plan['inventory']['files']))
+        E.archive(plan)
+        with self.assertRaisesRegex(E.S.Refusal, 'explicit_raw_evidence_loss_consent_required'): E.cleanup(plan, False)
+        self.assertTrue(self.run.exists())
+        self.assertEqual(E.cleanup(plan, True)['outcome'], 'archived_and_cleaned')
+        self.assertEqual({p.name: (p.read_bytes(), p.stat().st_ino) for p in external.iterdir()}, before)
+        self.assertEqual(self.target.read_bytes(), before_target)
+
+    def test_snapshot_schemas_digests_instances_modes_and_unknown_fields_refuse(self):
+        profile, context = self.snapshots()
+        cases = [('diagnostic-context.json', {**context, 'instance_id': 'z' * 43}),
+                 ('diagnostic-context.json', {**context, 'owner': {**context['owner'], 'start_ticks': True}}),
+                 ('diagnostic-context.json', {**context, 'listener': {**context['listener'], 'fd': -1}}),
+                 ('diagnostic-context.json', {**context, 'future': 1}),
+                 ('host-process.json', {**context['owner'], 'pid': 124, 'uid': os.getuid() + 1}),
+                 ('profile.json', {**profile, 'mutation_quota': {}}),
+                 ('profile.json', {**profile, 'root': '/foreign/output'}),
+                 ('profile.json', {**profile, 'format': 'sw-installed-edit-session/2'}),
+                 ('profile.json', {**profile, 'targets': [{**profile['targets'][0], 'read': 1}]})]
+        for name, value in cases:
+            path = self.run / name;original = path.read_bytes()
+            with self.subTest(name=name, value=value):
+                self.write(path, E.S.encoded(value), 0o400)
+                with self.assertRaises(E.S.Refusal): self.plan()
+                self.assertTrue(path.exists());self.assertEqual(list(self.destination.iterdir()), [])
+            self.write(path, original, 0o400)
+        path = self.run / 'profile.sha256';original = path.read_bytes()
+        for raw in (b'0' * 64, original + b'\n'):
+            self.write(path, raw, 0o400)
+            with self.assertRaises(E.S.Refusal): self.plan()
+        self.write(path, original, 0o600)
+        with self.assertRaisesRegex(E.S.Refusal, 'edit_snapshot_mode_invalid'): self.plan()
+        self.write(path, original, 0o400)
+        path.unlink()
+        with self.assertRaisesRegex(E.S.Refusal, 'edit_snapshot_set_incomplete'): self.plan()
+
+    def test_snapshot_links_nested_copies_and_validation_read_races_are_retained(self):
+        self.snapshots();path = self.run / 'profile.json';original = path.read_bytes()
+        alias = self.base / 'external-profile';self.write(alias, original, 0o400)
+        path.unlink();os.link(alias, path)
+        with self.assertRaises(E.S.Refusal): self.plan()
+        self.assertEqual(alias.read_bytes(), original)
+        path.unlink();self.write(path, original, 0o400)
+        nested = self.run / 'host-home/profile.json';self.write(nested, original, 0o400)
+        with self.assertRaisesRegex(E.S.Refusal, 'project_or_immutable_plan_retained'): self.plan()
+        nested.unlink()
+        real = E.descriptive_snapshots
+        def changed(*args):
+            result = real(*args)
+            self.write(path, b'{}', 0o400)
+            return result
+        with patch.object(E, 'descriptive_snapshots', changed):
+            with self.assertRaisesRegex(E.S.Refusal, 'edit_snapshot_changed'): self.plan()
+        self.assertTrue(path.exists());self.assertEqual(list(self.destination.iterdir()), [])
+
     def test_explicit_archive_preserves_source_then_acknowledged_exact_cleanup_is_repeatable(self):
         plan = self.plan()
         with self.assertRaisesRegex(E.S.Refusal, 'explicit_raw_evidence_loss_consent_required'):
@@ -105,6 +192,13 @@ class CleanupBoundary(unittest.TestCase):
         import fcntl
         with E.S.Directory(self.run) as live:
             fcntl.flock(live.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(E.S.Refusal, 'edit_run_active'): self.plan()
+        with E.S.Directory(self.home) as live:
+            fcntl.flock(live.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Stop can still transact on metadata while the lifecycle lock
+            # refuses archival even with an injected completed terminal.
+            with E.S.Directory(self.run) as metadata:
+                fcntl.flock(metadata.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             with self.assertRaisesRegex(E.S.Refusal, 'edit_run_active'): self.plan()
         self.terminal['cleanup']['cleaned'] = False
         self.write(self.run / 'terminal.json', E.S.encoded(self.terminal), 0o400)

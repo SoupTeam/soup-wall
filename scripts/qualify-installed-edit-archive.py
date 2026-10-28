@@ -24,10 +24,12 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('archive_native_base', ROOT / 'scripts/qualify-installed-edit.py')
 B = importlib.util.module_from_spec(spec);spec.loader.exec_module(B)
+spec = importlib.util.spec_from_file_location('archive_stop_base', ROOT / 'scripts/qualify-installed-edit-stop.py')
+STOP = importlib.util.module_from_spec(spec);spec.loader.exec_module(STOP)
 require, sha, snapshot = B.require, B.sha, B.snapshot
 FORMAT = 'sw-installed-edit-archive-qualification/1'
-CASES = ('installed-identity', 'two-active-runs-refused', 'completed-archive-cleanup', 'interrupted-run-archive',
-         'unknown-crash-refused', 'changed-preview-refused', 'linked-and-special-state', 'foreign-owner-refused',
+CASES = ('installed-identity', 'two-active-runs-refused', 'completed-archive-cleanup', 'interrupted-run-archive', 'stop-archive-cleanup',
+         'unknown-crash-refused', 'changed-preview-refused', 'descriptive-snapshot-refusals', 'linked-and-special-state', 'foreign-owner-refused',
          'private-secret-canaries', 'native-low-space', 'interrupted-archive-before-publication',
          'interrupted-archive-after-publication', 'interrupted-removal-recovery', 'fresh-useful-run')
 
@@ -114,9 +116,19 @@ def qualify(args, report):
     def done(row, **facts):
         require(unrelated.poll() is None and B.BASE.ProcessWitness.identity(unrelated.pid) == unrelated_birth
                 and snapshot(suite.sentinel) == suite.before_sentinel, 'unrelated_witness_changed')
-        for target, before, plan, digest in preserved:
-            require(snapshot(target) == before and sha((plan / 'profile.json').read_bytes()) == digest, 'output_or_plan_changed')
+        for target, before, plan, plan_before in preserved:
+            require(snapshot(target) == before and plan_witness(plan) == plan_before, 'output_or_plan_changed')
         row.update(facts, status='passed')
+    def plan_witness(plan):
+        return {name: snapshot(plan / name) for name in ('profile.json', 'profile.sha256')}
+    def snapshots(run, plan):
+        names = ('profile.json', 'profile.sha256', 'diagnostic-context.json', 'host-process.json')
+        result = {name: snapshot(run / name) for name in names}
+        require(all(v['exists'] and v['links'] == 1 and v['mode'] & 0o777 == 0o400 for v in result.values())
+                and (run / 'profile.json').read_bytes() == (plan / 'profile.json').read_bytes()
+                and (run / 'profile.sha256').read_bytes() == (plan / 'profile.sha256').read_bytes(),
+                'current_main_run_snapshot_missing_or_unbound')
+        return result
     def cli(action, *words):
         return suite.cli('archive', '--home', suite.home, action, *words, timeout=35)
     def prepare_archive(run, label, destination=None):
@@ -138,7 +150,7 @@ def qualify(args, report):
         facts, observed, _ = suite.host(label, root, target, plan, prepared, proposals)
         require(facts['exit'] == 0 and target.read_text() == B.NEW and len(observed) == 3
                 and all(not item['is_error'] for item in observed.values()), 'useful_installed_sequence_failed')
-        preserved.append((target, snapshot(target), plan, sha((plan / 'profile.json').read_bytes())))
+        preserved.append((target, snapshot(target), plan, plan_witness(plan)))
         return suite.last_run, facts
     def apply_archive(bound):
         code, value = cli('apply', *bound)
@@ -174,6 +186,7 @@ def qualify(args, report):
 
         row = begin('completed-archive-cleanup')
         run, facts = useful('completed')
+        descriptive = snapshots(run, preserved[-1][2])
         plan, bound = prepare_archive(run, 'completed')
         value = apply_archive(bound)
         require(run.exists() and first.process.poll() is None and peer.process.poll() is None, 'archive_touched_source_or_active_peer')
@@ -186,7 +199,8 @@ def qualify(args, report):
         done(row, process_cleanup=facts['process_cleanup'], reclaimed_bytes=plan['inventory']['bytes'],
              inventoried_files=len(plan['inventory']['files']), archive=value, repeat=again,
              profile_sha256=plan['run_record']['profile_sha256'], plan_sha256=plan['plan_sha256'],
-             instance_sha256=sha(plan['run_record']['instance_id'].encode()))
+             instance_sha256=sha(plan['run_record']['instance_id'].encode()),
+             descriptive_snapshots=descriptive, output_preserved=True, immutable_plan_preserved=True)
 
         row = begin('interrupted-run-archive')
         cleanup = first.finish()
@@ -196,6 +210,43 @@ def qualify(args, report):
         code, value = cli('cleanup', *bound, '--acknowledge-evidence-loss')
         require(code == 0 and value['outcome'] == 'archived_and_cleaned', 'interrupted_terminal_cleanup_failed')
         done(row, process_cleanup=cleanup, terminal_state='failed', reason='cancelled')
+
+        row = begin('stop-archive-cleanup')
+        stopped = STOP.Run(suite, 'stop-archive', active)
+        pending = until(stopped.pending, 'archive_stop_pending_missing')
+        require(stopped.decision(pending)[0] == 0, 'archive_stop_approval_failed')
+        until(stopped.future_ready.is_set, 'archive_stop_postcommit_barrier_missing')
+        require(stopped.target.read_text() == B.NEW and stopped.observed['toolu_stop_0']['is_error'] is False,
+                'archive_stop_useful_commit_missing')
+        target_before, plan_before = snapshot(stopped.target), plan_witness(stopped.plan)
+        descriptive = snapshots(stopped.run, stopped.plan)
+        code, stop = stopped.stop()
+        require(STOP.stop_ok(code, stop, 'stopped'), 'archive_stop_not_confirmed')
+        stopped.future_release.set()
+        facts = stopped.finish()
+        require(facts['publication_gates'] == 1 and facts['stop_diagnosis']['state_unchanged'] is True,
+                'archive_stop_publication_or_diagnosis_lost')
+        preserved.append((stopped.target, target_before, stopped.plan, plan_before))
+        plan, bound = prepare_archive(stopped.run, 'stop-archive')
+        require(plan['terminal']['reason'] == 'operator_stop' and plan['terminal']['state'] == 'failed'
+                and set(descriptive) <= set(plan['inventory']['files']), 'archive_stop_terminal_or_snapshot_lost')
+        archived = apply_archive(bound)
+        require(stopped.run.exists(), 'archive_stop_apply_removed_source')
+        code, refusal = cli('cleanup', *bound)
+        require(code != 0 and refusal['reason'] == 'explicit_raw_evidence_loss_consent_required'
+                and stopped.run.exists(), 'archive_stop_cleanup_without_consent')
+        code, cleaned = cli('cleanup', *bound, '--acknowledge-evidence-loss')
+        require(code == 0 and cleaned['outcome'] == 'archived_and_cleaned' and not stopped.run.exists(),
+                'archive_stopped_run_cleanup_failed')
+        done(row, stop={k: stop[k] for k in ('status', 'revocation_confirmed', 'cleanup_confirmed',
+             'effects_may_remain_committed', 'running_effects_rolled_back', 'automatic_retry')},
+             terminal_reason='operator_stop', process_cleanup=facts['process_cleanup'],
+             profile_sha256=facts['profile_sha256'], instance_sha256=sha(facts['instance_id'].encode()),
+             plan_sha256=plan['plan_sha256'], descriptive_snapshots=descriptive,
+             target_before=target_before, target_after=snapshot(stopped.target),
+             immutable_plan_before=plan_before, immutable_plan_after=plan_witness(stopped.plan),
+             archive_sha256=archived['archive_sha256'], consent_refusal=refusal['reason'],
+             cleanup_outcome=cleaned['outcome'], sentinel_preserved=True, active_peer_preserved=peer.process.poll() is None)
 
         row = begin('unknown-crash-refused')
         crashed = Live(suite, 'unknown-crash', active);cleanup = crashed.finish(crash=True)
@@ -209,6 +260,23 @@ def qualify(args, report):
         code, value = cli('apply', *bound)
         require(code != 0 and run.exists(), 'changed_inventory_archived')
         done(row, refusal=value)
+
+        row = begin('descriptive-snapshot-refusals')
+        run = completed_copy('snapshot-refusals');results = []
+        for name, field, invalid in [('diagnostic-context.json', 'instance_id', 'z' * 43),
+                                     ('host-process.json', 'uid', os.getuid() + 1),
+                                     ('profile.json', 'future_version', 2)]:
+            path = run / name;original = path.read_bytes();value = json.loads(original);value[field] = invalid
+            path.chmod(0o600);path.write_text(json.dumps(value));path.chmod(0o400)
+            code, refusal = cli('preview', '--run', run, '--destination', destination)
+            require(code != 0 and run.exists() and path.exists(), 'unbound_descriptive_snapshot_accepted')
+            results.append({'id': name, 'reason': refusal.get('reason')})
+            path.chmod(0o600);path.write_bytes(original);path.chmod(0o400)
+        unknown = run / 'unknown-snapshot.json';unknown.write_bytes(b'{}');unknown.chmod(0o400)
+        code, refusal = cli('preview', '--run', run, '--destination', destination)
+        require(code != 0 and unknown.read_bytes() == b'{}', 'unknown_snapshot_removed_or_accepted')
+        results.append({'id': 'unknown-snapshot.json', 'reason': refusal.get('reason')});unknown.unlink()
+        done(row, controls=results, source_retained=True)
 
         row = begin('linked-and-special-state')
         run = completed_copy('linked-state');path = run / 'host-bun.toml';original = path.read_bytes()

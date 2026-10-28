@@ -33,7 +33,7 @@ class SharedComponents(unittest.TestCase):
         expected = {f"{wf.removesuffix('.yml')}--{job}" for wf, jobs in WORKFLOW_JOBS.items()
                     if wf != "ci.yml" for job in jobs}
         self.assertEqual(set(actual), expected)
-        self.assertEqual(len(actual), 46)
+        self.assertEqual(len(actual), 47)
         self.assertIn("mcp-create-file--linux-installed-edit", actual)
         self.assertIn("gateway-sdk--official-sdk", actual)
         self.assertIn("mcp-https-post--linux-https-post", actual)
@@ -106,6 +106,27 @@ class SharedComponents(unittest.TestCase):
         planner = (ROOT / ".github/workflows/ci-impact-plan.yml").read_text()
         self.assertIn("plan: ${{ steps.plan.outputs.plan }}", planner)
         self.assertIn("value: ${{ jobs.compute.outputs.plan }}", planner)
+
+    def test_build_edges_fail_missing_producer_without_weakening_original_consumers(self):
+        central = blocks(generated())
+        producer = "ci-builds--agent-default-ubuntu2404"
+        self.assertIn(producer, central)
+        for job in ("linux-create-file", "linux-installed-edit"):
+            body = central["mcp-create-file--" + job]
+            self.assertIn("    needs: " + producer, body)
+            self.assertIn("    if: always() && contains(", body)
+            self.assertIn("      SOU166_MODE: shared", body)
+            self.assertIn("${{ needs." + producer + ".result }}", body)
+            self.assertIn("${{ needs." + producer + ".outputs.artifact_id }}", body)
+            self.assertNotIn("github.event.inputs.build_mode", body)
+            guard = body.index("ci_qualification_build.py guard")
+            self.assertLess(guard, body.index("uses: actions/download-artifact@"))
+            self.assertIn("artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}", body)
+            self.assertNotIn("github-token:", body)
+            self.assertNotIn("run-id:", body)
+        separate = central["mcp-create-file--linux-replace-file"]
+        self.assertNotIn("needs: " + producer, separate)
+        self.assertIn("runs-on: ubuntu-22.04", separate)
 
     def test_implicit_matrix_names_keep_each_required_platform_and_backend(self):
         text = TARGET.read_text()
