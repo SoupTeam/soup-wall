@@ -10,9 +10,9 @@
     "scripts/build-pilot-front-door.py": "a21c4da0ad36f1ed484782f6e608c440a037f5e9d973d649ca4ec64e9917d4e3",
     "scripts/pilot.py": "8ffa0605e4f4564e36fd421f60d76e98743fa8374f2cd57b5b506e88484509ad",
     "scripts/pilot_update.py": "7ab012b4ff02410f324fc921a1c8b002ea56a4cf533362165ec30c02817853a0",
-    "scripts/prepare-pilot-update-fixture.py": "7e2efd9e5611754944ff0627dfba33317b2c8c23b9b8ba495879991b0561ba9d",
+    "scripts/prepare-pilot-update-fixture.py": "29c18396d2c57303927c4b864d6fba9e9d017e1513c99a1fb0ed83c4cfbed10c",
     "scripts/qualify-pilot-update.py": "70ef91700e69743f85ace3f06446155214a14a72c04ee6ec9ebd4ebd9352efce",
-    "scripts/tests/test_pilot_update.py": "d10f6bc2193e3d0e26ba861af70c1c90ed4027172edbcc8e8f7b21a6b496f5f0",
+    "scripts/tests/test_pilot_update.py": "934e15bcbe4023c21725e9f02e9daf8a7c5a7681eef677f127565da8279b1396",
     "scripts/tests/test_prepared_qualification_coverage.py": "b19952bc2ba671d18f42c4948333adeed8f322528fd473902024efdd9365da47"
   },
   "date": "2026-10-28",

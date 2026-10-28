@@ -100,4 +100,6 @@ The driver requires `--entry-agent`, `--entry-home`, `--inventory-a`, `--invento
 
 The focused `mcp-real-filesystem.yml` dispatch accepts `coordinated_update_only=true`. It builds each source with the accepted native builder, prepares two disposable prefixes from explicit offline inputs, installs the current helper as the bootstrap entry, and runs the driver outside both checkouts. Set A is accepted commit `144512b3ed11f985c922d9911cba26f07599dea9`; set B is the exact dispatched head. Other focus flags must remain false. This development run does not replace ordinary qualification or admission.
 
+Fixture preparation uses each installed helper and the explicitly selected `/usr/bin/python3.12`. Runtime classifiers therefore come from the private verified component tree. Parent ownership and modes are recorded before building; shared development-tool directories are not selected as trusted runtime inputs.
+
 The native evidence includes a refused update during an authenticated live run, changed interpreter/binary/helper identity controls, five staging/publication interruptions, repeated recovery, eligible owned cleanup and useful original-server results before and after both transitions. A phase-level I/O injection is not a physical disk-full test.

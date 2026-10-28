@@ -58,10 +58,14 @@ def prepare(args):
         built = call([sys.executable, "-B", source / "scripts/build-pilot-front-door.py",
                       "--out", component], source, env)
         UPDATE.require(built["commit"] == commit, "fixture_component_source_mismatch")
-        words = [sys.executable, "-B", source / "scripts/pilot.py", "prepare", "--apply",
+        entry_home = args.output / ("entry-" + label)
+        entry_home.mkdir(mode=0o700)
+        call([build["agentfw"], "pilot-component", "--home", entry_home, "install", component,
+              "--sha256", built["archive_sha256"], "--python", args.python], home, env)
+        words = [build["agentfw"], "pilot", "--home", entry_home, "prepare", "--apply",
                  "--prefix", prefix, "--expected-commit", commit, "--node-archive", args.node_archive,
                  "--bwrap", args.bwrap, "--git", args.git, "--claude", args.claude,
-                 "--python", Path(sys.executable).resolve(),
+                 "--python", args.python,
                  "--filesystem-workspace", project, "--git-workspace", repository,
                  "--python-archive", args.python_archive, "--npm-cache", cache,
                  "--wheelhouse", args.wheelhouse]
@@ -77,11 +81,7 @@ def prepare(args):
             stream.write("\n")
         records.append({"inventory": str(path), "component": built, "prepared": prepared})
     entry = json.loads(args.build_b.read_text())["agentfw"]
-    entry_home = args.output / "bootstrap"
-    entry_home.mkdir(mode=0o700)
-    call([entry, "pilot-component", "--home", entry_home, "install",
-          args.output / "helper-b.tar", "--sha256", records[1]["component"]["archive_sha256"],
-          "--python", Path(sys.executable).resolve()], home, env)
+    entry_home = args.output / "entry-b"
     result = {"status": "prepared-not-qualified", "sets": records, "entry_agent": entry,
               "entry_home": str(entry_home), "fixture_root": str(args.output),
               "expected_text": "Owned coordinated update fixture"}
@@ -92,7 +92,7 @@ def prepare(args):
 def main():
     parser = argparse.ArgumentParser(description="Prepare disposable update fixtures from explicit local inputs.")
     for name in ("source-a", "build-a", "build-b", "node-archive", "bwrap", "git", "claude",
-                 "python-archive", "npm-cache", "wheelhouse", "output"):
+                 "python", "python-archive", "npm-cache", "wheelhouse", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     args = parser.parse_args()
     try:

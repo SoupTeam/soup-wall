@@ -518,7 +518,8 @@ class QualificationFixtureControls(unittest.TestCase):
             build.write_text(json.dumps({role: "/owned/" + role for role in
                                         ("agentfw", "git_launcher", "sandbox_tests")}))
             args = SimpleNamespace(source_a=ROOT, build_a=build, build_b=build,
-                                   output=parent / "fixtures", git=Path("/usr/bin/git"))
+                                   output=parent / "fixtures", git=Path("/usr/bin/git"),
+                                   python=Path("/usr/bin/python3.12"))
             for role in ("node_archive", "bwrap", "claude", "python_archive", "npm_cache", "wheelhouse"):
                 setattr(args, role, Path("/owned") / role)
             args.npm_cache = parent / "source-cache"
@@ -534,10 +535,11 @@ class QualificationFixtureControls(unittest.TestCase):
                 commands.append(words)
                 if words[2].endswith("build-pilot-front-door.py"):
                     return {"commit": "a" * 40, "archive_sha256": "b" * 64}
-                if words[2].endswith("pilot.py"):
-                    parsed = front.parser().parse_args(words[3:])
+                if words[1] == "pilot":
+                    parsed = front.parser().parse_args(words[4:])
                     self.assertFalse(parsed.allow_download)
                     front.PREP.private_dir(parsed.npm_cache)
+                    self.assertEqual(parsed.python, args.python)
                     for role in ("python_archive", "npm_cache", "wheelhouse", "agentfw", "sandbox_tests"):
                         self.assertTrue(getattr(parsed, role).is_absolute())
                     return {"status": "prepared-not-active"}
@@ -546,7 +548,8 @@ class QualificationFixtureControls(unittest.TestCase):
                     patch.object(module.subprocess, "check_output", return_value="a" * 40), \
                     patch.object(module.UPDATE, "make_inventory", return_value={"fixture": True}):
                 module.prepare(args)
-            self.assertEqual(sum(words[2].endswith("pilot.py") for words in commands), 2)
+            self.assertFalse(any(words[2].endswith("scripts/pilot.py") for words in commands))
+            self.assertEqual(sum(words[1] == "pilot" for words in commands), 2)
             result = json.loads((args.output / "inputs.json").read_text())
             self.assertEqual(result["status"], "prepared-not-qualified")
             self.assertEqual(result["entry_agent"], "/owned/agentfw")
