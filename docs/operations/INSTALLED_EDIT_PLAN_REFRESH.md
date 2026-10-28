@@ -89,3 +89,8 @@ SIGKILL after staging before publication. It independently checks file/sentinel
 identities and bytes, no unauthorized effects and owned process cleanup. Failed
 and incomplete attempts remain in its report. This is development qualification;
 final shared Ready qualification, admission and merge are reviewer-owned.
+
+The first targeted native run passed 23/23 refresh cases and all 23 existing
+installed-edit cases on implementation `635f9dfdf08e904e98ad45c565f784033a33ff05`.
+Independent artifact checks, exact source/binary/plan digests and all development
+attempts are retained under [SOU-168 evidence](evidence/sou-168/README.md).

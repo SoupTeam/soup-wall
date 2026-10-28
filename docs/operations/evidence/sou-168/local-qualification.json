@@ -176,6 +176,44 @@
       "source_sha256": "d76bb9ca6609a1b9575f75cfe8b4369d04910cb0157b8471d22499dde3f243d8",
       "log_sha256": "f223b7321f1cb6a03fecf201096b1c33fac4b8001d0e3968a0aa85e1edacc6f0",
       "elapsed_seconds": 0.4
+    },
+    {
+      "label": "final-fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "a45f54ddca3278a4446d9910e54ab346f4bdc7334baee9585b91f69cd1179ff7",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 1.3
+    },
+    {
+      "label": "final-documentation",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "a45f54ddca3278a4446d9910e54ab346f4bdc7334baee9585b91f69cd1179ff7",
+      "log_sha256": "d1e9a0de9920ad602610d3d8ce868e6ac8f0b9a057811c05660a6b4c80c37c46",
+      "elapsed_seconds": 1.63
+    },
+    {
+      "label": "final-generator",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/ci_components.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "a45f54ddca3278a4446d9910e54ab346f4bdc7334baee9585b91f69cd1179ff7",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 0.07
     }
   ],
   "development_observations": [
@@ -185,5 +223,11 @@
       "reason": "new guide was not yet in the isolated Git index; added only that document to the isolated index and reran",
       "next": "documentation-tracked passed; no broken links or source runtime changes"
     }
-  ]
+  ],
+  "final_documentation": {
+    "files": 320,
+    "links": 1087,
+    "errors": 0
+  },
+  "post_native_delta": "documentation/evidence only; qualified runtime, tests, driver, workflow and workload are unchanged"
 }
