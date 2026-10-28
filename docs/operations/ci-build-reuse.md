@@ -91,6 +91,8 @@ producer guard. Missing, skipped, cancelled or incomplete producer evidence neve
 turns a required consumer green. Build/test logs and failed partial generations
 are retained; diagnostic artifacts have 30-day retention. No failure triggers a
 silent source-build fallback, wider permission, deadline increase or test skip.
+Producer and consumer evidence names include the run and attempt, so a partial
+rerun keeps earlier failed diagnostics without overwriting their artifact names.
 
 A consumer-only rerun may use its retained successful dependency's artifact ID,
 hashes and older producer attempt **in the same run**. If the producer actually

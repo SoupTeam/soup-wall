@@ -1113,7 +1113,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: sou54-create-file-evidence
+          name: sou54-create-file-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/sou54-*.json
             ${{ runner.temp }}/sou54-*.jsonl
@@ -1301,7 +1301,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: sou161-installed-edit-evidence
+          name: sou161-installed-edit-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
