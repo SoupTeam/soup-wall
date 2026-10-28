@@ -292,7 +292,6 @@ try:
     if action == "verify_unsupported":
         send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"write_file","arguments":{"path":path,"content":content}}})
     elif action == "verify_generic_error":
-        # Send a supported tool with missing arguments to bypass profile checks and force a setup/argument error
         send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{}}})
     else:
         send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{"path":path}}})
@@ -335,11 +334,11 @@ elif action == "verify_policy":
     if result.get("isError") is not True:
         sys.exit(f"CRITICAL: Expected strict policy denial (isError=True), got {resp}")
         
-    text_content = result.get("content", [{}])[0].get("text", "")
+    text_content = result.get("content", [{}])[0].get("text", "").strip()
     expected_framing = "Soup Wall withheld MCP result (filesystem-profile-refuse-result-injection)"
     
-    if expected_framing not in text_content:
-        sys.exit(f"CRITICAL: Expected exact policy denial framing '{expected_framing}' in text content, got {resp}")
+    if text_content != expected_framing:
+        sys.exit(f"CRITICAL: Expected EXACT policy denial framing, but got incidental substring match or wrong text: '{text_content}'")
     sys.exit(0)
 EOF
 
@@ -400,6 +399,27 @@ if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_structure
     exit 1
 fi
 
+echo "Testing Fake Policy Setup Error Negative Control (Exact Phrase Substring)..."
+cat <<'EOF' > mock_agent_substring.py
+import sys, json
+for line in sys.stdin:
+    if not line.strip(): continue
+    req = json.loads(line)
+    mid = req.get("id")
+    method = req.get("method")
+    if method == "initialize":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{}}))
+    elif method == "tools/list":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{"tools":[]}}))
+    elif method == "tools/call":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{"isError":True,"content":[{"type":"text","text":"Cannot open file named Soup Wall withheld MCP result (filesystem-profile-refuse-result-injection): setup file missing"}]}}))
+    sys.stdout.flush()
+EOF
+
+if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_substring.py >/dev/null 2>&1; then
+    echo "CRITICAL: Substring setup error containing the exact expected phrase was falsely accepted as a policy denial!"
+    exit 1
+fi
 
 echo "Testing Useful Read (Offline)..."
 python3 mcp_test_driver.py "read" "/workspace/test_secret.txt" "" \
