@@ -21,6 +21,10 @@ class InstalledEditEvidence(unittest.TestCase):
             self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', action, '--', '-pending'))
         suite.ask('owned-run', 'approve', '-pending', '--binding', 'a' * 64)
         self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', 'approve', '--binding', 'a' * 64, '--', '-pending'))
+        for words in (('inspect', '--', '-pending'), ('reject', '--', '-pending'),
+                      ('approve', '--binding', 'a' * 64, '--', '-pending')):
+            suite.ask('owned-run', *words)
+            self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', *words))
 
     def seed(self):
         report = {'format': probe.FORMAT, 'status': 'passed', 'paid_inference': False,
