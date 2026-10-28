@@ -39,6 +39,11 @@ struct Fixture {
     tree_tag: String,
 }
 
+#[cfg(target_os = "linux")]
+pub(super) fn transport_snapshot() -> Arc<Snapshot> {
+    Fixture::new().snapshot()
+}
+
 impl Fixture {
     fn new() -> Self {
         let mut images = BTreeMap::new();
@@ -94,6 +99,150 @@ impl Fixture {
             profile: context().profile_format,
         })
     }
+}
+
+fn tracked_fixture() -> Fixture {
+    let mut f = Fixture::new();
+    f.images.get_mut(".git/config").unwrap().extend_from_slice(
+        b"[user]\nname = Owned\nemail = owned@example.invalid\n[remote \"origin\"]\nurl = https://example.invalid/owned/repo.git\nfetch = +refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\nremote = origin\nmerge = refs/heads/main\n");
+    f.images.insert(
+        ".git/refs/remotes/origin/main".into(),
+        format!("{}\n", f.commit).into_bytes(),
+    );
+    f.images.insert(
+        ".git/refs/remotes/origin/HEAD".into(),
+        b"ref: refs/remotes/origin/main\n".to_vec(),
+    );
+    f.images.insert(
+        ".git/packed-refs".into(),
+        format!(
+            "# pack-refs with: peeled fully-peeled sorted\n{} refs/remotes/origin/packed\n",
+            f.commit
+        )
+        .into_bytes(),
+    );
+    f
+}
+
+#[test]
+fn git_tracked_symlinks_origin_metadata_retains_digest_without_remote_revision_authority() {
+    let f = tracked_fixture();
+    assert!(Repository::images(f.images.clone()).is_err());
+    let repo = Repository::tracked_images(f.images.clone()).unwrap();
+    assert_eq!(
+        repo.resolve("HEAD").unwrap().effective.kind,
+        ObjectKind::Commit
+    );
+    for remote in [
+        "refs/remotes/origin/main",
+        "refs/remotes/origin/HEAD",
+        "refs/remotes/origin/packed",
+    ] {
+        assert!(repo.resolve(remote).is_err());
+        assert!(super::super::validate_arguments(
+            "git_show",
+            &json!({"repo_path":"/workspace", "revision":remote})
+        )
+        .is_err());
+    }
+    let mut changed = f.images.clone();
+    changed
+        .get_mut(".git/config")
+        .unwrap()
+        .extend_from_slice(b"# retained original bytes\n");
+    assert_ne!(
+        Repository::tracked_images(changed).unwrap().digest,
+        repo.digest
+    );
+    let mut changed = f.images;
+    changed.insert(
+        ".git/refs/remotes/origin/main".into(),
+        format!("{}\n", f.blob).into_bytes(),
+    );
+    let changed = Repository::tracked_images(changed).unwrap();
+    assert_ne!(changed.digest, repo.digest);
+    assert_eq!(
+        changed.resolve("HEAD").unwrap().effective.kind,
+        ObjectKind::Commit
+    );
+}
+
+#[test]
+fn git_tracked_symlinks_metadata_refuses_unsafe_config_names_symbolics_and_ref_overflow() {
+    let f = tracked_fixture();
+    let mut images = f.images.clone();
+    images.remove(".git/config");
+    assert!(Repository::tracked_images(images).is_err());
+    for extra in [
+        "[include]\npath = owned\n",
+        "[core]\nsshCommand = owned\n",
+        "[remote \"other\"]\nurl = https://example.invalid/other\n",
+    ] {
+        let mut images = f.images.clone();
+        images
+            .get_mut(".git/config")
+            .unwrap()
+            .extend_from_slice(extra.as_bytes());
+        assert!(Repository::tracked_images(images).is_err());
+    }
+    for (name, target) in [
+        ("refs/remotes/other/main", format!("{}\n", f.commit)),
+        ("refs/remotes/origin/../escape", format!("{}\n", f.commit)),
+        ("refs/remotes/origin/.hidden", format!("{}\n", f.commit)),
+        ("refs/remotes/origin/HEAD", "ref: refs/heads/main\n".into()),
+        (
+            "refs/remotes/origin/HEAD",
+            "ref: refs/remotes/origin/HEAD\n".into(),
+        ),
+        (
+            "refs/remotes/origin/HEAD",
+            "ref: refs/remotes/origin/missing\n".into(),
+        ),
+        (
+            "refs/remotes/origin/HEAD",
+            "ref: refs/remotes/other/main\n".into(),
+        ),
+        (
+            "refs/remotes/origin/main",
+            "ref: refs/remotes/origin/HEAD\n".into(),
+        ),
+        ("refs/remotes/origin/main", "\n".into()),
+    ] {
+        let mut images = f.images.clone();
+        images.insert(format!(".git/{name}"), target.into_bytes());
+        assert!(Repository::tracked_images(images).is_err(), "{name}");
+    }
+    for name in ["refs/remotes/other/main", "refs/remotes/origin/../escape"] {
+        let mut images = f.images.clone();
+        images.insert(
+            ".git/packed-refs".into(),
+            format!("{} {name}\n", f.commit).into_bytes(),
+        );
+        assert!(Repository::tracked_images(images).is_err());
+    }
+    let mut images = f.images.clone();
+    images.insert(
+        ".git/HEAD".into(),
+        b"ref: refs/remotes/origin/main\n".to_vec(),
+    );
+    assert!(Repository::tracked_images(images).is_err());
+    let mut images = f.images.clone();
+    images.insert(
+        ".git/packed-refs".into(),
+        (0..65)
+            .map(|i| format!("{} refs/remotes/origin/extra{i}\n", f.commit))
+            .collect::<String>()
+            .into_bytes(),
+    );
+    assert!(Repository::tracked_images(images).is_err());
+    let mut images = f.images;
+    for i in 0..64 {
+        images.insert(
+            format!(".git/refs/remotes/origin/extra{i}"),
+            format!("{}\n", f.commit).into_bytes(),
+        );
+    }
+    assert!(Repository::tracked_images(images).is_err());
 }
 
 fn request(id: i64, revision: &str) -> Vec<u8> {
@@ -367,7 +516,7 @@ fn cancellation_expiry_invalid_result_and_withdrawal_do_not_poison_fresh_reads()
     match &snapshot.source {
         Source::Memory(live) => live.store(false, Ordering::SeqCst),
         #[cfg(target_os = "linux")]
-        Source::Native(_) => panic!("expected owned memory fixture"),
+        Source::Native(_) | Source::FileRevisions(_) => panic!("expected owned memory fixture"),
     }
     assert!(p.verify_local(&claim, &context(), &req, &result).is_err());
     assert!(p.begin(snapshot, &req).is_err());
@@ -431,6 +580,71 @@ fn parallel_local_calls_with_identical_ids_and_result_bytes_remain_isolated() {
             h.join().unwrap();
         }
     });
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn git_tracked_symlinks_native_witness_keeps_exact_origin_images_and_sticky_ref_withdrawal() {
+    let f = tracked_fixture();
+    let root = tempfile::tempdir().unwrap();
+    for path in [".git/objects/info", ".git/objects/pack", ".git/refs/tags"] {
+        std::fs::create_dir_all(root.path().join(path)).unwrap();
+    }
+    for (path, bytes) in &f.images {
+        let file = root.path().join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, bytes).unwrap();
+    }
+    let workspace = std::fs::File::open(root.path()).unwrap();
+    assert!(super::super::shallow_view::View::capture(&workspace).is_err());
+    assert!(super::super::shallow_view::View::capture_object_witness(&workspace).is_err());
+    let format = super::super::super::git_tracked_symlinks::FORMAT;
+    let other = root.path().join(".git/refs/remotes/other");
+    std::fs::create_dir(&other).unwrap();
+    assert!(Snapshot::capture(&workspace, format).is_err());
+    std::fs::remove_dir(other).unwrap();
+    let snapshot = Snapshot::capture(&workspace, format).unwrap();
+    let Source::Native(view) = &snapshot.source else {
+        panic!("native view required")
+    };
+    assert_eq!(view.object_witness_images().unwrap(), f.images);
+    assert_eq!(
+        snapshot.repository.resolve("HEAD").unwrap().effective.kind,
+        ObjectKind::Commit
+    );
+    let context = ExecutionContext {
+        profile_format: format.into(),
+        ..context()
+    };
+    // The generic component Producer remains narrow. The private tracked
+    // worker authenticates its own proof; this test checks only its Snapshot.
+    assert!(Producer::new(context).is_err());
+    snapshot.validate().unwrap();
+    assert_eq!(
+        snapshot.show_target("HEAD").unwrap().effective.kind,
+        ObjectKind::Commit
+    );
+    let mut command = tokio::process::Command::new("/owned-not-executed");
+    let mut pins = Vec::new();
+    snapshot.mount(&mut command, &mut pins).unwrap();
+    let path = root.path().join(".git/refs/remotes/origin/main");
+    let before = std::fs::read(&path).unwrap();
+    let moved = path.with_extension("owned-moved");
+    std::fs::rename(&path, &moved).unwrap();
+    std::fs::rename(&moved, &path).unwrap();
+    assert_eq!(std::fs::read(path).unwrap(), before);
+    assert!(snapshot.validate().is_err());
+    assert!(snapshot.show_target("HEAD").is_err());
+    assert!(view.object_witness_images().is_err());
+    assert!(snapshot
+        .mount(
+            &mut tokio::process::Command::new("/owned-not-executed"),
+            &mut Vec::new()
+        )
+        .is_err());
+    drop(pins);
+    drop(snapshot);
+    Snapshot::capture(&workspace, format).unwrap();
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]

@@ -471,6 +471,7 @@ fn policy_for(
                     canonical: path.to_string_lossy().to_string(),
                 }],
                 execution: Some(resource::ExecutionPolicy {
+                    replacement: None,
                     operation: resource::ExecutionOperation::CreateFile,
                     action: resource::ExecutionAction::Write,
                     max_content_bytes,
@@ -939,6 +940,7 @@ pub fn compiled_bundle_files(
     // Complete typed, inert Agent config fragment. Registry path names the
     // FINAL no-clobber directory, not temporary publication staging.
     let native = crate::config::NativeCfg {
+        execution: None,
         git_execution: None,
         registry_path: out.join("registry.json"),
         registry_sha256: p.profile.registry_sha256.clone(),

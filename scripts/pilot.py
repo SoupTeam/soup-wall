@@ -85,6 +85,17 @@ def load(name, filename):
 
 
 PREP = load("front_door_preparation", "prepare-installed-pilot.py")
+SOURCE_IDENTITY = load("front_door_source_identity", "pilot_source_identity.py")
+# Inside a component verified by `agentfw pilot` there is no Git
+# checkout: the identity is the recorded clean commit of the component.
+INSTALLED = SOURCE_IDENTITY.installed(ROOT) is not None
+PROG = "agentfw pilot" if INSTALLED else "pilot.py"
+# An installed helper starts accepted helpers in isolated mode: no PYTHON*
+# variables, user site or working-directory imports.
+PYTHON_FLAGS = ["-I", "-B"] if INSTALLED else ["-B"]
+HINTS = {key: re.sub(r"(?<![-\w])pilot\.py", PROG, value) for key, value in HINTS.items()}
+AGENT_NOT_BUILT = ("--agentfw, --git-launcher and --sandbox-tests built from commit {commit} (the installed front door "
+                   "never builds from source; build them in a checkout with scripts/build-native-pilot-inputs.py)")
 
 
 class Failure(Exception):
@@ -205,7 +216,7 @@ def describe(path, kind="file"):
 
 def child(words, *, timeout=None, cwd=None):
     """Run one accepted script; its last stdout line is its JSON result."""
-    command = [sys.executable, "-B", *[str(word) for word in words]]
+    command = [sys.executable, *PYTHON_FLAGS, *[str(word) for word in words]]
     try:
         # Never let a toolchain manager install anything as a side effect.
         env = dict(os.environ, RUSTUP_AUTO_INSTALL="0", PYTHONDONTWRITEBYTECODE="1")
@@ -239,6 +250,7 @@ def stage_words(args, inputs, paths, commit):
 
 def prepare_words(args, inputs, paths, commit, produced):
     words = ["scripts/prepare-installed-pilot.py", "--output", paths["preparation"], "--expected-commit", commit]
+    words += ["--git-profile", getattr(args, "git_profile", None) or PREP.GIT_PROFILES.DEFAULT]
     selected = dict(produced)
     for name in ("agentfw", "git_launcher", "sandbox_tests", "git", "bwrap", "claude", "python", "node", "npm"):
         if name in inputs:
@@ -249,7 +261,8 @@ def prepare_words(args, inputs, paths, commit, produced):
         if name in inputs:
             words += ["--" + name.replace("_", "-"), inputs[name]]
     words += ["--filesystem-classifier", ROOT / "rule_baseline/rule_baseline.py",
-              "--git-classifier", ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py",
+              "--git-classifier", PREP.GIT_PROFILES.classifier_path(
+                  getattr(args, "git_profile", None) or PREP.GIT_PROFILES.DEFAULT),
               "--policy", paths["inputs"] / "policy.yaml"]
     if args.allow_download:
         words.append("--allow-download")
@@ -278,6 +291,9 @@ def plan(args):
     # operator's earlier download permission; reuse never downloads anything.
     args.allow_download = bool(args.allow_download or (state or {}).get("allow_download"))
     inputs = recorded_inputs(args, state)
+    args.git_profile = getattr(args, "git_profile", None) or (state or {}).get(
+        "git_profile", PREP.GIT_PROFILES.DEFAULT)
+    report["git_selection"] = PREP.GIT_PROFILES.binding(args.git_profile)
     paths = layout(prefix, inputs)
     native, agent = stage_words(args, inputs, paths, current["commit"])
     stages = []
@@ -294,6 +310,9 @@ def plan(args):
     if all(name in inputs for name in ("agentfw", "git_launcher", "sandbox_tests")):
         stages.append({"stage": "agent", "action": "use supplied Agent executables",
                        "inputs": {name: describe(inputs[name]) for name in ("agentfw", "git_launcher", "sandbox_tests")}})
+    elif INSTALLED:
+        stages.append({"stage": "agent", "action": "supply Agent executables built from the component commit",
+                       "missing": [AGENT_NOT_BUILT.format(commit=current["commit"])]})
     else:
         code, value = child(agent, timeout=PLAN_SECONDS, cwd=ROOT)
         stages.append({"stage": "agent", "action": "build Agent executables from this commit into " + str(paths["agent"]),
@@ -321,6 +340,7 @@ def plan(args):
                    "sha256": hashlib.sha256(PREP.PILOT.PILOT_POLICY.encode("utf-8")).hexdigest()})
     words = prepare_words(args, inputs, paths, current["commit"], {})
     code, value = child(words, timeout=PLAN_SECONDS, cwd=ROOT)
+    require(code == 0 and value.get("status") == "plan", value.get("reason") or "selection_plan_failed", "selection")
     missing = [item for item in value.get("missing", []) if not any(
         item.startswith(prefix_) for prefix_ in ("--agentfw", "--git-launcher", "--sandbox-tests", "--git ", "--bwrap",
                                                  "--claude", "--node-archive", "provide existing absolute --policy"))]
@@ -345,8 +365,8 @@ def plan(args):
         *(["download pinned public archives and locked packages"] if args.allow_download else []),
         *[row["action"] for row in stages],
         "record the selected generation in " + str(paths["state"]),
-        "no daemon, host or server starts; protection starts only with `pilot.py run`"]
-    report["next"] = ("pilot.py prepare --apply with the same options" if not report["missing"]
+        "no daemon, host or server starts; protection starts only with `" + PROG + " run`"]
+    report["next"] = (PROG + " prepare --apply with the same options" if not report["missing"]
                       else "resolve the missing items, then preview again")
     return report
 
@@ -415,10 +435,11 @@ def prepare(args):
     record = {"format": FORMAT, "commit": commit, "tree": report["source"]["tree"], "selection": str(selection),
               "selection_sha256": sha(selection), "status": value["status"],
               "allow_download": bool(args.allow_download),
+              "git_profile": args.git_profile,
               "inputs": {name: str(path) for name, path in inputs.items()}}
     write_state(prefix, record)
     report.update(status=value["status"], selection=str(selection),
-                  next="pilot.py run --prefix " + str(prefix) + " (protection starts only then)")
+                  next=PROG + " run --prefix " + str(prefix) + " (protection starts only then)")
     return report
 
 
@@ -496,7 +517,7 @@ def verified_state(prefix):
 def run(args):
     """Delegate to the accepted entry point; exact status and signals are kept."""
     state = verified_state(args.prefix)
-    words = [sys.executable, "-B", str(RUNNER), "--run", "--selection", state["selection"],
+    words = [sys.executable, *PYTHON_FLAGS, str(RUNNER), "--run", "--selection", state["selection"],
              "--expected-commit", state["commit"], "--timeout-seconds", str(args.timeout_seconds),
              "--ask-wait-seconds", str(args.ask_wait_seconds), "--port", str(args.port)]
     if args.state_root is not None:
@@ -712,7 +733,7 @@ def status(args):
                              "--expected-commit", state["commit"]], timeout=PLAN_SECONDS, cwd=ROOT)
         if code == 0 and value.get("status") == "plan":
             report["selection"] = {"state": "configured", "path": state["selection"], "commit": state["commit"],
-                                   "workspaces": value.get("workspaces")}
+                                   "workspaces": value.get("workspaces"), "git_selection": value.get("git_selection")}
             selection = PREP.PILOT.strict_json(Path(state["selection"]).read_bytes())
             expected = expected_identity(state, selection)
         else:
@@ -739,6 +760,7 @@ def human(report):
         platform = report["platform"]
         lines.append("Platform: " + ("supported" if platform["supported"] else "NOT supported (" + str(platform["reason"]) + ")"))
         lines.append("Source: " + report["source"]["commit"] + (" (dirty)" if report["source"]["dirty"] else " (clean)"))
+        lines.append("Git profile: " + report["git_selection"]["id"] + " (configured capability; runtime use is separate)")
         lines.append("Prefix: " + report["prefix"]["path"] + (" (exists)" if report["prefix"]["exists"] else " (will be created)"))
         workspaces = report["workspaces"]
         lines.append("Roots: " + ("generated demo workspaces" if workspaces["mode"] == "generated-demo" else
@@ -766,7 +788,7 @@ def human(report):
 
 
 def parser():
-    top = argparse.ArgumentParser(prog="pilot.py", description=__doc__,
+    top = argparse.ArgumentParser(prog=PROG, description=re.sub(r"(?<![-\w])pilot\.py", PROG, __doc__),
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = top.add_subparsers(dest="command")
     shared = argparse.ArgumentParser(add_help=False)
@@ -775,6 +797,8 @@ def parser():
     inputs = argparse.ArgumentParser(add_help=False)
     inputs.add_argument("--expected-commit", help="assert the clean checkout commit")
     inputs.add_argument("--allow-download", action="store_true", help="prepare may download pinned public inputs")
+    inputs.add_argument("--git-profile", action=PREP.GIT_PROFILES.SingleProfile,
+                        help="exactly one reviewed Git registry id; default git-readonly-v1")
     for name in EXECUTABLE_INPUTS + FILE_INPUTS + DIR_INPUTS:
         inputs.add_argument("--" + name.replace("_", "-"), type=Path)
     for name in ("preview", "prepare"):

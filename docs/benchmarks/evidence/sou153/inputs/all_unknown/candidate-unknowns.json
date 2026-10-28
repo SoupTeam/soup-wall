@@ -1,0 +1,251 @@
+{
+  "schema": "soup-wall-paired-regression-unknowns/1",
+  "run_report_sha256": "3789c140a8e0852548cd4a2fe3633996fdf3ef5306bd7cb95a7c68f2700445ef",
+  "provenance": {
+    "kind": "synthetic",
+    "assigned_by": "SOU-153 control generator",
+    "basis": "all-unknown control: no evaluator outcome is treated as known"
+  },
+  "trajectories": [
+    {
+      "case_id": "synthetic_user_task_01/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_01/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_01/synthetic_injection_task_01",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_01/synthetic_injection_task_01",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_02/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_02/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_02/synthetic_injection_task_02",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_02/synthetic_injection_task_02",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_03/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_03/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_03/synthetic_injection_task_03",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_03/synthetic_injection_task_03",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_04/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_04/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_04/synthetic_injection_task_04",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_04/synthetic_injection_task_04",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_05/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_05/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_05/synthetic_injection_task_05",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_05/synthetic_injection_task_05",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_06/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_06/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_06/synthetic_injection_task_06",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_06/synthetic_injection_task_06",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_07/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_07/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_07/synthetic_injection_task_07",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_07/synthetic_injection_task_07",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_08/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_08/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_08/synthetic_injection_task_08",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_08/synthetic_injection_task_08",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_09/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_09/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_09/synthetic_injection_task_09",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_09/synthetic_injection_task_09",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_10/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_10/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_10/synthetic_injection_task_10",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_10/synthetic_injection_task_10",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_11/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_11/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_11/synthetic_injection_task_11",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_11/synthetic_injection_task_11",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_12/benign",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_12/benign",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_12/synthetic_injection_task_12",
+      "repetition": 1,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    },
+    {
+      "case_id": "synthetic_user_task_12/synthetic_injection_task_12",
+      "repetition": 2,
+      "reason": "synthetic control: evaluator outcome declared unknown"
+    }
+  ]
+}

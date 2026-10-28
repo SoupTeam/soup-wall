@@ -5,6 +5,8 @@
 
 #[path = "mcp/server_profile/git_local_clone.rs"]
 pub mod git_local_clone;
+#[path = "mcp/server_profile/git_tracked_symlinks.rs"]
+pub mod git_tracked_symlinks;
 
 #[cfg(target_os = "linux")]
 fn restrict(execution: bool) -> std::io::Result<()> {
@@ -150,10 +152,15 @@ fn inspect_git(args: &[&str], limit: usize) -> anyhow::Result<Vec<u8>> {
 #[cfg(target_os = "linux")]
 fn run() -> anyhow::Result<()> {
     use std::os::unix::process::CommandExt;
-    let guarded = std::env::args_os().next().as_deref()
-        == Some(std::ffi::OsStr::new(git_local_clone::EXECUTABLE));
+    let link_profile = std::env::args_os().next().as_deref()
+        == Some(std::ffi::OsStr::new(git_tracked_symlinks::EXECUTABLE));
+    let guarded = link_profile
+        || std::env::args_os().next().as_deref()
+            == Some(std::ffi::OsStr::new(git_local_clone::EXECUTABLE));
     restrict(guarded)?;
-    if guarded {
+    if link_profile {
+        git_tracked_symlinks::validate_invocation(std::path::Path::new("/workspace"), inspect_git)?;
+    } else if guarded {
         // This is the same mounted workspace the original server sees. Every
         // Git invocation rechecks it, including GitPython's startup probes.
         git_local_clone::validate_repository(std::path::Path::new("/workspace"))?;
