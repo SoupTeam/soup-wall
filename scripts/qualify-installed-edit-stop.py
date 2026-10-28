@@ -143,7 +143,9 @@ class Run:
         return value[0] if code == 0 and isinstance(value, list) and value else None
 
     def decision(self, row, approve=True):
-        words = ['approve', '--binding', row['binding_sha256'], '--', row['pending_id']] if approve else ['reject', '--', row['pending_id']]
+        # Suite.ask owns the native positional separator, including IDs that
+        # begin with '-'. Supply its logical argument order, not CLI argv.
+        words = ['approve', row['pending_id'], '--binding', row['binding_sha256']] if approve else ['reject', row['pending_id']]
         return self.suite.ask(self.run, *words)
 
     def stop(self):

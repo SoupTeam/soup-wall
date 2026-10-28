@@ -14,6 +14,19 @@ spec.loader.exec_module(probe)
 
 
 class InstalledEditStopEvidence(unittest.TestCase):
+    def test_stop_decisions_use_shared_ask_helper_and_preserve_opaque_ids(self):
+        calls = []
+        suite = object.__new__(probe.BASE.Suite)
+        suite.cli = lambda *words: (calls.append(words) or (0, None))
+        run = object.__new__(probe.Run)
+        run.suite, run.run = suite, Path('/owned-run-not-executed')
+        pending = {'pending_id': '--help', 'binding_sha256': 'a' * 64}
+        self.assertEqual(run.decision(pending), (0, None))
+        self.assertEqual(calls[-1], ('ask', '--run', run.run, 'approve',
+                                    '--binding', pending['binding_sha256'], '--', '--help'))
+        self.assertEqual(run.decision(pending, False), (0, None))
+        self.assertEqual(calls[-1], ('ask', '--run', run.run, 'reject', '--', '--help'))
+
     def test_partial_or_missing_native_inventory_cannot_pass(self):
         report = {'format': probe.FORMAT, 'status': 'passed', 'expected': list(probe.CASES),
                   'claude_sha256': probe.BASE.CLAUDE, 'paid_inference': False, 'unrelated_process_preserved': True,
