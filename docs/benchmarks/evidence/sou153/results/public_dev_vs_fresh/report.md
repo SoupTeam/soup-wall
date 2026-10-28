@@ -1,0 +1,77 @@
+# Paired development regression
+
+Development comparison of recorded runs. Not held-out efficacy, general safety or readiness evidence.
+
+| Question | Status |
+|---|---|
+| Execution | completed |
+| Input validity | valid |
+| Comparability | non_comparable |
+| Completeness | per_side_only |
+| Unknown outcomes | unavailable |
+
+## Reasons (non-comparable)
+
+- `plan_set_mismatch`: baseline development vs candidate fresh_evaluation
+- `run_settings_mismatch`: differs in ['selection.repetitions', 'budget.max_calls']
+- `input_identity_unverified`: no source bundle: task, environment and injection identities are plan declarations
+
+## Input binding
+
+Overall: **declared_unverified**. 
+
+| Link | Status |
+|---|---|
+| run_to_plan | verified |
+| case_semantic_input | unverified |
+| source_to_inventory | not_supplied |
+| injections_to_plan | not_supplied |
+
+## Completeness: baseline
+
+| Domain | Planned | Attempted | Evaluable | Unknown | Incomplete | Not run |
+|---|---|---|---|---|---|---|
+| all | 4 | 4 | 4 | 0 | 0 | 0 |
+| attacked | 2 | 2 | 2 | 0 | 0 | 0 |
+| benign | 2 | 2 | 2 | 0 | 0 | 0 |
+
+## Completeness: candidate
+
+| Domain | Planned | Attempted | Evaluable | Unknown | Incomplete | Not run |
+|---|---|---|---|---|---|---|
+| all | 2 | 2 | 1 | 0 | 1 | 0 |
+| attacked | 1 | 1 | 0 | 0 | 1 | 0 |
+| benign | 1 | 1 | 1 | 0 | 0 | 0 |
+
+## Stopped, not-run and timeout
+
+Stopped and not-run units have no evaluator outcome; they are never counted as successes.
+
+| Side | Stopped units by producer reason | Not run | Timeouts |
+|---|---|---|---|
+| baseline | none | 0 | not available (undistinguished) |
+| candidate | budget_exhausted: 1 | 0 | not available (undistinguished) |
+
+## Latency (enforced trajectories, ms)
+
+Median / nearest-rank p95 (min–max). Unknown evaluator outcomes keep their recorded durations. Stopped and not-run units have no duration and are not imputed. Timeouts: not available (undistinguished).
+
+| Side | Measured / planned | With outcome | With unknown outcome | Stopped (duration unavailable) | Not run | task_elapsed_ms | elapsed_ms |
+|---|---|---|---|---|---|---|---|
+| baseline | 4 / 4 | 4 | 0 | 0 | 0 | 147.0 / 164 (141–164) | 334.5 / 347 (322–347) |
+| candidate | 1 / 2 | 1 | 0 | 1 | 0 | 135 / 135 (135–135) | 319 / 319 (319–319) |
+
+## Family-cluster uncertainty
+
+Not computed: no comparable outcomes.
+
+## Limitations
+
+- Development comparison of recorded runs; not held-out efficacy, general safety or pilot readiness evidence.
+- Revision pins and the run's source inventory hash are producer declarations; this tool checks their consistency, not which binary or policy actually executed.
+- Input binding checks the identity of the supplied inputs, not that the producer executed them. Per-case full input, label and family are verified only through a case manifest inside the inventoried source; without one that link stays unverified (genuine upstream AgentDojo has none).
+- Paired differences and their family-cluster intervals are conditional on units evaluable in both runs; with partial coverage only the missing-outcome bounds on the planned set account for missing outcomes, and those bounds are not confidence intervals.
+- Family-cluster intervals treat resampling units as independent and exchangeable draws from the families of interest; they are approximate percentile intervals that tend to be too narrow with few clusters, and none is reported below the effective-cluster minimum. They describe this development set, not held-out performance.
+- Without declared semantic families no uncertainty is computed; correlated variants are then grouped by known plan dependencies only.
+- Unknown outcomes are unavailable in this producer contract; timeouts are not distinguishable.
+- Latency is descriptive and states no speed-up or slow-down.

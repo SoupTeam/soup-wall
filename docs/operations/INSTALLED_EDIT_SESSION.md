@@ -146,11 +146,79 @@ An interrupted run is failed/indeterminate. If publication committed before a
 result was lost or withheld, the bytes remain committed: cancellation does not
 roll them back and this entry never automatically retries the mutation.
 
+Read-only status treats the Stop producer's run-revocation record as strictly
+bound descriptive metadata, including at ordinary completed-run cleanup. It does
+not infer commit, delivery, rollback or authenticated Stop confirmation from it.
+A retained `operator_stop` outcome is reported separately from cancellation;
+missing or malformed bindings keep the diagnosis incomplete.
+
 Private run state retains the audit and exact native approval records. Host
 stdout/stderr are drained within fixed caps; only byte counts and digests are
 retained, never raw model output or provider credentials. A killed daemon cannot
 approve stale records: Ask requires the matching live authenticated epoch.
 Prepare a new plan after independently inspecting an uncertain target.
+
+## Stop one selected live run
+
+From a second terminal, use the **same installed Agent executable** as the run:
+
+```sh
+agentfw edit-session stop --run /absolute/runs/edit-RUN_ID
+agentfw edit-session stop --run /absolute/runs/edit-RUN_ID --output json-v1
+```
+
+The selected private directory must be canonical, owned and link-free. A new
+bounded `control.json` is separate from the existing `run.json` contract. The
+operator verifies it against the live launcher's sealed descriptor, executable,
+process birth identity, exact profile/session and authenticated daemon epoch,
+then pins the launcher with a Linux pidfd. Edited JSON, a PID or a process name
+cannot authorize signaling. Missing kernel identity support refuses before the
+host starts. Older runs without control metadata cannot use this operation.
+
+Only the existing launcher retires its exact native authority and pending Ask,
+closes its one-use transport and joins the adapter before cleaning its owned
+host/relay group. Native revocation takes the same lock as admission and result
+publication. It never changes policy, approval expiry, output targets, immutable
+plans or sticky host risk. No general kill endpoint or second supervisor exists.
+
+Text and versioned JSON distinguish `stopped`, `already_stopped`,
+`requested_unconfirmed` and `cleanup_incomplete`. Only an authenticated owner
+receipt after confirmed revocation and cleanup permits either successful status.
+A queued request, dead PID or independently observed disappearance is insufficient.
+All outcomes report that effects may remain committed, rollback is false and
+automatic retry is false. A replacement committed before revocation remains on
+disk even if its result was withheld. Inspect the target and retained native audit
+before deciding what to do next; prepare fresh bindings through the ordinary flow.
+
+Daemon authentication failure refuses without signaling or publishing intent.
+If the launcher/embedded daemon crashes after intent, the result remains
+unconfirmed until an owner receipt exists; repeated commands never guess success
+or signal an unrelated replacement PID. Preserve `control.json`, stop request,
+receipt, native audit and any incomplete state for recovery. Old requests,
+receipts and approvals cannot select a freshly prepared run or daemon epoch.
+
+`python3 -B scripts/qualify-installed-edit-stop.py` is inert. Its explicit `--run`
+driver reuses the accepted installed component and genuine restricted host with
+an owned loopback provider. It checks two concurrent private roots and an
+unrelated process/sentinel, pending/rejected Ask, repeat/replay, post-confirmation
+dispatch, committed publication and a publication/stop race, unsafe records,
+unavailable daemon, launcher crash and fresh useful read/edit/read. Birth mismatch
+controls simulate stale/PID-reuse identity; they do not force kernel PID reuse.
+The stopped daemon shares the launcher process. Suspended-daemon and actual
+SIGKILL cases retain that distinction. Parser/MAC and stalled-preamble unit
+controls supplement, rather than replace, the installed observations.
+
+The existing `linux-installed-edit` artifact retains `source.txt`, `binary.txt`,
+the original 23-case `runtime/report.json` and `stop-runtime/report.json`. Match
+the source commit and Agent SHA-256 across both reports and the build witnesses.
+The stop report records the installed component and genuine host digests, exact
+profile and daemon identities, observed owned process IDs/birth ticks, target
+snapshots and audit digests. Private raw arguments, bearer tokens and provider
+contents stay outside that artifact. Failed/incomplete cases remain explicit;
+an observed crash cleanup never becomes an authenticated successful stop.
+For another operation on the same declared targets, use the explicit
+[plan refresh preview and confirmation](INSTALLED_EDIT_PLAN_REFRESH.md).
+Refresh never infers previous success, retries a call or approves the next Ask.
 
 ## Qualification
 

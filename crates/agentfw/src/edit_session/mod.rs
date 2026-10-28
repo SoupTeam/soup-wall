@@ -9,9 +9,15 @@ pub(crate) mod diagnostic;
 mod profile;
 pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
+mod control;
+#[cfg(target_os = "linux")]
+mod control_io;
+#[cfg(target_os = "linux")]
 mod launch;
 #[cfg(target_os = "linux")]
 mod record;
+#[cfg(target_os = "linux")]
+mod refresh;
 #[cfg(target_os = "linux")]
 mod runtime;
 pub(crate) mod transport;
@@ -41,6 +47,21 @@ enum Action {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Preview refreshed exact bindings; publication requires the displayed confirmation.
+    Refresh {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        sha256: String,
+        /// New private immutable plan directory; the original is preserved.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, requires = "confirm")]
+        apply: bool,
+        /// Exact confirmation_sha256 from the read-only refresh preview.
+        #[arg(long, requires = "apply")]
+        confirm: Option<String>,
+    },
     /// Run one explicitly prepared profile with the genuine pinned Claude host.
     Run {
         #[arg(long)]
@@ -64,6 +85,13 @@ enum Action {
         run: PathBuf,
         #[command(subcommand)]
         action: Ask,
+    },
+    /// Revoke and stop one exact installed run through its verified owner.
+    Stop {
+        #[arg(long)]
+        run: PathBuf,
+        #[arg(long, value_enum)]
+        output: Option<crate::pilot_approval::OutputFormat>,
     },
     /// Private host forwarder; never launches an MCP child or grants authority.
     #[command(hide = true)]

@@ -116,6 +116,36 @@ fn handshake_metadata(row: &Value) -> Result<()> {
     Ok(())
 }
 
+// The Stop producer also emits this metadata during normal run cleanup.
+// It carries no per-call execution, publication, result or rollback proof.
+fn revocation_metadata(row: &Value, context: &Context, registry: &str) -> Result<()> {
+    let object = row.as_object().ok_or("audit_revocation_metadata_invalid")?;
+    let keys = [
+        "event",
+        "at_ms",
+        "instance_id",
+        "host_session",
+        "registry_sha256",
+        "retired_sessions",
+        "released",
+        "running_effects_rolled_back",
+    ];
+    if object.len() != keys.len()
+        || object.keys().any(|key| !keys.contains(&key.as_str()))
+        || row["instance_id"] != context.instance_id
+        || row["host_session"] != context.host_session
+        || row["registry_sha256"] != registry
+        // Current native session capacity is 64. A future producer expansion
+        // needs its own reviewed diagnostic contract, not silent acceptance.
+        || !row["retired_sessions"].as_u64().is_some_and(|n| n <= 64)
+        || row["released"] != false
+        || row["running_effects_rolled_back"] != false
+    {
+        return Err("audit_revocation_metadata_invalid");
+    }
+    Ok(())
+}
+
 pub(super) fn inspect(bytes: &[u8], profile: &Profile, context: &Context, registry: &str) -> Audit {
     let mut report = Audit {
         file_sha256: Some(sha(bytes)),
@@ -190,6 +220,10 @@ fn parse(
             return Err("audit_foreign_run_or_instance");
         }
         let event = row["event"].as_str().ok_or("audit_record_invalid")?;
+        if event == "pilot_run_authority_revoked" {
+            revocation_metadata(&row, context, registry)?;
+            continue;
+        }
         if event == "mcp_handshake" {
             if handshake_seen
                 || sessions.is_empty()
@@ -435,6 +469,57 @@ mod tests {
             .collect::<String>()
             .into_bytes()
     }
+    #[test]
+    fn stop_cleanup_metadata_preserves_unknown_execution_and_rejects_forgery() {
+        let (profile, context, registry, rows) = fixtures();
+        let before = inspect(&bytes(&rows), &profile, &context, &registry);
+        let revocation = json!({
+            "event":"pilot_run_authority_revoked", "at_ms":context.started_at_ms,
+            "instance_id":context.instance_id, "host_session":context.host_session,
+            "registry_sha256":registry, "retired_sessions":1,
+            "released":false, "running_effects_rolled_back":false,
+        });
+        let mut completed = rows.clone();
+        completed.push(revocation.clone());
+        let observed = inspect(&bytes(&completed), &profile, &context, &registry);
+        assert_eq!(observed.completeness, "selected_bounded_records_only");
+        assert_eq!(observed.records, before.records + 1);
+        assert_eq!(observed.calls.len(), before.calls.len());
+        assert!(observed
+            .calls
+            .iter()
+            .all(|call| { call.commit == "unknown" && call.host_delivery == "unknown" }));
+        for (key, value) in [
+            ("instance_id", json!("foreign-instance")),
+            ("host_session", json!("foreign-host")),
+            ("registry_sha256", json!("f".repeat(64))),
+            ("retired_sessions", json!(65)),
+            ("retired_sessions", json!(-1)),
+            ("retired_sessions", json!("1")),
+            ("released", json!(true)),
+            ("running_effects_rolled_back", json!(true)),
+            ("session", json!("forged-session")),
+            ("call_id", json!("forged-call")),
+        ] {
+            let mut invalid = rows.clone();
+            let mut extra = revocation.clone();
+            extra[key] = value;
+            invalid.push(extra);
+            let rejected = inspect(&bytes(&invalid), &profile, &context, &registry);
+            assert_eq!(rejected.completeness, "incomplete");
+            assert!(rejected.calls.is_empty());
+        }
+        for key in revocation.as_object().unwrap().keys() {
+            let mut invalid = rows.clone();
+            let mut missing = revocation.clone();
+            missing.as_object_mut().unwrap().remove(key);
+            invalid.push(missing);
+            let rejected = inspect(&bytes(&invalid), &profile, &context, &registry);
+            assert_eq!(rejected.completeness, "incomplete");
+            assert!(rejected.calls.is_empty());
+        }
+    }
+
     fn installed_create_sequence() -> (Profile, Context, String, Vec<Value>) {
         // Sanitized shape/order observed in an installed create/read run,
         // reconciled with native::audit, native::liveness and handlers::mcp.

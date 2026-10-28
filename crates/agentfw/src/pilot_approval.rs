@@ -48,7 +48,7 @@ pub struct OperatorArgs {
     pub action: OperatorAction,
 }
 
-#[derive(Clone, Copy, clap::ValueEnum)]
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum OutputFormat {
     JsonV1,
 }
@@ -116,7 +116,7 @@ pub struct RunGuard {
 }
 
 #[cfg(target_os = "linux")]
-fn manifest() -> Result<fs::File> {
+pub(crate) fn manifest() -> Result<fs::File> {
     use std::os::fd::FromRawFd;
     let fd = unsafe {
         libc::memfd_create(
@@ -143,8 +143,13 @@ fn manifest() -> Result<fs::File> {
 
 #[cfg(target_os = "linux")]
 fn seal(file: &mut fs::File, run: &Run) -> Result<()> {
+    seal_bytes(file, &serde_json::to_vec(run)?)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn seal_bytes(file: &mut fs::File, bytes: &[u8]) -> Result<()> {
     use std::os::fd::AsRawFd;
-    file.write_all(&serde_json::to_vec(run)?)?;
+    file.write_all(bytes)?;
     let flags = libc::F_SEAL_WRITE | libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL;
     ensure!(
         unsafe { libc::fcntl(file.as_raw_fd(), libc::F_ADD_SEALS, flags) } == 0,
@@ -174,24 +179,34 @@ fn verify_manifest(run: &Run, bytes: &[u8]) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 fn verify_sealed(run: &Run, bytes: &[u8]) -> Result<()> {
+    verify_sealed_owner(run.launcher_pid, run.launcher_start, run.manifest_fd, bytes)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn verify_sealed_owner(
+    pid: u32,
+    start: u64,
+    manifest_fd: i32,
+    bytes: &[u8],
+) -> Result<()> {
     use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
-    ensure!(run.manifest_fd >= 3, "invalid sealed manifest descriptor");
+    ensure!(manifest_fd >= 3, "invalid sealed manifest descriptor");
     ensure!(
-        process_start(run.launcher_pid)? == run.launcher_start,
+        process_start(pid)? == start,
         "pilot launcher identity changed"
     );
-    let owner = fs::metadata(format!("/proc/{}", run.launcher_pid))?;
+    let owner = fs::metadata(format!("/proc/{pid}"))?;
     ensure!(
         owner.uid() == unsafe { libc::getuid() },
         "pilot launcher owner mismatch"
     );
-    let process_exe = fs::metadata(format!("/proc/{}/exe", run.launcher_pid))?;
+    let process_exe = fs::metadata(format!("/proc/{pid}/exe"))?;
     let selected_exe = fs::metadata(std::env::current_exe()?)?;
     ensure!(
         process_exe.dev() == selected_exe.dev() && process_exe.ino() == selected_exe.ino(),
         "pilot launcher executable differs from this operator CLI"
     );
-    let file = fs::File::open(format!("/proc/{}/fd/{}", run.launcher_pid, run.manifest_fd))?;
+    let file = fs::File::open(format!("/proc/{pid}/fd/{manifest_fd}"))?;
     let required = libc::F_SEAL_WRITE | libc::F_SEAL_GROW | libc::F_SEAL_SHRINK | libc::F_SEAL_SEAL;
     let actual = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GET_SEALS) };
     ensure!(
@@ -212,7 +227,7 @@ fn verify_manifest(_run: &Run, _bytes: &[u8]) -> Result<()> {
     anyhow::bail!("run-scoped pilot approval requires Linux")
 }
 
-fn descriptor(file: &fs::File) -> i32 {
+pub(crate) fn descriptor(file: &fs::File) -> i32 {
     #[cfg(unix)]
     {
         use std::os::fd::AsRawFd;
@@ -372,7 +387,7 @@ fn prune_inspections(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn process_start(pid: u32) -> Result<u64> {
+pub(crate) fn process_start(pid: u32) -> Result<u64> {
     ensure!(
         cfg!(target_os = "linux"),
         "pilot Ask continuation is supported only on qualified Linux"
@@ -1084,12 +1099,17 @@ fn revoke(run: &Run) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 fn launcher_handle(run: &Run) -> Result<fs::File> {
+    process_handle(run.launcher_pid, run.launcher_start)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn process_handle(pid: u32, start: u64) -> Result<fs::File> {
     use std::os::fd::FromRawFd;
-    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, run.launcher_pid, 0) as i32 };
+    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) as i32 };
     ensure!(fd >= 0, "pilot stop cannot pin launcher identity");
     let file = unsafe { fs::File::from_raw_fd(fd) };
     ensure!(
-        process_start(run.launcher_pid)? == run.launcher_start,
+        process_start(pid)? == start,
         "pilot stop launcher identity changed"
     );
     Ok(file)
@@ -1101,7 +1121,7 @@ fn launcher_handle(_run: &Run) -> Result<fs::File> {
 }
 
 #[cfg(target_os = "linux")]
-fn signal_launcher(handle: &fs::File) -> Result<()> {
+pub(crate) fn signal_launcher(handle: &fs::File) -> Result<()> {
     use std::os::fd::AsRawFd;
     let result = unsafe {
         libc::syscall(

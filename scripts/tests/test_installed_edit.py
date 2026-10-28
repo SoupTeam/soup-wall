@@ -61,6 +61,21 @@ class InstalledEditEvidence(unittest.TestCase):
         self.assertEqual(probe.failure_code(ValueError('payload /private/owned-secret-canary')),
                          'qualification_runtime_error')
 
+    def test_opaque_hyphenated_ids_cannot_be_interpreted_as_cli_options(self):
+        for identity in ('-owned-id', '--help', '--', 'ordinary-id'):
+            for action in ('inspect', 'reject', 'approve'):
+                extra = ['--binding', 'a' * 64] if action == 'approve' else []
+                words = probe.ask_words(Path('/owned/missing-run'), action, identity, *extra)
+                self.assertEqual(words[-2:], ['--', identity])
+                # Any native approval option must remain on the option side;
+                # leaving --binding after '--' would silently change parsing.
+                if extra:
+                    self.assertEqual(words[4:-2], extra)
+        self.assertEqual(probe.ask_words('/owned/run', 'list'), ['ask', '--run', '/owned/run', 'list'])
+        diagnostic = probe.cli_observation(2, b'', b'error: hidden private argument\n\nUsage: agentfw edit-session ask inspect <ID>\n')
+        self.assertEqual(diagnostic['reason'], 'argument_parse_refused')
+        self.assertNotIn('hidden private argument', str(diagnostic))
+
     def test_hardlink_control_requires_both_independent_alias_snapshots(self):
         report = self.seed()
         row = next(r for r in report['cases'] if r['id'] == 'hardlink-target')

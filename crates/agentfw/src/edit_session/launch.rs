@@ -208,6 +208,7 @@ fn selected(args: Selection) -> Result<Profile> {
     crate::pilot_host::validate(&args.claude, false)?;
     let p = Profile {
         format: FORMAT.into(),
+        refreshed_from_sha256: None,
         exclusion: replace_file::EXCLUSION.into(),
         root: args.root,
         root_identity,
@@ -221,6 +222,10 @@ fn selected(args: Selection) -> Result<Profile> {
     Ok(p)
 }
 pub(super) fn verify(p: &Profile) -> Result<()> {
+    verify_anchors(p)?;
+    verify_targets(p)
+}
+pub(super) fn verify_anchors(p: &Profile) -> Result<()> {
     p.validate()?;
     ensure!(
         replace_file::inspect_workspace(&p.root)? == p.root_identity,
@@ -240,6 +245,9 @@ pub(super) fn verify(p: &Profile) -> Result<()> {
         p.policy_sha256 == profile::digest(&policy()?)?,
         "edit_policy_changed"
     );
+    Ok(())
+}
+pub(super) fn verify_targets(p: &Profile) -> Result<()> {
     for target in &p.targets {
         let path = p.root.join(&target.name);
         if target.create {
@@ -285,6 +293,15 @@ impl Drop for Stage {
     }
 }
 fn publish(out: &Path, p: &Profile) -> Result<()> {
+    publish_checked(out, p, || Ok(()))
+}
+/// Shared create-new staging and atomic no-clobber publication. Refresh checks
+/// its exact input again after staging, before the only publication point.
+pub(super) fn publish_checked(
+    out: &Path,
+    p: &Profile,
+    revalidate: impl FnOnce() -> Result<()>,
+) -> Result<()> {
     let parent = out.parent().context("edit_plan_parent")?;
     private_dir(parent)?;
     let name = out
@@ -309,6 +326,8 @@ fn publish(out: &Path, p: &Profile) -> Result<()> {
         0o400,
     )?;
     File::open(stage.0.as_path())?.sync_all()?;
+    revalidate()?;
+    private_dir(parent)?;
     let from = std::ffi::CString::new(stage.0.as_path().as_os_str().as_bytes())?;
     let dest = std::ffi::CString::new(parent.join(name).as_os_str().as_bytes())?;
     ensure!(
@@ -327,6 +346,13 @@ fn publish(out: &Path, p: &Profile) -> Result<()> {
     Ok(())
 }
 pub(super) fn load(path: &Path, expected: &str) -> Result<Profile> {
+    let p = read_plan(path, expected)?;
+    verify(&p)?;
+    Ok(p)
+}
+/// Exact bounded descriptor read without accepting stale target bindings for execution.
+/// Only refresh may observe new targets after independently checking the anchors.
+pub(super) fn read_plan(path: &Path, expected: &str) -> Result<Profile> {
     private_dir(path)?;
     ensure!(
         crate::native::is_digest(expected),
@@ -346,7 +372,7 @@ pub(super) fn load(path: &Path, expected: &str) -> Result<Profile> {
     let p: Profile =
         serde_json::from_value(value).map_err(|_| anyhow::anyhow!("edit_plan_invalid"))?;
     ensure!(profile::canonical(&p)? == raw, "edit_plan_not_canonical");
-    verify(&p)?;
+    p.validate()?;
     Ok(p)
 }
 pub(super) fn command(action: Action) -> Result<()> {
@@ -381,6 +407,17 @@ pub(super) fn command(action: Action) -> Result<()> {
             timeout_seconds,
             model,
         } => super::runtime::run(plan, sha256, state, prompt_file, timeout_seconds, model)?,
+        Action::Stop { run, output } => super::control::stop(&run, output)?,
+        Action::Refresh {
+            plan,
+            sha256,
+            out,
+            apply,
+            confirm,
+        } => {
+            let result = super::refresh::command(&plan, &sha256, &out, apply, confirm.as_deref())?;
+            println!("{result}");
+        }
         Action::Ask { run, action } => {
             private_dir(&run)?;
             let record: super::runtime::RunRecord =

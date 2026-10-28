@@ -106,6 +106,9 @@ fn terminal(raw: &[u8], context: &Context) -> Result<&'static str> {
         }
         ("failed", "host_completed") => Ok("recorded_cleanup_or_stream_failure"),
         ("failed", "cancelled") => Ok("recorded_cancellation"),
+        // Retained outcome only: not authenticated Stop/cleanup or rollback proof.
+        ("failed", "operator_stop") => Ok("recorded_operator_stop"),
+        ("failed", "invalid_stop_request") => Ok("recorded_invalid_stop_request"),
         ("failed", "deadline") => Ok("recorded_deadline"),
         ("failed", "daemon_lost") => Ok("recorded_daemon_loss"),
         ("failed", "host_stream_failure") => Ok("recorded_host_stream_failure"),
@@ -648,6 +651,20 @@ mod tests {
             terminal(&serde_json::to_vec(&row).unwrap(), &context).unwrap(),
             "recorded_unsuccessful_host_exit"
         );
+        for (reason, expected) in [
+            ("operator_stop", "recorded_operator_stop"),
+            ("invalid_stop_request", "recorded_invalid_stop_request"),
+        ] {
+            row["reason"] = json!(reason);
+            assert_eq!(
+                terminal(&serde_json::to_vec(&row).unwrap(), &context).unwrap(),
+                expected
+            );
+            row["state"] = json!("host_completed");
+            assert!(terminal(&serde_json::to_vec(&row).unwrap(), &context).is_err());
+            row["state"] = json!("failed");
+        }
+        row["reason"] = json!("host_completed");
         // A failed or missing reap does not establish how the host exited.
         row["cleanup"]["reaped"] = json!(false);
         row["cleanup"]["cleaned"] = json!(false);
