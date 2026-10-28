@@ -42,11 +42,11 @@ COMMANDS = [
      "--test", "replace_file", "--no-run", "--message-format=json"],
 ]
 MAX_MANIFEST = 256 * 1024
-MAX_ARCHIVE = 512 * 1024 * 1024
-MAX_FILE = 512 * 1024 * 1024
-# The real four-role debug producer exceeded the initial 1 GiB aggregate.
-# Each of the four files still has the accepted 512 MiB per-executable cap.
-MAX_PAYLOAD = len(ROLES) * MAX_FILE
+# Native observation at af531a2d: 1,004,034,344 payload bytes, largest file
+# 282,418,024 bytes, 265,384,281 compressed bytes. Keep finite headroom.
+MAX_ARCHIVE = 320 * 1024 * 1024
+MAX_FILE = 320 * 1024 * 1024
+MAX_PAYLOAD = 1152 * 1024 * 1024
 CHUNK = 1024 * 1024
 MAX_TAIL = tarfile.RECORDSIZE + 1024
 HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -91,7 +91,10 @@ def validate_manifest(value, expected):
         "manifest_shape")
     require(value["format"] == FORMAT and value["tuple"] == TUPLE, "unsupported_build_tuple")
     for key in ("source", "runtime", "producer"):
-        require(canonical(value[key]) == canonical(expected[key]), key + "_identity_mismatch")
+        if canonical(value[key]) != canonical(expected[key]):
+            fields = [name for name in expected[key] if not isinstance(value[key], dict)
+                      or canonical(value[key].get(name)) != canonical(expected[key][name])]
+            raise ValueError(key + "_identity_mismatch:" + ",".join(fields))
     require(value["commands"] == COMMANDS, "build_commands_mismatch")
     files = value["files"]
     require(isinstance(files, dict) and set(files) == set(ROLES), "build_roles_mismatch")
@@ -852,15 +855,33 @@ def main(argv=None):
                        "artifact_id": os.environ.get("SOU166_ARTIFACT_ID", ""),
                        "archive_sha256": os.environ.get("SOU166_ARCHIVE_SHA256", ""),
                        "manifest_sha256": os.environ.get("SOU166_MANIFEST_SHA256", "")}
-            unpack(args.archive, args.output, context["expected"], context["artifact_id"],
-                   context["archive_sha256"], context["manifest_sha256"])
-            with args.context.open("xb") as output:
-                output.write(canonical(context))
-                os.fchmod(output.fileno(), 0o444)
-            with Path(str(args.context) + ".metrics.json").open("xb") as output:
-                output.write(canonical({"format": "sw-ci-build-transfer/1", "status": "verified",
-                                        "artifact_id": context["artifact_id"], "archive_bytes": args.archive.stat().st_size,
-                                        "verification_seconds": round(time.monotonic() - began, 3)}))
+            observation = {"format": "sw-ci-build-transfer/1", "status": "observed-not-verified",
+                           "artifact_id": context["artifact_id"], "expected": context["expected"],
+                           "archive_bytes": args.archive.stat().st_size}
+            metrics_path = Path(str(args.context) + ".metrics.json")
+            with metrics_path.open("xb") as output:
+                os.fchmod(output.fileno(), 0o600)
+                def retain():
+                    raw = canonical(observation)
+                    require(len(raw) <= MAX_MANIFEST, "observation_size_limit")
+                    output.seek(0)
+                    output.write(raw)
+                    output.truncate()
+                    output.flush()
+                    os.fsync(output.fileno())
+                retain()
+                try:
+                    unpack(args.archive, args.output, context["expected"], context["artifact_id"],
+                           context["archive_sha256"], context["manifest_sha256"])
+                except Exception as error:
+                    observation.update(status="failed", reason=str(error), verification_seconds=round(time.monotonic() - began, 3))
+                    retain()
+                    raise
+                with args.context.open("xb") as selected:
+                    selected.write(canonical(context))
+                    os.fchmod(selected.fileno(), 0o444)
+                observation.update(status="verified", verification_seconds=round(time.monotonic() - began, 3))
+                retain()
         elif args.command == "cargo":
             require(args.arguments[:1] == ["--"], "explicit_original_command_required")
             cargo(args.arguments[1:], args.output)

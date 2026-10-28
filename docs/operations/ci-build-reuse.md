@@ -25,6 +25,10 @@ The producer disables incremental compilation explicitly and records its build
 environment and actual role profiles, including optimization, debug information,
 debug assertions and overflow checks. Other active compilers, compiler/native
 flags or Cargo configuration are not accepted implicitly.
+Source-mode binaries retain their original target directories and environment;
+their bytes are not claimed identical to a separate producer build. The common
+tuple records incremental compilation as disabled, and both consumers must pass
+their full original tests and witnesses using that exact produced payload.
 The producer also records each ELF's actual dynamic library names and requires
 the reviewed GNU loader. Unknown dynamic dependencies require a separate review;
 the independently checked ABI set includes libc, loader, GCC/C++ runtime, math,
@@ -49,11 +53,13 @@ Each consumer independently checks current source, toolchain, image, ABI and
 fixture paths against that protected producer context. A finite parser accepts
 only the manifest and four regular files: no extension records, links, traversal,
 extra files, special modes or unbounded declared lengths. The initial limits are
-256 KiB manifest, 512 MiB compressed archive, 512 MiB per file and at most 2 GiB
-across the four files. The first actual producer refused the initial 1 GiB
-aggregate; per-file size observations are now retained before copying/packing.
-These are refusal limits, not claims about compressed or payload sizes. Successful
-native measurements must be retained before changing them further.
+256 KiB manifest, 320 MiB compressed archive, 320 MiB per file and 1152 MiB
+across the four files. The initial producer refused a 1 GiB aggregate. The
+explicit nonincremental tuple measured at `af531a2d` then produced 1,004,034,344
+payload bytes (largest file 282,418,024) and 265,384,281 compressed bytes, with
+10.473 seconds packing time. These observations set the current refusal limits;
+they are size evidence, not a successful multi-consumer qualification claim.
+Per-file size observations are retained before copying/packing.
 
 Extraction never overwrites an existing generation or repairs a partial one.
 The custody marker is published last. All bytes, modes, finite directory contents
@@ -82,6 +88,12 @@ reruns, its dependency outputs select its new immutable ID, hashes and attempt.
 A future attempt, inconsistent filename, missing ID, changed source, workflow
 revision, image or ABI refuses. Do not manually substitute an old ID/hash set or
 delete failed evidence to make a retry pass. A new source requires a new run.
+Hosted labels can temporarily allocate different image versions during rollout.
+The prototype actually refused a `20261025.353.1` consumer for its
+`20261023.334.3` producer. Keep that refusal and compare the recorded identities;
+a controlled retry must satisfy the original exact-image/ABI contract. The
+validator records mismatch fields and the consumer's observed expected context
+even on failure, without publishing a usable selection context.
 
 ## Focused comparison and evidence
 
@@ -111,3 +123,10 @@ seconds and mixed build/test/runtime step seconds are not pure compiler time,
 billable minutes or dollar savings. No billing claim follows without actual
 billing data. Final current-source CI, all CodeQL and admission remain required;
 the shared final qualification and merge remain owned by the technical lead.
+
+The installed-edit driver passes opaque pending IDs after `--`, with approval
+options before the separator. URL-safe IDs can start with `-`; treating such an
+ID as an option previously produced a CLI parser failure. The real installed
+Agent preflight exercises inspect/approve/reject with synthetic hyphenated IDs
+and a missing run, requiring domain refusal, zero authority and unchanged
+inventory. The original 23 runtime cases and approval semantics remain intact.

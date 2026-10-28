@@ -102,6 +102,32 @@ class Custody(unittest.TestCase):
             B.pack(self.manifest, files, self.archive)
         self.assertLessEqual(self.archive.stat().st_size, 128)
 
+    def test_prepare_refusal_retains_observed_image_without_publishing_selection_context(self):
+        import contextlib
+        archive_sha, manifest_sha = self.write_archive()
+        downloaded = self.root / "download"
+        downloaded.mkdir(mode=0o700)
+        archive = downloaded / "build-r123-a1.tar.gz"
+        self.archive.rename(archive)
+        context = self.root / "expected.json"
+        changed = copy.deepcopy(self.expected)
+        changed["runtime"]["image"] = "different-hosted-image"
+        env = {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_REPOSITORY": "SoupTeam/soup-wall",
+               "GITHUB_WORKFLOW_REF": self.expected["producer"]["workflow_ref"],
+               "GITHUB_WORKFLOW_SHA": self.expected["producer"]["workflow_sha"], "SOU166_PRODUCER_RESULT": "success",
+               "SOU166_PRODUCER_ATTEMPT": "1", "SOU166_ARCHIVE_NAME": archive.name, "SOU166_ARTIFACT_ID": "456",
+               "SOU166_ARCHIVE_SHA256": archive_sha, "SOU166_MANIFEST_SHA256": manifest_sha}
+        with patch.dict(os.environ, env), patch.object(B, "expected_identity", return_value=changed), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(B.main(["prepare", "--archive", str(archive), "--output", str(self.root / "selected"),
+                                     "--context", str(context)]), 2)
+        self.assertFalse(context.exists())
+        self.unpublished()
+        observation = json.loads(Path(str(context) + ".metrics.json").read_text())
+        self.assertEqual(observation["status"], "failed")
+        self.assertEqual(observation["reason"], "runtime_identity_mismatch:image")
+        self.assertEqual(observation["expected"]["runtime"]["image"], "different-hosted-image")
+
     def test_source_image_abi_workflow_run_and_superseded_attempt_refuse(self):
         digests = self.write_archive()
         for section, field, value in (("source", "commit", "f" * 40), ("source", "tree", "f" * 40),
