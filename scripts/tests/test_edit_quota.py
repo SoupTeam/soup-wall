@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -12,6 +13,23 @@ quota = importlib.util.module_from_spec(spec);spec.loader.exec_module(quota)
 
 
 class InstalledQuotaEvidence(unittest.TestCase):
+    def test_prepared_profile_contract_is_distinct_from_qualification_report_contract(self):
+        # Exercise the selector against the actual prepare response shape;
+        # a qualification report version cannot identify an executable plan.
+        with tempfile.TemporaryDirectory() as directory:
+            suite = quota.Suite.__new__(quota.Suite)
+            suite.work = Path(directory);suite.home = suite.work / 'agent';suite.claude = suite.work / 'claude'
+            for limits in (None, (2, 100)):
+                def cli(*args):
+                    profile = {'format': quota.PROFILE if suite.limits is not None else quota.LEGACY_PROFILE}
+                    if suite.limits is not None:
+                        profile['mutation_quota'] = {'contract_version': quota.QUOTA,
+                            'max_mutations': suite.limits[0], 'max_write_bytes': suite.limits[1]}
+                    return 0, {'profile': profile, 'profile_sha256': quota.sha(quota.canonical(profile))}
+                suite.cli = cli
+                _, _, _, prepared = suite.select('legacy' if limits is None else 'quota', limits)
+                self.assertNotEqual(prepared['profile']['format'], quota.EDIT.FORMAT)
+
     def report(self):
         report = {'format': quota.FORMAT, 'status': 'passed', 'paid_inference': False,
                   'claude_sha256': quota.EDIT.CLAUDE, 'expected': list(quota.CASES),

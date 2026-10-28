@@ -1,0 +1,24 @@
+{
+  "format": "sw-edit-quota-native-attempts/1",
+  "attempts": [
+    {
+      "run": 40678782295,
+      "job": 122783920141,
+      "source": "8e345beb5b050de5a63fa869d5dbaf3eb9033bb1",
+      "artifact": 12812156815,
+      "zip_sha256": "d5eb7be407213d4bf9ebf3619406ab3b5902042eb7f7bb2270459053fcc3bb19",
+      "log_sha256": "eff2dd28360b627498c14f28bf24fb2760d8401f9b2f4aee31d9f9eac55725e5",
+      "legacy_cases": "23/23 passed",
+      "quota_inventory": {
+        "expected": 23,
+        "attempted": 2,
+        "passed": 1,
+        "failed": 1,
+        "incomplete": 21
+      },
+      "failure": "profile_version at legacy-profile; checker used qualification-report FORMAT instead of installed profile FORMAT",
+      "correction": "explicit sw-installed-edit-session/1 legacy profile contract; selector regression covers legacy/v2 response shapes",
+      "runtime_delta": "none; checked implementation remains unchanged; fresh focused native qualification required"
+    }
+  ]
+}

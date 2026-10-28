@@ -25,6 +25,7 @@ EDIT = importlib.util.module_from_spec(spec);spec.loader.exec_module(EDIT)
 require, sha, snapshot = EDIT.require, EDIT.sha, EDIT.snapshot
 FORMAT = 'sw-installed-edit-quota-qualification/1'
 PROFILE = 'sw-installed-edit-session/2'
+LEGACY_PROFILE = 'sw-installed-edit-session/1'
 QUOTA = 'sw-installed-edit-mutation-quota/1'
 TEXT = EDIT.NEW
 SECOND = 'Another bounded report: nine green containers.\n'
@@ -90,7 +91,7 @@ class Suite(EDIT.Suite):
             words += ['--apply']
         code, prepared = self.cli(*words)
         require(code == 0, 'prepare_failed_' + label)
-        require(prepared['profile']['format'] == (PROFILE if limits is not None else EDIT.FORMAT), 'profile_version')
+        require(prepared['profile']['format'] == (PROFILE if limits is not None else LEGACY_PROFILE), 'profile_version')
         if limits is not None:
             require(prepared['profile']['mutation_quota'] == {'contract_version': QUOTA,
                     'max_mutations': limits[0], 'max_write_bytes': limits[1]}, 'selected_limits_changed')
