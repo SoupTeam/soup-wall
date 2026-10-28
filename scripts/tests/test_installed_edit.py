@@ -26,12 +26,14 @@ class InstalledEditEvidence(unittest.TestCase):
         status = {'schema': probe.DIAGNOSTIC_FORMAT,
                   'effects': 'indeterminate', 'host_delivery': 'unknown', 'model_consumption': 'unknown',
                   'audit': {'calls': []}, 'outputs': [], 'recorded_host_outcome': 'recorded_operator_stop'}
-        for raw, expected in ((json.dumps(status, indent=2).encode() + b'\n', status),
-                              (b'{"running":true}\n{"finished":true}\n', {'finished': True}),
-                              (b'', None), (b'{broken\n', None)):
+        framed = b'{"running":true}\n{"finished":true}\n'
+        for command, raw, expected in (('status', json.dumps(status, indent=2).encode() + b'\n', status),
+                                       ('run', framed, {'finished': True}),
+                                       ('status', framed, None),
+                                       ('status', b'', None), ('status', b'{broken\n', None)):
             with self.subTest(raw=raw), mock.patch.object(probe.subprocess, 'run',
                     return_value=subprocess.CompletedProcess([], 0, raw, b'')):
-                code, value = suite.cli('status', '--run', '/owned', '--json')
+                code, value = suite.cli(command, '--run', '/owned', '--json')
                 self.assertEqual((code, value), (0, expected))
                 self.assertEqual(suite.last_cli['stdout_sha256'], probe.sha(raw))
                 if value == status:

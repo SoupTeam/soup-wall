@@ -174,6 +174,21 @@ class Run:
             before_state = BASE.private_state_witness(self.run)
             before_target, before_sentinel = snapshot(self.target), snapshot(self.suite.sentinel)
             code, observed = self.suite.cli('status', '--run', self.run, '--json', timeout=12)
+            # Retain bounded typed failure context before grading, never payloads.
+            observation = {'exit_code': code, 'cli': self.suite.last_cli,
+                           'decoded_object': isinstance(observed, dict)}
+            def code_only(value):
+                return value if isinstance(value, str) and 0 < len(value) <= 128 and all(
+                    char.isascii() and (char.isalnum() or char in '_/-') for char in value) else 'invalid'
+            if isinstance(observed, dict):
+                for key in ('schema', 'status', 'reason_code', 'recorded_host_outcome'):
+                    observation[key] = code_only(observed.get(key))
+                audit = observed.get('audit')
+                if isinstance(audit, dict):
+                    observation['audit_completeness'] = code_only(audit.get('completeness'))
+                    observation['audit_reason_code'] = code_only(audit.get('reason_code'))
+            self.suite.active['stop_diagnosis_observation'] = observation
+            require(code == 0 and isinstance(observed, dict), 'stop_diagnosis_command_failed')
             BASE.require_indeterminate_status(observed)
             require(code == 0 and observed.get('recorded_host_outcome') == 'recorded_operator_stop'
                     and observed.get('audit', {}).get('completeness') == 'selected_bounded_records_only',
