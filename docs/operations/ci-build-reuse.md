@@ -21,6 +21,11 @@ rules. Sources are fetched with `--locked`, compilation is offline in a fresh
 private Cargo home/target, and the compiler is already installed at the exact
 version. Ambient compiler flags, wrappers, target and profile overrides refuse.
 
+The producer disables incremental compilation explicitly and records its build
+environment and actual role profiles, including optimization, debug information,
+debug assertions and overflow checks. Other active compilers, compiler/native
+flags or Cargo configuration are not accepted implicitly.
+
 The versioned manifest binds the clean commit, tree, tracked-file digest,
 lockfile and toolchain file; compiler/tool hashes; target, profiles, features and
 flags; exact hosted image version and selected system ABI libraries; source and
@@ -40,9 +45,11 @@ Each consumer independently checks current source, toolchain, image, ABI and
 fixture paths against that protected producer context. A finite parser accepts
 only the manifest and four regular files: no extension records, links, traversal,
 extra files, special modes or unbounded declared lengths. The initial limits are
-256 KiB manifest, 512 MiB compressed archive, 512 MiB per file and 1 GiB payload.
-These are refusal limits, not measured artifact sizes. Successful native
-measurements must be retained before changing them.
+256 KiB manifest, 512 MiB compressed archive, 512 MiB per file and at most 2 GiB
+across the four files. The first actual producer refused the initial 1 GiB
+aggregate; per-file size observations are now retained before copying/packing.
+These are refusal limits, not claims about compressed or payload sizes. Successful
+native measurements must be retained before changing them further.
 
 Extraction never overwrites an existing generation or repairs a partial one.
 The custody marker is published last. All bytes, modes, finite directory contents

@@ -30,6 +30,7 @@ concurrency:
 
 jobs:
   impact:
+    if: github.event.inputs.build_mode != 'shared'
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-create-file.yml

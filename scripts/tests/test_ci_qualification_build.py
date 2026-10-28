@@ -41,7 +41,7 @@ class Custody(unittest.TestCase):
         self.manifest = {"format": B.FORMAT, "tuple": B.TUPLE, **copy.deepcopy(self.expected),
                          "commands": B.COMMANDS, "files": {
                              role: {"path": path, "mode": 0o555, "size": len(self.payload[role]),
-                                    "sha256": B.sha(self.payload[role]), "target": B.TARGETS[role]}
+                                    "sha256": B.sha(self.payload[role]), "target": B.TARGETS[role], "profile": B.PROFILES[role]}
                              for role, path in B.ROLES.items()},
                          "metrics": {"stages": [{"stage": name, "compiled_artifacts": 2, "execution_seconds": 0.5}
                                                 for name in ("binary", "tests")],
@@ -92,6 +92,15 @@ class Custody(unittest.TestCase):
             self.assertEqual(selected.read_bytes(), self.payload[role])
             self.assertEqual(selected.stat().st_mode & 0o777, 0o555)
 
+    def test_packing_stops_writing_at_compressed_limit_and_keeps_partial_evidence(self):
+        files = {}
+        for role, data in self.payload.items():
+            path = self.root / role
+            path.write_bytes(data);path.chmod(0o555);files[role] = path
+        with patch.object(B, "MAX_ARCHIVE", 128), self.assertRaisesRegex(ValueError, "compressed_archive_limit"):
+            B.pack(self.manifest, files, self.archive)
+        self.assertLessEqual(self.archive.stat().st_size, 128)
+
     def test_source_image_abi_workflow_run_and_superseded_attempt_refuse(self):
         digests = self.write_archive()
         for section, field, value in (("source", "commit", "f" * 40), ("source", "tree", "f" * 40),
@@ -127,6 +136,18 @@ class Custody(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.unpack(self.write_archive(manifest=changed), self.root / fault)
                 self.unpublished(self.root / fault)
+
+    def test_optimization_debug_overflow_and_json_type_substitution_refuse(self):
+        for field, value in (("opt_level", "3"), ("debuginfo", 0), ("debug_assertions", False),
+                             ("debug_assertions", 1), ("overflow_checks", False), ("test", 1)):
+            changed = copy.deepcopy(self.manifest)
+            changed["files"]["library"]["profile"][field] = value
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, "build_profile_mismatch"):
+                B.validate_manifest(changed, self.expected)
+        changed = copy.deepcopy(self.manifest)
+        changed["producer"]["run_attempt"] = True
+        with self.assertRaisesRegex(ValueError, "producer_identity_mismatch"):
+            B.validate_manifest(changed, self.expected)
 
     def test_tampering_does_not_rebind_protected_producer_hashes(self):
         expected = self.write_archive()
@@ -284,6 +305,15 @@ class Dependency(unittest.TestCase):
                         valid[:6] + ["nonexistent_filter"] + valid[7:], ["build", "--release"],
                         ["test", "--locked", "--offline", "-p", "agentfw", "--test", "unreviewed", "--", "--nocapture"]):
             with self.subTest(command=changed), self.assertRaises(ValueError): B.parse_cargo(changed)
+
+    def test_incompatible_active_compiler_native_flags_and_cargo_environment_refuse(self):
+        B.validate_build_overrides({"RUSTUP_TOOLCHAIN": B.PIN, "CARGO_TARGET_DIR": "/private/scratch/target", "CARGO_BUILD_JOBS": "4"})
+        for key, value in (("RUSTUP_TOOLCHAIN", "1.94.1"), ("RUSTUP_TOOLCHAIN", "stable"),
+                           ("RUSTC", "/other/rustc"), ("RUSTC_BOOTSTRAP", "1"), ("RUSTFLAGS", "-Copt-level=3"),
+                           ("CARGO_BUILD_TARGET", "aarch64-unknown-linux-gnu"), ("CARGO_BUILD_RUSTFLAGS", "-Copt-level=3"),
+                           ("CARGO_BUILD_RUSTC_WRAPPER", "/other/wrapper"), ("CARGO_PROFILE_DEV_OPT_LEVEL", "3"),
+                           ("CC", "/other/cc"), ("CFLAGS", "-march=native")):
+            with self.subTest(key=key), self.assertRaises(ValueError): B.validate_build_overrides({key: value})
 
     def test_zero_test_success_is_failure_and_retains_actual_record(self):
         with tempfile.TemporaryDirectory() as temporary, patch.object(B, "source_builder") as builder, \

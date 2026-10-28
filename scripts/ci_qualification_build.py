@@ -32,6 +32,8 @@ TARGETS = {"agentfw": {"name": "agentfw", "kind": "bin", "test": False},
            "library": {"name": "agentfw", "kind": "lib", "test": True},
            "native_endpoint": {"name": "native_endpoint", "kind": "test", "test": True},
            "replace_file": {"name": "replace_file", "kind": "test", "test": True}}
+PROFILES = {role: {"opt_level": "0", "debuginfo": 2, "debug_assertions": True,
+                   "overflow_checks": True, "test": role != "agentfw"} for role in ROLES}
 COMMANDS = [
     ["build", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw", "--message-format=json"],
     ["test", "--locked", "--offline", "-p", "agentfw", "--lib", "--test", "native_endpoint",
@@ -40,7 +42,9 @@ COMMANDS = [
 MAX_MANIFEST = 256 * 1024
 MAX_ARCHIVE = 512 * 1024 * 1024
 MAX_FILE = 512 * 1024 * 1024
-MAX_PAYLOAD = 1024 * 1024 * 1024
+# The real four-role debug producer exceeded the initial 1 GiB aggregate.
+# Each of the four files still has the accepted 512 MiB per-executable cap.
+MAX_PAYLOAD = len(ROLES) * MAX_FILE
 CHUNK = 1024 * 1024
 MAX_TAIL = tarfile.RECORDSIZE + 1024
 HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -85,15 +89,16 @@ def validate_manifest(value, expected):
         "manifest_shape")
     require(value["format"] == FORMAT and value["tuple"] == TUPLE, "unsupported_build_tuple")
     for key in ("source", "runtime", "producer"):
-        require(value[key] == expected[key], key + "_identity_mismatch")
+        require(canonical(value[key]) == canonical(expected[key]), key + "_identity_mismatch")
     require(value["commands"] == COMMANDS, "build_commands_mismatch")
     files = value["files"]
     require(isinstance(files, dict) and set(files) == set(ROLES), "build_roles_mismatch")
     total = 0
     for role, entry in files.items():
-        require(isinstance(entry, dict) and set(entry) == {"path", "size", "sha256", "mode", "target"},
+        require(isinstance(entry, dict) and set(entry) == {"path", "size", "sha256", "mode", "target", "profile"},
                 "build_file_shape")
-        require(entry["path"] == ROLES[role] and entry["target"] == TARGETS[role], "build_role_substitution")
+        require(entry["path"] == ROLES[role] and canonical(entry["target"]) == canonical(TARGETS[role]), "build_role_substitution")
+        require(canonical(entry["profile"]) == canonical(PROFILES[role]), "build_profile_mismatch")
         require(positive(entry["size"], MAX_FILE) and entry["mode"] == 0o555
                 and type(entry["mode"]) is int and isinstance(entry["sha256"], str)
                 and HEX.fullmatch(entry["sha256"]), "build_file_identity")
@@ -215,7 +220,13 @@ def pack(manifest, files, destination):
     require(len(raw) <= MAX_MANIFEST, "manifest_size_limit")
     with Path(destination).open("xb") as output:
         os.fchmod(output.fileno(), 0o600)
-        with gzip.GzipFile(fileobj=output, mode="wb", filename="", mtime=0, compresslevel=1) as zipped:
+        class LimitedOutput:
+            def write(self, raw):
+                require(output.tell() + len(raw) <= MAX_ARCHIVE, "compressed_archive_limit")
+                return output.write(raw)
+            def flush(self):
+                output.flush()
+        with gzip.GzipFile(fileobj=LimitedOutput(), mode="wb", filename="", mtime=0, compresslevel=1) as zipped:
             with tarfile.open(fileobj=zipped, mode="w|", format=tarfile.USTAR_FORMAT) as bundle:
                 bundle.addfile(member_info("manifest.json", len(raw), 0o444), io.BytesIO(raw))
                 for role in ROLES:
@@ -416,6 +427,16 @@ def producer_identity(env, attempt=None):
             "workflow_ref": workflow, "workflow_sha": env["GITHUB_WORKFLOW_SHA"], "producer_job": PRODUCER}
 
 
+def validate_build_overrides(env):
+    require(env.get("RUSTUP_TOOLCHAIN", PIN) in {PIN, PIN + "-x86_64-unknown-linux-gnu"}, "active_toolchain_mismatch")
+    forbidden = {"RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
+                 "RUSTDOCFLAGS", "CARGO_ENCODED_RUSTDOCFLAGS", "RUSTC", "RUSTDOC", "RUSTC_BOOTSTRAP",
+                 "CC", "CXX", "AR", "RANLIB", "CFLAGS", "CXXFLAGS", "LDFLAGS", "BINDGEN_EXTRA_CLANG_ARGS"}
+    require(not any(value for key, value in env.items() if key in forbidden or
+                    key.startswith(("CARGO_PROFILE_", "CARGO_TARGET_", "CARGO_BUILD_")) and
+                    key not in {"CARGO_TARGET_DIR", "CARGO_BUILD_JOBS"}), "ambient_build_override")
+
+
 def runtime_identity(root):
     require(sys.platform == "linux" and os.uname().machine == "x86_64", "native_linux_x86_64_required")
     release = dict(line.split("=", 1) for line in Path("/etc/os-release").read_text().splitlines() if "=" in line)
@@ -425,10 +446,10 @@ def runtime_identity(root):
     require(image["ImageOS"] == "ubuntu24" and re.fullmatch(r"[0-9]{8}\.[0-9]+(\.[0-9]+)?", image["ImageVersion"]),
             "exact_hosted_image_required")
     # Ambient build overrides are not silently incorporated into a compatible tuple.
-    require(not any(value for key, value in os.environ.items() if key in {
-        "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
-        "RUSTDOCFLAGS", "CARGO_ENCODED_RUSTDOCFLAGS"} or key.startswith(("CARGO_PROFILE_", "CARGO_TARGET_"))
-        and key != "CARGO_TARGET_DIR"), "ambient_build_override")
+    validate_build_overrides(os.environ)
+    for directory in (root, *root.parents):
+        require(not any((directory / ".cargo" / name).exists() for name in ("config", "config.toml")),
+                "unreviewed_cargo_configuration")
     tools = {}
     for name in ("rustc", "cargo"):
         path = Path(probe(["rustup", "which", "--toolchain", PIN, name])).resolve(strict=True)
@@ -437,6 +458,7 @@ def runtime_identity(root):
         if name == "rustc":
             require("host: x86_64-unknown-linux-gnu" in version, "compiler_host_mismatch")
         tools[name] = {"path": str(path), "sha256": source_builder().native.digest(path), "version": version}
+        require(probe([name, "-vV" if name == "rustc" else "--version"]) == version, "active_compiler_mismatch")
     for name in ("cc", "c++", "ld", "ar", "ranlib", "cmake", "pkg-config", "make"):
         path = Path(shutil.which(name) or "/missing").resolve(strict=True)
         tools[name] = {"path": str(path), "sha256": source_builder().native.digest(path)}
@@ -446,6 +468,8 @@ def runtime_identity(root):
         abi[name] = {"path": str(path), "sha256": source_builder().native.digest(path)}
     return {"image": image, "tools": tools, "abi": abi, "target": "x86_64-unknown-linux-gnu",
             "profile": "dev/test", "features": [], "default_features": True, "flags": [],
+            "build_environment": {"CARGO_BUILD_JOBS": "4", "CARGO_INCREMENTAL": "0", "LANG": "C", "LC_ALL": "C",
+                                  "RUSTUP_TOOLCHAIN": PIN, "RUSTUP_AUTO_INSTALL": "0"},
             "source_path": str(root), "test_working_directory": str(root / "crates/agentfw")}
 
 
@@ -490,6 +514,7 @@ def build(root, output):
            "HOME": str(output / "home"), "TMPDIR": str(output / "tmp"), "LANG": "C", "LC_ALL": "C",
            "CARGO_HOME": str(output / "cargo-home"), "CARGO_TARGET_DIR": str(output / "target"),
            "RUSTUP_TOOLCHAIN": PIN, "RUSTUP_AUTO_INSTALL": "0", "CARGO_BUILD_JOBS": "4",
+           "CARGO_INCREMENTAL": "0",
            "RUSTC": tools["rustc"]["path"], "CC": tools["cc"]["path"], "CXX": tools["c++"]["path"],
            "AR": tools["ar"]["path"], "RANLIB": tools["ranlib"]["path"], "CMAKE": tools["cmake"]["path"]}
     if "RUSTUP_HOME" in os.environ:
@@ -518,8 +543,19 @@ def build(root, output):
                 if (target.get("name") == TARGETS[role]["name"] and TARGETS[role]["kind"] in target.get("kind", [])
                         and row.get("profile", {}).get("test") is TARGETS[role]["test"] and row.get("executable")):
                     require(role not in found and row.get("features") == [], "cargo_role_duplicate_or_features")
+                    require(canonical(row.get("profile")) == canonical(PROFILES[role]), "cargo_profile_mismatch")
                     found[role] = Path(row["executable"])
         require(set(found) == requested, "cargo_build_roles_missing")
+        # Record the full measured second-stage set before any aggregate refusal.
+        measurements = {role: {"path": str(path), "bytes": builder.cargo_artifact_source(path).st_size}
+                        for role, path in found.items()}
+        measurements.update({role: {"path": str(output / entry["path"]), "bytes": entry["size"]}
+                             for role, entry in files.items()})
+        measured = {"format": "sw-ci-build-size-observation/1", "stage": stage, "files": measurements,
+                    "payload_bytes": sum(item["bytes"] for item in measurements.values()),
+                    "limits": {"file_bytes": MAX_FILE, "payload_bytes": MAX_PAYLOAD, "archive_bytes": MAX_ARCHIVE}}
+        (output / "file-measurements.json").write_bytes(canonical(measured))
+        print(canonical(measured).decode(), flush=True)
         for role, path in found.items():
             source = path.resolve(strict=True)
             require(source.is_relative_to(output / "target"), "cargo_artifact_outside_target")
@@ -542,7 +578,7 @@ def build(root, output):
             fd = open_file(destination)
             try:
                 files[role] = {"path": ROLES[role], "size": checked_file(fd, MAX_FILE, mode=0o555).st_size,
-                               "sha256": fd_digest(fd, MAX_FILE), "mode": 0o555, "target": TARGETS[role]}
+                               "sha256": fd_digest(fd, MAX_FILE), "mode": 0o555, "target": TARGETS[role], "profile": PROFILES[role]}
             finally:
                 os.close(fd)
     require(expected == expected_identity(root, os.environ), "producer_inputs_changed")
