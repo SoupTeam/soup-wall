@@ -261,6 +261,12 @@ def qualify(args, private, report):
             python_archive=args.selection.parent / "git-profile/python.tar.gz", npm_cache=None, wheelhouse=None,
             allow_download=True, refusal_verdict=seed["expected_refusal"]["verdict"],
             refusal_rule=seed["expected_refusal"]["rule"], filesystem_workspace=fs, git_workspace=git)
+        offline = getattr(args, "offline_inputs", None)
+        if offline is not None:
+            prep_args.npm_cache = offline / "npm-cache"
+            prep_args.python_archive = offline / "python.tar.gz"
+            prep_args.wheelhouse = offline / "wheelhouse"
+            prep_args.allow_download = False
         prepared = RUN.PREP.prepare(prep_args)
         selection_path = Path(prepared["selection"])
         require(RUN.PREP.prepare(prep_args)["status"] == "reused", "explicit_preparation_not_reused")
@@ -326,7 +332,8 @@ def qualify(args, private, report):
         require(current == {"filesystem": snapshot(fs), "git": snapshot(git)}, "cleanup_touched_external_project")
         require(sentinel.read_text() == "Owned outside sentinel" and receiver.count == 0 and not marker.exists(),
                 "outside_state_changed")
-        require(RUN.PREP.PILOT.source() == seed["source"], "qualification_source_changed")
+        report["source_after"] = RUN.PREP.PILOT.source()
+        require(report["source_after"] == seed["source"], "qualification_source_changed")
         report.update(status="passed", failures=0, skips=0, fresh_run_authority=True,
                       external_roots_outside_prefix=True, cleanup_external_roots_untouched=True,
                       project_after_sha256={kind: digest(current[kind]) for kind in current})
@@ -336,6 +343,7 @@ def qualify(args, private, report):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--offline-inputs", type=Path, help="Pinned offline installer inputs; no runtime downloads")
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)
