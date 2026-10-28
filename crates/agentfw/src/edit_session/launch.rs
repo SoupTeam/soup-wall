@@ -380,6 +380,7 @@ pub(super) fn command(action: Action) -> Result<()> {
             timeout_seconds,
             model,
         } => super::runtime::run(plan, sha256, state, prompt_file, timeout_seconds, model)?,
+        Action::Stop { run, output } => super::control::stop(&run, output)?,
         Action::Ask { run, action } => {
             private_dir(&run)?;
             let record: super::runtime::RunRecord =
