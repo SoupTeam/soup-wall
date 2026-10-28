@@ -205,7 +205,7 @@ class Suite:
     def ask(self, run, *words):
         return self.cli(*ask_words(run, *words))
 
-    def host(self, label, root, target, plan, prepared, proposals, mode='approve', timeout=40):
+    def host(self, label, root, target, plan, prepared, proposals, mode='approve', timeout=40, on_pending=None):
         model = HOST.ScriptedModel([])
         offered = set()
         observed = {}
@@ -289,6 +289,8 @@ class Suite:
                             require(inspected.get('verdict') in ('allow', 'ask', 'deny', 'escalate'), 'inspect_verdict_invalid')
                             diagnostic.update(redaction='passed', verdict=inspected['verdict'],
                                               binding_sha256=row['binding_sha256'])
+                            if on_pending is not None:
+                                on_pending(run, row)
                             seen.add(row['pending_id'])
                             inspected_seen.add(row['pending_id'])
                             if mode in ('no-approval', 'cancel-pending', 'daemon-loss'):

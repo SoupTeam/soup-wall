@@ -1295,6 +1295,7 @@ jobs:
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
           python3 -B scripts/qualify-installed-edit.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
@@ -1302,6 +1303,11 @@ jobs:
           python3 -B scripts/qualify-installed-edit-stop.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/stop-runtime"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou168_publish_fault.c -ldl -o "$SOU161_SCRATCH/publish-fault.so"
+          python3 -B scripts/qualify-edit-refresh.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --publish-fault "$SOU161_SCRATCH/publish-fault.so" \
+            --output "$SOU161_SCRATCH/refresh"
           BASH
       - name: Retain finite current-source qualification and build correlation
         if: always()
@@ -1317,6 +1323,7 @@ jobs:
             ${{ runner.temp }}/sou166-context.json
             ${{ runner.temp }}/sou166-context.json.metrics.json
             ${{ runner.temp }}/sou161-scratch/stop-runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/refresh/report.json
           if-no-files-found: warn
           retention-days: 30
 

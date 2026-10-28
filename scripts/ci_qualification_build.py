@@ -715,8 +715,8 @@ def verified_role(directory, context, role):
 
 
 FILTERS = {"library": {"create_file", "sou54_", "mcp::input::tests::", "edit_session",
-                       "native::execution::transport", "replace_file"},
-           "native_endpoint": {"create_file_v2"}, "replace_file": {""}}
+                       "native::execution::transport", "replace_file", "pilot_approval"},
+           "native_endpoint": {"create_file_v2", "sou125_stop"}, "replace_file": {""}}
 
 
 def parse_cargo(arguments):

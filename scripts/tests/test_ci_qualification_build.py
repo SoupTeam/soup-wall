@@ -307,6 +307,18 @@ class Custody(unittest.TestCase):
 
 
 class Dependency(unittest.TestCase):
+    def test_stop_filters_use_existing_pinned_test_roles_without_widening_commands(self):
+        prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
+        for selection, expected in ((["--lib", "pilot_approval"], ("library", "pilot_approval")),
+                                    (["--test", "native_endpoint", "sou125_stop"], ("native_endpoint", "sou125_stop"))):
+            command = prefix + selection + ["--", "--nocapture"]
+            self.assertEqual(B.parse_cargo(command), expected)
+            for changed in (prefix + selection + ["extra-filter", "--", "--nocapture"],
+                            prefix + selection + ["--features", "unreviewed", "--", "--nocapture"],
+                            prefix + selection[:-1] + ["unknown-filter", "--", "--nocapture"]):
+                with self.assertRaises(ValueError):
+                    B.parse_cargo(changed)
+
     def setUp(self):
         self.env = {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_REPOSITORY": "SoupTeam/soup-wall",
                     "GITHUB_WORKFLOW_REF": "SoupTeam/soup-wall/.github/workflows/ci.yml@refs/pull/3/merge",

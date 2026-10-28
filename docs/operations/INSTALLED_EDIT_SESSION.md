@@ -166,6 +166,9 @@ profile and daemon identities, observed owned process IDs/birth ticks, target
 snapshots and audit digests. Private raw arguments, bearer tokens and provider
 contents stay outside that artifact. Failed/incomplete cases remain explicit;
 an observed crash cleanup never becomes an authenticated successful stop.
+For another operation on the same declared targets, use the explicit
+[plan refresh preview and confirmation](INSTALLED_EDIT_PLAN_REFRESH.md).
+Refresh never infers previous success, retries a call or approves the next Ask.
 
 ## Qualification
 
