@@ -25,6 +25,10 @@ The producer disables incremental compilation explicitly and records its build
 environment and actual role profiles, including optimization, debug information,
 debug assertions and overflow checks. Other active compilers, compiler/native
 flags or Cargo configuration are not accepted implicitly.
+The producer also records each ELF's actual dynamic library names and requires
+the reviewed GNU loader. Unknown dynamic dependencies require a separate review;
+the independently checked ABI set includes libc, loader, GCC/C++ runtime, math,
+zlib and OpenSSL libraries.
 
 The versioned manifest binds the clean commit, tree, tracked-file digest,
 lockfile and toolchain file; compiler/tool hashes; target, profiles, features and

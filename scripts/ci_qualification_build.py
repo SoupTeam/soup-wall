@@ -34,6 +34,8 @@ TARGETS = {"agentfw": {"name": "agentfw", "kind": "bin", "test": False},
            "replace_file": {"name": "replace_file", "kind": "test", "test": True}}
 PROFILES = {role: {"opt_level": "0", "debuginfo": 2, "debug_assertions": True,
                    "overflow_checks": True, "test": role != "agentfw"} for role in ROLES}
+ABI_LIBRARIES = {"libc.so.6", "ld-linux-x86-64.so.2", "libgcc_s.so.1", "libstdc++.so.6",
+                 "libssl.so.3", "libcrypto.so.3", "libm.so.6", "libz.so.1"}
 COMMANDS = [
     ["build", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw", "--message-format=json"],
     ["test", "--locked", "--offline", "-p", "agentfw", "--lib", "--test", "native_endpoint",
@@ -95,10 +97,14 @@ def validate_manifest(value, expected):
     require(isinstance(files, dict) and set(files) == set(ROLES), "build_roles_mismatch")
     total = 0
     for role, entry in files.items():
-        require(isinstance(entry, dict) and set(entry) == {"path", "size", "sha256", "mode", "target", "profile"},
+        require(isinstance(entry, dict) and set(entry) == {"path", "size", "sha256", "mode", "target", "profile", "needed"},
                 "build_file_shape")
         require(entry["path"] == ROLES[role] and canonical(entry["target"]) == canonical(TARGETS[role]), "build_role_substitution")
         require(canonical(entry["profile"]) == canonical(PROFILES[role]), "build_profile_mismatch")
+        needed = entry["needed"]
+        require(isinstance(needed, list) and all(isinstance(name, str) for name in needed)
+                and needed == sorted(set(needed)) and "libc.so.6" in needed
+                and set(needed) <= ABI_LIBRARIES, "unsupported_dynamic_library")
         require(positive(entry["size"], MAX_FILE) and entry["mode"] == 0o555
                 and type(entry["mode"]) is int and isinstance(entry["sha256"], str)
                 and HEX.fullmatch(entry["sha256"]), "build_file_identity")
@@ -459,11 +465,11 @@ def runtime_identity(root):
             require("host: x86_64-unknown-linux-gnu" in version, "compiler_host_mismatch")
         tools[name] = {"path": str(path), "sha256": source_builder().native.digest(path), "version": version}
         require(probe([name, "-vV" if name == "rustc" else "--version"]) == version, "active_compiler_mismatch")
-    for name in ("cc", "c++", "ld", "ar", "ranlib", "cmake", "pkg-config", "make"):
+    for name in ("cc", "c++", "ld", "ar", "ranlib", "cmake", "pkg-config", "make", "readelf"):
         path = Path(shutil.which(name) or "/missing").resolve(strict=True)
         tools[name] = {"path": str(path), "sha256": source_builder().native.digest(path)}
     abi = {}
-    for name in ("libc.so.6", "ld-linux-x86-64.so.2", "libgcc_s.so.1", "libstdc++.so.6", "libssl.so.3", "libcrypto.so.3"):
+    for name in sorted(ABI_LIBRARIES):
         path = (Path("/lib/x86_64-linux-gnu") / name).resolve(strict=True)
         abi[name] = {"path": str(path), "sha256": source_builder().native.digest(path)}
     return {"image": image, "tools": tools, "abi": abi, "target": "x86_64-unknown-linux-gnu",
@@ -577,8 +583,17 @@ def build(root, output):
                 os.fsync(outgoing.fileno())
             fd = open_file(destination)
             try:
+                dynamic = probe([tools["readelf"]["path"], "-d", str(destination)])
+                needed = sorted(set(re.findall(r"\(NEEDED\).*Shared library: \[([^\]]+)\]", dynamic)))
+                require("libc.so.6" in needed and set(needed) <= ABI_LIBRARIES, "unsupported_dynamic_library:" + ",".join(needed))
+                program = probe([tools["readelf"]["path"], "-l", str(destination)])
+                require("[Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]" in program,
+                        "unsupported_elf_interpreter")
+                require(Path("/lib64/ld-linux-x86-64.so.2").resolve(strict=True) ==
+                        Path(expected["runtime"]["abi"]["ld-linux-x86-64.so.2"]["path"]), "loader_path_mismatch")
                 files[role] = {"path": ROLES[role], "size": checked_file(fd, MAX_FILE, mode=0o555).st_size,
-                               "sha256": fd_digest(fd, MAX_FILE), "mode": 0o555, "target": TARGETS[role], "profile": PROFILES[role]}
+                               "sha256": fd_digest(fd, MAX_FILE), "mode": 0o555, "target": TARGETS[role],
+                               "profile": PROFILES[role], "needed": needed}
             finally:
                 os.close(fd)
     require(expected == expected_identity(root, os.environ), "producer_inputs_changed")

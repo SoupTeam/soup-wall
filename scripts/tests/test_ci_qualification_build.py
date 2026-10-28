@@ -41,7 +41,8 @@ class Custody(unittest.TestCase):
         self.manifest = {"format": B.FORMAT, "tuple": B.TUPLE, **copy.deepcopy(self.expected),
                          "commands": B.COMMANDS, "files": {
                              role: {"path": path, "mode": 0o555, "size": len(self.payload[role]),
-                                    "sha256": B.sha(self.payload[role]), "target": B.TARGETS[role], "profile": B.PROFILES[role]}
+                                    "sha256": B.sha(self.payload[role]), "target": B.TARGETS[role], "profile": B.PROFILES[role],
+                                    "needed": ["libc.so.6"]}
                              for role, path in B.ROLES.items()},
                          "metrics": {"stages": [{"stage": name, "compiled_artifacts": 2, "execution_seconds": 0.5}
                                                 for name in ("binary", "tests")],
@@ -148,6 +149,11 @@ class Custody(unittest.TestCase):
         changed["producer"]["run_attempt"] = True
         with self.assertRaisesRegex(ValueError, "producer_identity_mismatch"):
             B.validate_manifest(changed, self.expected)
+        for needed in ([], ["libc.so.6", "unreviewed.so"], ["libc.so.6", "libc.so.6"]):
+            changed = copy.deepcopy(self.manifest)
+            changed["files"]["library"]["needed"] = needed
+            with self.assertRaisesRegex(ValueError, "unsupported_dynamic_library"):
+                B.validate_manifest(changed, self.expected)
 
     def test_tampering_does_not_rebind_protected_producer_hashes(self):
         expected = self.write_archive()
