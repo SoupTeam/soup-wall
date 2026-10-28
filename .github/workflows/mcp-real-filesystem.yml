@@ -80,10 +80,12 @@ jobs:
             --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
             /usr/bin/env -i PATH="$SOU145_SCRATCH/node/bin:/usr/bin:/bin" LANG=C.UTF-8 \
             HOME="$SOU145_SCRATCH/home" TMPDIR="$SOU145_SCRATCH/tmp" \
-            SOU145_HOST_PID_NS="$(readlink /proc/self/ns/pid)" \
+            SOU145_HOST_PID_NS="$(readlink /proc/self/ns/pid)" SOU145_SELECTED_BWRAP="$SOU111_BWRAP" \
             SOU145_SOURCE="$GITHUB_WORKSPACE" SOU145_SCRATCH="$SOU145_SCRATCH" /bin/bash "$SOU145_SCRATCH/runtime.sh"
       - name: Remove job-scoped sandbox permission
         if: always()
+        env:
+          SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: python3 -B scripts/ci_bwrap_userns.py cleanup --report "$RUNNER_TEMP/sou145-apparmor-cleanup.json"
       - uses: actions/upload-artifact@v7
         if: always()
@@ -91,6 +93,7 @@ jobs:
           name: sou145-fixed-source-execution
           path: |
             ${{ runner.temp }}/sou145/build-record.json
+            ${{ runner.temp }}/sou145/seed.json
             ${{ runner.temp }}/sou145/results/execution.json
             ${{ runner.temp }}/sou145/results/frozen-plan.json
             ${{ runner.temp }}/sou145/results/*/report.json
