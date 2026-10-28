@@ -1,0 +1,27 @@
+{
+  "format": "sou144-independent-verification/1",
+  "status": "pass",
+  "source": "561fd091306941e8107948c35df530d94995e578",
+  "tree": "c33f04c03d35f7fdb8677c9df21b8b84abcfef9d",
+  "run": 40759188394,
+  "artifact": 12848410065,
+  "archive_sha256": "19bb053db61840fc277991e5b5f69d6e8bce787462c65822c5a07e0f2252b320",
+  "binary_sha256": "a548e4c3cd83a8edcb533dab6317bdbf5f9be0b32c48f75a507e5190d37ba51c",
+  "driver_sha256": "7d4459fdcb13f47c107734f74a40e537aef1ea574a4fecc4a2007d526b01dda7",
+  "native_tests": {
+    "inspector-tests.log": 18,
+    "production-validator-tests.log": 71,
+    "selected-validator-tests.log": 1
+  },
+  "python_controls": 8,
+  "cli_syscall_cases": 7,
+  "original_six_expectations_unchanged": true,
+  "preflight_is_not_full_inspection": true,
+  "local_workspace": {
+    "passed": 1913,
+    "failed": 0,
+    "ignored": 13
+  },
+  "local_clippy": "passed all-targets -D warnings",
+  "authority_claims": false
+}
