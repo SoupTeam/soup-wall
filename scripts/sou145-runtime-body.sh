@@ -13,7 +13,7 @@ python3 -B scripts/prepare-installed-pilot.py --prepare \
   --agentfw "$SOU145_SCRATCH/target/debug/agentfw" --git-launcher "$SOU145_SCRATCH/target/debug/agentfw-git-sandbox" \
   --sandbox-tests "$(cat "$SOU145_SCRATCH/library-path.txt")" \
   --node "$SOU145_SCRATCH/node/bin/node" --npm "$SOU145_SCRATCH/node/bin/npm" \
-  --node-archive "$SOU145_SCRATCH/node.tar.xz" --bwrap "$SOU145_SELECTED_BWRAP" --git "$SOU145_SCRATCH/git-source/git" \
+  --bwrap "$SOU145_SELECTED_BWRAP" --git "$SOU145_SCRATCH/git-source/git" \
   --claude "$SOU145_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" --python /usr/bin/python3 \
   --filesystem-classifier "$SOU145_SOURCE/rule_baseline/rule_baseline.py" --git-classifier "$SOU145_SOURCE/rule_baseline/git_readonly_v1/rule_baseline.py" \
   --policy "$SOU145_SCRATCH/policy.yaml" --npm-cache "$SOU145_SCRATCH/offline/npm-cache" \
