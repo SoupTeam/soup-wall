@@ -33,7 +33,10 @@ jobs:
           git show ${{ github.sha }}:scripts/sou144-native-body.sh > "$SOU144_SCRATCH/run.sh"
           sudo -- /usr/bin/bwrap --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / --bind "$SOU144_SCRATCH" "$SOU144_SCRATCH" --proc /proc --dev /dev \
-            --cap-drop ALL --uid "$(id -u)" --gid "$(id -g)" --chdir "$GITHUB_WORKSPACE" \
+            --cap-drop ALL --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP --cap-add CAP_SYS_ADMIN \
+            --chdir "$GITHUB_WORKSPACE" /bin/bash -euc 'mount -t proc -o nosuid,nodev,noexec proc /proc; exec "$@"' bash \
+            /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
             /usr/bin/env -i PATH="$HOME/.cargo/bin:/usr/bin:/bin" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
             HOME="$SOU144_SCRATCH/home" CARGO_HOME="$SOU144_SCRATCH/cargo-home" \
             CARGO_TARGET_DIR="$SOU144_SCRATCH/target" TMPDIR="$SOU144_SCRATCH/tmp" \
