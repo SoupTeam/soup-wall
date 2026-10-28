@@ -289,8 +289,20 @@ def render(value: dict) -> bytes:
     return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def without_citation_hashes(value):
+    """The same items with every sources[].sha256 removed. A cited file may be re-cited after a reviewed
+    source change; the current hash is verified by the gate, and the frozen v0.3 files keep theirs."""
+    if isinstance(value, dict):
+        return {k: ([{kk: vv for kk, vv in s.items() if kk != "sha256"} for s in v] if k == "sources" else without_citation_hashes(v))
+                for k, v in value.items()}
+    if isinstance(value, list):
+        return [without_citation_hashes(v) for v in value]
+    return value
+
+
 def frozen_prefix_errors(fixture: dict, relations: dict) -> list[str]:
-    """v0.4 must keep every frozen v0.3 case, relation and probe unchanged and in order."""
+    """v0.4 must keep every frozen v0.3 case unchanged, and every relation and probe unchanged except
+    for re-cited source hashes, in the same order."""
     old_fx = json.loads(FROZEN_FIXTURE.read_bytes())
     old_rel = json.loads(FROZEN_RELATIONS.read_bytes())
     errors = []
@@ -299,10 +311,11 @@ def frozen_prefix_errors(fixture: dict, relations: dict) -> list[str]:
         errors.append("v0.4 cases do not start with the frozen v0.3 cases")
     if any(c["origin"] != ORIGIN_V04 for c in fixture["cases"][n:]):
         errors.append("an added case is not marked " + ORIGIN_V04)
-    if relations["relations"][:len(old_rel["relations"])] != old_rel["relations"]:
+    m = len(old_rel["relations"])
+    if without_citation_hashes(relations["relations"][:m]) != without_citation_hashes(old_rel["relations"]):
         errors.append("v0.4 relations do not start with the frozen v0.3 relations")
     for key in ("boundary_probes", "worker_frame_probes", "scope", "format"):
-        if relations[key] != old_rel[key]:
+        if without_citation_hashes(relations[key]) != without_citation_hashes(old_rel[key]):
             errors.append(f"v0.4 {key} differs from frozen v0.3")
     return errors
 

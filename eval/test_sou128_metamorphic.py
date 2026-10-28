@@ -353,6 +353,16 @@ class InputIntegrity(unittest.TestCase):
         edited = json.loads(json.dumps(corpus))
         edited["cases"][0]["input"]["raw_arguments"]["head"] = 11
         self.assertIn("v0.4 cases do not start with the frozen v0.3 cases", BUILD.frozen_prefix_errors(edited, rels))
+        # A re-cited source hash keeps the frozen prefix; a changed cited rule or basis does not.
+        recited = json.loads(json.dumps(rels))
+        recited["relations"][0]["sources"][1]["sha256"] = "0" * 64
+        recited["boundary_probes"][0]["sources"][0]["sha256"] = "0" * 64
+        self.assertEqual(BUILD.frozen_prefix_errors(corpus, recited), [])
+        for edit in (lambda r: r["relations"][0]["sources"][1].update(rule="changed"),
+                     lambda r: r["relations"][0].update(basis="changed")):
+            changed = json.loads(json.dumps(rels))
+            edit(changed)
+            self.assertIn("v0.4 relations do not start with the frozen v0.3 relations", BUILD.frozen_prefix_errors(corpus, changed))
 
 
 class Judge(unittest.TestCase):
