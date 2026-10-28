@@ -67,6 +67,12 @@ implementation plus bounded Stop failure-observation retention and its test.
 All Agent source bytes remain identical to qualified `fa1732a7`; 29 focused
 Python controls, generator/fmt and 333 Markdown / 1161 links pass after that
 sync. This does not attribute a new native run to the later retention commit.
+The final helper sync `e0ece8d8` adds an explicit qualification-only
+`diagnosis_response_not_object` error. Both regression sets are preserved and
+aligned to that code; 30 focused Python controls, generator/fmt and 334 Markdown /
+1163 links pass. Valid-status behavior and all Agent source bytes remain
+unchanged. The new upstream correction report is retained in its own source
+history; no new native run is inferred from this script/test sync.
 Historical results below retain their exact earlier source attribution.
 
 # Historical independent implementation evidence

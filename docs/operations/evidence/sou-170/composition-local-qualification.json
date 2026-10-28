@@ -119,6 +119,18 @@
       "source_sha256": "fc9c34ad0af42bb19fc1057d46e1a4a174e5ab0caebecad54fcd9ec8022a0b17",
       "log_sha256": "67d226704abb670437cec4b3927c3e31b7dbced9a64f833a201be376b30a7889",
       "elapsed_seconds": 4.19
+    },
+    {
+      "label": "final-status-contract-sync",
+      "command": [
+        "sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p test_installed_edit.py -v && python3 -B -m unittest discover -s scripts/tests -p test_installed_edit_stop.py -v && python3 -B -m unittest discover -s scripts/tests -p \"test_edit_*.py\" -v && python3 -B scripts/ci_components.py --check && cargo fmt --all --check && GIT_INDEX_FILE=/private/tmp/sou170-qualification/scratch/docs-current.index python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "312f7ee526ec5cc37938884282b35fecc7be942f49c0d0fe516cf3c1af0c5494",
+      "log_sha256": "26451e02f96d9146ffbc22b3cd1b61a93259549295b74229afb83414615f7e19",
+      "elapsed_seconds": 4.02
     }
   ],
   "native_composition": "passed; see composition-native-verification.json",
@@ -132,5 +144,15 @@
     "docs_markdown": 333,
     "docs_links": 1161,
     "docs_errors": 0
+  },
+  "final_status_contract_sync": {
+    "upstream": "e0ece8d8817b7466a6125db11c57f7dae9920f38",
+    "changed_behavior": "qualification failure code for non-object status only; valid-status framing/criteria unchanged",
+    "preserved_tests": "both original regression sets; expected explicit non-object refusal aligned",
+    "python_passed": 30,
+    "docs_markdown": 334,
+    "docs_links": 1163,
+    "docs_errors": 0,
+    "agent_source_delta_since_native_fa1732a7": "none"
   }
 }

@@ -71,6 +71,10 @@ allowed result or matching current target cannot establish those boundaries.
 
 ## Failed attempts and checks
 
+The subsequent integrated CI Stop-suite parser correction and its real installed
+12/12 Stop plus 23/23 refresh follow-up are recorded separately in
+[CI_JSON_FIX.md](CI_JSON_FIX.md), with original failed-artifact/report hashes.
+
 The projection retains two distinct failed original reports and their hashes:
 
 - `1df096f2`: 5/23 base controls and 0/14 diagnosis cases passed before the

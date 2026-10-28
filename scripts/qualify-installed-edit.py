@@ -206,7 +206,8 @@ def retain_diagnostic_response(directory, name, phase, completed):
 
 
 def require_indeterminate_status(value):
-    require(isinstance(value, dict) and value.get('schema') == DIAGNOSTIC_FORMAT
+    require(isinstance(value, dict), 'diagnosis_response_not_object')
+    require(value.get('schema') == DIAGNOSTIC_FORMAT
             and value.get('effects') == 'indeterminate'
             and value.get('host_delivery') == 'unknown'
             and value.get('model_consumption') == 'unknown', 'diagnosis_overclaimed_outcome')
