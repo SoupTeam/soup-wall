@@ -404,6 +404,7 @@ def main():
   observed=set()
   report['startup_diagnostics']=[]
   report['daemon_failures']=[]
+  report['formatter_classifications']=[]
   for log in logs:
    log.flush()
    with Path(log.name).open('rb') as reader:
@@ -412,6 +413,9 @@ def main():
    for line in tail.decode('utf-8',errors='replace').splitlines():
     try:item=json.loads(line)
     except ValueError:continue
+    if shadow and len(report['formatter_classifications'])<16:
+     diagnostic=shadow.classification_diagnostic(item)
+     if diagnostic:report['formatter_classifications'].append(diagnostic)
     if isinstance(item,dict) and item.get('event')=='verified_execution_session_failed' and len(report['daemon_failures'])<4:
      stage=item.get('launch_stage')
      report['daemon_failures'].append({'event':'verified_execution_session_failed',

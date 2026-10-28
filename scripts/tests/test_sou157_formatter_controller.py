@@ -19,6 +19,24 @@ G=load('projection','scripts/ci/project-formatter-shadow.py')
 TOOLS=json.loads((ROOT/'profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json').read_text())['result']['tools']
 
 class Controller(unittest.TestCase):
+    def test_refusal_predicates_isolate_each_failure_without_payloads(self):
+        cl={'unknown':True,'reason_codes':['partial_unknown','truncated','private']}
+        reply={'result':{'isError':True,'content':[{'text':'Soup Wall withheld MCP invocation (policy_unconfirmed_ask, native_approval_timeout)'}]}}
+        self.assertTrue(all(S.refusal_diagnostics(cl,reply,[])['predicates'].values()))
+        variants=[({'unknown':False,'reason_codes':['truncated']},reply,[],'classifier_unknown'),
+                  ({'unknown':True,'reason_codes':[]},reply,[],'classifier_truncated'),
+                  (cl,reply,[{'execution':True}],'zero_execution_records'),
+                  (cl,{'error':{'code':-32603,'message':'classifier_invalid PRIVATE'}},[],'tool_error')]
+        for c,r,rows,predicate in variants:
+            d=S.refusal_diagnostics(c,r,rows)
+            self.assertFalse(d['predicates'][predicate])
+            self.assertNotIn('PRIVATE',json.dumps(d))
+            self.assertNotIn('private',json.dumps(d))
+        d=S.classification_diagnostic({'event':'mcp_classification','host_call_id':'shadow-201-False',
+            'classification':{'unknown':True,'actions':['read'],'reason':'SECRET'},'authoritative_verdict':'ask'})
+        self.assertEqual(d,{'case_id':'shadow-201-False','unknown':True,'verdict':'ask','read_only':True})
+        self.assertIsNone(S.classification_diagnostic({'event':'mcp_classification','host_call_id':'private'}))
+
     def ordinary(self,wrong_error=False):
         sessions={};seen=[]
         def call(event,fields=None,session=None):

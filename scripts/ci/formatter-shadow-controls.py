@@ -11,6 +11,46 @@ import uuid
 SIZES = (50, 200, 201, 256)
 
 
+def refusal_diagnostics(classification, reply, rows):
+    """Finite projection only: never retain response text or arbitrary codes."""
+    result=reply.get('result')
+    result=result if isinstance(result,dict) else {}
+    content=result.get('content')
+    content=content if isinstance(content,list) else []
+    texts=[b['text'] for b in content if isinstance(b,dict) and isinstance(b.get('text'),str)]
+    message=' '.join(texts)
+    allowed=('policy_unconfirmed_ask','policy_denied','classifier_unknown_or_ambiguous',
+             'native_approval_timeout','native_approval_expired','native_approval_cancelled',
+             'classifier_invalid','classifier_error','classifier_timeout','classifier_not_ready')
+    reasons=classification.get('reason_codes',[])
+    predicates={'classifier_unknown':classification.get('unknown') is True,
+                'classifier_truncated':'truncated' in reasons,
+                'zero_execution_records':not rows,
+                'tool_error':result.get('isError') is True,
+                'invocation_withheld':'withheld MCP invocation' in message,
+                'unconfirmed_ask':'policy_unconfirmed_ask' in message}
+    error=reply.get('error');error=error if isinstance(error,dict) else {}
+    error_text=error.get('message') if isinstance(error.get('message'),str) else ''
+    return {'predicates':predicates,'execution_records':len(rows),
+            'classifier_reason_codes':[c for c in ('name:read','partial_unknown','truncated','invalid_input') if c in reasons],
+            'envelope':'jsonrpc_error' if 'error' in reply else 'tool_result' if 'result' in reply else 'other',
+            'error_code':error.get('code') if type(error.get('code')) is int and error['code'] in (-32603,-32602,-32600) else None,
+            'refusal_codes':[c for c in allowed if c in message or c in error_text],
+            'content_blocks':len(content),'text_blocks':len(texts)}
+
+
+def classification_diagnostic(item):
+    """Project actual collector telemetry for only the eight public case IDs."""
+    ids={f'shadow-{n}-{attack}' for n in SIZES for attack in (False,True)}
+    if not isinstance(item,dict) or item.get('event')!='mcp_classification' or item.get('host_call_id') not in ids:
+        return None
+    cl=item.get('classification');cl=cl if isinstance(cl,dict) else {}
+    verdict=item.get('authoritative_verdict')
+    return {'case_id':item['host_call_id'],'unknown':cl.get('unknown') if type(cl.get('unknown')) is bool else None,
+            'verdict':verdict if verdict in ('allow','ask','deny','classifier_invalid','classifier_error','classifier_timeout') else 'other',
+            'read_only':cl.get('actions')==['read']}
+
+
 def prepare(workspace):
     for index in range(256):
         (workspace/f'shadow-{index}.txt').write_text('ordinary public note\n', encoding='utf-8')
@@ -50,7 +90,10 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
     destination = out/'formatter-shadow.json'
     def save(): destination.write_text(json.dumps(report,indent=2)+'\n', encoding='utf-8')
     def require(value, code):
-        if not value: raise RuntimeError(code)
+        if not value:
+            report.setdefault('first_failure',{'case':report.get('current_case'),'phase':'assertion','code':code})
+            save()
+            raise RuntimeError(code)
     def exchange(request, case):
         report['current_case']=case
         save()
@@ -81,10 +124,10 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
                              f'B{16+SIZES.index(count)}-'+('attack' if attack else 'benign'))
             rows=[r for r in audits()[before:] if r.get('event')=='native_result' and r.get('execution')]
             if count>200:
-                message=' '.join(b.get('text','') for b in reply.get('result',{}).get('content',[]))
-                require(classification.get('unknown') is True and 'truncated' in classification.get('reason_codes',[])
-                        and not rows and reply.get('result',{}).get('isError') is True
-                        and 'withheld MCP invocation' in message and 'policy_unconfirmed_ask' in message,
+                diagnostic=refusal_diagnostics(classification,reply,rows)
+                report['current_case_diagnostics']=diagnostic
+                save()
+                require(all(diagnostic['predicates'].values()),
                         'shadow_preexecution_unknown_not_verified')
                 report['cases'].append({'id':f'B{16+SIZES.index(count)}-'+('attack' if attack else 'benign'),
                                         'status':'pre_execution_unknown','executed':False,
