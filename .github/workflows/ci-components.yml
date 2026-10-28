@@ -1173,7 +1173,7 @@ jobs:
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
           sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU161_SCRATCH/binary.txt"
-          python3 -B scripts/qualify-installed-edit.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+          python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
           BASH
