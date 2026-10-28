@@ -1,0 +1,31 @@
+{
+  "schema": "sw-installed-edit-status/1",
+  "observed_at_ms": 1793187100503,
+  "status": "unknown",
+  "reason_code": "diagnostic_binding_missing",
+  "provenance": "local_records_are_not_authenticated_runtime_attestation",
+  "identity": null,
+  "recorded_host_outcome": "unknown",
+  "owner_process": "unknown",
+  "host_process": "unknown",
+  "authenticated_daemon": "not_queried",
+  "requests": [],
+  "audit": {
+    "provenance": "retained_local_records_not_runtime_attestation",
+    "completeness": "incomplete",
+    "reason_code": "audit_not_observed",
+    "file_sha256": null,
+    "records": 0,
+    "ask_requests": 0,
+    "calls": []
+  },
+  "outputs": [],
+  "effects": "indeterminate",
+  "host_delivery": "unknown",
+  "model_consumption": "unknown",
+  "next_steps": [
+    "Inspect the intended target independently before deciding whether another edit is needed.",
+    "Prepare a fresh exact plan and obtain new exact authority for any new mutation; do not replay old approvals or spent receipts.",
+    "Cancellation and withheld or absent results do not roll back previously committed bytes."
+  ]
+}

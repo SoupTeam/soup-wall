@@ -187,3 +187,10 @@ The corrected native qualification passed 23/23 cases, 43 focused Rust controls,
 all original attempts are retained under
 [`evidence/sou-161/`](evidence/sou-161/README.md). Final shared Ready qualification,
 admission and merge remain with the reviewer.
+
+The subsequent installed status/diagnosis qualification passed all 23 existing
+controls plus 14 diagnostic cases on `a7ec2de899aa55726e7488f5d31bec5044b52307`.
+Eight cases observed actual installed runtime boundaries; six explicitly changed
+retained state as parser fixtures. Exact source/binary/component/report hashes,
+typed responses, independent witnesses, limits and both failed attempts are
+retained in [the diagnosis evidence](evidence/edit-diagnostics/README.md).
