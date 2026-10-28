@@ -22,6 +22,10 @@ fn failed_session_diagnostics_never_reflect_credentials_or_upstream_text() {
         failure_code(&anyhow::anyhow!("mcp_owner_launch_invalid")),
         "mcp_owner_launch_invalid"
     );
+    assert_eq!(
+        failure_code(&anyhow::anyhow!("verified_execution_receipt_mismatch")),
+        "verified_execution_receipt_mismatch"
+    );
 }
 impl InvocationClassifier for UnusedClassifier {
     fn source(&self) -> &'static str {
@@ -223,12 +227,19 @@ fn formatter_shadow_requires_custody_and_cannot_change_release() {
             .finish(None)
             .unwrap();
         let env = Env::with("read_multiple_files", args.clone(), &text);
-        let reply = env.finish(Some(env.source())).unwrap();
+        let source = env.source();
+        let expected_receipt = serde_json::to_value(source.metadata()).unwrap();
+        let reply = env.finish(Some(source)).unwrap();
         assert_eq!(reply.release, baseline.release);
         assert_eq!(reply.verdict, baseline.verdict);
         assert_eq!(reply.reason_codes, baseline.reason_codes);
         assert!(baseline.execution.is_none());
         let metadata = reply.execution.unwrap();
+        assert_eq!(
+            serde_json::to_value(&metadata).unwrap(),
+            expected_receipt,
+            "collector compares the complete receipt captured BEFORE inspection"
+        );
         let attribution = metadata.formatter_shadow.unwrap();
         assert_eq!(attribution.separator_spans.len(), 49);
         assert!(!attribution.production_authority);

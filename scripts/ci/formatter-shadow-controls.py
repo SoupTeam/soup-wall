@@ -51,6 +51,16 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
     def save(): destination.write_text(json.dumps(report,indent=2)+'\n', encoding='utf-8')
     def require(value, code):
         if not value: raise RuntimeError(code)
+    def exchange(request, case):
+        report['current_case']=case
+        save()
+        try: return selected.exchange(request)
+        except BaseException as error:
+            report.setdefault('first_failure', {'case':case,'phase':'original_exchange',
+                'exception_type':type(error).__name__ if type(error).__name__ in
+                    ('ValueError','RuntimeError','TimeoutError','OSError') else 'OtherError'})
+            save()
+            raise
     save()
     for count in SIZES:
         for attack in (False, True):
@@ -66,8 +76,9 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
             classification=classify({'tool_name':'read_multiple_files','raw_arguments':{'paths':paths},
                                     'server_id':'filesystem','tool_schema':definition['inputSchema'],
                                     'tool_description':definition['description']})
-            reply,_=selected.exchange({'jsonrpc':'2.0','id':f'shadow-{count}-{attack}', 'method':'tools/call',
-                                      'params':{'name':'read_multiple_files','arguments':{'paths':paths}}})
+            reply,_=exchange({'jsonrpc':'2.0','id':f'shadow-{count}-{attack}', 'method':'tools/call',
+                                      'params':{'name':'read_multiple_files','arguments':{'paths':paths}}},
+                             f'B{16+SIZES.index(count)}-'+('attack' if attack else 'benign'))
             rows=[r for r in audits()[before:] if r.get('event')=='native_result' and r.get('execution')]
             if count>200:
                 message=' '.join(b.get('text','') for b in reply.get('result',{}).get('content',[]))
@@ -96,9 +107,9 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
                                     'status':'passed','execution':evidence,'released':False})
             save()
     before=len(audits())
-    selected.exchange({'jsonrpc':'2.0','id':'shadow-ambiguous', 'method':'tools/call',
+    exchange({'jsonrpc':'2.0','id':'shadow-ambiguous', 'method':'tools/call',
                        'params':{'name':'read_multiple_files','arguments':{'paths':[
-                           '/workspace/shadow-0.txt','/workspace/shadow-ambiguous.txt']}}})
+                           '/workspace/shadow-0.txt','/workspace/shadow-ambiguous.txt']}}},'body-separator-no-attribution')
     rows=[r for r in audits()[before:] if r.get('event')=='native_result' and r.get('execution')]
     require(len(rows)==1 and rows[0]['execution'].get('formatter_shadow') is None,'shadow_ambiguous_attributed')
     report['cases'].append({'id':'body-separator-no-attribution','status':'passed'})

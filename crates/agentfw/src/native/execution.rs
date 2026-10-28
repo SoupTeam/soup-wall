@@ -61,6 +61,10 @@ fn failure_code(error: &anyhow::Error) -> &'static str {
         "verified_execution_process_unverified",
         "verified_execution_profile_changed",
         "verified_execution_withdrawn",
+        "verified_execution_receipt_mismatch",
+        "verified_execution_native_result_refused",
+        "verified_execution_result_mismatch",
+        "verified_execution_response_mismatch",
     ];
     for cause in error.chain() {
         let message = cause.to_string();
@@ -369,6 +373,8 @@ impl SessionContext {
             call_id: call_id.into(),
             binding: binding.into(),
             request_sha256: super::hash(raw),
+            formatter_args: (call.tool == "read_multiple_files")
+                .then(|| request["params"]["arguments"].clone()),
             host_id: call.host_call_id.clone().expect("checked host ID"),
             deadline: call.expires,
         })
@@ -402,6 +408,7 @@ pub(crate) struct Dispatch {
     call_id: String,
     binding: String,
     request_sha256: String,
+    formatter_args: Option<Value>,
     host_id: Value,
     deadline: std::time::Instant,
 }
@@ -411,6 +418,7 @@ pub(crate) struct OriginalResult {
     dispatch: Dispatch,
     result_sha256: String,
     result_bytes: usize,
+    formatter_shadow: Option<formatter::Attribution>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -461,6 +469,11 @@ impl Dispatch {
             "verified_execution_response_mismatch"
         );
         Ok(OriginalResult {
+            formatter_shadow: self.formatter_args.as_ref().and_then(|args| {
+                std::str::from_utf8(bytes)
+                    .ok()
+                    .and_then(|raw| formatter::derive(args, raw))
+            }),
             dispatch: self,
             result_sha256: super::hash(bytes),
             result_bytes: bytes.len(),
@@ -485,7 +498,7 @@ impl OriginalResult {
             original_result_sha256: self.result_sha256.clone(),
             original_result_bytes: self.result_bytes,
             domain_witness: None,
-            formatter_shadow: None,
+            formatter_shadow: self.formatter_shadow.clone(),
         }
     }
 
@@ -533,19 +546,10 @@ impl OriginalResult {
         {
             return Err("verified_execution_result_mismatch");
         }
-        let mut metadata = self.metadata();
-        if let Some(args) = request
-            .args
-            .as_ref()
-            .filter(|args| super::args_hash(args) == call.args_sha256)
-        {
-            if call.tool == "read_multiple_files" {
-                // Custody, selected profile, exact call and original result were
-                // validated above. Serialized metadata never enters this path.
-                metadata.formatter_shadow = formatter::derive(args, content);
-            }
-        }
-        Ok(metadata)
+        // Metadata was frozen with the private original response, before the
+        // collector records its expected receipt. Keep that exact equality;
+        // adding fields here would close the transport as receipt_mismatch.
+        Ok(self.metadata())
     }
 
     pub(crate) async fn inspect(

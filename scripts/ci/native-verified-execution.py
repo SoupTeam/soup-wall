@@ -403,6 +403,7 @@ def main():
        (source/'crates/agentfw/src'/name).read_text()))
   observed=set()
   report['startup_diagnostics']=[]
+  report['daemon_failures']=[]
   for log in logs:
    log.flush()
    with Path(log.name).open('rb') as reader:
@@ -411,6 +412,12 @@ def main():
    for line in tail.decode('utf-8',errors='replace').splitlines():
     try:item=json.loads(line)
     except ValueError:continue
+    if isinstance(item,dict) and item.get('event')=='verified_execution_session_failed' and len(report['daemon_failures'])<4:
+     stage=item.get('launch_stage')
+     report['daemon_failures'].append({'event':'verified_execution_session_failed',
+         'failure_code':item.get('failure_code') if item.get('failure_code') in allowed else 'unclassified',
+         'launch_stage':stage if type(stage) is int and 0<=stage<=3 else None,
+         'original_generation_bound':item.get('original_generation_bound') is True})
     if isinstance(item,dict) and item.get('event')=='mcp_owner_startup_diagnostic':
      elapsed=item.get('elapsed_ms')
      report['startup_diagnostics'].append({'timed_out':item.get('timed_out') is True,

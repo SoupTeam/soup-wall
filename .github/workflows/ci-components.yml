@@ -3717,6 +3717,15 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
     steps:
+      - name: Validate explicit formatter shadow selection
+        env:
+          FORMATTER_SHADOW: ${{ github.event.inputs.formatter_shadow }}
+          PREPARED_FOCUS: ${{ github.event.inputs.prepared_focus }}
+          PREPARED_HOST: ${{ github.event.inputs.prepared_host }}
+        run: |
+          if [ "$FORMATTER_SHADOW" = true ]; then
+            test "$PREPARED_FOCUS" = 155 && test "$PREPARED_HOST" = true
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -3806,6 +3815,8 @@ jobs:
       - name: Actual original SOU155 daemon process and result custody
         if: github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
         shell: bash
+        env:
+          FORMATTER_SHADOW: ${{ github.event.inputs.formatter_shadow }}
         run: |
           set -euo pipefail
           host="$RUNNER_TEMP/sou155-native-runtime"
@@ -3813,6 +3824,8 @@ jobs:
           printf 'SOU155_HOST=%s\n' "$host" >> "$GITHUB_ENV"
           unit="sou155-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           status=0
+          shadow_args=()
+          if [ "$FORMATTER_SHADOW" = true ]; then shadow_args+=(--formatter-shadow); fi
           sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
             --property="User=$(id -un)" --property="Group=$(id -gn)" \
             --property=PrivateNetwork=yes --property=NoNewPrivileges=yes \
@@ -3827,12 +3840,18 @@ jobs:
             /usr/bin/env -i PATH=/usr/bin:/bin HOME="$host" TMPDIR="$host" \
             "$pythonLocation/bin/python3" -B scripts/ci/native-verified-execution.py \
             --source "$GITHUB_WORKSPACE" --scratch "$host" --inputs "$SOU155_INPUTS" \
-            --build "$SOU155_SCRATCH" --expected-commit "$SOU155_COMMIT" --unit="$unit.service" || status=$?
+            --build "$SOU155_SCRATCH" --expected-commit "$SOU155_COMMIT" --unit="$unit.service" "${shadow_args[@]}" || status=$?
           # Inspect finite evidence only after the isolated candidate unit exits.
           # A successful exit or self-reported status alone cannot pass the lane.
+          if [ "$FORMATTER_SHADOW" = true ]; then
+            python3 -B scripts/ci/project-formatter-shadow.py \
+              --report "$host/formatter-shadow.json" --runtime "$host/native-execution.json" \
+              --expected-commit "$SOU155_COMMIT" --exit-code "$status" --output "$host/formatter-shadow-acceptance.json"
+          else
           python3 -B scripts/ci/project-verified-execution.py \
             --report "$host/native-execution.json" --build "$SOU155_SCRATCH/native-build.json" \
             --expected-commit "$SOU155_COMMIT" --exit-code "$status" --output "$host/acceptance.json"
+          fi
       - name: Remove only the owned SOU155 runtime unit
         if: always() && github.event.inputs.prepared_focus == '155' && github.event.inputs.prepared_host == 'true'
         shell: bash
@@ -3850,6 +3869,8 @@ jobs:
             ${{ runner.temp }}/sou155-public-inputs/setup.json
             ${{ runner.temp }}/sou155-native-runtime/native-execution.json
             ${{ runner.temp }}/sou155-native-runtime/acceptance.json
+            ${{ runner.temp }}/sou155-native-runtime/formatter-shadow.json
+            ${{ runner.temp }}/sou155-native-runtime/formatter-shadow-acceptance.json
           if-no-files-found: error
           retention-days: 30
 

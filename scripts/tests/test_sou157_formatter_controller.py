@@ -110,4 +110,17 @@ class Controller(unittest.TestCase):
             result=subprocess.run([bash,'-c',script],env=dict(os.environ,FORMATTER_SHADOW=value),capture_output=True,text=True,check=True)
             self.assertEqual(result.stdout,expected)
 
+    def test_first_transport_failure_retains_case_but_never_exception_payload(self):
+        class Broken:
+            def exchange(self,request): raise ValueError('private credential and raw body')
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaises(ValueError):
+                S.exercise(Broken(),lambda:[],{},None,Path(temp),'a'*40,None,None,None,C.classify,TOOLS)
+            raw=(Path(temp)/'formatter-shadow.json').read_text()
+            report=json.loads(raw)
+            self.assertEqual(report['status'],'incomplete')
+            self.assertEqual(report['cases'],[])
+            self.assertEqual(report['first_failure'],{'case':'B16-benign','phase':'original_exchange','exception_type':'ValueError'})
+            self.assertNotIn('private credential',raw)
+
 if __name__=='__main__':unittest.main()
