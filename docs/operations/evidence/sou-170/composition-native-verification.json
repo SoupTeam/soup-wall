@@ -1,0 +1,173 @@
+{
+  "format": "sw-edit-quota-independent-artifact-check/1",
+  "source": "fa1732a7c49f591c66d456031301d9486b8969cf",
+  "tree": "c00c3adcfbd4aea5b488db05b8556522f1044104",
+  "zip_sha256": "6d22cf00553af47f0b3224c9a78c597248f4db1b18cdd660c335bb1e34eaf400",
+  "members": [
+    "sou161-scratch/quota/report.json",
+    "sou161-scratch/refresh/report.json",
+    "sou161-scratch/binary.txt",
+    "sou161-scratch/runtime/report.json",
+    "sou161-scratch/sou166-edit-build.json",
+    "sou161-scratch/sou166-edit-build.log",
+    "sou161-scratch/sou166-edit-clippy.json",
+    "sou161-scratch/sou166-edit-clippy.log",
+    "sou161-scratch/sou166-edit-stop-endpoint.json",
+    "sou161-scratch/sou166-edit-stop-endpoint.log",
+    "sou161-scratch/sou166-edit-stop-unit.json",
+    "sou161-scratch/sou166-edit-stop-unit.log",
+    "sou161-scratch/sou166-edit-test-0.json",
+    "sou161-scratch/sou166-edit-test-0.log",
+    "sou161-scratch/sou166-edit-test-1.json",
+    "sou161-scratch/sou166-edit-test-1.log",
+    "sou161-scratch/sou166-edit-test-2.json",
+    "sou161-scratch/sou166-edit-test-2.log",
+    "sou161-scratch/sou166-edit-test-3.json",
+    "sou161-scratch/sou166-edit-test-3.log",
+    "sou161-scratch/sou166-edit-test-4.json",
+    "sou161-scratch/sou166-edit-test-4.log",
+    "sou161-scratch/source.txt",
+    "sou161-scratch/stop-runtime/report.json"
+  ],
+  "agentfw_sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e",
+  "component": "92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de",
+  "quota_cases": {
+    "attempted": 25,
+    "expected": 25,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 25
+  },
+  "legacy_cases": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "verified_executions": 21,
+  "refresh_cases": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "stop_cases": {
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 12
+  },
+  "legacy_diagnosis": {
+    "attempted": 14,
+    "expected": 14,
+    "failed": 0,
+    "incomplete": 0,
+    "native_runtime_cases": 8,
+    "passed": 14,
+    "simulated_retained_state_cases": 6
+  },
+  "new_composition_witnesses": [
+    "active-refresh-no-refill",
+    "refreshed-v2-fresh-ask-read-only-diagnosis"
+  ],
+  "verified": "exact source/binary/component/plan digests; monotone atomic quotas; aggregate byte and operation limits; useful readbacks; known vs indeterminate commits; actual lost-result effects; new authority and peer isolation; no over-budget execution; owned cleanup",
+  "run": 40698883037,
+  "job": 122853070027,
+  "artifact": 12820384961,
+  "native_rust": {
+    "passed": 133,
+    "failed": 0,
+    "ignored": 0,
+    "by_log": [
+      {
+        "log": "sou166-edit-stop-endpoint.log",
+        "sha256": "0326f4c4b00b1036ee632f5134aed47997b729d05724bac8ed2fd4f9196a1a8a",
+        "suites": [
+          {
+            "status": "ok",
+            "passed": 5,
+            "failed": 0,
+            "ignored": 0
+          }
+        ]
+      },
+      {
+        "log": "sou166-edit-stop-unit.log",
+        "sha256": "20d054910be5e4295cd3e1f89ade9ce1efc1bc9ba8321e501d8c2e5a04b54595",
+        "suites": [
+          {
+            "status": "ok",
+            "passed": 31,
+            "failed": 0,
+            "ignored": 0
+          }
+        ]
+      },
+      {
+        "log": "sou166-edit-test-0.log",
+        "sha256": "df0df480fdb05f1c9c922b36dd9308124e4e28b356c992aa438ce8b8d66727e9",
+        "suites": [
+          {
+            "status": "ok",
+            "passed": 63,
+            "failed": 0,
+            "ignored": 0
+          }
+        ]
+      },
+      {
+        "log": "sou166-edit-test-1.log",
+        "sha256": "add80d8c21bd8c76ce553ade385971272ff0db101e4abb3ddddb85f6b9942b3f",
+        "suites": [
+          {
+            "status": "ok",
+            "passed": 6,
+            "failed": 0,
+            "ignored": 0
+          }
+        ]
+      },
+      {
+        "log": "sou166-edit-test-2.log",
+        "sha256": "86bd74a60b71aedc4162cf8d7b741658b1afd8075f3a49ab546ce9a18583884e",
+        "suites": [
+          {
+            "status": "ok",
+            "passed": 10,
+            "failed": 0,
+            "ignored": 0
+          }
+        ]
+      },
+      {
+        "log": "sou166-edit-test-3.log",
+        "sha256": "0978a03ba5dceae99ac2a8ff5dabb81ed75a42fd263fe4c271d678f477bc2633",
+        "suites": [
+          {
+            "status": "ok",
+            "passed": 5,
+            "failed": 0,
+            "ignored": 0
+          }
+        ]
+      },
+      {
+        "log": "sou166-edit-test-4.log",
+        "sha256": "c1b5f2c14afeaffd9ac2ea66ca17b857a2f5b9c822e3cc763a9b81049086ce9a",
+        "suites": [
+          {
+            "status": "ok",
+            "passed": 13,
+            "failed": 0,
+            "ignored": 0
+          }
+        ]
+      }
+    ]
+  },
+  "native_python_tests": 28,
+  "agent_clippy": "passed, all targets -D warnings",
+  "fmt": "passed",
+  "artifact_verification": "bounded ZIP/JSON only; artifact code never executed"
+}

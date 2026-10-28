@@ -102,3 +102,10 @@ all 23 quota scenarios and all 23 legacy installed scenarios, plus 53 focused
 Rust tests. Exact source/binary/profile correlation, all failed/incomplete
 attempts and independent effect checks are retained in
 [SOU-170 evidence](evidence/sou-170/README.md).
+
+The composed source `fa1732a7c49f591c66d456031301d9486b8969cf` also passed
+25 quota, 23 original edit, 23 refresh and 12 Stop cases, with eight actual and
+six simulated diagnostic controls kept distinct, plus 133 focused native Rust
+tests. The two added quota cases verify no active refill through Refresh and
+fresh Ask followed by unchanged-state read-only diagnosis. See the current
+composition section of the evidence page for exact hashes and retained failures.

@@ -78,6 +78,54 @@
       "correction": "Read the complete bounded JSON document for status only; retain other commands final-line JSON parsing. Reject malformed, null and multiple documents.",
       "runtime_delta": "none; failed attempt and correction differ only in qualification scripts/tests/evidence",
       "failure_report": "composition-attempt-1.json"
+    },
+    {
+      "run": 40698883037,
+      "job": 122853070027,
+      "source": "fa1732a7c49f591c66d456031301d9486b8969cf",
+      "tree": "c00c3adcfbd4aea5b488db05b8556522f1044104",
+      "artifact": 12820384961,
+      "zip_sha256": "6d22cf00553af47f0b3224c9a78c597248f4db1b18cdd660c335bb1e34eaf400",
+      "binary_sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e",
+      "result": "passed",
+      "quota_inventory": {
+        "attempted": 25,
+        "expected": 25,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 25
+      },
+      "legacy_inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "refresh_inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "stop_inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 12
+      },
+      "legacy_diagnosis": {
+        "attempted": 14,
+        "expected": 14,
+        "failed": 0,
+        "incomplete": 0,
+        "native_runtime_cases": 8,
+        "passed": 14,
+        "simulated_retained_state_cases": 6
+      },
+      "native_rust_passed": 133,
+      "runtime_change_since_prior_composition_attempt": "none; only test-helper status JSON parsing and its regression/evidence changed",
+      "independent_verification": "composition-native-verification.json"
     }
   ]
 }

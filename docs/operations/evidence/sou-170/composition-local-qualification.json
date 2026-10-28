@@ -77,8 +77,60 @@
         "ignored": 0
       },
       "python_tests": 0
+    },
+    {
+      "label": "diagnosis-composition-workspace-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "source_sha256": "3e1eb51d77668a85e165b71c5469a690e09cbdff65771fe1d0ab12538086d3fc",
+      "log_sha256": "7b599b2f9a7b36621c133e201e779ee3fab9fd29610a375384e0d2d524e76dfb",
+      "elapsed_seconds": 11.09
+    },
+    {
+      "label": "diagnosis-pretty-cli-regression",
+      "command": [
+        "sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p test_installed_edit.py -v && python3 -B -m unittest discover -s scripts/tests -p test_installed_edit_stop.py -v && python3 -B -m unittest discover -s scripts/tests -p \"test_edit_*.py\" -v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "3174e1317ad781ba434e853a95735213bf3b2c28cec46f365be8a7384e8515b5",
+      "log_sha256": "b151cbc41269a654192c29113aa3a58e926fb78184453f0895288b7b3dfb0a9f",
+      "elapsed_seconds": 0.99
+    },
+    {
+      "label": "composition-final-delivery-controls",
+      "command": [
+        "sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p test_installed_edit.py -v && python3 -B -m unittest discover -s scripts/tests -p test_installed_edit_stop.py -v && python3 -B -m unittest discover -s scripts/tests -p \"test_edit_*.py\" -v && python3 -B scripts/ci_components.py --check && cargo fmt --all --check && GIT_INDEX_FILE=/private/tmp/sou170-qualification/scratch/docs-current.index python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "fc9c34ad0af42bb19fc1057d46e1a4a174e5ab0caebecad54fcd9ec8022a0b17",
+      "log_sha256": "67d226704abb670437cec4b3927c3e31b7dbced9a64f833a201be376b30a7889",
+      "elapsed_seconds": 4.19
     }
   ],
-  "native_composition": "pending",
-  "qualification_note": "The doc-check failure was stale isolated Git-index metadata; exact current staged index was copied only into writable scratch for the read-only recheck."
+  "native_composition": "passed; see composition-native-verification.json",
+  "qualification_note": "The doc-check failure was stale isolated Git-index metadata; exact current staged index was copied only into writable scratch for the read-only recheck.",
+  "later_qualifier_sync": {
+    "source": "785b934b342d3187b892a6fc3f8bdee84c064dc5",
+    "runtime_delta": "none; all crates/agentfw/src bytes match qualified fa1732a7",
+    "shared_helper": "identical status JSON implementation; comments reconciled",
+    "additional_changes": "bounded Stop diagnosis failure metadata retention and one upstream regression",
+    "focused_python_passed": 29,
+    "docs_markdown": 333,
+    "docs_links": 1161,
+    "docs_errors": 0
+  }
 }

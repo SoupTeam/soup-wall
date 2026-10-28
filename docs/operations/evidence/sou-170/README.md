@@ -1,5 +1,76 @@
 # SOU-170 installed quota evidence
 
+## Current lifecycle and diagnosis composition
+
+Accepted base: `144512b3ed11f985c922d9911cba26f07599dea9`. Reviewed diagnosis
+history: `b30d2bd1e6d95d94f63e52b5b234ec15c60ff401`; its branch is unchanged.
+Qualified source: `fa1732a7c49f591c66d456031301d9486b8969cf`, tree
+`c00c3adcfbd4aea5b488db05b8556522f1044104`.
+
+The focused [native run 40698883037](https://github.com/SoupTeam/soup-wall/actions/runs/40698883037),
+job `122853070027`, passed. Artifact `12820384961`, ZIP SHA-256
+`6d22cf00553af47f0b3224c9a78c597248f4db1b18cdd660c335bb1e34eaf400`,
+contains the exact reports below. Actual Agent SHA-256:
+`4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e`.
+
+- [composition-trial-plan.json](composition-trial-plan.json) freezes the 25-case
+  quota inventory before execution. All 23 original cases remain; two added
+  cases exercise active-run Refresh without budget refill and a refreshed-v2
+  plan followed by fresh Ask and real read-only diagnosis.
+- [composition-native-quota.json](composition-native-quota.json): 25/25 passed,
+  zero failed/incomplete. Three approved attempts retain two credits across
+  two explicitly confirmed refresh publications: two physical writes succeed,
+  the third target remains unchanged with typed quota exhaustion. Every
+  refreshed plan preserves the exact quota contract/ceilings and old plan.
+  A new run uses fresh Ask, rejects old authority, reads back exact replacement
+  bytes, and executes default and explicit output-check diagnosis without
+  changing private state, targets or the sentinel. Diagnosis retains unknown
+  commit/delivery/model-consumption boundaries.
+- [composition-native-original-edit.json](composition-native-original-edit.json):
+  23/23 original installed cases and all 14 diagnostic cases passed. The latter
+  are explicitly eight actual installed observations and six simulated
+  retained-state controls; these are not 14 real fault executions.
+- [composition-native-stop.json](composition-native-stop.json): 12/12 passed,
+  including real Stop followed by read-only diagnosis with preserved state.
+- [composition-native-refresh.json](composition-native-refresh.json): 23/23
+  passed. Both actual replacements/readbacks, new exact bindings, old authority
+  refusal, interruption controls and cleanup remain required.
+- [composition-native-verification.json](composition-native-verification.json)
+  records independent bounded ZIP/JSON checks of source/tree/binary/component,
+  canonical profiles, monotone counts, unchanged limits, actual effects,
+  private-state preservation and owned cleanup. All 133 focused native Rust
+  tests passed (63+31+5+6+10+5+13), plus 28 Python controls, strict Agent Clippy
+  and fmt. No ignored or failed focused Rust tests. No artifact code was
+  executed by this independent verification.
+- [composition-local-qualification.json](composition-local-qualification.json)
+  retains 1922 passed / zero failed / 13 existing ignored workspace tests,
+  workspace/all-target strict Clippy, script controls, generator and docs checks.
+  The stale isolated Git-index documentation failure and exact-index correction
+  remain recorded.
+- [composition-attempt-1.json](composition-attempt-1.json) and
+  [composition-attempt-1-original-edit.json](composition-attempt-1-original-edit.json)
+  retain failed run 40697167080 on source `88c097fc`. Original 23 cases and all
+  14 diagnosis cases passed; Stop then failed at its second case because a
+  qualification helper parsed only `}` from a successful pretty-printed JSON
+  document. The bounded status parser and negative regressions were corrected;
+  runtime bytes did not change. Stop's 1 passed / 1 failed / 10 incomplete and
+  the unexecuted Refresh/quota inventories are not represented as success.
+
+Execution used actual installed Agent/component, genuine pinned restricted
+Claude and an owned scripted loopback provider outside read-only source,
+non-root private writable scratch and a private network namespace. No paid
+inference, global host changes or model-effectiveness claim. Local counters and
+matching output bytes are not authenticated execution/commit/delivery proof.
+Final shared Ready, current-source CI/admission and main delivery remain TL-owned.
+The subsequent upstream helper sync `785b934b` contains the same status JSON
+implementation plus bounded Stop failure-observation retention and its test.
+All Agent source bytes remain identical to qualified `fa1732a7`; 29 focused
+Python controls, generator/fmt and 333 Markdown / 1161 links pass after that
+sync. This does not attribute a new native run to the later retention commit.
+Historical results below retain their exact earlier source attribution.
+
+# Historical independent implementation evidence
+
 Accepted independent base: `db4f006d74957fc1a8dc1a0a4be40c3b887d8a01`.
 Qualified source: `66e126486ea9b21f0104051a3f97a65561ee21ea`, tree `30d22de2eba1e43890a6206c7691a529ad399d77`.
 Actual Agent binary: SHA-256 `cbfef36de57efcfdba73e0a74c3c5bda1a641b9c829fbd17f49bdd89f42caa36`.

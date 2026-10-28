@@ -576,8 +576,9 @@ class Suite:
         require(len(result.stdout) <= 128 * 1024 and len(result.stderr) <= 128 * 1024, 'cli_output_cap')
         lines = result.stdout.splitlines()
         try:
-            # Status emits a complete pretty-printed typed JSON document.
-            # Other commands retain their existing final-line JSON contract.
+            # Status emits a complete pretty JSON document; launchers may emit
+            # newline-delimited run and terminal records. Do not mistake the
+            # final closing brace of a valid status document for its response.
             raw = result.stdout if words and words[0] == 'status' else (lines[-1] if lines else b'')
             value = json.loads(raw) if raw else None
         except ValueError:
