@@ -44,6 +44,12 @@ pub struct Target {
 #[serde(deny_unknown_fields)]
 pub struct Profile {
     pub format: String,
+    #[serde(
+        default,
+        deserialize_with = "super::quota::present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub mutation_quota: Option<super::quota::Limits>,
     pub exclusion: String,
     pub root: PathBuf,
     pub root_identity: RootIdentity,
@@ -70,9 +76,14 @@ pub fn leaf(name: &str) -> bool {
 impl Profile {
     pub fn validate(&self) -> Result<()> {
         ensure!(
-            self.format == super::FORMAT && self.exclusion == replace_file::EXCLUSION,
+            ((self.format == super::FORMAT && self.mutation_quota.is_none())
+                || (self.format == super::QUOTA_PROFILE && self.mutation_quota.is_some()))
+                && self.exclusion == replace_file::EXCLUSION,
             "edit_profile_contract"
         );
+        if let Some(limits) = &self.mutation_quota {
+            limits.validate()?;
+        }
         ensure!(
             self.root.is_absolute() && self.root_identity.inode != 0,
             "edit_root_invalid"
@@ -231,6 +242,7 @@ pub(super) fn fixture() -> Profile {
     };
     Profile {
         format: super::FORMAT.into(),
+        mutation_quota: None,
         exclusion: replace_file::EXCLUSION.into(),
         root: absolute("output"),
         root_identity: RootIdentity {

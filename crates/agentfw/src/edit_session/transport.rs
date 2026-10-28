@@ -26,6 +26,7 @@ pub(crate) struct Service {
     pub profile: Profile,
     pub host: String,
     pub digest: String,
+    pub quota: Option<Arc<super::quota::Ledger>>,
     used: AtomicBool,
     pub dispatches: Arc<AtomicUsize>,
 }
@@ -35,10 +36,22 @@ impl Service {
         profile.validate()?;
         ensure!(crate::native::identifier(&host), "edit_host_invalid");
         let digest = profile::digest(&profile)?;
+        let quota = profile
+            .mutation_quota
+            .as_ref()
+            .map(|limits| {
+                super::quota::Ledger::new(
+                    limits.clone(),
+                    profile::digest(&profile.registry()?)?,
+                    host.clone(),
+                )
+            })
+            .transpose()?;
         Ok(Arc::new(Self {
             profile,
             host,
             digest,
+            quota,
             used: AtomicBool::new(false),
             dispatches: Arc::new(AtomicUsize::new(0)),
         }))
@@ -168,6 +181,7 @@ pub(crate) async fn handler(
             (
                 service.profile.root.clone(),
                 service.profile.root_identity.clone(),
+                service.quota.clone(),
             ),
             service.profile.tools(),
             &mut client,

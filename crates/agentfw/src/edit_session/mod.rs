@@ -6,6 +6,7 @@ use clap::{Args, Subcommand};
 use std::path::PathBuf;
 
 mod profile;
+pub(crate) mod quota;
 pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
 mod launch;
@@ -14,6 +15,7 @@ mod runtime;
 pub(crate) mod transport;
 
 pub const FORMAT: &str = "sw-installed-edit-session/1";
+pub const QUOTA_PROFILE: &str = "sw-installed-edit-session/2";
 pub const ENDPOINT: &str = "/native/edit-session/v1";
 pub const SERVER: &str = "private-output";
 
@@ -92,6 +94,12 @@ pub struct Selection {
     /// Explicit operator assertion, not discovery of other same-UID writers.
     #[arg(long)]
     private_sole_writer: bool,
+    /// Maximum admitted mutation attempts in one new run (also caps commits).
+    #[arg(long, requires = "max_write_bytes")]
+    max_mutations: Option<u64>,
+    /// Cumulative full-payload reservations; never refunded within an active run.
+    #[arg(long, requires = "max_mutations")]
+    max_write_bytes: Option<u64>,
 }
 #[derive(Subcommand, Debug)]
 pub enum Ask {

@@ -148,6 +148,11 @@ fn component(home: &Path) -> Result<Component> {
     })
 }
 fn selected(args: Selection) -> Result<Profile> {
+    let mutation_quota = match (args.max_mutations, args.max_write_bytes) {
+        (None, None) => None,
+        (Some(operations), Some(bytes)) => Some(super::quota::Limits::new(operations, bytes)?),
+        _ => anyhow::bail!("edit_quota_both_limits_required"),
+    };
     ensure!(
         cfg!(target_arch = "x86_64"),
         "installed_edit_requires_native_linux_x86_64"
@@ -207,7 +212,13 @@ fn selected(args: Selection) -> Result<Profile> {
     let claude = pin(&args.claude, 512 * 1024 * 1024)?;
     crate::pilot_host::validate(&args.claude, false)?;
     let p = Profile {
-        format: FORMAT.into(),
+        format: if mutation_quota.is_some() {
+            super::QUOTA_PROFILE
+        } else {
+            FORMAT
+        }
+        .into(),
+        mutation_quota,
         exclusion: replace_file::EXCLUSION.into(),
         root: args.root,
         root_identity,

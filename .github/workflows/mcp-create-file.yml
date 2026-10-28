@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       edit_only:
-        description: Focus on the installed SOU-161 edit qualification
+        description: Focus on installed edit and cumulative quota qualification
         type: boolean
         default: false
       replacement_only:
@@ -224,10 +224,17 @@ jobs:
           cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_quota.py' -v
           sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU161_SCRATCH/binary.txt"
           python3 -B scripts/qualify-installed-edit.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
+          mkdir -m 700 "$SOU161_SCRATCH/quota-faults"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=1 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/withheld.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=2 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/interrupted.so"
+          python3 -B scripts/qualify-edit-quota.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --faults "$SOU161_SCRATCH/quota-faults" --output "$SOU161_SCRATCH/quota"
           BASH
       - name: Retain finite current-source qualification and build correlation
         if: always()
@@ -238,5 +245,6 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/quota/report.json
           if-no-files-found: warn
           retention-days: 30
