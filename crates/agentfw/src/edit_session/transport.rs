@@ -47,12 +47,12 @@ impl Service {
             dispatches: Arc::new(AtomicUsize::new(0)),
         }))
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(test, target_os = "linux"))]
     pub fn close(&self) {
         self.used.store(true, Ordering::Release);
         self.closed.send_replace(true);
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(test, target_os = "linux"))]
     pub async fn wait_idle(&self) -> bool {
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(3);
         while self.active.load(Ordering::Acquire) != 0 {
