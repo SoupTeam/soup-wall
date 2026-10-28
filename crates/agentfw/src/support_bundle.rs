@@ -6,6 +6,15 @@ use std::path::Path;
 
 #[cfg(target_os = "linux")]
 pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
+    export_edit(report, None, destination)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn export_edit(
+    report: &Report,
+    edit: Option<&crate::edit_session::diagnostic::Report>,
+    destination: &Path,
+) -> anyhow::Result<()> {
     use anyhow::{ensure, Context};
     use serde_json::json;
     use sha2::{Digest, Sha256};
@@ -105,7 +114,13 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
         owner.is_dir() && owner.uid() == unsafe { libc::geteuid() } && owner.mode() & 0o077 == 0,
         "support output parent must be owner-only"
     );
-    let bytes = serde_json::to_vec_pretty(report)?;
+    let bytes = if let Some(edit) = edit {
+        let mut value = serde_json::to_value(report)?;
+        value["edit_session"] = serde_json::to_value(edit)?;
+        serde_json::to_vec_pretty(&value)?
+    } else {
+        serde_json::to_vec_pretty(report)?
+    };
     ensure!(bytes.len() <= 128 * 1024, "diagnostic report exceeds cap");
     // The exported schema contains fixed enums/codes/timestamps/hashes only.
     // Never serialize raw config, host settings, tokens, errors or environment.
@@ -120,6 +135,9 @@ pub fn export(report: &Report, destination: &Path) -> anyhow::Result<()> {
     });
     if let Some(pilot) = &report.pilot {
         manifest["pilot_schema"] = json!(pilot.schema);
+    }
+    if let Some(edit_session) = edit {
+        manifest["edit_session_schema"] = json!(edit_session.schema);
     }
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
     ensure!(manifest_bytes.len() < 8192, "support manifest exceeds cap");
@@ -175,6 +193,15 @@ pub fn export(_report: &Report, _destination: &Path) -> anyhow::Result<()> {
     anyhow::bail!("private support export requires Linux")
 }
 
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn export_edit(
+    _report: &Report,
+    _edit: Option<&crate::edit_session::diagnostic::Report>,
+    _destination: &Path,
+) -> anyhow::Result<()> {
+    anyhow::bail!("private support export requires Linux")
+}
+
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
@@ -216,5 +243,34 @@ mod tests {
         assert!(export(&sample(), &linked).is_err());
         let remaining: Vec<_> = std::fs::read_dir(dir.path()).unwrap().collect();
         assert_eq!(remaining.len(), 2);
+    }
+
+    #[test]
+    fn edit_diagnosis_uses_existing_allowlisted_private_export() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let report = sample();
+        let edit =
+            crate::edit_session::diagnostic::inspect(&crate::edit_session::diagnostic::Args {
+                run: dir.path().join("secret-path-canary-unavailable"),
+                json: true,
+                check_output: false,
+                support_bundle: None,
+            });
+        let out = dir.path().join("support");
+        export_edit(&report, Some(&edit), &out).unwrap();
+        for name in ["report.json", "manifest.json"] {
+            let bytes = std::fs::read(out.join(name)).unwrap();
+            assert!(!String::from_utf8_lossy(&bytes).contains("secret-path-canary"));
+            assert!(bytes.len() <= 128 * 1024);
+        }
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(out.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(
+            manifest["edit_session_schema"],
+            "sw-installed-edit-status/1"
+        );
+        assert!(export_edit(&report, Some(&edit), &out).is_err());
     }
 }

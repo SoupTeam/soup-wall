@@ -96,11 +96,61 @@ cannot activate this endpoint through caller-supplied configuration.
 
 ## Outcomes and recovery
 
-A host completion is not a claim that every proposed edit succeeded. Read the
-native audit and verify the resulting bytes through the selected read tool.
+A host completion is not a claim that every proposed edit succeeded. Inspect
+the selected run with the installed read-only diagnosis:
+
+```sh
+agentfw edit-session status --run /absolute/runs/edit-RUN_ID
+agentfw edit-session status --run /absolute/runs/edit-RUN_ID --json
+```
+
+Status uses bounded private records and authenticated loopback observations;
+it never launches a host, dispatches a tool, decides Ask, refreshes a plan or
+retries a mutation. It creates no files by default. The versioned report keeps
+live daemon observations, retained local evidence and optional current-output
+observations separate. Local records are operator-controlled evidence, not
+authenticated runtime attestation. A PID or successful host exit does not prove
+that a selected mutation committed or that its result reached the model.
+
+If the daemon is unavailable, its instance has changed, audit is missing or
+truncated, or records cannot be attributed to this exact run, keep the reported
+uncertainty. A publication gate precedes the actual filesystem change; it is
+not a commit receipt. A recorded allowed result is not proof of delivery or
+model consumption. Create and replacement are diagnosed separately. Older runs
+without retained diagnostic bindings remain incomplete evidence.
+
+For an explicit, bounded digest observation of only the declared direct-child
+targets, add `--check-output`. Matching current bytes are an observed postcondition,
+not proof of who wrote them. Status refuses linked, non-regular, unowned,
+oversized or redirected state rather than following it or scanning directories.
+It never renders file content or raw arguments.
+
+The short recovery flow is: inspect status, inspect the intended target
+independently if the result is uncertain, prepare a fresh exact plan when an
+edit is still needed, then obtain new exact approval. Never reuse old Ask
+decisions or spent receipts. To share the fixed allowlist through the existing
+private support exporter, select a new directory outside the run:
+
+```sh
+agentfw edit-session status --run /absolute/runs/edit-RUN_ID \
+  --support-bundle /absolute/private/new-support
+```
+
+The export contains typed outcomes, validated identity digests and evidence
+provenance/completeness, plus the existing hash manifest. It excludes prompts,
+contents, raw arguments/results, provider inputs, tokens, grants, private paths
+and arbitrary exception text. Publication remains private and create-new;
+there is no upload.
+
 An interrupted run is failed/indeterminate. If publication committed before a
 result was lost or withheld, the bytes remain committed: cancellation does not
 roll them back and this entry never automatically retries the mutation.
+
+Read-only status treats the Stop producer's run-revocation record as strictly
+bound descriptive metadata, including at ordinary completed-run cleanup. It does
+not infer commit, delivery, rollback or authenticated Stop confirmation from it.
+A retained `operator_stop` outcome is reported separately from cancellation;
+missing or malformed bindings keep the diagnosis incomplete.
 
 Private run state retains the audit and exact native approval records. Host
 stdout/stderr are drained within fixed caps; only byte counts and digests are
@@ -188,9 +238,27 @@ process cleanup. This is development qualification, not a live-model efficacy or
 production-readiness claim. The registered `linux-installed-edit` job runs with
 read-only source, private writable scratch and no external network.
 
+Add `--diagnose` to freeze and execute the additional status inventory: eight
+native runtime cases and six explicitly simulated retained-state cases. The
+runtime cases cover create/read, replace/read, pending/rejected Ask,
+cancellation, daemon loss, post-publication interruption and secret-canary
+support export. The fixtures cover stale identity, absent/truncated audit,
+missing result after a publication gate, tampered profile and foreign run.
+The missing-result fixture does not establish a real commit-before-result-loss
+event. Independent target/sentinel/process witnesses check that diagnosis
+does not change the selected run; only correlated bounded lease-renewal audit
+appends are allowed while a real run remains live.
+
 The corrected native qualification passed 23/23 cases, 43 focused Rust controls,
 5 finite/classifier controls and strict Linux Clippy/fmt on implementation source
 `07a5f1d1b2b05162e1d1d7849af577e94b802202`. Source/binary/artifact correlation and
 all original attempts are retained under
 [`evidence/sou-161/`](evidence/sou-161/README.md). Final shared Ready qualification,
 admission and merge remain with the reviewer.
+
+The subsequent installed status/diagnosis qualification passed all 23 existing
+controls plus 14 diagnostic cases on `a7ec2de899aa55726e7488f5d31bec5044b52307`.
+Eight cases observed actual installed runtime boundaries; six explicitly changed
+retained state as parser fixtures. Exact source/binary/component/report hashes,
+typed responses, independent witnesses, limits and both failed attempts are
+retained in [the diagnosis evidence](evidence/edit-diagnostics/README.md).

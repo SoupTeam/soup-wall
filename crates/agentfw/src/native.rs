@@ -1699,6 +1699,57 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
     if let Some(service) = &native.execution {
         description["execution_service"] = service.metadata();
     }
+    if let Some(service) = &native.edit {
+        let tools = service.profile.tools();
+        let owns = |session_id: &str, epoch: &str, tool: &str| {
+            sessions.entries.get(session_id).is_some_and(|s| {
+                s.epoch == epoch
+                    && s.host_session.as_deref() == Some(service.host.as_str())
+                    && s.server_id.as_deref() == Some(crate::edit_session::SERVER)
+                    && tools.as_array().is_some_and(|definitions| {
+                        definitions
+                            .iter()
+                            .any(|definition| definition["name"] == tool)
+                    })
+            })
+        };
+        let (pending, decisions) = match native
+            .approval
+            .as_ref()
+            .map(|approval| approval.edit_bindings(owns))
+            .transpose()
+        {
+            Ok(value) => value.unwrap_or_default(),
+            Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
+        };
+        let collectors = sessions
+            .entries
+            .values()
+            .filter(|s| {
+                s.host_session.as_deref() == Some(service.host.as_str())
+                    && s.server_id.as_deref() == Some(crate::edit_session::SERVER)
+            })
+            .take(9)
+            .map(|s| {
+                json!({"session_epoch":s.epoch,"host_session":s.host_session,
+                    "server_id":s.server_id,
+                    "active":!s.is_dead(now, now_ms, &sessions)
+                        && validate_lineage(&sessions, s, now_ms, now).is_ok()})
+            })
+            .collect::<Vec<_>>();
+        if collectors.len() > 8 {
+            return failure(
+                "edit_diagnostic_collector_cap",
+                StatusCode::SERVICE_UNAVAILABLE,
+            );
+        }
+        description["edit_diagnostic"] = json!({
+            "format":"sw-installed-edit-live/1","profile_sha256":service.digest,
+            "host_session":service.host,"collectors":collectors,
+            "pending":pending,"decisions":decisions,
+            "observation":"authenticated_current_memory_not_result_delivery_proof"
+        });
+    }
     (StatusCode::OK, Json(description))
 }
 

@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import secrets
 import shutil
 import signal
@@ -34,6 +35,241 @@ CASES = ('installed-closure', 'inert-preview', 'changed-runtime', 'changed-compo
 CLAUDE = 'fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7'
 OLD = 'Original ledger: seven blue containers.\n'
 NEW = 'Revised report: twelve red samples.\n'
+DIAGNOSTIC_FORMAT = 'sw-installed-edit-status/1'
+# Frozen before the first host starts. Fixture rows are deliberately not native
+# boundary acceptance: only the explicitly marked runtime rows observed a host.
+DIAGNOSTIC_CASES = (
+    ('create-read-status', 'native-runtime'),
+    ('replace-read-status', 'native-runtime'),
+    ('pending-ask-status', 'native-runtime'),
+    ('rejected-ask-status', 'native-runtime'),
+    ('cancelled-status', 'native-runtime'),
+    ('daemon-loss-status', 'native-runtime'),
+    ('stale-instance-fixture', 'simulated-retained-state'),
+    ('missing-audit-fixture', 'simulated-retained-state'),
+    ('truncated-audit-fixture', 'simulated-retained-state'),
+    ('commit-before-result-loss-fixture', 'simulated-retained-state'),
+    ('post-publication-interruption-status', 'native-runtime'),
+    ('tampered-state-fixture', 'simulated-retained-state'),
+    ('foreign-run-fixture', 'simulated-retained-state'),
+    ('secret-canary-export', 'native-runtime'),
+)
+
+
+def diagnostic_inventory():
+    return {'expected': [{'id': name, 'kind': kind} for name, kind in DIAGNOSTIC_CASES],
+            'cases': [{'id': name, 'kind': kind, 'status': 'incomplete', 'attempted': False}
+                      for name, kind in DIAGNOSTIC_CASES]}
+
+
+def diagnostics_passed(report):
+    if not report.get('diagnosis_requested'):
+        return True
+    rows = report.get('diagnosis', {})
+    expected = [{'id': name, 'kind': kind} for name, kind in DIAGNOSTIC_CASES]
+    actual = rows.get('cases', [])
+    return (rows.get('expected') == expected
+            and [{'id': r.get('id'), 'kind': r.get('kind')} for r in actual] == expected
+            and all(r.get('attempted') is True and r.get('status') == 'passed'
+                    and r.get('state_unchanged') is True and r.get('target_unchanged') is True
+                    and r.get('sentinel_unchanged') is True for r in actual))
+
+
+def retain_validated_runtime_case(report, name, row):
+    """Keep native witnesses even if the subsequent diagnosis assertion fails."""
+    report['cases'][CASES.index(name)] = dict(
+        row, id=name, attempted=True, status='incomplete',
+        qualification_stage='native_checks_complete_diagnosis_pending')
+
+
+def private_state_witness(run, *, include_audit=True):
+    """Finite qualification witness only; the product never crawls state."""
+    names = ('run.json', 'profile.json', 'profile.sha256', 'diagnostic-context.json',
+             'host-process.json', 'terminal.json', 'mcp.json')
+    home = run_home(run)
+    selected = [run / name for name in names]
+    selected.extend(home / name for name in ('config.yaml', 'native-token', 'registry.json', 'policy.yaml'))
+    if include_audit:
+        selected.append(home / 'audit.jsonl')
+    result = []
+    for path in selected:
+        try:
+            meta = path.lstat()
+        except FileNotFoundError:
+            result.append(None)
+            continue
+        require(stat.S_ISREG(meta.st_mode) and meta.st_size <= 2 * 1024 * 1024, 'diagnosis_witness_unsafe')
+        raw = path.read_bytes()
+        result.append((meta.st_dev, meta.st_ino, meta.st_mode, meta.st_nlink, meta.st_size,
+                       meta.st_mtime_ns, meta.st_ctime_ns, sha(raw)))
+    return result
+
+
+def live_audit_witness(run):
+    """Pin a finite audit prefix while its existing liveness writer runs."""
+    path = run_home(run) / 'audit.jsonl'
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    with os.fdopen(descriptor, 'rb') as stream:
+        meta = os.fstat(stream.fileno())
+        require(stat.S_ISREG(meta.st_mode) and meta.st_nlink == 1 and meta.st_uid == os.geteuid()
+                and meta.st_size <= 1024 * 1024, 'diagnosis_audit_witness_unsafe')
+        raw = stream.read(meta.st_size)
+        after = os.fstat(stream.fileno())
+        identity = lambda m: (m.st_dev, m.st_ino, m.st_mode, m.st_nlink, m.st_uid, m.st_gid)
+        require(len(raw) == meta.st_size and identity(meta) == identity(after), 'diagnosis_audit_witness_changed')
+        return {'identity': identity(meta), 'size': meta.st_size, 'mtime_ns': meta.st_mtime_ns,
+                'ctime_ns': meta.st_ctime_ns, 'raw': raw}
+
+
+def live_audit_delta(before, after):
+    """Only correlated append-only lease renewals may change a live audit."""
+    require(before['identity'] == after['identity'] and after['raw'].startswith(before['raw']),
+            'diagnosis_audit_prefix_changed')
+    added = after['raw'][len(before['raw']):]
+    if not added:
+        require(before == after, 'diagnosis_audit_metadata_changed_without_append')
+        return 0
+    require(before['raw'].endswith(b'\n') and added.endswith(b'\n') and len(added) <= 65536,
+            'diagnosis_audit_append_bound')
+    def strict(raw):
+        def pairs(items):
+            result = {}
+            for key, value in items:
+                require(key not in result, 'diagnosis_audit_duplicate_key')
+                result[key] = value
+            return result
+        def invalid(_):
+            raise ValueError('diagnosis_audit_nonfinite_json')
+        return json.loads(raw, object_pairs_hook=pairs, parse_constant=invalid)
+    prefix = before['raw'].splitlines()
+    suffix = added.splitlines()
+    require(len(prefix) <= 512 and len(suffix) <= 64, 'diagnosis_audit_append_bound')
+    enrolled = {}
+    for raw in prefix:
+        require(0 < len(raw) <= 65536, 'diagnosis_audit_append_bound')
+        row = strict(raw)
+        if row.get('event') == 'native_liveness_enrolled' and row.get('released') is True:
+            enrolled[(row.get('session'), row.get('session_id'))] = (0, row.get('at_ms'))
+        elif row.get('event') == 'native_liveness_renewed':
+            key = (row.get('session'), row.get('session_id'))
+            if key in enrolled:
+                enrolled[key] = (row.get('lease_seq'), row.get('at_ms'))
+    for raw in suffix:
+        row = strict(raw)
+        require(set(row) == {'at_ms', 'event', 'session', 'session_id', 'lease_seq', 'released'}
+                and row['event'] == 'native_liveness_renewed' and row['released'] is True,
+                'diagnosis_audit_new_dispatch_or_decision')
+        key = (row['session'], row['session_id'])
+        require(key in enrolled, 'diagnosis_audit_foreign_renewal')
+        sequence, observed_at = enrolled[key]
+        require(type(row['lease_seq']) is int and type(sequence) is int and row['lease_seq'] > sequence
+                and type(row['at_ms']) is int and type(observed_at) is int
+                and observed_at <= row['at_ms'] <= int(time.time() * 1000) + 5000,
+                'diagnosis_audit_invalid_renewal')
+        enrolled[key] = (row['lease_seq'], row['at_ms'])
+    return len(suffix)
+
+
+def process_identity(pid):
+    """An independent /proc witness, never a claim of successful execution."""
+    try:
+        with Path(f'/proc/{pid}/stat').open('rb') as stream:
+            raw = stream.read(4097)
+        require(len(raw) <= 4096 and b')' in raw, 'process_identity_bound')
+        tail = raw.rsplit(b')', 1)[1].split()
+        return (pid, int(tail[19]))
+    except FileNotFoundError:
+        return None
+
+
+def retain_diagnostic_response(directory, name, phase, completed):
+    """Retain a bounded failed observation privately before grading its value.
+
+    These raw synthetic qualification responses may contain a privacy regression;
+    only hashes/counts enter report.json, and passing still requires every
+    response/export to pass the omission checks below.
+    """
+    require(name in {item[0] for item in DIAGNOSTIC_CASES} and phase in ('default', 'output', 'text'),
+            'diagnosis_response_identity')
+    require(len(completed.stdout) <= 128 * 1024 and len(completed.stderr) <= 128 * 1024,
+            'diagnosis_response_bound')
+    observation = {'exit_code': completed.returncode, 'raw_retained': 'private_qualification_only'}
+    for stream, raw in (('stdout', completed.stdout), ('stderr', completed.stderr)):
+        leaf = f'{name}.{phase}.{stream}.private'
+        descriptor = os.open(directory / leaf, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(raw)
+        observation[stream + '_bytes'] = len(raw)
+        observation[stream + '_sha256'] = sha(raw)
+        observation[stream + '_artifact'] = leaf
+    return observation
+
+
+def require_indeterminate_status(value):
+    require(isinstance(value, dict), 'diagnosis_response_not_object')
+    require(value.get('schema') == DIAGNOSTIC_FORMAT
+            and value.get('effects') == 'indeterminate'
+            and value.get('host_delivery') == 'unknown'
+            and value.get('model_consumption') == 'unknown', 'diagnosis_overclaimed_outcome')
+    for call in value.get('audit', {}).get('calls', []):
+        require(call.get('commit') == 'unknown' and call.get('host_delivery') == 'unknown'
+                and call.get('model_consumption') == 'unknown', 'diagnosis_overclaimed_call')
+    for output in value.get('outputs', []):
+        require(output.get('attribution') == 'observed_postcondition_not_writer_or_commit_proof',
+                'diagnosis_overclaimed_output')
+
+
+def require_diagnostic(value, *, daemon=None, status=None, operation=None, pending=False,
+                       rejected=False, incomplete=False, binding_sha256=None, read_after=False):
+    require_indeterminate_status(value)
+    if daemon:
+        require(value.get('authenticated_daemon') == daemon, 'diagnosis_daemon_outcome')
+    if status:
+        require(value.get('status') == status, 'diagnosis_host_outcome')
+    if operation:
+        outputs = [row for row in value.get('outputs', []) if row.get('operation') == operation]
+        require(len(outputs) == 1 and outputs[0].get('observation') == 'present'
+                and outputs[0].get('sha256') == sha(NEW.encode()) and outputs[0].get('bytes') == len(NEW.encode()),
+                'diagnosis_operation_missing')
+        audit = value.get('audit', {})
+        require(audit.get('completeness') == 'selected_bounded_records_only', 'diagnosis_runtime_audit_incomplete')
+        calls = audit.get('calls', [])
+        mutations = [(i, row) for i, row in enumerate(calls)
+                     if row.get('operation') in ('create', 'replace') and row.get('admission') == 'recorded_allow']
+        require(len(mutations) == 1, 'diagnosis_mutation_correlation_missing')
+        index, mutation = mutations[0]
+        require(mutation.get('operation') == operation and mutation.get('target_index') == outputs[0].get('target_index')
+                and mutation.get('admission') == 'recorded_allow' and mutation.get('result_release') == 'recorded_allow'
+                and mutation.get('publication_gate') == ('recorded_allow' if operation == 'replace' else 'not_recorded')
+                and all(isinstance(mutation.get(key), str) and re.fullmatch('[0-9a-f]{64}', mutation[key])
+                        for key in ('session_sha256', 'call_sha256', 'binding_sha256')),
+                'diagnosis_mutation_boundary_missing')
+        if binding_sha256:
+            require(mutation['binding_sha256'] == binding_sha256, 'diagnosis_mutation_approval_binding_mismatch')
+        for preceding_index, preceding in enumerate(calls):
+            if preceding.get('operation') not in ('create', 'replace') or preceding_index == index:
+                continue
+            # The first native attempt can legitimately Ask; only the later
+            # approved Allow has a call/binding and a recorded result boundary.
+            # A refused admission never counts as another executed mutation.
+            require(preceding_index < index and preceding.get('admission') == 'recorded_ask'
+                    and preceding.get('operation') == operation
+                    and preceding.get('target_index') == mutation['target_index']
+                    and preceding.get('session_sha256') == mutation['session_sha256']
+                    and preceding.get('call_sha256') is None and preceding.get('binding_sha256') is None
+                    and preceding.get('publication_gate') == preceding.get('result_release') == 'not_recorded',
+                    'diagnosis_unrelated_or_contradictory_refused_mutation')
+        if read_after:
+            require(any(row.get('operation') == 'read' and row.get('target_index') == mutation['target_index']
+                        and row.get('session_sha256') == mutation['session_sha256']
+                        and row.get('admission') == row.get('result_release') == 'recorded_allow'
+                        for row in calls[index + 1:]), 'diagnosis_successful_read_after_missing')
+    if pending or rejected:
+        state = 'pending' if pending else 'rejected'
+        require(any(row.get('state') == state for row in value.get('requests', [])),
+                'diagnosis_ask_outcome_missing')
+    if incomplete:
+        require(value.get('audit', {}).get('completeness') == 'incomplete', 'diagnosis_missing_audit_accepted')
 
 
 def load(name, file):
@@ -50,6 +286,13 @@ BASE = load('edit_process_witness', 'verify-sou62-real-mcp.py')
 def require(value, code):
     if not value:
         raise ValueError(code)
+
+
+def failure_code(error):
+    text = str(error)
+    if type(error) is ValueError and re.fullmatch(r'[a-z][a-z0-9_-]{0,159}', text):
+        return text
+    return 'qualification_runtime_error'
 
 
 def sha(raw):
@@ -90,7 +333,8 @@ def passed_report(report):
             and all(r.get('status') == 'passed' and r.get('attempted') is True for r in report['cases'])
             and hardlink_preserved(next((r for r in report['cases'] if r.get('id') == 'hardlink-target'), None))
             and report.get('claude_sha256') == CLAUDE
-            and report.get('paid_inference') is False)
+            and report.get('paid_inference') is False
+            and diagnostics_passed(report))
 
 
 def cli_observation(code, stdout, stderr):
@@ -165,6 +409,161 @@ class Suite:
         self.before_sentinel = snapshot(self.sentinel)
         self.last_run = None
         self.last_record = None
+        self.diagnose_enabled = bool(getattr(args, 'diagnose', False))
+        self.secret_canary = 'owned-diagnosis-secret-' + secrets.token_hex(24)
+        self.diagnostic_root = args.output / 'diagnosis'
+        if self.diagnose_enabled:
+            self.diagnostic_root.mkdir(mode=0o700)
+
+    def diagnostic_row(self, name):
+        return next(r for r in self.report['diagnosis']['cases'] if r['id'] == name)
+
+    def retained_fixture(self, name, run, target, changes, expected, *, owner_pid=None):
+        """Explicitly simulated local evidence; restore every changed input."""
+        if not self.diagnose_enabled or self.diagnostic_row(name)['status'] == 'passed':
+            return
+        originals = {}
+        self.diagnostic_row(name)['fixture_inputs'] = [
+            {'file': path.name, 'present': replacement is not None,
+             'sha256': sha(replacement) if replacement is not None else None,
+             'bytes': len(replacement) if replacement is not None else 0}
+            for path, replacement in changes.items()]
+        try:
+            for path, replacement in changes.items():
+                originals[path] = (path.read_bytes(), stat.S_IMODE(path.stat().st_mode))
+                if replacement is None:
+                    path.unlink()
+                else:
+                    path.chmod(0o600)
+                    path.write_bytes(replacement)
+                    path.chmod(originals[path][1])
+            self.diagnose(name, run, target, expected, owner_pid=owner_pid)
+        finally:
+            for path, (raw, mode) in originals.items():
+                if path.exists():
+                    path.chmod(0o600)
+                path.write_bytes(raw)
+                path.chmod(mode)
+            self.diagnostic_row(name)['fixture_inputs_restored'] = True
+
+    def retained_diagnostic_fixtures(self, run, target):
+        if not self.diagnose_enabled:
+            return
+        audit = run_home(run) / 'audit.jsonl'
+        self.retained_fixture('missing-audit-fixture', run, target, {audit: None},
+                              lambda value: require_diagnostic(value, incomplete=True))
+        self.retained_fixture('truncated-audit-fixture', run, target,
+                              {audit: audit.read_bytes() + b'{"event":'},
+                              lambda value: require_diagnostic(value, incomplete=True))
+        rows = [json.loads(line) for line in audit.read_bytes().splitlines()]
+        require(any(r.get('event') == 'native_publish' for r in rows), 'fixture_publication_gate_missing')
+        without_results = b''.join(json.dumps(r, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+                                   for r in rows if r.get('event') != 'native_result')
+        self.retained_fixture('commit-before-result-loss-fixture', run, target, {audit: without_results},
+                              require_indeterminate_status)
+        self.diagnostic_row('commit-before-result-loss-fixture').update(
+            scope='simulated_missing_result_after_retained_publication_gate',
+            actual_result_loss_observed=False, actual_commit_boundary_observed=False)
+        profile = run / 'profile.json'
+        self.retained_fixture('tampered-state-fixture', run, target,
+                              {profile: profile.read_bytes() + b' '},
+                              lambda value: require_diagnostic(value, status='unknown'))
+        foreign = self.diagnostic_root / 'foreign-run'
+        foreign.mkdir(mode=0o700)
+        (foreign / 'run.json').write_bytes((run / 'run.json').read_bytes())
+        (foreign / 'run.json').chmod(0o400)
+        self.diagnose('foreign-run-fixture', foreign, target,
+                      lambda value: require_diagnostic(value, status='unknown'), witness_run=run)
+
+    def diagnose(self, name, run, target, expected=None, *, witness_run=None, owner_pid=None, export=False):
+        if not self.diagnose_enabled:
+            return None
+        row = self.diagnostic_row(name)
+        if row.get('status') == 'passed':
+            return None
+        row['attempted'] = True
+        selected = witness_run or run
+        live = owner_pid is not None
+        before_state = private_state_witness(selected, include_audit=not live)
+        before_audit = live_audit_witness(selected) if live else None
+        before_target, before_sentinel = snapshot(target), snapshot(self.sentinel)
+        before_process = process_identity(owner_pid) if owner_pid else None
+        secrets_to_omit = [self.secret_canary.encode(), OLD.encode().strip(), NEW.encode().strip(),
+                           str(self.args.output).encode(), str(run).encode()]
+        home = run_home(selected)
+        for leaf in ('native-token', 'token'):
+            if (home / leaf).is_file():
+                secrets_to_omit.append((home / leaf).read_bytes())
+        mcp = json.loads((selected / 'mcp.json').read_bytes())
+        relay = mcp['mcpServers']['private-output']['args']
+        if '--child-authority' in relay:
+            secrets_to_omit.append(str(relay[relay.index('--child-authority') + 1]).encode())
+        secrets_to_omit.extend(getattr(self, 'provider_canaries', []))
+        destination = self.diagnostic_root / (name + '-support')
+        default = subprocess.run([str(self.binary), 'edit-session', 'status', '--run', str(run), '--json'],
+                                 cwd=self.work, env=self.env, stdin=subprocess.DEVNULL,
+                                 capture_output=True, timeout=12)
+        row.setdefault('responses', {})['default'] = retain_diagnostic_response(self.diagnostic_root, name, 'default', default)
+        require(default.returncode == 0 and len(default.stdout) <= 128 * 1024
+                and len(default.stderr) <= 128 * 1024, 'diagnosis_default_failed')
+        default_value = json.loads(default.stdout)
+        require_indeterminate_status(default_value)
+        require(not default_value.get('outputs'), 'diagnosis_default_observed_output_without_opt_in')
+        words = ['status', '--run', str(run), '--check-output']
+        if export:
+            words += ['--support-bundle', str(destination)]
+        result = subprocess.run([str(self.binary), 'edit-session', *words, '--json'],
+                                cwd=self.work, env=self.env, stdin=subprocess.DEVNULL,
+                                capture_output=True, timeout=12)
+        row['responses']['output'] = retain_diagnostic_response(self.diagnostic_root, name, 'output', result)
+        require(result.returncode == 0 and len(result.stdout) <= 128 * 1024
+                and len(result.stderr) <= 128 * 1024, 'diagnosis_command_failed')
+        value = json.loads(result.stdout)
+        require(value.get('schema') == DIAGNOSTIC_FORMAT, 'diagnosis_schema_mismatch')
+        require_indeterminate_status(value)
+        rendered = subprocess.run([str(self.binary), 'edit-session', 'status', '--run', str(run), '--check-output'],
+                                  cwd=self.work, env=self.env, stdin=subprocess.DEVNULL,
+                                  capture_output=True, timeout=12)
+        row['responses']['text'] = retain_diagnostic_response(self.diagnostic_root, name, 'text', rendered)
+        require(rendered.returncode == 0 and 0 < len(rendered.stdout) <= 128 * 1024
+                and len(rendered.stderr) <= 128 * 1024, 'diagnosis_text_failed')
+        streams = [default.stdout, default.stderr, result.stdout, result.stderr, rendered.stdout, rendered.stderr]
+        if export:
+            require(sorted(p.name for p in destination.iterdir()) == ['manifest.json', 'report.json'],
+                    'diagnosis_export_not_allowlisted')
+            for path in (destination, destination / 'manifest.json', destination / 'report.json'):
+                require(stat.S_IMODE(path.stat().st_mode) == (0o700 if path.is_dir() else 0o600),
+                        'diagnosis_export_permissions')
+            exported = (destination / 'report.json').read_bytes()
+            manifest = json.loads((destination / 'manifest.json').read_bytes())
+            require(manifest['files'] == [{'name': 'report.json', 'sha256': sha(exported), 'bytes': len(exported)}],
+                    'diagnosis_export_manifest')
+            require(json.loads(exported).get('edit_session') == value, 'diagnosis_export_section_mismatch')
+            streams += [exported, (destination / 'manifest.json').read_bytes()]
+        require(not any(secret and secret in output for secret in secrets_to_omit for output in streams),
+                'diagnosis_exposed_private_input')
+        if expected:
+            expected(value)
+        after_process = process_identity(owner_pid) if owner_pid else None
+        renewals = live_audit_delta(before_audit, live_audit_witness(selected)) if live else 0
+        stable_state = before_state == private_state_witness(selected, include_audit=not live)
+        stable_target, stable_sentinel = snapshot(target) == before_target, snapshot(self.sentinel) == before_sentinel
+        require(stable_state and stable_target and stable_sentinel, 'diagnosis_changed_selected_state')
+        require(before_process == after_process and (owner_pid is None or before_process is not None),
+                'diagnosis_changed_process_identity')
+        (self.diagnostic_root / (name + '.json')).write_bytes(result.stdout)
+        row.update(status='passed', state_unchanged=stable_state, target_unchanged=stable_target,
+                   sentinel_unchanged=stable_sentinel, process_identity_unchanged=True,
+                   process_identity_observed=owner_pid is not None,
+                   process_witness_scope='live_owner_start_ticks' if owner_pid else 'preceding_owned_run_cleanup',
+                   audit_witness_scope='exact_prefix_with_only_correlated_liveness_renewals' if live else 'entire_audit_immutable',
+                   audit_appended_renewals=renewals,
+                   audit_prefix_sha256=sha(before_audit['raw']) if live else None,
+                   report_sha256=sha(result.stdout), text_sha256=sha(rendered.stdout),
+                   default_report_sha256=sha(default.stdout), default_output_observed=False,
+                   json_bytes=len(result.stdout), support_export=export,
+                   provenance='installed-status-command; independent target/state/process witnesses')
+        return value
 
     def cli(self, *words, env=None, timeout=30):
         result = subprocess.run([str(self.binary), 'edit-session', *map(str, words)],
@@ -175,7 +574,11 @@ class Suite:
         require(len(result.stdout) <= 128 * 1024 and len(result.stderr) <= 128 * 1024, 'cli_output_cap')
         lines = result.stdout.splitlines()
         try:
-            value = json.loads(lines[-1]) if lines else None
+            # Status emits a complete pretty JSON document; launchers may emit
+            # newline-delimited run and terminal records. Do not mistake the
+            # final closing brace of a valid status document for its response.
+            raw = result.stdout if words and words[0] == 'status' else (lines[-1] if lines else b'')
+            value = json.loads(raw) if raw else None
         except ValueError:
             value = None
         return result.returncode, value
@@ -212,6 +615,8 @@ class Suite:
         changed = False
         retired = self.last_run if mode == 'restart-authority' else None
         restart_refused = False
+        result_gate = threading.Event()
+        completion_gate = threading.Event()
         def next_step(body):
             names = {t.get('name') for t in body.get('tools', [])}
             if not any(n and n.startswith('mcp__private-output__') for n in names):
@@ -228,12 +633,20 @@ class Suite:
                     return [{'type': 'tool_use', 'id': identity, 'name': 'mcp__private-output__' + tool, 'input': arguments}]
             if mode == 'interruption-after-delivery':
                 time.sleep(60)
+            if mode == 'ask-reject' and self.diagnose_enabled:
+                # Hold only the owned provider's final response. The refusal
+                # has reached this independent provider, and the genuine host
+                # stays live long enough to inspect the authenticated decision.
+                result_gate.set()
+                require(completion_gate.wait(20), 'diagnosis_rejection_gate_timeout')
             return [{'type': 'text', 'text': 'Owned edit sequence finished.'}]
         model.next = next_step
         env = dict(self.env, ANTHROPIC_API_KEY=secrets.token_hex(32), ANTHROPIC_BASE_URL=model.url,
                    HTTP_PROXY='http://127.0.0.1:9', HTTPS_PROXY='http://127.0.0.1:9', NO_PROXY='localhost,127.0.0.1,::1')
+        self.provider_canaries = [env['ANTHROPIC_API_KEY'].encode(), model.url.encode()]
         prompt = self.work / (label + '-prompt.txt')
-        prompt.write_text('Use only the selected private output tools. Produce the requested bounded report.')
+        prompt.write_text('Use only the selected private output tools. Produce the requested bounded report. '
+                          + self.secret_canary)
         prompt.chmod(0o600)
         before = snapshot(target)
         words = [str(self.binary), 'edit-session', 'run', '--plan', str(plan), '--sha256', prepared['profile_sha256'],
@@ -269,11 +682,35 @@ class Suite:
                                     restart_refused = True
                                 require(restart_refused, 'old_epoch_accepted')
                     if run is not None:
+                        if mode == 'ask-reject' and self.diagnose_enabled and result_gate.is_set():
+                            try:
+                                self.diagnose('rejected-ask-status', run, target,
+                                              lambda value: require_diagnostic(value, daemon='matching_current_epoch',
+                                                                               rejected=True),
+                                              owner_pid=process.pid)
+                            finally:
+                                completion_gate.set()
                         code, rows = self.ask(run, 'list')
                         if code != 0:
                             time.sleep(.025)
                             continue
                         require(isinstance(rows, list), 'ask_list_failed')
+                        if rows and self.diagnose_enabled:
+                            self.diagnose('pending-ask-status', run, target,
+                                          lambda value: require_diagnostic(value, daemon='matching_current_epoch',
+                                                                           pending=True),
+                                          owner_pid=process.pid)
+                            if self.diagnostic_row('stale-instance-fixture')['status'] != 'passed':
+                                changes = {}
+                                for leaf in ('run.json', 'diagnostic-context.json'):
+                                    path = run / leaf
+                                    context = json.loads(path.read_bytes())
+                                    previous = context['instance_id']
+                                    context['instance_id'] = ('B' if previous.startswith('A') else 'A') * len(previous)
+                                    changes[path] = json.dumps(context, sort_keys=True, separators=(',', ':')).encode()
+                                self.retained_fixture('stale-instance-fixture', run, target, changes,
+                                                      lambda value: require_diagnostic(value, daemon='stale_epoch'),
+                                                      owner_pid=process.pid)
                         for row in rows:
                             pending_seen.add(row['pending_id'])
                             if row['pending_id'] in seen:
@@ -319,6 +756,7 @@ class Suite:
                     time.sleep(.025)
                 require(process.poll() is not None, 'host_timeout_outside_bound')
             finally:
+                completion_gate.set()
                 if process.poll() is None:
                     os.killpg(process.pid, signal.SIGKILL);process.wait(timeout=5)
                 model.close()
@@ -529,6 +967,37 @@ def qualify(args, report):
             require(snapshot(target) == before, 'unauthorized_effect_' + label)
             if label in ('ask-reject', 'pending-new-change', 'unlisted-tool', 'outside-target'):
                 require(observed and all(r['is_error'] for r in observed.values()), 'refusal_not_observed_' + label)
+        if suite.diagnose_enabled:
+            retain_validated_runtime_case(report, label, row)
+            run = suite.last_run
+            if label in ('useful-create', 'useful-replace'):
+                operation = 'create' if label == 'useful-create' else 'replace'
+                approved_binding = next(d['binding_sha256'] for d in row['decisions'] if d['action'] == 'approve')
+                suite.diagnose(operation + '-read-status', run, target,
+                               lambda value, operation=operation: require_diagnostic(
+                                   value, status='recorded_host_completed', operation=operation,
+                                   binding_sha256=approved_binding, read_after=True))
+                if label == 'useful-replace':
+                    suite.diagnose('secret-canary-export', run, target, require_indeterminate_status, export=True)
+                    suite.retained_diagnostic_fixtures(run, target)
+            elif label == 'ask-reject':
+                suite.diagnose('rejected-ask-status', run, target,
+                               lambda value: require_diagnostic(value, rejected=True))
+            elif label == 'cancel-pending':
+                suite.diagnose('cancelled-status', run, target,
+                               lambda value: require_diagnostic(value, status='recorded_host_interrupted', daemon='unavailable'))
+            elif label == 'daemon-loss':
+                suite.diagnose('daemon-loss-status', run, target,
+                               lambda value: require_diagnostic(value, daemon='unavailable'))
+            elif label == 'interruption-after-delivery':
+                approved_binding = next(d['binding_sha256'] for d in row['decisions'] if d['action'] == 'approve')
+                suite.diagnose('post-publication-interruption-status', run, target,
+                               lambda value: require_diagnostic(value, status='recorded_host_interrupted', operation='replace',
+                                                                binding_sha256=approved_binding))
+                suite.diagnostic_row('post-publication-interruption-status').update(
+                    scope='actual_host_interruption_after_independently_observed_tool_result_delivery',
+                    actual_result_delivery_observed=True, tool_result_lost=False,
+                    publication_gates=row['publication_gates'], target_sha256=sha(target.read_bytes()))
         setrow(label, row)
     require(snapshot(suite.sentinel) == suite.before_sentinel, 'final_unrelated_witness_changed')
     report['status'] = 'passed'
@@ -538,31 +1007,55 @@ def qualify(args, report):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--run', action='store_true')
+    p.add_argument('--diagnose', action='store_true', help='Also execute the frozen installed status/diagnosis inventory.')
     p.add_argument('--agentfw', type=Path)
     p.add_argument('--claude', type=Path)
     p.add_argument('--python', type=Path, default=Path('/usr/bin/python3.12'))
     p.add_argument('--output', type=Path)
     args = p.parse_args()
     if not args.run:
-        print(json.dumps({'format': FORMAT, 'executed': False, 'cases': list(CASES)}));return 0
+        value = {'format': FORMAT, 'executed': False, 'cases': list(CASES)}
+        if args.diagnose:
+            value['diagnosis'] = diagnostic_inventory()
+        print(json.dumps(value));return 0
     require(args.output and args.output.is_absolute() and not args.output.exists(), 'new_absolute_output_required')
     args.output.mkdir(mode=0o700)
     report = {'format': FORMAT, 'status': 'incomplete', 'paid_inference': False,
               'scope': 'native-installed-genuine-host-owned-scripted-provider',
+              'diagnosis_requested': args.diagnose,
               'expected': list(CASES), 'cases': [{'id': name, 'status': 'incomplete', 'attempted': False} for name in CASES]}
+    if args.diagnose:
+        report['diagnosis'] = diagnostic_inventory()
     try:
         qualify(args, report)
     except Exception as error:
-        report.update(status='failed', failure_type=type(error).__name__, failure=str(error)[:160])
+        code = failure_code(error)
+        report.update(status='failed', failure_type=type(error).__name__, failure=code)
         current = next((r for r in report['cases'] if r.get('attempted') and r['status'] == 'incomplete'), None)
         if current is not None:
-            current.update(status='failed', failure=str(error)[:160])
+            current.update(status='failed', failure=code)
+        if args.diagnose:
+            current = next((r for r in report['diagnosis']['cases'] if r.get('attempted') and r['status'] == 'incomplete'), None)
+            if current is not None:
+                current.update(status='failed', failure=code)
     report['inventory'] = {'expected': len(CASES), 'attempted': sum(bool(r.get('attempted')) for r in report['cases']),
                            'passed': sum(r['status'] == 'passed' for r in report['cases']),
                            'failed': sum(r['status'] == 'failed' for r in report['cases']),
                            'incomplete': sum(r['status'] == 'incomplete' for r in report['cases'])}
+    if args.diagnose:
+        rows = report['diagnosis']['cases']
+        report['diagnosis']['inventory'] = {
+            'expected': len(DIAGNOSTIC_CASES),
+            **{state: sum(r['status'] == state for r in rows) for state in ('passed', 'failed', 'incomplete')},
+            'attempted': sum(r['attempted'] for r in rows),
+            'native_runtime_cases': sum(r['kind'] == 'native-runtime' for r in rows),
+            'simulated_retained_state_cases': sum(r['kind'] == 'simulated-retained-state' for r in rows)}
     (args.output / 'report.json').write_text(json.dumps(report, sort_keys=True, indent=2) + '\n')
-    print(json.dumps({'format': FORMAT, 'status': report['status'], 'passed': sum(r['status'] == 'passed' for r in report['cases']), 'required': len(CASES)}))
+    summary = {'format': FORMAT, 'status': report['status'],
+               'passed': sum(r['status'] == 'passed' for r in report['cases']), 'required': len(CASES)}
+    if args.diagnose:
+        summary['diagnosis'] = report['diagnosis']['inventory']
+    print(json.dumps(summary))
     return 0 if passed_report(report) else 1
 
 
