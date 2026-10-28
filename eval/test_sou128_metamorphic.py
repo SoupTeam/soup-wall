@@ -244,6 +244,38 @@ class CandidateComparison(unittest.TestCase):
         self.assertEqual({p["id"] for p in cand["boundary_probes"] if p["verdict"] == "blocked"},
                          {"DUPLICATE-ARGUMENT", "DUPLICATE-TOOL-NAME", "NAN", "LONE-SURROGATE"})
 
+    def test_git_candidate_boundaries_are_probed_too(self):
+        # A Git-only candidate: the unchanged Git baseline plus a main() that masks unparseable input.
+        git_baseline = ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"
+        masking = ("import io, json, sys\n"
+                   "_ns = {'__name__': 'sou128_wrapped_baseline', '__file__': 'rule_baseline.py'}\n"
+                   "exec(compile(open(@BASELINE@, 'rb').read(), 'rule_baseline.py', 'exec'), _ns)\n"
+                   "classify, _error = _ns['classify'], _ns['_error']\n"
+                   "if __name__ == '__main__':\n"
+                   "    raw = sys.stdin.buffer.read()\n"
+                   "    try:\n"
+                   "        json.loads(raw)\n"
+                   "    except ValueError:\n"
+                   "        print(json.dumps(classify({'tool_name': 'git_status', 'raw_arguments': {'repo_path': '/workspace'}})))\n"
+                   "        raise SystemExit(0)\n"
+                   "    sys.stdin = io.TextIOWrapper(io.BytesIO(raw), encoding='utf-8')\n"
+                   "    raise SystemExit(_ns['main']())\n").replace("@BASELINE@", repr(str(git_baseline)))
+        with tempfile.TemporaryDirectory(prefix="sou128-candidate-") as tmp:
+            path = Path(tmp, "git_masks_invalid_input.py")
+            path.write_text(masking, encoding="utf-8")
+            done, report = gate("--modes", "direct", "--candidate", f"git={path}")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        cand = report["candidate"]
+        self.assertEqual(cand["modes"]["direct"]["tally"]["fail"], 0)  # relations alone would pass
+        self.assertEqual(cand["boundary_probes_git_classifier"], cand["classifiers"]["git"])
+        git_probes = {p["id"]: p for p in cand["boundary_probes_git"]}
+        for pid in ("TRUNCATED", "TRAILING-COMMA"):
+            self.assertEqual((git_probes[pid]["verdict"], git_probes[pid]["detail"]["single_shot"]), ("fail", "classification"))
+        self.assertEqual({p["id"] for p in cand["boundary_probes"] if p["verdict"] == "fail"}, set())  # generic is the baseline
+        # The baseline Git classifier's own boundaries are probed as well, and hold.
+        self.assertEqual(report["boundary_probes_git_classifier"], report["identities"]["classifiers"]["git"])
+        self.assertEqual({p["id"] for p in report["boundary_probes_git"] if p["verdict"] == "fail"}, set())
+
 
 class Reproducibility(unittest.TestCase):
     def test_report_is_byte_identical_across_runs_and_latency_is_separate(self):
