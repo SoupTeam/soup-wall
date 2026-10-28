@@ -25,6 +25,8 @@ The producer disables incremental compilation explicitly and records its build
 environment and actual role profiles, including optimization, debug information,
 debug assertions and overflow checks. Other active compilers, compiler/native
 flags or Cargo configuration are not accepted implicitly.
+Loader substitution through `LD_PRELOAD`, `LD_LIBRARY_PATH` or `LD_AUDIT` also
+refuses, so validated system-library paths cannot be replaced through the environment.
 Source-mode binaries retain their original target directories and environment;
 their bytes are not claimed identical to a separate producer build. The common
 tuple records incremental compilation as disabled, and both consumers must pass

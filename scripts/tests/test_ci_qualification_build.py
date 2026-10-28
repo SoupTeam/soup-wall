@@ -369,6 +369,9 @@ class Dependency(unittest.TestCase):
                            ("CARGO_BUILD_RUSTC_WRAPPER", "/other/wrapper"), ("CARGO_PROFILE_DEV_OPT_LEVEL", "3"),
                            ("CC", "/other/cc"), ("CFLAGS", "-march=native")):
             with self.subTest(key=key), self.assertRaises(ValueError): B.validate_build_overrides({key: value})
+        for name in ("LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT"):
+            with self.subTest(loader_override=name), self.assertRaises(ValueError):
+                B.validate_build_overrides({name: "/unreviewed/loader-substitution"})
 
     def test_zero_test_success_is_failure_and_retains_actual_record(self):
         with tempfile.TemporaryDirectory() as temporary, patch.object(B, "source_builder") as builder, \

@@ -441,6 +441,7 @@ def validate_build_overrides(env):
     require(env.get("RUSTUP_TOOLCHAIN", PIN) in {PIN, PIN + "-x86_64-unknown-linux-gnu"}, "active_toolchain_mismatch")
     forbidden = {"RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
                  "RUSTDOCFLAGS", "CARGO_ENCODED_RUSTDOCFLAGS", "RUSTC", "RUSTDOC", "RUSTC_BOOTSTRAP",
+                 "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT",
                  "CC", "CXX", "AR", "RANLIB", "CFLAGS", "CXXFLAGS", "LDFLAGS", "BINDGEN_EXTRA_CLANG_ARGS"}
     require(not any(value for key, value in env.items() if key in forbidden or
                     key.startswith(("CARGO_PROFILE_", "CARGO_TARGET_", "CARGO_BUILD_")) and
