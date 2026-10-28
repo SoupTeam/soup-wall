@@ -1,4 +1,5 @@
 import argparse
+import copy
 import importlib.util
 import json
 import os
@@ -25,6 +26,15 @@ require = UPDATE.require
 
 
 class Door(QUAL.FrontDoor):
+    live_probe = None
+
+    def call(self, command, *extra, **options):
+        result = super().call(command, *extra, **options)
+        if command == "status" and result[1].get("protection") == "observed-live" and self.live_probe:
+            probe, self.live_probe = self.live_probe, None
+            probe()
+        return result
+
     def words(self, command, *extra, inputs=False, prefix=None, project_roots=False):
         return [str(self.args.entry_agent), "pilot", "--home", str(self.args.entry_home),
                 command, "--prefix", str(prefix or self.args.prefix), *[str(word) for word in extra]]
@@ -94,8 +104,51 @@ def qualify(args, candidates, report):
     require(preview["writes"] is False and not args.prefix.exists(), "preview_changed_state")
     first = update(door, "apply", args.inventory_a, preview["plan_sha256"])
     report["install"] = first
+    def refuse_live_update():
+        before = UPDATE.state(args.prefix)
+        journal = (args.prefix / "journal.json").read_bytes()
+        preview = UPDATE.plan(args.prefix, candidates[1])
+        try:
+            UPDATE.apply(args.prefix, candidates[1], preview["plan_sha256"])
+        except ValueError as error:
+            require(str(error) == "active_or_concurrent_operation", "live_update_refused_for_wrong_reason")
+        else:
+            raise ValueError("live_run_did_not_refuse_update")
+        require(UPDATE.state(args.prefix) == before and (args.prefix / "journal.json").read_bytes() == journal,
+                "live_update_changed_state")
+        report["cases"].append({"case": "live_run_refuses_update", "passed": True,
+                                "current_preserved": True, "journal_preserved": True})
+    door.live_probe = refuse_live_update
     useful("installed_a")
+    require(door.live_probe is None, "live_update_probe_not_reached")
     current_a = UPDATE.state(args.prefix)
+    for role, record in (("interpreter", candidates[1]["interpreter"]),
+                         ("binary", candidates[1]["runtime"]["agentfw"]),
+                         ("helper", candidates[1]["component"])):
+        changed = copy.deepcopy(candidates[1])
+        target = changed["interpreter"] if role == "interpreter" else (
+            changed["runtime"]["agentfw"] if role == "binary" else changed["component"])
+        target["sha256"] = "0" * 64 if record["sha256"] != "0" * 64 else "1" * 64
+        try:
+            UPDATE.plan(args.prefix, changed)
+        except ValueError as error:
+            require(str(error) == "input_identity_changed", "changed_input_refused_for_wrong_reason")
+        else:
+            raise ValueError("changed_" + role + "_accepted")
+        require(UPDATE.state(args.prefix) == current_a, "changed_input_lost_current_set")
+        report["cases"].append({"case": "changed_" + role, "passed": True,
+                                "current_preserved": True, "executed": False})
+    review = UPDATE.plan(args.prefix, candidates[1])
+    with UPDATE.Directory(args.prefix) as directory, directory.lock(exclusive=False):
+        try:
+            UPDATE.apply(args.prefix, candidates[1], review["plan_sha256"])
+        except ValueError as error:
+            require(str(error) == "active_or_concurrent_operation", "lease_refused_for_wrong_reason")
+        else:
+            raise ValueError("active_coordinator_lease_not_refused")
+    require(UPDATE.state(args.prefix) == current_a, "active_lease_lost_current_set")
+    report["cases"].append({"case": "active_coordinator_lease", "passed": True,
+                            "current_preserved": True})
     for point in ("before_staging", "after_agent", "after_helper", "before_selection", "after_selection"):
         review = UPDATE.plan(args.prefix, candidates[1])
         before = UPDATE.state(args.prefix)
@@ -205,7 +258,8 @@ def main():
             os.fchmod(stream.fileno(), 0o600)
             json.dump(report, stream, sort_keys=True, indent=2)
             stream.write("\n")
-    print(json.dumps({"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}))
+    print(json.dumps(report if not args.run else {
+        "status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}))
     return 0 if report["status"] in ("plan", "passed_useful_runs") else 1
 
 

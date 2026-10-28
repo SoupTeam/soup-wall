@@ -1,20 +1,23 @@
 {
   "acceptance": {
     "active_protection": "not_claimed",
-    "full_ci": "not_run",
-    "native_ubuntu_2404_useful_a_b_a": "not_verified",
-    "ready_for_done": false
+    "evidence_scope": "local_controls_only",
+    "full_ci": "reported_separately_in_pull_request",
+    "native_ubuntu_2404_useful_a_b_a": "reported_separately_by_native_workflow"
   },
-  "accepted_base": "f4937110b58305645b7302acae99325d13354916",
+  "accepted_base": "144512b3ed11f985c922d9911cba26f07599dea9",
   "code_sha256": {
-    "scripts/build-pilot-front-door.py": "46defc5e107fcf9691b580128fb252731bdef7709f2ba71d82ecd486bf412a54",
+    "scripts/build-pilot-front-door.py": "a21c4da0ad36f1ed484782f6e608c440a037f5e9d973d649ca4ec64e9917d4e3",
     "scripts/pilot.py": "8ffa0605e4f4564e36fd421f60d76e98743fa8374f2cd57b5b506e88484509ad",
     "scripts/pilot_update.py": "7ab012b4ff02410f324fc921a1c8b002ea56a4cf533362165ec30c02817853a0",
-    "scripts/qualify-pilot-update.py": "7584c3ffe2db91efbb89ffb0d506dbe3c3e129e67cd3f32010c0ce733a35e5ee",
-    "scripts/tests/test_pilot_update.py": "9cb415fc395a89bb2b7dcd7cebe0edddbfff7650539dc6abb6ac57107dd80236"
+    "scripts/prepare-pilot-update-fixture.py": "c70f6125550f126bbc3317cebcd8a815f9153d090acf382530c06c2f05fe46f5",
+    "scripts/qualify-pilot-update.py": "70ef91700e69743f85ace3f06446155214a14a72c04ee6ec9ebd4ebd9352efce",
+    "scripts/tests/test_pilot_update.py": "e3114f5bd9cf582ea15aff2162043f40c44cdb80bf5c50a32485d33399f3c01d",
+    "scripts/tests/test_prepared_qualification_coverage.py": "b19952bc2ba671d18f42c4948333adeed8f322528fd473902024efdd9365da47"
   },
   "date": "2026-10-28",
   "format": "sw-pilot-update-local-evidence/1",
+  "initial_local_base": "f4937110b58305645b7302acae99325d13354916",
   "offline_agent": {
     "cargo_lock_sha256": "f4bd80d40a0408145a11bae4c91324ff954cdd59ee8172ce1f0a6e22b161f6c2",
     "compiler": "rustc 1.99.0",
@@ -43,17 +46,25 @@
       "errors": 1,
       "setup_error": "test_pilot_launch.PilotLaunchCliTests: cargo executable absent in WSL",
       "skipped": 42,
+      "source_base": "f4937110b58305645b7302acae99325d13354916",
       "tests_run": 1788
+    },
+    "historical_container_base": "f4937110b58305645b7302acae99325d13354916",
+    "native_workflow_controls": {
+      "failed": 0,
+      "passed": 19,
+      "skipped": 0
     },
     "real_installer_scope": "Production lifecycle/component commands; invalid preparation refused; capacity guard fixture; no useful original-server acceptance",
     "windows_tests": {
       "failed": 0,
       "passed": 2,
-      "skipped": 30
+      "skipped": 30,
+      "source_base": "f4937110b58305645b7302acae99325d13354916"
     },
     "wsl_tests": {
       "failed": 0,
-      "passed": 31,
+      "passed": 33,
       "skipped": 1
     }
   }

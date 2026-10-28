@@ -1,6 +1,8 @@
 import copy
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -475,6 +477,74 @@ class CandidateControls(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "invalid_update_journal"):
                     self.m.recovery_plan(self.root)
                 self.assertIsNone(directory.read("current.json"))
+
+
+@unittest.skipUnless(sys.platform == "linux", "Linux fixture file modes")
+class QualificationFixtureControls(unittest.TestCase):
+    def test_read_only_qualification_prints_both_source_identities(self):
+        spec = importlib.util.spec_from_file_location("update_qualification_test", ROOT / "scripts/qualify-pilot-update.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            sources = [{"commit": letter * 40} for letter in ("a", "b")]
+            paths = []
+            for index, source in enumerate(sources):
+                path = parent / (str(index) + ".json")
+                path.write_text(json.dumps({"source": source}))
+                path.chmod(0o600)
+                paths.append(path)
+            args = ["qualification", "--entry-agent", "/owned/agentfw", "--entry-home", "/owned/bootstrap",
+                    "--inventory-a", str(paths[0]), "--inventory-b", str(paths[1]),
+                    "--fixture-root", str(parent), "--output", str(parent / "new-output"),
+                    "--expected-commit", "c" * 40, "--expected-text", "Owned text"]
+            output = io.StringIO()
+            with patch.object(sys, "argv", args), patch.object(module.UPDATE, "inventory"), \
+                    patch.object(module.QUAL.BASE, "source", return_value={"dirty": False, "commit": "c" * 40}), \
+                    contextlib.redirect_stdout(output):
+                self.assertEqual(module.main(), 0)
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["accepted_sources"], sources)
+            self.assertIs(report["writes"], False)
+            self.assertFalse((parent / "new-output").exists())
+
+    def test_fixture_uses_accepted_cli_and_explicit_offline_inputs(self):
+        spec = importlib.util.spec_from_file_location("update_fixture_test", ROOT / "scripts/prepare-pilot-update-fixture.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            build = parent / "build.json"
+            build.write_text(json.dumps({role: "/owned/" + role for role in
+                                        ("agentfw", "git_launcher", "sandbox_tests")}))
+            args = SimpleNamespace(source_a=ROOT, build_a=build, build_b=build,
+                                   output=parent / "fixtures", git=Path("/usr/bin/git"))
+            for role in ("node_archive", "bwrap", "claude", "python_archive", "npm_cache", "wheelhouse"):
+                setattr(args, role, Path("/owned") / role)
+            spec = importlib.util.spec_from_file_location("update_fixture_front_door", ROOT / "scripts/pilot.py")
+            front = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(front)
+            commands = []
+            def call(words, source, env):
+                words = [str(word) for word in words]
+                commands.append(words)
+                if words[2].endswith("build-pilot-front-door.py"):
+                    return {"commit": "a" * 40, "archive_sha256": "b" * 64}
+                if words[2].endswith("pilot.py"):
+                    parsed = front.parser().parse_args(words[3:])
+                    self.assertFalse(parsed.allow_download)
+                    for role in ("python_archive", "npm_cache", "wheelhouse", "agentfw", "sandbox_tests"):
+                        self.assertTrue(getattr(parsed, role).is_absolute())
+                    return {"status": "prepared-not-active"}
+                return {"ok": True}
+            with patch.object(module, "call", call), \
+                    patch.object(module.subprocess, "check_output", return_value="a" * 40), \
+                    patch.object(module.UPDATE, "make_inventory", return_value={"fixture": True}):
+                module.prepare(args)
+            self.assertEqual(sum(words[2].endswith("pilot.py") for words in commands), 2)
+            result = json.loads((args.output / "inputs.json").read_text())
+            self.assertEqual(result["status"], "prepared-not-qualified")
+            self.assertEqual(result["entry_agent"], "/owned/agentfw")
 
 
 @unittest.skipUnless(sys.platform == "linux" and os.environ.get("SOU164_TEST_AGENT"),
