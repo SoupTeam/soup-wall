@@ -1,0 +1,1358 @@
+{
+  "agentfw_sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e",
+  "all_owned_stopped": true,
+  "cases": [
+    {
+      "attempted": true,
+      "component": "92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de",
+      "id": "installed-closure",
+      "source": "fa1732a7c49f591c66d456031301d9486b8969cf",
+      "status": "passed"
+    },
+    {
+      "after_first": {
+        "device": 2049,
+        "exists": true,
+        "inode": 9963317,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+        "size": 36
+      },
+      "after_second": {
+        "device": 2049,
+        "exists": true,
+        "inode": 9963365,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "a3d550c6124325977209c212f65ffa9e81ad9420fd3dbd102fea020880c5ea2a",
+        "size": 48
+      },
+      "attempted": true,
+      "confirmation_sha256": "316e2a46413430142e39f45d620a3e0bfd3677d8bd9a1f45760464d06198378e",
+      "expected_first_sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+      "expected_second_sha256": "a3d550c6124325977209c212f65ffa9e81ad9420fd3dbd102fea020880c5ea2a",
+      "first": {
+        "adapter_mutation_dispatches": 0,
+        "after": {
+          "device": 2049,
+          "exists": true,
+          "inode": 9963317,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+          "size": 36
+        },
+        "approval_verdicts": [
+          "ask"
+        ],
+        "approved": 1,
+        "audit_sha256": "a2ecab5f0c720009700bacb116f66c3f93ff7c6cf7d800842a0cd896efb820e4",
+        "before": {
+          "device": 2049,
+          "exists": true,
+          "inode": 9963277,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+          "size": 40
+        },
+        "bindings_match_approved": true,
+        "changed_control": false,
+        "closed_inspection": null,
+        "decisions": [
+          {
+            "action": "approve",
+            "binding_sha256": "7393809c9959e9f62ba5883139b094dbf53c71ca7d9be42ab058e31f7d779726",
+            "id": "ZaeURPnzhpDvTgBmxJaFPc7Py-7N9ZaHGGftSzq1Bgk"
+          }
+        ],
+        "exit": 0,
+        "id": "first",
+        "inspect_observations": [
+          {
+            "binding_sha256": "7393809c9959e9f62ba5883139b094dbf53c71ca7d9be42ab058e31f7d779726",
+            "exit_code": 0,
+            "pending_id_sha256": "2e8c9efd36548530c25d1c596cddaaefba61a085c64115cae8bad423d72aee97",
+            "raw_retained": false,
+            "reason": "ok",
+            "redaction": "passed",
+            "stderr_bytes": 0,
+            "stdout_bytes": 1543,
+            "stdout_sha256": "c6a7ce47c77a0d0e11c588387628064177ad1e2728c8b1394624f23235c05eb5",
+            "verdict": "ask"
+          }
+        ],
+        "inspected_seen": 1,
+        "matched_inspections": 1,
+        "native_call_verdicts": [
+          "allow"
+        ],
+        "observed_results": 3,
+        "pending_seen": 1,
+        "process_cleanup": {
+          "all_stopped": true,
+          "descendant_count": 6,
+          "observed": [
+            {
+              "parent_process": true,
+              "pid": 10123,
+              "start_time_ticks": 47986
+            },
+            {
+              "parent_process": false,
+              "pid": 10125,
+              "start_time_ticks": 48129
+            },
+            {
+              "parent_process": false,
+              "pid": 10149,
+              "start_time_ticks": 48171
+            },
+            {
+              "parent_process": false,
+              "pid": 10148,
+              "start_time_ticks": 48171
+            },
+            {
+              "parent_process": false,
+              "pid": 10147,
+              "start_time_ticks": 48171
+            },
+            {
+              "parent_process": false,
+              "pid": 10157,
+              "start_time_ticks": 48175
+            },
+            {
+              "parent_process": false,
+              "pid": 10162,
+              "start_time_ticks": 48179
+            }
+          ],
+          "remaining": []
+        },
+        "provider_requests": 4,
+        "publication_gates": 1,
+        "retired_epoch_refused": false,
+        "root_inventory": [
+          "result.txt"
+        ],
+        "status": "passed",
+        "terminal": {
+          "cleanup": {
+            "cleaned": true,
+            "exit_success": true,
+            "failure": null,
+            "graceful_observed": false,
+            "ownership": "unix_process_group",
+            "reaped": true
+          },
+          "daemon_clean": true,
+          "effect_status": "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry",
+          "format": "sw-installed-edit-session/1",
+          "mutation_dispatches": 0,
+          "profile_sha256": "0765ab4d601968c17f128e909f445707bf51f047c88835dca9c59216d8357f02",
+          "reason": "host_completed",
+          "run": "/home/runner/work/_temp/sou161-scratch/refresh/runs/edit-43af3a97-7553-4d42-a3eb-52967233baf9",
+          "state": "host_completed"
+        },
+        "write_admissions": 1
+      },
+      "first_plan_sha256": "0765ab4d601968c17f128e909f445707bf51f047c88835dca9c59216d8357f02",
+      "first_readback": true,
+      "id": "useful-second-replacement",
+      "new_binding": true,
+      "new_epoch": true,
+      "refresh_proposal": {
+        "after": {
+          "agent": {
+            "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/bin/agentfw",
+            "sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e"
+          },
+          "claude": {
+            "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/bin/claude",
+            "sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7"
+          },
+          "component": {
+            "classifier": {
+              "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/agent/pilot-front-door/components/92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de/tree/rule_baseline/rule_baseline.py",
+              "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+            },
+            "home": "/home/runner/work/_temp/sou161-scratch/refresh/installed/agent",
+            "id": "92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de",
+            "python": {
+              "path": "/usr/bin/python3.12",
+              "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+            },
+            "python_version": "3.12.3",
+            "source_commit": "fa1732a7c49f591c66d456031301d9486b8969cf",
+            "source_tree": "c00c3adcfbd4aea5b488db05b8556522f1044104"
+          },
+          "exclusion": "operator-private-sole-writer+directory-flock/1",
+          "format": "sw-installed-edit-session/1",
+          "policy_sha256": "5a4c161efb933d00a972271dc93ccaef9c1428600e581eb622a29f2af7f43c90",
+          "refreshed_from_sha256": "0765ab4d601968c17f128e909f445707bf51f047c88835dca9c59216d8357f02",
+          "root": "/home/runner/work/_temp/sou161-scratch/refresh/work/repeated",
+          "root_identity": {
+            "device": 2049,
+            "inode": 9963198
+          },
+          "targets": [
+            {
+              "create": false,
+              "name": "result.txt",
+              "read": true,
+              "replacement": {
+                "identity": {
+                  "ctime_nanoseconds": 536804820,
+                  "ctime_seconds": 1793195396,
+                  "device": 2049,
+                  "gid": 1001,
+                  "inode": 9963317,
+                  "mode": 33152,
+                  "mtime_nanoseconds": 533299684,
+                  "mtime_seconds": 1793195396,
+                  "size": 36,
+                  "uid": 1001
+                },
+                "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b"
+              }
+            }
+          ]
+        },
+        "before": {
+          "agent": {
+            "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/bin/agentfw",
+            "sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e"
+          },
+          "claude": {
+            "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/bin/claude",
+            "sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7"
+          },
+          "component": {
+            "classifier": {
+              "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/agent/pilot-front-door/components/92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de/tree/rule_baseline/rule_baseline.py",
+              "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+            },
+            "home": "/home/runner/work/_temp/sou161-scratch/refresh/installed/agent",
+            "id": "92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de",
+            "python": {
+              "path": "/usr/bin/python3.12",
+              "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+            },
+            "python_version": "3.12.3",
+            "source_commit": "fa1732a7c49f591c66d456031301d9486b8969cf",
+            "source_tree": "c00c3adcfbd4aea5b488db05b8556522f1044104"
+          },
+          "exclusion": "operator-private-sole-writer+directory-flock/1",
+          "format": "sw-installed-edit-session/1",
+          "policy_sha256": "5a4c161efb933d00a972271dc93ccaef9c1428600e581eb622a29f2af7f43c90",
+          "root": "/home/runner/work/_temp/sou161-scratch/refresh/work/repeated",
+          "root_identity": {
+            "device": 2049,
+            "inode": 9963198
+          },
+          "targets": [
+            {
+              "create": false,
+              "name": "result.txt",
+              "read": true,
+              "replacement": {
+                "identity": {
+                  "ctime_nanoseconds": 459607213,
+                  "ctime_seconds": 1793195392,
+                  "device": 2049,
+                  "gid": 1001,
+                  "inode": 9963277,
+                  "mode": 33152,
+                  "mtime_nanoseconds": 459607213,
+                  "mtime_seconds": 1793195392,
+                  "size": 40,
+                  "uid": 1001
+                },
+                "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96"
+              }
+            }
+          ]
+        },
+        "destination": "/home/runner/work/_temp/sou161-scratch/refresh/work/repeated-next-plan",
+        "format": "sw-installed-edit-refresh/1",
+        "observed_targets": [
+          {
+            "current": {
+              "identity": {
+                "ctime_nanoseconds": 536804820,
+                "ctime_seconds": 1793195396,
+                "device": 2049,
+                "gid": 1001,
+                "inode": 9963317,
+                "mode": 33152,
+                "mtime_nanoseconds": 533299684,
+                "mtime_seconds": 1793195396,
+                "size": 36,
+                "uid": 1001
+              },
+              "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b"
+            },
+            "name": "result.txt"
+          }
+        ],
+        "prior_operation_outcome": "unknown-not-inferred-from-current-bytes",
+        "profile_sha256": "ad45f39bb54fc07abfc0f020127bd45f2af7f8e57bf9a61529bad92029d04267",
+        "requires_fresh_run_and_exact_ask": true,
+        "scope_unchanged": true,
+        "source_plan": "/home/runner/work/_temp/sou161-scratch/refresh/work/repeated-plan",
+        "source_plan_sha256": "0765ab4d601968c17f128e909f445707bf51f047c88835dca9c59216d8357f02"
+      },
+      "refreshed_plan_sha256": "ad45f39bb54fc07abfc0f020127bd45f2af7f8e57bf9a61529bad92029d04267",
+      "refreshed_profile": {
+        "agent": {
+          "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/bin/agentfw",
+          "sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e"
+        },
+        "claude": {
+          "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/bin/claude",
+          "sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7"
+        },
+        "component": {
+          "classifier": {
+            "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/agent/pilot-front-door/components/92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de/tree/rule_baseline/rule_baseline.py",
+            "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+          },
+          "home": "/home/runner/work/_temp/sou161-scratch/refresh/installed/agent",
+          "id": "92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de",
+          "python": {
+            "path": "/usr/bin/python3.12",
+            "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+          },
+          "python_version": "3.12.3",
+          "source_commit": "fa1732a7c49f591c66d456031301d9486b8969cf",
+          "source_tree": "c00c3adcfbd4aea5b488db05b8556522f1044104"
+        },
+        "exclusion": "operator-private-sole-writer+directory-flock/1",
+        "format": "sw-installed-edit-session/1",
+        "policy_sha256": "5a4c161efb933d00a972271dc93ccaef9c1428600e581eb622a29f2af7f43c90",
+        "refreshed_from_sha256": "0765ab4d601968c17f128e909f445707bf51f047c88835dca9c59216d8357f02",
+        "root": "/home/runner/work/_temp/sou161-scratch/refresh/work/repeated",
+        "root_identity": {
+          "device": 2049,
+          "inode": 9963198
+        },
+        "targets": [
+          {
+            "create": false,
+            "name": "result.txt",
+            "read": true,
+            "replacement": {
+              "identity": {
+                "ctime_nanoseconds": 536804820,
+                "ctime_seconds": 1793195396,
+                "device": 2049,
+                "gid": 1001,
+                "inode": 9963317,
+                "mode": 33152,
+                "mtime_nanoseconds": 533299684,
+                "mtime_seconds": 1793195396,
+                "size": 36,
+                "uid": 1001
+              },
+              "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b"
+            }
+          }
+        ]
+      },
+      "retired_authority_refused": true,
+      "second": {
+        "adapter_mutation_dispatches": 0,
+        "after": {
+          "device": 2049,
+          "exists": true,
+          "inode": 9963365,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "a3d550c6124325977209c212f65ffa9e81ad9420fd3dbd102fea020880c5ea2a",
+          "size": 48
+        },
+        "approval_verdicts": [
+          "ask"
+        ],
+        "approved": 1,
+        "audit_sha256": "c5da07761cb8248aa68f3ca13ea89ab5fb9dfdf3ce1bcbefe84f8faee3e60c1e",
+        "before": {
+          "device": 2049,
+          "exists": true,
+          "inode": 9963317,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+          "size": 36
+        },
+        "bindings_match_approved": true,
+        "changed_control": false,
+        "closed_inspection": null,
+        "decisions": [
+          {
+            "action": "approve",
+            "binding_sha256": "88cca64ba30fb8ec5b872936856581dcc908399b6eefc185e488ff90114abf34",
+            "id": "jjtY7TldUZYo6_9IgzyowgEY8weniIplLJXPLjA2BtE"
+          }
+        ],
+        "exit": 0,
+        "id": "second",
+        "inspect_observations": [
+          {
+            "binding_sha256": "88cca64ba30fb8ec5b872936856581dcc908399b6eefc185e488ff90114abf34",
+            "exit_code": 0,
+            "pending_id_sha256": "9e6dc994398ea6f821c3565127beb7c0754f734f3f30ef9ac9a4b080a8ceb5c2",
+            "raw_retained": false,
+            "reason": "ok",
+            "redaction": "passed",
+            "stderr_bytes": 0,
+            "stdout_bytes": 1543,
+            "stdout_sha256": "eda5e698538e0728ff3548db1a5d3b51a87f2087c4d90731c2e273cd6a3c16d7",
+            "verdict": "ask"
+          }
+        ],
+        "inspected_seen": 1,
+        "matched_inspections": 1,
+        "native_call_verdicts": [
+          "allow"
+        ],
+        "observed_results": 3,
+        "pending_seen": 1,
+        "process_cleanup": {
+          "all_stopped": true,
+          "descendant_count": 6,
+          "observed": [
+            {
+              "parent_process": true,
+              "pid": 10203,
+              "start_time_ticks": 48881
+            },
+            {
+              "parent_process": false,
+              "pid": 10205,
+              "start_time_ticks": 49024
+            },
+            {
+              "parent_process": false,
+              "pid": 10227,
+              "start_time_ticks": 49063
+            },
+            {
+              "parent_process": false,
+              "pid": 10226,
+              "start_time_ticks": 49062
+            },
+            {
+              "parent_process": false,
+              "pid": 10225,
+              "start_time_ticks": 49062
+            },
+            {
+              "parent_process": false,
+              "pid": 10235,
+              "start_time_ticks": 49066
+            },
+            {
+              "parent_process": false,
+              "pid": 10240,
+              "start_time_ticks": 49069
+            }
+          ],
+          "remaining": []
+        },
+        "provider_requests": 4,
+        "publication_gates": 1,
+        "retired_epoch_refused": true,
+        "root_inventory": [
+          "result.txt"
+        ],
+        "status": "passed",
+        "terminal": {
+          "cleanup": {
+            "cleaned": true,
+            "exit_success": true,
+            "failure": null,
+            "graceful_observed": false,
+            "ownership": "unix_process_group",
+            "reaped": true
+          },
+          "daemon_clean": true,
+          "effect_status": "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry",
+          "format": "sw-installed-edit-session/1",
+          "mutation_dispatches": 0,
+          "profile_sha256": "ad45f39bb54fc07abfc0f020127bd45f2af7f8e57bf9a61529bad92029d04267",
+          "reason": "host_completed",
+          "run": "/home/runner/work/_temp/sou161-scratch/refresh/runs/edit-264288c4-2acf-4ea7-8dff-fab0d9e2f46d",
+          "state": "host_completed"
+        },
+        "write_admissions": 1
+      },
+      "second_plan_sha256": "ad45f39bb54fc07abfc0f020127bd45f2af7f8e57bf9a61529bad92029d04267",
+      "second_readback": true,
+      "source_plan_preserved": true,
+      "source_profile": {
+        "agent": {
+          "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/bin/agentfw",
+          "sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e"
+        },
+        "claude": {
+          "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/bin/claude",
+          "sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7"
+        },
+        "component": {
+          "classifier": {
+            "path": "/home/runner/work/_temp/sou161-scratch/refresh/installed/agent/pilot-front-door/components/92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de/tree/rule_baseline/rule_baseline.py",
+            "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+          },
+          "home": "/home/runner/work/_temp/sou161-scratch/refresh/installed/agent",
+          "id": "92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de",
+          "python": {
+            "path": "/usr/bin/python3.12",
+            "sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f"
+          },
+          "python_version": "3.12.3",
+          "source_commit": "fa1732a7c49f591c66d456031301d9486b8969cf",
+          "source_tree": "c00c3adcfbd4aea5b488db05b8556522f1044104"
+        },
+        "exclusion": "operator-private-sole-writer+directory-flock/1",
+        "format": "sw-installed-edit-session/1",
+        "policy_sha256": "5a4c161efb933d00a972271dc93ccaef9c1428600e581eb622a29f2af7f43c90",
+        "root": "/home/runner/work/_temp/sou161-scratch/refresh/work/repeated",
+        "root_identity": {
+          "device": 2049,
+          "inode": 9963198
+        },
+        "targets": [
+          {
+            "create": false,
+            "name": "result.txt",
+            "read": true,
+            "replacement": {
+              "identity": {
+                "ctime_nanoseconds": 459607213,
+                "ctime_seconds": 1793195392,
+                "device": 2049,
+                "gid": 1001,
+                "inode": 9963277,
+                "mode": 33152,
+                "mtime_nanoseconds": 459607213,
+                "mtime_seconds": 1793195392,
+                "size": 40,
+                "uid": 1001
+              },
+              "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96"
+            }
+          }
+        ]
+      },
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "authority": false,
+      "id": "preview-inert",
+      "new_plans": 0,
+      "new_runs": 0,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "stale-plan",
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 29,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "old-digest",
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 25,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "missing-confirmation",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 2,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 227,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "wrong-confirmation",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 41,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "changed-destination",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 41,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "changed-target",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 41,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "root-replacement",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 25,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "symlink-target",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "outside_alias_after": {
+        "device": 2049,
+        "exists": true,
+        "inode": 10223630,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "outside_alias_before": {
+        "device": 2049,
+        "exists": true,
+        "inode": 10223630,
+        "links": 1,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 99,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "hardlink-target",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "outside_alias_after": {
+        "device": 2049,
+        "exists": true,
+        "inode": 10223636,
+        "links": 2,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "outside_alias_before": {
+        "device": 2049,
+        "exists": true,
+        "inode": 10223636,
+        "links": 2,
+        "mode": 33152,
+        "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+        "size": 40
+      },
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 99,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "altered-runtime-pin",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 28,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "altered-component-pin",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 64,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "id": "altered-plan",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 25,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "authority": false,
+      "id": "create-cannot-become-replace",
+      "operation_preserved": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "authority": false,
+      "id": "create-stays-create",
+      "operation_preserved": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "host": {
+        "adapter_mutation_dispatches": 0,
+        "after": {
+          "device": 2049,
+          "exists": true,
+          "inode": 10223670,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+          "size": 40
+        },
+        "approval_verdicts": [
+          "ask"
+        ],
+        "approved": 0,
+        "audit_sha256": "f40860e9eec3e8c83c0579aec34cb4ae59ceaeca5c023fff01317ee72c9f42aa",
+        "before": {
+          "device": 2049,
+          "exists": true,
+          "inode": 10223670,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+          "size": 40
+        },
+        "bindings_match_approved": true,
+        "changed_control": false,
+        "closed_inspection": null,
+        "decisions": [
+          {
+            "action": "reject",
+            "binding_sha256": "b482146a24d16a83969a8b22a61fb514a8e5b8241c31bb02bb7815cc745596a9",
+            "id": "RVWKNIgx02mbJBR7Sji1AHrSG1PjSlDPFzJNm5zNnxE"
+          }
+        ],
+        "exit": 0,
+        "id": "ask-reject",
+        "inspect_observations": [
+          {
+            "binding_sha256": "b482146a24d16a83969a8b22a61fb514a8e5b8241c31bb02bb7815cc745596a9",
+            "exit_code": 0,
+            "pending_id_sha256": "63691b7844579d7eeb08d9c2378f4d9b7b020a2362b40818a8a4631495a27b68",
+            "raw_retained": false,
+            "reason": "ok",
+            "redaction": "passed",
+            "stderr_bytes": 0,
+            "stdout_bytes": 1547,
+            "stdout_sha256": "81e9f91174c1a813f958d447b87fcebc210b536090e1349944da983fccb15147",
+            "verdict": "ask"
+          }
+        ],
+        "inspected_seen": 1,
+        "matched_inspections": 1,
+        "native_call_verdicts": [],
+        "observed_results": 1,
+        "pending_seen": 1,
+        "process_cleanup": {
+          "all_stopped": true,
+          "descendant_count": 5,
+          "observed": [
+            {
+              "parent_process": true,
+              "pid": 10318,
+              "start_time_ticks": 55795
+            },
+            {
+              "parent_process": false,
+              "pid": 10320,
+              "start_time_ticks": 55937
+            },
+            {
+              "parent_process": false,
+              "pid": 10342,
+              "start_time_ticks": 55975
+            },
+            {
+              "parent_process": false,
+              "pid": 10341,
+              "start_time_ticks": 55975
+            },
+            {
+              "parent_process": false,
+              "pid": 10343,
+              "start_time_ticks": 55975
+            },
+            {
+              "parent_process": false,
+              "pid": 10352,
+              "start_time_ticks": 55981
+            }
+          ],
+          "remaining": []
+        },
+        "provider_requests": 2,
+        "publication_gates": 0,
+        "retired_epoch_refused": false,
+        "root_inventory": [
+          "result.txt"
+        ],
+        "status": "passed",
+        "terminal": {
+          "cleanup": {
+            "cleaned": true,
+            "exit_success": true,
+            "failure": null,
+            "graceful_observed": false,
+            "ownership": "unix_process_group",
+            "reaped": true
+          },
+          "daemon_clean": true,
+          "effect_status": "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry",
+          "format": "sw-installed-edit-session/1",
+          "mutation_dispatches": 0,
+          "profile_sha256": "a92b2c4c157ae9420110710a4c6371d12befc6e0b3ce1dfa680fede69f4c0857",
+          "reason": "host_completed",
+          "run": "/home/runner/work/_temp/sou161-scratch/refresh/runs/edit-e5e247d9-71c0-44db-9451-9e1123a782c3",
+          "state": "host_completed"
+        },
+        "write_admissions": 0
+      },
+      "id": "ask-reject",
+      "inspect_observations": [
+        {
+          "binding_sha256": "b482146a24d16a83969a8b22a61fb514a8e5b8241c31bb02bb7815cc745596a9",
+          "exit_code": 0,
+          "pending_id_sha256": "63691b7844579d7eeb08d9c2378f4d9b7b020a2362b40818a8a4631495a27b68",
+          "raw_retained": false,
+          "reason": "ok",
+          "redaction": "passed",
+          "stderr_bytes": 0,
+          "stdout_bytes": 1547,
+          "stdout_sha256": "81e9f91174c1a813f958d447b87fcebc210b536090e1349944da983fccb15147",
+          "verdict": "ask"
+        }
+      ],
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "host": {
+        "adapter_mutation_dispatches": 0,
+        "after": {
+          "device": 2049,
+          "exists": true,
+          "inode": 10223719,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+          "size": 40
+        },
+        "approval_verdicts": [
+          "ask"
+        ],
+        "approved": 0,
+        "audit_sha256": "c15904771a5394ca55c813d6cdd3d5c904a195f92c98e1ba4f79cea648236d3d",
+        "before": {
+          "device": 2049,
+          "exists": true,
+          "inode": 10223719,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+          "size": 40
+        },
+        "bindings_match_approved": true,
+        "changed_control": false,
+        "closed_inspection": {
+          "exit_code": 1,
+          "raw_retained": false,
+          "reason": "run_ended",
+          "stderr_bytes": 22,
+          "stdout_bytes": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "decisions": [],
+        "exit": 0,
+        "id": "no-approval",
+        "inspect_observations": [
+          {
+            "binding_sha256": "abaddc5d8256b21f3c3cef31bb7f1bab2fd89e7e8450756817920db8ea6aff60",
+            "exit_code": 0,
+            "pending_id_sha256": "0b316b1cc12f47b3f442596ca84a48e96519e2f04f3f9e7e6e768c8f1232fe3b",
+            "raw_retained": false,
+            "reason": "ok",
+            "redaction": "passed",
+            "stderr_bytes": 0,
+            "stdout_bytes": 1548,
+            "stdout_sha256": "9701eeaf3555c68f25f04d22570f27fe9a5213f6aee4fabbfeb170abd0693bb8",
+            "verdict": "ask"
+          }
+        ],
+        "inspected_seen": 1,
+        "matched_inspections": 1,
+        "native_call_verdicts": [],
+        "observed_results": 1,
+        "pending_seen": 1,
+        "process_cleanup": {
+          "all_stopped": true,
+          "descendant_count": 7,
+          "observed": [
+            {
+              "parent_process": true,
+              "pid": 10387,
+              "start_time_ticks": 56799
+            },
+            {
+              "parent_process": false,
+              "pid": 10389,
+              "start_time_ticks": 56942
+            },
+            {
+              "parent_process": false,
+              "pid": 10412,
+              "start_time_ticks": 56980
+            },
+            {
+              "parent_process": false,
+              "pid": 10411,
+              "start_time_ticks": 56980
+            },
+            {
+              "parent_process": false,
+              "pid": 10410,
+              "start_time_ticks": 56979
+            },
+            {
+              "parent_process": false,
+              "pid": 10420,
+              "start_time_ticks": 56983
+            },
+            {
+              "parent_process": false,
+              "pid": 10423,
+              "start_time_ticks": 56983
+            },
+            {
+              "parent_process": false,
+              "pid": 10425,
+              "start_time_ticks": 56986
+            }
+          ],
+          "remaining": []
+        },
+        "provider_requests": 2,
+        "publication_gates": 0,
+        "retired_epoch_refused": false,
+        "root_inventory": [
+          "result.txt"
+        ],
+        "status": "passed",
+        "terminal": {
+          "cleanup": {
+            "cleaned": true,
+            "exit_success": true,
+            "failure": null,
+            "graceful_observed": false,
+            "ownership": "unix_process_group",
+            "reaped": true
+          },
+          "daemon_clean": true,
+          "effect_status": "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry",
+          "format": "sw-installed-edit-session/1",
+          "mutation_dispatches": 0,
+          "profile_sha256": "c34ab3c275ccc0db908b48d4252010a0996d95307343a1e563f350bcf4efabf5",
+          "reason": "host_completed",
+          "run": "/home/runner/work/_temp/sou161-scratch/refresh/runs/edit-4e679818-6241-4082-9646-37ea1c17ffed",
+          "state": "host_completed"
+        },
+        "write_admissions": 0
+      },
+      "id": "no-approval",
+      "inspect_observations": [
+        {
+          "binding_sha256": "abaddc5d8256b21f3c3cef31bb7f1bab2fd89e7e8450756817920db8ea6aff60",
+          "exit_code": 0,
+          "pending_id_sha256": "0b316b1cc12f47b3f442596ca84a48e96519e2f04f3f9e7e6e768c8f1232fe3b",
+          "raw_retained": false,
+          "reason": "ok",
+          "redaction": "passed",
+          "stderr_bytes": 0,
+          "stdout_bytes": 1548,
+          "stdout_sha256": "9701eeaf3555c68f25f04d22570f27fe9a5213f6aee4fabbfeb170abd0693bb8",
+          "verdict": "ask"
+        }
+      ],
+      "lifecycle_reconciliation": {
+        "after": {
+          "device": 2049,
+          "exists": true,
+          "inode": 10223719,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+          "size": 40
+        },
+        "approval_verdicts": [
+          "ask"
+        ],
+        "before": {
+          "device": 2049,
+          "exists": true,
+          "inode": 10223719,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+          "size": 40
+        },
+        "closed_inspection": {
+          "exit_code": 1,
+          "raw_retained": false,
+          "reason": "run_ended",
+          "stderr_bytes": 22,
+          "stdout_bytes": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "matched_inspections": 1,
+        "native_call_verdicts": [],
+        "processes_stopped": true,
+        "write_admissions": 0
+      },
+      "status": "passed",
+      "target_preserved": true
+    },
+    {
+      "attempted": true,
+      "host": {
+        "adapter_mutation_dispatches": 0,
+        "after": {
+          "device": 2049,
+          "exists": true,
+          "inode": 10223806,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+          "size": 36
+        },
+        "approval_verdicts": [
+          "ask"
+        ],
+        "approved": 1,
+        "audit_sha256": "18428dcb37cfa659a7e0802a1f97e043ac33fe3383d3da92ff5803e53192fcca",
+        "before": {
+          "device": 2049,
+          "exists": true,
+          "inode": 10223769,
+          "links": 1,
+          "mode": 33152,
+          "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+          "size": 40
+        },
+        "bindings_match_approved": true,
+        "changed_control": false,
+        "closed_inspection": null,
+        "decisions": [
+          {
+            "action": "approve",
+            "binding_sha256": "94d652866065ff51987b0c5e54e91e207fc6d182d495b4ce960a03de8b1e04ef",
+            "id": "PbnoAahjW8Cmj_KT1WQa8t0g6ldoO2cVK9MmL3aiJJE"
+          }
+        ],
+        "exit": 0,
+        "id": "active-run-stays-pinned",
+        "inspect_observations": [
+          {
+            "binding_sha256": "94d652866065ff51987b0c5e54e91e207fc6d182d495b4ce960a03de8b1e04ef",
+            "exit_code": 0,
+            "pending_id_sha256": "6e3501a5451d27593ce9e35ba0d4bbc0572321e2382dd166a121b6516aae8324",
+            "raw_retained": false,
+            "reason": "ok",
+            "redaction": "passed",
+            "stderr_bytes": 0,
+            "stdout_bytes": 1560,
+            "stdout_sha256": "00e22b0daf638e183b7817f024272266ef0c14668c0832fd392ef3539249c7d2",
+            "verdict": "ask"
+          }
+        ],
+        "inspected_seen": 1,
+        "matched_inspections": 1,
+        "native_call_verdicts": [
+          "allow"
+        ],
+        "observed_results": 3,
+        "pending_seen": 1,
+        "process_cleanup": {
+          "all_stopped": true,
+          "descendant_count": 5,
+          "observed": [
+            {
+              "parent_process": true,
+              "pid": 10765,
+              "start_time_ticks": 58510
+            },
+            {
+              "parent_process": false,
+              "pid": 10767,
+              "start_time_ticks": 58670
+            },
+            {
+              "parent_process": false,
+              "pid": 10790,
+              "start_time_ticks": 58708
+            },
+            {
+              "parent_process": false,
+              "pid": 10789,
+              "start_time_ticks": 58708
+            },
+            {
+              "parent_process": false,
+              "pid": 10788,
+              "start_time_ticks": 58708
+            },
+            {
+              "parent_process": false,
+              "pid": 10799,
+              "start_time_ticks": 58714
+            }
+          ],
+          "remaining": []
+        },
+        "provider_requests": 4,
+        "publication_gates": 1,
+        "retired_epoch_refused": false,
+        "root_inventory": [
+          "result.txt"
+        ],
+        "status": "passed",
+        "terminal": {
+          "cleanup": {
+            "cleaned": true,
+            "exit_success": true,
+            "failure": null,
+            "graceful_observed": false,
+            "ownership": "unix_process_group",
+            "reaped": true
+          },
+          "daemon_clean": true,
+          "effect_status": "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry",
+          "format": "sw-installed-edit-session/1",
+          "mutation_dispatches": 0,
+          "profile_sha256": "2619e8f4a7e1f852f439717ac9dcbe79152efd00ec9e22b77a57164c0d71f670",
+          "reason": "host_completed",
+          "run": "/home/runner/work/_temp/sou161-scratch/refresh/runs/edit-161b731f-9890-4217-a21e-5508c7b43cd5",
+          "state": "host_completed"
+        },
+        "write_admissions": 1
+      },
+      "id": "active-run-stays-pinned",
+      "inspect_observations": [
+        {
+          "binding_sha256": "94d652866065ff51987b0c5e54e91e207fc6d182d495b4ce960a03de8b1e04ef",
+          "exit_code": 0,
+          "pending_id_sha256": "6e3501a5451d27593ce9e35ba0d4bbc0572321e2382dd166a121b6516aae8324",
+          "raw_retained": false,
+          "reason": "ok",
+          "redaction": "passed",
+          "stderr_bytes": 0,
+          "stdout_bytes": 1560,
+          "stdout_sha256": "00e22b0daf638e183b7817f024272266ef0c14668c0832fd392ef3539249c7d2",
+          "verdict": "ask"
+        }
+      ],
+      "original_run_preserved": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "id": "concurrent-refresh",
+      "original_plan_preserved": true,
+      "refusals": 1,
+      "status": "passed",
+      "successes": 1
+    },
+    {
+      "actual_sigkill": true,
+      "attempted": true,
+      "automatic_replay": false,
+      "id": "interrupted-publish",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": -9,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 0,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true,
+      "unpublished_stage_retained": true
+    },
+    {
+      "attempted": true,
+      "id": "existing-destination",
+      "new_runs": 0,
+      "original_plan_preserved": true,
+      "refusal": {
+        "exit_code": 1,
+        "raw_retained": false,
+        "reason": "cli_failed",
+        "stderr_bytes": 54,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "status": "passed",
+      "target_preserved": true
+    }
+  ],
+  "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "component": "92a9f6fe71cc66d95848487a737047b685ed671b4675b7de747fdc1779c8f7de",
+  "expected": [
+    "installed-closure",
+    "useful-second-replacement",
+    "preview-inert",
+    "stale-plan",
+    "old-digest",
+    "missing-confirmation",
+    "wrong-confirmation",
+    "changed-destination",
+    "changed-target",
+    "root-replacement",
+    "symlink-target",
+    "hardlink-target",
+    "altered-runtime-pin",
+    "altered-component-pin",
+    "altered-plan",
+    "create-cannot-become-replace",
+    "create-stays-create",
+    "ask-reject",
+    "no-approval",
+    "active-run-stays-pinned",
+    "concurrent-refresh",
+    "interrupted-publish",
+    "existing-destination"
+  ],
+  "format": "sw-installed-edit-refresh-qualification/1",
+  "inventory": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "last_cli": {
+    "exit_code": 1,
+    "raw_retained": false,
+    "reason": "cli_failed",
+    "stderr_bytes": 54,
+    "stdout_bytes": 0,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "paid_inference": false,
+  "scope": "native-installed-genuine-host-owned-scripted-provider",
+  "sentinel_preserved": true,
+  "source_commit": "fa1732a7c49f591c66d456031301d9486b8969cf",
+  "source_tree": "c00c3adcfbd4aea5b488db05b8556522f1044104",
+  "status": "passed"
+}

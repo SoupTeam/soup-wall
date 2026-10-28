@@ -445,6 +445,12 @@ async fn owned(
         input.abort();
         let _ = input.await;
     }
+    let quota_usage = service.quota.as_ref().map(|q| q.snapshot());
+    let quota_complete = quota_usage.as_ref().is_none_or(|usage| {
+        usage.as_ref().is_ok_and(|u| {
+            u.indeterminate_publications == 0 && u.pending_prepublication_attempts == 0
+        })
+    });
     let cleanup_confirmed =
         cleanup.cleaned && cleanup.reaped && daemon_clean && adapter_clean && streams_ok;
     let receipt = control.finish(revoked, cleanup_confirmed, reason);
@@ -458,11 +464,18 @@ async fn owned(
         && input_ok
         && adapter_clean
         && revoked
-        && receipt.is_ok();
-    let outcome = json!({"format":FORMAT,"state":if complete {"host_completed"} else {"failed"},"reason":reason,
+        && receipt.is_ok()
+        && quota_complete;
+    let mut outcome = json!({"format":FORMAT,"state":if complete {"host_completed"} else {"failed"},"reason":reason,
         "run":run,"profile_sha256":record.profile_sha256,"cleanup":cleanup,"daemon_clean":daemon_clean,
         "mutation_dispatches":service.dispatches.load(Ordering::Acquire),
         "effect_status":"consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry"});
+    if let Some(usage) = quota_usage {
+        outcome["mutation_quota"] = match usage {
+            Ok(usage) => serde_json::to_value(super::quota::RetainedQuota::Known(usage))?,
+            Err(_) => serde_json::to_value(super::quota::RetainedQuota::unavailable())?,
+        };
+    }
     launch::write(
         &run.join("terminal.json"),
         &profile::canonical(&outcome)?,

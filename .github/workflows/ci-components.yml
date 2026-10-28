@@ -1294,6 +1294,7 @@ jobs:
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_quota.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
@@ -1308,6 +1309,12 @@ jobs:
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --publish-fault "$SOU161_SCRATCH/publish-fault.so" \
             --output "$SOU161_SCRATCH/refresh"
+          mkdir -m 700 "$SOU161_SCRATCH/quota-faults"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=1 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/withheld.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=2 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/interrupted.so"
+          python3 -B scripts/qualify-edit-quota.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --faults "$SOU161_SCRATCH/quota-faults" --output "$SOU161_SCRATCH/quota"
           BASH
       - name: Retain finite current-source qualification and build correlation
         if: always()
@@ -1318,6 +1325,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/quota/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json
