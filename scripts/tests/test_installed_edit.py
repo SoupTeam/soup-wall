@@ -2,9 +2,11 @@
 import importlib.util
 import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 
@@ -213,6 +215,32 @@ class InstalledEditEvidence(unittest.TestCase):
         late_ask['audit']['calls'].append(late_ask['audit']['calls'].pop(0))
         with self.assertRaises(ValueError):
             probe.require_diagnostic(late_ask, operation='create', binding_sha256='c' * 64, read_after=True)
+
+    def test_failed_diagnostic_value_is_retained_privately_before_grading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            value = self.native_success_status()
+            value['authenticated_daemon'] = 'unavailable'
+            response = subprocess.CompletedProcess([], 0, json.dumps(value).encode() + b'\n',
+                                                    b'owned-privacy-regression-canary')
+            observation = probe.retain_diagnostic_response(root, 'pending-ask-status', 'output', response)
+            with self.assertRaises(ValueError):
+                probe.require_diagnostic(json.loads(response.stdout), daemon='matching_current_epoch')
+            self.assertEqual((root / observation['stdout_artifact']).read_bytes(), response.stdout)
+            self.assertEqual((root / observation['stderr_artifact']).read_bytes(), response.stderr)
+            self.assertNotIn('owned-privacy-regression-canary', json.dumps(observation))
+            if os.name != 'nt':
+                self.assertTrue(all(path.stat().st_mode & 0o077 == 0 for path in root.iterdir()))
+            with self.assertRaises(FileExistsError):
+                probe.retain_diagnostic_response(root, 'pending-ask-status', 'output', response)
+
+    def test_oversized_diagnostic_response_is_not_retained(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            response = subprocess.CompletedProcess([], 0, b'x' * (128 * 1024 + 1), b'')
+            with self.assertRaises(ValueError):
+                probe.retain_diagnostic_response(root, 'pending-ask-status', 'output', response)
+            self.assertEqual(list(root.iterdir()), [])
 
     def test_create_and_replace_remain_known_write_in_the_real_classifier(self):
         for tool, description, arguments in (

@@ -175,6 +175,29 @@ def process_identity(pid):
         return None
 
 
+def retain_diagnostic_response(directory, name, phase, completed):
+    """Retain a bounded failed observation privately before grading its value.
+
+    These raw synthetic qualification responses may contain a privacy regression;
+    only hashes/counts enter report.json, and passing still requires every
+    response/export to pass the omission checks below.
+    """
+    require(name in {item[0] for item in DIAGNOSTIC_CASES} and phase in ('default', 'output', 'text'),
+            'diagnosis_response_identity')
+    require(len(completed.stdout) <= 128 * 1024 and len(completed.stderr) <= 128 * 1024,
+            'diagnosis_response_bound')
+    observation = {'exit_code': completed.returncode, 'raw_retained': 'private_qualification_only'}
+    for stream, raw in (('stdout', completed.stdout), ('stderr', completed.stderr)):
+        leaf = f'{name}.{phase}.{stream}.private'
+        descriptor = os.open(directory / leaf, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(raw)
+        observation[stream + '_bytes'] = len(raw)
+        observation[stream + '_sha256'] = sha(raw)
+        observation[stream + '_artifact'] = leaf
+    return observation
+
+
 def require_indeterminate_status(value):
     require(value.get('schema') == DIAGNOSTIC_FORMAT
             and value.get('effects') == 'indeterminate'
@@ -451,6 +474,7 @@ class Suite:
         default = subprocess.run([str(self.binary), 'edit-session', 'status', '--run', str(run), '--json'],
                                  cwd=self.work, env=self.env, stdin=subprocess.DEVNULL,
                                  capture_output=True, timeout=12)
+        row.setdefault('responses', {})['default'] = retain_diagnostic_response(self.diagnostic_root, name, 'default', default)
         require(default.returncode == 0 and len(default.stdout) <= 128 * 1024
                 and len(default.stderr) <= 128 * 1024, 'diagnosis_default_failed')
         default_value = json.loads(default.stdout)
@@ -462,6 +486,7 @@ class Suite:
         result = subprocess.run([str(self.binary), 'edit-session', *words, '--json'],
                                 cwd=self.work, env=self.env, stdin=subprocess.DEVNULL,
                                 capture_output=True, timeout=12)
+        row['responses']['output'] = retain_diagnostic_response(self.diagnostic_root, name, 'output', result)
         require(result.returncode == 0 and len(result.stdout) <= 128 * 1024
                 and len(result.stderr) <= 128 * 1024, 'diagnosis_command_failed')
         value = json.loads(result.stdout)
@@ -470,6 +495,7 @@ class Suite:
         rendered = subprocess.run([str(self.binary), 'edit-session', 'status', '--run', str(run), '--check-output'],
                                   cwd=self.work, env=self.env, stdin=subprocess.DEVNULL,
                                   capture_output=True, timeout=12)
+        row['responses']['text'] = retain_diagnostic_response(self.diagnostic_root, name, 'text', rendered)
         require(rendered.returncode == 0 and 0 < len(rendered.stdout) <= 128 * 1024
                 and len(rendered.stderr) <= 128 * 1024, 'diagnosis_text_failed')
         streams = [default.stdout, default.stderr, result.stdout, result.stderr, rendered.stdout, rendered.stderr]

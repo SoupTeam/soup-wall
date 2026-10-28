@@ -60,6 +60,24 @@ fn process(identity: &ProcessIdentity) -> &'static str {
         "unavailable_or_changed"
     }
 }
+fn live_policy_digest(policy: &soup_wall_agent::AgentPolicySet) -> Result<String> {
+    // agent-policy-json/1 hashes the declared struct serialization order. The
+    // retained edit profile uses its separate canonical-object digest format;
+    // those two valid identities must never be compared as if interchangeable.
+    serde_json::to_vec(policy)
+        .map(|bytes| audit::sha(&bytes))
+        .map_err(|_| "retained_policy_invalid")
+}
+fn protection_failure(code: &'static str) -> &'static str {
+    match code {
+        "status_unavailable" | "status_client_unavailable" | "status_query_rejected" => {
+            "unavailable"
+        }
+        // Producer-owned identity, freshness, shape and cap failures retain
+        // mismatch/uncertainty, without exposing a remote body or raw error.
+        _ => "invalid_or_mismatched",
+    }
+}
 fn terminal(raw: &[u8], context: &Context) -> Result<&'static str> {
     let terminal: Terminal = decode(raw)?;
     if terminal.format != FORMAT || terminal.run != context.run || terminal.profile_sha256 != context.profile_sha256
@@ -157,6 +175,7 @@ pub(super) fn inspect(args: &Args, report: &mut Report) -> Result<()> {
     if profile::digest(&policy).map_err(|_| "retained_policy_invalid")? != profile.policy_sha256 {
         return Err("retained_policy_digest_mismatch");
     }
+    let live_policy_sha256 = live_policy_digest(&policy)?;
     report.identity = Some(Identity {
         run_sha256: audit::sha(&run_bytes),
         context_sha256: audit::sha(&context_bytes),
@@ -211,6 +230,7 @@ pub(super) fn inspect(args: &Args, report: &mut Report) -> Result<()> {
             &profile,
             &context,
             &registry,
+            &live_policy_sha256,
             &mut budget,
             &mut report.requests,
         );
@@ -305,6 +325,7 @@ fn query(
     profile: &Profile,
     context: &Context,
     registry: &str,
+    live_policy_sha256: &str,
     budget: &mut Budget,
     requests: &mut Vec<Request>,
 ) -> &'static str {
@@ -362,7 +383,7 @@ fn query(
     let result = runtime.block_on(async {
         let expected = crate::protection_status::Expectations {
             config_sha256: Some(context.config_sha256.clone()),
-            policy_sha256: Some(profile.policy_sha256.clone()),
+            policy_sha256: Some(live_policy_sha256.into()),
             registry_sha256: Some(registry.into()),
             ..Default::default()
         };
@@ -371,7 +392,7 @@ fn query(
         let observed =
             crate::protection_status::query(&config, &token, &expected, Duration::from_secs(2))
                 .await
-                .map_err(|_| "unavailable")?;
+                .map_err(protection_failure)?;
         if observed.runtime.pid != context.owner.pid
             || observed.mode != crate::protection_status::Mode::Enforcing
         {
@@ -641,6 +662,101 @@ mod tests {
             terminal(&serde_json::to_vec(&row).unwrap(), &context).unwrap(),
             "recorded_cleanup_or_stream_failure"
         );
+    }
+    #[tokio::test]
+    async fn live_policy_identity_matches_authenticated_producer_without_reusing_profile_hash_format(
+    ) {
+        use std::sync::{Arc, Mutex};
+        use tower::ServiceExt;
+        let directory = tempfile::tempdir().unwrap();
+        let policy = crate::edit_session::launch::policy().unwrap();
+        let config = crate::Config {
+            enforce: true,
+            ..Default::default()
+        };
+        let token = crate::token::generate();
+        let state = Arc::new(crate::AppState {
+            native: None,
+            firewall: Mutex::new(
+                soup_wall_agent::AgentFirewall::with_taint_limits(
+                    policy.clone(),
+                    soup_wall_agent::DEFAULT_TAINT_CAP,
+                    config.provenance.clone(),
+                )
+                .unwrap(),
+            ),
+            sessions: Default::default(),
+            audit: crate::audit::AuditSink::open(&directory.path().join("audit")).unwrap(),
+            config: config.clone(),
+            token: token.clone(),
+            spans: crate::spans::SpanCache::new(64, 262144),
+            judge: crate::judge::Judge::new(Default::default()),
+            manifests: crate::mcp::store::ManifestStore::new(&directory.path().join("manifests")),
+            tools: crate::mcp::store::ToolRegistry::with_builtins(),
+            grants: crate::grant::GrantStore::new(&directory.path().join("grants")),
+            grant_ledger: crate::grant::GrantLedger::open(&directory.path().join("spent")),
+            grant_key: crate::grant::derive_key(&token),
+        });
+        let nonce = crate::token::generate();
+        let request = axum::http::Request::get(crate::protection_status::ENDPOINT)
+            .header("authorization", format!("Bearer {token}"))
+            .header(crate::protection_status::NONCE_HEADER, &nonce)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let response = crate::app(state).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let raw = axum::body::to_bytes(response.into_body(), 32768)
+            .await
+            .unwrap();
+        let observed: crate::protection_status::Snapshot = serde_json::from_slice(&raw).unwrap();
+        let live = live_policy_digest(&policy).unwrap();
+        let retained = profile::digest(&policy).unwrap();
+        assert_ne!(retained, live);
+        let mut expected = crate::protection_status::Expectations {
+            policy_sha256: Some(live),
+            config_sha256: Some(crate::protection_status::config_digest(&config)),
+            ..Default::default()
+        };
+        crate::protection_status::validate(
+            &observed,
+            &nonce,
+            crate::protection_status::now_ms(),
+            &expected,
+        )
+        .unwrap();
+        expected.policy_sha256 = Some(retained);
+        let mismatch = crate::protection_status::validate(
+            &observed,
+            &nonce,
+            crate::protection_status::now_ms(),
+            &expected,
+        )
+        .unwrap_err();
+        assert_eq!(mismatch, "status_identity_mismatch");
+        assert_eq!(protection_failure(mismatch), "invalid_or_mismatched");
+    }
+    #[test]
+    fn unavailable_transport_and_invalid_authenticated_evidence_remain_distinct_and_allowlisted() {
+        for code in [
+            "status_unavailable",
+            "status_client_unavailable",
+            "status_query_rejected",
+        ] {
+            assert_eq!(protection_failure(code), "unavailable");
+        }
+        for code in [
+            "status_identity_mismatch",
+            "status_invalid_or_stale",
+            "status_invalid_response",
+            "status_response_over_cap",
+            "status_invalid_config",
+            "status_invalid_registry",
+            "status_invalid_coverage",
+            "arbitrary-private-error-canary",
+        ] {
+            assert_eq!(protection_failure(code), "invalid_or_mismatched");
+            assert!(!protection_failure(code).contains("canary"));
+        }
     }
     #[test]
     fn output_digest_is_only_an_explicit_postcondition_observation() {
