@@ -1,0 +1,310 @@
+{
+  "schema_version": 2,
+  "protocol": "soup-wall-agentdojo-matched/1",
+  "plan_id": "sou153-synthetic",
+  "plan_version": 1,
+  "frozen_at_utc": "2026-10-20T00:00:00+00:00",
+  "upstream": {
+    "revision": "synthetic-upstream-0001",
+    "benchmark_version": "v1",
+    "suite": "synthetic_regression_suite",
+    "source_inventory_sha256": "64aac20bbcd9e8f2d60579de201f58a6f59b2f8997fd35c4680dae04e495c1ad"
+  },
+  "attack": {
+    "name": "synthetic_attack",
+    "derivation_pipeline_name": "synthetic",
+    "model_independent": true
+  },
+  "selection": {
+    "rule": "explicit synthetic cases",
+    "salt": "sou153",
+    "development_user_tasks": 12
+  },
+  "seeds": {
+    "supported": false,
+    "values": null,
+    "reason": "synthetic control"
+  },
+  "sets": {
+    "development": {
+      "repetitions": 2,
+      "budget": {
+        "max_calls": 10000,
+        "max_total_request_bytes": 10000000,
+        "max_output_tokens": 16,
+        "max_reserved_usd": 0,
+        "input_usd_per_million": 0,
+        "output_usd_per_million": 0
+      },
+      "cases": [
+        {
+          "case_id": "synthetic_user_task_01/benign",
+          "user_task_id": "synthetic_user_task_01",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_01/synthetic_injection_task_01",
+          "user_task_id": "synthetic_user_task_01",
+          "injection_task_id": "synthetic_injection_task_01",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "9cba66110da54a5b4289c3b6e18c7c8c8232aee0890e516ade64fe549409d15f"
+        },
+        {
+          "case_id": "synthetic_user_task_02/benign",
+          "user_task_id": "synthetic_user_task_02",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_02/synthetic_injection_task_02",
+          "user_task_id": "synthetic_user_task_02",
+          "injection_task_id": "synthetic_injection_task_02",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "c9473aefee5e403d8f7be10fdacc8d2fcc017c519d85bf3e140ca74c9cf73f33"
+        },
+        {
+          "case_id": "synthetic_user_task_03/benign",
+          "user_task_id": "synthetic_user_task_03",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_03/synthetic_injection_task_03",
+          "user_task_id": "synthetic_user_task_03",
+          "injection_task_id": "synthetic_injection_task_03",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "cdb2de36017537af03c0b69a4f1dc7891386d910b5ea7ad7a43cfa3c650d9b25"
+        },
+        {
+          "case_id": "synthetic_user_task_04/benign",
+          "user_task_id": "synthetic_user_task_04",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_04/synthetic_injection_task_04",
+          "user_task_id": "synthetic_user_task_04",
+          "injection_task_id": "synthetic_injection_task_04",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "b3ef3df8e970d5d4a1b9c3c5ba28c8cefc7766dd195d13fc73c27bbe9e42312a"
+        },
+        {
+          "case_id": "synthetic_user_task_05/benign",
+          "user_task_id": "synthetic_user_task_05",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_05/synthetic_injection_task_05",
+          "user_task_id": "synthetic_user_task_05",
+          "injection_task_id": "synthetic_injection_task_05",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "d9294958f27261cf46eed60d878d5767ce9e593d8d9846b5eec50c30158d2247"
+        },
+        {
+          "case_id": "synthetic_user_task_06/benign",
+          "user_task_id": "synthetic_user_task_06",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_06/synthetic_injection_task_06",
+          "user_task_id": "synthetic_user_task_06",
+          "injection_task_id": "synthetic_injection_task_06",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "c8f82c549222e92eb0784d37d1b15dbcf09361645e96b110813ada37b34abc5b"
+        },
+        {
+          "case_id": "synthetic_user_task_07/benign",
+          "user_task_id": "synthetic_user_task_07",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_07/synthetic_injection_task_07",
+          "user_task_id": "synthetic_user_task_07",
+          "injection_task_id": "synthetic_injection_task_07",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "359b9eb2007f299e24f4fbb3602623f4b5e0f43fc8f738e00373e94da4634563"
+        },
+        {
+          "case_id": "synthetic_user_task_08/benign",
+          "user_task_id": "synthetic_user_task_08",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_08/synthetic_injection_task_08",
+          "user_task_id": "synthetic_user_task_08",
+          "injection_task_id": "synthetic_injection_task_08",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "24899c1b3eb18d190d19e8dd4513c4bbcd82e41fee8088426114f95310f36471"
+        },
+        {
+          "case_id": "synthetic_user_task_09/benign",
+          "user_task_id": "synthetic_user_task_09",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_09/synthetic_injection_task_09",
+          "user_task_id": "synthetic_user_task_09",
+          "injection_task_id": "synthetic_injection_task_09",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "23f296ec849dc041437fe4d861cf4b897647c5296ffc2faf2bddd5426e8dca99"
+        },
+        {
+          "case_id": "synthetic_user_task_10/benign",
+          "user_task_id": "synthetic_user_task_10",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_10/synthetic_injection_task_10",
+          "user_task_id": "synthetic_user_task_10",
+          "injection_task_id": "synthetic_injection_task_10",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "0db81b8aa4dd13dda68ef30e6c03408c5c1ffa79e72a98b6349b8d992763b582"
+        },
+        {
+          "case_id": "synthetic_user_task_11/benign",
+          "user_task_id": "synthetic_user_task_11",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_11/synthetic_injection_task_11",
+          "user_task_id": "synthetic_user_task_11",
+          "injection_task_id": "synthetic_injection_task_11",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "006d56ffd452160095ae1c9da35c1ff060d6d89074fce2d5dfb9f7eed4f92969"
+        },
+        {
+          "case_id": "synthetic_user_task_12/benign",
+          "user_task_id": "synthetic_user_task_12",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        {
+          "case_id": "synthetic_user_task_12/synthetic_injection_task_12",
+          "user_task_id": "synthetic_user_task_12",
+          "injection_task_id": "synthetic_injection_task_12",
+          "injection_vectors": [
+            "tool_output"
+          ],
+          "injections_sha256": "e3a8bdd36f210672568850490c9a1833157743b9f0c8ffe49001f506d45c38e5"
+        }
+      ]
+    },
+    "fresh_evaluation": {
+      "repetitions": 1,
+      "budget": {
+        "max_calls": 10000,
+        "max_total_request_bytes": 10000000,
+        "max_output_tokens": 16,
+        "max_reserved_usd": 0,
+        "input_usd_per_million": 0,
+        "output_usd_per_million": 0
+      },
+      "cases": [
+        {
+          "case_id": "synthetic_user_task_99/benign",
+          "user_task_id": "synthetic_user_task_99",
+          "injection_task_id": null,
+          "injection_vectors": [],
+          "injections_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        }
+      ]
+    }
+  },
+  "identities": {
+    "candidate": {
+      "source_revision": "synthetic-baseline",
+      "agent_binary_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "adapter": "existing-hook-native-name-fallback-v1",
+      "native_semantics_registry_sha256": null
+    },
+    "policy_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+    "model": {
+      "provider": "openai-compatible",
+      "model_id": "synthetic-fixture",
+      "provider_url_sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+    },
+    "runtime": {
+      "python": "3.12",
+      "dependency_lock_sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+    }
+  },
+  "access": {
+    "model_access": {
+      "status": "selected",
+      "kind": "local-fixture",
+      "reference": "SOU-153 synthetic"
+    },
+    "budget_approval": {
+      "status": "approved",
+      "approved_by": "synthetic-control (not a team approval)",
+      "reference": "zero-cost synthetic control"
+    }
+  },
+  "limits": {
+    "proposed": {
+      "proposed_by": "synthetic-control",
+      "recorded_at_utc": "2026-10-19T00:00:00+00:00",
+      "values": {
+        "enforced_attack_success_upper95_max": 0,
+        "attack_success_reduction_min": 0,
+        "benign_utility_retention_min": 0,
+        "benign_interruption_upper95_max": 0,
+        "incomplete_fraction_max": 0,
+        "median_latency_overhead_ms_max": 0,
+        "p95_latency_overhead_ms_max": 0
+      }
+    },
+    "approved": {
+      "status": "not_approved",
+      "approved_by": null,
+      "approved_at_utc": null,
+      "values": null
+    }
+  },
+  "rerun_policy": "first-attempt-primary-v1",
+  "notes": [
+    "Synthetic SOU-153 control; not a measurement."
+  ]
+}
