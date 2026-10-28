@@ -119,7 +119,7 @@ async fn owned(
     // Archive selection takes this daemon-home inode lock through terminal
     // publication. Keep the run-directory lock available for the accepted short
     // Stop request/receipt transactions; never hold that lock over host work.
-    use std::os::{fd::AsRawFd, unix::fs::OpenOptionsExt};
+    use std::os::unix::fs::OpenOptionsExt;
     let archive_guard = fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
