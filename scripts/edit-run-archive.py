@@ -135,9 +135,10 @@ def inventory(run):
     def walk(directory, prefix, depth):
         nonlocal total
         S.require(depth <= MAX_DEPTH, 'edit_inventory_depth_limit')
-        for name in directory.names(MAX_ENTRIES):
+        names = directory.names(MAX_ENTRIES)
+        S.require(not {'.git', 'profile.json', 'profile.sha256'}.intersection(names), 'project_or_immutable_plan_retained')
+        for name in names:
             S.safe_component(name)
-            S.require(name not in ('.git', 'profile.json', 'profile.sha256'), 'project_or_immutable_plan_retained')
             key = prefix + name
             S.require(len(key.encode()) <= 1024 and len(files) + len(dirs) < MAX_ENTRIES, 'edit_inventory_entry_limit')
             info = os.stat(name, dir_fd=directory.fd, follow_symlinks=False)
