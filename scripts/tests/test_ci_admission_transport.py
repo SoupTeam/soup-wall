@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Owned HTTP transport witnesses; never contact GitHub or publish real statuses."""
 from contextlib import contextmanager, redirect_stdout
 from copy import deepcopy

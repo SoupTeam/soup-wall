@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
 """Opt-in owned-loopback SOU-175 reproduction; no GitHub calls/status writes."""
 import argparse
 import hashlib
