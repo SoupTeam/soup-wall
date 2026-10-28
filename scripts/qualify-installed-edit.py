@@ -104,9 +104,30 @@ def cli_observation(code, stdout, stderr):
         for text, tag in known.items():
             if any(line.strip() in (text, 'Error: ' + text) for line in lines):
                 reason = tag;break
+        if code == 2 and any(line.startswith('Usage: agentfw edit-session ask ') for line in lines):
+            reason = 'argument_parse_refused'
     return {'exit_code': code, 'reason': reason, 'stdout_bytes': len(stdout),
             'stderr_bytes': len(stderr), 'stdout_sha256': sha(stdout),
             'raw_retained': False}
+
+
+def ask_words(run, *words):
+    """Opaque URL-safe native IDs may begin with a hyphen, including '--'.
+
+    Keep option values before the positional separator; never rewrite the ID.
+    This changes the qualification caller, not native approval semantics.
+    """
+    require(words and words[0] in ('list', 'inspect', 'approve', 'reject'), 'ask_command_shape')
+    action = words[0]
+    if action == 'list':
+        require(len(words) == 1, 'ask_command_shape')
+        return ['ask', '--run', run, action]
+    require(len(words) == (4 if action == 'approve' else 2), 'ask_command_shape')
+    options = []
+    if action == 'approve':
+        require(words[2] == '--binding', 'ask_command_shape')
+        options = list(words[2:])
+    return ['ask', '--run', run, action, *options, '--', words[1]]
 
 
 def run_home(run):
@@ -182,9 +203,9 @@ class Suite:
         return root, target, plan, code, value
 
     def ask(self, run, *words):
-        return self.cli('ask', '--run', run, *words)
+        return self.cli(*ask_words(run, *words))
 
-    def host(self, label, root, target, plan, prepared, proposals, mode='approve', timeout=40):
+    def host(self, label, root, target, plan, prepared, proposals, mode='approve', timeout=40, on_pending=None):
         model = HOST.ScriptedModel([])
         offered = set()
         observed = {}
@@ -268,6 +289,8 @@ class Suite:
                             require(inspected.get('verdict') in ('allow', 'ask', 'deny', 'escalate'), 'inspect_verdict_invalid')
                             diagnostic.update(redaction='passed', verdict=inspected['verdict'],
                                               binding_sha256=row['binding_sha256'])
+                            if on_pending is not None:
+                                on_pending(run, row)
                             seen.add(row['pending_id'])
                             inspected_seen.add(row['pending_id'])
                             if mode in ('no-approval', 'cancel-pending', 'daemon-loss'):
@@ -370,6 +393,21 @@ def qualify(args, report):
     require(install.returncode == 0, 'component_install_failed')
     report['source_commit'] = built['commit']
     report['cases'][0].update(status='passed', component=built['component'], source=built['commit'])
+    # Exercise actual Clap boundaries without a pending record, live run or
+    # authority. A native missing-run failure is required; parser/help success
+    # cannot satisfy this preflight. No ID or raw diagnostic enters evidence.
+    missing_run = suite.work / 'ask-argument-control-missing-run'
+    inventory_before = sorted(path.name for path in suite.work.iterdir())
+    report['ask_argument_controls'] = []
+    for identity in ('-owned-synthetic-id', '--help'):
+        for action in ('inspect', 'approve', 'reject'):
+            extra = ['--binding', sha(b'owned synthetic binding')] if action == 'approve' else []
+            code, _ = suite.ask(missing_run, action, identity, *extra)
+            require(code == 1 and not missing_run.exists()
+                    and sorted(path.name for path in suite.work.iterdir()) == inventory_before,
+                    'ask_positional_boundary_not_preserved')
+            report['ask_argument_controls'].append({'action': action, 'exit_code': code,
+                                                    'parser_accepted': True, 'authority': False, 'effects': False})
     def setrow(name, row):
         report['cases'][CASES.index(name)] = dict(row, id=name, attempted=True)
     report['cases'][1]['attempted'] = True

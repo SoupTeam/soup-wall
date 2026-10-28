@@ -1588,6 +1588,14 @@ pub(crate) mod linux {
         }
 
         #[test]
+        fn executable_rejects_writable_permissions() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = trusted_fixture_executable(dir.path());
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o720)).unwrap();
+            assert!(executable(&path).is_err());
+        }
+
+        #[test]
         fn oversized_transaction_does_not_create_ownership() {
             let (_dir, path) = fixture();
             let config = ConfigFile::read(&path).unwrap();
