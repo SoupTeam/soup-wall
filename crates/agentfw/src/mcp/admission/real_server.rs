@@ -4,10 +4,11 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use anyhow::{bail, ensure, Context};
 use futures_util::stream::{FuturesUnordered, StreamExt};
+use futures_util::FutureExt;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::time::Instant;
@@ -15,6 +16,8 @@ use tokio::time::Instant;
 use super::DaemonSizeLimit;
 use super::{canonical, id, keys, line, not_classified, parse, sha, withheld, write};
 use super::{AdmittedTool, ClassificationAuthority, Collector, ProductionVerdict, Snapshot};
+#[cfg(target_os = "linux")]
+use crate::mcp::original_create::{run_original_upstream, VerifiedOutput};
 use crate::mcp::{server_profile, server_sandbox};
 use crate::native::CONTRACT;
 
@@ -47,6 +50,8 @@ macro_rules! diagnostic {
 }
 
 struct Grant {
+    source: Option<Box<crate::native::execution::Dispatch>>,
+    original_result: Option<Box<crate::native::execution::OriginalResult>>,
     call_id: Value,
     binding: Value,
     boundary: Option<crate::policy_transition::Boundary>,
@@ -86,6 +91,8 @@ impl ContinuationTiming {
 
 struct Release {
     raw: Vec<u8>,
+    #[cfg(target_os = "linux")]
+    authorized: bool,
     _boundary: Option<crate::policy_transition::Boundary>,
 }
 
@@ -93,6 +100,10 @@ enum Phase {
     Queued,
     Admitting,
     Running(Grant),
+    #[cfg(target_os = "linux")]
+    Creating(Grant),
+    #[cfg(target_os = "linux")]
+    Staging,
     Inspecting,
     Reclaiming,
 }
@@ -112,6 +123,45 @@ struct Call {
     progress: Option<Value>,
     progress_count: usize,
     last_progress: f64,
+    // Cancellation spends native authority before the producer necessarily
+    // finishes cleanup. Workers retain this lease independently of the call.
+    create_lease: Option<Arc<()>>,
+    // Pin the exact operator workspace *before* native admission.
+    // Never reopen a substituted root after native result Allow.
+    #[cfg(target_os = "linux")]
+    pinned_workspace: Option<Arc<crate::sandbox::PinnedWorkspace>>,
+}
+
+#[derive(Default)]
+struct CreateSlot(Weak<()>);
+
+impl CreateSlot {
+    fn reserve(&mut self) -> Option<Arc<()>> {
+        if self.0.upgrade().is_some() {
+            return None;
+        }
+        let lease = Arc::new(());
+        self.0 = Arc::downgrade(&lease);
+        Some(lease)
+    }
+}
+
+#[cfg(any(test, target_os = "linux"))]
+async fn retain_create_slot<T>(lease: Option<Arc<()>>, work: impl Future<Output = T>) -> T {
+    let _lease = lease;
+    work.await
+}
+
+#[cfg(target_os = "linux")]
+async fn produce_original_create(
+    profile: &server_profile::ProfileConfig,
+    args: &Value,
+) -> anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)> {
+    #[cfg(test)]
+    if let Some(result) = fault_tests::controlled_create_output(args) {
+        return result;
+    }
+    run_original_upstream(profile, args).await
 }
 
 enum Decision {
@@ -122,6 +172,16 @@ enum Decision {
 enum WorkEvent {
     Admitted(String, anyhow::Result<Decision>),
     Inspected(String, anyhow::Result<Option<Release>>),
+    #[cfg(target_os = "linux")]
+    Created(String, anyhow::Result<(Vec<u8>, Option<VerifiedOutput>)>),
+    #[cfg(target_os = "linux")]
+    CreateInspected(String, anyhow::Result<Option<Release>>, VerifiedOutput),
+    #[cfg(target_os = "linux")]
+    CreateStaged(
+        String,
+        anyhow::Result<crate::mcp::create_file::StagedCreate>,
+        Release,
+    ),
     Reclaimed(String, anyhow::Result<()>),
 }
 
@@ -186,6 +246,7 @@ fn audit(call: &Call, state: &str, active: usize, queued: usize) {
         json!({"event":"mcp_real_call","profile":call.profile,
         "host_call_id":call.id,"id_type":if call.id.is_string(){"string"}else{"integer"},
         "state":state,"active":active,"queued":queued,"execution_dispatched":call.dispatched,
+        "enqueue_to_stage_us":Instant::now().saturating_duration_since(call.deadline - super::IO_TIMEOUT).as_micros(),
         "arguments_sha256":sha(canonical(&call.args).to_string().as_bytes())})
     );
 }
@@ -227,6 +288,15 @@ async fn admit(
     call: &Call,
     profile: &server_profile::ProfileConfig,
 ) -> anyhow::Result<Decision> {
+    let creating =
+        call.profile == server_profile::filesystem_create::FORMAT && call.tool == "write_file";
+    if creating && (!cfg!(target_os = "linux") || collector.config.classifier.is_none()) {
+        return Ok(Decision::Refused(withheld(
+            &call.id,
+            "invocation",
+            &json!(["original_create_classifier_or_platform_unavailable"]),
+        )));
+    }
     let installed = collector
         .config
         .native
@@ -243,8 +313,9 @@ async fn admit(
             &call.args,
             installed.action_class,
             ClassificationAuthority {
+                replacement: false,
                 egress_declared: false,
-                create_file_profile: None,
+                create_file_profile: creating.then_some(server_profile::filesystem_create::FORMAT),
                 https_get: false,
             },
         )
@@ -260,7 +331,13 @@ async fn admit(
     if assessment.verdict == ProductionVerdict::Deny {
         return Ok(refusal("classifier_deny"));
     }
-    if !assessment.known_read_only {
+    // Only the exact installed create-only profile may continue a classified
+    // mutation. Unknown read-only semantics remain unsupported for approvals.
+    if !(if creating {
+        assessment.known_create
+    } else {
+        assessment.known_read_only
+    }) {
         return Ok(refusal(if collector.config.approval.is_some() {
             "classifier_unknown_approval_unsupported"
         } else {
@@ -270,6 +347,36 @@ async fn admit(
     let mut boundary = collector.policy_boundary().await?;
     let mut fields = json!({"tool":call.tool,"args":call.args,
         "schema_sha256":installed.schema_sha256,"mcp_host_call_id":call.id});
+    let create_context = if creating {
+        #[cfg(target_os = "linux")]
+        {
+            let Some(workspace) = call.pinned_workspace.as_deref() else {
+                return Ok(refusal("native_approval_create_resource_unavailable"));
+            };
+            let resource = match server_profile::filesystem_create::CreateResource::capture(
+                workspace, &call.args,
+            ) {
+                Ok(resource) => resource,
+                Err(_) => return Ok(refusal("native_approval_create_resource_changed")),
+            };
+            Some(selected_invocation(
+                collector,
+                &snapshot,
+                call,
+                profile,
+                Some(resource),
+            )?)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            None
+        }
+    } else {
+        None
+    };
+    if let Some(context) = &create_context {
+        fields["selected_invocation"] = json!(context);
+    }
     let mut receipt = if assessment.verdict == ProductionVerdict::Ask {
         None
     } else {
@@ -297,51 +404,28 @@ async fn admit(
                 refusal("classifier_ask")
             });
         }
-        let Some(classifier) = &collector.config.classifier else {
-            return Ok(refusal("native_approval_classifier_identity_required"));
-        };
-        let Some(classifier_digest) = classifier
-            .revision()
-            .filter(|digest| crate::native::is_digest(digest))
-        else {
-            return Ok(refusal("native_approval_classifier_identity_required"));
-        };
         // This increment requires the accepted host/agent capability and live
         // collector owner. Plain legacy sessions keep their correlated refusal.
         if collector.host_session.is_none() || collector.liveness.is_none() {
             return Ok(refusal("native_approval_bound_owner_required"));
         }
-        let definition = snapshot
-            .tools
-            .get(&call.tool)
-            .context("selected definition missing")?;
-        let context = crate::native::approval::SelectedInvocation {
-            host_call_id: call.id.clone(),
-            request_sha256: call.request_sha256.clone(),
-            server_id: collector.config.server_id.clone(),
-            profile: call.profile.clone(),
-            profile_sha256: sha(canonical(&serde_json::to_value(profile)?)
-                .to_string()
-                .as_bytes()),
-            classifier_sha256: classifier_digest.to_owned(),
-            snapshot_sha256: snapshot.sha256.clone(),
-            definition_sha256: definition.definition_sha256.clone(),
-            input_sha256: super::prediction_identity(
-                &collector.config.server_id,
-                &snapshot,
-                definition,
-                &call.tool,
-                &call.args,
-                classifier.source(),
-                classifier.revision(),
-            ),
+        let context = match create_context {
+            Some(context) => context,
+            None => selected_invocation(collector, &snapshot, call, profile, None)?,
         };
         // Bind same-FD verified input observations before publishing a pending
         // request. Only kernel-enforced immutable bytes may be reused later.
         // This state belongs to this exact Ask, never a global authority cache.
-        let frozen = profile.clone();
-        let verified_assets =
-            tokio::task::spawn_blocking(move || frozen.capture_verified_assets()).await??;
+        let verified_assets = if let Some(runtime) = collector.runtime() {
+            ensure!(
+                runtime.matches(profile),
+                "verified_execution_profile_changed"
+            );
+            None
+        } else {
+            let frozen = profile.clone();
+            Some(tokio::task::spawn_blocking(move || frozen.capture_verified_assets()).await??)
+        };
         let approval_id =
             match wait_approval(collector, call, source, &installed.schema_sha256, &context).await?
             {
@@ -350,12 +434,37 @@ async fn admit(
             };
         let mut timing = ContinuationTiming::new();
         let resumed = async {
-            let frozen = profile.clone();
-            let verified =
+            let verified = if let Some(verified_assets) = verified_assets {
+                let frozen = profile.clone();
                 tokio::task::spawn_blocking(move || frozen.revalidate_assets(&verified_assets))
-                    .await;
-            timing.record(call, "profile_and_assets", matches!(&verified, Ok(Ok(()))));
-            verified??;
+                    .await?
+            } else {
+                match collector.runtime() {
+                    Some(runtime) if runtime.matches(profile) => {
+                        if let Some(context) = &collector.execution {
+                            context.check()
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    _ => Err(anyhow::anyhow!("verified_execution_profile_changed")),
+                }
+            };
+            timing.record(call, "profile_and_assets", verified.is_ok());
+            verified?;
+            #[cfg(target_os = "linux")]
+            if let Some(expected) = &context.original_create {
+                let workspace = call
+                    .pinned_workspace
+                    .as_deref()
+                    .context("selected create root missing")?;
+                ensure!(
+                    &server_profile::filesystem_create::CreateResource::capture(
+                        workspace, &call.args
+                    )? == expected,
+                    "selected create resource changed during approval"
+                );
+            }
             boundary = collector.policy_boundary().await?;
             timing.record(call, "policy_boundary", true);
             let reassessed = collector
@@ -366,8 +475,10 @@ async fn admit(
                     &call.args,
                     installed.action_class,
                     ClassificationAuthority {
+                        replacement: false,
                         egress_declared: false,
-                        create_file_profile: None,
+                        create_file_profile: creating
+                            .then_some(server_profile::filesystem_create::FORMAT),
                         https_get: false,
                     },
                 )
@@ -375,9 +486,11 @@ async fn admit(
             timing.record(call, "classifier", matches!(&reassessed, Ok(Ok(_))));
             let reassessed = reassessed?;
             ensure!(
-                reassessed.is_ok_and(
-                    |value| value.known_read_only && value.verdict != ProductionVerdict::Deny
-                ),
+                reassessed.is_ok_and(|value| (if creating {
+                    value.known_create
+                } else {
+                    value.known_read_only
+                }) && value.verdict != ProductionVerdict::Deny),
                 "selected approval reclassification refused"
             );
             ensure!(
@@ -415,11 +528,59 @@ async fn admit(
         )));
     }
     Ok(Decision::Allowed(Grant {
+        source: None,
+        original_result: None,
         call_id: receipt["call_id"].clone(),
         binding: receipt["binding_sha256"].clone(),
         boundary,
         continuation,
     }))
+}
+
+/// Freeze observations for the existing signed grant and call binding. Runtime,
+/// package, schema and classifier revisions remain part of this same identity.
+fn selected_invocation(
+    collector: &Collector<'_>,
+    snapshot: &Snapshot,
+    call: &Call,
+    profile: &server_profile::ProfileConfig,
+    original_create: Option<server_profile::filesystem_create::CreateResource>,
+) -> anyhow::Result<crate::native::approval::SelectedInvocation> {
+    let classifier = collector
+        .config
+        .classifier
+        .as_ref()
+        .context("selected classifier missing")?;
+    let classifier_digest = classifier
+        .revision()
+        .filter(|digest| crate::native::is_digest(digest))
+        .context("selected classifier revision missing")?;
+    let definition = snapshot
+        .tools
+        .get(&call.tool)
+        .context("selected definition missing")?;
+    Ok(crate::native::approval::SelectedInvocation {
+        host_call_id: call.id.clone(),
+        request_sha256: call.request_sha256.clone(),
+        server_id: collector.config.server_id.clone(),
+        profile: call.profile.clone(),
+        profile_sha256: sha(canonical(&serde_json::to_value(profile)?)
+            .to_string()
+            .as_bytes()),
+        classifier_sha256: classifier_digest.to_owned(),
+        snapshot_sha256: snapshot.sha256.clone(),
+        definition_sha256: definition.definition_sha256.clone(),
+        input_sha256: super::prediction_identity(
+            &collector.config.server_id,
+            snapshot,
+            definition,
+            &call.tool,
+            &call.args,
+            classifier.source(),
+            classifier.revision(),
+        ),
+        original_create,
+    })
 }
 
 /// One bounded admission worker, independent of host input and useful peers.
@@ -515,8 +676,15 @@ async fn inspect(
         "expected_contract_version":CONTRACT,"result_kind":kind,"delivery":"mcp_host","content":content})
     };
     let content = std::str::from_utf8(&raw).context("selected MCP result is not UTF-8")?;
-    let (raw, receipt) = match collector.event("result", fields(kind, content)).await {
-        Ok(receipt) => (raw, receipt),
+    let (raw, receipt, _original_inspected) = match collector
+        .event_inner(
+            "result",
+            fields(kind, content),
+            grant.original_result.take().map(|result| *result),
+        )
+        .await
+    {
+        Ok(receipt) => (raw, receipt, true),
         Err(failure) => {
             // A size refusal leaves the grant unspent at the daemon. Spend it
             // with a small correlated error instead of ending the session.
@@ -532,20 +700,69 @@ async fn inspect(
             let replacement = error(&call.id, -32603, limit.message());
             let content = std::str::from_utf8(&replacement).expect("fixed UTF-8 error");
             let receipt = collector.event("result", fields("error", content)).await?;
-            (replacement, receipt)
+            // Allowing this correlated error to reach the host does not
+            // authorize publication of an uninspected original create result.
+            (replacement, receipt, false)
         }
     };
     if let Some(timing) = &mut grant.continuation {
         timing.record(call, "result_inspection", receipt["release"] == true);
     }
-    let raw = if receipt["release"] == true {
+    let authorized = receipt["release"] == true;
+    let raw = if authorized {
         raw
     } else {
         withheld(&call.id, "result", &receipt["reason_codes"])
     };
     Ok(Some(Release {
         raw,
+        #[cfg(target_os = "linux")]
+        authorized: authorized && _original_inspected,
         _boundary: boundary,
+    }))
+}
+
+async fn execute_in_daemon(
+    collector: &Collector<'_>,
+    call: &Call,
+    mut grant: Grant,
+    profile: &server_profile::ProfileConfig,
+) -> anyhow::Result<Option<Release>> {
+    let reply = collector
+        .execute_original_git(&grant.call_id, &grant.binding, profile)
+        .await?;
+    ensure!(
+        reply["completed"] == true,
+        "original daemon execution incomplete"
+    );
+    let receipt = &reply["receipt"];
+    let authorized = receipt["release"] == true;
+    let raw = if authorized {
+        let raw = reply["frame"]
+            .as_str()
+            .context("original daemon frame missing")?;
+        let decoded = parse(raw.as_bytes())?;
+        ensure!(decoded["id"] == call.id, "original daemon host ID mismatch");
+        let profiles = server_profile::classify_manifest_for(
+            &profile.format,
+            &server_profile::original_manifest_for(&profile.format)?,
+        )?;
+        profiles
+            .get(&call.tool)
+            .context("original daemon tool missing")?
+            .validate_result(&decoded)?;
+        raw.as_bytes().to_vec()
+    } else {
+        withheld(&call.id, "result", &receipt["reason_codes"])
+    };
+    if let Some(timing) = &mut grant.continuation {
+        timing.record(call, "daemon_original_result", authorized);
+    }
+    Ok(Some(Release {
+        raw,
+        #[cfg(target_os = "linux")]
+        authorized,
+        _boundary: grant.boundary.take(),
     }))
 }
 
@@ -578,6 +795,9 @@ fn detached(call: &Call) -> Call {
         progress: call.progress.clone(),
         progress_count: 0,
         last_progress: 0.0,
+        create_lease: call.create_lease.clone(),
+        #[cfg(target_os = "linux")]
+        pinned_workspace: call.pinned_workspace.clone(),
     }
 }
 
@@ -607,8 +827,11 @@ fn validate_registry(
             .unwrap_or(server_profile::git::FORMAT),
         server_profile::git::FORMAT
         | server_profile::git::LOCAL_REFS_FORMAT
+        | server_profile::git::FILE_READS_FORMAT
         | server_profile::git::SHALLOW_FORMAT
-        | server_profile::git_local_clone::FORMAT => server_profile::FORMAT,
+        | server_profile::git_local_clone::FORMAT
+        | server_profile::git_tracked_symlinks::FORMAT => server_profile::FORMAT,
+        server_profile::filesystem_create::FORMAT => server_profile::git::FORMAT,
         _ => bail!("unsupported selected registry profile"),
     };
     let peer_manifest = server_profile::original_manifest_for(peer_format)?;
@@ -622,6 +845,11 @@ fn validate_registry(
             .find(|value| value["name"] == tool.name)
             .map(|definition| (definition, &profiles[&tool.name], format))
             .or_else(|| {
+                // The separately installed create-only profile does not acquire
+                // the readonly pilot's union-registry authority.
+                if format == server_profile::filesystem_create::FORMAT {
+                    return None;
+                }
                 peer_tools
                     .iter()
                     .find(|value| value["name"] == tool.name)
@@ -637,15 +865,22 @@ fn validate_registry(
             "selected server cannot acquire built-in resource authority"
         );
         if profile.unsupported_reason.is_none() {
+            let required_action = if expected_format == server_profile::filesystem_create::FORMAT
+                && tool.name == "write_file"
+            {
+                soup_wall_agent::ActionClass::SideEffecting
+            } else {
+                soup_wall_agent::ActionClass::ReadOnly
+            };
             ensure!(
-                tool.action_class == soup_wall_agent::ActionClass::ReadOnly
+                tool.action_class == required_action
                     && tool.egress.is_empty()
                     && matches!(
                         tool.result_provenance,
                         crate::native::ResultProvenance::Untrusted
                     )
                     && tool.mcp_result_profile.as_deref() == Some(expected_format),
-                "selected read authority is not explicitly installed"
+                "selected per-tool authority is not explicitly installed"
             );
         }
     }
@@ -659,7 +894,7 @@ fn validate_registry(
                     .tools
                     .iter()
                     .any(|tool| tool.name == *name),
-                "selected read tool is not installed"
+                "selected supported tool is not installed"
             );
         }
     }
@@ -701,11 +936,23 @@ where
     T: AsyncWrite + Unpin,
 {
     let format = profile.format.as_str();
+    let daemon_git = collector
+        .config
+        .native
+        .git_execution_selected(&collector.config.server_id, profile)?;
+    ensure!(
+        !daemon_git
+            || (server_profile::git_selected(format)
+                && collector.prepared_budget.is_none()
+                && collector.liveness.is_some()),
+        "daemon Git execution requires selected Git, liveness and an independent execution budget"
+    );
     let mut initialized = false;
     let mut notified = false;
     let mut ready = false;
     let mut control: Option<Control> = None;
     let mut calls: BTreeMap<String, Call> = BTreeMap::new();
+    let mut create_slot = CreateSlot::default();
     let mut queue = VecDeque::new();
     let mut used = BTreeSet::new();
     let mut wire: BTreeMap<String, (Instant, bool)> = BTreeMap::new();
@@ -836,6 +1083,17 @@ where
                                     WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
                                 }));
                             }
+                            #[cfg(target_os = "linux")]
+                            Phase::Creating(grant) => {
+                                let input = detached(call);
+                                let worker_key = key.clone();
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Reclaimed(worker_key,
+                                        reclaim(collector, &input, grant).await)
+                                }));
+                            }
+                            #[cfg(target_os = "linux")]
+                            Phase::Staging => { calls.remove(&key); }
                             Phase::Admitting => call.phase = Phase::Admitting,
                             Phase::Inspecting => call.phase = Phase::Inspecting,
                             Phase::Reclaiming => {}
@@ -857,10 +1115,15 @@ where
                 }
                 let request_id = &value["id"];
                 let key = rpc_key(request_id)?;
-                ensure!(
-                    used.len() < super::MAX_REQUESTS && used.insert(key.clone()),
-                    "duplicate MCP ID or request-count limit"
-                );
+                ensure!(used.len() < super::MAX_REQUESTS, "MCP request-count limit");
+                if !used.insert(key.clone()) {
+                    // A replayed/previously spent host ID must never reach
+                    // another native admission. Preserve useful read/write
+                    // peers instead of terminating the entire session.
+                    write(host, &error(request_id, -32600,
+                        "Replayed or spent MCP request ID refused")).await?;
+                    continue;
+                }
                 if !params.is_object() {
                     write(
                         host,
@@ -962,7 +1225,7 @@ where
                             .await?;
                             continue;
                         };
-                        let Some(profile) = profiles.get(name) else {
+                        let Some(tool_profile) = profiles.get(name) else {
                             write(
                                 host,
                                 &error(
@@ -974,7 +1237,7 @@ where
                             .await?;
                             continue;
                         };
-                        if profile.unsupported_reason.is_some() {
+                        if tool_profile.unsupported_reason.is_some() {
                             write(
                                 host,
                                 &error(
@@ -991,7 +1254,12 @@ where
                             .cloned()
                             .unwrap_or_else(|| json!({}));
                         let progress = match metadata(&params).and_then(|progress| {
-                            profile.validate_arguments(&args)?;
+                            tool_profile.validate_arguments(&args)?;
+                            if format == server_profile::filesystem_create::FORMAT
+                                && name == "write_file"
+                            {
+                                server_profile::filesystem_create::validate_request(&args)?;
+                            }
                             Ok(progress)
                         }) {
                             Ok(progress) => progress,
@@ -1009,9 +1277,23 @@ where
                         };
                         if git_view.is_some_and(|view| view.validate_call(name, &args).is_err()) {
                             write(host, &error(request_id, -32602,
-                                "Git local reference unavailable, unsupported, or its source changed")).await?;
+                                "Git local reference or file revision unavailable, unsupported, or its source changed")).await?;
                             continue;
                         }
+                        // One original mutator at a time. Each selected
+                        // create receives a new heavy isolated Node/owner
+                        // process; native read-only calls stay concurrent.
+                        let create_lease = if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file" {
+                            match create_slot.reserve() {
+                                Some(lease) => Some(lease),
+                                None => {
+                                    write(host, &error(request_id, -32003,
+                                        "An original create operation is already active")).await?;
+                                    continue;
+                                }
+                            }
+                        } else { None };
                         let (active, queued) = counts(&calls);
                         if active >= ACTIVE_LIMIT && queued >= QUEUE_LIMIT {
                             write(
@@ -1021,6 +1303,21 @@ where
                             .await?;
                             continue;
                         }
+                        #[cfg(target_os = "linux")]
+                        let pinned_workspace = if format == server_profile::filesystem_create::FORMAT
+                            && name == "write_file"
+                        {
+                            match crate::sandbox::PinnedWorkspace::open(&profile.workspace) {
+                                Ok(workspace) => Some(Arc::new(workspace)),
+                                Err(_) => {
+                                    write(host, &error(request_id, -32603,
+                                        "Original create workspace identity unavailable")).await?;
+                                    continue;
+                                }
+                            }
+                        } else {
+                            None
+                        };
                         let call = Call {
                             profile: format.to_owned(),
                             id: request_id.clone(),
@@ -1028,6 +1325,7 @@ where
                             args,
                             request_sha256: sha(&raw),
                             raw,
+                            create_lease,
                             phase: Phase::Queued,
                             cancelled: false,
                             cancel: tokio::sync::watch::channel(false).0,
@@ -1036,6 +1334,8 @@ where
                             progress,
                             progress_count: 0,
                             last_progress: 0.0,
+                            #[cfg(target_os = "linux")]
+                            pinned_workspace,
                         };
                         audit(&call, "queued", active, queued + 1);
                         calls.insert(key.clone(), call);
@@ -1060,6 +1360,12 @@ where
                         let Some(call) = calls.get_mut(&key) else {
                             bail!("unbound native admission completion");
                         };
+                        // A disconnected host cannot authorize new execution.
+                        // Reclaim any late native Allow rather than launching
+                        // an ephemeral writer after the client has disappeared.
+                        if client_closed {
+                            call.cancelled = true;
+                        }
                         match result? {
                             Decision::Refused(raw) => {
                                 if !call.cancelled {
@@ -1095,6 +1401,52 @@ where
                                         )
                                     }));
                                 } else {
+                                    #[cfg(target_os = "linux")]
+                                    if format == server_profile::filesystem_create::FORMAT
+                                        && call.tool == "write_file"
+                                    {
+                                        // The installed server stays read-only.
+                                        // Only an isolated fresh ORIGINAL server
+                                        // can run the mutating upstream tool.
+                                        let worker_key = key.clone();
+                                        let args = call.args.clone();
+                                        let runner = profile.clone();
+                                        let lease = call.create_lease.clone();
+                                        call.phase = Phase::Creating(grant);
+                                        call.dispatched = true;
+                                        // The external Linux acceptance can
+                                        // observe actual post-admission creation
+                                        // without exposing content or credentials.
+                                        diagnostic!("{}", json!({
+                                            "event":"mcp_original_create_state",
+                                            "host_call_id":call.id,
+                                            "state":"creating"
+                                        }));
+                                        workers.push(Box::pin(async move {
+                                            WorkEvent::Created(worker_key,
+                                                retain_create_slot(lease,
+                                                    produce_original_create(&runner, &args)).await)
+                                        }));
+                                        continue;
+                                    }
+                                    if daemon_git && matches!(call.tool.as_str(), "git_show" | "git_diff") {
+                                        // Do NOT also dispatch the tools/call to the collector's server.
+                                        // The daemon consumes the admission and owns the one actual result pipe.
+                                        let input = detached(call);
+                                        let worker_key = key.clone();
+                                        call.dispatched = true;
+                                        call.phase = Phase::Inspecting;
+                                        workers.push(Box::pin(async move {
+                                            WorkEvent::Inspected(worker_key,
+                                                execute_in_daemon(collector, &input, grant, profile).await)
+                                        }));
+                                        continue;
+                                    }
+                                    if let Some(context)=&collector.execution {
+                                        grant.source=Some(Box::new(context.dispatched(&collector.session,
+                                            grant.call_id.as_str().context("private native call")?,
+                                            grant.binding.as_str().context("private native binding")?,&call.raw)?));
+                                    }
                                     write(child, &call.raw).await?;
                                     call.dispatched = true;
                                     if let Some(timing) = &mut grant.continuation {
@@ -1109,17 +1461,202 @@ where
                             }
                         }
                     }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::Created(key, produced) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        if call.cancelled { continue; }
+                        if client_closed {
+                            // A host EOF before native result release must
+                            // spend the admission grant and drop the isolated
+                            // output. No publication occurs and relay can exit.
+                            let phase = std::mem::replace(&mut call.phase, Phase::Reclaiming);
+                            let Phase::Creating(grant) = phase else {
+                                bail!("orphaned original create without native grant");
+                            };
+                            let input = detached(call);
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(key,
+                                    reclaim(collector, &input, grant).await)
+                            }));
+                            continue;
+                        }
+                        let phase = std::mem::replace(&mut call.phase, Phase::Inspecting);
+                        let Phase::Creating(grant) = phase else {
+                            bail!("original create returned without its bound native grant");
+                        };
+                        let input = detached(call);
+                        let worker_key = key.clone();
+                        match produced {
+                            Ok((raw, verified)) => {
+                                // Internal original-server RPC always uses id=3.
+                                // The host must receive its own opaque request ID.
+                                // Only the JSON-RPC transport ID is changed;
+                                // original result/error fields are untouched.
+                                let mut decoded = parse(&raw)?;
+                                ensure!(decoded["id"] == 3,
+                                    "unexpected original-server response correlation");
+                                decoded["id"] = call.id.clone();
+                                let raw = frame(&decoded);
+                                if let Some(verified) = verified {
+                                    workers.push(Box::pin(async move {
+                                        let receipt = inspect(collector, &input, grant, raw, "value").await;
+                                        #[cfg(test)]
+                                        fault_tests::pause_create_completion("inspected").await;
+                                        WorkEvent::CreateInspected(worker_key,
+                                            receipt, verified)
+                                    }));
+                                } else {
+                                    // Preserve the valid ORIGINAL error. It
+                                    // has no output/publication capability.
+                                    workers.push(Box::pin(async move {
+                                        WorkEvent::Inspected(worker_key,
+                                            inspect(collector, &input, grant, raw, "error").await)
+                                    }));
+                                }
+                            }
+                            Err(_) => {
+                                let failure = error(&call.id, -32603,
+                                    "Original isolated MCP create failed; workspace unchanged");
+                                workers.push(Box::pin(async move {
+                                    WorkEvent::Inspected(worker_key,
+                                        inspect(collector, &input, grant, failure, "error").await)
+                                }));
+                            }
+                        }
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::CreateInspected(key, receipt, output) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if call.deadline <= Instant::now() {
+                            write(host, &error(&call.id, -32001,
+                                "Original create timed out before publication; no file committed")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        let release = receipt?.context("native original-create result missing")?;
+                        if !release.authorized {
+                            write(host, &release.raw).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if collector.is_uncertain() {
+                            write(host, &error(&call.id, -32603,
+                                "Native collector became uncertain before publication")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        let prepared = call.pinned_workspace.as_deref()
+                            .context("original create workspace pin not held")
+                            .and_then(|workspace| output.prepare_atomic_publication(workspace));
+                        let prepared = match prepared {
+                            Ok(value) => value,
+                            Err(_) => {
+                                write(host, &error(&call.id, -32603,
+                                    "Unsafe or existing original-create destination; no publication")).await?;
+                                calls.remove(&key);
+                                continue;
+                            }
+                        };
+                        call.phase = Phase::Staging;
+                        let lease = call.create_lease.clone();
+                        workers.push(Box::pin(async move {
+                            let stage = tokio::task::spawn_blocking(move || {
+                                let _lease = lease;
+                                prepared.stage()
+                            })
+                                .await.map_err(anyhow::Error::from)
+                                .and_then(|value| value.map_err(anyhow::Error::from));
+                            #[cfg(test)]
+                            fault_tests::pause_create_completion("staged").await;
+                            WorkEvent::CreateStaged(key, stage, release)
+                        }));
+                    }
+                    #[cfg(target_os = "linux")]
+                    WorkEvent::CreateStaged(key, stage, release) => {
+                        let Some(call) = calls.get_mut(&key) else { continue; };
+                        // Cancellation after native result Allow, but before
+                        // linkat, closes only an anonymous stage.
+                        if call.cancelled || client_closed {
+                            calls.remove(&key);
+                            continue;
+                        }
+                        if collector.is_uncertain() || call.deadline <= Instant::now() {
+                            write(host, &error(&call.id,
+                                if collector.is_uncertain() { -32603 } else { -32001 },
+                                "Original create authority expired or became uncertain; no file committed")).await?;
+                            calls.remove(&key);
+                            continue;
+                        }
+                        // release owns the native result policy boundary until
+                        // this synchronous publication point is finished.
+                        match stage {
+                            Ok(stage) => match stage.publish() {
+                                Ok(result) if result.committed && result.file_synced
+                                    && result.directory_synced => {
+                                    diagnostic!("{}", json!({
+                                        "event":"mcp_original_create_commit",
+                                        "committed":true,
+                                        "bytes":result.bytes_written,
+                                        "content_disclosed":false
+                                    }));
+                                    write(host, &release.raw).await?;
+                                }
+                                Ok(_) => bail!("incomplete original-create publication"),
+                                Err(publish_error) => {
+                                    diagnostic!("{}", json!({
+                                        "event":"mcp_original_create_commit",
+                                        "committed":publish_error.committed,
+                                        "bytes":publish_error.committed_bytes,
+                                        "reason":publish_error.code,
+                                        "content_disclosed":false
+                                    }));
+                                    write(host, &error(&call.id, -32603,
+                                        if publish_error.committed {
+                                            "Create failed after commit; file effect may remain"
+                                        } else {
+                                            "Create publication refused; no file committed"
+                                        })).await?;
+                                }
+                            },
+                            Err(_) => {
+                                write(host, &error(&call.id, -32603,
+                                    "Original create staging failed; no file committed")).await?;
+                            }
+                        }
+                        calls.remove(&key);
+                    }
                     WorkEvent::Inspected(key, result) => {
                         let call = calls
                             .remove(&key)
                             .context("unbound native result completion")?;
+                        // A fresh daemon worker must not turn withdrawal of
+                        // the original collector-held view into an uncorrelated
+                        // transport failure. Keep the same sticky refusal even
+                        // when that worker also refused its source snapshot.
+                        let source_withdrawn = git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err());
+                        if source_withdrawn && !call.cancelled {
+                            write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
+                        }
+                        // Preserve fatal retirement on transport/auth/audit or
+                        // cleanup uncertainty, even after the correlated refusal.
                         let result = result?;
-                        if !call.cancelled {
+                        if !call.cancelled && !source_withdrawn {
                             if let Some(release) = result {
                                 if git_view.is_some_and(|view| view.validate_call(&call.tool, &call.args).is_err()) {
                                     write(host, &error(&call.id, -32602, "Git local-reference view changed during execution")).await?;
                                 } else {
-                                    write(host, &release.raw).await?;
+                                    let delivery_started = Instant::now();
+                                    let delivered = write(host, &release.raw).await;
+                                    diagnostic!("{}", json!({"event":"mcp_original_result_delivery_timing","version":1,
+                                        "host_call_sha256":sha(canonical(&call.id).to_string().as_bytes()),
+                                        "request_sha256":call.request_sha256,"response_sha256":sha(&release.raw),
+                                        "elapsed_us":delivery_started.elapsed().as_micros(),
+                                        "written":delivered.is_ok(),"authority":false}));
+                                    delivered?;
                                 }
                             }
                         }
@@ -1395,12 +1932,15 @@ where
                     .validate_result(&value)
                     .map(str::to_owned);
                 match validated {
-                    Ok(kind) => workers.push(Box::pin(async move {
-                        WorkEvent::Inspected(
-                            worker_key,
-                            inspect(collector, &input, grant, raw, &kind).await,
-                        )
-                    })),
+                    Ok(kind) => {
+                        if let Some(source)=grant.source.take() {
+                            grant.original_result=Some(Box::new((*source).response(&raw)?));
+                        }
+                        workers.push(Box::pin(async move {
+                            WorkEvent::Inspected(worker_key,
+                                inspect(collector,&input,grant,raw,&kind).await)
+                        }));
+                    },
                     Err(failure) => {
                         // Unsupported output is never partially released. A local
                         // error completes this reservation and leaves other calls usable.
@@ -1477,6 +2017,17 @@ where
                                 WorkEvent::Reclaimed(worker_key, reclaim(collector, &input, grant).await)
                             }));
                         }
+                        #[cfg(target_os = "linux")]
+                        Phase::Creating(grant) => {
+                            let input = detached(call);
+                            let worker_key = key.clone();
+                            workers.push(Box::pin(async move {
+                                WorkEvent::Reclaimed(worker_key,
+                                    reclaim(collector, &input, grant).await)
+                            }));
+                        }
+                        #[cfg(target_os = "linux")]
+                        Phase::Staging => { calls.remove(&key); }
                         Phase::Admitting => call.phase = Phase::Admitting,
                         Phase::Inspecting => call.phase = Phase::Inspecting,
                         Phase::Reclaiming => {}
@@ -1624,17 +2175,76 @@ pub(super) async fn run(
     profile: &server_profile::ProfileConfig,
     workspace: &std::path::Path,
 ) -> anyhow::Result<()> {
-    // The host may TERM its MCP children during normal shutdown, including
-    // after their namespace owners have finished but before the authenticated
-    // cleanup acknowledgement. Install interception before creating an owner;
-    // later TERM must not abruptly kill the completion path.
+    #[cfg(unix)]
+    let client = BufReader::new(crate::mcp::stdio::Pipe::stdin()?);
+    #[cfg(unix)]
+    let host = crate::mcp::stdio::Pipe::stdout()?;
+    #[cfg(not(unix))]
+    let client = BufReader::new(tokio::io::stdin());
+    #[cfg(not(unix))]
+    let host = tokio::io::stdout();
+    // Legacy stdio owns the process-level termination handlers. An embedded
+    // daemon session must use its own connection lifetime instead.
     #[cfg(unix)]
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("install selected collector termination handler")?;
+    let shutdown = async {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => "native_mcp_interrupted",
+            _ = async {
+                #[cfg(unix)]
+                sigterm.recv().await;
+                #[cfg(not(unix))]
+                std::future::pending::<()>().await;
+            } => "native_mcp_terminated",
+        }
+    };
+    run_streams(collector, profile, workspace, client, host, shutdown, true).await
+}
+
+/// One selected-server transport with explicitly owned host streams. This is
+/// transport plumbing only: it does not authenticate a launch or mint evidence.
+/// Shutdown still reaches the same owner, budget, process and stderr cleanup.
+pub(super) async fn run_streams<R, W, F>(
+    collector: &Collector<'_>,
+    profile: &server_profile::ProfileConfig,
+    workspace: &std::path::Path,
+    mut client: R,
+    host: W,
+    shutdown: F,
+    inherit_environment: bool,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = &'static str>,
+{
+    tokio::pin!(shutdown);
+    if let Some(reason) = shutdown.as_mut().now_or_never() {
+        bail!(reason);
+    }
     profile.validate_command(&collector.config.command, &collector.config.args, workspace)?;
     let selected_budget = collector.prepared_budget.as_ref();
+    if collector
+        .config
+        .native
+        .git_execution_selected(&collector.config.server_id, profile)?
+    {
+        ensure!(
+            server_profile::git_selected(&profile.format)
+                && selected_budget.is_none()
+                && collector.liveness.is_some(),
+            "daemon Git execution does not support prepared budget selection"
+        );
+    }
     ensure!(
-        selected_budget.is_some() || std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
+        selected_budget.is_none() || profile.format != server_profile::filesystem_create::FORMAT,
+        "prepared budgets do not support the original-create profile"
+    );
+    ensure!(
+        !inherit_environment
+            || selected_budget.is_some()
+            || std::env::var_os(crate::pilot_budget::BINDING_ENV).is_none(),
         "pilot_budget_binding_required"
     );
     let mut budget_record = selected_budget
@@ -1653,10 +2263,16 @@ pub(super) async fn run(
     if let Some(owner) = cleanup_owner {
         owner.pilot_cleanup("begin").await?;
     }
-    let prepared = match server_sandbox::prepare_with_budget(
-        profile,
-        selected_budget.map(crate::pilot_budget::VerifiedSelection::bound),
-    ) {
+    let bound = selected_budget.map(crate::pilot_budget::VerifiedSelection::bound);
+    let prepared = match if let Some(reason) = shutdown.as_mut().now_or_never() {
+        Err(anyhow::anyhow!(reason))
+    } else if let Some(runtime) = collector.runtime() {
+        server_sandbox::prepare_verified(profile, bound, runtime)
+    } else if inherit_environment {
+        server_sandbox::prepare_with_budget(profile, bound)
+    } else {
+        server_sandbox::prepare_explicit(profile, bound)
+    } {
         Ok(prepared) => prepared,
         Err(error) => {
             if let Some(owner) = cleanup_owner {
@@ -1669,8 +2285,22 @@ pub(super) async fn run(
         prepared.workspace() == workspace,
         "selected sandbox workspace changed"
     );
+    if let Some(reason) = shutdown.as_mut().now_or_never() {
+        if let Some(owner) = cleanup_owner {
+            owner.pilot_cleanup("finish").await?;
+        }
+        bail!(reason);
+    }
     let git_view = prepared.git_view();
+    if let Some(context) = &collector.execution {
+        context.preparing();
+    }
     let (mut process, mut budget, mut owner, sandbox_pid) = prepared.spawn().await?;
+    let context_bound = collector
+        .execution
+        .as_ref()
+        .map(|context| context.bind(&owner))
+        .unwrap_or(Ok(()));
     let attached = if let Some(budget) = budget.as_mut() {
         budget.verify_attached(sandbox_pid)
     } else {
@@ -1708,7 +2338,11 @@ pub(super) async fn run(
     let operation = {
         let transport = async {
             attached?;
+            context_bound?;
             owner.check()?;
+            if let Some(context) = &collector.execution {
+                context.check()?;
+            }
             if let (Some(record), Some(budget)) = (&mut budget_record, &budget) {
                 record.record(budget.metadata(), false)?;
             }
@@ -1727,14 +2361,6 @@ pub(super) async fn run(
                     .take()
                     .context("selected server stdout missing")?,
             );
-            #[cfg(unix)]
-            let mut client = BufReader::new(crate::mcp::stdio::Pipe::stdin()?);
-            #[cfg(unix)]
-            let host = crate::mcp::stdio::Pipe::stdout()?;
-            #[cfg(not(unix))]
-            let mut client = BufReader::new(tokio::io::stdin());
-            #[cfg(not(unix))]
-            let host = tokio::io::stdout();
             // The monitor publishes failure before waking its select arm. An
             // already pending host write must observe the same withdrawal;
             // cancelling the relay alone does not provide that ordering.
@@ -1744,11 +2370,21 @@ pub(super) async fn run(
                 failed: Arc::clone(&boundary_failed),
                 liveness: None,
             };
-            let mut host = super::DiagnosticOutput {
+            let host = super::DiagnosticOutput {
                 budget: None,
                 inner: host,
                 failed: Arc::clone(&owner_failed),
                 liveness: collector.liveness.clone(),
+            };
+            let mut host = super::DiagnosticOutput {
+                budget: None,
+                inner: host,
+                liveness: None,
+                failed: collector
+                    .execution
+                    .as_ref()
+                    .map(|context| context.withdrawn.clone())
+                    .unwrap_or_else(|| Arc::new(std::sync::atomic::AtomicBool::new(false))),
             };
             let result = {
                 let exchange = relay(
@@ -1816,13 +2452,7 @@ pub(super) async fn run(
                 Err(error) => Err(error),
                 Ok(()) => Err(anyhow::anyhow!("mcp_budget_monitor_stopped")),
             },
-            _ = tokio::signal::ctrl_c() => Err(anyhow::anyhow!("native_mcp_interrupted")),
-            _ = async {
-                #[cfg(unix)]
-                sigterm.recv().await;
-                #[cfg(not(unix))]
-                std::future::pending::<()>().await;
-            } => Err(anyhow::anyhow!("native_mcp_terminated")),
+            reason = shutdown => Err(anyhow::anyhow!(reason)),
             result = &mut transport => result,
         }
     };
@@ -1911,6 +2541,11 @@ pub(super) async fn run(
     } else {
         Err(anyhow::anyhow!("pilot_cleanup_unconfirmed"))
     };
+    if cleanup_confirmation.is_ok() {
+        if let Some(context) = &collector.execution {
+            context.cleaned();
+        }
+    }
     cleanup_confirmation?;
     record_result?;
     operation?;
@@ -1929,6 +2564,53 @@ pub(super) async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn original_create_cancelled_call_keeps_slot_until_producer_cleanup() {
+        let mut slot = CreateSlot::default();
+        let call = slot.reserve().unwrap();
+        let reclaim = call.clone();
+        let (finish, cleanup) = tokio::sync::oneshot::channel::<()>();
+        let worker = tokio::spawn(retain_create_slot(Some(call.clone()), async move {
+            cleanup.await.unwrap();
+        }));
+        // Native reclamation and logical removal do not stop the isolated
+        // producer. A fresh writer must wait for its real cleanup completion.
+        drop(call);
+        drop(reclaim);
+        assert!(slot.reserve().is_none());
+        finish.send(()).unwrap();
+        worker.await.unwrap();
+        assert!(slot.reserve().is_some());
+    }
+
+    #[tokio::test]
+    async fn original_create_blocking_stage_keeps_slot_after_waiter_is_aborted() {
+        let mut slot = CreateSlot::default();
+        let call = slot.reserve().unwrap();
+        let stage_lease = call.clone();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (finish, cleanup) = std::sync::mpsc::channel();
+        let worker = tokio::task::spawn_blocking(move || {
+            let _lease = stage_lease;
+            started.send(()).unwrap();
+            cleanup.recv().unwrap();
+        });
+        let waiter = tokio::spawn(async move { worker.await.unwrap() });
+        ready.await.unwrap();
+        waiter.abort();
+        let _ = waiter.await;
+        drop(call);
+        assert!(slot.reserve().is_none());
+        finish.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while slot.reserve().is_none() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn closed_diagnostic_pipe_cannot_abort_stderr_cleanup() {

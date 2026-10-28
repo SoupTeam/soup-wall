@@ -58,6 +58,13 @@ struct Leased {
 }
 
 fn assert_fullhash_fallback(fixture: &Fixture) {
+    // Lease availability may change after a previous unsupported probe. Keep
+    // an independent writer open so this new capture cannot acquire F_RDLCK.
+    let writer = OpenOptions::new()
+        .write(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(&fixture.path)
+        .unwrap();
     let mut inputs = Inputs::default();
     let digest = Verification::Capture(&mut inputs)
         .digest(&fixture.path, FIXTURE_BYTES as u64)
@@ -74,6 +81,12 @@ fn assert_fullhash_fallback(fixture: &Fixture) {
     assert!(Verification::Resume(&inputs)
         .digest(&fixture.path, FIXTURE_BYTES as u64)
         .is_err());
+    drop(writer);
+}
+
+#[test]
+fn open_writer_forces_fullhash_fallback_with_unchanged_and_mutated_controls() {
+    assert_fullhash_fallback(&Fixture::new(false));
 }
 
 fn leased(required: bool) -> Option<Leased> {

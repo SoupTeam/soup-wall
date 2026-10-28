@@ -163,6 +163,15 @@ existing authenticated native liveness lease (2 seconds) to witness autonomous
 pending-authority expiry after collector death; resource opt-in does not silently
 enable or change liveness defaults.
 
+The observer attributes descendants through pinned process handles and creation
+FILETIMEs. A Toolhelp parent PID alone is insufficient: Windows can reuse that
+number while an older unrelated process still reports it as its creator. A
+candidate must be born within the pinned parent's lifetime and no later than
+the sampled snapshot boundary. Distinct process generations retain distinct
+handles and exit/CPU evidence. The 64-generation observer bound applies only
+after this identity check; genuine exhaustion and missing child evidence still
+fail acceptance. Exited parents can retain legitimately older live children.
+
 `results.json` retains every completed case, failure/incomplete status, source
 manifest/binary/Python/fixture/harness/configuration hashes, bounded counters and cleanup
 outcomes. Bootstrap failures before the first case retain sanitized exception

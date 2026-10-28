@@ -455,6 +455,12 @@ impl OwnedChild {
         &mut self.child
     }
 
+    /// Bounded observation only. cleanup() retains exclusive reap ownership.
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn exit_observed(&self) -> bool {
+        self.tree.observe_exit(&self.child).await
+    }
+
     pub(crate) async fn cleanup(&mut self, graceful: bool) -> CleanupReport {
         if let Some(report) = self.complete {
             return report;

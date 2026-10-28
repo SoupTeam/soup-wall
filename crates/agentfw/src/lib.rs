@@ -9,6 +9,7 @@ pub mod classifier_runtime;
 pub mod config;
 pub mod decision;
 pub mod doctor;
+pub mod edit_session;
 pub mod grant;
 pub mod handlers;
 pub mod hook;
@@ -24,15 +25,19 @@ pub mod native;
 pub mod onboarding;
 pub mod pilot_approval;
 pub mod pilot_budget;
+#[cfg(target_os = "linux")]
+pub mod pilot_component;
 pub mod pilot_doctor;
 mod pilot_host;
 pub mod pilot_launcher;
+pub mod pilot_observation;
 pub mod policy_transition;
 pub use native::child_authority;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub(crate) mod macos_create;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub(crate) mod macos_read;
+pub mod offline_replay;
 pub mod preflight;
 #[cfg(windows)]
 mod private_file_windows;
@@ -99,6 +104,18 @@ pub fn app_with_diagnostics(
             "/native/liveness/v1",
             post(native::liveness::handler)
                 .layer(axum::extract::DefaultBodyLimit::max(native::MAX_BODY)),
+        )
+        .route(
+            native::execution::ENDPOINT,
+            post(native::execution::transport::handler),
+        )
+        .route(
+            edit_session::ENDPOINT,
+            post(edit_session::transport::handler),
+        )
+        .route(
+            native::verified_git::ENDPOINT,
+            post(native::verified_git::handler).layer(axum::extract::DefaultBodyLimit::max(4096)),
         )
         .route("/native/v1/instance", get(native::instance))
         .route(

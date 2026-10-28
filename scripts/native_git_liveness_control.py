@@ -1,0 +1,240 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Qualification-only native lease expiry; never extends or revives authority."""
+import hashlib
+import json
+import os
+import queue
+import signal
+import subprocess
+import time
+from pathlib import Path
+
+HEALTHY_LEASE_SECONDS = 10
+SHORT_LEASE_SECONDS = 2
+
+
+def need(ok, message):
+    if not ok:
+        raise RuntimeError(message)
+
+
+def audit_rows(path):
+    data = path.read_bytes()
+    need(len(data) <= 2 * 1024 * 1024, "qualification audit exceeds bound")
+    return [json.loads(line) for line in data.splitlines() if line.strip()]
+
+
+def enrolled_epoch(rows, session_id, seconds):
+    matches = [row for row in rows if row.get("event") == "native_liveness_enrolled"
+               and row.get("session_id") == session_id and row.get("released") is True]
+    need(len(matches) == 1 and matches[0].get("lease_seconds") == seconds,
+         "actual granted lease/session not matched")
+    epoch = matches[0].get("session")
+    need(isinstance(epoch, str) and epoch, "enrolled epoch missing")
+    return epoch
+
+
+def expired(rows, session_id, epoch):
+    return any(row.get("event") == "native_session_expired"
+               and row.get("session_id") == session_id and row.get("session") == epoch
+               and row.get("released") is False
+               for row in rows)
+
+
+def drain_host_eof(client):
+    client.reader.join(timeout=3)
+    need(not client.reader.is_alive(), "collector stdout EOF reader incomplete")
+    frames, raw_frames, total, eof = [], [], 0, False
+    while not client.lines.empty():
+        try:
+            raw = client.lines.get_nowait()
+        except queue.Empty:
+            break
+        if raw is None:
+            eof = True
+            need(client.lines.empty(), "host data after EOF sentinel")
+            break
+        total += len(raw)
+        need(len(raw) <= 1024 * 1024 and raw.endswith(b"\n")
+             and total <= 2 * 1024 * 1024 and len(frames) < 32, "host observation exceeds bound")
+        try:
+            value = json.loads(raw)
+        except (ValueError, UnicodeError):
+            raise RuntimeError("malformed host JSON-RPC observation") from None
+        need(isinstance(value, dict), "host observation is not a JSON-RPC object")
+        frames.append(value)
+        raw_frames.append(raw)
+        client.received.append(raw)
+    need(eof, "collector stdout EOF sentinel not observed")
+    need(not any("result" in frame for frame in frames), "expired original result reached host")
+    return {"eof_observed": True, "frames": len(frames), "bytes": total,
+            "sha256": hashlib.sha256(b"".join(raw_frames)).hexdigest()}
+
+
+def safe_close(client):
+    try:
+        client.close()
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("owned collector cleanup deadline exceeded") from None
+
+
+def grade_terminal(terminal, diagnostics, cleanup, collector, profile):
+    """Two exact fault branches; an arbitrary failure is never expiry evidence."""
+    need(cleanup.get("all_stopped") is True and cleanup.get("observation_complete") is True
+         and cleanup.get("remaining") == [], "independent process cleanup incomplete")
+    observed = cleanup.get("observed", [])
+    need(any(item.get("parent_process") is True and item.get("pid") == collector["pid"]
+             and item.get("start_time_ticks") == collector["start_time_ticks"] for item in observed),
+         "collector identity absent from independent observation")
+    need(any(item.get("original_git_server") is True and item.get("parent_process") is False
+             for item in observed), "original server descendant not observed")
+    records = {}
+    for event in ("mcp_real_owner_start", "mcp_real_owner_end", "mcp_real_server_end"):
+        matches = [item for item in diagnostics if item.get("event") == event]
+        need(len(matches) == 1, "collector owner diagnostic context incomplete")
+        records[event] = matches[0]
+    start = records["mcp_real_owner_start"].get("owner", {})
+    end = records["mcp_real_owner_end"]
+    server = records["mcp_real_server_end"]
+    identity = ("format", "instance", "owner_pid", "owner_start_ticks", "sandbox_pid",
+                "sandbox_start_ticks", "pid1_pid", "pid1_start_ticks")
+    need(isinstance(start, dict) and start.get("format") == "sw-mcp/linux-crash-owner/1"
+         and isinstance(start.get("instance"), str) and start["instance"]
+         and start.get("failed") is False, "owner start context invalid")
+    for record in (end, server):
+        owner = record.get("owner", {})
+        need(isinstance(owner, dict) and all(key in start and owner.get(key) == start[key] for key in identity),
+             "owner instance or process identity mismatch")
+    for prefix in ("owner", "sandbox", "pid1"):
+        pid, ticks = start[prefix + "_pid"], start[prefix + "_start_ticks"]
+        need(type(pid) is int and pid > 0 and type(ticks) is int and ticks > 0
+             and any(item.get("parent_process") is False and item.get("pid") == pid
+                     and item.get("start_time_ticks") == ticks for item in observed),
+             "owner diagnostic identity not independently observed")
+    need(server.get("profile") == profile and server.get("transport_complete") is False
+         and server.get("budget_failure_observed") is False
+         and server.get("budget_cleanup_verified") is True, "server fault context mismatched")
+    if terminal == "Error: native_liveness_uncertain":
+        need(end.get("cleanup_verified") is True and end.get("observed_failure") is False
+             and end["owner"].get("failed") is False
+             and server.get("owner_cleanup_verified") is True
+             and server.get("owner_failure_observed") is False
+             and server.get("cleanup_verified") is True, "native expiry cleanup not confirmed")
+        return {"guard_scope": "native_expiry", "production_owner_cleanup_verified": True}
+    need(terminal == "Error: pilot_cleanup_unconfirmed", "unexpected collector terminal failure")
+    need(start.get("lease_ms") == 1500 and end.get("observed_failure") is True
+         and end.get("cleanup_verified") is False
+         and end["owner"].get("failed") is True
+         and end["owner"].get("reason") == "mcp_owner_liveness_expired"
+         and server["owner"].get("reason") == "mcp_owner_liveness_expired"
+         and server["owner"].get("failed") is True
+         and server.get("owner_failure_observed") is True
+         and server.get("owner_cleanup_verified") is False
+         and server.get("cleanup_verified") is False,
+         "unconfirmed cleanup lacks exact namespace owner expiry evidence")
+    return {"guard_scope": "combined_native_expiry_and_namespace_owner_guard",
+            "production_owner_cleanup_verified": False, "production_owner_failure_observed": True,
+            "production_transport_complete": False, "namespace_owner_reason": "mcp_owner_liveness_expired"}
+
+
+def qualify_short_lease(*, make_client, make_call, audit, log_path, witness_factory,
+                        expected_sha256, expected_profile, report):
+    need(hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"),
+         "pidfd liveness-control prerequisite unavailable")
+    row = {"passed": False, "requested_seconds": SHORT_LEASE_SECONDS}
+    report["short_lease_expiry"] = row
+    pin, witness, suspended = None, None, False
+    with log_path.open("wb") as log:
+        client = make_client(log, SHORT_LEASE_SECONDS)
+        witness = witness_factory(client.process.pid)
+        try:
+            client.initialize()
+            session_id = client.liveness_session_id
+            epoch = enrolled_epoch(audit_rows(audit), session_id, SHORT_LEASE_SECONDS)
+            row.update(granted_seconds=SHORT_LEASE_SECONDS, session_id=session_id,
+                       epoch_sha256=hashlib.sha256(epoch.encode()).hexdigest())
+            start = witness.identity(client.process.pid)
+            need(start is not None and client.process.poll() is None, "owned collector already stopped")
+            pin = os.pidfd_open(client.process.pid, 0)
+            os.set_inheritable(pin, False)
+            need(witness.identity(client.process.pid) == start, "collector identity changed before pin")
+            signal.pidfd_send_signal(pin, signal.SIGSTOP)
+            suspended = True
+            deadline = time.monotonic() + 0.5
+            stopped = False
+            while time.monotonic() < deadline:
+                text = Path(f"/proc/{client.process.pid}/stat").read_text()
+                state = text[text.rfind(")") + 2:].split()[0]
+                need(witness.identity(client.process.pid) == start, "pinned collector identity changed")
+                if state in ("T", "t"):
+                    stopped = True
+                    break
+                time.sleep(0.005)
+            need(stopped, "collector stop barrier not observed")
+            row["stopped_collector"] = {"pid": client.process.pid, "start_time_ticks": start}
+            deadline = time.monotonic() + SHORT_LEASE_SECONDS + 4
+            while not expired(audit_rows(audit), session_id, epoch):
+                need(time.monotonic() < deadline, "exact native lease expiry not audited")
+                time.sleep(0.05)
+            row["native_expiry_audited"] = True
+            # The namespace owner has its own 1500ms guard. Its exit is never
+            # substituted for the matched native expiry above.
+            client.send(make_call(90))
+            signal.pidfd_send_signal(pin, signal.SIGCONT)
+            os.close(pin)
+            pin = None
+            try:
+                client.process.wait(timeout=8)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("expired collector termination deadline exceeded") from None
+            host_observation = drain_host_eof(client)
+            row["host_observation"] = host_observation
+            rows = audit_rows(audit)
+            row["execution_reservations"] = sum(item.get("event") == "native_git_execution_reserved" and item.get("session") == epoch for item in rows)
+            row["original_results"] = sum(item.get("event") == "native_result" and item.get("session") == epoch for item in rows)
+            need(not any(item.get("event") == "native_git_execution_reserved"
+                         and item.get("session") == epoch for item in rows),
+                 "expired session reserved execution")
+            need(not any(item.get("event") == "native_result" and item.get("session") == epoch
+                         for item in rows), "expired session produced an original result")
+            terminal = [line for line in log_path.read_text().splitlines() if line.startswith("Error:")]
+            terminal = terminal[0] if len(terminal) == 1 else "missing_or_ambiguous_terminal"
+            row["terminal"] = terminal if terminal in ("Error: native_liveness_uncertain", "Error: pilot_cleanup_unconfirmed") else "unexpected_terminal"
+            need(client.process.returncode != 0, "expired collector exited successfully")
+            diagnostics = [json.loads(line) for line in log_path.read_text().splitlines() if line.startswith("{")]
+            row["production_owner_receipts"] = [item for item in diagnostics if item.get("event") in ("mcp_real_owner_start", "mcp_real_owner_end", "mcp_real_server_end")]
+        finally:
+            if pin is not None:
+                try:
+                    if suspended:
+                        signal.pidfd_send_signal(pin, signal.SIGCONT)
+                except ProcessLookupError:
+                    pass
+                finally:
+                    os.close(pin)
+            try:
+                safe_close(client)
+            finally:
+                row["cleanup"] = witness.finish()
+    need(row["cleanup"]["all_stopped"] and any(
+        item.get("original_git_server") and not item["parent_process"]
+        for item in row["cleanup"]["observed"]), "expired collector cleanup observation incomplete")
+    row.update(grade_terminal(terminal, diagnostics, row["cleanup"], row["stopped_collector"], expected_profile))
+    with log_path.with_name(log_path.stem + "-fresh.log").open("wb") as log:
+        fresh = make_client(log, HEALTHY_LEASE_SECONDS)
+        fresh_witness = witness_factory(fresh.process.pid)
+        try:
+            fresh.initialize()
+            fresh_epoch = enrolled_epoch(audit_rows(audit), fresh.liveness_session_id, HEALTHY_LEASE_SECONDS)
+            need(fresh.liveness_session_id != session_id and fresh_epoch != epoch, "expired session was reused")
+            _, raw = fresh.exchange(make_call(10))
+            need(hashlib.sha256(raw).hexdigest() == expected_sha256, "fresh session original bytes differ")
+        finally:
+            try:
+                safe_close(fresh)
+            finally:
+                row["fresh_cleanup"] = fresh_witness.finish()
+    need(fresh.process.returncode == 0 and row["fresh_cleanup"]["all_stopped"],
+         "fresh healthy collector cleanup unverified")
+    row.update(fresh_requested_and_granted_seconds=HEALTHY_LEASE_SECONDS,
+               fresh_original_bytes_equal=True, expired_session_revived=False, passed=True)

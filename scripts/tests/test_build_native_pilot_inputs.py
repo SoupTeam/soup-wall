@@ -251,6 +251,18 @@ class SourceBuildBoundary(unittest.TestCase):
                 self.assertFalse(first["active_protection"])
                 self.assertEqual(compile_one.call_count, 1)
                 marker = (output / "current.json").read_bytes()
+                receipt = json.loads(Path(first["receipt"]).read_bytes())
+                self.assertEqual(receipt["environment"]["CARGO_PROFILE_DEV_DEBUG"], "0")
+                self.assertEqual(receipt["environment"]["CARGO_PROFILE_TEST_DEBUG"], "0")
+                # A receipt produced with different debug options cannot be
+                # reused, even when all source and executable hashes match.
+                real_options = build.build_options
+                def other_options(selected_tools):
+                    return {**real_options(selected_tools), "CARGO_PROFILE_TEST_DEBUG": "2"}
+                with patch.object(build, "build_options", side_effect=other_options):
+                    with self.assertRaisesRegex(build.Failure, "receipt_identity_changed"):
+                        build.run_build(ROOT, output, source["commit"])
+                self.assertEqual((output / "current.json").read_bytes(), marker)
                 repeated = build.run_build(ROOT, output, source["commit"])
                 self.assertEqual(repeated["status"], "reused")
                 self.assertEqual(repeated["build_seconds"], 0)

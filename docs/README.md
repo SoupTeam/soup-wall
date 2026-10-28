@@ -11,6 +11,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Development](DEVELOPMENT.md) | Prerequisites, platform differences, first build, local baseline and focused checks |
 | [Clean setup and status preparation](operations/CLEAN_SETUP_ACCEPTANCE.md) | Disposable Agent installation, truthful daemon-status evidence and read-only scanning audit |
 | [Change-aware CI admission](operations/CI_CHANGE_AWARE.md) | Trusted source-bound plan, aggregate status, full qualification and maintainer activation |
+| [SOU-160 control outcome](SOU160_CONTROL_OUTCOME.md) | Measured duplicate admission costs, safety limits and rollout stop recommendation |
 | [Shared VPS CI](operations/VPS_CI.md) | Main/manual Windows smoke, default-feature checks and owned WSL driver tests on the shared team worker |
 | [Contributing](../CONTRIBUTING.md) | Pull request expectations, regression cases and compatibility rules |
 | [Architecture](ARCHITECTURE.md) | Workspace source map and decision boundaries |
@@ -36,6 +37,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Claude HTTP-hook acceptance](operations/CLAUDE_HOST_ACCEPTANCE.md) | Actual host behavior with deterministic local model fixtures |
 | [First-use onboarding](operations/ONBOARDING.md) | Read-only preview, explicit journaled apply, truthful configured/verified result and undo (Linux) |
 | [Agent self-test](operations/SELF_TEST.md) | One Linux command: witnessed useful reads, a refused synthetic send, daemon loss and a versioned report |
+| [Offline policy replay](operations/OFFLINE_POLICY_REPLAY.md) | Explicit bounded legacy-event policy simulation, production traces and exact-source synthetic parity |
 | [Offline Agent audit explorer](operations/AGENT_AUDIT_EXPLORER.md) | Private Linux JSONL report generation, decision timeline, filters and evidence limits |
 | [Bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION.md) | Opt-in Linux segments, crash recovery, private verified export and loss-aware browsing |
 | [Windows bounded Agent audit retention](operations/AGENT_AUDIT_RETENTION_WINDOWS.md) | Native local NTFS scope, private ACLs, recovery, export and standard-user acceptance |
@@ -82,6 +84,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [Independent historical replay](benchmarks/independent-history-replay.md) | Pinned historical evidence and the original adapter's semantic limits |
 | [AgentDojo runtime adapter](benchmarks/agentdojo-live-fallback.md) | Pinned runtime fixtures and explicit live-evaluation prerequisites |
 | [AgentDojo matched protocol](benchmarks/agentdojo-matched-protocol.md) | SOU-36 frozen plan, live gate, pair validation and independent report (Phase 4 stays open) |
+| [Paired development regression](benchmarks/paired-regression.md) | SOU-153 offline comparison of two matched runs: input contract, comparability, completeness, transitions and family-aware uncertainty |
 | [Task 3 resilience](benchmarks/task3_resilience.md) | Malformed events, unknown tools, daemon failures and independent execution witnesses |
 | [SOU-17 verification](benchmarks/sou17_verification.md) | Failure, overlap, replay and native witnesses; exact-source reproduction and code-scanning triage |
 | [Native admission](benchmarks/native-admission.md) | Installed tool semantics, invocation binding and result/context contracts |
@@ -91,6 +94,7 @@ overview. Choose a guide below for development, operation or evaluation.
 ## Status and retained evidence
 
 - [Read-only Git MCP profile](operations/GIT_MCP_PROFILE.md): original-server pins, bounded operations, private installation and exact-source Linux acceptance.
+- [Tracked symbolic-link Git profile](operations/GIT_TRACKED_SYMLINK_PROFILE.md): separate opt-in subset, refusal diagnostics and targeted native Linux reproduction.
 - [Explicit local Git references](operations/GIT_LOCAL_REFERENCES.md): opt-in bounded branch/tag reads, immutable metadata, source withdrawal and original-server acceptance.
 
 [ROADMAP](ROADMAP.md) records the tagged baseline, product principles,

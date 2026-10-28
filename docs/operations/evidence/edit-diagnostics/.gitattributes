@@ -1,0 +1,2 @@
+# Preserve exact sanitized report bytes and manifest hashes on every checkout.
+*.json -text

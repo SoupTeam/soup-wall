@@ -2,6 +2,24 @@ name: Constrained MCP file creation
 
 on:
   workflow_dispatch:
+    inputs:
+      build_mode:
+        description: Explicit source build or same-source producer/consumer prototype
+        type: choice
+        options: [source, shared]
+        default: source
+      comparison_only:
+        description: Run only the two measured Ubuntu 24.04 consumers
+        type: boolean
+        default: false
+      edit_only:
+        description: Focus on installed edit and explicit refresh qualification
+        type: boolean
+        default: false
+      replacement_only:
+        description: Focus only on the additive SOU-159 qualification
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,36 +30,73 @@ concurrency:
 
 jobs:
   impact:
+    if: github.event.inputs.build_mode != 'shared'
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-create-file.yml
   linux-create-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file')
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true' && github.event.inputs.build_mode != 'shared'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      SOU166_MODE: source
+      SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOU166_PRODUCER_RESULT: ''
+      SOU166_PRODUCER_ATTEMPT: ''
+      SOU166_PRODUCER_IMAGE_VERSION: ''
+      SOU166_ARTIFACT_ID: ''
+      SOU166_ARCHIVE_NAME: ''
+      SOU166_ARCHIVE_SHA256: ''
+      SOU166_MANIFEST_SHA256: ''
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Prepare locked sources for explicit source mode
+        if: env.SOU166_MODE == 'source'
+        run: cargo fetch --locked
+      - name: Initialize private current-job artifact locations
+        run: |
+          printf 'SOU166_BUNDLE=%s/sou166-selected\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'SOU166_CONTEXT=%s/sou166-context.json\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Require successful explicit producer before download
+        if: env.SOU166_MODE == 'shared'
+        run: python3 -B scripts/ci_qualification_build.py guard
+      - name: Download only the immutable current-run producer artifact
+        if: env.SOU166_MODE == 'shared'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}
+          path: ${{ runner.temp }}/sou166-download
+          skip-decompress: true
+          digest-mismatch: error
+      - name: Independently verify provenance, tuple and every executable byte
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          python3 -B scripts/ci_qualification_build.py prepare \
+            --archive "$RUNNER_TEMP/sou166-download/$SOU166_ARCHIVE_NAME" \
+            --output "$SOU166_BUNDLE" --context "$SOU166_CONTEXT"
       - name: Build the exact candidate
         shell: bash
         run: |
           set -o pipefail
           git rev-parse HEAD > "$RUNNER_TEMP/sou54-source.txt"
           rustc --version > "$RUNNER_TEMP/sou54-rust.txt"
-          cargo build --locked -p agentfw --bin agentfw --message-format=json > "$RUNNER_TEMP/sou54-build.jsonl"
-          sha256sum target/debug/agentfw > "$RUNNER_TEMP/sou54-binary.txt"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou166-create-build.json" -- build --locked --offline -p agentfw --bin agentfw > "$RUNNER_TEMP/sou54-build.jsonl"
+          sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$RUNNER_TEMP/sou54-binary.txt"
       - name: Native authority, publication and effect-accounting regressions
         shell: bash
         run: |
           set -o pipefail
-          cargo test --locked -p agentfw --lib create_file -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-unit.log"
-          cargo test --locked -p agentfw --test native_endpoint create_file_v2 -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-router.log"
-          cargo test --locked -p agentfw --lib sou54_ -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-composition.log"
-          cargo test --locked -p agentfw --lib mcp::input::tests:: -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-input.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou166-create-test-0.json" -- test --locked --offline -p agentfw --lib create_file -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-unit.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou166-create-test-1.json" -- test --locked --offline -p agentfw --test native_endpoint create_file_v2 -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-router.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou166-create-test-2.json" -- test --locked --offline -p agentfw --lib sou54_ -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-composition.log"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$RUNNER_TEMP/sou166-create-test-3.json" -- test --locked --offline -p agentfw --lib mcp::input::tests:: -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou54-native-input.log"
       - name: Require nonempty native boundary evidence
         run: |
           python3 - <<'PYCODE'
@@ -61,24 +116,255 @@ jobs:
         run: |
           set -o pipefail
           python3 scripts/verify-sou54-create-file.py --run --repo "$PWD" \
-            --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
+            --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou54-create-file-results.json" 2>&1 | tee "$RUNNER_TEMP/sou54-driver.log"
       - name: Actual native authority substitution, concurrency and replay races
         shell: bash
         run: |
           set -o pipefail
           python3 scripts/verify-sou54-create-races.py --run --repo "$PWD" \
-            --agentfw "$PWD/target/debug/agentfw" --expected-commit "$(git rev-parse HEAD)" \
+            --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou54-create-races-results.json" 2>&1 | tee "$RUNNER_TEMP/sou54-races.log"
       - name: Retain sanitized outcomes and source/build witnesses
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: sou54-create-file-evidence
+          name: sou54-create-file-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/sou54-*.json
             ${{ runner.temp }}/sou54-*.jsonl
             ${{ runner.temp }}/sou54-*.txt
             ${{ runner.temp }}/sou54-*.log
+            ${{ runner.temp }}/sou166-*.json
+            ${{ runner.temp }}/sou166-*.log
           if-no-files-found: warn
           retention-days: 30
+
+  linux-replace-file:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-replace-file') && github.event.inputs.edit_only != 'true' && github.event.inputs.comparison_only != 'true' && github.event.inputs.build_mode != 'shared'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Prepare isolated offline qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          cargo fetch --locked
+          mkdir -p "$RUNNER_TEMP/sou159-scratch"/{home,cargo-home,tmp,faults}
+          ln -s "$HOME/.cargo/registry" "$RUNNER_TEMP/sou159-scratch/cargo-home/registry"
+          git rev-parse HEAD > "$RUNNER_TEMP/sou159-scratch/source.txt"
+      - name: Read-only source and private loopback runtime qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_scratch="$RUNNER_TEMP/sou159-scratch"
+          # Trusted sandbox setup, then drop ALL capabilities and the root UID.
+          # No host sysctl, cgroup delegation or shared-runner setting changes.
+          sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
+            --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --proc /proc --dev /dev --cap-drop ALL \
+            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
+            --chdir / /usr/bin/setpriv \
+            --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            /usr/bin/env -i \
+            PATH="$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
+            HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
+            CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
+            SOU159_SCRATCH="$task_scratch" SOU159_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
+            /bin/bash -euo pipefail <<'BASH'
+          cd "$SOU159_SOURCE"
+          cargo build --locked --offline -p agentfw --bin agentfw
+          cargo test --locked --offline -p agentfw --lib replace_file -- --nocapture
+          cargo test --locked --offline -p agentfw --lib resource::replacement -- --nocapture
+          cargo test --locked --offline -p agentfw --test replace_file -- --nocapture
+          cargo test --locked --offline -p agentfw --lib create_file -- --nocapture
+          cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
+          cargo fmt --all --check
+          python3 -B -m unittest discover -s scripts/tests -p 'test_sou159*.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=1 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/stage-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=2 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/publication-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=3 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/committed-error.so"
+          sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU159_SCRATCH/binary.txt"
+          python3 -B scripts/verify-sou159-replace-file.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+            --fault-libraries "$SOU159_SCRATCH/faults" --output "$SOU159_SCRATCH/runtime.json"
+          BASH
+      - name: Retain current-source finite evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou159-replacement-evidence
+          path: |
+            ${{ runner.temp }}/sou159-scratch/source.txt
+            ${{ runner.temp }}/sou159-scratch/binary.txt
+            ${{ runner.temp }}/sou159-scratch/runtime.json
+          if-no-files-found: warn
+          retention-days: 30
+  linux-installed-edit:
+    needs: impact
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-installed-edit') && github.event.inputs.replacement_only != 'true' && github.event.inputs.build_mode != 'shared'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOU166_MODE: source
+      SOU166_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOU166_PRODUCER_RESULT: ''
+      SOU166_PRODUCER_ATTEMPT: ''
+      SOU166_PRODUCER_IMAGE_VERSION: ''
+      SOU166_ARTIFACT_ID: ''
+      SOU166_ARCHIVE_NAME: ''
+      SOU166_ARCHIVE_SHA256: ''
+      SOU166_MANIFEST_SHA256: ''
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Initialize private current-job artifact locations
+        run: |
+          printf 'SOU166_BUNDLE=%s/sou166-selected\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'SOU166_CONTEXT=%s/sou166-context.json\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Require successful explicit producer before download
+        if: env.SOU166_MODE == 'shared'
+        run: python3 -B scripts/ci_qualification_build.py guard
+      - name: Download only the immutable current-run producer artifact
+        if: env.SOU166_MODE == 'shared'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          artifact-ids: ${{ env.SOU166_ARTIFACT_ID }}
+          path: ${{ runner.temp }}/sou166-download
+          skip-decompress: true
+          digest-mismatch: error
+      - name: Independently verify provenance, tuple and every executable byte
+        if: env.SOU166_MODE == 'shared'
+        run: |
+          python3 -B scripts/ci_qualification_build.py prepare \
+            --archive "$RUNNER_TEMP/sou166-download/$SOU166_ARCHIVE_NAME" \
+            --output "$SOU166_BUNDLE" --context "$SOU166_CONTEXT"
+      - name: Trusted setup of locked dependencies and genuine host
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          cargo fetch --locked
+          task_scratch="$RUNNER_TEMP/sou161-scratch"
+          mkdir -m 700 "$task_scratch"
+          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host}
+          ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
+          cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
+          npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
+          printf '%s  %s\n' fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7 \
+            "$task_scratch/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum --check
+          git rev-parse HEAD > "$task_scratch/source.txt"
+      - name: Read-only source, private scratch, offline native installed qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_scratch="$RUNNER_TEMP/sou161-scratch"
+          sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
+            --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --proc /proc --dev /dev --cap-drop ALL \
+            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
+            --chdir / /usr/bin/setpriv \
+            --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            /usr/bin/env -i \
+            PATH="$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
+            HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
+            CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
+            SOU161_SCRATCH="$task_scratch" SOU161_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
+            SOU166_MODE="$SOU166_MODE" SOU166_BUNDLE="$SOU166_BUNDLE" SOU166_CONTEXT="$SOU166_CONTEXT" \
+            ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
+            /bin/bash -euo pipefail <<'BASH'
+          cd "$SOU161_SOURCE"
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-build.json" -- build --locked --offline -p agentfw --bin agentfw
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-0.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-unit.json" -- test --locked --offline -p agentfw --lib pilot_approval -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-endpoint.json" -- test --locked --offline -p agentfw --test native_endpoint sou125_stop -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-1.json" -- test --locked --offline -p agentfw --lib native::execution::transport -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-2.json" -- test --locked --offline -p agentfw --lib replace_file -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-3.json" -- test --locked --offline -p agentfw --test replace_file -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-4.json" -- test --locked --offline -p agentfw --lib create_file -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
+          cargo fmt --all --check
+          python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
+          sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+          python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
+          python3 -B scripts/qualify-installed-edit-stop.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/stop-runtime"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou168_publish_fault.c -ldl -o "$SOU161_SCRATCH/publish-fault.so"
+          python3 -B scripts/qualify-edit-refresh.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --publish-fault "$SOU161_SCRATCH/publish-fault.so" \
+            --output "$SOU161_SCRATCH/refresh"
+          BASH
+      - name: Retain finite current-source qualification and build correlation
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou161-installed-edit-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou161-scratch/source.txt
+            ${{ runner.temp }}/sou161-scratch/binary.txt
+            ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/sou166-*.json
+            ${{ runner.temp }}/sou161-scratch/sou166-*.log
+            ${{ runner.temp }}/sou166-context.json
+            ${{ runner.temp }}/sou166-context.json.metrics.json
+            ${{ runner.temp }}/sou161-scratch/stop-runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/refresh/report.json
+          if-no-files-found: warn
+          retention-days: 30
+  reuse-plan:
+    if: github.event_name == 'workflow_dispatch' && inputs.build_mode == 'shared'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: plan
+        run: |
+          python3 -B - <<'PYCODE'
+          import json, os, sys
+          sys.path.insert(0, 'scripts')
+          from ci_impact import WORKFLOW_JOBS
+          selected = {name: [] for name in WORKFLOW_JOBS}
+          selected['ci-builds.yml'] = ['agent-default-ubuntu2404']
+          selected['mcp-create-file.yml'] = ['linux-create-file', 'linux-installed-edit']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('plan=' + json.dumps({'workflows': selected}, separators=(',', ':')) + '\n')
+          PYCODE
+  reuse-qualification:
+    needs: reuse-plan
+    if: github.event_name == 'workflow_dispatch' && inputs.build_mode == 'shared'
+    uses: ./.github/workflows/ci-components.yml
+    with:
+      plan: ${{ needs.reuse-plan.outputs.plan }}

@@ -1,0 +1,55 @@
+{
+  "schema": "sw-installed-edit-status/1",
+  "observed_at_ms": 1793187214674,
+  "status": "incomplete",
+  "reason_code": "terminal_missing_interruption_or_unrecorded_outcome",
+  "provenance": "local_records_are_not_authenticated_runtime_attestation",
+  "identity": {
+    "run_sha256": "20b7d583190ff019d261dc35970d855d37237d95752a979e5581a4ec6ab4adcb",
+    "context_sha256": "4a592a8426e16e3791379e8072e20e7e545944ac3ffcaa1611132a3017167ea0",
+    "profile_sha256": "f5a7bd45b330963a9868cb45c0698078389dc3c9426edd976ea6bd279f486c47",
+    "registry_sha256": "5bc5642f981bdfcebe2a19b8f9f94ae621d25407e82e65cc307c2cc6a6782d08",
+    "source_commit": "a7ec2de899aa55726e7488f5d31bec5044b52307",
+    "source_tree": "fc1336b4e9ed706d170e52ea181b2fc359f76cc5",
+    "component_sha256": "03686312bb036238da24519f294296f5700ac6348f07fbf07c33c89d6f4a86c4",
+    "agent_sha256": "c62872d5721bda10939de9fcdd94a30fc2a7de746b482424e1a8d777a9112095",
+    "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "policy_sha256": "5a4c161efb933d00a972271dc93ccaef9c1428600e581eb622a29f2af7f43c90",
+    "config_sha256": "30375da5b70f7192a3d18ebe3fa29b2267bba1060183e3916e59c9f0f85ffe5e",
+    "host_session_sha256": "0972a26d67a18967b01788a29778bc3257106c466dfbb96318c5e58b3b155452",
+    "instance_sha256": "5df0e2f8c749d831f507eb493cc60447a6831748ba704fbfe1353ca637084f81"
+  },
+  "recorded_host_outcome": "terminal_not_recorded",
+  "owner_process": "unavailable_or_changed",
+  "host_process": "unavailable_or_changed",
+  "authenticated_daemon": "unavailable",
+  "requests": [],
+  "audit": {
+    "provenance": "retained_local_records_not_runtime_attestation",
+    "completeness": "selected_bounded_records_only",
+    "reason_code": "local_audit_observations_not_commit_or_delivery_proof",
+    "file_sha256": "f4e359f6adc9b5ac49e0a9d56a1daa23be75a1bb1db226551386a8edae70e20a",
+    "records": 4,
+    "ask_requests": 1,
+    "calls": []
+  },
+  "outputs": [
+    {
+      "target_index": 0,
+      "operation": "replace",
+      "observation": "present",
+      "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+      "bytes": 40,
+      "matches_prepared_baseline": true,
+      "attribution": "observed_postcondition_not_writer_or_commit_proof"
+    }
+  ],
+  "effects": "indeterminate",
+  "host_delivery": "unknown",
+  "model_consumption": "unknown",
+  "next_steps": [
+    "Inspect the intended target independently before deciding whether another edit is needed.",
+    "Prepare a fresh exact plan and obtain new exact authority for any new mutation; do not replay old approvals or spent receipts.",
+    "Cancellation and withheld or absent results do not roll back previously committed bytes."
+  ]
+}
