@@ -20,6 +20,29 @@ spec.loader.exec_module(probe)
 
 
 class InstalledEditEvidence(unittest.TestCase):
+    def test_shared_cli_decodes_pretty_status_and_retains_run_line_framing(self):
+        suite = object.__new__(probe.Suite)
+        suite.binary, suite.work, suite.env, suite.report = Path('/agentfw'), Path('/work'), {}, {}
+        status = {'schema': probe.DIAGNOSTIC_FORMAT,
+                  'effects': 'indeterminate', 'host_delivery': 'unknown', 'model_consumption': 'unknown',
+                  'audit': {'calls': []}, 'outputs': [], 'recorded_host_outcome': 'recorded_operator_stop'}
+        for raw, expected in ((json.dumps(status, indent=2).encode() + b'\n', status),
+                              (b'{"running":true}\n{"finished":true}\n', {'finished': True}),
+                              (b'', None), (b'{broken\n', None)):
+            with self.subTest(raw=raw), mock.patch.object(probe.subprocess, 'run',
+                    return_value=subprocess.CompletedProcess([], 0, raw, b'')):
+                code, value = suite.cli('status', '--run', '/owned', '--json')
+                self.assertEqual((code, value), (0, expected))
+                self.assertEqual(suite.last_cli['stdout_sha256'], probe.sha(raw))
+                if value == status:
+                    probe.require_indeterminate_status(value)
+        with mock.patch.object(probe.subprocess, 'run',
+                return_value=subprocess.CompletedProcess([], 0, b'x' * (128 * 1024 + 1), b'')):
+            with self.assertRaisesRegex(ValueError, 'cli_output_cap'):
+                suite.cli('status', '--run', '/owned', '--json')
+        with self.assertRaisesRegex(ValueError, 'diagnosis_response_not_object'):
+            probe.require_indeterminate_status(None)
+
     def seed(self):
         report = {'format': probe.FORMAT, 'status': 'passed', 'paid_inference': False,
                 'claude_sha256': probe.CLAUDE,

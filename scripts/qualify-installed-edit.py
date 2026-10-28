@@ -206,6 +206,7 @@ def retain_diagnostic_response(directory, name, phase, completed):
 
 
 def require_indeterminate_status(value):
+    require(isinstance(value, dict), 'diagnosis_response_not_object')
     require(value.get('schema') == DIAGNOSTIC_FORMAT
             and value.get('effects') == 'indeterminate'
             and value.get('host_delivery') == 'unknown'
@@ -571,11 +572,17 @@ class Suite:
         self.last_cli = cli_observation(result.returncode, result.stdout, result.stderr)
         self.report['last_cli'] = self.last_cli
         require(len(result.stdout) <= 128 * 1024 and len(result.stderr) <= 128 * 1024, 'cli_output_cap')
-        lines = result.stdout.splitlines()
         try:
-            value = json.loads(lines[-1]) if lines else None
+            value = json.loads(result.stdout)
         except ValueError:
-            value = None
+            # Most commands emit compact JSON; status intentionally emits a
+            # pretty-printed object. Retain the final-line framing used by run
+            # commands only when stdout is not one complete JSON document.
+            lines = result.stdout.splitlines()
+            try:
+                value = json.loads(lines[-1]) if lines else None
+            except ValueError:
+                value = None
         return result.returncode, value
 
     def prepare(self, label, replacing=False, apply=True, exclusion=True):
