@@ -149,6 +149,10 @@ def optional_control(run, record, ended, home, names):
               and control['run_identity'] == run.object[:2] and control['instance_id'] == record['instance_id']
               and control['profile_sha256'] == record['profile_sha256'] and control['host_session'] == record['host_session'],
               'edit_control_binding_invalid')
+    S.require(type(control['launcher_pid']) is int and 0 < control['launcher_pid'] < 2**32
+              and type(control['launcher_start']) is int and 0 <= control['launcher_start'] < 2**64
+              and type(control['manifest_fd']) is int and 3 <= control['manifest_fd'] < 2**31,
+              'edit_control_identity_invalid')
     with run.child(home) as daemon:
         S.require(control['home_identity'] == daemon.object[:2]
                   and control['config_sha256'] == S.sha(daemon.read('config.yaml')[0])

@@ -204,6 +204,11 @@ class CleanupBoundary(unittest.TestCase):
                    'authority_revoked': True, 'cleanup_confirmed': True, 'reason': 'host_completed',
                    'signature': 'm' * 43}
         self.write(self.run / 'stop-receipt.json', E.S.encoded(receipt))
+        control['launcher_pid'] = True
+        self.write(self.run / 'control.json', E.S.encoded(control), 0o400)
+        with self.assertRaisesRegex(E.S.Refusal, 'edit_control_identity_invalid'): self.plan()
+        control['launcher_pid'] = 123
+        self.write(self.run / 'control.json', E.S.encoded(control), 0o400)
         plan = self.plan();E.archive(plan)
         self.assertIn('control.json', plan['inventory']['files'])
         self.assertEqual(E.cleanup(plan, True)['outcome'], 'archived_and_cleaned')
