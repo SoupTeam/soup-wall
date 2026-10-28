@@ -1,6 +1,6 @@
 # SOU-128 Phase 3 review
 
-Development evidence only. All 79 case labels are `pending`; nothing here is label correctness, native policy, production MCP admission or original-server execution.
+Development evidence only. Every case label is `pending`: 79 in the frozen v0.3 corpus, 83 in the default v0.4 corpus (section 9.3). Nothing here is label correctness, native policy, production MCP admission or original-server execution. Sections 1 to 8 describe the v0.3 corpus; section 9 describes v0.4.
 
 ## 1. Relation review (52 relations: 35 asserted, 17 observation only)
 
@@ -89,7 +89,7 @@ Production admission behaviour still needs Rust execution: the existing `test` j
 
 ## 8. Integration with main `db4f006d` and the SOU-97 candidate (2026-10-28)
 
-Development evidence on the same Windows host as section 3. Nothing here scores a label, observes native policy, production MCP admission or original-server execution, or selects a candidate by default.
+Development evidence on the same Windows host as section 3, measured on the v0.3 corpus (79 cases, 52 relations). Section 9 gives the v0.4 results. Nothing here scores a label, observes native policy, production MCP admission or original-server execution, or selects a candidate by default.
 
 ### 8.1 Integration
 
@@ -179,15 +179,143 @@ Each `eval/sou128_controls.py` defect was also wrapped around the SOU-97 candida
   - Production Python boundaries (`rule_baseline.py`, `runtime/worker.py`, the candidate) were not changed. On the daemon path the worker input is `serde_json::to_string(&invocation.semantic_input())` of a `serde_json::Value` (`classifier_runtime/worker.rs`, blob `f010a323…da5f`; `admission.rs` `semantic_input`), so these inputs cannot reach the worker through the daemon.
 - **After #213 merges**, `eval/eval_runner.py` becomes `760085c0faf23a8409e52d6fd5ebc97bedf64fd67c0547f1d6fb33bbc5bebe6e` (purely additive) and the gate will refuse the stale citation.
   - A trial merge of this branch with `ea5614df` has no conflicts.
-  - Rebuilding the corpus re-cites only that file: relations `a82ae6a3160be842998a74241eb24bd0c218319aedf65d940780cb55b73c7918`, fixture unchanged.
+  - Rebuilding the corpus re-cites only that file: relations `a82ae6a3160be842998a74241eb24bd0c218319aedf65d940780cb55b73c7918`, fixture unchanged. These are v0.3 values; section 9.6 gives the v0.4 values.
   - The in-repo candidate then passes, including its own boundary probes.
-- **Candidate latency was not measured.** `--latency` times the baselines only.
+- **Candidate latency was not measured.** `--latency` timed the baselines only. *Superseded:* section 9.1 adds candidate timing.
   - Re-measured baselines on this host, p50 / p95 ms:
     - generic: direct warm 0.097 / 0.197; worker warm 0.219 / 0.404; worker start-to-ready 45.1 / 51.0.
     - git: direct warm 0.057 / 0.076; worker warm 0.258 / 0.304; worker start-to-ready 42.9 / 48.3.
   - 0 calls over the deadline. No threshold is applied.
-- **Unchanged from section 7:**
+- **Unchanged from section 7** (Git coverage is revised in section 9.3):
   - No Git cases for invalid names, mixed known/unknown, bounds, Unicode or literals (`certain_noop`, `masked_error`, `risk_loss` and `slow` have no Git effect).
   - No reviewed labels.
   - No Linux or CI run of this gate.
   - Order invariance is not shown on the production sorted-key path.
+
+## 9. Candidate latency, label audit, corpus v0.4 and Rust gaps (2026-10-28)
+
+Same Windows host and candidate identity as section 8 (`ea5614df`, `pilot_readonly_v1.1`, `9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e`). Measured at `metamorphic_runner.py` blob `514a9fd2b863ab44b800669611aff5119bd8737d3779d1d5195afcbb629c474f` on the v0.4 corpus.
+
+### 9.1 Candidate latency
+
+`--latency` with `--candidate` now also times the profiles the candidate replaces.
+- The method, the deadlines (REQUEST 1400 ms, START 1400 ms), batch size 1, the nearest-rank percentiles and `time.perf_counter_ns` are unchanged.
+- The candidate is timed after the baselines in the same process. Its results go to `latency.json` `candidate.classifiers` and `candidate.profiles`; the baseline `profiles` block is unchanged and `classifiers` records the baseline identities.
+- `report.json` is byte-identical with and without `--latency`. Tested by `test_candidate_latency_is_separate_and_leaves_the_report_unchanged`.
+
+Command: `metamorphic_runner.py --candidate generic=PATH --candidate git=PATH --latency` (5 warm repeats, 20 cold samples). Host: Windows 11 10.0.22631, CPython 3.12.10, 8 logical CPUs. p50 / p95 ms:
+
+| profile | measurement | n | baseline | candidate | over deadline (b / c) |
+|---|---|---|---|---|---|
+| generic | direct warm (in process) | 360 | 0.092 / 0.170 | 0.078 / 0.582 | – |
+| generic | direct cold (process per call) | 20 | 47.0 / 66.8 | 48.9 / 51.2 | – |
+| generic | worker warm round trip | 360 | 0.224 / 0.406 | 0.212 / 0.896 | 0 / 0 |
+| generic | worker cold: start to ready | 20 | 43.3 / 46.5 | 44.0 / 48.2 | 0 / 0 |
+| generic | worker cold: first reply | 20 | 0.750 / 0.900 | 0.782 / 0.896 | 0 / 0 |
+| git | direct warm (in process) | 55 | 0.072 / 0.122 | 0.058 / 0.102 | – |
+| git | direct cold (process per call) | 20 | 47.6 / 50.8 | 48.4 / 51.1 | – |
+| git | worker warm round trip | 55 | 0.209 / 0.403 | 0.254 / 0.446 | 0 / 0 |
+| git | worker cold: start to ready | 20 | 42.4 / 46.3 | 43.8 / 48.2 | 0 / 0 |
+| git | worker cold: first reply | 20 | 0.715 / 0.818 | 0.700 / 0.816 | 0 / 0 |
+
+There were 0 timeouts in every row. No threshold is applied, because none is approved. These are single-host development numbers, not Linux, CI or production measurements, and not a claim that one classifier is faster.
+
+### 9.2 Label audit (83 pending labels; none promoted)
+
+No fixture in the repository carries a reviewed label: every one is `provisional` or `pending`. The gate refuses a promoted label by design (`test_label_promotion_is_refused`), and no reviewer approval exists. **No label was changed or promoted, and no label was inferred from a classifier output.**
+
+The sources consulted:
+- the reviewed contract `contract/updated_contract2.md` (taxonomy section 2 and D01–D10);
+- the pinned upstream tool lists of `profiles/mcp/{filesystem,git}-readonly-v1`;
+- the read-only tool sets that native admission admits (`crates/agentfw/src/mcp/server_profile.rs` `classify_manifest`; `server_profile/git.rs`).
+
+Upstream `annotations` (for example `readOnlyHint`) are tool metadata. Under D04 they cannot establish an action, so they are not used as a basis.
+
+Each case was assigned by these rules, in order:
+- **A — determined by one accepted rule (5).** `tool_name` is absent or not a string. D06 routes this to `classifier_invalid`. No taxonomy judgement is involved, but promotion still needs a reviewer.
+  - Cases: `NAME-01`, `NAME-02`, `NAME-04`, `NAME-05`, `GIT-NAME-01`.
+- **B — derivable, needs reviewer approval of one bridge (33).** The tool is in the admitted read-only set, the case carries the exact pinned upstream schema, and every argument is schema-declared. The derivation is: taxonomy section 2 `read`; D04 for an added description; taxonomy rule 3 for literal patterns; so `actions: ["read"], unknown: false`.
+  - The bridge to approve: "admitted by the reviewed read-only profile, with the pinned upstream identity" becomes a classifier oracle. That links a native admission decision to a classifier label, which is a reviewer's call.
+  - Cases: `ORDER-READ-A/B`, `META-READ`, `ORDER-SIZES-A/B`, `META-SIZES`, `ORDER-SEARCH-A/B`, `META-SEARCH`, `ORDER-GITLOG-A/B`, `META-GITLOG`, `DEFAULT-DTREE-*` (2), `DEFAULT-SEARCH-*` (2), `DEFAULT-SIZES-*` (2), `DEFAULT-GITDIFF-*` (2), `DEFAULT-GITLOG-*` (2), `ARRAY-199`, `ARRAY-200`, `UNICODE-*` (6), `LITERAL-RM-A/B`, `GIT-BOUND-LOG-20`.
+- **B-bound — as B, plus a bound decision (3).** The contract-level label would be `read` / `unknown: false`. The bound relations, however, deliberately allow added uncertainty here, and the native profile refuses `max_count` 21. A reviewer must decide whether the oracle is the contract-level label.
+  - Cases: `ARRAY-201`, `ARRAY-256`, `GIT-BOUND-LOG-21`.
+- **C — needs reviewer authoring (42).** No reviewed source fixes the outcome.
+  - Blank names (2): `NAME-03`, `GIT-NAME-02`. A whitespace-only string is a string; the contract does not say whether it violates the admitted schema.
+  - Pinned but not admitted mutation tool (3): `DEFAULT-EDIT-*` (2), `OBSERVE-EDIT-DRYRUN-TRUE`. `edit_file` is `selected_profile_mutation_unsupported`, and whether `dryRun: true` is a proven no-op is not stated.
+  - Synthetic tools without a pinned definition (37): `delete_file`, `workflow_batch`, `shell_exec` and `unknown_vendor_command` cases (`ORDER-`/`META-` DEL, MIX, SHELL, UNKNOWN; `MIXED-*` (8); `DEPTH-*` (4); `LITERAL-QUOTED-A/B`), `RENAMED-1..5` and `STRARG-01..06`. D05 bounds shell parsing, but what a synthetic `shell_exec` executes is not defined by any pinned source.
+
+Total: 5 + 33 + 3 + 42 = 83. The rules are mechanical, so a reviewer can re-derive the assignment from the fixture, the two tool lists and the two admitted sets.
+
+### 9.3 Corpus v0.4: bounded Git-classifier coverage
+
+The v0.3 files are unchanged (`4d71bcd3…` fixture; `794202c4…` relations). v0.4 appends **4 pending cases and 3 relations** after every v0.3 item:
+- fixture `1897deef9e4afd5b5d2088075a68db8520f9867e898c174eaa9d245663d196ee`;
+- relations `a11d3896ed84e0320eda8ad85b80c7294bafabb0da96e68c666baea40d4b82a3`.
+
+`make_sou128_corpus.py --check` requires v0.4 to keep the frozen v0.3 items as an exact prefix:
+- cases are compared byte-for-byte after parsing;
+- relations and probes are compared with only `sources[].sha256` removed, so a re-citation is accepted but a changed rule, basis, path, member or kind is not.
+
+Inclusion was decided before any outcome was seen. A candidate addition needed an invariant from an accepted contract rule, a Git code path or control not already covered, and a bounded size.
+
+| Gap | Decision | Basis |
+|---|---|---|
+| Argument bounds | **Added** `S128-GIT-BOUND-LOG-20/21` and relation `BOUND-GITLOG-20-21` (`no_silent_loss_past_bound`) | D01, D08. The Git classifier proves `max_count` only within 1..20 (`_bounded_git_read`, cited). `context_lines` uses the same loop, so it would be redundant. |
+| Invalid names | **Added** `S128-GIT-NAME-01` (`null`) and `-02` (`"   "`), relations `GIT-NAME-01/02` (`technical_failure_channel`) | D06. These are the two disjuncts of the Git classifier's own check `not isinstance(name, str) or not name.strip()`; more types would reach the same branch. |
+| Mixed known/unknown | **Not added** | An undeclared Git argument is both an "unmodeled parameter" (D01, so `unknown = true`) and "an input that violates the admitted schema" (D06, so `classifier_invalid`). Neither outcome is source-determined; a reviewer must resolve it. |
+| Unicode, literals | **Not added** | They would be observation-only relations with no assertion. |
+
+Results: all 3 new relations pass **informatively** (not vacuously) for the baseline and the candidate, in both modes.
+- At `max_count` 21 the Git baseline drops `read` and sets `unknown = true`, which the relation permits. It now appears as the third known-action loss: risky lost none, uncertainty added.
+- The relation review now finds `certain_noop/git` (breaks `BOUND-GITLOG-20-21`) and `masked_error/git` (breaks `GIT-NAME-01/02`) effective.
+- `risk_loss/git` still has no effect: no Git case has a risky action together with an unknown component, which is the reviewer-blocked mixed case.
+- `slow/git` also has no effect, by control design: `slow` delays only `search_files`.
+
+### 9.4 Rust admission-boundary gaps
+
+| Probe | Request-path Rust test on `main` | Status |
+|---|---|---|
+| Duplicate member in `arguments` | `native_mcp_rejects_ambiguous_and_unsupported_client_messages_before_execution`: a duplicate `url` must fail closed with no execution (since `7052a64b`) | covered by an existing test; not executed by this gate |
+| Duplicate tool name | none | proposed below |
+| `NaN` in `arguments` | none | proposed below |
+| Lone surrogate in `arguments` | none | proposed below |
+
+The narrowest regression is three raw messages added to that existing table-driven test, which already asserts fail-closed with an empty execution ledger. The fixture tools `read_document` and `delete_note` already exist there:
+
+```rust
+r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","name":"delete_note","arguments":{}}}"#,
+r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{"n":NaN}}}"#,
+r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_document","arguments":{"s":"\ud800"}}}"#,
+```
+
+**Not implemented here, on purpose.**
+- `crates/agentfw/tests/mcp_admission.rs` belongs to the MCP-admission owners, not SOU-128.
+- It cannot be validated here: this host has no Rust toolchain, the gate cannot run Rust, and the `test` job is deferred on Draft PRs and skipped on `main` pushes.
+- The expected rejections follow from source but are unexecuted:
+  - duplicate name: `Strict` `visit_map`;
+  - `NaN`: `serde_json` has no such token;
+  - lone surrogate: `serde_json` 1.0.154 string parsing.
+
+The four probes stay `blocked`.
+
+### 9.5 Results (v0.4)
+
+| Check | Result |
+|---|---|
+| `make_sou128_corpus.py --check` (including the frozen prefix) | OK |
+| Baseline gate, direct and worker | `PASS`: 38 pass, 0 fail, 17 observed, 3 vacuous; probes 6 pass, 4 blocked |
+| Candidate gate, direct and worker | `PASS`: 38 pass, 0 fail, 17 observed, 2 vacuous; candidate probes 6 pass, 4 blocked; no direct/worker divergence |
+| Baseline / candidate accounting (both modes) | certain 58 / 62; partial unknown 6 / 4; abstention 10 / 8; proven no-op 2 / 2; technical failure 7 / 7 (`classifier_invalid`); classified pairs 37; known-action losses 3, none without added uncertainty; labels scored 0, pending 83 |
+| Candidate comparison | 4/83 cases changed (`DEFAULT-DTREE-ABSENT/EXPLICIT`, `ARRAY-201/256`); 0 risky losses; 0 relation regressions |
+| Relation review | every asserted relation broken by a targeted control; none broken only by the untargeted one; no effect: `risk_loss/git`, `slow/git` |
+| Broken-candidate controls (wrapping the candidate) | all 8 detected. Exit 1: `order_sensitive`, `metadata_obedient`, `default_sensitive`, `risk_loss`, `masked_error` (also `GIT-NAME-01/02`), `certain_noop` (also `BOUND-GITLOG-20-21`). Exit 2: `fake_success`, `slow`. |
+| `test_sou128_metamorphic.py` | 25 tests OK |
+| `report.json` | byte-identical across runs and with or without `--latency` |
+
+### 9.6 Remaining gaps
+
+- No reviewed labels. Section 9.2 gives what a reviewer can approve and what must be authored.
+- Git mixed known/unknown awaits a contract decision between D01 and D06 for undeclared arguments.
+- Rust request-path regressions for duplicate tool name, `NaN` and lone surrogate (section 9.4).
+- After #213 merges, `eval/eval_runner.py` must be re-cited. In a trial merge with `ea5614df` the rebuild produces relations `88950e88490890199293e281c66b10a0a7599f3b0898a713bf75cb04b65186dc`, the fixture stays `1897deef…`, `--check` passes with v0.3 still frozen, and the full suite passes.
+- No Linux or CI run of this gate. Order invariance is not shown on the production sorted-key path.

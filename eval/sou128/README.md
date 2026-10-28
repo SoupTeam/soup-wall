@@ -2,9 +2,9 @@
 
 A bounded gate that checks **relations between classifier outputs**: an original case against each transformed case. It runs in-process (`direct`) and through the existing classifier worker framing (`worker`).
 
-It is a development gate. All case labels are `pending`.
+It is a development gate. All 83 case labels are `pending`. The gate refuses a promoted label (exit 3), and [PHASE3_REVIEW.md](PHASE3_REVIEW.md) section 9.2 records which labels could be justified for review.
 
-It does **not** observe native policy, authority decisions, production MCP admission (Rust) or original-server execution. It never selects the SOU-97 candidate by default, because #213 is not merged. The candidate's comparison by explicit identity is recorded in [PHASE3_REVIEW.md](PHASE3_REVIEW.md) section 8.
+It does **not** observe native policy, authority decisions, production MCP admission (Rust) or original-server execution. It never selects the SOU-97 candidate by default, because #213 is not merged. The candidate's comparison by explicit identity is recorded in [PHASE3_REVIEW.md](PHASE3_REVIEW.md) sections 8 and 9.
 
 ## Reproduce
 
@@ -20,7 +20,7 @@ Options:
 - `--classifier generic=PATH` or `--classifier git=PATH` replaces a classifier for the whole run. The default is the accepted baselines `rule_baseline/rule_baseline.py` and `rule_baseline/git_readonly_v1/rule_baseline.py`.
 - `--candidate NAME=PATH` keeps the baselines and also runs an explicitly selected candidate. The report then includes per-case and per-relation comparisons. The boundary probes also run against the candidate's generic classifier (`candidate.boundary_probes`), and a failing candidate probe fails the run. No candidate is selected by default, and the SOU-97 candidate is not in this branch while #213 is unmerged.
 - `--modes direct` skips the worker.
-- `--latency` (with `--latency-repeats N`, `--latency-cold N`) measures batch-1 latency. `report.json` stays byte-identical between runs; timings go to `latency.json` only.
+- `--latency` (with `--latency-repeats N`, `--latency-cold N`) measures batch-1 latency of the baselines and, with `--candidate`, separately of the profiles the candidate replaces (`latency.json` `candidate.classifiers` and `candidate.profiles`). `report.json` stays byte-identical with or without it; timings go to `latency.json` only.
 
 Exit codes:
 
@@ -35,15 +35,16 @@ Exit codes:
 
 | File | Role |
 |---|---|
-| `eval/tools/make_sou128_corpus.py` | Builds the corpus from the pinned tool schemas; every relation cites `path`, `rule` and `sha256` |
-| `eval/fixtures/sou128_metamorphic_dev_v0.3.json` | 79 cases in the accepted `eval_runner` fixture format |
-| `eval/fixtures/sou128_relations_v0.3.json` | 52 relations, 8 raw-byte boundary probes, 2 worker frame probes |
+| `eval/tools/make_sou128_corpus.py` | Builds the corpus from the pinned tool schemas; every relation cites `path`, `rule` and `sha256`. `--check` also requires v0.4 to keep the frozen v0.3 items as an exact prefix |
+| `eval/fixtures/sou128_metamorphic_dev_v0.4.json` | Default corpus: 83 cases (the 79 frozen v0.3 cases plus 4 Git cases) in the accepted `eval_runner` fixture format |
+| `eval/fixtures/sou128_relations_v0.4.json` | Default relations: 55 (52 frozen plus 3 Git), 8 raw-byte boundary probes, 2 worker frame probes |
+| `eval/fixtures/sou128_*_v0.3.json` | Frozen v0.3 corpus (79 cases, 52 relations); never rewritten |
 | `eval/metamorphic_runner.py` | The gate. Each case is scored by `eval_runner.evaluate_case`; this module adds relations, worker mode, probes and provenance |
 | `eval/sou128_controls.py` | Negative controls: the unchanged generic or Git baseline plus one defect each (test input only) |
 | `eval/tools/sou128_relation_review.py` | Runs every control and reports which asserted relations each breaks, vacuous passes and coverage gaps |
 | `eval/test_sou128_metamorphic.py` | Positive control, negative controls, relation sensitivity, accounting, candidate path, reproducibility, input integrity |
 | `eval/sou128/SOU128_CORPUS_AUDIT.md` | The independent audit of the v0.2 preparation that v0.3 corrects |
-| `eval/sou128/PHASE3_REVIEW.md` | Relation review, accounting, latency, blocked boundary cases, and (section 8) the integration with main and the SOU-97 candidate comparison |
+| `eval/sou128/PHASE3_REVIEW.md` | Relation review, accounting, latency, blocked boundary cases; section 8 covers the integration with main and the SOU-97 candidate comparison; section 9 covers candidate latency, the label audit, v0.4 and the Rust gaps |
 
 ## Assertions
 
