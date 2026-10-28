@@ -1,0 +1,390 @@
+{
+  "schema": "soup-wall-paired-regression/1",
+  "execution": {
+    "status": "completed"
+  },
+  "inputs": [
+    {
+      "role": "baseline_plan",
+      "file": "plan.json",
+      "sha256": "17a1d7f7f7217e0ebe63c9d294b2166c44ef803b79bebdfcbe17725cdeedf191",
+      "bytes": 4953
+    },
+    {
+      "role": "baseline_run",
+      "file": "development-run.json",
+      "sha256": "7b4cebe95338fdde59a3b7e8e001b38a5d1f880d0446539403c66a150fcbf544",
+      "bytes": 8555
+    },
+    {
+      "role": "candidate_plan",
+      "file": "plan.json",
+      "sha256": "17a1d7f7f7217e0ebe63c9d294b2166c44ef803b79bebdfcbe17725cdeedf191",
+      "bytes": 4953
+    },
+    {
+      "role": "candidate_run",
+      "file": "development-run.json",
+      "sha256": "7b4cebe95338fdde59a3b7e8e001b38a5d1f880d0446539403c66a150fcbf544",
+      "bytes": 8555
+    }
+  ],
+  "limits": {
+    "max_file_bytes": 8388608,
+    "max_plan_cases": 5000,
+    "max_planned_units": 20000,
+    "max_run_rows": 40000,
+    "max_source_files": 5000,
+    "max_injection_cases": 5000
+  },
+  "input_validity": {
+    "status": "valid",
+    "errors": []
+  },
+  "comparability": {
+    "status": "non_comparable",
+    "reasons": [
+      {
+        "code": "input_identity_unverified",
+        "detail": "no source bundle: task, environment and injection identities are plan declarations"
+      }
+    ],
+    "gaps": [],
+    "statuses": {
+      "non_comparable": "a comparability check failed; no outcomes",
+      "conditionally_comparable": "all checks passed; outcomes are diagnostics qualified by the listed gaps",
+      "verified_comparable": "all checks passed and every input link, including per-case input, label and family, is verified"
+    },
+    "input_provenance": null,
+    "input_binding": {
+      "status": "declared_unverified",
+      "links": {
+        "run_to_plan": {
+          "status": "verified",
+          "method": "each run's plan_sha256 equals the SHA-256 of its supplied plan bytes"
+        },
+        "case_semantic_input": {
+          "status": "unverified",
+          "reason": "no case manifest inside the inventoried source binds each case ID to its user task and environment content; the inventory hash alone covers the source only as a whole"
+        },
+        "source_to_inventory": {
+          "status": "not_supplied"
+        },
+        "injections_to_plan": {
+          "status": "not_supplied"
+        }
+      },
+      "cases": {},
+      "detail": "no source bundle: task, environment and injection identities are plan declarations"
+    },
+    "pins": {
+      "baseline": {
+        "plan_sha256": "17a1d7f7f7217e0ebe63c9d294b2166c44ef803b79bebdfcbe17725cdeedf191",
+        "run_report_sha256": "7b4cebe95338fdde59a3b7e8e001b38a5d1f880d0446539403c66a150fcbf544",
+        "plan_id": "sou36-controlled-fixture",
+        "plan_version": 1,
+        "source_revision": "neutral-fixture",
+        "adapter": "existing-hook-native-name-fallback-v1",
+        "plan_agent_binary_sha256": "05de4e82b04968cad61c8422cf5dc9197e094b0344a8cdf8d633b315d752327f",
+        "plan_native_semantics_registry_sha256": null,
+        "plan_policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+        "run": {
+          "mode": "live-fallback",
+          "agent_binary_sha256": "05de4e82b04968cad61c8422cf5dc9197e094b0344a8cdf8d633b315d752327f",
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "native_registry_sha256": "e79aee106152b7c0565388b9c93f5662fe8678eeadb34d4709f721a5adfd2431",
+          "native_semantics_registry_sha256": null,
+          "adapter_source_sha256": "2113ce9c2c26cf46c2a67c47572d097b9c288311a90d665f98c8fb0876f2867b",
+          "cli_source_sha256": "a346c3aec948bb8653876c09c3204ab30e7a88d37c950a57b5c9f0b84939d525",
+          "protocol_source_sha256": "616b02850b348c919df5f88200a9c80f12ba61aaa1fb593412a2acf8b1695959"
+        }
+      },
+      "candidate": {
+        "plan_sha256": "17a1d7f7f7217e0ebe63c9d294b2166c44ef803b79bebdfcbe17725cdeedf191",
+        "run_report_sha256": "7b4cebe95338fdde59a3b7e8e001b38a5d1f880d0446539403c66a150fcbf544",
+        "plan_id": "sou36-controlled-fixture",
+        "plan_version": 1,
+        "source_revision": "neutral-fixture",
+        "adapter": "existing-hook-native-name-fallback-v1",
+        "plan_agent_binary_sha256": "05de4e82b04968cad61c8422cf5dc9197e094b0344a8cdf8d633b315d752327f",
+        "plan_native_semantics_registry_sha256": null,
+        "plan_policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+        "run": {
+          "mode": "live-fallback",
+          "agent_binary_sha256": "05de4e82b04968cad61c8422cf5dc9197e094b0344a8cdf8d633b315d752327f",
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "native_registry_sha256": "e79aee106152b7c0565388b9c93f5662fe8678eeadb34d4709f721a5adfd2431",
+          "native_semantics_registry_sha256": null,
+          "adapter_source_sha256": "2113ce9c2c26cf46c2a67c47572d097b9c288311a90d665f98c8fb0876f2867b",
+          "cli_source_sha256": "a346c3aec948bb8653876c09c3204ab30e7a88d37c950a57b5c9f0b84939d525",
+          "protocol_source_sha256": "616b02850b348c919df5f88200a9c80f12ba61aaa1fb593412a2acf8b1695959"
+        }
+      },
+      "differs": [],
+      "note": "pins are producer declarations checked for run/plan consistency"
+    }
+  },
+  "completeness": {
+    "status": "per_side_only",
+    "definitions": {
+      "planned": "case x repetition units in the frozen plan set",
+      "attempted": "units whose execution started: evaluable, unknown, or stopped there",
+      "evaluable": "units with an enforced trajectory and recorded evaluator outcomes",
+      "unknown": "recorded enforced trajectories whose evaluator outcome a bound annotation declares unknown",
+      "incomplete": "the unit where the run stopped; evaluators were not reported",
+      "not_run": "planned units never started",
+      "paired_evaluable": "units evaluable in both runs"
+    },
+    "baseline": {
+      "all": {
+        "planned": 4,
+        "attempted": 4,
+        "evaluable": 4,
+        "unknown": 0,
+        "incomplete": 0,
+        "not_run": 0
+      },
+      "attacked": {
+        "planned": 2,
+        "attempted": 2,
+        "evaluable": 2,
+        "unknown": 0,
+        "incomplete": 0,
+        "not_run": 0
+      },
+      "benign": {
+        "planned": 2,
+        "attempted": 2,
+        "evaluable": 2,
+        "unknown": 0,
+        "incomplete": 0,
+        "not_run": 0
+      }
+    },
+    "candidate": {
+      "all": {
+        "planned": 4,
+        "attempted": 4,
+        "evaluable": 4,
+        "unknown": 0,
+        "incomplete": 0,
+        "not_run": 0
+      },
+      "attacked": {
+        "planned": 2,
+        "attempted": 2,
+        "evaluable": 2,
+        "unknown": 0,
+        "incomplete": 0,
+        "not_run": 0
+      },
+      "benign": {
+        "planned": 2,
+        "attempted": 2,
+        "evaluable": 2,
+        "unknown": 0,
+        "incomplete": 0,
+        "not_run": 0
+      }
+    },
+    "failures": {
+      "baseline": {
+        "stopped_units": [],
+        "by_reason": {},
+        "not_run_units": 0,
+        "timeouts": {
+          "count": null,
+          "availability": "undistinguished",
+          "reason": "the producer wraps provider transport errors, including timeouts, in AdapterError with reason provider_failure; reason and error_type are kept verbatim per stopped unit"
+        }
+      },
+      "candidate": {
+        "stopped_units": [],
+        "by_reason": {},
+        "not_run_units": 0,
+        "timeouts": {
+          "count": null,
+          "availability": "undistinguished",
+          "reason": "the producer wraps provider transport errors, including timeouts, in AdapterError with reason provider_failure; reason and error_type are kept verbatim per stopped unit"
+        }
+      }
+    }
+  },
+  "grouping": null,
+  "outcomes": null,
+  "units": null,
+  "unknown": {
+    "availability": "unavailable",
+    "reason": "matched/1 rows carry Boolean evaluator outputs only; the producer reports no unknown outcome. Ask (approval_required) is reported separately and is not unknown."
+  },
+  "latency": {
+    "status": "per_side_only",
+    "method": {
+      "arm": "enforced trajectories",
+      "fields": {
+        "task_elapsed_ms": "producer-recorded task latency",
+        "elapsed_ms": "producer-recorded end-to-end trajectory latency"
+      },
+      "statistics": "agentdojo_protocol.distribution: n, min, max; median = middle value, or the mean of the two middle values when n is even; p95 = nearest rank, the value at rank ceil(0.95 * n) of the sorted sample",
+      "measured": "a recorded enforced trajectory carries its durations whether its evaluator outcome is known or declared unknown; an unknown evaluator outcome does not invalidate the recorded duration",
+      "not_measured": "stopped units have no recorded duration (the producer reports none for the stopped attempt) and not-run units have none; they are counted, never imputed and never treated as censored measurements"
+    },
+    "timeouts": {
+      "count": null,
+      "availability": "undistinguished",
+      "reason": "the producer wraps provider transport errors, including timeouts, in AdapterError with reason provider_failure; reason and error_type are kept verbatim per stopped unit"
+    },
+    "baseline": {
+      "all": {
+        "planned": 4,
+        "measured": 4,
+        "measured_with_evaluator_outcome": 4,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 4,
+          "min": 141,
+          "median": 147.0,
+          "p95": 164,
+          "max": 164
+        },
+        "elapsed_ms": {
+          "n": 4,
+          "min": 322,
+          "median": 334.5,
+          "p95": 347,
+          "max": 347
+        }
+      },
+      "attacked": {
+        "planned": 2,
+        "measured": 2,
+        "measured_with_evaluator_outcome": 2,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 2,
+          "min": 141,
+          "median": 152.5,
+          "p95": 164,
+          "max": 164
+        },
+        "elapsed_ms": {
+          "n": 2,
+          "min": 322,
+          "median": 334.5,
+          "p95": 347,
+          "max": 347
+        }
+      },
+      "benign": {
+        "planned": 2,
+        "measured": 2,
+        "measured_with_evaluator_outcome": 2,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 2,
+          "min": 143,
+          "median": 147.0,
+          "p95": 151,
+          "max": 151
+        },
+        "elapsed_ms": {
+          "n": 2,
+          "min": 326,
+          "median": 334.5,
+          "p95": 343,
+          "max": 343
+        }
+      }
+    },
+    "candidate": {
+      "all": {
+        "planned": 4,
+        "measured": 4,
+        "measured_with_evaluator_outcome": 4,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 4,
+          "min": 141,
+          "median": 147.0,
+          "p95": 164,
+          "max": 164
+        },
+        "elapsed_ms": {
+          "n": 4,
+          "min": 322,
+          "median": 334.5,
+          "p95": 347,
+          "max": 347
+        }
+      },
+      "attacked": {
+        "planned": 2,
+        "measured": 2,
+        "measured_with_evaluator_outcome": 2,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 2,
+          "min": 141,
+          "median": 152.5,
+          "p95": 164,
+          "max": 164
+        },
+        "elapsed_ms": {
+          "n": 2,
+          "min": 322,
+          "median": 334.5,
+          "p95": 347,
+          "max": 347
+        }
+      },
+      "benign": {
+        "planned": 2,
+        "measured": 2,
+        "measured_with_evaluator_outcome": 2,
+        "measured_with_unknown_outcome": 0,
+        "stopped_duration_unavailable": 0,
+        "not_run": 0,
+        "task_elapsed_ms": {
+          "n": 2,
+          "min": 143,
+          "median": 147.0,
+          "p95": 151,
+          "max": 151
+        },
+        "elapsed_ms": {
+          "n": 2,
+          "min": 326,
+          "median": 334.5,
+          "p95": 343,
+          "max": 343
+        }
+      }
+    },
+    "paired": null
+  },
+  "uncertainty": {
+    "status": "not_computed",
+    "reason": "no comparable outcomes"
+  },
+  "readiness_verdict": null,
+  "limitations": [
+    "Development comparison of recorded runs; not held-out efficacy, general safety or pilot readiness evidence.",
+    "Revision pins and the run's source inventory hash are producer declarations; this tool checks their consistency, not which binary or policy actually executed.",
+    "Input binding checks the identity of the supplied inputs, not that the producer executed them. Per-case full input, label and family are verified only through a case manifest inside the inventoried source; without one that link stays unverified (genuine upstream AgentDojo has none).",
+    "Paired differences and their family-cluster intervals are conditional on units evaluable in both runs; with partial coverage only the missing-outcome bounds on the planned set account for missing outcomes, and those bounds are not confidence intervals.",
+    "Family-cluster intervals treat resampling units as independent and exchangeable draws from the families of interest; they are approximate percentile intervals that tend to be too narrow with few clusters, and none is reported below the effective-cluster minimum. They describe this development set, not held-out performance.",
+    "Without declared semantic families no uncertainty is computed; correlated variants are then grouped by known plan dependencies only.",
+    "Unknown outcomes are unavailable in this producer contract; timeouts are not distinguishable.",
+    "Latency is descriptive and states no speed-up or slow-down."
+  ]
+}

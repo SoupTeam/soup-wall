@@ -21,3 +21,18 @@ serde_json = "1"
 # Security checks and release profiles are unchanged.
 [profile.dev.package."sha2@0.10.9"]
 opt-level = 3
+
+# SOU-165: complete native result scans hold the sequencing lock. The frozen
+# original-server trial reproduces 5s transport misses with unoptimized scanner
+# and provenance work; distribution builds complete the same bytes/decisions.
+# Optimize these pure computation crates in dev too. Debug assertions, overflow
+# checks, scanner rules, budgets, authority and all deadlines remain unchanged.
+[profile.dev.package.soup-wall-core]
+opt-level = 3
+debug-assertions = true
+overflow-checks = true
+
+[profile.dev.package.soup-wall-agent]
+opt-level = 3
+debug-assertions = true
+overflow-checks = true

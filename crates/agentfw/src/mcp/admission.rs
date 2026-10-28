@@ -27,6 +27,7 @@ use soup_wall_adapter::{ToolActionCategory, ToolClassification, Verdict as Adapt
 use soup_wall_agent::ActionClass;
 
 mod real_server;
+mod timing;
 
 const MAX_REQUESTS: usize = 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(30);
@@ -1462,6 +1463,26 @@ impl<'a> Collector<'a> {
     }
 
     async fn post_bounded(
+        &self,
+        url: &str,
+        token: &str,
+        body: &Value,
+        limit: usize,
+        native_identity: bool,
+    ) -> anyhow::Result<Value> {
+        let mut timing = timing::Transport::new(body);
+        let result = self
+            .post_bounded_inner(url, token, body, limit, native_identity)
+            .await;
+        timing.outcome = if result.is_ok() {
+            "receipt_received"
+        } else {
+            "transport_error"
+        };
+        result
+    }
+
+    async fn post_bounded_inner(
         &self,
         url: &str,
         token: &str,
