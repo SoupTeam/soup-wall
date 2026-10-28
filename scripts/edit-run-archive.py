@@ -90,12 +90,19 @@ def terminal(run):
     S.require(type(args) is list and len(args) == 10 and args[:3] == ['edit-session', 'relay', '--home']
               and args[3] == record['home'] and args[4:7] == ['--host-session', record['host_session'], '--child-authority']
               and args[8:] == ['--profile-sha256', record['profile_sha256']]
-              and type(args[7]) is str and re.fullmatch(r'[A-Za-z0-9_-]{1,16384}', args[7]), 'edit_transport_binding_invalid')
+              and type(args[7]) is str and re.fullmatch(r'[A-Za-z0-9_-]{1,65536}', args[7]), 'edit_transport_binding_invalid')
     claim = S.strict(base64.urlsafe_b64decode(args[7] + '=' * (-len(args[7]) % 4)))
     S.require(type(claim) is dict and claim.get('contract_version') == 'sw-child-authority/1'
               and claim.get('host_session') == record['host_session'] and claim.get('server_id') == 'private-output'
               and type(claim.get('nonce')) is str and claim['nonce'].startswith(record['instance_id'] + '.'),
               'edit_instance_binding_invalid')
+    resources = claim.get('granted_resources')
+    S.require(type(resources) is list and 1 <= len(resources) <= 8
+              and all(type(value) is str and len(value.encode()) <= 4096 and Path(value).is_absolute()
+                      and '..' not in Path(value).parts for value in resources), 'edit_output_binding_invalid')
+    roots = {Path(value).parent for value in resources}
+    S.require(len(roots) == 1 and all(not root.is_relative_to(run.path.parent)
+              and not run.path.parent.is_relative_to(root) for root in roots), 'edit_output_state_overlap')
     ended = run.json('terminal.json')
     S.require(type(ended) is dict and set(ended) == {'format', 'state', 'reason', 'run', 'profile_sha256',
               'cleanup', 'daemon_clean', 'mutation_dispatches', 'effect_status'}
@@ -130,6 +137,7 @@ def inventory(run):
         S.require(depth <= MAX_DEPTH, 'edit_inventory_depth_limit')
         for name in directory.names(MAX_ENTRIES):
             S.safe_component(name)
+            S.require(name not in ('.git', 'profile.json', 'profile.sha256'), 'project_or_immutable_plan_retained')
             key = prefix + name
             S.require(len(key.encode()) <= 1024 and len(files) + len(dirs) < MAX_ENTRIES, 'edit_inventory_entry_limit')
             info = os.stat(name, dir_fd=directory.fd, follow_symlinks=False)

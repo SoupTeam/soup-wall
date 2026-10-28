@@ -500,6 +500,10 @@ pub(super) fn command(action: Action) -> Result<()> {
 }
 
 fn archive(home: &Path, action: super::Archive) -> Result<()> {
+    ensure!(
+        cfg!(target_arch = "x86_64"),
+        "installed_edit_requires_native_linux_x86_64"
+    );
     use std::ffi::OsString;
     use std::os::unix::process::CommandExt;
     let component = crate::pilot_component::Store::new(home)

@@ -147,7 +147,9 @@ agentfw edit-session archive --home /absolute/agent-home cleanup \
 ```
 
 Only the approved run inventory is removed. Output targets, immutable plans,
-projects, shared assets and other runs are never traversed. The accepted
+projects, shared assets and other runs are never traversed.
+Output resource roots must remain disjoint from run state. Nested Git or
+immutable-plan markers refuse the whole selection and remain in place. The accepted
 SOU-149 no-follow descriptors, exclusive staging, file identity checks and
 durable archive guard are reused. A durable private journal precedes detachment;
 completion needs a separate durable create-new commit. A missing source or PID

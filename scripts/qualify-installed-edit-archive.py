@@ -184,7 +184,9 @@ def qualify(args, report):
         code, again = cli('cleanup', *bound, '--acknowledge-evidence-loss')
         require(code == 0 and again['outcome'] == 'already_cleaned', 'repeat_cleanup_not_bound_to_commit')
         done(row, process_cleanup=facts['process_cleanup'], reclaimed_bytes=plan['inventory']['bytes'],
-             inventoried_files=len(plan['inventory']['files']), archive=value, repeat=again)
+             inventoried_files=len(plan['inventory']['files']), archive=value, repeat=again,
+             profile_sha256=plan['run_record']['profile_sha256'], plan_sha256=plan['plan_sha256'],
+             instance_sha256=sha(plan['run_record']['instance_id'].encode()))
 
         row = begin('interrupted-run-archive')
         cleanup = first.finish()
@@ -220,6 +222,15 @@ def qualify(args, report):
             require(code != 0 and run.exists(), 'linked_or_special_state_accepted')
             results.append({'id': kind, 'reason': value.get('reason')})
             path.unlink();path.write_bytes(original);path.chmod(0o644)
+        for name in ('.git', 'profile.json', 'profile.sha256'):
+            marker = run / 'host-home' / name
+            marker.write_bytes(b'Owned nested project or immutable plan.');marker.chmod(0o600)
+            before_marker = snapshot(marker)
+            code, value = cli('preview', '--run', run, '--destination', destination)
+            require(code != 0 and value.get('reason') == 'project_or_immutable_plan_retained'
+                    and snapshot(marker) == before_marker, 'nested_project_or_plan_was_selected')
+            results.append({'id': name, 'reason': value['reason']})
+            marker.unlink()
         alias = run.parent.with_name(run.parent.name + '-alias');run.parent.rename(alias);run.parent.symlink_to(alias)
         try:
             code, value = cli('preview', '--run', run, '--destination', destination)

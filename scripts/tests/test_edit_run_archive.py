@@ -60,7 +60,8 @@ class CleanupBoundary(unittest.TestCase):
         self.write(self.run / 'run.json', E.S.encoded(self.record), 0o400)
         self.write(self.run / 'terminal.json', E.S.encoded(self.terminal), 0o400)
         claim = {'contract_version': 'sw-child-authority/1', 'host_session': self.record['host_session'],
-                 'server_id': 'private-output', 'nonce': self.record['instance_id'] + '.owned-fixture'}
+                 'server_id': 'private-output', 'nonce': self.record['instance_id'] + '.owned-fixture',
+                 'granted_resources': [str(self.base / 'private-output/result.txt')]}
         authority = base64.urlsafe_b64encode(E.S.encoded(claim)).decode().rstrip('=')
         transport = {'mcpServers': {'private-output': {'command': '/owned/agentfw', 'env': {},
                      'args': ['edit-session', 'relay', '--home', str(self.home), '--host-session', self.record['host_session'],
@@ -72,7 +73,8 @@ class CleanupBoundary(unittest.TestCase):
         raw = E.S.encoded({'event': 'native_call', 'verdict': 'allow', 'shadow': False, 'session': 'owned',
                           'args': {'secret': SECRET}, 'findings': []}) + b'\n'
         self.write(self.home / 'audit.jsonl', raw)
-        self.target = self.base / 'output.txt';self.target.write_bytes(b'preserved output')
+        self.target = self.base / 'private-output/result.txt';self.target.parent.mkdir(mode=0o700)
+        self.target.write_bytes(b'preserved output')
 
     @staticmethod
     def write(path, raw, mode=0o600):
@@ -161,6 +163,27 @@ class CleanupBoundary(unittest.TestCase):
         for bad in (raw + SECRET.encode(), SECRET.encode() + raw):
             with self.assertRaises(E.S.Refusal): E.verify_archive(bad, plan)
         self.assertTrue(self.run.exists())
+
+    def test_nested_project_and_immutable_plan_are_retained_before_any_archive_write(self):
+        for marker in ('.git', 'profile.json', 'profile.sha256'):
+            path = self.run / 'host-home' / marker
+            self.write(path, b'preserved project or immutable plan')
+            with self.assertRaisesRegex(E.S.Refusal, 'project_or_immutable_plan_retained'): self.plan()
+            self.assertEqual(path.read_bytes(), b'preserved project or immutable plan')
+            self.assertEqual(list(self.destination.iterdir()), [])
+            path.unlink()
+
+    def test_output_claim_cannot_overlap_selected_run_state(self):
+        path = self.run / 'mcp.json'
+        value = json.loads(path.read_bytes())
+        args = value['mcpServers']['private-output']['args']
+        claim = json.loads(base64.urlsafe_b64decode(args[7] + '=' * (-len(args[7]) % 4)))
+        claim['granted_resources'] = [str(self.run / 'result.txt')]
+        args[7] = base64.urlsafe_b64encode(E.S.encoded(claim)).decode().rstrip('=')
+        self.write(path, E.S.encoded(value))
+        with self.assertRaisesRegex(E.S.Refusal, 'edit_output_state_overlap'): self.plan()
+        self.assertEqual(list(self.destination.iterdir()), [])
+        self.assertTrue(self.run.is_dir())
 
 
 if __name__ == '__main__':
