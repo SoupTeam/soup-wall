@@ -19,6 +19,32 @@
       "failure": "profile_version at legacy-profile; checker used qualification-report FORMAT instead of installed profile FORMAT",
       "correction": "explicit sw-installed-edit-session/1 legacy profile contract; selector regression covers legacy/v2 response shapes",
       "runtime_delta": "none; checked implementation remains unchanged; fresh focused native qualification required"
+    },
+    {
+      "run": 40679977662,
+      "job": 122787990877,
+      "source": "66e126486ea9b21f0104051a3f97a65561ee21ea",
+      "tree": "30d22de2eba1e43890a6206c7691a529ad399d77",
+      "artifact": 12811928830,
+      "zip_sha256": "078d96e4ea53a83f4f525e8e6dcb59cebba9cdb17226dc2b5cbe17c31197b6b7",
+      "binary_sha256": "cbfef36de57efcfdba73e0a74c3c5bda1a641b9c829fbd17f49bdd89f42caa36",
+      "result": "passed",
+      "quota_inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "legacy_inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "runtime_change_since_prior": "none; only driver legacy-format comparison and its regression fixed",
+      "independent_verification": "native-verification.json"
     }
   ]
 }

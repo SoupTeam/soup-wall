@@ -90,3 +90,9 @@ not substitute for positive installed workflows. All attempts, exact source and
 binary/profile identities, zero over-budget effects and owned cleanup must be
 retained. No paid inference or model-effectiveness claim. Final shared Ready
 qualification, admission and main delivery remain reviewer-owned.
+
+On implementation `66e126486ea9b21f0104051a3f97a65561ee21ea`, native Linux passed
+all 23 quota scenarios and all 23 legacy installed scenarios, plus 53 focused
+Rust tests. Exact source/binary/profile correlation, all failed/incomplete
+attempts and independent effect checks are retained in
+[SOU-170 evidence](evidence/sou-170/README.md).
