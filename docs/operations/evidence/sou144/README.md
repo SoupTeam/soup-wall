@@ -1,9 +1,53 @@
-# SOU-144 development evidence
+# SOU-144 current-source qualification
+
+Accepted base: `8ead460e7460a8168459e0f02ea25c1eb2d8f7d4`.
+Qualified implementation: `e296ad2d5fcca35da481fb0a3d9c18c4c357f1bf`,
+tree `b9f454c84c07f72a572b90211f5c9969b7301eac`. Original authorship and
+all earlier incomplete outcomes below remain retained.
+
+[Native Linux run 40750046744](https://github.com/SoupTeam/soup-wall/actions/runs/40750046744)
+passed **17 inspector tests, 71 production-validator regressions, one selected-validator
+regression, eight Python witness controls and all six independent CLI/syscall cases**.
+Artifact `12844146202` has archive SHA-256
+`2470afffed7937433a23beeb765b539648ac4fc2d1ae67db5eb30ea898e29d2d`.
+The parent independently checked the bounded archive, source/tree, complete case
+inventory, zero network/child/mutation syscalls, unchanged synthetic workspaces,
+absent helper traps and no launch/protection claims. It executed no artifact code.
+
+- [Original finite CLI report](native-inspection-e296ad2d.json).
+- [Independent verification and retained attempt ledger](native-verification-e296ad2d.json).
+- Agent binary SHA-256: `322a242c1df5662668005f91fbd25138eab4be4d97308692ec68fca9b6611b01`.
+- Local macOS workspace: **1913 passed, zero failed, 13 existing ignored**;
+  strict Agent all-target Clippy and workspace formatting passed.
+
+All target execution used read-only source, private writable scratch, an isolated
+PID/network namespace and a nonroot process with all capabilities dropped. Existing
+mmap regressions also used a private in-memory `/dev/shm`; the host filesystem was
+not made writable. Two runner setup failures preceded target execution. The next
+attempt passed all 17 inspector tests, but nine existing mmap regressions could
+not create their fixtures in that namespace. This failed attempt remains retained
+as artifact `12841784604`; providing the private tmpfs fixed that environment defect.
+No test, production limit, expected verdict or timeout was weakened.
+
+The current accepted `--git-profile-format` interface and response field remain;
+the optional short kind cannot be combined with an explicit format. All six
+reviewed formats reuse their current production validators. Extended-profile
+layout checks are conditional on runtime object/view proof and never grant launch
+authority. Conditional layout compatibility keeps the accepted preparation caller
+usable. Tracked links are checked by the selected production graph validator,
+without following their targets. Default v1 remains narrow.
+
+SOU-144 author-side qualification is complete; shared Ready CI, admission and
+integration remain TL-owned. Inspection does not attest sandbox enforcement,
+live-model efficacy, WSL/storage support or permission for release.
+
+## Historical development checkpoints (not current blockers)
+
 
 Base: accepted main `eb6aa6a531cef67a0eac307404da981a5a600f07`, a descendant of
 requested `2af7015e414485b55822f372517969c49a80bcde`.
 
-Status: **implementation prepared; Linux execution not verified**. Keep Draft.
+Historical status at the original delivery: **Linux execution not verified**.
 No product, sandbox-enforcement, live-model or release acceptance is claimed.
 
 ## Local checks, 2026-10-25

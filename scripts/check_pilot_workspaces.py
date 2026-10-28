@@ -117,9 +117,11 @@ def run_case(binary, tracer, root, kind):
         (git / ".git/objects/info").mkdir(parents=True)
         (git / ".git/objects/info/alternates").write_text("/synthetic/outside\n", encoding="utf-8")
         expected, reason = "unsupported", "git_object_indirection_unsupported"
-    elif kind == "symlink":
+    elif kind in ("symlink", "selection-preflight"):
         (files / "link").symlink_to(root)
         expected, reason = "unsupported", "unsafe_link_or_special_file"
+        if kind == "selection-preflight":
+            expected, reason = "preflight", None
     elif kind == "local-clone":
         profile = "local-clone"
         (git / ".git/config").write_text(config + '[remote "origin"]\nurl = https://synthetic-user:synthetic-token@example.invalid/repo\n', encoding="utf-8")
@@ -131,7 +133,8 @@ def run_case(binary, tracer, root, kind):
     result = subprocess.run([str(tracer), "-f", "-qq", "-o", str(trace),
         "-e", "trace=%process,%network,%file,write,pwrite64,writev,pwritev,pwritev2,ftruncate,fchmod,fchown,mmap,msync,io_uring_setup,io_uring_enter",
         str(binary), "pilot-workspaces", "--workspace", str(files),
-        "--git-workspace", str(git), "--git-profile-kind", profile],
+        "--git-workspace", str(git), "--git-profile-kind", profile,
+        *(["--validate-selection"] if kind == "selection-preflight" else [])],
         capture_output=True, timeout=30, env=environment)
     require(snapshot(root) == before, "workspace_changed")
     require(not marker.exists(), "helper_marker_present")
@@ -140,9 +143,13 @@ def run_case(binary, tracer, root, kind):
     counts = analyze_trace(raw)
     require(len(result.stdout) <= 16384 and len(result.stderr) <= 4096, "output_bound")
     report = json.loads(result.stdout)
-    require(report["format"] == "sw-pilot-workspace-inspection/1", "report_schema")
-    require(report["state"] == expected, "unexpected_state")
-    require(result.returncode == (0 if expected in {"supported", "conditional"} else 1), "unexpected_exit")
+    if kind == "selection-preflight":
+        require(report["format"] == "sw-pilot-workspace-preflight/1" and report["inspection_complete"] is False,
+                "preflight_not_inspection")
+    else:
+        require(report["format"] == "sw-pilot-workspace-inspection/1", "report_schema")
+        require(report["state"] == expected, "unexpected_state")
+    require(result.returncode == (0 if expected in {"supported", "conditional", "preflight"} else 1), "unexpected_exit")
     require(not report["executed"] and not report["launch_authorized"]
             and not report["runtime_protection_verified"], "authority_claim")
     require(reason is None or any(c["reason"] == reason for c in report["checks"]), "missing_reason")
@@ -180,7 +187,7 @@ def main(argv=None):
         report["driver_sha256"] = digest(Path(__file__).read_bytes())
         with tempfile.TemporaryDirectory(prefix="sou144-synthetic-") as temporary:
             root = Path(temporary)
-            for kind in ("supported", "helper-config", "attributes", "alternates", "symlink", "local-clone"):
+            for kind in ("supported", "helper-config", "attributes", "alternates", "symlink", "local-clone", "selection-preflight"):
                 case = root / kind
                 case.mkdir(mode=0o700)
                 report["cases"].append(run_case(binary, Path(tracer), case, kind))
