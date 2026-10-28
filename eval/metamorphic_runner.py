@@ -482,6 +482,12 @@ def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: 
     report["boundary_probes"] = probe_boundaries(rels, classifiers["generic"], deadlines)
     if any(p["verdict"] == "fail" for p in report["boundary_probes"]):
         status = max(status, 1)
+    if candidate:
+        # The candidate's own single-shot and worker boundaries, by the same probes and rules.
+        report["candidate"]["boundary_probes_classifier"] = identity({"generic": cand["generic"]})["generic"]
+        report["candidate"]["boundary_probes"] = probe_boundaries(rels, cand["generic"], deadlines)
+        if any(p["verdict"] == "fail" for p in report["candidate"]["boundary_probes"]):
+            status = max(status, 1)
     report["verdict"] = {0: "PASS", 1: "FAIL", 2: "TECHNICAL_ERROR"}[status]
     report["not_claimed"] = ["label correctness (all labels pending)", "native policy or authority decisions",
                              "production MCP admission (Rust) behaviour", "original-server execution",
@@ -642,6 +648,7 @@ def render_markdown(report: dict, latency: dict | None = None) -> str:
         for mode, cmp_ in cand["comparison"].items():
             lines.append(f"- {mode}: {len(cmp_['cases_changed'])}/{cmp_['cases_compared']} cases changed, risky losses "
                          f"{len(cmp_['risky_losses'])}, relation regressions {len(cmp_['relation_regressions'])}")
+        lines.append("- boundary probes: " + ", ".join(f"{p['id']} {p['verdict']}" for p in cand.get("boundary_probes", [])))
     else:
         lines.append(f"Not run: {cand.get('blocker')}")
     if latency:
@@ -703,6 +710,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{mode}: relations {m['tally']}; unexpected technical errors {len(m['unexpected_technical_errors'])}")
     probes = report.get("boundary_probes", [])
     print("boundary probes:", {k: sum(p["verdict"] == k for p in probes) for k in ("pass", "fail", "blocked")})
+    if "boundary_probes" in report.get("candidate", {}):
+        probes = report["candidate"]["boundary_probes"]
+        print("candidate boundary probes:", {k: sum(p["verdict"] == k for p in probes) for k in ("pass", "fail", "blocked")})
     print(f"verdict {report.get('verdict', 'INVALID')}; wrote {a.out_dir / 'report.json'}")
     return status
 

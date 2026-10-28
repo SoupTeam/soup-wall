@@ -205,6 +205,38 @@ class CandidateComparison(unittest.TestCase):
                          {"MIXED-SHELL-MIX", "MIXED-SHELL-SEND", "MIXED-WF-DELETE", "MIXED-WF-PERM"})
         self.assertTrue(cmp_["risky_losses"] and all(c["risky_lost"] for c in cmp_["risky_losses"]))
 
+    def test_candidate_boundaries_are_probed_and_a_masked_parse_failure_fails(self):
+        # Unchanged baseline classify(); only the single-shot main() answers unparseable input with an
+        # ordinary read classification. No in-process relation can see this, so only probing fails it.
+        masking = ("import io, json, sys\n"
+                   "_ns = {'__name__': 'sou128_wrapped_baseline', '__file__': 'rule_baseline.py'}\n"
+                   "exec(compile(open(@BASELINE@, 'rb').read(), 'rule_baseline.py', 'exec'), _ns)\n"
+                   "classify, _error = _ns['classify'], _ns['_error']\n"
+                   "if __name__ == '__main__':\n"
+                   "    raw = sys.stdin.buffer.read()\n"
+                   "    try:\n"
+                   "        json.loads(raw)\n"
+                   "    except ValueError:\n"
+                   "        print(json.dumps(classify({'tool_name': 'read_text_file', 'raw_arguments': {'path': '/workspace/a'}})))\n"
+                   "        raise SystemExit(0)\n"
+                   "    sys.stdin = io.TextIOWrapper(io.BytesIO(raw), encoding='utf-8')\n"
+                   "    raise SystemExit(_ns['main']())\n").replace("@BASELINE@", repr(str(BASELINE)))
+        with tempfile.TemporaryDirectory(prefix="sou128-candidate-") as tmp:
+            path = Path(tmp, "masks_invalid_input.py")
+            path.write_text(masking, encoding="utf-8")
+            done, report = gate("--modes", "direct", "--candidate", f"generic={path}")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        cand = report["candidate"]
+        self.assertEqual(cand["modes"]["direct"]["tally"]["fail"], 0)  # relations alone would pass this candidate
+        self.assertEqual(cand["comparison"]["direct"]["relation_regressions"], [])
+        self.assertEqual(cand["boundary_probes_classifier"], cand["classifiers"]["generic"])
+        probes = {p["id"]: p for p in cand["boundary_probes"]}
+        for pid in ("TRUNCATED", "TRAILING-COMMA"):
+            self.assertEqual((probes[pid]["verdict"], probes[pid]["detail"]["single_shot"]), ("fail", "classification"))
+        self.assertEqual({p["id"] for p in report["boundary_probes"] if p["verdict"] == "fail"}, set())  # baseline unchanged
+        self.assertEqual({p["id"] for p in cand["boundary_probes"] if p["verdict"] == "blocked"},
+                         {"DUPLICATE-ARGUMENT", "DUPLICATE-TOOL-NAME", "NAN", "LONE-SURROGATE"})
+
 
 class Reproducibility(unittest.TestCase):
     def test_report_is_byte_identical_across_runs_and_latency_is_separate(self):
