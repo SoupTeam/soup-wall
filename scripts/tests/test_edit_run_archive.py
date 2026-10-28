@@ -187,6 +187,34 @@ class CleanupBoundary(unittest.TestCase):
         self.assertEqual(list(self.destination.iterdir()), [])
         self.assertTrue(self.run.is_dir())
 
+    def test_known_optional_control_state_is_inventoried_without_becoming_inactive_proof(self):
+        self.write(self.home / 'config.yaml', b'owned fixture configuration', 0o400)
+        self.write(self.home / 'native-token', RAW_CANARY.encode())
+        control = {'contract': E.CONTROL_FORMATS['control.json'],
+                   'run_sha256': E.S.sha((self.run / 'run.json').read_bytes()),
+                   'run_identity': [self.run.stat().st_dev, self.run.stat().st_ino],
+                   'home_identity': [self.home.stat().st_dev, self.home.stat().st_ino],
+                   'launcher_pid': 123, 'launcher_start': 456, 'manifest_fd': 7,
+                   'config_sha256': E.S.sha((self.home / 'config.yaml').read_bytes()),
+                   'native_token_sha256': E.S.sha(RAW_CANARY.encode()),
+                   **{key: self.record[key] for key in ('instance_id', 'profile_sha256', 'host_session')}}
+        self.write(self.run / 'control.json', E.S.encoded(control), 0o400)
+        receipt = {'contract': E.CONTROL_FORMATS['stop-receipt.json'],
+                   'control_sha256': E.S.sha((self.run / 'control.json').read_bytes()), 'request_sha256': None,
+                   'authority_revoked': True, 'cleanup_confirmed': True, 'reason': 'host_completed',
+                   'signature': 'm' * 43}
+        self.write(self.run / 'stop-receipt.json', E.S.encoded(receipt))
+        plan = self.plan();E.archive(plan)
+        self.assertIn('control.json', plan['inventory']['files'])
+        self.assertEqual(E.cleanup(plan, True)['outcome'], 'archived_and_cleaned')
+
+    def test_optional_control_without_terminal_never_confirms_inactivity(self):
+        self.write(self.run / 'control.json', E.S.encoded({'contract': E.CONTROL_FORMATS['control.json']}), 0o400)
+        (self.run / 'terminal.json').unlink()
+        with self.assertRaises(FileNotFoundError): self.plan()
+        self.write(self.run / 'terminal.json', E.S.encoded(self.terminal), 0o400)
+        with self.assertRaisesRegex(E.S.Refusal, 'edit_control_incomplete'): self.plan()
+
 
 if __name__ == '__main__':
     unittest.main()

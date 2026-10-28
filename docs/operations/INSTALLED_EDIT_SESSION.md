@@ -161,6 +161,12 @@ owner-editable evidence, not authenticated execution proof. Failed/interrupted
 runs qualify only if their accepted terminal explicitly confirms process and
 daemon cleanup. Unknown crash state, inconsistent bindings and new or unexpected
 state members refuse and remain intact. No background pruning occurs.
+Known separately versioned optional stop/control records are included in the
+private inventory and excluded from the sanitized ZIP. They never substitute
+for terminal cleanup and never authorize signaling here. Missing, inconsistent
+or unconfirmed control evidence refuses cleanup; the stop command remains
+optional. Compatibility with this metadata is covered by synthetic parser
+fixtures independently of the genuine accepted-runtime qualification.
 
 `archived_source_retained`, `archived_and_cleaned`, `already_cleaned`, `refused`
 and `incomplete` distinguish the outcomes. After interruption preserve the

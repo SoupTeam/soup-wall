@@ -48,6 +48,9 @@ MODES = {'file_modes': (0o400, 0o600, 0o644), 'directory_modes': (0o700, 0o755)}
 EXCLUDED = ['credentials_and_authority', 'raw_audit', 'raw_host_state', 'raw_prompts_and_tool_payloads',
             'provider_inputs', 'environment', 'absolute_paths', 'unprojected_audit_fields']
 PRESERVED = ['output_targets', 'immutable_plans', 'project', 'shared_assets', 'other_runs']
+CONTROL_FORMATS = {'control.json': 'sw-installed-edit-control/1',
+                   'stop-request.json': 'sw-installed-edit-stop-request/1',
+                   'stop-receipt.json': 'sw-installed-edit-stop-receipt/1'}
 
 
 @contextmanager
@@ -115,7 +118,7 @@ def terminal(run):
               and cleanup['cleaned'] is True and cleanup['reaped'] is True and cleanup['failure'] is None
               and cleanup['ownership'] == 'unix_process_group' and type(cleanup['exit_success']) is bool
               and type(cleanup['graceful_observed']) is bool, 'owned_cleanup_unconfirmed')
-    reasons = {'host_completed', 'cancelled', 'deadline', 'provider_child_environment_unavailable', 'host_stream_failure', 'daemon_lost'}
+    reasons = {'host_completed', 'cancelled', 'deadline', 'provider_child_environment_unavailable', 'host_stream_failure', 'daemon_lost', 'operator_stop'}
     S.require(ended['reason'] in reasons and ended['state'] in ('host_completed', 'failed')
               and (ended['state'] != 'host_completed' or ended['reason'] == 'host_completed' and cleanup['exit_success'] is True),
               'terminal_state_inconsistent')
@@ -124,12 +127,56 @@ def terminal(run):
     return record, ended, home.name
 
 
+def optional_control(run, record, ended, home, names):
+    """Inventory known optional control records without depending on stop.
+
+    They never establish inactivity or authorize signaling here. Accepted
+    terminal cleanup and the directory lock remain independently mandatory.
+    Unknown/incomplete control state is conservatively retained.
+    """
+    present = names.intersection(CONTROL_FORMATS)
+    if not present:
+        S.require(ended['reason'] != 'operator_stop', 'edit_stop_control_missing')
+        return
+    S.require({'control.json', 'stop-receipt.json'} <= present, 'edit_control_incomplete')
+    values = {name: run.json(name, 16384) for name in present}
+    for name, value in values.items():
+        S.require(type(value) is dict and value.get('contract') == CONTROL_FORMATS[name], 'edit_control_contract_invalid')
+    control = values['control.json']
+    S.require(set(control) == {'contract', 'run_sha256', 'run_identity', 'home_identity', 'launcher_pid',
+              'launcher_start', 'manifest_fd', 'config_sha256', 'native_token_sha256', 'instance_id',
+              'profile_sha256', 'host_session'} and control['run_sha256'] == S.sha(run.read('run.json')[0])
+              and control['run_identity'] == run.object[:2] and control['instance_id'] == record['instance_id']
+              and control['profile_sha256'] == record['profile_sha256'] and control['host_session'] == record['host_session'],
+              'edit_control_binding_invalid')
+    with run.child(home) as daemon:
+        S.require(control['home_identity'] == daemon.object[:2]
+                  and control['config_sha256'] == S.sha(daemon.read('config.yaml')[0])
+                  and control['native_token_sha256'] == S.sha(daemon.read('native-token')[0]), 'edit_control_binding_invalid')
+    receipt = values['stop-receipt.json']
+    control_sha = S.sha(run.read('control.json', 16384)[0])
+    S.require(set(receipt) == {'contract', 'control_sha256', 'request_sha256', 'authority_revoked', 'cleanup_confirmed', 'reason', 'signature'}
+              and receipt['control_sha256'] == control_sha and receipt['authority_revoked'] is True
+              and receipt['cleanup_confirmed'] is True and receipt['reason'] == ended['reason']
+              and type(receipt['signature']) is str and HOME.fullmatch(receipt['signature']), 'edit_control_cleanup_unconfirmed')
+    if 'stop-request.json' in present:
+        request = values['stop-request.json']
+        S.require(set(request) == {'contract', 'control_sha256', 'nonce', 'signature'} and request['control_sha256'] == control_sha
+                  and type(request['nonce']) is str and HOME.fullmatch(request['nonce'])
+                  and type(request['signature']) is str and HOME.fullmatch(request['signature'])
+                  and receipt['request_sha256'] == S.sha(run.read('stop-request.json', 16384)[0]), 'edit_control_request_inconsistent')
+    else:
+        S.require(receipt['request_sha256'] is None, 'edit_control_request_missing')
+
+
 def inventory(run):
     record, ended, home = terminal(run)
     root_files = {'run.json', 'terminal.json', 'mcp.json', 'host-settings.json', 'host-bun.toml',
                   'host-stdout.json', 'host-stderr.json'}
     root_dirs = {home, 'host-home', 'host-tmp', 'host-path'}
-    S.require(set(run.names(MAX_ENTRIES)) == root_files | root_dirs, 'unexpected_edit_run_layout')
+    names = set(run.names(MAX_ENTRIES))
+    S.require(names == root_files | root_dirs | names.intersection(CONTROL_FORMATS), 'unexpected_edit_run_layout')
+    optional_control(run, record, ended, home, names)
     files, dirs, bodies = {}, {'': S.identity(os.fstat(run.fd))}, {}
     total = 0
     def walk(directory, prefix, depth):
