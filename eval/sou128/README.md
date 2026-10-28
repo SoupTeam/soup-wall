@@ -18,7 +18,7 @@ python3 -m unittest discover -s eval -p 'test_sou128_metamorphic.py' -v
 
 Options:
 - `--classifier generic=PATH` or `--classifier git=PATH` replaces a classifier for the whole run. The default is the accepted baselines `rule_baseline/rule_baseline.py` and `rule_baseline/git_readonly_v1/rule_baseline.py`.
-- `--candidate NAME=PATH` keeps the baselines and also runs an explicitly selected candidate. The report then includes per-case and per-relation comparisons. The boundary probes also run against the candidate's generic classifier (`candidate.boundary_probes`), and a failing candidate probe fails the run. No candidate is selected by default, and the SOU-97 candidate is not in this branch while #213 is unmerged.
+- `--candidate NAME=PATH` keeps the baselines and also runs an explicitly selected candidate. The report then includes per-case and per-relation comparisons. The boundary probes also run against the candidate's generic and Git classifiers (`candidate.boundary_probes`, `candidate.boundary_probes_git`), and a failing candidate probe fails the run. No candidate is selected by default, and the SOU-97 candidate is not in this branch while #213 is unmerged.
 - `--modes direct` skips the worker.
 - `--latency` (with `--latency-repeats N`, `--latency-cold N`) measures batch-1 latency of the baselines and, with `--candidate`, separately of the profiles the candidate replaces (`latency.json` `candidate.classifiers` and `candidate.profiles`). `report.json` stays byte-identical with or without it; timings go to `latency.json` only.
 
@@ -44,7 +44,7 @@ Exit codes:
 | `eval/tools/sou128_relation_review.py` | Runs every control and reports which asserted relations each breaks, vacuous passes and coverage gaps |
 | `eval/test_sou128_metamorphic.py` | Positive control, negative controls, relation sensitivity, accounting, candidate path, reproducibility, input integrity |
 | `eval/sou128/SOU128_CORPUS_AUDIT.md` | The independent audit of the v0.2 preparation that v0.3 corrects |
-| `eval/sou128/PHASE3_REVIEW.md` | Relation review, accounting, latency, blocked boundary cases; section 8 covers the integration with main and the SOU-97 candidate comparison; section 9 covers candidate latency, the label audit, v0.4 and the Rust gaps |
+| `eval/sou128/PHASE3_REVIEW.md` | Relation review, accounting, latency, blocked boundary cases; section 8 covers the integration with main and the SOU-97 candidate comparison; section 9 covers candidate latency, the label audit, v0.4 and the Rust gaps; section 10 covers Git boundary probes, label ownership and the D01/D06 decision request |
 
 ## Assertions
 
@@ -62,5 +62,5 @@ An equality between two abstentions (`unknown` with no actions) is reported as `
 ## Modes and boundaries
 
 - **`worker`** runs the daemon's own `WORKER_BOOTSTRAP` and `REQUEST_DEADLINE`/`START_DEADLINE`, read from `crates/agentfw/src/classifier_runtime/worker.rs`. A missed deadline becomes an explicit `classifier_timeout`, never a classification. The harness sends members in their written order; the real daemon re-serializes with sorted keys (see the audit).
-- **Raw-byte probes** go to the single-shot stdin process and to the worker's `input_json` of the baseline generic classifier, and also of the candidate when one is selected. Truncated or invalid JSON, invalid UTF-8 and inputs over 1 MiB must fail through `classifier_invalid`.
+- **Raw-byte probes** go to the single-shot stdin process and to the worker's `input_json` of each classifier (generic and Git, which has its own main()), for the baseline and for a selected candidate (`boundary_probes`, `boundary_probes_git`). Truncated or invalid JSON, invalid UTF-8 and inputs over 1 MiB must fail through `classifier_invalid`.
 - **Duplicate members, `NaN` and lone surrogates** are accepted by both Python boundaries. Only the Rust MCP admission parser (`crates/agentfw/src/mcp/admission.rs`) rejects them, and this gate cannot run it. They are reported as `blocked`, with the Python behaviour shown as a `known_gap`.

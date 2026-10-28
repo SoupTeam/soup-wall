@@ -319,3 +319,57 @@ The four probes stay `blocked`.
 - Rust request-path regressions for duplicate tool name, `NaN` and lone surrogate (section 9.4).
 - After #213 merges, `eval/eval_runner.py` must be re-cited. In a trial merge with `ea5614df` the rebuild produces relations `88950e88490890199293e281c66b10a0a7599f3b0898a713bf75cb04b65186dc`, the fixture stays `1897deef…`, `--check` passes with v0.3 still frozen, and the full suite passes.
 - No Linux or CI run of this gate. Order invariance is not shown on the production sorted-key path.
+
+## 10. Git boundary probes, label ownership and the D01/D06 decision request (2026-10-28)
+
+### 10.1 Defect fixed: the Git classifier's boundaries were never probed
+
+Section 8.5 extended the boundary probes to a candidate's *generic* classifier. The Git classifier (`rule_baseline/git_readonly_v1/rule_baseline.py`) is a separate file with its own single-shot `main()`, and it was never probed, for the baseline or for a candidate. A Git-only candidate whose `main()` answered truncated JSON with an ordinary classification therefore got `PASS` (exit 0).
+- Reproduced by `test_git_candidate_boundaries_are_probed_too`.
+- **Fix:** the same probes and verdict rules now also run against the Git classifier and are recorded under `boundary_probes_git` and `boundary_probes_git_classifier`, for the baseline and for a candidate. A failing probe fails the run, and the generic keys are unchanged.
+- The accepted Git baseline and the SOU-97 candidate each give 6 pass and the same 4 blocked; the masking Git candidate gives 3 fail.
+- `report.json` stays deterministic. The suite now has 26 tests, and all 8 broken-candidate controls are still detected.
+
+### 10.2 Are reviewed labels required for this gate?
+
+The contract assigns them elsewhere: "SOU-13 owns reviewed labels/splits" (`contract/updated_contract2.md`, section 1.2). Section 8 also states that "provisional developer labels do not establish a production accuracy gate".
+- Every SOU-128 assertion is a relation between two observed classifier outputs. None compares an output with a label, and `labels.scored` is 0 by construction.
+- Reviewed labels are therefore not an input this metamorphic gate needs. Section 9.2 lists which labels a reviewer could approve if SOU-13 or the TL wants them for later accuracy accounting.
+- This reading rests on the contract and this review. It has not been checked against the current Linear task text.
+
+### 10.3 D01 versus D06 for an undeclared argument: decision request
+
+**Sources.**
+- D01 (section 3.1): "When some actions are proven but unmodeled parameters remain, proven actions are preserved alongside `unknown: true`."
+- D06 (section 3.2): `classifier_invalid` covers "an input that violates the admitted schema/profile".
+- None of the pinned upstream schemas sets `additionalProperties`. Under JSON Schema an undeclared member is therefore *allowed* by the upstream schema.
+- The selected read-only profiles treat a missing `additionalProperties` as closed (`crates/agentfw/src/mcp/input.rs`, `"MCP objects must explicitly be closed"`). The real-server path validates arguments and refuses (`"MCP arguments violate the selected input profile"`) before a call is queued for `admit()`, which is where classification happens.
+- So under the selected profiles the classifier never sees an undeclared argument. Generic native admission (`crates/agentfw/src/mcp/admission.rs`) classifies arguments without that schema check.
+
+**Counterexamples.** Observed outputs of the accepted baselines; the SOU-97 candidate gives the same. These are observations, not labels.
+
+| ID | Invocation (pinned upstream schema) | Observed | Under D01 | Under D06 (closed profile) | Open upstream schema |
+|---|---|---|---|---|---|
+| CE-1 | `git_log {"repo_path":"/workspace","max_count":5,"author":"x"}` | `actions: [], unknown: true` | must keep `read`, `unknown: true` | `classifier_invalid` | no violation |
+| CE-2 | `read_text_file {"path":"/workspace/notes.txt","mode":"raw"}` | `read`, `unknown: false` | `read`, `unknown: true` | `classifier_invalid` | no violation |
+| CE-3 | `edit_file {path, edits, "backup": true}` | `write`, `unknown: false` | `write`, `unknown: true` | `classifier_invalid` | no violation |
+
+SOU-97 already records the CE-2 shape (its PMF-A01) as a pending safety violation of the generic read rule.
+
+**Decision requested (TL).** For classifier semantics outside the closed selected profiles, is an argument absent from the pinned tool schema:
+- (a) an unmodeled parameter under D01 (keep proven actions, `unknown: true`);
+- (b) a D06 `classifier_invalid` input; or
+- (c) out of classifier scope, because admission must close the schema first?
+
+What SOU-128 would do in each case:
+- (a): add `preserve_risk_mark_unknown` relations for CE-1/2/3. The accepted baselines would fail them, which is a classifier-owner fix.
+- (b): add `technical_failure_channel` relations. The baselines would also fail.
+- (c): record the cases as observation only.
+
+Until then nothing is added. `risk_loss/git` stays without effect because it depends on this case.
+
+### 10.4 State at the end of this section
+
+- Pushed PR head `90b18d10` with CI: 8 success (Draft fast checks, admission, CodeQL and its five analyses) and 14 skipped by the Draft policy. The Rust `test` job is among the deferred ones.
+- Local commit `d52ecf84` (section 10.1) is not pushed.
+- `eval/eval_runner.py` stays cited at main's `86dded74…` until #213 merges (section 9.6). Re-citing earlier would break the gate on the current base.
