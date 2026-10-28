@@ -40,5 +40,6 @@
     "A refreshed profile starts only with an explicit new run, fresh exact Ask and unchanged finite ceilings.",
     "Retained typed quota counters remain local bookkeeping, never authenticated commit or delivery proof."
   ],
-  "diagnostic_composition": "Required against reviewed incoming #294; not yet claimed qualified."
+  "diagnostic_composition": "Actual refreshed quota-v2 run with fresh Ask; default and explicit output-check diagnosis must preserve private state, outputs and sentinel, and retain indeterminate commit/delivery/model claims.",
+  "reviewed_diagnostic_dependency": "b30d2bd1e6d95d94f63e52b5b234ec15c60ff401"
 }

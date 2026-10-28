@@ -45,7 +45,7 @@ class InstalledQuotaEvidence(unittest.TestCase):
             if row['id'] == 'active-refresh-no-refill':
                 row.update(original_plan_preserved=True, exact_limits_preserved=True, active_budget_refilled=False)
             if row['id'] == 'refreshed-v2-fresh-ask':
-                row.update(exact_limits_preserved=True, fresh_ask_required=True, old_authority_refused=True)
+                row.update(exact_limits_preserved=True, fresh_ask_required=True, old_authority_refused=True, read_only_diagnosis=True)
             if row['id'].startswith('postcommit-'):
                 row['execution'] = {'externally_observed_commit': True, 'actual_success_result_observed': False}
         return report
@@ -62,7 +62,7 @@ class InstalledQuotaEvidence(unittest.TestCase):
     def test_refresh_cannot_pass_without_exact_limits_no_refill_and_fresh_ask(self):
         for name, fields in (
                 ('active-refresh-no-refill', ('original_plan_preserved', 'exact_limits_preserved', 'active_budget_refilled')),
-                ('refreshed-v2-fresh-ask', ('exact_limits_preserved', 'fresh_ask_required', 'old_authority_refused'))):
+                ('refreshed-v2-fresh-ask', ('exact_limits_preserved', 'fresh_ask_required', 'old_authority_refused', 'read_only_diagnosis'))):
             for key in fields:
                 report = self.report()
                 row = next(r for r in report['cases'] if r['id'] == name)

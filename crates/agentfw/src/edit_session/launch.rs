@@ -388,6 +388,7 @@ pub(super) fn read_plan(path: &Path, expected: &str) -> Result<Profile> {
 }
 pub(super) fn command(action: Action) -> Result<()> {
     match action {
+        Action::Status(args) => super::status(args)?,
         Action::Preview(args) => {
             let p = selected(args)?;
             println!(

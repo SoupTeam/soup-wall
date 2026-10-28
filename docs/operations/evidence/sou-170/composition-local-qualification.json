@@ -1,16 +1,84 @@
 {
   "accepted_base": "144512b3ed11f985c922d9911cba26f07599dea9",
-  "workspace": {
-    "passed": 1920,
-    "failed": 0,
-    "ignored": 13,
-    "suites": 75,
-    "log_sha256": "a02b66f8c6f777025f240e54f98c7e5cadcb74a3b8ce1d5c95fd070cebed5cb5"
-  },
-  "strict_workspace_clippy": "pass",
-  "format": "pass",
-  "python_edit_controls": 8,
-  "generator": "pass",
+  "reviewed_diagnostic_dependency": "b30d2bd1e6d95d94f63e52b5b234ec15c60ff401",
+  "attempts": [
+    {
+      "label": "diagnosis-composition-targets",
+      "command": [
+        "sh",
+        "-c",
+        "cargo test --offline --locked -p agentfw --lib edit_session && cargo clippy --offline --locked -p agentfw --all-targets -- -D warnings && python3 -B -m unittest discover -s scripts/tests -p \"test_edit_*.py\" -v && python3 -B -m unittest discover -s scripts/tests -p test_installed_edit.py -v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "b9c5067b65153bb202f34867ec187665017f1dbe64bb9f0149dfd6b13dd92060",
+      "log_sha256": "9ddab096501b8cbd8ee5eb2a8d9fe9c0cf560c5b41f2bf6d8ffe2c893f6d8837",
+      "elapsed_seconds": 33.21,
+      "rust_summary": {
+        "passed": 20,
+        "failed": 0,
+        "ignored": 0
+      },
+      "python_tests": 23
+    },
+    {
+      "label": "diagnosis-composition-workspace",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--workspace"
+      ],
+      "exit_code": 0,
+      "source_sha256": "730caacf953cb3ce12cf7372ee9ace9464e432c17ad7c5e01e346f218fa3aba9",
+      "log_sha256": "d60a5b5c6d9a7f63dbdd1a5a36ecf44146cd7e0413e5446a3a1f9aaefee5c8cf",
+      "elapsed_seconds": 148.77,
+      "rust_summary": {
+        "passed": 1922,
+        "failed": 0,
+        "ignored": 13
+      },
+      "python_tests": 0
+    },
+    {
+      "label": "diagnosis-composition-ci-controls",
+      "command": [
+        "sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p \"test_ci_*.py\" -v && python3 -B scripts/ci_components.py --check && cargo fmt --all --check && python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 1,
+      "source_sha256": "904e38d9c6b9f2f1adfa7a9113d1cc511d47674f4fa8444f96f25913b664ed1c",
+      "log_sha256": "2374006c418c843e3d39edf280b2554e9873a81d08e0a38a243af7c6b8005fda",
+      "elapsed_seconds": 3.41,
+      "rust_summary": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      "python_tests": 122
+    },
+    {
+      "label": "diagnosis-composition-docs-current",
+      "command": [
+        "env",
+        "GIT_INDEX_FILE=/private/tmp/sou170-qualification/scratch/docs-current.index",
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "904e38d9c6b9f2f1adfa7a9113d1cc511d47674f4fa8444f96f25913b664ed1c",
+      "log_sha256": "2a1e807d0162f344492098bb773f67cd862bfd5022765b214968cfa3d46d6f39",
+      "elapsed_seconds": 1.54,
+      "rust_summary": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      "python_tests": 0
+    }
+  ],
   "native_composition": "pending",
-  "diagnostic_composition": "not yet qualified"
+  "qualification_note": "The doc-check failure was stale isolated Git-index metadata; exact current staged index was copied only into writable scratch for the read-only recheck."
 }

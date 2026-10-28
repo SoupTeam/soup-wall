@@ -1,0 +1,108 @@
+{
+  "schema": "sw-installed-edit-status/1",
+  "observed_at_ms": 1793187089040,
+  "status": "recorded_host_completed",
+  "reason_code": "host_completion_does_not_establish_edit_outcome",
+  "provenance": "local_records_are_not_authenticated_runtime_attestation",
+  "identity": {
+    "run_sha256": "0f0c5a034fea488b169d4b5a5295f76bbcddffe4acf68c74302cb0052f5663ba",
+    "context_sha256": "e7ab4a77786bd08ff742547b1aaf54f44e2464df55b13356a79033c171d3de94",
+    "profile_sha256": "c63eed262f008557fd4150be95b0a44b3b11269586c555a6bb021f8a735b434a",
+    "registry_sha256": "9b33eec8cc44c40b70964fc62420b6a0a643e34464abceb1faf3326c5af319b4",
+    "source_commit": "a7ec2de899aa55726e7488f5d31bec5044b52307",
+    "source_tree": "fc1336b4e9ed706d170e52ea181b2fc359f76cc5",
+    "component_sha256": "03686312bb036238da24519f294296f5700ac6348f07fbf07c33c89d6f4a86c4",
+    "agent_sha256": "c62872d5721bda10939de9fcdd94a30fc2a7de746b482424e1a8d777a9112095",
+    "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "policy_sha256": "5a4c161efb933d00a972271dc93ccaef9c1428600e581eb622a29f2af7f43c90",
+    "config_sha256": "f550c6bf133e33a90e893db479f635e33415d53b0c9fe9cced33a7fc3a0064bd",
+    "host_session_sha256": "bffeb7b6a4c7b1683f72c82fda5e719e2131cd90fb8a70c91b5c89453446be0d",
+    "instance_sha256": "3b1a134b83f9c5a3b16078b159688da6db5cc55dc9aac88c1da7c50042dc2c43"
+  },
+  "recorded_host_outcome": "recorded_host_completed",
+  "owner_process": "unavailable_or_changed",
+  "host_process": "unavailable_or_changed",
+  "authenticated_daemon": "unavailable",
+  "requests": [],
+  "audit": {
+    "provenance": "retained_local_records_not_runtime_attestation",
+    "completeness": "selected_bounded_records_only",
+    "reason_code": "local_audit_observations_not_commit_or_delivery_proof",
+    "file_sha256": "4d79a6b2f84ca304e255d90788702700c23c5aa563d313417cde4846602a35b8",
+    "records": 14,
+    "ask_requests": 1,
+    "calls": [
+      {
+        "target_index": 1,
+        "operation": "read",
+        "session_sha256": "3fe290638bb164da537f77b0c6d328a39ef0466c8d2ed3436c9c728e3e2644b3",
+        "call_sha256": "9180308aca4ec43006aa741b618ae96db8b8324ca7daf02fcd1222a7a8107231",
+        "binding_sha256": "14882b773120cd5de56598fd7e9315a3d85234ab2a9564ebf75d9e07cdaf9bed",
+        "admission": "recorded_allow",
+        "publication_gate": "not_recorded",
+        "commit": "unknown",
+        "result_release": "recorded_allow",
+        "host_delivery": "unknown",
+        "model_consumption": "unknown"
+      },
+      {
+        "target_index": 0,
+        "operation": "create",
+        "session_sha256": "3fe290638bb164da537f77b0c6d328a39ef0466c8d2ed3436c9c728e3e2644b3",
+        "call_sha256": null,
+        "binding_sha256": null,
+        "admission": "recorded_ask",
+        "publication_gate": "not_recorded",
+        "commit": "unknown",
+        "result_release": "not_recorded",
+        "host_delivery": "unknown",
+        "model_consumption": "unknown"
+      },
+      {
+        "target_index": 0,
+        "operation": "create",
+        "session_sha256": "3fe290638bb164da537f77b0c6d328a39ef0466c8d2ed3436c9c728e3e2644b3",
+        "call_sha256": "9d914c75202b3c6b8ec3135332a69c15429c6cc7bcfe4a2c2b5e23b4d6692eee",
+        "binding_sha256": "42399a63131660b8b7d0115a8f1cf8f195722fef7a6b74f0e18b969b712f21dd",
+        "admission": "recorded_allow",
+        "publication_gate": "not_recorded",
+        "commit": "unknown",
+        "result_release": "recorded_allow",
+        "host_delivery": "unknown",
+        "model_consumption": "unknown"
+      },
+      {
+        "target_index": 0,
+        "operation": "read",
+        "session_sha256": "3fe290638bb164da537f77b0c6d328a39ef0466c8d2ed3436c9c728e3e2644b3",
+        "call_sha256": "f9da24ac155ea843c86d919518eb6967b656f813c7a18be90bff149be998e4c1",
+        "binding_sha256": "1b5689a0af443b686144aab944a4ec5c11eb75fb8b7f1826f019e811804b7609",
+        "admission": "recorded_allow",
+        "publication_gate": "not_recorded",
+        "commit": "unknown",
+        "result_release": "recorded_allow",
+        "host_delivery": "unknown",
+        "model_consumption": "unknown"
+      }
+    ]
+  },
+  "outputs": [
+    {
+      "target_index": 0,
+      "operation": "create",
+      "observation": "present",
+      "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+      "bytes": 36,
+      "matches_prepared_baseline": null,
+      "attribution": "observed_postcondition_not_writer_or_commit_proof"
+    }
+  ],
+  "effects": "indeterminate",
+  "host_delivery": "unknown",
+  "model_consumption": "unknown",
+  "next_steps": [
+    "Inspect the intended target independently before deciding whether another edit is needed.",
+    "Prepare a fresh exact plan and obtain new exact authority for any new mutation; do not replay old approvals or spent receipts.",
+    "Cancellation and withheld or absent results do not roll back previously committed bytes."
+  ]
+}

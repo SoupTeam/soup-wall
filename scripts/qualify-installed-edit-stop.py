@@ -168,7 +168,25 @@ class Run:
         raw = self.errors.read_bytes()
         require(b'"mutation_dispatches":1' not in raw and b'edit_adapter_mutation_dispatch' not in raw, 'stop_adapter_mutation')
         rows, audit_sha = self.audit()
-        return {'process_cleanup': cleanup, 'exit': self.process.returncode,
+        diagnosis = None
+        terminal = json.loads((self.run / 'terminal.json').read_bytes()) if (self.run / 'terminal.json').exists() else None
+        if terminal and terminal.get('reason') == 'operator_stop':
+            before_state = BASE.private_state_witness(self.run)
+            before_target, before_sentinel = snapshot(self.target), snapshot(self.suite.sentinel)
+            code, observed = self.suite.cli('status', '--run', self.run, '--json', timeout=12)
+            BASE.require_indeterminate_status(observed)
+            require(code == 0 and observed.get('recorded_host_outcome') == 'recorded_operator_stop'
+                    and observed.get('audit', {}).get('completeness') == 'selected_bounded_records_only',
+                    'stop_diagnosis_lost_composed_audit')
+            require(BASE.private_state_witness(self.run) == before_state
+                    and snapshot(self.target) == before_target
+                    and snapshot(self.suite.sentinel) == before_sentinel,
+                    'stop_diagnosis_changed_owned_state')
+            diagnosis = {'recorded_host_outcome': observed['recorded_host_outcome'],
+                         'audit_completeness': observed['audit']['completeness'],
+                         'effects': observed['effects'], 'state_unchanged': True,
+                         'target_unchanged': True, 'sentinel_unchanged': True}
+        return {'stop_diagnosis': diagnosis, 'process_cleanup': cleanup, 'exit': self.process.returncode,
                 'profile_sha256': self.prepared['profile_sha256'],
                 'instance_id': self.control['instance_id'], 'audit_sha256': audit_sha,
                 'target_before': self.before, 'target_after': snapshot(self.target),

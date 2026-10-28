@@ -65,12 +65,18 @@ again explicitly; this is per-run accounting, not a user/host/cross-run budget.
 
 ## Scope, compatibility and qualification
 
-This task is independently based on accepted main `db4f006d`. It does not depend
-on the open refresh or CI-reuse branches. On eventual composition with SOU-168,
-refresh must clone and preserve `mutation_quota`; changing a quota requires
-explicit prepare, not a refresh top-up. The new quota field and the separate
-descriptive refresh lineage have independent validation and digest binding.
-Runtime changes still require preparation; old approvals cannot cross epochs.
+Refreshing an eligible immutable quota-v2 plan preserves the exact quota
+contract and limits. It publishes a new inactive plan and never refills a live
+run. Using that plan requires an explicit new run and fresh exact Ask authority.
+Changing limits requires explicit preparation; refresh cannot increase them.
+Quota and descriptive refresh lineage have separate validation and digest
+binding. Old approvals cannot cross epochs.
+
+Read-only status consumes retained quota metadata through a strict bounded
+schema, checks it against the selected profile, and rejects contradictory or
+unknown fields. Those counters remain local bookkeeping. They do not establish
+authenticated commit, host delivery or model consumption, including when an
+optional output check observes the expected bytes.
 
 The existing selected resource transport still refuses unsupported overlapping
 requests. It is not upgraded to a parallel executor. The finite installed

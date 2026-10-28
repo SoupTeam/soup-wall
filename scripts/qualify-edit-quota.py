@@ -60,6 +60,7 @@ def passed_report(report):
             and required.get('refreshed-v2-fresh-ask', {}).get('exact_limits_preserved') is True
             and required.get('refreshed-v2-fresh-ask', {}).get('fresh_ask_required') is True
             and required.get('refreshed-v2-fresh-ask', {}).get('old_authority_refused') is True
+            and required.get('refreshed-v2-fresh-ask', {}).get('read_only_diagnosis') is True
             and all(required.get(name, {}).get('execution', {}).get('externally_observed_commit') is True
                     and required.get(name, {}).get('execution', {}).get('actual_success_result_observed') is False
                     for name in ('postcommit-withheld-create', 'postcommit-withheld-replace',
@@ -418,8 +419,39 @@ def qualify(args, report):
     require(fresh['usage']['limits'] == prepared['profile']['mutation_quota']
             and fresh['usage']['admitted_mutation_attempts'] == fresh['usage']['known_committed_mutations'] == 1,
             'refreshed_v2_changed_quota_or_reused_budget')
+    before_state = EDIT.private_state_witness(suite.last_run)
+    before_target = snapshot(target)
+    diagnosed = []
+    for output_check in (False, True):
+        words = [str(suite.binary), 'edit-session', 'status', '--run', str(suite.last_run), '--json']
+        if output_check:
+            words += ['--check-output']
+        result = subprocess.run(words, cwd=suite.work, env=suite.env, stdin=subprocess.DEVNULL,
+                                capture_output=True, timeout=12)
+        require(result.returncode == 0 and 0 < len(result.stdout) <= 128 * 1024
+                and len(result.stderr) <= 128 * 1024, 'quota_v2_diagnosis_unavailable')
+        value = json.loads(result.stdout)
+        EDIT.require_indeterminate_status(value)
+        require(value['status'] == value['recorded_host_outcome'] == 'recorded_host_completed'
+                and value['audit']['completeness'] == 'selected_bounded_records_only', 'quota_v2_diagnosis_incomplete')
+        if output_check:
+            index = next(i for i, t in enumerate(next_prepared['profile']['targets']) if t['name'] == 'result.txt')
+            postconditions = [r for r in value['outputs'] if r['target_index'] == index]
+            require(len(postconditions) == 1 and postconditions[0]['sha256'] == sha(SECOND.encode()),
+                    'quota_v2_diagnosis_postcondition_missing')
+        else:
+            require(value['outputs'] == [], 'quota_v2_default_diagnosis_read_output')
+        rendered = result.stdout + result.stderr
+        for private in (TEXT.encode(), SECOND.encode(), str(root).encode(), str(suite.last_run).encode()):
+            require(private not in rendered, 'quota_v2_diagnosis_privacy_regression')
+        require(EDIT.private_state_witness(suite.last_run) == before_state and snapshot(target) == before_target
+                and snapshot(suite.sentinel) == suite.before_sentinel, 'quota_v2_diagnosis_mutated_state_or_effects')
+        diagnosed.append(dict(output_check=output_check, response_sha256=sha(result.stdout),
+                              status=value['status'], effects=value['effects'], host_delivery=value['host_delivery'],
+                              model_consumption=value['model_consumption']))
     finish('refreshed-v2-fresh-ask', execution=fresh, exact_limits_preserved=True, fresh_ask_required=True,
-           old_authority_refused=True, target_after=snapshot(target), expected_content_sha256=sha(SECOND.encode()))
+           old_authority_refused=True, read_only_diagnosis=True, diagnosis=diagnosed,
+           target_after=snapshot(target), expected_content_sha256=sha(SECOND.encode()))
     report.update(sentinel_preserved=True, owned_cleanup=True, status='passed')
     require(passed_report(report), 'incomplete_quota_qualification')
 
