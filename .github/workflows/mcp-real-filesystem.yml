@@ -247,6 +247,8 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts/tests -p test_sou62_real_mcp.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_installed_pilot.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_wsl_preflight.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_wsl_qualification.py -v
           cargo test --locked -p agentfw --lib selected_registry_shared_daemon | tee "$RUNNER_TEMP/sou100-registry-regressions.log"
           python3 -B - <<'REGISTRY_CONTROLS'
           import os, re
