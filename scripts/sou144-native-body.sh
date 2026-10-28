@@ -1,4 +1,5 @@
 set -euo pipefail
+cd /home/runner/work/soup-wall/soup-wall
 cargo fmt --all -- --check
 cargo test --locked --offline -p agentfw --lib pilot_workspaces -- --nocapture 2>&1 | tee "$SOU144_SCRATCH/inspector-tests.log"
 cargo test --locked --offline -p agentfw --lib mcp::server_profile::git -- --nocapture 2>&1 | tee "$SOU144_SCRATCH/production-validator-tests.log"
