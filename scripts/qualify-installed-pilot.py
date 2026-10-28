@@ -37,6 +37,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pilot_provider import utility_environment
 from pilot_qualification import CASES, LIMITS, Failure, canonical, digest, measure, new_report, require, sha, write_report
+import pilot_source_identity as SOURCE_IDENTITY
+import pilot_git_profiles as GIT_PROFILES
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -91,6 +93,11 @@ def strict_json(raw):
 
 
 def source():
+    # An installed front-door component carries the verified identity of the
+    # clean commit it was built from; a checkout answers with Git.
+    installed = SOURCE_IDENTITY.installed(ROOT)
+    if installed is not None:
+        return installed
     result = BASE.source()
     files = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT, timeout=15, env=utility_environment()).split(b"\0")
     result["files_sha256"] = digest({os.fsdecode(name): sha(ROOT / os.fsdecode(name)) for name in files if name})
@@ -98,7 +105,10 @@ def source():
 
 
 def validate_selection(selection, expected):
-    require(selection.get("format") == "sw-installed-pilot-selection/2", "selection_version")
+    try:
+        git_profile = GIT_PROFILES.from_selection(selection)
+    except ValueError as error:
+        raise Failure(str(error)) from None
     before = source()
     require(not before["dirty"] and before["commit"] == expected
             and selection["source"] == before, "candidate_source_mismatch")
@@ -120,6 +130,9 @@ def validate_selection(selection, expected):
         require(re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) and sha(path) == item["sha256"],
                 changed)
         paths[role] = path
+    if selection["format"] == GIT_PROFILES.SELECTION_V3:
+        require(sha(paths["git_classifier"]) == GIT_PROFILES.binding(git_profile)["classifier_sha256"],
+                "selected_git_classifier_changed")
     return before, paths
 
 
@@ -1073,6 +1086,8 @@ def run(args):
         if args.fault == "missing-sandbox":
             selection["files"]["bwrap"]["path"] = str(args.output / "absent-bwrap")
         before, paths = validate_selection(selection, args.expected_commit)
+        require(GIT_PROFILES.from_selection(selection) == GIT_PROFILES.DEFAULT,
+                "extended_git_selection_use_qualify_installed_git_profiles")
         selected = paths
         report["source_before"] = before
         report["selection_format"] = selection["format"]

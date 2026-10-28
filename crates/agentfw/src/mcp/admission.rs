@@ -1000,6 +1000,7 @@ struct ClassificationAuthority {
     egress_declared: bool,
     create_file_profile: Option<&'static str>,
     https_get: bool,
+    replacement: bool,
 }
 
 /// The native daemon refused a request for its size. The daemon checks these
@@ -1058,6 +1059,10 @@ impl std::error::Error for DaemonSizeLimit {}
 
 pub struct Collector<'a> {
     config: &'a AdmissionCfg,
+    // Only a daemon-owned installed edit profile can set this. Existing CLI
+    // collectors retain their current explicit environment/cwd selection.
+    selected_workspace: Option<std::path::PathBuf>,
+    selected_root: Option<super::replace_file::RootIdentity>,
     host_session: Option<String>,
     child_authority: Option<String>,
     prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
@@ -1091,6 +1096,8 @@ impl<'a> Collector<'a> {
         }
         Ok(Self {
             config,
+            selected_workspace: None,
+            selected_root: None,
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
             prepared_budget: None,
@@ -1251,6 +1258,21 @@ impl<'a> Collector<'a> {
                     authority.create_file_profile.is_some(),
                 )
             };
+            let eval = eval.map(|verdict| {
+                if !authority.replacement || verdict == ProductionVerdict::Deny {
+                    return verdict;
+                }
+                if ambiguous_or_unknown {
+                    return ProductionVerdict::Ask;
+                }
+                if baseline == ActionClass::Destructive && res.actions.as_slice() == ["write"] {
+                    // Explicit replacement never inherits the create-only
+                    // write exception. Known replacement is still single-use Ask.
+                    ProductionVerdict::Ask
+                } else {
+                    ProductionVerdict::Deny
+                }
+            });
             eval.map(|verdict| ClassifiedAssessment {
                 verdict,
                 ambiguous_or_unknown,
@@ -1761,6 +1783,7 @@ impl<'a> Collector<'a> {
                     | crate::native::resource::WINDOWS_CREATE_CONTRACT
                     | crate::native::resource::MACOS_READ_CONTRACT
                     | crate::native::resource::MACOS_CREATE_CONTRACT
+                    | crate::native::resource::replacement::CONTRACT
             ),
             "unsupported native receipt contract"
         );
@@ -1810,6 +1833,7 @@ impl<'a> Collector<'a> {
             "verified_execution_receipt_mismatch"
         );
         let allowed = [
+            "publication_ttl_ms",
             "execution",
             "contract_version",
             "registry_sha256",
@@ -1828,6 +1852,10 @@ impl<'a> Collector<'a> {
             "managed_policy",
         ];
         keys(&reply, &allowed)?;
+        ensure!(
+            event == "publish" || reply.get("publication_ttl_ms").is_none(),
+            "unexpected publication deadline on another receipt"
+        );
         let required = [
             "contract_version",
             "registry_sha256",
@@ -1849,6 +1877,7 @@ impl<'a> Collector<'a> {
                             || matches!(
                                 k.as_str(),
                                 "execution"
+                                    | "publication_ttl_ms"
                                     | "resources_sha256"
                                     | "instance_id"
                                     | "owner_token"
@@ -1917,6 +1946,20 @@ impl<'a> Collector<'a> {
             ensure!(
                 reply["content_sha256"].is_null(),
                 "unexpected MCP call content hash"
+            );
+        } else if event == "publish" {
+            ensure!(
+                reply["call_id"] == fields["call_id"]
+                    && reply["binding_sha256"] == fields["expected_binding_sha256"]
+                    && reply["content_sha256"].is_null()
+                    && reply.get("resources_sha256").is_none(),
+                "MCP publication receipt changed invocation"
+            );
+            ensure!(
+                reply["publication_ttl_ms"]
+                    .as_u64()
+                    .is_some_and(|ms| ms > 0 && ms <= crate::native::TTL.as_millis() as u64),
+                "MCP publication deadline missing or invalid"
             );
         } else if event == "result" {
             ensure!(
@@ -2295,6 +2338,10 @@ where
                     }
                     "ping" => { keys(&params, &[])?; Pending::Ping(request_id.clone()) }
                     "tools/call" => {
+                        if let Some(root) = &collector.selected_root {
+                            let workspace = collector.selected_workspace.as_deref().context("edit_workspace_absent")?;
+                            ensure!(super::replace_file::inspect_workspace(workspace).as_ref().ok()==Some(root),"edit_root_changed");
+                        }
                         ensure!(ready, "MCP call before operator-pinned manifest");
                         keys(&params, &["name","arguments","_meta"])?;
                         if let Some(metadata) = params.get("_meta") { call_metadata(metadata)?; }
@@ -2317,6 +2364,10 @@ where
                                 &withheld(request_id, "invocation", &json!(["resource_https_profile_required"]))).await?;
                             continue;
                         }
+                        if name == "replace_file" && !installed.resource_policy.as_ref().is_some_and(|p|p.is_replace_file()) {
+                            write_resource_reply(client,host,true,&withheld(request_id,"invocation",&json!(["replace_profile_required"]))).await?;
+                            continue;
+                        }
                         if name == "create_file"
                             && !installed.resource_policy.as_ref().is_some_and(|policy| policy.is_create_file())
                         {
@@ -2333,6 +2384,10 @@ where
                         let mut prepared_macos_read = None;
                         #[cfg(any(target_os = "linux", windows, all(target_os = "macos", target_arch = "aarch64")))]
                         let mut prepared_create = None;
+                        #[cfg(unix)]
+                        let mut prepared_replacement: Option<super::replace_file::Prepared> = None;
+                        #[cfg(not(unix))]
+                        let prepared_replacement: Option<super::replace_file::Prepared> = None;
                         let resource_admission = if let Some(policy) = &installed.resource_policy {
                             #[cfg(windows)]
                             if policy.is_windows_handles() {
@@ -2438,7 +2493,7 @@ where
                                     prepared_macos_read = Some(prepared);
                                 }
                             }
-                            if (policy.is_create_file()
+                            if (policy.is_create_file() || policy.is_replace_file()
                                 || policy.is_https_get()
                                 || policy.is_https_post()
                                 || policy.is_windows_handles()
@@ -2450,14 +2505,14 @@ where
                                     &withheld(request_id, "invocation", &json!(["resource_server_identity_mismatch"]))).await?;
                                 continue;
                             }
-                            if policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors() {
+                            if policy.is_create_file() || policy.is_replace_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors() {
                                 if !policy.is_windows_handles() && !policy.is_macos_descriptors() {
                                     // Match run()'s actual operator-selected session root,
                                     // including its cwd fallback when no override exists.
                                     // Handle profiles checked exact spelling without DOS I/O.
-                                    let actual_workspace = std::env::var_os("AGENTFW_WORKSPACE")
+                                    let actual_workspace = collector.selected_workspace.clone().or_else(|| std::env::var_os("AGENTFW_WORKSPACE")
                                         .map(std::path::PathBuf::from)
-                                        .or_else(|| std::env::current_dir().ok())
+                                        .or_else(|| std::env::current_dir().ok()))
                                         .and_then(|path| path.canonicalize().ok());
                                     let configured_workspace = policy.workspace.canonicalize().ok();
                                     if !matches!((&configured_workspace, &actual_workspace),
@@ -2468,10 +2523,9 @@ where
                                         continue;
                                     }
                                 }
-                            } else if let Some(agentfw_ws) = std::env::var_os("AGENTFW_WORKSPACE") {
+                            } else if let Some(agentfw_ws) = collector.selected_workspace.clone().or_else(|| std::env::var_os("AGENTFW_WORKSPACE").map(std::path::PathBuf::from)) {
                                 let policy_ws_canon = policy.workspace.canonicalize().ok();
-                                let agentfw_ws_canon =
-                                    std::path::PathBuf::from(agentfw_ws).canonicalize().ok();
+                                let agentfw_ws_canon = agentfw_ws.canonicalize().ok();
                                 let same_workspace = matches!((&policy_ws_canon, &agentfw_ws_canon),
                                     (Some(policy), Some(actual)) if policy == actual);
                                 let known_mismatch = policy_ws_canon.is_some()
@@ -2483,7 +2537,7 @@ where
                                     continue;
                                 }
                             }
-                            if (policy.is_create_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors())
+                            if (policy.is_create_file() || policy.is_replace_file() || policy.is_https_get() || policy.is_https_post() || policy.is_windows_handles() || policy.is_macos_descriptors())
                                 && collector.config.classifier.as_ref()
                                     .and_then(|classifier| classifier.revision())
                                     != Some(policy.classifier_sha256.as_str())
@@ -2623,7 +2677,12 @@ where
                                 &serde_json::to_value(&policy.profile)
                                     .context("profile serializes")?,
                             );
-                            let execution = if policy.is_create_file() {
+                            let execution = if policy.is_replace_file() {
+                                match crate::native::resource::replacement::binding(policy,&args) {
+                                    Ok(binding) => Some(binding),
+                                    Err(code) => { write_resource_reply(client,host,true,&withheld(request_id,"invocation",&json!([code]))).await?; continue; }
+                                }
+                            } else if policy.is_create_file() {
                                 #[cfg(windows)]
                                 let create_binding = if policy.is_windows_create() {
                                     let prepared = prepared_create.as_ref()
@@ -2713,6 +2772,7 @@ where
                                 }),
                             https_get: installed.resource_policy.as_ref()
                                 .is_some_and(|policy| policy.is_https_get()),
+                            replacement: installed.resource_policy.as_ref().is_some_and(|policy|policy.is_replace_file()),
                         };
                         if collector.config.classifier.is_some() {
                             let snapshot = admitted_snapshot
@@ -2868,7 +2928,8 @@ where
                                 }
                             } else {
                                 let creating = policy.is_create_bound_or_named(name);
-                                if creating && !cfg!(target_os = "linux") {
+                                let replacing = policy.is_replace_file();
+                                if (creating || replacing) && !cfg!(target_os = "linux") {
                                     let reasons = json!(["resource_create_platform_unsupported"]);
                                     write_resource_reply(client, host, resource_reply,
                                         &withheld(request_id, "invocation", &reasons)).await?;
@@ -2877,7 +2938,7 @@ where
                                 if !((installed.action_class == ActionClass::ReadOnly
                                     && policy.is_read_bound_or_named(name))
                                     || (installed.action_class == ActionClass::SideEffecting
-                                        && creating))
+                                        && creating) || (installed.action_class == ActionClass::Destructive && replacing))
                                 {
                                     let reasons = json!(["resource_executor_unsupported"]);
                                     write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
@@ -2907,7 +2968,12 @@ where
                                     write_resource_reply(client, host, resource_reply, &withheld(request_id, "invocation", &reasons)).await?;
                                     continue;
                                 }
-                                if creating {
+                                if replacing {
+                                    match crate::native::resource::replacement::prepare(policy,&args) {
+                                        Ok(prepared) => prepared_replacement=Some(prepared),
+                                        Err(code) => { write_resource_reply(client,host,true,&withheld(request_id,"invocation",&json!([code]))).await?; continue; }
+                                    }
+                                } else if creating {
                                     #[cfg(target_os = "linux")]
                                     {
                                         let content_ptr = policy.content_selector();
@@ -3073,6 +3139,66 @@ where
                                 &withheld(request_id, "invocation", &receipt["reason_codes"]),
                             )
                             .await?;
+                            continue;
+                        }
+                        if let Some(prepared) = prepared_replacement {
+                            let policy=installed.resource_policy.as_ref().expect("replacement policy");
+                            let bound=resource_admission.as_ref().and_then(|(a,_)| a.execution.as_ref()).context("replacement binding missing")?;
+                            let staging=tokio::task::spawn_blocking(move || prepared.stage());
+                            let staged=without_resource_overlap(client,true,async { staging.await.context("replacement staging worker failed") }).await?;
+                            let replacement=match staged {
+                                Err(error) => Err(error),
+                                Ok(staged) => {
+                                    let unchanged=crate::native::resource::replacement::frozen_binding(policy,&args)
+                                        .is_ok_and(|current| &current==bound);
+                                    if !unchanged {
+                                        drop(staged);
+                                        Err(super::replace_file::Error { code:"replace_binding_changed",committed:false,staged_bytes:0,cleanup_unresolved:false })
+                                    } else {
+                                        let publication_started=std::time::Instant::now();
+                                        let gate=without_resource_overlap(client,true,collector.event("publish",json!({
+                                            "expected_contract_version":contract_version,"tool":name,"args":args,
+                                            "call_id":receipt["call_id"],"expected_binding_sha256":receipt["binding_sha256"]
+                                        }))).await?;
+                                        if gate["release"]!=true {
+                                            drop(staged);
+                                            write_resource_reply(client,host,true,&withheld(request_id,"publication",&gate["reason_codes"])).await?;
+                                            continue;
+                                        }
+                                        without_resource_overlap(client,true,async {
+                                            eprintln!("{}",json!({"event":"mcp_replace_file_publication_intent","host_call_id":request_id,
+                                                "outcome":"indeterminate_until_completion"}));
+                                            let deadline=publication_started+Duration::from_millis(gate["publication_ttl_ms"].as_u64().context("publication deadline missing")?);
+                                            Ok(staged.publish_before(deadline))
+                                        }).await?
+                                    }
+                                }
+                            };
+                            let (payload,committed,result_kind)=match replacement {
+                                Ok(commit)=>(json!({"success":true,"replaced":true,"committed":true,
+                                    "bytes_written":commit.bytes_written,"file_synced":commit.file_synced,
+                                    "directory_synced":commit.directory_synced}),true,"value"),
+                                Err(error)=>(json!({"success":false,"replaced":error.committed,"committed":error.committed,
+                                    "error":error.code,"staged_bytes":error.staged_bytes,
+                                    "committed_bytes":if error.committed {error.staged_bytes}else{0},
+                                    "cleanup_unresolved":error.cleanup_unresolved}),error.committed,"error"),
+                            };
+                            eprintln!("{}",json!({"event":"mcp_replace_file_execution","host_call_id":request_id,
+                                "committed":committed,"result_kind":result_kind,"error":payload.get("error")}));
+                            let response=json!({"jsonrpc":"2.0","id":request_id,"result":{"isError":result_kind=="error",
+                                "content":[{"type":"text","text":payload.to_string()}]}});
+                            let mut raw=response.to_string().into_bytes();raw.push(b'\n');
+                            let result_gate=without_resource_overlap(client,true,collector.event("result",json!({
+                                "expected_contract_version":contract_version,"tool":name,"args":args,"call_id":receipt["call_id"],
+                                "result_kind":result_kind,"delivery":"mcp_host","content":std::str::from_utf8(&raw)?,
+                                "expected_binding_sha256":receipt["binding_sha256"]
+                            }))).await?;
+                            if result_gate["release"]==true {write_resource_reply(client,host,true,&raw).await?;}
+                            else {
+                                let mut reasons=result_gate["reason_codes"].as_array().cloned().unwrap_or_default();
+                                if committed {reasons.push(json!("resource_replacement_committed"));}
+                                write_resource_reply(client,host,true,&withheld(request_id,"result",&json!(reasons))).await?;
+                            }
                             continue;
                         }
                         if https_get {
@@ -3684,6 +3810,99 @@ where
     .await
 }
 
+/// An in-daemon declaration adapter for the separately installed edit profile.
+/// Every call still goes through the SAME resource/classifier/native/Ask relay.
+/// The adapter has no filesystem API and treats forwarded tools/call as failure.
+pub(crate) async fn run_builtin_streams<R, W, F>(
+    config: AdmissionCfg,
+    selection: (std::path::PathBuf, super::replace_file::RootIdentity),
+    declarations: Value,
+    client: &mut R,
+    host: W,
+    shutdown: F,
+    dispatches: Arc<std::sync::atomic::AtomicUsize>,
+) -> anyhow::Result<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+    F: Future<Output = ()>,
+{
+    ensure!(
+        config.host_session.is_some() && config.liveness_url.is_some(),
+        "edit_bound_owner_required"
+    );
+    let mut collector =
+        Collector::with_session(&config, format!("mcp:{}", crate::token::generate()))?;
+    collector.selected_workspace = Some(selection.0);
+    collector.selected_root = Some(selection.1);
+    let (stop, renewal) =
+        enroll_session(&mut collector, true, config.liveness_lease_seconds).await?;
+    let (broker, adapter) = tokio::io::duplex(16384);
+    let (server, mut child) = tokio::io::split(broker);
+    let mut server = BufReader::new(server);
+    let mut adapter_task = tokio::spawn(async move {
+        let (input, mut output) = tokio::io::split(adapter);
+        let mut input = BufReader::new(input);
+        let mut partial = Vec::new();
+        while let Some(raw) = line(&mut input, &mut partial).await? {
+            let request = parse(&raw)?;
+            let result = match request["method"].as_str() {
+                Some("notifications/initialized") => continue,
+                Some("initialize") => {
+                    json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"soup-installed-private-output","version":"1"}})
+                }
+                Some("tools/list") => json!({"tools":declarations}),
+                Some("ping") => json!({}),
+                Some("tools/call") => {
+                    dispatches.fetch_add(1, Ordering::AcqRel);
+                    bail!("edit_adapter_mutation_dispatch");
+                }
+                _ => bail!("edit_adapter_method"),
+            };
+            let mut raw =
+                serde_json::to_vec(&json!({"jsonrpc":"2.0","id":request["id"],"result":result}))?;
+            raw.push(b'\n');
+            write(&mut output, &raw).await?;
+        }
+        Ok::<_, anyhow::Error>(())
+    });
+    let mut host = DiagnosticOutput {
+        inner: host,
+        failed: Arc::new(AtomicBool::new(false)),
+        budget: None,
+        liveness: collector.liveness.clone(),
+    };
+    let operation = tokio::select! {
+        biased;
+        _=shutdown=>Err(anyhow::anyhow!("edit_session_cancelled")),
+        result=relay(&collector,client,&mut host,&mut server,&mut child)=>result,
+    };
+    drop(server);
+    drop(child);
+    let adapter_result = match tokio::time::timeout(Duration::from_secs(1), &mut adapter_task).await
+    {
+        Ok(result) => result.map_err(anyhow::Error::new).and_then(|r| r),
+        Err(_) => {
+            adapter_task.abort();
+            let _ = adapter_task.await;
+            Err(anyhow::anyhow!("edit_adapter_cleanup_timeout"))
+        }
+    };
+    if let Some(stop) = stop {
+        let _ = stop.send(true);
+    }
+    let retired = match &collector.liveness {
+        Some(lease) => lease.retire().await.map(|_| ()),
+        None => Err(anyhow::anyhow!("edit_liveness_missing")),
+    };
+    if let Some(task) = renewal {
+        task.await?;
+    }
+    operation?;
+    adapter_result?;
+    retired
+}
+
 /// Run the accepted selected-server relay against explicit host streams.
 /// This API alone is not verified execution provenance. The daemon-owned launch
 /// and immutable closure must independently establish custody before minting it.
@@ -3993,6 +4212,7 @@ pub async fn run_with_budget(
         let clean_exit_required = config.native.registry.tools.iter().any(|tool| {
             tool.resource_policy.as_ref().is_some_and(|policy| {
                 policy.is_create_file()
+                    || policy.is_replace_file()
                     || policy.is_https_get()
                     || policy.is_https_post()
                     || policy.is_windows_handles()

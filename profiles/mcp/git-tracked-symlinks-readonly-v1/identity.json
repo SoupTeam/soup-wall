@@ -7,7 +7,7 @@
     "profiles/mcp/git-readonly-v1/upstream-tools-list.json": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b",
     "profiles/mcp/git-readonly-v1/upstream-identity.json": "90fbf2f84db1fee38145914adaf851c35d9b8b3735dc4e78caf7820c507e09e4",
     "profiles/mcp/git-readonly-v1/requirements.lock": "a2cfeda583ce58ab092610ee5b8902ef2f6ab1c97dabebf7eb67bcc512f5f1e5",
-    "scripts/install-sou107-git-profile.py": "af6c740c0c80629237dff41e593fa9f7911702ba500ce48cac67530fbbbf6aa0",
-    "scripts/install-sou150-git-profile.py": "2e6bbe4d3c16f37e2d969c8fe2dd59f9961a0b4eadc1ee02bb7dcaef5252f1f1"
+    "scripts/install-sou107-git-profile.py": "f1cb2d8b692759fd8c0b375895b2f59c09757f9259c70e98884ad30786cee0d2",
+    "scripts/install-sou150-git-profile.py": "90f7e999e935208d7e51f2869ddfd37e9fc329f03c641f6319902fed7a63ca76"
   }
 }

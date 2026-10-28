@@ -972,7 +972,7 @@ jobs:
 
   mcp-create-file--linux-create-file:
     name: "mcp-create-file / linux-create-file"
-    if: contains(fromJSON(inputs.plan).workflows['mcp-create-file.yml'], 'linux-create-file')
+    if: contains(fromJSON(inputs.plan).workflows['mcp-create-file.yml'], 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -1035,6 +1035,157 @@ jobs:
             ${{ runner.temp }}/sou54-*.jsonl
             ${{ runner.temp }}/sou54-*.txt
             ${{ runner.temp }}/sou54-*.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  mcp-create-file--linux-replace-file:
+    name: "mcp-create-file / linux-replace-file"
+    if: contains(fromJSON(inputs.plan).workflows['mcp-create-file.yml'], 'linux-replace-file') && github.event.inputs.edit_only != 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Prepare isolated offline qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          cargo fetch --locked
+          mkdir -p "$RUNNER_TEMP/sou159-scratch"/{home,cargo-home,tmp,faults}
+          ln -s "$HOME/.cargo/registry" "$RUNNER_TEMP/sou159-scratch/cargo-home/registry"
+          git rev-parse HEAD > "$RUNNER_TEMP/sou159-scratch/source.txt"
+      - name: Read-only source and private loopback runtime qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_scratch="$RUNNER_TEMP/sou159-scratch"
+          # Trusted sandbox setup, then drop ALL capabilities and the root UID.
+          # No host sysctl, cgroup delegation or shared-runner setting changes.
+          sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
+            --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --proc /proc --dev /dev --cap-drop ALL \
+            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
+            --chdir / /usr/bin/setpriv \
+            --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            /usr/bin/env -i \
+            PATH="$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
+            HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
+            CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
+            SOU159_SCRATCH="$task_scratch" SOU159_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
+            /bin/bash -euo pipefail <<'BASH'
+          cd "$SOU159_SOURCE"
+          cargo build --locked --offline -p agentfw --bin agentfw
+          cargo test --locked --offline -p agentfw --lib replace_file -- --nocapture
+          cargo test --locked --offline -p agentfw --lib resource::replacement -- --nocapture
+          cargo test --locked --offline -p agentfw --test replace_file -- --nocapture
+          cargo test --locked --offline -p agentfw --lib create_file -- --nocapture
+          cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
+          cargo fmt --all --check
+          python3 -B -m unittest discover -s scripts/tests -p 'test_sou159*.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=1 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/stage-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=2 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/publication-fault.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DFAULT=3 scripts/fixtures/sou159_faults.c -ldl -o "$SOU159_SCRATCH/faults/committed-error.so"
+          sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU159_SCRATCH/binary.txt"
+          python3 -B scripts/verify-sou159-replace-file.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+            --fault-libraries "$SOU159_SCRATCH/faults" --output "$SOU159_SCRATCH/runtime.json"
+          BASH
+      - name: Retain current-source finite evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou159-replacement-evidence
+          path: |
+            ${{ runner.temp }}/sou159-scratch/source.txt
+            ${{ runner.temp }}/sou159-scratch/binary.txt
+            ${{ runner.temp }}/sou159-scratch/runtime.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  mcp-create-file--linux-installed-edit:
+    name: "mcp-create-file / linux-installed-edit"
+    if: contains(fromJSON(inputs.plan).workflows['mcp-create-file.yml'], 'linux-installed-edit') && github.event.inputs.replacement_only != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+      - name: Trusted setup of locked dependencies and genuine host
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          cargo fetch --locked
+          task_scratch="$RUNNER_TEMP/sou161-scratch"
+          mkdir -m 700 "$task_scratch"
+          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host}
+          ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
+          cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
+          npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
+          printf '%s  %s\n' fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7 \
+            "$task_scratch/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum --check
+          git rev-parse HEAD > "$task_scratch/source.txt"
+      - name: Read-only source, private scratch, offline native installed qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_scratch="$RUNNER_TEMP/sou161-scratch"
+          sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
+            --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --proc /proc --dev /dev --cap-drop ALL \
+            --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
+            --chdir / /usr/bin/setpriv \
+            --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
+            /usr/bin/env -i \
+            PATH="$PATH" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
+            HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
+            CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
+            SOU161_SCRATCH="$task_scratch" SOU161_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
+            /bin/bash -euo pipefail <<'BASH'
+          cd "$SOU161_SOURCE"
+          cargo build --locked --offline -p agentfw --bin agentfw
+          cargo test --locked --offline -p agentfw --lib edit_session -- --nocapture
+          cargo test --locked --offline -p agentfw --lib native::execution::transport -- --nocapture
+          cargo test --locked --offline -p agentfw --lib replace_file -- --nocapture
+          cargo test --locked --offline -p agentfw --test replace_file -- --nocapture
+          cargo test --locked --offline -p agentfw --lib create_file -- --nocapture
+          cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
+          cargo fmt --all --check
+          python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU161_SCRATCH/binary.txt"
+          python3 -B scripts/qualify-installed-edit.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
+          BASH
+      - name: Retain finite current-source qualification and build correlation
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou161-installed-edit-evidence
+          path: |
+            ${{ runner.temp }}/sou161-scratch/source.txt
+            ${{ runner.temp }}/sou161-scratch/binary.txt
+            ${{ runner.temp }}/sou161-scratch/runtime/report.json
           if-no-files-found: warn
           retention-days: 30
 
@@ -2416,6 +2567,26 @@ jobs:
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python "$(command -v python3)" --allow-download \
             2>&1 | tee "$RUNNER_TEMP/front-door.log"
+      - name: Qualify the installed guided pilot front door through the original host
+        if: github.event.inputs.capacity_only != 'true' && github.event.inputs.prepared_operations_only != 'true' && github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          cargo test --locked -p agentfw --lib pilot_component
+          # The component is built from this checkout and started only as the
+          # installed `agentfw pilot` of this job's SOU-119 build.
+          python3 -B scripts/qualify-installed-front-door.py --run \
+            --output "$RUNNER_TEMP/installed-front-door" --expected-commit "$(git rev-parse HEAD)" \
+            --component-python /usr/bin/python3.12 \
+            --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" \
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python "$(command -v python3)" --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/installed-front-door.log"
       - name: Qualify terminal Ask inbox through the original Claude host
         if: github.event.inputs.capacity_only != 'true' && (github.event.inputs.operator_results_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
@@ -2723,6 +2894,8 @@ jobs:
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
             ${{ runner.temp }}/front-door/report.json
             ${{ runner.temp }}/front-door.log
+            ${{ runner.temp }}/installed-front-door/report.json
+            ${{ runner.temp }}/installed-front-door.log
             ${{ runner.temp }}/sou111-assets/apparmor-provisioning.json
             ${{ runner.temp }}/sou111-apparmor-cleanup.json
             ${{ runner.temp }}/sou111-assets/plan.json
@@ -2764,7 +2937,7 @@ jobs:
 
   mcp-real-git--required-linux-git:
     name: "mcp-real-git / required-linux-git"
-    if: contains(fromJSON(inputs.plan).workflows['mcp-real-git.yml'], 'required-linux-git')
+    if: contains(fromJSON(inputs.plan).workflows['mcp-real-git.yml'], 'required-linux-git') && !inputs.installed_profiles_only
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:

@@ -1,0 +1,27 @@
+{
+  "source_commit": "4cdd671476f813f6e661a2a45a6c6b4a14d566a2",
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/40463425198",
+  "workflow": "mcp-create-file.yml",
+  "job": "linux-replace-file",
+  "runner": "ubuntu-22.04",
+  "rust_toolchain": "1.99.1",
+  "artifact_id": 12715472477,
+  "archive_sha256": "abbab5d01ca95942d0fb9b55c27ec77e8896a2a2ac13c5f62e5ca4d7c3d5c454",
+  "archive_sha256_and_zip_crc_verified": true,
+  "runtime_sha256": "a93a36d7b6c112a5843ab6e275c5d4e5490bc568b3211a89c63f2e7443f374b3",
+  "binary_sha256": "765062ea06223ed291abac753dd2bd374f6961d383cfe793e3e6b9305aad1e9b",
+  "workflow_log_sha256": "917068714683319b4ccb1bcb5337e7543b3fa1cdd77ba0dbf8176734bfa9b713",
+  "acceptance": {
+    "acceptance_pass": true,
+    "cases": 22,
+    "child_dispatches": 0,
+    "production_stdio": true
+  },
+  "linux_rust_controls": 31,
+  "finite_evidence_controls": 9,
+  "strict_agentfw_all_target_clippy": "pass_zero_warnings",
+  "cargo_fmt_check": "pass",
+  "build_and_execution_boundary": "Read-only source/root, writable isolated scratch, private loopback network and PID namespaces; original unprivileged runner UID/GID, no capabilities, no-new-privs; build offline after trusted dependency fetch.",
+  "fault_scope": "Only three disposable collectors use test-only LD_PRELOAD filesystem fault libraries. Only result-withheld tightens its disposable max_source_bytes to zero. Production policies, caps, approval TTLs and binary are unchanged.",
+  "delivery_boundary": "Subsequent evidence/documentation-only commit wraps this exact executable source. Final Ready/shared admission/main delivery remain TL-owned; this focused manual run does not claim full Ready qualification."
+}

@@ -61,6 +61,19 @@ class PreparedQualificationCoverage(unittest.TestCase):
         for name in ("mcp-real-filesystem.yml", "ci-components.yml"):
             yield name, (ROOT / ".github/workflows" / name).read_text()
 
+    def test_installed_front_door_qualifies_ordinary_pr_but_not_focused_capacity_or_operations(self):
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                body = step(text, "Qualify the installed guided pilot front door through the original host")
+                self.assertTrue(enabled(body))
+                self.assertIn("cargo test --locked -p agentfw --lib pilot_component", body)
+                self.assertIn("scripts/qualify-installed-front-door.py --run", body)
+                for focus in ("capacity_only", "prepared_operations_only"):
+                    self.assertFalse(enabled(body, **{
+                        "github.event_name": "workflow_dispatch",
+                        "github.event.inputs." + focus: "true",
+                    }))
+
     def test_ordinary_pr_keeps_full_prepared_lifecycle_suite(self):
         for name, text in self.workflows():
             with self.subTest(workflow=name):

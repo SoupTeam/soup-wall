@@ -233,6 +233,7 @@ mod linux {
     }
 
     pub(super) struct Staged {
+        _writer_lock: File,
         prepared: Prepared,
         file: File,
         staged: usize,
@@ -327,6 +328,8 @@ mod linux {
         }
 
         pub(super) fn stage(self, _fault: Fault) -> Result<Staged, CreateFileError> {
+            let writer_lock = crate::mcp::replace_file::create_writer_lock(&self.root)
+                .map_err(|_| CreateFileError::new("workspace_writer_busy"))?;
             self.verify_root()?;
             self.require_absent()?;
             let fd = unsafe {
@@ -408,6 +411,7 @@ mod linux {
                 with_effects(result, staged, false)
             })?;
             Ok(Staged {
+                _writer_lock: writer_lock,
                 prepared: self,
                 file,
                 staged,
@@ -502,6 +506,7 @@ mod linux {
     impl Staged {
         pub(super) fn publish(self, fault: Fault) -> Result<CreateFileCommit, CreateFileError> {
             let Self {
+                _writer_lock,
                 prepared,
                 file,
                 staged,

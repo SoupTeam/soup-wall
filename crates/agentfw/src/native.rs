@@ -46,7 +46,7 @@ const MAX_SESSIONS: usize = 64;
 const MAX_CALLS: usize = 256;
 const MAX_SESSION_CALLS: usize = 64;
 pub(crate) const MAX_SPENT_AUTHORITIES: usize = MAX_SESSIONS * 8;
-const TTL: Duration = Duration::from_secs(300);
+pub(crate) const TTL: Duration = Duration::from_secs(300);
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -393,6 +393,8 @@ enum Stage {
 
 #[derive(Clone)]
 struct Call {
+    publication_outcome: Option<soup_wall_agent::Outcome>,
+    publication_authorized: bool,
     #[cfg(target_os = "linux")]
     execution_args: Option<Value>,
     managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
@@ -547,6 +549,43 @@ pub(crate) fn validate_lineage(
     Err("native_child_parent_unavailable")
 }
 
+fn publication_lifetime(
+    state: &Sessions,
+    session: &Session,
+    now: Instant,
+    now_ms: u64,
+) -> Result<u64, &'static str> {
+    let mut current = session;
+    let mut remaining = TTL.as_millis() as u64;
+    for _ in 0..=MAX_SESSIONS {
+        let lease = current
+            .liveness_lease
+            .as_ref()
+            .map(|l| l.expires_in_ms(now))
+            .unwrap_or_else(|| {
+                TTL.saturating_sub(now.saturating_duration_since(current.touched))
+                    .as_millis() as u64
+            });
+        remaining = remaining.min(lease);
+        if let Some(expiry) = current.authority_expires_at_ms {
+            remaining = remaining.min(expiry.saturating_sub(now_ms));
+        }
+        let Some(parent) = &current.parent_id else {
+            return Ok(remaining);
+        };
+        current = state
+            .entries
+            .values()
+            .find(|p| {
+                p.host_session == current.host_session
+                    && p.agent_id.as_ref() == Some(parent)
+                    && current.parent_epoch.as_ref() == Some(&p.epoch)
+            })
+            .ok_or("native_child_parent_unavailable")?;
+    }
+    Err("native_child_parent_unavailable")
+}
+
 pub struct NativeState {
     git_execution: Option<verified_git::Runtime>,
     pub registry: Registry,
@@ -554,6 +593,7 @@ pub struct NativeState {
     pub token: String,
     instance_id: String,
     pub(crate) execution: Option<Arc<execution::Service>>,
+    pub(crate) edit: Option<Arc<crate::edit_session::transport::Service>>,
     pub(crate) continuity: Option<continuity::Continuity>,
     pub(crate) sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
@@ -723,6 +763,7 @@ impl NativeState {
             token,
             instance_id: crate::token::generate(),
             execution: None,
+            edit: None,
             continuity: None,
             sessions: Mutex::default(),
             approval: None,
@@ -793,6 +834,7 @@ impl NativeState {
             token: self.token.clone(),
             instance_id: crate::token::generate(),
             execution: None,
+            edit: None,
             continuity: None,
             sessions: Mutex::default(),
             approval: None,
@@ -1107,6 +1149,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                     | resource::WINDOWS_CREATE_CONTRACT
                     | resource::MACOS_READ_CONTRACT
                     | resource::MACOS_CREATE_CONTRACT
+                    | resource::replacement::CONTRACT
             ) {
                 keys.insert("resource_admission");
             }
@@ -1119,6 +1162,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             "result_kind",
             "delivery",
         ]),
+        "publish" => keys.extend(["call_id", "tool", "args"]),
         "context" => keys.extend(["call_id", "tool", "args", "content"]),
         _ => return Err("native_invalid_event"),
     }
@@ -1166,11 +1210,18 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                 | resource::WINDOWS_CREATE_CONTRACT
                 | resource::MACOS_READ_CONTRACT
                 | resource::MACOS_CREATE_CONTRACT
+                | resource::replacement::CONTRACT
         )
         || (matches!(event, "session_start" | "session_end")
             && request.contract_version != CONTRACT)
     {
         return Err("native_invalid_identity");
+    }
+    if request.contract_version == resource::replacement::CONTRACT && !cfg!(target_os = "linux") {
+        return Err("replace_platform_unsupported");
+    }
+    if event == "publish" && request.contract_version != resource::replacement::CONTRACT {
+        return Err("native_publication_contract_required");
     }
     if request.contract_version == resource::WINDOWS_READ_CONTRACT && !cfg!(windows) {
         return Err("native_windows_read_platform_unsupported");
@@ -1199,6 +1250,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                 | resource::WINDOWS_CREATE_CONTRACT
                 | resource::MACOS_READ_CONTRACT
                 | resource::MACOS_CREATE_CONTRACT
+                | resource::replacement::CONTRACT
         )
     {
         let admission = request
@@ -1219,7 +1271,10 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         let is_plain = request.contract_version == CONTRACT && request.resource_admission.is_none();
         let is_supported_resource = matches!(
             request.contract_version.as_str(),
-            resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
+            resource::CONTRACT
+                | resource::CREATE_CONTRACT
+                | resource::NETWORK_CONTRACT
+                | resource::replacement::CONTRACT
         ) && request.resource_admission.is_some();
         if !is_plain && !is_supported_resource {
             return Err("native_invalid_fields");
@@ -1245,6 +1300,8 @@ fn parse(body: &str) -> Result<Request, &'static str> {
 
 #[derive(Serialize)]
 struct Response {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    publication_ttl_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     execution: Option<execution::Metadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2003,6 +2060,7 @@ fn inspect_bound_complete(
         session.calls.retain(|_, call| call.expires > now);
     }
     let mut response = Response {
+        publication_ttl_ms: None,
         execution: None,
         managed_policy: firewall.active_managed_policy(),
         contract_version: match request.contract_version.as_str() {
@@ -2014,6 +2072,7 @@ fn inspect_bound_complete(
             resource::WINDOWS_CREATE_CONTRACT => resource::WINDOWS_CREATE_CONTRACT,
             resource::MACOS_READ_CONTRACT => resource::MACOS_READ_CONTRACT,
             resource::MACOS_CREATE_CONTRACT => resource::MACOS_CREATE_CONTRACT,
+            resource::replacement::CONTRACT => resource::replacement::CONTRACT,
             _ => CONTRACT,
         },
         registry_sha256: native.registry_sha256.clone(),
@@ -2392,6 +2451,11 @@ fn inspect_bound_complete(
         .get(&request.session_id)
         .ok_or("native_session_unknown")?;
     validate_lineage(&state, session, now_ms, now)?;
+    let publication_lifetime = if request.event == "publish" {
+        publication_lifetime(&state, session, now, now_ms)?
+    } else {
+        0
+    };
     let session = state
         .entries
         .get_mut(&request.session_id)
@@ -2762,6 +2826,12 @@ fn inspect_bound_complete(
             session.calls.insert(
                 id.clone(),
                 Call {
+                    publication_outcome: tool
+                        .resource_policy
+                        .as_ref()
+                        .is_some_and(|p| p.is_replace_file())
+                        .then(|| outcome.clone()),
+                    publication_authorized: false,
                     #[cfg(target_os = "linux")]
                     execution_args: native
                         .git_execution
@@ -2829,6 +2899,67 @@ fn inspect_bound_complete(
         || call.args_sha256 != args_hash(args)
     {
         return Err("native_call_binding_mismatch");
+    }
+    if request.event == "publish" {
+        if call.contract_version != resource::replacement::CONTRACT
+            || call.publication_authorized
+            || call.stage != Stage::Result
+            || call.managed_policy != firewall.active_managed_policy()
+        {
+            return Err("native_publication_stale_or_spent");
+        }
+        let hosts = declared_hosts(tool, args)?;
+        let kind = EventKind::ToolCall {
+            tool: name.into(),
+            args: args.clone(),
+        };
+        let mut current =
+            invocation::inspect(&mut firewall, &session.event(kind.clone()), tool, &hosts)?;
+        if let Some(host) = &session.host_session {
+            let host_outcome = invocation::inspect(
+                &mut firewall,
+                &session.host_event(host, session.seq, kind),
+                tool,
+                &hosts,
+            )?;
+            current = merge_provenance_outcomes(current, host_outcome);
+        }
+        // An Ask was already redeemed once. It remains usable only if the
+        // exact policy outcome and provenance remain unchanged; this is not a
+        // new grant and cannot rescue Deny or a newly introduced condition.
+        if resolved(&current) == Verdict::Deny
+            || call.publication_outcome.as_ref() != Some(&current)
+        {
+            return Err("native_publication_policy_changed");
+        }
+        call.publication_authorized = true;
+        let gate_now = native.monotonic_now();
+        let remaining = call.expires.saturating_duration_since(gate_now).as_millis() as u64;
+        let remaining = remaining.min(
+            publication_lifetime
+                .saturating_sub(gate_now.saturating_duration_since(now).as_millis() as u64),
+        );
+        if remaining == 0 {
+            return Err("native_publication_expired");
+        }
+        response.publication_ttl_ms = Some(remaining);
+        audit(
+            st,
+            &request,
+            session,
+            &response,
+            Some(&current),
+            started.elapsed().as_micros(),
+        )?;
+        session.calls.insert(id.into(), call);
+        return Ok(response);
+    }
+    if request.event == "result"
+        && call.publication_outcome.is_some()
+        && !call.publication_authorized
+        && request.result_kind.as_deref() != Some("error")
+    {
+        return Err("native_publication_required");
     }
     if let Some(evidence) = evidence {
         response.execution = Some(evidence.consume(native, session, &request, &call, now)?);
