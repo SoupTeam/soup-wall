@@ -70,7 +70,7 @@ still match. Refresh refuses runtime upgrades; prepare explicitly for the new
 installed generation instead.
 
 A failed or interrupted publication can leave an unpublished private staging
-directory. It is never treated as a prepared plan, resumed or replayed. Preserve
+directory. No automatic recovery selects that stage or replays an edit. Preserve
 it for inspection, check the actual destination and current output, then make a
 new explicit decision. A failure after publication may have committed the new
 descriptive plan; inspect it rather than infer success from a command exit. No
