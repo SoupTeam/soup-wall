@@ -10,6 +10,8 @@ pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
 mod launch;
 #[cfg(target_os = "linux")]
+mod refresh;
+#[cfg(target_os = "linux")]
 mod runtime;
 pub(crate) mod transport;
 
@@ -35,6 +37,21 @@ enum Action {
         /// New private plan directory, outside the output root.
         #[arg(long)]
         out: PathBuf,
+    },
+    /// Preview refreshed exact bindings; publication requires the displayed confirmation.
+    Refresh {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        sha256: String,
+        /// New private immutable plan directory; the original is preserved.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, requires = "confirm")]
+        apply: bool,
+        /// Exact confirmation_sha256 from the read-only refresh preview.
+        #[arg(long, requires = "apply")]
+        confirm: Option<String>,
     },
     /// Run one explicitly prepared profile with the genuine pinned Claude host.
     Run {

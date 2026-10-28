@@ -108,6 +108,10 @@ retained, never raw model output or provider credentials. A killed daemon cannot
 approve stale records: Ask requires the matching live authenticated epoch.
 Prepare a new plan after independently inspecting an uncertain target.
 
+For another operation on the same declared targets, use the explicit
+[plan refresh preview and confirmation](INSTALLED_EDIT_PLAN_REFRESH.md).
+Refresh never infers previous success, retries a call or approves the next Ask.
+
 ## Qualification
 
 `python3 -B scripts/qualify-installed-edit.py` is inert. The explicit `--run`
