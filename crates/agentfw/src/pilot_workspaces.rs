@@ -235,6 +235,26 @@ fn inspect_inner(
     report.finish()
 }
 
+/// Production preparation checks the selected roots, not whether every leaf is
+/// individually supported. This reuses the same pinned root and Git validators;
+/// per-operation path admission still happens in the protected runtime.
+pub fn validate_selection(
+    filesystem: &Path,
+    git: &Path,
+    selected: GitProfileKind,
+) -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::preflight(filesystem, git, selected)
+            .map_err(|_| anyhow::anyhow!("selected workspace validation failed"))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (filesystem, git, selected);
+        anyhow::bail!("native Linux required");
+    }
+}
+
 #[cfg(target_os = "linux")]
 mod linux {
     use super::*;
@@ -354,7 +374,7 @@ mod linux {
     }
 
     impl Capture {
-        fn begin(root: &Path, allow_links: bool) -> Result<Self, Reason> {
+        fn pin_root(root: &Path) -> Result<File, Reason> {
             let canonical = crate::sandbox::validate_workspace_path(root).map_err(|e| {
                 if e.chain().any(|cause| cause.is::<std::io::Error>()) {
                     Reason::InspectionIoUnavailable
@@ -379,6 +399,11 @@ mod linux {
             if stamp(&m) != stamp(&fs::symlink_metadata(root).map_err(|_| Reason::SourceChanged)?) {
                 return Err(Reason::SourceChanged);
             }
+            Ok(pin)
+        }
+
+        fn begin(root: &Path, allow_links: bool) -> Result<Self, Reason> {
+            let pin = Self::pin_root(root)?;
             let entries = snapshot(&pin, allow_links)?;
             Ok(Self {
                 root: root.to_owned(),
@@ -465,6 +490,39 @@ mod linux {
         } else {
             Reason::ValidatorUnavailable
         }
+    }
+
+    pub(super) fn preflight(
+        filesystem: &Path,
+        git: &Path,
+        selected: GitProfileKind,
+    ) -> Result<(), Reason> {
+        let roots = [filesystem, git];
+        let pins = roots.map(Capture::pin_root);
+        let [files, repository] = pins;
+        let pins = [files?, repository?];
+        let before = pins
+            .iter()
+            .map(|pin| pin.metadata().map(|m| stamp(&m)))
+            .collect::<std::io::Result<Vec<_>>>()
+            .map_err(|_| Reason::InspectionIoUnavailable)?;
+        crate::pilot_launcher::validate_selected_git_workspace(
+            &anchored(&pins[1]),
+            selected.format(),
+        )
+        .map_err(|e| validator_reason(&e))?;
+        for ((root, pin), before) in roots.into_iter().zip(&pins).zip(before) {
+            if crate::sandbox::validate_workspace_path(root)
+                .ok()
+                .as_deref()
+                != Some(root)
+                || stamp(&pin.metadata().map_err(|_| Reason::SourceChanged)?) != before
+                || stamp(&fs::symlink_metadata(root).map_err(|_| Reason::SourceChanged)?) != before
+            {
+                return Err(Reason::SourceChanged);
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn run(
@@ -766,6 +824,22 @@ mod tests {
             assert_eq!(report.profile.git, profile.format());
             assert!(has(&report, Reason::SelectedProfileRequiresRuntimeProof));
         }
+    }
+
+    #[test]
+    fn production_preflight_preserves_per_path_refusals_without_borrowing_inspection() {
+        let (_temp, files, git) = fixture();
+        symlink("/outside/never-open", files.join("link")).unwrap();
+        assert_eq!(
+            inspect(&files, &git, GitProfileKind::V1).state,
+            State::Unsupported
+        );
+        validate_selection(&files, &git, GitProfileKind::V1).unwrap();
+        fs::write(git.join(".gitmodules"), "unsupported").unwrap();
+        assert!(validate_selection(&files, &git, GitProfileKind::V1).is_err());
+        fs::remove_file(git.join(".gitmodules")).unwrap();
+        fs::set_permissions(&files, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(validate_selection(&files, &git, GitProfileKind::V1).is_err());
     }
 
     #[test]

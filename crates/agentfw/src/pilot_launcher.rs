@@ -63,6 +63,9 @@ pub struct PilotWorkspacesArgs {
     /// Optional short spelling for the same single selected compatibility grammar.
     #[arg(long, value_enum)]
     pub git_profile_kind: Option<crate::pilot_workspaces::GitProfileKind>,
+    /// Internal production root-selection preflight; not a full inspection report.
+    #[arg(long, hide = true)]
+    pub validate_selection: bool,
 }
 
 pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
@@ -70,6 +73,20 @@ pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
         .git_profile_kind
         .or_else(|| crate::pilot_workspaces::GitProfileKind::from_format(&args.git_profile_format))
         .context("unsupported Git profile; select one reviewed variant")?;
+    if args.validate_selection {
+        crate::pilot_workspaces::validate_selection(
+            &args.workspace,
+            &args.git_workspace,
+            selected,
+        )?;
+        println!(
+            "{}",
+            serde_json::json!({"format":"sw-pilot-workspace-preflight/1",
+            "status":"supported-read-only", "executed":false, "git_profile_format":selected.format(),
+            "inspection_complete":false, "launch_authorized":false, "runtime_protection_verified":false})
+        );
+        return Ok(());
+    }
     let report = crate::pilot_workspaces::inspect(&args.workspace, &args.git_workspace, selected);
     println!("{}", serde_json::to_string(&report)?);
     ensure!(
