@@ -34,7 +34,7 @@ jobs:
           sudo -- /usr/bin/bwrap --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / --bind "$SOU144_SCRATCH" "$SOU144_SCRATCH" --proc /proc --dev /dev \
             --cap-drop ALL --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP --cap-add CAP_SYS_ADMIN \
-            --chdir / /bin/bash -euc 'mount -t proc -o nosuid,nodev,noexec proc /proc; exec "$@"' bash \
+            --chdir / /bin/bash -euc 'mount -t proc -o nosuid,nodev,noexec proc /proc; mount -t tmpfs -o nosuid,nodev,mode=1777 tmpfs /dev/shm; exec "$@"' bash \
             /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
             --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
             /usr/bin/env -i PATH="$HOME/.cargo/bin:/usr/bin:/bin" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
