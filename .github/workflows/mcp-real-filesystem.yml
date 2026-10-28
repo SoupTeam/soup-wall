@@ -624,9 +624,17 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_switch_prepared_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_resumable_download.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_preparation_coordination.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_cleanup.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_build_native_pilot_inputs.py -v
+      - name: Qualify exact pinned public bubblewrap transfer and offline reuse
+        if: github.event.inputs.capacity_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/qualify-pilot-resumable-download.py --run \
+            --report "$RUNNER_TEMP/sou173-download.json"
       - name: Verify disposable runner administration boundary before building
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
@@ -690,11 +698,6 @@ jobs:
             --output "$RUNNER_TEMP/sou111-assets/git.tar.xz"
           printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 \
             "$RUNNER_TEMP/sou111-assets/git.tar.xz" | sha256sum --check
-          curl --fail --location --retry 3 \
-            https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz \
-            --output "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
-          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
-            "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets/libcap"
           (cd "$RUNNER_TEMP/sou111-assets" && apt-get download libcap-dev)
           dpkg-deb -x "$RUNNER_TEMP"/sou111-assets/libcap-dev_*.deb "$RUNNER_TEMP/sou111-assets/libcap"
@@ -708,7 +711,7 @@ jobs:
           native_args=(--output "$RUNNER_TEMP/sou111-native-prerequisites"
             --expected-commit "$(git rev-parse HEAD)"
             --git-archive "$RUNNER_TEMP/sou111-assets/git.tar.xz"
-            --bwrap-archive "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
+            --allow-download
             --pkg-config-libdir "$caplib/pkgconfig"
             --pkg-config-sysroot "$RUNNER_TEMP/sou111-assets/libcap"
             --meson-pythonpath "$RUNNER_TEMP/sou111-assets/build-tools")
@@ -816,6 +819,16 @@ jobs:
           PY
           export SOU115_GIT="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["git"])')"
           export SOU115_BWRAP="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["bwrap"])')"
+          # The cleanup qualifier uses an isolated account and still requires a local archive.
+          # Reuse the verified transfer instead of issuing a second network request.
+          verified_bwrap="$RUNNER_TEMP/sou111-native-prerequisites/download-cache/bwrap.verified.tar.xz"
+          test -f "$verified_bwrap" && test ! -L "$verified_bwrap"
+          test "$(stat -c %s "$verified_bwrap")" = 129472
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
+            "$verified_bwrap" | sha256sum --check
+          install -m 600 "$verified_bwrap" "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
+            "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
           bash scripts/ci-pilot-cleanup.sh
           source_args=(--output "$RUNNER_TEMP/sou119-agent-build"
             --expected-commit "$(git rev-parse HEAD)")
@@ -1559,6 +1572,7 @@ jobs:
             ${{ runner.temp }}/sou140-rust-tests.log
             ${{ runner.temp }}/sou122-toolchain/native-attestation.json
             ${{ runner.temp }}/sou111-assets/native-summary.json
+            ${{ runner.temp }}/sou173-download.json
             ${{ runner.temp }}/sou111-assets/native-timing.json
             ${{ runner.temp }}/sou111-assets/native-rejected.json
             ${{ runner.temp }}/sou111-assets/native-diagnostic.json

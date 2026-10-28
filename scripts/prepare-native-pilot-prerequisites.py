@@ -34,6 +34,7 @@ sys.dont_write_bytecode = True
 import pilot_capacity as capacity
 from pilot_provider import utility_environment
 import pilot_preparation_lock as coordination
+import pilot_resumable_download as resumable
 import pilot_source_identity as SOURCE_IDENTITY
 SOURCES = {
     "git": ("2.51.2", "git-2.51.2",
@@ -43,6 +44,7 @@ SOURCES = {
               "https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz",
               "0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d", 16 * 1024 * 1024),
 }
+BWRAP_ARCHIVE_BYTES = 129472  # Exact pinned v0.13.1 tar.xz length, independently SHA-256 verified.
 GIT_FLAGS = ("-j2", "NO_CURL=YesPlease", "NO_EXPAT=YesPlease", "NO_TCLTK=YesPlease",
              "NO_GETTEXT=YesPlease", "NO_OPENSSL=YesPlease", "git")
 BWRAP_FLAGS = ("-Dtests=false", "-Dman=disabled", "-Dselinux=disabled",
@@ -58,9 +60,9 @@ MAX_DEPENDENCY_BYTES = 512 * 1024 * 1024
 
 
 class Failure(Exception):
-    def __init__(self, reason, stage="inventory", exit_code=None):
+    def __init__(self, reason, stage="inventory", exit_code=None, progress=None):
         super().__init__(reason)
-        self.reason, self.stage, self.exit_code = reason, stage, exit_code
+        self.reason, self.stage, self.exit_code, self.progress = reason, stage, exit_code, progress
 
 
 def require(ok, reason, stage="inventory"):
@@ -294,11 +296,21 @@ def bounded_archive(path, kind):
     return Path(path).resolve(strict=True)
 
 
-def download(kind, destination):
+def download(kind, destination, *, output=None, claim=None, offline=False, reset=False):
     capacity.recheck("before_download")
     url = SOURCES[kind][2]
     require(url.startswith("https://"), "unpinned_download_refused", "download")
     limit = SOURCES[kind][4]
+    if kind == "bwrap":
+        require(output is not None and claim is not None, "download_claim_missing", "download")
+        try:
+            progress = resumable.acquire(output, claim, destination, url=url,
+                sha256=SOURCES[kind][3], expected=BWRAP_ARCHIVE_BYTES, limit=limit,
+                allow_download=not offline, reset=reset)
+        except resumable.Refusal as error:
+            raise Failure("bwrap_" + error.reason, "download", progress=error.progress) from None
+        bounded_archive(destination, kind)
+        return destination, progress
     request = urllib.request.Request(url, headers={"User-Agent": "soup-wall-sou115/1"})
     deadline = time.monotonic() + 120
     try:
@@ -314,7 +326,7 @@ def download(kind, destination):
     except (OSError, TimeoutError, urllib.error.URLError) as error:
         raise Failure(f"{kind}_download_failed; use the pinned local archive", "download") from error
     bounded_archive(destination, kind)
-    return destination
+    return destination, None
 
 
 def extract(archive, destination, kind):
@@ -597,6 +609,8 @@ def freeze(generation):
 def failure_record(output, error):
     record = {"status": "failed", "stage": error.stage, "reason": error.reason[:160],
               "exit_code": error.exit_code, "active_protection": False}
+    if progress := getattr(error, "progress", None):
+        record["download_progress"] = progress
     if output is not None and output.exists() and not output.is_symlink():
         info = output.lstat()
         if stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() \
@@ -616,7 +630,8 @@ def prepare(args):
     missing.extend(f'{item["dependency"]}: install {item["install"]}' for item in dependencies)
     for kind in SOURCES:
         archive = getattr(args, kind + "_archive")
-        if archive is None and not args.allow_download:
+        if archive is None and not args.allow_download and not (
+                kind == "bwrap" and getattr(args, "offline_bwrap_cache", False)):
             missing.append(f"--{kind}-archive ABSOLUTE_PINNED_ARCHIVE or --allow-download")
         elif archive is not None and (not archive.is_absolute() or not archive.is_file()):
             missing.append(f"--{kind}-archive must be an existing absolute file")
@@ -676,10 +691,18 @@ def prepare(args):
         (generation / "tmp").mkdir(mode=0o700)
         env = environment(tools, generation, args)
         archives = {}
+        download_progress = {}
         for kind in SOURCES:
             supplied = getattr(args, kind + "_archive")
-            archives[kind] = bounded_archive(supplied, kind) if supplied else download(
-                kind, generation / (kind + ".tar.xz"))
+            if supplied:
+                archives[kind] = bounded_archive(supplied, kind)
+            else:
+                archives[kind], progress = download(kind, generation / (kind + ".tar.xz"),
+                    output=output, claim=claim,
+                    offline=kind == "bwrap" and getattr(args, "offline_bwrap_cache", False),
+                    reset=kind == "bwrap" and getattr(args, "clear_bwrap_cache", False))
+                if progress is not None:
+                    download_progress[kind] = progress
         for kind in SOURCES:
             destination = generation / (kind + "-src")
             destination.mkdir(mode=0o700)
@@ -727,6 +750,8 @@ def prepare(args):
                   "active_protection": False}
         if incomplete:
             answer["retained_interrupted_generations"] = incomplete
+        if download_progress:
+            answer["download_progress"] = download_progress
         return answer
 
 
@@ -738,6 +763,10 @@ def main():
     parser.add_argument("--wait-seconds", type=float, default=0,
                         help="explicit bounded wait for an owned same-root build (max 2700)")
     parser.add_argument("--allow-download", action="store_true")
+    parser.add_argument("--offline-bwrap-cache", action="store_true",
+                        help="reuse only the whole-digest-verified private bubblewrap archive")
+    parser.add_argument("--clear-bwrap-cache", action="store_true",
+                        help="with --prepare --rebuild, explicitly clear only owned bubblewrap download staging")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--expected-commit")
     parser.add_argument("--git-archive", type=Path)
@@ -746,6 +775,11 @@ def main():
     parser.add_argument("--pkg-config-sysroot", type=Path)
     parser.add_argument("--meson-pythonpath", type=Path)
     args = parser.parse_args()
+    if args.clear_bwrap_cache and (not args.prepare or not args.rebuild or
+                                   args.bwrap_archive is not None or not args.allow_download):
+        parser.error("--clear-bwrap-cache requires --prepare --rebuild --allow-download and no --bwrap-archive")
+    if args.offline_bwrap_cache and (args.allow_download or args.bwrap_archive is not None):
+        parser.error("--offline-bwrap-cache requires neither --allow-download nor --bwrap-archive")
     if args.capacity_plan:
         if args.prepare or args.guard_capacity:
             parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
