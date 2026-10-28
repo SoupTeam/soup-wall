@@ -654,10 +654,12 @@ def render_markdown(report: dict, latency: dict | None = None) -> str:
     if latency:
         lines += ["", "## Latency (batch 1, this host only)", "", f"Environment: {latency['environment']}", "",
                   "| profile | measurement | n | p50 ms | p95 ms | max ms | over deadline |", "|---|---|---|---|---|---|---|"]
-        for prof, rows in latency["profiles"].items():
-            for k, v in rows.items():
-                if isinstance(v, dict):
-                    lines.append(f"| {prof} | {k} | {v['n']} | {v['p50_ms']:.3f} | {v['p95_ms']:.3f} | {v['max_ms']:.3f} | {v['over_deadline']} |")
+        timed = [("baseline", latency["profiles"])] + ([("candidate", latency["candidate"]["profiles"])] if "candidate" in latency else [])
+        for side, profiles in timed:
+            for prof, rows in profiles.items():
+                for k, v in rows.items():
+                    if isinstance(v, dict):
+                        lines.append(f"| {side} {prof} | {k} | {v['n']} | {v['p50_ms']:.3f} | {v['p95_ms']:.3f} | {v['max_ms']:.3f} | {v['over_deadline']} |")
     lines += ["", "## Boundary probes", "", "| probe | expected | verdict |", "|---|---|---|"]
     lines += [f"| {p['id']} | {p.get('expected')} | {p['verdict']} |" for p in report.get("boundary_probes", [])]
     lines += ["", "Not claimed: " + "; ".join(report.get("not_claimed", [])), ""]
@@ -697,7 +699,13 @@ def main(argv: list[str] | None = None) -> int:
     report, status = run(a.corpus, a.relations, modes, classifiers, candidate)
     a.out_dir.mkdir(parents=True, exist_ok=True)
     if a.latency and status != 3:
-        latency = measure_latency(json.loads(a.corpus.read_bytes())["cases"], classifiers, a.latency_repeats, a.latency_cold)
+        cases = json.loads(a.corpus.read_bytes())["cases"]
+        latency = measure_latency(cases, classifiers, a.latency_repeats, a.latency_cold)
+        latency["classifiers"] = identity(classifiers)
+        if candidate:
+            # Same method and deadlines, after the baseline; only the profiles the candidate replaces.
+            latency["candidate"] = {"classifiers": identity(candidate),
+                                    "profiles": measure_latency(cases, candidate, a.latency_repeats, a.latency_cold)["profiles"]}
         (a.out_dir / "latency.json").write_bytes((json.dumps(latency, indent=2, sort_keys=True) + "\n").encode("utf-8"))
         report_latency = latency
     else:

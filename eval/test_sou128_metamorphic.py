@@ -254,6 +254,37 @@ class Reproducibility(unittest.TestCase):
                 self.assertEqual(rows[key]["n"], 1)
             self.assertEqual(rows["worker_warm_round_trip"]["timeouts"], 0)
 
+    def test_candidate_latency_is_separate_and_leaves_the_report_unchanged(self):
+        # A pass-through candidate: the unchanged generic baseline under another file identity.
+        source = (CONTROLS.PREAMBLE.replace("@BASELINE@", repr(str(BASELINE)))
+                  + "def classify(event):\n    return _base(event)\n" + CONTROLS.POSTAMBLE)
+        with tempfile.TemporaryDirectory(prefix="sou128-candidate-") as tmp:
+            path = Path(tmp, "passthrough.py")
+            path.write_text(source, encoding="utf-8")
+            cand_sha = MR.sha256(path.read_bytes())
+            plain = gate("--modes", "direct,worker", "--candidate", f"generic={path}", keep=True)
+            timed = gate("--modes", "direct,worker", "--candidate", f"generic={path}", "--latency",
+                         "--latency-repeats", "1", "--latency-cold", "1", keep=True)
+        self.assertEqual((plain[0].returncode, timed[0].returncode), (0, 0), timed[0].stdout + timed[0].stderr)
+        self.assertEqual(plain[2]["report.json"], timed[2]["report.json"])
+        latency = json.loads(timed[2]["latency.json"])
+        baseline_ids = timed[1]["identities"]["classifiers"]
+        self.assertEqual(latency["classifiers"], baseline_ids)
+        self.assertEqual({k: v["classifier_sha256"] for k, v in latency["profiles"].items()},
+                         {k: v["sha256"] for k, v in baseline_ids.items()})
+        cand = latency["candidate"]
+        self.assertEqual(cand["classifiers"], {"generic": {"path": "passthrough.py", "sha256": cand_sha}})
+        self.assertEqual(set(cand["profiles"]), {"generic"})  # only the replaced profile is timed again
+        rows = cand["profiles"]["generic"]
+        self.assertEqual(rows["classifier_sha256"], cand_sha)
+        self.assertEqual(rows["cases"], latency["profiles"]["generic"]["cases"])
+        self.assertEqual(rows["direct_warm_in_process"]["n"], rows["cases"])
+        self.assertEqual(rows["worker_warm_round_trip"]["n"], rows["cases"])
+        for key in ("direct_cold_process_per_call", "worker_cold_start_to_ready", "worker_cold_first_reply"):
+            self.assertEqual(rows[key]["n"], 1)
+        self.assertEqual(rows["worker_warm_round_trip"]["timeouts"], 0)
+        self.assertEqual(latency["method"]["deadlines_ms"], {"REQUEST_DEADLINE": 1400, "START_DEADLINE": 1400})
+
 
 class InputIntegrity(unittest.TestCase):
     def mutated(self, corpus_edit=None, relations_edit=None):
