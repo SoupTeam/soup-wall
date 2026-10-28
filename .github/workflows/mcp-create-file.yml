@@ -217,6 +217,8 @@ jobs:
           cd "$SOU161_SOURCE"
           cargo build --locked --offline -p agentfw --bin agentfw
           cargo test --locked --offline -p agentfw --lib edit_session -- --nocapture
+          cargo test --locked --offline -p agentfw --lib pilot_approval -- --nocapture
+          cargo test --locked --offline -p agentfw --test native_endpoint sou125_stop -- --nocapture
           cargo test --locked --offline -p agentfw --lib native::execution::transport -- --nocapture
           cargo test --locked --offline -p agentfw --lib replace_file -- --nocapture
           cargo test --locked --offline -p agentfw --test replace_file -- --nocapture
@@ -224,10 +226,14 @@ jobs:
           cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           sha256sum "$CARGO_TARGET_DIR/debug/agentfw" > "$SOU161_SCRATCH/binary.txt"
           python3 -B scripts/qualify-installed-edit.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
+          python3 -B scripts/qualify-installed-edit-stop.py --run --agentfw "$CARGO_TARGET_DIR/debug/agentfw" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/stop-runtime"
           BASH
       - name: Retain finite current-source qualification and build correlation
         if: always()
@@ -238,5 +244,6 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/stop-runtime/report.json
           if-no-files-found: warn
           retention-days: 30

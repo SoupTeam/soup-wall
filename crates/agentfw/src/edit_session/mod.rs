@@ -8,6 +8,10 @@ use std::path::PathBuf;
 mod profile;
 pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
+mod control;
+#[cfg(target_os = "linux")]
+mod control_io;
+#[cfg(target_os = "linux")]
 mod launch;
 #[cfg(target_os = "linux")]
 mod runtime;
@@ -59,6 +63,13 @@ enum Action {
         run: PathBuf,
         #[command(subcommand)]
         action: Ask,
+    },
+    /// Revoke and stop one exact installed run through its verified owner.
+    Stop {
+        #[arg(long)]
+        run: PathBuf,
+        #[arg(long, value_enum)]
+        output: Option<crate::pilot_approval::OutputFormat>,
     },
     /// Private host forwarder; never launches an MCP child or grants authority.
     #[command(hide = true)]
