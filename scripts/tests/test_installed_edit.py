@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 import importlib.util
+import copy
+import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,6 +49,12 @@ class InstalledEditEvidence(unittest.TestCase):
         self.assertEqual(probe.cli_observation(1, b'', b'Error: arbitrary failure\n')['reason'], 'cli_failed')
         report = self.seed();report['cases'][0]['attempted'] = False
         self.assertFalse(probe.passed_report(report))
+        self.assertEqual(probe.failure_code(ValueError('diagnosis_changed_selected_state')),
+                         'diagnosis_changed_selected_state')
+        self.assertEqual(probe.failure_code(FileNotFoundError('/private/owned-secret-canary')),
+                         'qualification_runtime_error')
+        self.assertEqual(probe.failure_code(ValueError('payload /private/owned-secret-canary')),
+                         'qualification_runtime_error')
 
     def test_hardlink_control_requires_both_independent_alias_snapshots(self):
         report = self.seed()
@@ -63,6 +72,147 @@ class InstalledEditEvidence(unittest.TestCase):
                                 capture_output=True, check=True, timeout=10)
         self.assertIn(b'"executed": false', result.stdout)
         self.assertNotIn(b'"status": "passed"', result.stdout)
+
+    def test_diagnostic_inventory_keeps_every_runtime_and_simulated_case(self):
+        report = self.seed()
+        report['diagnosis_requested'] = True
+        report['diagnosis'] = probe.diagnostic_inventory()
+        self.assertFalse(probe.passed_report(report))
+        for row in report['diagnosis']['cases']:
+            row.update(attempted=True, status='passed', state_unchanged=True,
+                       target_unchanged=True, sentinel_unchanged=True)
+        self.assertTrue(probe.passed_report(report))
+        for index in range(len(probe.DIAGNOSTIC_CASES)):
+            missing = copy.deepcopy(report)
+            missing['diagnosis']['cases'].pop(index)
+            self.assertFalse(probe.passed_report(missing))
+            failed = copy.deepcopy(report)
+            failed['diagnosis']['cases'][index]['status'] = 'incomplete'
+            self.assertFalse(probe.passed_report(failed))
+            changed = copy.deepcopy(report)
+            changed['diagnosis']['cases'][index]['target_unchanged'] = False
+            self.assertFalse(probe.passed_report(changed))
+        mislabeled = copy.deepcopy(report)
+        fixture = next(r for r in mislabeled['diagnosis']['cases'] if r['kind'] == 'simulated-retained-state')
+        fixture['kind'] = 'native-runtime'
+        self.assertFalse(probe.passed_report(mislabeled))
+
+    def test_diagnosis_default_freezes_inventory_without_executing(self):
+        result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/qualify-installed-edit.py'), '--diagnose'],
+                                capture_output=True, check=True, timeout=10)
+        value = json.loads(result.stdout)
+        self.assertFalse(value['executed'])
+        self.assertEqual(value['diagnosis'], probe.diagnostic_inventory())
+        self.assertTrue(all(row['attempted'] is False for row in value['diagnosis']['cases']))
+
+    def test_result_absence_and_matching_output_cannot_claim_commit_or_delivery(self):
+        status = {'schema': probe.DIAGNOSTIC_FORMAT, 'effects': 'indeterminate',
+                  'host_delivery': 'unknown', 'model_consumption': 'unknown',
+                  'audit': {'calls': [{'commit': 'unknown', 'host_delivery': 'unknown', 'model_consumption': 'unknown'}]},
+                  'outputs': [{'attribution': 'observed_postcondition_not_writer_or_commit_proof'}]}
+        probe.require_indeterminate_status(status)
+        for field in ('effects', 'host_delivery', 'model_consumption'):
+            changed = copy.deepcopy(status)
+            changed[field] = 'success'
+            with self.assertRaises(ValueError):
+                probe.require_indeterminate_status(changed)
+        changed = copy.deepcopy(status)
+        changed['audit']['calls'][0]['commit'] = 'committed'
+        with self.assertRaises(ValueError):
+            probe.require_indeterminate_status(changed)
+        changed = copy.deepcopy(status)
+        changed['outputs'][0]['attribution'] = 'matching_output_proves_writer'
+        with self.assertRaises(ValueError):
+            probe.require_indeterminate_status(changed)
+
+    def test_live_audit_allows_only_correlated_append_only_lease_renewals(self):
+        now = int(time.time() * 1000)
+        def line(row):
+            return json.dumps(row, sort_keys=True).encode() + b'\n'
+        enrolled = {'event': 'native_liveness_enrolled', 'session': 'epoch', 'session_id': 'session',
+                    'at_ms': now, 'released': True}
+        renewal = {'event': 'native_liveness_renewed', 'session': 'epoch', 'session_id': 'session',
+                   'at_ms': now + 1, 'released': True, 'lease_seq': 1}
+        original = line(enrolled)
+        def witness(raw, *, identity=(1, 2, 0o100600, 1, 1000, 1000), tick=1):
+            return {'identity': identity, 'raw': raw, 'size': len(raw), 'mtime_ns': tick, 'ctime_ns': tick}
+        before = witness(original)
+        self.assertEqual(probe.live_audit_delta(before, copy.deepcopy(before)), 0)
+        self.assertEqual(probe.live_audit_delta(before, witness(original + line(renewal), tick=2)), 1)
+        negatives = [witness(original, tick=2), witness(original.replace(b'epoch', b'other')),
+                     witness(original + line(renewal), identity=(1, 3, 0o100600, 1, 1000, 1000)),
+                     witness(original + line(dict(renewal, event='native_call'))),
+                     witness(original + line(dict(renewal, session='another-epoch'))),
+                     witness(original + line(dict(renewal, session_id='another-session'))),
+                     witness(original + line(dict(renewal, released=False))),
+                     witness(original + line(dict(renewal, lease_seq=True))),
+                     witness(original + line(dict(renewal, raw_arguments='must-not-appear'))),
+                     witness(original + line(renewal) + line(renewal)),
+                     witness(original + line(renewal).rstrip(b'\n')),
+                     witness(original + b'{"event":"native_liveness_renewed","event":"native_call"}\n')]
+        for after in negatives:
+            with self.subTest(after_sha256=probe.sha(after['raw'])):
+                with self.assertRaises(ValueError):
+                    probe.live_audit_delta(before, after)
+
+    def native_success_status(self):
+        mutation = {'target_index': 0, 'operation': 'create', 'session_sha256': 'a' * 64,
+                    'call_sha256': 'b' * 64, 'binding_sha256': 'c' * 64, 'admission': 'recorded_allow',
+                    'publication_gate': 'not_recorded', 'result_release': 'recorded_allow',
+                    'commit': 'unknown', 'host_delivery': 'unknown', 'model_consumption': 'unknown'}
+        read = dict(mutation, operation='read', call_sha256='d' * 64)
+        value = {'schema': probe.DIAGNOSTIC_FORMAT, 'effects': 'indeterminate', 'host_delivery': 'unknown',
+                 'model_consumption': 'unknown',
+                 'outputs': [{'target_index': 0, 'operation': 'create', 'observation': 'present',
+                              'sha256': probe.sha(probe.NEW.encode()), 'bytes': len(probe.NEW.encode()),
+                              'attribution': 'observed_postcondition_not_writer_or_commit_proof'}],
+                 'audit': {'completeness': 'selected_bounded_records_only', 'calls': [mutation, read]}}
+        return value
+
+    def test_native_success_requires_correlated_audit_boundaries_and_following_read(self):
+        value = self.native_success_status()
+        read = value['audit']['calls'][1]
+        probe.require_diagnostic(value, operation='create', binding_sha256='c' * 64, read_after=True)
+        negatives = []
+        for field, replacement in [('completeness', 'incomplete'), ('calls', []), ('calls', [read])]:
+            changed = copy.deepcopy(value);changed['audit'][field] = replacement;negatives.append(changed)
+        for field, replacement in [('result_release', 'not_recorded'), ('admission', 'recorded_ask'),
+                                   ('binding_sha256', 'e' * 64), ('target_index', 1), ('call_sha256', None)]:
+            changed = copy.deepcopy(value);changed['audit']['calls'][0][field] = replacement;negatives.append(changed)
+        changed = copy.deepcopy(value);changed['audit']['calls'][1]['session_sha256'] = 'e' * 64;negatives.append(changed)
+        changed = copy.deepcopy(value);changed['audit']['calls'].reverse();negatives.append(changed)
+        for changed in negatives:
+            with self.assertRaises(ValueError):
+                probe.require_diagnostic(changed, operation='create', binding_sha256='c' * 64, read_after=True)
+        replacement = copy.deepcopy(value)
+        replacement['outputs'][0]['operation'] = 'replace'
+        replacement['audit']['calls'][0].update(operation='replace', publication_gate='recorded_allow')
+        probe.require_diagnostic(replacement, operation='replace', binding_sha256='c' * 64, read_after=True)
+        replacement['audit']['calls'][0]['publication_gate'] = 'not_recorded'
+        with self.assertRaises(ValueError):
+            probe.require_diagnostic(replacement, operation='replace', binding_sha256='c' * 64, read_after=True)
+
+    def test_prior_exact_ask_is_not_counted_as_an_executed_mutation(self):
+        value = self.native_success_status()
+        ask = dict(value['audit']['calls'][0], admission='recorded_ask', call_sha256=None,
+                   binding_sha256=None, result_release='not_recorded')
+        value['audit']['calls'].insert(0, ask)
+        probe.require_diagnostic(value, operation='create', binding_sha256='c' * 64, read_after=True)
+        for key, replacement in [('session_sha256', 'e' * 64), ('target_index', 1),
+                                 ('operation', 'replace'), ('result_release', 'recorded_allow'),
+                                 ('binding_sha256', 'c' * 64)]:
+            changed = copy.deepcopy(value)
+            changed['audit']['calls'][0][key] = replacement
+            with self.assertRaises(ValueError):
+                probe.require_diagnostic(changed, operation='create', binding_sha256='c' * 64, read_after=True)
+        second_allow = copy.deepcopy(value)
+        second_allow['audit']['calls'].insert(2, copy.deepcopy(second_allow['audit']['calls'][1]))
+        with self.assertRaises(ValueError):
+            probe.require_diagnostic(second_allow, operation='create', binding_sha256='c' * 64, read_after=True)
+        late_ask = copy.deepcopy(value)
+        late_ask['audit']['calls'].append(late_ask['audit']['calls'].pop(0))
+        with self.assertRaises(ValueError):
+            probe.require_diagnostic(late_ask, operation='create', binding_sha256='c' * 64, read_after=True)
 
     def test_create_and_replace_remain_known_write_in_the_real_classifier(self):
         for tool, description, arguments in (

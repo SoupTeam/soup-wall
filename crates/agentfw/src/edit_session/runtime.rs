@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! One private daemon epoch and one supervised genuine host. No resumption or
 //! automatic retry is permitted after the host has obtained edit authority.
-use super::{launch, profile, transport, FORMAT, SERVER};
+use super::{launch, profile, record, transport, FORMAT, SERVER};
 use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -105,7 +105,10 @@ async fn owned(
     model: String,
     provider: Vec<(std::ffi::OsString, std::ffi::OsString)>,
 ) -> Result<()> {
-    use std::os::unix::{fs::DirBuilderExt, process::CommandExt};
+    use std::os::{
+        fd::AsRawFd,
+        unix::{fs::DirBuilderExt, process::CommandExt},
+    };
     // Register interception before any child can exist.
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -164,6 +167,32 @@ async fn owned(
         instance_id: native.instance_id().into(),
     };
     launch::write(&run.join("run.json"), &profile::canonical(&record)?, 0o400)?;
+    // Retain the exact descriptive plan, not a reference that diagnosis would
+    // have to re-open or revalidate against an already changed output target.
+    launch::write(
+        &run.join("profile.json"),
+        &profile::canonical(&profile)?,
+        0o400,
+    )?;
+    launch::write(&run.join("profile.sha256"), digest.as_bytes(), 0o400)?;
+    let diagnostic = record::Context {
+        format: record::FORMAT.into(),
+        run: run.clone(),
+        home: home.clone(),
+        profile_sha256: digest.clone(),
+        host_session: host.clone(),
+        instance_id: native.instance_id().into(),
+        config_sha256: crate::protection_status::config_digest(&config),
+        listener: record::listener_identity(listener.as_raw_fd())?,
+        started_at_ms: crate::protection_status::now_ms(),
+        owner: record::process_identity(std::process::id())?,
+    };
+    diagnostic.validate()?;
+    launch::write(
+        &run.join("diagnostic-context.json"),
+        &profile::canonical(&diagnostic)?,
+        0o400,
+    )?;
     let tools = profile
         .tools()
         .as_array()
@@ -306,6 +335,22 @@ async fn owned(
                 anyhow::bail!("edit_host_spawn_failed");
             }
         };
+    // The leader remains owned and unreaped until cleanup. Capturing an
+    // identity is only a diagnostic observation, never new process authority.
+    let host_identity = child
+        .child_mut()
+        .id()
+        .context("edit_host_identity")
+        .and_then(record::process_identity)
+        .and_then(|identity| profile::canonical(&identity))
+        .and_then(|bytes| launch::write(&run.join("host-process.json"), &bytes, 0o400));
+    if host_identity.is_err() {
+        let _ = child.cleanup(false).await;
+        let _ = stop_tx.send(true);
+        server.abort();
+        maintenance.abort();
+        anyhow::bail!("edit_host_identity_unavailable");
+    }
     let stream_failure = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let stdout = tokio::spawn(guarded_capture(
         child
