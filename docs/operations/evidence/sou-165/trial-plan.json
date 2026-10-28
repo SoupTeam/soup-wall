@@ -1,0 +1,17 @@
+{
+  "format": "sw-native-result-trial-plan/1",
+  "accepted_base": "f4937110b58305645b7302acae99325d13354916",
+  "frozen_before_measurement": true,
+  "purpose": "Bounded paired profiling; no universal latency claim or inference that retry fixed the original failure",
+  "historical_run": {"run": 40542391786, "source": "cb2860fa6dc2fe070d7eb1b55613a8652d8cd788", "attempt_1": "failed after 19 cases in burst", "repeat": "passed unchanged source and limits per assignment; retain both logs"},
+  "native": "Linux x86-64 non-root, pinned original filesystem MCP, immutable source and isolated loopback namespace",
+  "workload": {"supported_reads": 8, "bytes_per_read": 122880, "oversized_reads": 1, "oversized_file_bytes": 2097152, "native_http_deadline_ms": 5000, "unchanged_full_inventory": true},
+  "conditions": [{"name":"debug-idle","profile":"dev","owned_cpu_loaders":0,"burst_repeats":3}, {"name":"debug-contended","profile":"dev","owned_cpu_loaders":2,"burst_repeats":3}, {"name":"distribution-idle","profile":"release","owned_cpu_loaders":0,"burst_repeats":3}],
+  "variants": ["instrumented-baseline", "measured-candidate"],
+  "full_inventory_runs_per_variant": 1,
+  "maximum_burst_trials": 18,
+  "trial_timeout_seconds": 90,
+  "failure_rule": "Always retain attempted row, exact replies, refusals, errors, incomplete denominator, CPU/load/build/binary/source identity and cleanup. No selective reruns. Full-inventory failure is retained independently of burst trials.",
+  "local_diagnostic": "Three fixed-size eight-result in-process stage profiles before correction; macOS observations cannot substitute for native Linux acceptance",
+  "prohibited_changes": ["deadline increase", "workload reduction", "truncation", "scanner/threshold/label change", "stale-context cache", "concurrent state commit reordering", "paid inference", "runner or ruleset changes"]
+}

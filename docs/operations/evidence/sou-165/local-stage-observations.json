@@ -1,0 +1,155 @@
+{
+  "platform": "macOS arm64 local in-process diagnostic only",
+  "input": "8 x 122880 bytes synthetic public ToolResult, one text block; pinned original-server two-channel Linux evidence is separate",
+  "observations": [
+    {
+      "label": "stage-baseline",
+      "variant": "instrumented-baseline",
+      "observed_results": 8,
+      "all_release_decisions": true,
+      "max_total_us": 941021,
+      "max_session_wait_us": 826818,
+      "median_tracking_us": 69036.5,
+      "median_detectors_us": 38939.0,
+      "qualification": {
+        "label": "stage-baseline",
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "-p",
+          "agentfw",
+          "--lib",
+          "concurrent_eight_original_sized",
+          "--",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "source_sha256": "e344ff7975a195d04d2925a000d54a49963dc1a645cc4b2ace43eddb6740f707",
+        "log_sha256": "3c18d9f445e76c7ef01fe4a396298a6a28a8af767bbacf999bf967c728fa175f",
+        "elapsed_seconds": 81.03
+      }
+    },
+    {
+      "label": "baseline-controls",
+      "variant": "instrumented-baseline",
+      "observed_results": 8,
+      "all_release_decisions": true,
+      "max_total_us": 1115083,
+      "max_session_wait_us": 982739,
+      "median_tracking_us": 72748.0,
+      "median_detectors_us": 52756.0,
+      "qualification": {
+        "label": "baseline-controls",
+        "command": [
+          "cargo",
+          "test",
+          "--offline",
+          "-p",
+          "agentfw",
+          "--lib",
+          "native::tests",
+          "--",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "source_sha256": "99146b50e415f8cb8f1fbcca7004ec156b0a38014f14901ca52aefb63d84e071",
+        "log_sha256": "7ba9c94b7b1b829ab448c4976d0b6546c81b6a30f719a6a226b711fd5d363b45",
+        "elapsed_seconds": 16.73
+      }
+    },
+    {
+      "label": "baseline-validation",
+      "variant": "instrumented-baseline",
+      "observed_results": 8,
+      "all_release_decisions": true,
+      "max_total_us": 1862480,
+      "max_session_wait_us": 1657836,
+      "median_tracking_us": 133614.5,
+      "median_detectors_us": 82571.0,
+      "qualification": {
+        "label": "baseline-validation",
+        "command": [
+          "/bin/bash",
+          "-e",
+          "-c",
+          "cargo test --offline --workspace\ncargo clippy --offline --all-targets -- -D warnings\ncargo fmt --all --check"
+        ],
+        "exit_code": 0,
+        "source_sha256": "1da7402e0e3913a85a51693c052431d2505c105b312e139dad3850d38e84aa40",
+        "log_sha256": "8b29a7e9e37cdee5a7eb01df526994590a2515e9783e68c3ca0aa00f38d1b9f0",
+        "elapsed_seconds": 333.01
+      }
+    },
+    {
+      "label": "instrumentation-final",
+      "variant": "instrumented-baseline",
+      "observed_results": 8,
+      "all_release_decisions": true,
+      "max_total_us": 942547,
+      "max_session_wait_us": 828257,
+      "median_tracking_us": 68959.0,
+      "median_detectors_us": 39258.5,
+      "qualification": {
+        "label": "instrumentation-final",
+        "command": [
+          "/bin/bash",
+          "-e",
+          "-c",
+          "cargo test --offline -p agentfw --lib concurrent_timing -- --nocapture\ncargo clippy --offline -p agentfw --all-targets -- -D warnings\ncargo fmt --all --check"
+        ],
+        "exit_code": 0,
+        "source_sha256": "39e87ba41b56119ed179756e68272e79fc13f556e6fb16cef927b8269c1a2c9b",
+        "log_sha256": "cfd5a523a97d7dfce66f5b19fa6b2250eea70cff19f2dedf5545662d700cacf2",
+        "elapsed_seconds": 35.31
+      }
+    },
+    {
+      "label": "candidate-fingerprints",
+      "variant": "measured-candidate",
+      "observed_results": 8,
+      "all_release_decisions": true,
+      "max_total_us": 786016,
+      "max_session_wait_us": 690476,
+      "median_tracking_us": 48900.0,
+      "median_detectors_us": 39170.0,
+      "qualification": {
+        "label": "candidate-fingerprints",
+        "command": [
+          "/bin/bash",
+          "-e",
+          "-c",
+          "cargo test --offline -p soup-wall-agent fingerprint -- --nocapture\ncargo test --offline -p agentfw --lib concurrent_timing -- --nocapture"
+        ],
+        "exit_code": 0,
+        "source_sha256": "fda77e69bb2774226fb54f46d9ad2b9345c2a4f7f5462f6537f7df96dc2a874f",
+        "log_sha256": "6b25d66dd0ba07c8a0b15679198b5146db4740d345ba0695950224e1cc9dc93d",
+        "elapsed_seconds": 26.28
+      }
+    },
+    {
+      "label": "candidate-validation",
+      "variant": "measured-candidate",
+      "observed_results": 8,
+      "all_release_decisions": true,
+      "max_total_us": 1147943,
+      "max_session_wait_us": 1007297,
+      "median_tracking_us": 73128.5,
+      "median_detectors_us": 62017.0,
+      "qualification": {
+        "label": "candidate-validation",
+        "command": [
+          "/bin/bash",
+          "-e",
+          "-c",
+          "cargo test --offline --workspace\ncargo clippy --offline --all-targets -- -D warnings\ncargo fmt --all --check"
+        ],
+        "exit_code": 0,
+        "source_sha256": "fda77e69bb2774226fb54f46d9ad2b9345c2a4f7f5462f6537f7df96dc2a874f",
+        "log_sha256": "90a6fa722446a8fc401ceb3439cd29be721495c46c4b1a212e031e8e0de4739e",
+        "elapsed_seconds": 240.3
+      }
+    }
+  ],
+  "interpretation": "All observed diagnostic executions, including incidental workspace test runs, are retained. CPU load was not controlled for local diagnostics. Comparisons are illustrative and do not substitute for the frozen Linux trials."
+}

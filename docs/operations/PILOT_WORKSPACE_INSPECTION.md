@@ -20,7 +20,9 @@ It does not implement the guided CLI.
 
 ## Versioned response
 
-Format: `sw-pilot-workspace-inspection/1`. Fields are additive to the previous
+Format: `sw-pilot-workspace-inspection/1`. The accepted `--git-profile-format` remains available for all six reviewed formats.
+`--git-profile-kind` is an optional short spelling and conflicts with an explicit
+format; neither field can combine capabilities. Fields are additive to the previous
 success response: `status: supported-read-only` and `executed: false` remain.
 
 | Field | Meaning |
@@ -33,8 +35,10 @@ success response: `status: supported-read-only` and `executed: false` remain.
 | `runtime_protection_verified` | Always false |
 | `revalidate_at_launch` | Always true |
 
-Exit 0 means only `supported` compatibility. Conditional, unsupported and
-unavailable return nonzero (currently 1), after the JSON report. Argument parsing
+Exit 0 means layout-compatible (`supported` or explicitly `conditional`). This
+preserves existing preparation callers selecting a reviewed format. A conditional
+result still requires the selected runtime proof and cannot authorize launch.
+Unsupported and unavailable return nonzero (currently 1), after the JSON report. Argument parsing
 retains clap's usage errors. An incomplete inspection dominates other partial
 findings. A refused root has no implied passing checks for its descendants.
 
@@ -62,16 +66,18 @@ Examples below are abbreviated shapes, not measured runtime evidence:
 The command calls the existing `sandbox::validate_workspace_path` and selected
 production Git repository validator. There is no second Git/config parser.
 Canonical/operator-owned roots without group/other writes are required. A
-conservative metadata guard refuses links, special files and shared-write entries
-in either selected tree; a filesystem profile may support individual operations
+conservative metadata guard refuses special files and shared-write entries. Links
+are refused except Git links under the explicitly selected tracked-symlinks
+profile, where the existing production graph validator remains authoritative; a filesystem profile may support individual operations
 on a wider tree, but this inspector cannot report a fully checked tree for it.
 
 | Selected kind | Offline result when layout passes |
 | --- | --- |
 | `v1` | Supported for original narrow repository compatibility only |
 | `local-clone` | Conditional: production layout/config/attributes checks pass, but protected runtime index/object proof is still required |
-| `local-refs` | Unsupported by this offline inspector; no silent fallback to v1 |
-| `shallow` | Unsupported by this offline inspector; no silent fallback to v1 |
+| `local-refs`, `file-revisions` | Conditional: selected production layout validator passes; runtime object/view proof remains mandatory |
+| `shallow` | Conditional: production shallow layout validator passes; bounded shallow object/view proof remains mandatory |
+| `tracked-symlinks` | Conditional: production link graph/layout validator passes without following links; runtime index/object proof remains mandatory |
 
 No profile activation or new Git semantics are introduced. In particular,
 ordinary-clone remote metadata cannot turn inspection into a network operation,
@@ -96,6 +102,9 @@ bytes and 4,096 bytes per relative path. At most two initial snapshots plus one
 comparison snapshot are retained; output contains no entry inventory. The report
 has at most six conditions. Only production validators read bounded control
 files; the stability guard reads metadata, not ordinary file contents.
+
+The accepted response field `git_profile_format` is retained alongside the bounded
+profile identity. No caller must infer a format from repository data.
 
 Linux roots and traversal directories are pinned by descriptors without following
 symlink components. Before/after identity, mode, ownership, size and mtime/ctime

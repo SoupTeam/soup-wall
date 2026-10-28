@@ -391,7 +391,7 @@ class PreparationBoundary(unittest.TestCase):
 
             with patch.object(PREP, "supported_platform"), patch.object(PREP.PILOT, "source", return_value=before), \
                  patch.object(PREP, "selected_paths", return_value=paths), \
-                 patch.object(PREP, "verify_profile", side_effect=lambda kind, *_: profiles[kind]), \
+                 patch.object(PREP, "verify_profile", side_effect=lambda kind, *_, **__: profiles[kind]), \
                  patch.object(PREP, "verify_generation", side_effect=lambda gen, *_: (gen / "selection.json", profiles)), \
                  patch.object(PREP.subprocess, "run", side_effect=init_git), \
                  patch.object(PREP.FS, "install") as fs_install, patch.object(PREP.GIT, "install"):

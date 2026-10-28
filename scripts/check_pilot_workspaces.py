@@ -142,7 +142,7 @@ def run_case(binary, tracer, root, kind):
     report = json.loads(result.stdout)
     require(report["format"] == "sw-pilot-workspace-inspection/1", "report_schema")
     require(report["state"] == expected, "unexpected_state")
-    require(result.returncode == (0 if expected == "supported" else 1), "unexpected_exit")
+    require(result.returncode == (0 if expected in {"supported", "conditional"} else 1), "unexpected_exit")
     require(not report["executed"] and not report["launch_authorized"]
             and not report["runtime_protection_verified"], "authority_claim")
     require(reason is None or any(c["reason"] == reason for c in report["checks"]), "missing_reason")

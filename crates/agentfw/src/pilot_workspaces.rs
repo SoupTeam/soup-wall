@@ -16,15 +16,32 @@ pub enum GitProfileKind {
     LocalClone,
     LocalRefs,
     Shallow,
+    FileRevisions,
+    TrackedSymlinks,
 }
 
 impl GitProfileKind {
-    fn format(self) -> &'static str {
+    pub fn from_format(format: &str) -> Option<Self> {
+        [
+            Self::V1,
+            Self::LocalClone,
+            Self::LocalRefs,
+            Self::Shallow,
+            Self::FileRevisions,
+            Self::TrackedSymlinks,
+        ]
+        .into_iter()
+        .find(|kind| kind.format() == format)
+    }
+
+    pub fn format(self) -> &'static str {
         match self {
             Self::V1 => server_profile::git::FORMAT,
             Self::LocalClone => server_profile::git_local_clone::FORMAT,
             Self::LocalRefs => server_profile::git::LOCAL_REFS_FORMAT,
             Self::Shallow => server_profile::git::SHALLOW_FORMAT,
+            Self::FileRevisions => server_profile::git::FILE_READS_FORMAT,
+            Self::TrackedSymlinks => server_profile::git_tracked_symlinks::FORMAT,
         }
     }
 }
@@ -85,7 +102,7 @@ impl Reason {
             Self::OwnedPrivateRootRequired | Self::SharedWriteAccess => "Select an operator-owned workspace without shared write access; no permission repair is performed.",
             Self::SourceChanged => "Stop concurrent writers and repeat inspection; never reuse this result for launch.",
             Self::InspectionBoundExceeded => "Select a smaller supported workspace; do not raise production limits to bypass refusal.",
-            Self::SelectedProfileRequiresRuntimeProof => "Local-clone layout checks passed; the protected runtime must still validate index/object semantics before use.",
+            Self::SelectedProfileRequiresRuntimeProof => "Selected profile layout checks passed; the protected runtime must still validate index/object semantics before use.",
             Self::ProfileNotInspectedOffline => "Use the selected profile's existing qualification procedure; this inspector cannot establish its object-view proof offline.",
             Self::InspectionIoUnavailable | Self::ValidatorUnavailable => "Resolve inspection availability with the operator, then repeat; do not assume compatibility.",
             _ => "Select a separate repository compatible with the chosen profile; inspect the reported category without executing helpers or repairing this repository.",
@@ -115,6 +132,7 @@ pub struct ProfileIdentity {
 pub struct Report {
     pub format: &'static str,
     /// Retains the old success token for existing callers; use `state` in v1 consumers.
+    pub git_profile_format: &'static str,
     pub status: &'static str,
     pub state: State,
     pub profile: ProfileIdentity,
@@ -126,6 +144,12 @@ pub struct Report {
 }
 
 impl Report {
+    /// Exit success establishes layout compatibility, including an explicit
+    /// runtime-proof condition. It never permits use of the report for launch.
+    pub fn is_layout_compatible(&self) -> bool {
+        matches!(self.state, State::Supported | State::Conditional)
+    }
+
     pub fn is_supported(&self) -> bool {
         self.state == State::Supported
     }
@@ -175,6 +199,8 @@ fn inspect_inner(
         include_bytes!("sandbox.rs").as_slice(),
         include_bytes!("mcp/server_profile/git.rs").as_slice(),
         include_bytes!("mcp/server_profile/git_local_clone.rs").as_slice(),
+        include_bytes!("mcp/server_profile/git_tracked_symlinks.rs").as_slice(),
+        include_bytes!("pilot_launcher.rs").as_slice(),
         include_bytes!("pilot_workspaces.rs").as_slice(),
     ] {
         identity.update((bytes.len() as u64).to_be_bytes());
@@ -184,6 +210,7 @@ fn inspect_inner(
     let mut report = Report {
         format: FORMAT,
         status: "unavailable",
+        git_profile_format: selected.format(),
         state: State::Unavailable,
         profile: ProfileIdentity {
             filesystem: server_profile::FORMAT,
@@ -270,15 +297,17 @@ mod linux {
         root: PathBuf,
         pin: File,
         entries: BTreeMap<PathBuf, Stamp>,
+        allow_links: bool,
     }
 
-    fn snapshot(pin: &File) -> Result<BTreeMap<PathBuf, Stamp>, Reason> {
+    fn snapshot(pin: &File, allow_links: bool) -> Result<BTreeMap<PathBuf, Stamp>, Reason> {
         fn walk(
             pin: &File,
             relative: &Path,
             depth: usize,
             bytes: &mut usize,
             rows: &mut BTreeMap<PathBuf, Stamp>,
+            allow_links: bool,
         ) -> Result<(), Reason> {
             if depth > MAX_DEPTH || rows.len() >= MAX_ENTRIES {
                 return Err(Reason::InspectionBoundExceeded);
@@ -298,10 +327,10 @@ mod linux {
                     return Err(Reason::InspectionBoundExceeded);
                 }
                 let m = fs::symlink_metadata(entry.path()).map_err(|_| Reason::SourceChanged)?;
-                if m.is_symlink() || !(m.is_file() || m.is_dir()) {
+                if !(m.is_file() || m.is_dir() || (allow_links && m.is_symlink())) {
                     return Err(Reason::UnsafeLinkOrSpecialFile);
                 }
-                if m.mode() & 0o022 != 0 {
+                if !m.is_symlink() && m.mode() & 0o022 != 0 {
                     return Err(Reason::SharedWriteAccess);
                 }
                 if m.is_dir() {
@@ -309,7 +338,7 @@ mod linux {
                     if stamp(&m) != stamp(&child.metadata().map_err(|_| Reason::SourceChanged)?) {
                         return Err(Reason::SourceChanged);
                     }
-                    walk(&child, &rel, depth + 1, bytes, rows)?;
+                    walk(&child, &rel, depth + 1, bytes, rows, allow_links)?;
                 } else {
                     rows.insert(rel, stamp(&m));
                 }
@@ -320,12 +349,12 @@ mod linux {
             Ok(())
         }
         let mut rows = BTreeMap::new();
-        walk(pin, Path::new(""), 0, &mut 0, &mut rows)?;
+        walk(pin, Path::new(""), 0, &mut 0, &mut rows, allow_links)?;
         Ok(rows)
     }
 
     impl Capture {
-        fn begin(root: &Path) -> Result<Self, Reason> {
+        fn begin(root: &Path, allow_links: bool) -> Result<Self, Reason> {
             let canonical = crate::sandbox::validate_workspace_path(root).map_err(|e| {
                 if e.chain().any(|cause| cause.is::<std::io::Error>()) {
                     Reason::InspectionIoUnavailable
@@ -350,11 +379,12 @@ mod linux {
             if stamp(&m) != stamp(&fs::symlink_metadata(root).map_err(|_| Reason::SourceChanged)?) {
                 return Err(Reason::SourceChanged);
             }
-            let entries = snapshot(&pin)?;
+            let entries = snapshot(&pin, allow_links)?;
             Ok(Self {
                 root: root.to_owned(),
                 pin,
                 entries,
+                allow_links,
             })
         }
 
@@ -365,7 +395,8 @@ mod linux {
                 != Some(&self.root)
                 || stamp(&fs::symlink_metadata(&self.root).map_err(|_| Reason::SourceChanged)?)
                     != self.entries[Path::new("")]
-                || snapshot(&self.pin).map_err(|_| Reason::SourceChanged)? != self.entries
+                || snapshot(&self.pin, self.allow_links).map_err(|_| Reason::SourceChanged)?
+                    != self.entries
             {
                 return Err(Reason::SourceChanged);
             }
@@ -445,7 +476,10 @@ mod linux {
     ) {
         let mut captures = Vec::new();
         for (role, root) in [("filesystem", filesystem), ("git", git)] {
-            match Capture::begin(root) {
+            match Capture::begin(
+                root,
+                role == "git" && matches!(selected, GitProfileKind::TrackedSymlinks),
+            ) {
                 Ok(capture) => {
                     report.record(role, "canonical_owned_root_and_bounded_tree", Ok(()));
                     captures.push((role, capture));
@@ -457,20 +491,12 @@ mod linux {
         }
         if let Some((_, capture)) = captures.iter().find(|(role, _)| *role == "git") {
             let root = anchored(&capture.pin);
-            let result = match selected {
-                GitProfileKind::V1 => server_profile::git::validate_repository(&root)
-                    .map_err(|e| validator_reason(&e)),
-                GitProfileKind::LocalClone => {
-                    server_profile::git_local_clone::validate_repository(&root)
-                        .map_err(|e| validator_reason(&e))
-                }
-                GitProfileKind::LocalRefs | GitProfileKind::Shallow => {
-                    Err(Reason::ProfileNotInspectedOffline)
-                }
-            };
+            let result =
+                crate::pilot_launcher::validate_selected_git_workspace(&root, selected.format())
+                    .map_err(|e| validator_reason(&e));
             let layout_passed = result.is_ok();
             report.record("git", "selected_production_repository_validator", result);
-            if layout_passed && matches!(selected, GitProfileKind::LocalClone) {
+            if layout_passed && !matches!(selected, GitProfileKind::V1) {
                 report.record(
                     "git",
                     "index_and_object_semantics",
@@ -726,13 +752,110 @@ mod tests {
     }
 
     #[test]
-    fn separate_profiles_are_not_silently_validated_as_v1() {
+    fn separate_reviewed_profiles_use_selected_authority_and_retain_runtime_condition() {
         let (_temp, files, git) = fixture();
-        for profile in [GitProfileKind::LocalRefs, GitProfileKind::Shallow] {
+        for profile in [
+            GitProfileKind::LocalRefs,
+            GitProfileKind::Shallow,
+            GitProfileKind::FileRevisions,
+            GitProfileKind::TrackedSymlinks,
+        ] {
             let report = inspect(&files, &git, profile);
-            assert_eq!(report.state, State::Unsupported);
+            assert_eq!(report.state, State::Conditional);
+            assert!(report.is_layout_compatible());
             assert_eq!(report.profile.git, profile.format());
-            assert!(has(&report, Reason::ProfileNotInspectedOffline));
+            assert!(has(&report, Reason::SelectedProfileRequiresRuntimeProof));
+        }
+    }
+
+    #[test]
+    fn shallow_layout_requires_exact_selected_production_validator() {
+        let (_temp, files, git) = fixture();
+        fs::write(git.join(".git/shallow"), "a".repeat(40) + "\n").unwrap();
+        assert_eq!(
+            inspect(&files, &git, GitProfileKind::V1).state,
+            State::Unsupported
+        );
+        let report = inspect(&files, &git, GitProfileKind::Shallow);
+        assert_eq!(report.state, State::Conditional);
+        assert!(report.is_layout_compatible());
+        assert!(!report.launch_authorized);
+    }
+
+    #[test]
+    fn tracked_links_use_production_graph_and_never_follow_outside_targets() {
+        let (_temp, files, git) = fixture();
+        fs::write(git.join("note"), "owned regular leaf").unwrap();
+        symlink("note", git.join("link")).unwrap();
+        assert_eq!(
+            inspect(&files, &git, GitProfileKind::V1).state,
+            State::Unsupported
+        );
+        assert_eq!(
+            inspect(&files, &git, GitProfileKind::TrackedSymlinks).state,
+            State::Conditional
+        );
+        fs::remove_file(git.join("link")).unwrap();
+        symlink("/outside/never-open", git.join("link")).unwrap();
+        assert!(!inspect(&files, &git, GitProfileKind::TrackedSymlinks).is_layout_compatible());
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+    use clap::Parser;
+
+    #[derive(Parser)]
+    struct Cli {
+        #[command(flatten)]
+        args: crate::pilot_launcher::PilotWorkspacesArgs,
+    }
+
+    #[test]
+    fn accepted_cli_format_is_preserved_and_cannot_be_combined_with_short_kind() {
+        let base = [
+            "inspect",
+            "--workspace",
+            "/owned/files",
+            "--git-workspace",
+            "/owned/git",
+        ];
+        for kind in [
+            GitProfileKind::V1,
+            GitProfileKind::LocalClone,
+            GitProfileKind::LocalRefs,
+            GitProfileKind::Shallow,
+            GitProfileKind::FileRevisions,
+            GitProfileKind::TrackedSymlinks,
+        ] {
+            let args = Cli::try_parse_from(
+                base.into_iter()
+                    .chain(["--git-profile-format", kind.format()]),
+            )
+            .unwrap()
+            .args;
+            assert_eq!(
+                GitProfileKind::from_format(&args.git_profile_format)
+                    .unwrap()
+                    .format(),
+                kind.format()
+            );
+        }
+        assert!(Cli::try_parse_from(
+            base.into_iter()
+                .chain(["--git-profile-kind", "local-clone"])
+        )
+        .is_ok());
+        assert!(Cli::try_parse_from(base.into_iter().chain([
+            "--git-profile-format",
+            server_profile::git::FORMAT,
+            "--git-profile-kind",
+            "local-clone"
+        ]))
+        .is_err());
+        for format in ["", "sw-mcp/git-readonly/1+file-revisions", "unknown"] {
+            assert!(GitProfileKind::from_format(format).is_none());
         }
     }
 }

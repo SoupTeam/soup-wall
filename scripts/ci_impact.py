@@ -33,6 +33,7 @@ WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
     "agent-windows-self-test.yml": ("standard-user-self-test",),
     "classifier-runtime-windows.yml": ("native-windows-classifier-runtime",),
     "benchmark.yml": ("agent-scorecard",),
+    "ci-builds.yml": ("agent-default-ubuntu2404",),
     "ci.yml": CI_JOBS,
     "console-recovery.yml": ("owned-recovery",),
     "gate-ci.yml": ("validate-gate-matrix",),
@@ -46,7 +47,7 @@ WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
     "managed-policy-demo.yml": ("managed-rollout-e2e",),
     "managed-policy-postgres.yml": ("managed-postgres",),
     "managed-policy-tls.yml": ("agent-https-rollout",),
-    "mcp-create-file.yml": ("linux-create-file",),
+    "mcp-create-file.yml": ("linux-create-file", "linux-replace-file", "linux-installed-edit"),
     "mcp-https-get.yml": ("linux-https-get",),
     "mcp-https-post.yml": ("linux-https-post",),
     "mcp-profile-author.yml": ("author-cli",),
@@ -66,6 +67,10 @@ WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
     "test-environment.yml": ("windows-launcher", "fixture-baseline"),
     "tls-lifecycle.yml": ("linux",),
 }
+
+# Declarative build edges only; admission scheduling/status algorithms do not change.
+BUILD_CONSUMERS = {"mcp-create-file.yml": ("linux-create-file", "linux-installed-edit")}
+BUILD_PRODUCER = ("ci-builds.yml", "agent-default-ubuntu2404")
 
 AGENT_WORKFLOWS = frozenset({
     "agent-doctor.yml", "agent-windows-onboarding.yml", "agent-windows-self-test.yml",
@@ -151,6 +156,8 @@ def plan(paths: list[str], *, force_full: bool = False) -> dict[str, object]:
         for name in active:
             selected[name] = list(WORKFLOW_JOBS[name])
         mode = "+".join(sorted(categories))
+    selected[BUILD_PRODUCER[0]] = ([BUILD_PRODUCER[1]] if any(
+        job in selected[workflow] for workflow, jobs in BUILD_CONSUMERS.items() for job in jobs) else [])
     return {
         "schema": "sou91-ci-plan/1",
         "mode": mode,

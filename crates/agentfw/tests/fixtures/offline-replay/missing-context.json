@@ -1,0 +1,32 @@
+{
+  "format": "sw-policy-offline-input/1",
+  "context": {
+    "history": "complete_from_start",
+    "judge": "disabled"
+  },
+  "events": [
+    {
+      "complete": false,
+      "event": {
+        "seq": 1,
+        "tool": "Read",
+        "verdict": "allow"
+      }
+    },
+    {
+      "complete": true,
+      "event": {
+        "session": "owned",
+        "agent": "main",
+        "seq": 2,
+        "at_ms": 2,
+        "kind": "tool_call",
+        "tool": "Write",
+        "args": {
+          "file_path": "/owned/note",
+          "content": "owned text"
+        }
+      }
+    }
+  ]
+}

@@ -126,6 +126,7 @@ class Windows:
             "OpenProcess": ([W.DWORD, W.BOOL, W.DWORD], W.HANDLE),
             "WaitForSingleObject": ([W.HANDLE, W.DWORD], W.DWORD),
             "GetProcessTimes": ([W.HANDLE] + [ctypes.POINTER(W.FILETIME)] * 4, W.BOOL),
+            "GetSystemTimeAsFileTime": ([ctypes.POINTER(W.FILETIME)], None),
             "CreateToolhelp32Snapshot": ([W.DWORD, W.DWORD], W.HANDLE),
             "Process32FirstW": ([W.HANDLE, ctypes.POINTER(ProcessEntry)], W.BOOL),
             "Process32NextW": ([W.HANDLE, ctypes.POINTER(ProcessEntry)], W.BOOL),
@@ -154,6 +155,11 @@ class Windows:
         require(self.k.GetProcessTimes(handle, *(ctypes.byref(v) for v in values)),
                 "process_time_witness_" + str(ctypes.get_last_error()))
         return [v.dwLowDateTime + (v.dwHighDateTime << 32) for v in values]
+
+    def now_100ns(self):
+        value = W.FILETIME()
+        self.k.GetSystemTimeAsFileTime(ctypes.byref(value))
+        return value.dwLowDateTime + (value.dwHighDateTime << 32)
 
     def snapshot(self):
         handle = self.k.CreateToolhelp32Snapshot(2, 0)
@@ -298,32 +304,73 @@ class Witness:
         self.peak_alive, self.peak_private, self.error = 0, 0, None
         self.peak_child_private = 0
         self.stop = threading.Event()
-        self.sample()
+        handle = self.api.k.OpenProcess(0x1000 | 0x10 | 0x100000, False, process.pid)
+        require(handle, "collector_process_witness")
+        try:
+            created, _, _, _ = self.api.times(handle)
+            self.remember(process.pid, created, handle)
+        except Exception:
+            self.api.k.CloseHandle(handle)
+            raise
+        try:
+            self.sample()
+        except Exception:
+            for pinned in self.handles.values():
+                self.api.k.CloseHandle(pinned)
+            raise
         self.thread = threading.Thread(target=self.loop, daemon=True)
         self.thread.start()
 
+    def remember(self, pid, created, handle):
+        # Bound proven process generations, never an unverified PID closure.
+        # Retain exited handles for independent cleanup/CPU evidence.
+        require(len(self.handles) < 64, "owned_process_count_bound")
+        identity = (pid, created)
+        self.handles[identity] = handle
+        self.rows[identity] = {"pid": pid, "created_100ns": created, "peak_private_bytes": 0,
+                               "cpu_user_100ns": 0, "cpu_kernel_100ns": 0}
+
     def sample(self):
-        known = {self.process.pid} | set(self.handles)
-        snapshot = self.api.snapshot()
-        for _ in range(32):
-            expanded = known | {pid for pid, parent in snapshot if parent in known}
-            if expanded == known:
-                break
-            known = expanded
-        require(len(known) <= 64, "owned_process_count_bound")
-        for pid in known:
-            if pid not in self.handles:
-                handle = self.api.k.OpenProcess(0x1000 | 0x10 | 0x100000, False, pid)
-                if not handle:
-                    continue  # Short-lived rows cannot provide positive evidence.
-                created, _, _, _ = self.api.times(handle)
-                self.handles[pid] = handle
-                self.rows[pid] = {"pid": pid, "created_100ns": created, "peak_private_bytes": 0,
-                                  "cpu_user_100ns": 0, "cpu_kernel_100ns": 0}
+        # Toolhelp parent IDs can refer to a long-dead process whose PID has
+        # since been reused by this collector. Pin candidate handles and check
+        # birth/lifetime ordering BEFORE attributing descendants or the bound.
+        # A PID reused after the snapshot must wait for a fresh snapshot.
+        captured = self.api.now_100ns()
+        children = {}
+        for pid, parent in self.api.snapshot():
+            children.setdefault(parent, []).append(pid)
+        frontier = list(self.handles)
+        while frontier:
+            following = []
+            for identity in frontier:
+                parent_created, parent_exited, _, _ = self.api.times(self.handles[identity])
+                require(parent_created == identity[1], "process_identity_changed")
+                for pid in children.get(identity[0], []):
+                    handle = self.api.k.OpenProcess(0x1000 | 0x10 | 0x100000, False, pid)
+                    if not handle:
+                        continue  # An unpinned row is never positive evidence.
+                    try:
+                        created, _, _, _ = self.api.times(handle)
+                        child = (pid, created)
+                        # Refresh exit time: the parent can exit (and its PID
+                        # become stale in Toolhelp) while a candidate is opened.
+                        parent_created, parent_exited, _, _ = self.api.times(self.handles[identity])
+                        require(parent_created == identity[1], "process_identity_changed")
+                        if (child in self.handles or created > captured or created < parent_created
+                                or (parent_exited and created > parent_exited)):
+                            continue
+                        self.remember(pid, created, handle)
+                        following.append(child)
+                        handle = None  # The observer now owns this pinned handle.
+                    finally:
+                        if handle is not None:
+                            self.api.k.CloseHandle(handle)
+            frontier = following
         alive, private, child_private = 0, 0, 0
-        for pid, handle in self.handles.items():
+        for identity, handle in self.handles.items():
+            pid, _ = identity
             created, _, kernel, user = self.api.times(handle)
-            row = self.rows[pid]
+            row = self.rows[identity]
             require(created == row["created_100ns"], "process_identity_changed")
             row.update(cpu_user_100ns=user, cpu_kernel_100ns=kernel)
             row["stopped"] = self.api.k.WaitForSingleObject(handle, 0) == 0
@@ -369,8 +416,9 @@ class Witness:
 
 
 class Capture:
-    def __init__(self, stream):
+    def __init__(self, stream, *, protocol_frames=True):
         self.stream, self.data, self.frames, self.error = stream, bytearray(), queue.Queue(maxsize=64), None
+        self.protocol_frames = protocol_frames
         self.thread = threading.Thread(target=self.read, daemon=True)
         self.thread.start()
 
@@ -382,7 +430,11 @@ class Capture:
                     return
                 require(len(line) <= 16384 and len(self.data) + len(line) <= 256 * 1024, "capture_bound")
                 self.data.extend(line)
-                self.frames.put_nowait(line)
+                # Only a protocol consumer drains this finite frame queue.
+                # Log captures must keep draining their pipes up to the same
+                # byte/line bounds instead of stopping at 64 unread log rows.
+                if self.protocol_frames:
+                    self.frames.put_nowait(line)
         except Exception as error:
             self.error = type(error).__name__
 
@@ -496,7 +548,8 @@ class Rig:
         self.server.write_text(SERVER, encoding="utf-8", newline="")
         self.daemon = subprocess.Popen([str(binary), "serve"], env=self.env, cwd=root,
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        self.daemon_out, self.daemon_err = Capture(self.daemon.stdout), Capture(self.daemon.stderr)
+        self.daemon_out = Capture(self.daemon.stdout, protocol_frames=False)
+        self.daemon_err = Capture(self.daemon.stderr, protocol_frames=False)
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             require(self.daemon.poll() is None, "owned_daemon_start_failed")
@@ -515,7 +568,13 @@ class Rig:
     def close(self):
         self.daemon.kill()
         self.daemon.wait(10)
-        return {"stdout_sha256": sha(self.daemon_out.finish()), "stderr_sha256": sha(self.daemon_err.finish())}
+        stdout, stderr = self.daemon_out.finish(), self.daemon_err.finish()
+        return {"stdout_sha256": sha(stdout), "stderr_sha256": sha(stderr),
+                "stdout_bytes": len(stdout), "stderr_bytes": len(stderr),
+                "stdout_error": self.daemon_out.error, "stderr_error": self.daemon_err.error,
+                "capture_complete": (not self.daemon_out.thread.is_alive()
+                    and not self.daemon_err.thread.is_alive()
+                    and self.daemon_out.error is None and self.daemon_err.error is None)}
 
     def audit(self):
         raw = self.audit_path.read_bytes() if self.audit_path.exists() else b""
@@ -563,7 +622,8 @@ class Client:
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         rig.clients.append(self.process)
         self.witness = Witness(rig.api, self.process)
-        self.out, self.err = Capture(self.process.stdout), Capture(self.process.stderr)
+        self.out = Capture(self.process.stdout)
+        self.err = Capture(self.process.stderr, protocol_frames=False)
         self.useful = False
 
     def send(self, value):
@@ -606,8 +666,8 @@ class Client:
             self.process.kill()
             self.process.wait(5)
         deadline = time.monotonic() + 4
-        while any(self.rig.api.k.WaitForSingleObject(handle, 0) != 0 for pid, handle in self.witness.handles.items()
-                  if pid != self.process.pid) and time.monotonic() < deadline:
+        while any(self.rig.api.k.WaitForSingleObject(handle, 0) != 0 for identity, handle in list(self.witness.handles.items())
+                  if identity[0] != self.process.pid) and time.monotonic() < deadline:
             time.sleep(.01)
         proof = self.witness.finish()
         stdout, stderr = self.out.finish(), self.err.finish()
@@ -781,6 +841,17 @@ def grade_report(report):
     grade(sibling, report["memory_accounting_controls"])
 
 
+def cleanup_failure(report, code):
+    # Fallback cleanup must fail the run, but must not replace the primary
+    # protocol/setup error with the symptom of its still-live sibling.
+    report["status"] = "fail"
+    if report.get("error") is None:
+        report["error"] = code
+    failures = report.setdefault("cleanup_errors", [])
+    if code not in failures:
+        failures.append(code)
+
+
 def run(args):
     root = args.output.resolve()
     require(not any((parent / ".git").exists() for parent in [root, *root.parents, Path.cwd(), *Path.cwd().parents]),
@@ -829,14 +900,17 @@ def run(args):
         peer_read_id = 10
         for name in CASES:
             report["active_case"] = name
+            report["active_phase"] = "create_client"
             save(root / "results.json", report)
             client = Client(rig, name)
             expected_failure = name not in {"useful", "breakaway"}
             if name not in {"missing-config", "invalid-config", "unsafe-acl", "spawn-failure", "transparent-refusal"}:
+                report["active_phase"] = "initialize_client"
                 client.initialize()
                 if name == "useful":
                     client.process.stdin.close()
                 else:
+                    report["active_phase"] = "exercise_client"
                     client.exercise()
                     if name == "breakaway":
                         result = json.loads(client.out.frames.get(timeout=8))
@@ -850,6 +924,7 @@ def run(args):
                             client.send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 4}})
                         else:
                             client.process.kill()
+            report["active_phase"] = "finish_client"
             row = client.finish(expected_failure)
             report["cases"].append(row)
             save(root / "results.json", report)
@@ -858,6 +933,7 @@ def run(args):
             except Exception as error:
                 row["passed"], row["failure_code"] = False, str(error) if isinstance(error, ValueError) else type(error).__name__
             try:
+                report["active_phase"] = "sibling_read"
                 peer_read_id += 1
                 peer.read(peer_read_id)
                 row["sibling_useful"] = True
@@ -874,15 +950,18 @@ def run(args):
         grade_report(report)
     except Exception as error:
         report["status"], report["error"] = "fail", str(error) if isinstance(error, ValueError) else type(error).__name__
+        report["primary_exception_type"] = type(error).__name__
     finally:
         if rig:
             # A private fallback cannot repair a failed row or earn a pass.
             for owned in rig.clients:
                 if owned.poll() is None:
-                    report["status"], report["error"] = "fail", "unfinished_owned_collector"
+                    cleanup_failure(report, "unfinished_owned_collector")
                     owned.kill()
                     owned.wait(5)
             report["daemon_capture"] = rig.close()
+            if not report["daemon_capture"]["capture_complete"]:
+                cleanup_failure(report, "daemon_capture_incomplete")
         report["not_run"] = [name for name in CASES if name not in {row["case"] for row in report["cases"]}]
         save(root / "results.json", report)
     return 0 if report["status"] == "pass" else 1

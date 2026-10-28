@@ -27,6 +27,7 @@ from pilot_provider import utility_environment
 ASSETS = ROOT / "profiles/mcp/git-readonly-v1"
 FORMAT = "sw-mcp/git-readonly/1"
 SHALLOW_FORMAT = "sw-mcp/git-readonly-shallow/1"
+FILE_READS_FORMAT = "sw-mcp/git-readonly-file-revisions/1"
 LOCAL_REFS_FORMAT = "sw-mcp/git-readonly-local-refs/1"
 READS = {"git_status", "git_log", "git_diff", "git_diff_staged", "git_diff_unstaged", "git_show"}
 spec = importlib.util.spec_from_file_location("filesystem_installer", ROOT / "scripts/install-sou62-filesystem-profile.py")
@@ -55,12 +56,22 @@ def extract_python(archive, destination):
         bundle.extractall(destination, members=members, filter="data")
 
 
+class RuntimeLibrariesUnavailable(ValueError):
+    """Bounded library identities suitable for prerequisite diagnostics."""
+    def __init__(self, names):
+        self.missing_libraries = sorted(set(names))[:32]
+        super().__init__("unresolved runtime ELF dependency: " + ", ".join(self.missing_libraries))
+
+
 def dependencies(executables, package):
     """Pin explicit system ELF files; packaged Python libraries stay in its tree."""
     paths = set()
     for executable in executables:
         result = subprocess.run(["ldd", str(executable)], capture_output=True, text=True, check=True, timeout=15, env=utility_environment())
         if "not found" in result.stdout:
+            names = re.findall(r"^\s*([A-Za-z0-9_.+-]{1,128})\s+=>\s+not found\s*$", result.stdout, re.M)
+            if names:
+                raise RuntimeLibrariesUnavailable(names)
             raise ValueError("unresolved runtime ELF dependency")
         for raw in re.findall(r"(?:=>\s*)?(/[^\s()]+)", result.stdout):
             path = Path(raw)
@@ -74,11 +85,11 @@ def dependencies(executables, package):
     return [{"path": path, "sha256": sha(path)} for path in sorted(paths)]
 
 
-def registry(manifest, *, local_references=False, shallow_repository=False):
-    if local_references and shallow_repository:
+def registry(manifest, *, local_references=False, file_revisions=False, shallow_repository=False):
+    if sum((local_references, file_revisions, shallow_repository)) > 1:
         raise ValueError("combined Git capabilities are not qualified")
-    selected_format = SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT
-    registry_id = "git-readonly-shallow-v1" if shallow_repository else "git-readonly-local-refs-v1" if local_references else "git-readonly-v1"
+    selected_format = FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT
+    registry_id = "git-readonly-file-revisions-v1" if file_revisions else "git-readonly-shallow-v1" if shallow_repository else "git-readonly-local-refs-v1" if local_references else "git-readonly-v1"
     return {"contract_version": "sw-native/1", "registry_id": registry_id, "tools": [
         {"name": tool["name"],
          "schema_sha256": hashlib.sha256(filesystem.canonical(tool["inputSchema"])).hexdigest(),
@@ -90,8 +101,8 @@ def registry(manifest, *, local_references=False, shallow_repository=False):
 
 def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
             *, static_git=False, python_archive=None, wheelhouse=None, allow_download=True, log=None,
-            local_references=False, shallow_repository=False):
-    if local_references and shallow_repository:
+            local_references=False, file_revisions=False, shallow_repository=False):
+    if sum((local_references, file_revisions, shallow_repository)) > 1:
         raise ValueError("combined Git capabilities are not qualified")
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise ValueError("Git profile requires Linux x86-64; no isolation fallback")
@@ -110,7 +121,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     bwrap_help = subprocess.check_output([str(bwrap), "--help"], text=True, timeout=10, env=utility_environment())
     if "--ro-bind-fd" not in bwrap_help:
         raise ValueError("bubblewrap --ro-bind-fd is required")
-    if (local_references or shallow_repository) and "--ro-bind-data" not in bwrap_help:
+    if (local_references or file_revisions or shallow_repository) and "--ro-bind-data" not in bwrap_help:
         raise ValueError("local references require bubblewrap --ro-bind-data")
     for name, expected in identity["files"].items():
         if Path(name).name != name or sha(ASSETS / name) != expected:
@@ -163,7 +174,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
     # Default v1 dependency discovery and all v1 CLI behavior remain unchanged.
     elf_files = [python, git_launcher] if static_git else [python, git, git_launcher]
     elf_files.extend(path for path in (package / "python/lib").rglob("*.so") if path.is_file())
-    profile = {"format": SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT,
+    profile = {"format": FILE_READS_FORMAT if file_revisions else SHALLOW_FORMAT if shallow_repository else LOCAL_REFS_FORMAT if local_references else FORMAT,
                "workspace": str(workspace), "runtimePath": str(python),
                "runtimeSha256": sha(python), "packageRoot": str(package), "packageTreeSha256": tree_sha(package),
                "bwrapPath": str(bwrap), "bwrapSha256": sha(bwrap),
@@ -172,7 +183,7 @@ def install(destination, workspace, git, git_sha256, bwrap, git_launcher,
                "libraries": dependencies(elf_files, package)}
     private_json(destination / "profile.json", profile)
     manifest = json.loads((ASSETS / "upstream-tools-list.json").read_text())
-    private_json(destination / "registry.json", registry(manifest, local_references=local_references, shallow_repository=shallow_repository))
+    private_json(destination / "registry.json", registry(manifest, local_references=local_references, file_revisions=file_revisions, shallow_repository=shallow_repository))
     shutil.copyfile(ASSETS / "policy.yaml", destination / "policy.yaml")
     os.chmod(destination / "policy.yaml", 0o600)
     shutil.copytree(ASSETS / "upstream-notices", destination / "upstream-notices")
@@ -189,6 +200,7 @@ def main():
     parser.add_argument("--run", action="store_true")
     selected = parser.add_mutually_exclusive_group()
     selected.add_argument("--shallow-repository", action="store_true", help="explicitly select bounded local shallow repository reads")
+    selected.add_argument("--file-revisions", action="store_true", help="explicitly select bounded per-file revision reads")
     selected.add_argument("--local-references", action="store_true",
                         help="explicitly select the bounded local branch/tag reference contract")
     for name in ("destination", "workspace", "git", "bwrap", "git-launcher"):
@@ -197,11 +209,11 @@ def main():
     args = parser.parse_args()
     if not args.run:
         print(json.dumps({"status": "plan", "executed": False,
-                          "profile": SHALLOW_FORMAT if args.shallow_repository else LOCAL_REFS_FORMAT if args.local_references else FORMAT}))
+                          "profile": FILE_READS_FORMAT if args.file_revisions else SHALLOW_FORMAT if args.shallow_repository else LOCAL_REFS_FORMAT if args.local_references else FORMAT}))
         return 0
     try:
         print(json.dumps(install(args.destination, args.workspace, args.git, args.git_sha256,
-                                 args.bwrap, args.git_launcher, local_references=args.local_references, shallow_repository=args.shallow_repository)))
+                                 args.bwrap, args.git_launcher, local_references=args.local_references, file_revisions=args.file_revisions, shallow_repository=args.shallow_repository)))
         return 0
     except (OSError, ValueError, subprocess.SubprocessError, tarfile.TarError) as error:
         print(json.dumps({"status": "failed", "error": str(error)}))

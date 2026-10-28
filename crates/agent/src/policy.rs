@@ -208,6 +208,22 @@ pub struct AgentDecision {
     pub fallback: Option<Verdict>,
 }
 
+/// Trace captured by the same first-match/floor evaluation that returns the verdict.
+/// Rule ordinals refer to the supplied operator policy or the shipped floor policy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyTrace {
+    pub operator_rule: Option<usize>,
+    pub operator_verdict: Verdict,
+    pub operator_fallback: Option<Verdict>,
+    pub applied_floor: Option<SafetyFloor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SafetyFloor {
+    ShippedDeny { rule: usize },
+    IncompleteProvenance,
+}
+
 impl AgentPolicySet {
     pub fn from_yaml(s: &str) -> Result<Self, serde_yaml::Error> {
         use serde::de::Error as _;
@@ -223,9 +239,20 @@ impl AgentPolicySet {
 
     /// First matching operator rule/default, then mandatory safety floors.
     pub fn evaluate(&self, s: &Signals) -> AgentDecision {
-        let decision = self.evaluate_rules(s);
+        self.evaluate_with_trace(s).0
+    }
+
+    /// Additive observation of the actual evaluator, not a second rule match.
+    pub fn evaluate_with_trace(&self, s: &Signals) -> (AgentDecision, PolicyTrace) {
+        let (decision, operator_rule) = self.evaluate_rules(s);
+        let mut trace = PolicyTrace {
+            operator_rule,
+            operator_verdict: decision.verdict,
+            operator_fallback: decision.fallback,
+            applied_floor: None,
+        };
         if decision.verdict == Verdict::Deny {
-            return decision;
+            return (decision, trace);
         }
         // Reuse the shipped hard-refusal predicates rather than duplicating them.
         // Operator ordering remains first-match within its configurable layer.
@@ -234,14 +261,18 @@ impl AgentPolicySet {
             Self::from_yaml(include_str!("../policies/agent-default.yaml"))
                 .expect("shipped policy must parse")
         });
-        for rule in &shipped.agent_policies {
+        for (index, rule) in shipped.agent_policies.iter().enumerate() {
             if rule.action == Verdict::Deny && self.matches(&rule.when, s) {
-                return AgentDecision {
-                    verdict: Verdict::Deny,
-                    rule: Some(rule.name.clone()),
-                    message: rule.message.clone(),
-                    fallback: None,
-                };
+                trace.applied_floor = Some(SafetyFloor::ShippedDeny { rule: index });
+                return (
+                    AgentDecision {
+                        verdict: Verdict::Deny,
+                        rule: Some(rule.name.clone()),
+                        message: rule.message.clone(),
+                        fallback: None,
+                    },
+                    trace,
+                );
             }
         }
         let protected = s
@@ -251,33 +282,105 @@ impl AgentPolicySet {
             && protected
             && matches!(decision.verdict, Verdict::Allow | Verdict::Escalate)
         {
-            return AgentDecision {
+            trace.applied_floor = Some(SafetyFloor::IncompleteProvenance);
+            return (AgentDecision {
                 verdict: Verdict::Ask,
                 rule: Some("taint-history-incomplete".into()),
                 message: Some("Session provenance was discarded; review this action or start a fresh context.".into()),
                 fallback: None,
-            };
+            }, trace);
         }
-        decision
+        (decision, trace)
     }
 
-    fn evaluate_rules(&self, s: &Signals) -> AgentDecision {
-        for rule in &self.agent_policies {
+    /// Eligibility gate for the opt-in formatter correction only. This does not
+    /// alter the ordinary first-match evaluator. A hidden independent restrictive
+    /// predicate is still evidence that the raw refusal was not formatter-only.
+    pub(crate) fn formatter_only_denial(
+        &self,
+        trace: &PolicyTrace,
+        original: &Signals,
+        corrected: &Signals,
+    ) -> bool {
+        if self.default != Verdict::Allow
+            || trace.applied_floor.is_some()
+            || !trace
+                .operator_rule
+                .and_then(|index| self.agent_policies.get(index))
+                .is_some_and(Self::formatter_deny_condition)
+        {
+            return false;
+        }
+        if self.agent_policies.iter().any(|rule| {
+            if rule.action == Verdict::Allow {
+                return false;
+            }
+            let before = self.matches(&rule.when, original);
+            let after = self.matches(&rule.when, corrected);
+            // Discharge only a formatter-specific predicate that actually
+            // stopped matching. A hidden Low Deny that still matches stays.
+            if after {
+                return true;
+            }
+            before && !Self::formatter_deny_condition(rule)
+        }) {
+            return false;
+        }
+        let floors = Self {
+            agent_policies: Vec::new(),
+            egress_allowlist: self.egress_allowlist.clone(),
+            default: Verdict::Allow,
+        };
+        floors
+            .evaluate_with_trace(original)
+            .1
+            .applied_floor
+            .is_none()
+            && floors
+                .evaluate_with_trace(corrected)
+                .1
+                .applied_floor
+                .is_none()
+    }
+
+    fn formatter_deny_condition(rule: &AgentRule) -> bool {
+        rule.action == Verdict::Deny
+            && rule.when.detector.as_deref() == Some("injection")
+            && rule.when.facet == Some(Facet::ToolResult)
+            && serde_json::to_value(&rule.when)
+                .ok()
+                .and_then(|value| value.as_object().cloned())
+                .is_some_and(|fields| {
+                    fields.iter().all(|(key, value)| {
+                        value.is_null()
+                            || matches!(key.as_str(), "detector" | "facet" | "min_severity")
+                    })
+                })
+    }
+
+    fn evaluate_rules(&self, s: &Signals) -> (AgentDecision, Option<usize>) {
+        for (index, rule) in self.agent_policies.iter().enumerate() {
             if self.matches(&rule.when, s) {
-                return AgentDecision {
-                    verdict: rule.action,
-                    rule: Some(rule.name.clone()),
-                    message: rule.message.clone(),
-                    fallback: rule.fallback,
-                };
+                return (
+                    AgentDecision {
+                        verdict: rule.action,
+                        rule: Some(rule.name.clone()),
+                        message: rule.message.clone(),
+                        fallback: rule.fallback,
+                    },
+                    Some(index),
+                );
             }
         }
-        AgentDecision {
-            verdict: self.default,
-            rule: None,
-            message: None,
-            fallback: None,
-        }
+        (
+            AgentDecision {
+                verdict: self.default,
+                rule: None,
+                message: None,
+                fallback: None,
+            },
+            None,
+        )
     }
 
     fn matches(&self, c: &AgentCondition, s: &Signals) -> bool {
