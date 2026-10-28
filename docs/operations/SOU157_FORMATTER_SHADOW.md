@@ -41,3 +41,30 @@ The parser alone proves nothing about origin. Synthetic component witnesses must
 be labelled as such. A fresh Linux daemon-owned execution witness plus tamper
 refusal remains required for runtime qualification; local Windows component
 tests cannot substitute for it. No fresh runtime success is claimed by this plan.
+
+## Implemented diagnostic and validation
+
+`native/execution/formatter.rs` derives bounded ranges only after the existing
+affine result is consumed. `Metadata.formatter_shadow` is optional and descriptive;
+it is never passed to a detector, scoring function or policy rule. The selected
+profile is bound by the existing catalogue and sealed runtime closure identities.
+Both duplicate text channels remain inspected in full by the unchanged pipeline.
+
+Windows: 19 execution tests and the broader 145 native tests passed; agentfw
+library Clippy with `-D warnings` passed. These include component custody/tamper
+controls, exact B16-B19-size spans and baseline verdict/reason equality. They
+are explicitly not a fresh Linux runtime witness. No model was run again.
+
+The existing isolated Linux runtime harness has an opt-in `--formatter-shadow`
+mode. Its default run is unchanged. With the flag, it prepares public inputs,
+uses the original owned runtime for eight size/attack pairs, checks the exact
+attribution hash/ranges against expected original bytes, retains each original
+refusal, and tests body-delimiter ambiguity and copied metadata rejection.
+Results go to `formatter-shadow.json`, initially `incomplete`; a failed assertion
+cannot produce `passed-diagnostic-only`. The existing SOU-155 projection gate is
+not a SOU-157 gate and must not be used to claim acceptance of this optional run.
+
+The reviewer must run that flag under the existing owned Linux lane's isolation
+and exact-source prerequisites. This Windows host has no working WSL distribution;
+no Linux setup or security settings were changed. Fresh runtime attribution and
+tamper evidence remain pending, as do production relief and full SOU-157 acceptance.

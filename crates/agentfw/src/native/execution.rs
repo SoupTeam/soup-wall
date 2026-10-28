@@ -17,6 +17,7 @@ use crate::mcp::admission::{AdmissionCfg, InvocationClassifier};
 use crate::mcp::server_profile::ProfileConfig;
 use crate::mcp::verified_closure::Runtime;
 
+mod formatter;
 pub mod transport;
 
 pub const FORMAT: &str = "sw-mcp/verified-original-execution/1";
@@ -446,6 +447,9 @@ pub struct Metadata {
     pub original_result_bytes: usize,
     /// Reserved narrow producer extension: SOU-156 has no producer in this PR.
     pub domain_witness: Option<GitObjectWitness>,
+    /// Diagnostic only; never an input to inspection or a release predicate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formatter_shadow: Option<formatter::Attribution>,
 }
 
 impl Dispatch {
@@ -481,6 +485,7 @@ impl OriginalResult {
             original_result_sha256: self.result_sha256.clone(),
             original_result_bytes: self.result_bytes,
             domain_witness: None,
+            formatter_shadow: None,
         }
     }
 
@@ -528,7 +533,19 @@ impl OriginalResult {
         {
             return Err("verified_execution_result_mismatch");
         }
-        Ok(self.metadata())
+        let mut metadata = self.metadata();
+        if let Some(args) = request
+            .args
+            .as_ref()
+            .filter(|args| super::args_hash(args) == call.args_sha256)
+        {
+            if call.tool == "read_multiple_files" {
+                // Custody, selected profile, exact call and original result were
+                // validated above. Serialized metadata never enters this path.
+                metadata.formatter_shadow = formatter::derive(args, content);
+            }
+        }
+        Ok(metadata)
     }
 
     pub(crate) async fn inspect(
