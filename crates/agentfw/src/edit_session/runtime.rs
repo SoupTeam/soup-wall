@@ -14,14 +14,14 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct RunRecord {
     pub format: String,
     pub run: PathBuf,
     pub home: PathBuf,
-    profile_sha256: String,
-    host_session: String,
+    pub(super) profile_sha256: String,
+    pub(super) host_session: String,
     pub(super) instance_id: String,
 }
 
@@ -164,6 +164,7 @@ async fn owned(
         instance_id: native.instance_id().into(),
     };
     launch::write(&run.join("run.json"), &profile::canonical(&record)?, 0o400)?;
+    let control = super::control::Guard::create(&run, &record)?;
     let tools = profile
         .tools()
         .as_array()
@@ -288,8 +289,9 @@ async fn owned(
         state.clone(),
         stop_rx.clone(),
     ));
+    let daemon = state.clone();
     let mut server = tokio::spawn(async move {
-        axum::serve(listener, crate::app(state))
+        axum::serve(listener, crate::app(daemon))
             .with_graceful_shutdown(async move {
                 let _ = stop_rx.changed().await;
             })
@@ -340,7 +342,7 @@ async fn owned(
     } else {
         loop {
             tokio::select! {biased;
-                _=term.recv()=>{reason="cancelled";break;},
+                _=term.recv()=>{reason=match control.requested(){Ok(true)=>"operator_stop",Ok(false)=>"cancelled",Err(_)=>"invalid_stop_request"};break;},
                 _=interrupt.recv()=>{reason="cancelled";break;},
                 _=tokio::time::sleep_until(deadline)=>{reason="deadline";break;},
                 _=tokio::time::sleep(Duration::from_millis(25))=>{
@@ -351,6 +353,22 @@ async fn owned(
             }
         }
     }
+    // Stop admission/result release at the same native lock used by execution.
+    // A publication that already held that lock may have committed; no rollback
+    // or automatic retry follows cancellation. The adapter is then joined before
+    // any owner receipt can confirm cleanup.
+    let authority = crate::mcp::replace_file::content_sha256(
+        crate::child_authority::encode_token(&grant).as_bytes(),
+    );
+    let revoked = crate::native::pilot_stop::revoke_selected(
+        &state,
+        &host,
+        &std::collections::BTreeMap::from([(SERVER.into(), authority)]),
+        grant.expires_at_ms,
+    )
+    .is_ok();
+    service.close();
+    let adapter_clean = service.wait_idle().await;
     let cleanup = child.cleanup(false).await;
     let _ = stop_tx.send(true);
     let daemon_clean = match tokio::time::timeout(Duration::from_secs(3), &mut server).await {
@@ -374,13 +392,13 @@ async fn owned(
         }
     }
     let mut input = input;
-    if !matches!(
+    let input_ok = matches!(
         tokio::time::timeout(Duration::from_secs(1), &mut input).await,
         Ok(Ok(Ok(())))
-    ) {
+    );
+    if !input_ok {
         input.abort();
         let _ = input.await;
-        streams_ok = false;
     }
     let quota_usage = service.quota.as_ref().map(|q| q.snapshot());
     let quota_complete = quota_usage.as_ref().is_none_or(|usage| {
@@ -388,12 +406,20 @@ async fn owned(
             u.indeterminate_publications == 0 && u.pending_prepublication_attempts == 0
         })
     });
+    let cleanup_confirmed =
+        cleanup.cleaned && cleanup.reaped && daemon_clean && adapter_clean && streams_ok;
+    let receipt = control.finish(revoked, cleanup_confirmed, reason);
+    let stopped = reason == "operator_stop" && revoked && cleanup_confirmed && receipt.is_ok();
     let complete = reason == "host_completed"
         && cleanup.cleaned
         && cleanup.reaped
         && cleanup.exit_success
         && daemon_clean
         && streams_ok
+        && input_ok
+        && adapter_clean
+        && revoked
+        && receipt.is_ok()
         && quota_complete;
     let mut outcome = json!({"format":FORMAT,"state":if complete {"host_completed"} else {"failed"},"reason":reason,
         "run":run,"profile_sha256":record.profile_sha256,"cleanup":cleanup,"daemon_clean":daemon_clean,
@@ -401,8 +427,8 @@ async fn owned(
         "effect_status":"consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry"});
     if let Some(usage) = quota_usage {
         outcome["mutation_quota"] = match usage {
-            Ok(usage) => serde_json::to_value(usage)?,
-            Err(error) => json!({"error_code":error.code,"counts_known":false}),
+            Ok(usage) => serde_json::to_value(super::quota::RetainedQuota::Known(usage))?,
+            Err(_) => serde_json::to_value(super::quota::RetainedQuota::unavailable())?,
         };
     }
     launch::write(
@@ -411,6 +437,6 @@ async fn owned(
         0o400,
     )?;
     println!("{outcome}");
-    ensure!(complete, "edit_session_incomplete");
+    ensure!(complete || stopped, "edit_session_incomplete");
     Ok(())
 }

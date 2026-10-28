@@ -1,0 +1,371 @@
+{
+  "format": "sw-native-result-qualified-summary/1",
+  "source": {
+    "commit": "929b863abbade7e7dd9c035a7e387d39fde59283",
+    "tree": "1e993870f8cb9f55d7612d629a71ffe0e86dd226",
+    "dirty": false
+  },
+  "run_id": 40574476228,
+  "artifact_id": 12767717781,
+  "artifact_sha256": "4b289bdfa00fd97137dac20fcde620a1ea43fdda550bf596df2d2d52242361ae",
+  "plan_sha256": "5587cfa14aca3dcef87eb82552e4dbee2f88f357f203919fc8aa9e749cabeedf",
+  "environment": {
+    "system": "Linux",
+    "kernel": "6.8.0-1064-azure",
+    "machine": "x86_64",
+    "cpus": 4,
+    "affinity": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "load": [
+      2.5546875,
+      2.80517578125,
+      1.93798828125
+    ]
+  },
+  "python": {
+    "version": "3.12.15",
+    "sha256": "a313772011cc719c0a50b9f952eec2cac13a710c339942fd6122f18e2f3fc707"
+  },
+  "runtime": {
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "bwrap": "2e088fe3192d93f959ef638a250bd1936d1382afdfa9b8e216c9bc1da4567a77",
+    "strace": "38a5c75cb29dd85ddd7780d54f5bf595554d7a1b5c42524b23065f5dc4c4b01d",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7"
+  },
+  "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+  "policy_sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec",
+  "builds": {
+    "instrumented-baseline": {
+      "dev": {
+        "binary": "/home/runner/work/_temp/sou165-scratch/binaries/instrumented-baseline-dev",
+        "binary_sha256": "e3e0538675859e1157ea34d4edf7dbc907f08458bc67164d6e289644a687c78c",
+        "source": "68d5ea479256e91e3c4890982fd26b407b3cdf73",
+        "profile": "dev",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+      },
+      "release": {
+        "binary": "/home/runner/work/_temp/sou165-scratch/binaries/instrumented-baseline-release",
+        "binary_sha256": "a38b5a27f95963815c7793849d357c1cb5da97bcce4bb335c6e91eccd068882c",
+        "source": "68d5ea479256e91e3c4890982fd26b407b3cdf73",
+        "profile": "release",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+      }
+    },
+    "measured-candidate": {
+      "dev": {
+        "binary": "/home/runner/work/_temp/sou165-scratch/binaries/measured-candidate-dev",
+        "binary_sha256": "4f1e1601d01d305cbd4388832e8f9d7a0ac716d5f1223c0235d882257e5cb318",
+        "source": "929b863abbade7e7dd9c035a7e387d39fde59283",
+        "profile": "dev",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+      },
+      "release": {
+        "binary": "/home/runner/work/_temp/sou165-scratch/binaries/measured-candidate-release",
+        "binary_sha256": "fddeff49357d6d1d71e7a7b727e5fd7e183f61f6d312e96e8489c1841fe1ad6d",
+        "source": "929b863abbade7e7dd9c035a7e387d39fde59283",
+        "profile": "release",
+        "rustc": "rustc 1.94.1 (e408947bf 2026-03-25)"
+      }
+    }
+  },
+  "denominator": {
+    "planned": 18,
+    "attempted": 18,
+    "passed": 17,
+    "failed": 1,
+    "incomplete": 0
+  },
+  "candidate": {
+    "planned": 9,
+    "attempted": 9,
+    "passed": 9,
+    "failed": 0,
+    "incomplete": 0,
+    "native_result_transport_observations": 81,
+    "max_transport_us": 3126115
+  },
+  "baseline": {
+    "planned": 9,
+    "attempted": 9,
+    "passed": 8,
+    "failed": 1,
+    "failed_trials": [
+      {
+        "trial": "debug-contended-2-instrumented-baseline",
+        "stage": "burst",
+        "received_responses": 7,
+        "error_type": "ValueError"
+      }
+    ]
+  },
+  "comparison": [
+    {
+      "condition": "debug-idle",
+      "variant": "instrumented-baseline",
+      "planned": 3,
+      "attempted": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "successful_burst_median_ms": 5468.506279999929,
+      "successful_tracking_median_us": 1409404
+    },
+    {
+      "condition": "debug-idle",
+      "variant": "measured-candidate",
+      "planned": 3,
+      "attempted": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "successful_burst_median_ms": 3316.6970599999104,
+      "successful_tracking_median_us": 171694
+    },
+    {
+      "condition": "debug-contended",
+      "variant": "instrumented-baseline",
+      "planned": 3,
+      "attempted": 3,
+      "passed": 2,
+      "failed": 1,
+      "incomplete": 0,
+      "successful_burst_median_ms": 5667.423185000018,
+      "successful_tracking_median_us": 1537482.0
+    },
+    {
+      "condition": "debug-contended",
+      "variant": "measured-candidate",
+      "planned": 3,
+      "attempted": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "successful_burst_median_ms": 3613.660772000003,
+      "successful_tracking_median_us": 183982
+    },
+    {
+      "condition": "distribution-idle",
+      "variant": "instrumented-baseline",
+      "planned": 3,
+      "attempted": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "successful_burst_median_ms": 755.3509760000452,
+      "successful_tracking_median_us": 102236
+    },
+    {
+      "condition": "distribution-idle",
+      "variant": "measured-candidate",
+      "planned": 3,
+      "attempted": 3,
+      "passed": 3,
+      "failed": 0,
+      "incomplete": 0,
+      "successful_burst_median_ms": 731.8950920000589,
+      "successful_tracking_median_us": 89315
+    }
+  ],
+  "stage_observations": [
+    {
+      "condition": "debug-idle",
+      "variant": "instrumented-baseline",
+      "observed_complete_stage_rows": 33,
+      "median_us": {
+        "session_wait_us": 1,
+        "firewall_wait_us": 0,
+        "evidence_us": 162781,
+        "detectors_us": 253896,
+        "tracking_us": 174761,
+        "audit_us": 495,
+        "total_us": 595895
+      },
+      "note": "All fully observed result rows including warm-up, useful continuation and rows from failed bursts; no imputation for lost replies"
+    },
+    {
+      "condition": "debug-idle",
+      "variant": "measured-candidate",
+      "observed_complete_stage_rows": 33,
+      "median_us": {
+        "session_wait_us": 1,
+        "firewall_wait_us": 0,
+        "evidence_us": 162848,
+        "detectors_us": 113607,
+        "tracking_us": 21201,
+        "audit_us": 517,
+        "total_us": 308648
+      },
+      "note": "All fully observed result rows including warm-up, useful continuation and rows from failed bursts; no imputation for lost replies"
+    },
+    {
+      "condition": "debug-contended",
+      "variant": "instrumented-baseline",
+      "observed_complete_stage_rows": 31,
+      "median_us": {
+        "session_wait_us": 1,
+        "firewall_wait_us": 1,
+        "evidence_us": 164985,
+        "detectors_us": 251991,
+        "tracking_us": 177731,
+        "audit_us": 506,
+        "total_us": 613195
+      },
+      "note": "All fully observed result rows including warm-up, useful continuation and rows from failed bursts; no imputation for lost replies"
+    },
+    {
+      "condition": "debug-contended",
+      "variant": "measured-candidate",
+      "observed_complete_stage_rows": 33,
+      "median_us": {
+        "session_wait_us": 1,
+        "firewall_wait_us": 0,
+        "evidence_us": 165857,
+        "detectors_us": 115282,
+        "tracking_us": 22116,
+        "audit_us": 541,
+        "total_us": 322890
+      },
+      "note": "All fully observed result rows including warm-up, useful continuation and rows from failed bursts; no imputation for lost replies"
+    },
+    {
+      "condition": "distribution-idle",
+      "variant": "instrumented-baseline",
+      "observed_complete_stage_rows": 33,
+      "median_us": {
+        "session_wait_us": 0,
+        "firewall_wait_us": 0,
+        "evidence_us": 967,
+        "detectors_us": 12406,
+        "tracking_us": 11433,
+        "audit_us": 353,
+        "total_us": 26535
+      },
+      "note": "All fully observed result rows including warm-up, useful continuation and rows from failed bursts; no imputation for lost replies"
+    },
+    {
+      "condition": "distribution-idle",
+      "variant": "measured-candidate",
+      "observed_complete_stage_rows": 33,
+      "median_us": {
+        "session_wait_us": 0,
+        "firewall_wait_us": 0,
+        "evidence_us": 938,
+        "detectors_us": 12380,
+        "tracking_us": 10377,
+        "audit_us": 363,
+        "total_us": 25113
+      },
+      "note": "All fully observed result rows including warm-up, useful continuation and rows from failed bursts; no imputation for lost replies"
+    }
+  ],
+  "enclosure": {
+    "uid": 1001,
+    "caps": {
+      "CapInh": "0000000000000000",
+      "CapPrm": "0000000000000000",
+      "CapEff": "0000000000000000",
+      "CapBnd": "0000000000000000",
+      "CapAmb": "0000000000000000",
+      "NoNewPrivs": "1"
+    },
+    "source_write_open_refused": true,
+    "scratch_writable": true,
+    "only_loopback_routes": true,
+    "procfs": "private_pid_namespace_nosuid_nodev_noexec"
+  },
+  "inventories": [
+    {
+      "variant": "instrumented-baseline",
+      "status": "passed",
+      "cases": 21,
+      "original_concurrent_exact": 8,
+      "original_oversized_refused": true,
+      "genuine_host": "pass",
+      "cancellation": {
+        "id": 1026,
+        "reply_code": -32800,
+        "reads_before": 1,
+        "reads_after": 1,
+        "late_frame_withheld": [],
+        "useful_followup": {
+          "id": 1027,
+          "released": true,
+          "response_sha256": "447feca59596c6349e41d178b0184ef20be668677c88f8ac022719bf8bebf56e"
+        }
+      },
+      "secret_negative": {
+        "small": [
+          true,
+          []
+        ],
+        "large": [
+          true,
+          []
+        ],
+        "large_released_payload": true
+      },
+      "workspace_unchanged": true
+    },
+    {
+      "variant": "measured-candidate",
+      "status": "passed",
+      "cases": 21,
+      "original_concurrent_exact": 8,
+      "original_oversized_refused": true,
+      "genuine_host": "pass",
+      "cancellation": {
+        "id": 1026,
+        "reply_code": -32800,
+        "reads_before": 1,
+        "reads_after": 1,
+        "late_frame_withheld": [],
+        "useful_followup": {
+          "id": 1027,
+          "released": true,
+          "response_sha256": "447feca59596c6349e41d178b0184ef20be668677c88f8ac022719bf8bebf56e"
+        }
+      },
+      "secret_negative": {
+        "small": [
+          true,
+          []
+        ],
+        "large": [
+          true,
+          []
+        ],
+        "large_released_payload": true
+      },
+      "workspace_unchanged": true
+    }
+  ],
+  "independent_verification": {
+    "archive_crc": true,
+    "archive_sha256": true,
+    "clean_source_and_build_identity": true,
+    "independent_old_candidate_binaries": true,
+    "finite_denominator_including_baseline_failure": true,
+    "all_candidate_original_bytes_and_correlations": true,
+    "all_candidate_native_transport_under_5s": true,
+    "all_candidate_original_syscall_witnesses": true,
+    "all_candidate_workspace_unchanged": true,
+    "all_candidate_processes_stopped": true,
+    "all_candidate_collector_memory_within_96MiB_growth": true,
+    "all_candidate_native_receipt_and_stdio_hashes_correlated": true,
+    "both_complete_inventories_and_genuine_host": true
+  },
+  "support_limit": "This finite owned workload passed on the identified Linux runner. No universal latency guarantee or source-regression inference from a single historical attempt. Final shared Ready qualification/admission/merge remain TL-owned.",
+  "native_rust_checks": {
+    "passed": 525,
+    "failed": 0,
+    "ignored": 0,
+    "strict_clippy_passed": true,
+    "fmt_passed": true,
+    "log_sha256": "2ca57fe3e767881e964be7f7719b4e77d3d2ca38a408e3c48af21c837c5069b2"
+  }
+}

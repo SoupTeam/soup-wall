@@ -1,0 +1,44 @@
+{
+  "format": "sw-edit-quota-composition-trial-plan/1",
+  "task": "SOU-170",
+  "accepted_base": "144512b3ed11f985c922d9911cba26f07599dea9",
+  "cases": [
+    "installed-closure",
+    "legacy-profile",
+    "inert-preview",
+    "invalid-limits",
+    "useful-create",
+    "useful-replace",
+    "exact-byte-limit",
+    "one-byte-over",
+    "one-operation-over",
+    "zero-mutations",
+    "empty-write-count",
+    "ask-reject",
+    "no-approval",
+    "unselected-target",
+    "create-not-replace",
+    "stale-replay",
+    "parallel-last-credit",
+    "postcommit-withheld-create",
+    "postcommit-withheld-replace",
+    "postcommit-interrupted-create",
+    "postcommit-interrupted-replace",
+    "fresh-run-recovery",
+    "independent-run",
+    "active-refresh-no-refill",
+    "refreshed-v2-fresh-ask"
+  ],
+  "original_case_count": 23,
+  "new_cases": [
+    "active-refresh-no-refill",
+    "refreshed-v2-fresh-ask"
+  ],
+  "requirements": [
+    "Preserve exact quota-v2 contract and limits through immutable plan refresh.",
+    "Publishing refreshed plans cannot reset a running ledger or revive old authority.",
+    "A refreshed profile starts only with an explicit new run, fresh exact Ask and unchanged finite ceilings.",
+    "Retained typed quota counters remain local bookkeeping, never authenticated commit or delivery proof."
+  ],
+  "diagnostic_composition": "Required against reviewed incoming #294; not yet claimed qualified."
+}

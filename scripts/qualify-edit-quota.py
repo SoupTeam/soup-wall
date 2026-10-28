@@ -36,7 +36,7 @@ CASES = ('installed-closure', 'legacy-profile', 'inert-preview', 'invalid-limits
          'no-approval', 'unselected-target', 'create-not-replace', 'stale-replay',
          'parallel-last-credit', 'postcommit-withheld-create', 'postcommit-withheld-replace',
          'postcommit-interrupted-create', 'postcommit-interrupted-replace',
-         'fresh-run-recovery', 'independent-run')
+         'fresh-run-recovery', 'independent-run', 'active-refresh-no-refill', 'refreshed-v2-fresh-ask')
 
 
 def canonical(value):
@@ -54,6 +54,12 @@ def passed_report(report):
             and required.get('useful-replace', {}).get('exact_readback') is True
             and required.get('fresh-run-recovery', {}).get('old_epoch_refused') is True
             and required.get('independent-run', {}).get('both_runs_preserved') is True
+            and required.get('active-refresh-no-refill', {}).get('original_plan_preserved') is True
+            and required.get('active-refresh-no-refill', {}).get('exact_limits_preserved') is True
+            and required.get('active-refresh-no-refill', {}).get('active_budget_refilled') is False
+            and required.get('refreshed-v2-fresh-ask', {}).get('exact_limits_preserved') is True
+            and required.get('refreshed-v2-fresh-ask', {}).get('fresh_ask_required') is True
+            and required.get('refreshed-v2-fresh-ask', {}).get('old_authority_refused') is True
             and all(required.get(name, {}).get('execution', {}).get('externally_observed_commit') is True
                     and required.get(name, {}).get('execution', {}).get('actual_success_result_observed') is False
                     for name in ('postcommit-withheld-create', 'postcommit-withheld-replace',
@@ -109,10 +115,10 @@ class Suite(EDIT.Suite):
         index = next(i for i, t in enumerate(prepared['profile']['targets']) if t['name'] == name)
         return f'read_output_{index}', {'path': name}
 
-    def quota_run(self, label, root, target, plan, prepared, proposals, mode='approve', batch=False):
+    def quota_run(self, label, root, target, plan, prepared, proposals, mode='approve', batch=False, on_pending=None):
         self.active = {}
         row, observed, config = self.host(label, root, target, plan, prepared, proposals, mode,
-                                           timeout=12 if mode == 'no-approval' else 40, batch=batch)
+                                           timeout=12 if mode == 'no-approval' else 40, batch=batch, on_pending=on_pending)
         events = []
         raw = (self.work / (label + '-stderr.private')).read_bytes()
         for line in raw.splitlines():
@@ -357,6 +363,63 @@ def qualify(args, report):
         rows = list(pool.map(peer_run, range(2)))
     require(snapshot(suite.sentinel) == suite.before_sentinel, 'peer_sentinel_changed')
     finish('independent-run', both_runs_preserved=True, executions=rows)
+
+    begin('active-refresh-no-refill')
+    size = len(TEXT.encode())
+    root, target, plan, prepared = suite.select('active-refresh', (2, 2 * size), create=(),
+        replace=('result.txt', 'other.txt', 'third.txt'))
+    original_plan = (plan / 'profile.json').read_bytes()
+    refreshed = []
+    pending_count = 0
+    def refresh_while_active(run, pending):
+        nonlocal pending_count
+        pending_count += 1
+        if pending_count == 1:
+            return
+        out = suite.work / ('active-refresh-plan-' + str(pending_count))
+        words = ('refresh', '--plan', plan, '--sha256', prepared['profile_sha256'], '--out', out)
+        code, preview = suite.cli(*words)
+        require(code == 0 and preview['executed'] is False and preview['authority'] is False, 'quota_refresh_preview_failed')
+        after = preview['proposal']['after']
+        require(after['format'] == PROFILE and after['mutation_quota'] == prepared['profile']['mutation_quota'],
+                'refresh_changed_quota_contract')
+        code, applied = suite.cli(*words, '--apply', '--confirm', preview['confirmation_sha256'])
+        require(code == 0 and applied['executed'] is True and applied['profile_sha256'] == sha(canonical(after)),
+                'quota_refresh_apply_failed')
+        require((plan / 'profile.json').read_bytes() == original_plan, 'refresh_mutated_active_source_plan')
+        refreshed.append(dict(plan=out, prepared=dict(profile=after, profile_sha256=applied['profile_sha256']),
+                              confirmation_sha256=preview['confirmation_sha256']))
+    active, observed, _ = suite.quota_run('active-refresh', root, target, plan, prepared,
+        [suite.write_proposal(prepared, name=name) for name in ('result.txt', 'other.txt', 'third.txt')],
+        on_pending=refresh_while_active)
+    require(pending_count == 3 and len(refreshed) == 2 and active['approved'] == 3, 'refresh_ask_sequence_incomplete')
+    require(active['usage']['admitted_mutation_attempts'] == 2 and active['usage']['charged_write_bytes'] == 2 * size
+            and active['usage']['remaining_mutations'] == active['usage']['remaining_write_bytes'] == 0,
+            'active_refresh_refilled_quota')
+    require(target.read_text() == (root / 'other.txt').read_text() == TEXT and (root / 'third.txt').read_text() == EDIT.OLD,
+            'refresh_changed_effect_boundary')
+    require(observed['toolu_edit_2']['is_error'] and 'edit_quota_mutation_limit' in json.dumps(observed['toolu_edit_2']),
+            'refresh_did_not_retain_typed_exhaustion')
+    finish('active-refresh-no-refill', execution=active, original_profile_sha256=sha(original_plan),
+           original_plan_preserved=True, exact_limits_preserved=True, active_budget_refilled=False,
+           refreshed_profiles=[r['prepared']['profile'] for r in refreshed],
+           third_target=snapshot(root / 'third.txt'))
+
+    begin('refreshed-v2-fresh-ask')
+    next_plan, next_prepared = refreshed[-1]['plan'], refreshed[-1]['prepared']
+    prior_run = json.loads((suite.last_run / 'run.json').read_text())
+    fresh, fresh_results, _ = suite.quota_run('refreshed-v2', root, target, next_plan, next_prepared,
+        [suite.write_proposal(next_prepared, content=SECOND), suite.read_proposal(next_prepared)], mode='restart-authority')
+    current_run = json.loads((suite.last_run / 'run.json').read_text())
+    require(fresh['exit'] == 0 and fresh['approved'] == 1 and fresh['retired_epoch_refused']
+            and prior_run['instance_id'] != current_run['instance_id']
+            and target.read_text() == SECOND and len(fresh_results) == 2
+            and all(not v['is_error'] for v in fresh_results.values()), 'refreshed_v2_fresh_authority_missing')
+    require(fresh['usage']['limits'] == prepared['profile']['mutation_quota']
+            and fresh['usage']['admitted_mutation_attempts'] == fresh['usage']['known_committed_mutations'] == 1,
+            'refreshed_v2_changed_quota_or_reused_budget')
+    finish('refreshed-v2-fresh-ask', execution=fresh, exact_limits_preserved=True, fresh_ask_required=True,
+           old_authority_refused=True, target_after=snapshot(target), expected_content_sha256=sha(SECOND.encode()))
     report.update(sentinel_preserved=True, owned_cleanup=True, status='passed')
     require(passed_report(report), 'incomplete_quota_qualification')
 

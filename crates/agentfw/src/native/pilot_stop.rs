@@ -92,35 +92,67 @@ pub async fn handler(
     if request.expires_at_ms == 0 || request.expires_at_ms.saturating_sub(now) > 3_660_000 {
         return failure("pilot_stop_expiry_invalid", StatusCode::BAD_REQUEST);
     }
+    match revoke_selected(
+        &st,
+        &request.host_session,
+        &request.authorities,
+        request.expires_at_ms,
+    ) {
+        Ok(retired) => (
+            StatusCode::OK,
+            Json(json!({
+                "contract_version":CONTRACT, "instance_id":request.instance_id,
+                "host_session":request.host_session, "status":"revoked",
+                "retired_sessions":retired, "running_effects_rolled_back":false,
+            })),
+        ),
+        Err((code, status)) => failure(code, status),
+    }
+}
+
+/// Exact signed bindings only. The installed edit supervisor calls this with
+/// its in-memory grant; the prepared pilot endpoint keeps its two-server wire
+/// contract. Enrollment and result publication share the native sessions lock.
+pub(crate) fn revoke_selected(
+    st: &Shared,
+    host: &str,
+    authorities: &BTreeMap<String, String>,
+    expires_at_ms: u64,
+) -> Result<usize, (&'static str, StatusCode)> {
+    let native = st
+        .native
+        .as_ref()
+        .ok_or(("native_not_configured", StatusCode::NOT_FOUND))?;
+    let now = wall_time_ms().map_err(|code| (code, StatusCode::SERVICE_UNAVAILABLE))?;
     let targets = {
         let Ok(mut sessions) = native.sessions.lock() else {
-            return failure("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE);
+            return Err(("native_state_unavailable", StatusCode::SERVICE_UNAVAILABLE));
         };
         sessions.spent_authorities.retain(|_, exp| *exp > now);
-        if !sessions.scoped_hosts.contains(&request.host_session)
+        if !sessions.scoped_hosts.contains(host)
             && sessions.scoped_hosts.len() >= super::MAX_SESSIONS
         {
-            return failure("native_host_binding_cap", StatusCode::SERVICE_UNAVAILABLE);
+            return Err(("native_host_binding_cap", StatusCode::SERVICE_UNAVAILABLE));
         }
         let mut targets = Vec::new();
         for (id, session) in &sessions.entries {
             if session
                 .authority_digest
                 .as_ref()
-                .is_some_and(|digest| request.authorities.values().any(|v| v == digest))
+                .is_some_and(|digest| authorities.values().any(|v| v == digest))
             {
-                if session.host_session.as_deref() != Some(&request.host_session)
+                if session.host_session.as_deref() != Some(host)
                     || !session.server_id.as_ref().is_some_and(|server| {
-                        request.authorities.get(server) == session.authority_digest.as_ref()
+                        authorities.get(server) == session.authority_digest.as_ref()
                     })
                 {
-                    return failure("pilot_stop_foreign_authority", StatusCode::FORBIDDEN);
+                    return Err(("pilot_stop_foreign_authority", StatusCode::FORBIDDEN));
                 }
                 if session
                     .authority_expires_at_ms
-                    .is_some_and(|expiry| expiry > request.expires_at_ms)
+                    .is_some_and(|expiry| expiry > expires_at_ms)
                 {
-                    return failure("pilot_stop_expiry_invalid", StatusCode::BAD_REQUEST);
+                    return Err(("pilot_stop_expiry_invalid", StatusCode::BAD_REQUEST));
                 }
                 targets.push((id.clone(), Some(session.epoch.clone())));
             }
@@ -134,42 +166,42 @@ pub async fn handler(
                     .values()
                     .filter_map(|s| s.authority_digest.as_ref()),
             )
-            .chain(request.authorities.values())
+            .chain(authorities.values())
             .collect();
         if ledger.len() > super::MAX_SPENT_AUTHORITIES {
-            return failure(
+            return Err((
                 "native_authority_ledger_saturated",
                 StatusCode::SERVICE_UNAVAILABLE,
-            );
+            ));
         }
         // Never permit an as-yet unconnected signed host to fall back to unsigned hooks.
-        sessions.scoped_hosts.insert(request.host_session.clone());
+        sessions.scoped_hosts.insert(host.into());
         // The same lock gates new sessions and all current lineage checks. From
         // here onward, even a not-yet-enrolled collector cannot use either grant.
-        for digest in request.authorities.values() {
+        for digest in authorities.values() {
             let expiry = sessions
                 .spent_authorities
                 .entry(digest.clone())
                 .or_default();
-            *expiry = (*expiry).max(request.expires_at_ms);
+            *expiry = (*expiry).max(expires_at_ms);
         }
         targets
     };
-    let retired = retire_sessions_terminal(&st, native, &targets, "revoked");
+    let retired = retire_sessions_terminal(st, native, &targets, "revoked");
     let audited = st
         .audit
         .write_native(&json!({
             "event":"pilot_run_authority_revoked", "at_ms":now,
-            "instance_id":request.instance_id, "host_session":request.host_session,
-            "registry_sha256":request.registry_sha256, "retired_sessions":retired,
+            "instance_id":native.instance_id(), "host_session":host,
+            "registry_sha256":native.registry_sha256, "retired_sessions":retired,
             "released":false, "running_effects_rolled_back":false,
         }))
         .is_ok();
     let Ok(sessions) = native.sessions.lock() else {
-        return failure(
+        return Err((
             "pilot_stop_cleanup_incomplete",
             StatusCode::SERVICE_UNAVAILABLE,
-        );
+        ));
     };
     let pending_closed = native
         .approval
@@ -188,22 +220,15 @@ pub async fn handler(
         || sessions.entries.values().any(|s| {
             s.authority_digest
                 .as_ref()
-                .is_some_and(|digest| request.authorities.values().any(|v| v == digest))
+                .is_some_and(|digest| authorities.values().any(|v| v == digest))
         })
     {
-        return failure(
+        return Err((
             "pilot_stop_cleanup_incomplete",
             StatusCode::SERVICE_UNAVAILABLE,
-        );
+        ));
     }
-    (
-        StatusCode::OK,
-        Json(json!({
-            "contract_version":CONTRACT, "instance_id":request.instance_id,
-            "host_session":request.host_session, "status":"revoked",
-            "retired_sessions":retired, "running_effects_rolled_back":false,
-        })),
-    )
+    Ok(retired)
 }
 
 #[cfg(test)]

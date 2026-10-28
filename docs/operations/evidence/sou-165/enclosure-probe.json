@@ -1,0 +1,62 @@
+{
+  "format": "sw-native-result-enclosure-probe/1",
+  "run_id": 40569786959,
+  "artifact_id": 12763898220,
+  "artifact_sha256": "84ae4d165680e47c0f0086bb481bd4084d4fd78d64afb6c66f54a1b9b501ffb1",
+  "results": [
+    {
+      "mode": "bounding-preserved",
+      "uid": 1001,
+      "caps": {
+        "CapInh": "0000000000000000",
+        "CapPrm": "0000000000000000",
+        "CapEff": "0000000000000000",
+        "CapBnd": "000001ffffffffff",
+        "CapAmb": "0000000000000000",
+        "NoNewPrivs": "1"
+      },
+      "exit_code": 1,
+      "stderr_codes": [
+        "eperm"
+      ],
+      "stderr_bytes": 58,
+      "stderr_message": "bwrap: Can't mount proc on <path>: Operation not permitted\n"
+    },
+    {
+      "mode": "raw-proc",
+      "uid": 1001,
+      "caps": {
+        "CapInh": "0000000000000000",
+        "CapPrm": "0000000000000000",
+        "CapEff": "0000000000000000",
+        "CapBnd": "0000000000000000",
+        "CapAmb": "0000000000000000",
+        "NoNewPrivs": "1"
+      },
+      "exit_code": 0,
+      "stderr_codes": [],
+      "stderr_bytes": 0,
+      "stderr_message": ""
+    },
+    {
+      "mode": "current",
+      "uid": 1001,
+      "caps": {
+        "CapInh": "0000000000000000",
+        "CapPrm": "0000000000000000",
+        "CapEff": "0000000000000000",
+        "CapBnd": "0000000000000000",
+        "CapAmb": "0000000000000000",
+        "NoNewPrivs": "1"
+      },
+      "exit_code": 1,
+      "stderr_codes": [
+        "eperm"
+      ],
+      "stderr_bytes": 58,
+      "stderr_message": "bwrap: Can't mount proc on <path>: Operation not permitted\n"
+    }
+  ],
+  "finding": "Masking/overmounts on the enclosing procfs prevented nested procfs mount. A fresh nosuid,nodev,noexec procfs inside the already private PID/mount namespace permits the unchanged inner bwrap. Preserving a capability bounding set alone did not fix the refusal.",
+  "invariants": "Runtime/build target remains uid1001, all capability sets including bounds zero, NoNewPrivs1, source/filesystem read-only, only owned scratch writable, loopback-only network. Only the trusted enclosing setup mounts procfs before dropping UID/caps; no host sysctl/AppArmor/ruleset change."
+}

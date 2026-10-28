@@ -63,6 +63,118 @@ pub(crate) struct Snapshot {
     pub remaining_write_bytes: u64,
 }
 
+impl<'de> Deserialize<'de> for Snapshot {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
+        // Retained counters are bounded local observations, not authenticated
+        // commit, delivery or execution evidence. Preserve a strict schema.
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Fields {
+            limits: Limits,
+            admitted_mutation_attempts: u64,
+            charged_write_bytes: u64,
+            known_committed_mutations: u64,
+            known_committed_write_bytes: u64,
+            known_not_committed_mutations: u64,
+            indeterminate_publications: u64,
+            pending_prepublication_attempts: u64,
+            remaining_mutations: u64,
+            remaining_write_bytes: u64,
+        }
+        let f = Fields::deserialize(d)?;
+        let valid = f.limits.validate().is_ok()
+            && f.admitted_mutation_attempts <= f.limits.max_mutations
+            && f.charged_write_bytes <= f.limits.max_write_bytes
+            && f.known_committed_mutations <= f.admitted_mutation_attempts
+            && f.known_committed_write_bytes <= f.charged_write_bytes
+            && f.known_not_committed_mutations <= f.admitted_mutation_attempts
+            && f.indeterminate_publications <= f.admitted_mutation_attempts
+            && f.pending_prepublication_attempts <= f.admitted_mutation_attempts;
+        if !valid {
+            return Err(serde::de::Error::custom(
+                "edit_quota_retained_counts_invalid",
+            ));
+        }
+        let uncommitted = f.admitted_mutation_attempts - f.known_committed_mutations;
+        if f.known_committed_mutations
+            + f.known_not_committed_mutations
+            + f.indeterminate_publications
+            + f.pending_prepublication_attempts
+            != f.admitted_mutation_attempts
+            || f.remaining_mutations != f.limits.max_mutations - f.admitted_mutation_attempts
+            || f.remaining_write_bytes != f.limits.max_write_bytes - f.charged_write_bytes
+            || f.known_committed_write_bytes
+                > f.known_committed_mutations * crate::mcp::replace_file::MAX_BYTES as u64
+            || f.charged_write_bytes - f.known_committed_write_bytes
+                > uncommitted * crate::mcp::replace_file::MAX_BYTES as u64
+        {
+            return Err(serde::de::Error::custom(
+                "edit_quota_retained_counts_contradictory",
+            ));
+        }
+        Ok(Self {
+            limits: f.limits,
+            admitted_mutation_attempts: f.admitted_mutation_attempts,
+            charged_write_bytes: f.charged_write_bytes,
+            known_committed_mutations: f.known_committed_mutations,
+            known_committed_write_bytes: f.known_committed_write_bytes,
+            known_not_committed_mutations: f.known_not_committed_mutations,
+            indeterminate_publications: f.indeterminate_publications,
+            pending_prepublication_attempts: f.pending_prepublication_attempts,
+            remaining_mutations: f.remaining_mutations,
+            remaining_write_bytes: f.remaining_write_bytes,
+        })
+    }
+}
+
+/// Private retained bookkeeping only. This type never authenticates a commit
+/// or caller delivery, including when every local counter is internally valid.
+#[cfg(any(test, target_os = "linux"))]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub(crate) enum RetainedQuota {
+    Known(Snapshot),
+    Unavailable(UnavailableUsage),
+}
+
+#[cfg(any(test, target_os = "linux"))]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UnavailableUsage {
+    error_code: UnavailableCode,
+    #[serde(deserialize_with = "must_be_false")]
+    counts_known: bool,
+}
+
+#[cfg(any(test, target_os = "linux"))]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+enum UnavailableCode {
+    #[serde(rename = "edit_quota_state_unavailable")]
+    StateUnavailable,
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn must_be_false<'de, D: Deserializer<'de>>(d: D) -> std::result::Result<bool, D::Error> {
+    if bool::deserialize(d)? {
+        Err(serde::de::Error::custom(
+            "edit_quota_counts_must_be_unknown",
+        ))
+    } else {
+        Ok(false)
+    }
+}
+
+#[cfg(any(test, target_os = "linux"))]
+impl RetainedQuota {
+    #[cfg(any(test, target_os = "linux"))]
+    pub fn unavailable() -> Self {
+        Self::Unavailable(UnavailableUsage {
+            error_code: UnavailableCode::StateUnavailable,
+            counts_known: false,
+        })
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Refusal {
     pub code: &'static str,

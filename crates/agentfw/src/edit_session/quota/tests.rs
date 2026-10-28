@@ -27,6 +27,66 @@ fn committed(mut ticket: Ticket) {
 }
 
 #[test]
+fn retained_quota_strictly_validates_bounded_local_bookkeeping() {
+    let q = ledger(4, 12);
+    committed(reserve(&q, 3));
+    drop(reserve(&q, 2));
+    let pending = reserve(&q, 1);
+    let value = serde_json::to_value(q.snapshot().unwrap()).unwrap();
+    let decoded: RetainedQuota = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), value);
+    for (key, bad) in [
+        ("admitted_mutation_attempts", json!(u64::MAX)),
+        ("charged_write_bytes", json!(13)),
+        ("known_committed_mutations", json!(2)),
+        ("known_committed_write_bytes", json!(7)),
+        ("known_not_committed_mutations", json!(0)),
+        ("indeterminate_publications", json!(1)),
+        ("pending_prepublication_attempts", json!(0)),
+        ("remaining_mutations", json!(4)),
+        ("remaining_write_bytes", json!(12)),
+        ("commit_authenticated", json!(true)),
+        ("admitted_mutation_attempts", json!(-1)),
+        ("admitted_mutation_attempts", json!(0.5)),
+    ] {
+        let mut malformed = value.clone();
+        malformed[key] = bad;
+        assert!(
+            serde_json::from_value::<RetainedQuota>(malformed).is_err(),
+            "{key}"
+        );
+    }
+    let raw = serde_json::to_string(&value).unwrap();
+    let duplicated = raw.replace(
+        "\"charged_write_bytes\":6",
+        "\"charged_write_bytes\":6,\"charged_write_bytes\":6",
+    );
+    assert_ne!(duplicated, raw);
+    assert!(serde_json::from_str::<RetainedQuota>(&duplicated).is_err());
+    drop(pending);
+}
+
+#[test]
+fn retained_unavailable_quota_never_becomes_known_or_accepts_extra_proof() {
+    let value = serde_json::to_value(RetainedQuota::unavailable()).unwrap();
+    assert_eq!(
+        value,
+        json!({"error_code":"edit_quota_state_unavailable","counts_known":false})
+    );
+    assert!(serde_json::from_value::<RetainedQuota>(value.clone()).is_ok());
+    for (key, bad) in [
+        ("counts_known", json!(true)),
+        ("error_code", json!("unknown")),
+        ("committed", json!(true)),
+    ] {
+        let mut altered = value.clone();
+        altered[key] = bad;
+        assert!(serde_json::from_value::<RetainedQuota>(altered).is_err());
+    }
+    assert!(serde_json::from_value::<RetainedQuota>(json!(null)).is_err());
+}
+
+#[test]
 fn exact_operation_and_byte_boundaries_include_empty_mutations() {
     let q = ledger(2, 7);
     committed(reserve(&q, 3));
