@@ -167,6 +167,7 @@ class RangeTransfer(unittest.TestCase):
                        check=True, timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         server = RedirectServer(hops=hops, delay=delay, body_delay=body_delay)
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.minimum_version = ssl.TLSVersion.TLSv1_2
         tls.load_cert_chain(str(certificate), str(key))
         server.socket = tls.wrap_socket(server.socket, server_side=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -174,6 +175,7 @@ class RangeTransfer(unittest.TestCase):
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         client = ssl.create_default_context(cafile=str(certificate))
+        client.minimum_version = ssl.TLSVersion.TLSv1_2
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
                                              redirect or download.SecureRedirect(),
                                              urllib.request.HTTPSHandler(context=client))
