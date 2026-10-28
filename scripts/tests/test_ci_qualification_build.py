@@ -287,13 +287,27 @@ class Dependency(unittest.TestCase):
 
     def test_zero_test_success_is_failure_and_retains_actual_record(self):
         with tempfile.TemporaryDirectory() as temporary, patch.object(B, "source_builder") as builder, \
-                patch.dict(os.environ, {"SOU166_MODE": "source"}):
+                patch.dict(os.environ, {"SOU166_MODE": "source", "CARGO_TARGET_DIR": temporary + "/target"}):
             output = Path(temporary) / "result.json"
             def fake(*args, **kwargs): kwargs["log"].write_text("test result: ok. 0 passed; 0 failed; 0 ignored;\n")
             builder.return_value.bounded_cargo.side_effect = fake
             with self.assertRaisesRegex(ValueError, "nonempty_passed"):
                 B.cargo(["test", "--locked", "--offline", "-p", "agentfw", "--lib", "create_file", "--", "--nocapture"], output)
             self.assertEqual(json.loads(output.read_text())["status"], "failed")
+
+    def test_fresh_source_target_exists_before_accepted_bounded_runner_checks_it(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(B, "source_builder") as builder, \
+                patch.dict(os.environ, {"SOU166_MODE": "source", "CARGO_TARGET_DIR": temporary + "/fresh-target"}):
+            output = Path(temporary) / "result.json"
+            def inspect(command, **kwargs):
+                self.assertTrue(kwargs["target"].is_dir())
+                self.assertFalse(kwargs["target"].is_symlink())
+                self.assertEqual(command, ["cargo", "build", "--message-format=json", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw"])
+                kwargs["log"].write_text('{"reason":"compiler-artifact","fresh":false}\n')
+            builder.return_value.bounded_cargo.side_effect = inspect
+            result = B.cargo(["build", "--locked", "--offline", "-p", "agentfw", "--bin", "agentfw"], output)
+            self.assertEqual(result["compiled_artifacts"], 1)
+            self.assertEqual(result["status"], "passed")
 
 
 if __name__ == "__main__":

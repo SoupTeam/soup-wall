@@ -731,6 +731,8 @@ def cargo(arguments, output):
             command = ["cargo", *arguments]
             command.insert(2, "--message-format=json")
             target = Path(os.environ.get("CARGO_TARGET_DIR", str(ROOT / "target")))
+            target.mkdir(mode=0o700, parents=True, exist_ok=True)
+            require(stat.S_ISDIR(target.lstat().st_mode), "source_target_directory_required")
             source_builder().bounded_cargo(command, root=ROOT, env=dict(os.environ), target=target,
                                           log=log, stage="source_" + role)
             record["compiled_artifacts"] = stage_metrics(log, "source", start)["compiled_artifacts"]
