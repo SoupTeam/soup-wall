@@ -720,7 +720,9 @@ jobs:
             "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets/libcap"
           if [[ "$PILOT_COORDINATED_UPDATE_ONLY" == 1 ]]; then
-            (cd "$RUNNER_TEMP/sou111-assets" && apt-get download libcap-dev=1:2.66-5ubuntu2.4)
+            curl --fail --location --retry 3 \
+              https://archive.ubuntu.com/ubuntu/pool/main/libc/libcap2/libcap-dev_2.66-5ubuntu2.4_amd64.deb \
+              --output "$RUNNER_TEMP/sou111-assets/libcap-dev_2.66-5ubuntu2.4_amd64.deb"
             printf '%s  %s\n' 07f2462867569a2119a2ad0f1593232663f2d1612b791c230d22a8d73a15abee \
               "$RUNNER_TEMP/sou111-assets/libcap-dev_2.66-5ubuntu2.4_amd64.deb" | sha256sum --check
           else
