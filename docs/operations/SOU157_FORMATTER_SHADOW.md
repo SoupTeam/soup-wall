@@ -57,7 +57,7 @@ are explicitly not a fresh Linux runtime witness. No model was run again.
 
 The existing isolated Linux runtime harness has an opt-in `--formatter-shadow`
 mode. Its default run is unchanged. With the flag, it prepares public inputs,
-uses the original owned runtime for eight size/attack pairs, checks the exact
+submits eight size/attack pairs, checks the exact
 attribution hash/ranges against expected original bytes, retains each original
 refusal, and tests body-delimiter ambiguity and copied metadata rejection.
 Results go to `formatter-shadow.json`, initially `incomplete`; a failed assertion
@@ -68,3 +68,39 @@ The reviewer must run that flag under the existing owned Linux lane's isolation
 and exact-source prerequisites. This Windows host has no working WSL distribution;
 no Linux setup or security settings were changed. Fresh runtime attribution and
 tamper evidence remain pending, as do production relief and full SOU-157 acceptance.
+
+## Controller corrections after reviews 5682517028 and 5683134260
+
+The earlier plan incorrectly expected all eight pairs to reach execution. The
+actual pinned rule baseline has MAX_LEAVES=200: 50/200 paths classify as known
+read, while 201/256 retain read plus unknown/partial_unknown/truncated. The
+controller now reproduces that exact schema/argument classification and requires
+the real invocation Ask refusal and absence of private native-result rows for
+the four >=201 pairs. They are retained as `pre_execution_unknown`, never as
+executed formatter witnesses. Classifier limits and Ask behavior are unchanged.
+
+The copied-metadata control now uses the existing ordinary native session helper.
+It issues a complete valid baseline result, confirms baseline-only release, then
+uses a fresh matched session/call and the same result fields plus copied execution
+metadata. HTTP 400 alone is insufficient: `native_invalid_fields` is required.
+Fresh receipts and session cleanup are retained; no successful result is replayed.
+
+The existing workflow now explicitly accepts `formatter_shadow=true`, validated
+with `prepared_focus=155` and `prepared_host=true`. It forwards the flag only
+when selected and retains both sidecar and diagnostic projection even on failure.
+Default SOU-155 qualification and its unchanged projection remain on the default
+branch. The opt-in uses a separate SOU-157 diagnostic check requiring all ten
+rows, four pre-execution Unknown outcomes, four attributed pairs, ambiguity and
+the matched wire refusal, plus successful isolated runtime cleanup. Its output
+explicitly denies task completion, production authority and SOU-155 acceptance.
+
+Controller regressions: 4/4 passed, including actual baseline classifications,
+simulated pre-execution admission versus actual-result rows, valid matched wire
+shape/specific error/cleanup, missing/changed/failed diagnostic reports, workflow
+retention, and execution of the shell flag selection for unset/false/true.
+Workflow YAML parsed and extracted shell passed `bash -n`. The combined run
+with the existing SOU-155 Linux-oriented suite had one failure, seven errors and
+one skip on Windows (O_NOFOLLOW, /bin/bash, /proc and POSIX path assumptions);
+these are not counted as passing or changed to hide the unsupported platform.
+No runtime lane has been dispatched by this update; independent Linux verification
+is still required before any production change. No model replay occurred.

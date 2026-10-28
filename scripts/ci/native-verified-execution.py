@@ -146,6 +146,7 @@ def main():
     code=detail.get('error_code') if isinstance(detail,dict) else None
     refusals=report.setdefault('http_refusals',[])
     if len(refusals)<16:refusals.append({'status':error.code,'error_code':code if code in known else None})
+    error.native_error_code=code if code in known else None
     save();raise
    require(len(raw)<=1048576,'daemon_reply_over_cap');return json.loads(raw)
   def proof(agent):
@@ -189,9 +190,9 @@ def main():
   require(alternate.returncode==0 and alternate.stdout==raw,'alternate_same_bytes_control_broken')
   native_session='unattested-alternate-'+uuid.uuid4().hex
   ordinary_contract=json.loads((installed/'registry.json').read_text())['contract_version']
-  def ordinary(event,fields=None):
+  def ordinary(event,fields=None,session=None):
    return http('/native/v1',{'contract_version':ordinary_contract,
-       'registry_sha256':config['native']['registry_sha256'],'session_id':native_session,
+       'registry_sha256':config['native']['registry_sha256'],'session_id':session or native_session,
        'event':event,**(fields or {})})
   require(ordinary('session_start')['release'] is True,'alternate_baseline_session_failed')
   tool=next(row for row in json.loads((installed/'registry.json').read_text())['tools'] if row['name']=='read_text_file')
@@ -204,7 +205,10 @@ def main():
   require(completed['release'] is True and completed.get('execution') is None,'alternate_acquired_private_execution')
   ordinary('session_end')
   if shadow:
-   shadow.exercise(selected,audits,service,ordinary_contract,http,config,out,a.expected_commit)
+   shadow.exercise(selected,audits,service,ordinary,out,a.expected_commit,
+       tool['schema_sha256'],invocation,alternate.stdout.decode('utf-8'),
+       load(source,'sou157_pinned_classifier','rule_baseline/rule_baseline.py').classify,
+       json.loads((source/'profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json').read_text())['result']['tools'])
   report['cases'].append({'case':'actual-alternate-process-identical-bytes-remains-unattested',
       'status':'passed','byte_identical':True,'baseline_release':True,'execution_metadata':False})
   # Input-path replacement after capture cannot change the sealed running closure.

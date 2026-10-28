@@ -6,6 +6,7 @@ This is a SOU157 diagnostic, not a replacement for the SOU155 projection gate.
 import hashlib
 import json
 import urllib.error
+import uuid
 
 SIZES = (50, 200, 201, 256)
 
@@ -17,7 +18,33 @@ def prepare(workspace):
     (workspace/'shadow-ambiguous.txt').write_text('ordinary\n---\nbody delimiter\n', encoding='utf-8')
 
 
-def exercise(selected, audits, service, contract, http, config, out, source):
+def copied_control(ordinary, schema, invocation, raw, evidence):
+    """Otherwise-valid matched fresh calls; never replay a consumed receipt."""
+    statuses=[]
+    for forged in (False, True):
+        session='shadow-wire-'+uuid.uuid4().hex
+        def call(event, fields=None): return ordinary(event, fields, session=session)
+        try:
+            if call('session_start')['release'] is not True: raise RuntimeError('shadow_session_refused')
+            common={'tool':invocation['params']['name'],'args':invocation['params']['arguments']}
+            issued=call('call',dict(common,schema_sha256=schema,mcp_host_call_id=invocation['id']))
+            if issued['release'] is not True: raise RuntimeError('shadow_call_refused')
+            fields=dict(common,call_id=issued['call_id'],content=raw,result_kind='value',delivery='mcp_host')
+            if forged: fields['execution']=evidence
+            try: reply=call('result',fields)
+            except urllib.error.HTTPError as error:
+                if not forged or error.code!=400 or getattr(error,'native_error_code',None)!='native_invalid_fields':
+                    raise RuntimeError('shadow_forgery_wrong_refusal') from error
+                statuses.append('native_invalid_fields')
+            else:
+                if forged or reply.get('release') is not True or reply.get('execution') is not None:
+                    raise RuntimeError('shadow_baseline_or_forgery_failed')
+                statuses.append('baseline_only')
+        finally: call('session_end')
+    return statuses
+
+
+def exercise(selected, audits, service, ordinary, out, source, schema, invocation, raw, classify, tools):
     report = {'format':'sou157-formatter-runtime-shadow/1', 'source_commit':source,
               'status':'incomplete', 'production_authority':False, 'cases':[]}
     destination = out/'formatter-shadow.json'
@@ -35,9 +62,25 @@ def exercise(selected, audits, service, contract, http, config, out, source):
             parts=[f'{path}:\n{body}\n' for path,body in zip(paths,bodies)]
             text='\n---\n'.join(parts)
             before=len(audits())
+            definition=next(t for t in tools if t['name']=='read_multiple_files')
+            classification=classify({'tool_name':'read_multiple_files','raw_arguments':{'paths':paths},
+                                    'server_id':'filesystem','tool_schema':definition['inputSchema'],
+                                    'tool_description':definition['description']})
             reply,_=selected.exchange({'jsonrpc':'2.0','id':f'shadow-{count}-{attack}', 'method':'tools/call',
                                       'params':{'name':'read_multiple_files','arguments':{'paths':paths}}})
             rows=[r for r in audits()[before:] if r.get('event')=='native_result' and r.get('execution')]
+            if count>200:
+                message=' '.join(b.get('text','') for b in reply.get('result',{}).get('content',[]))
+                require(classification.get('unknown') is True and 'truncated' in classification.get('reason_codes',[])
+                        and not rows and reply.get('result',{}).get('isError') is True
+                        and 'withheld MCP invocation' in message and 'policy_unconfirmed_ask' in message,
+                        'shadow_preexecution_unknown_not_verified')
+                report['cases'].append({'id':f'B{16+SIZES.index(count)}-'+('attack' if attack else 'benign'),
+                                        'status':'pre_execution_unknown','executed':False,
+                                        'classification':classification,'formatter_witness':False})
+                save()
+                continue
+            require(classification.get('unknown') is False,'shadow_unexpected_classification')
             require(len(rows)==1,'shadow_original_result_missing')
             row=rows[0]; evidence=row['execution']; attribution=evidence.get('formatter_shadow')
             require(attribution is not None and attribution['production_authority'] is False,'shadow_attribution_missing')
@@ -60,15 +103,7 @@ def exercise(selected, audits, service, contract, http, config, out, source):
     require(len(rows)==1 and rows[0]['execution'].get('formatter_shadow') is None,'shadow_ambiguous_attributed')
     report['cases'].append({'id':'body-separator-no-attribution','status':'passed'})
     save()
-    # A serialized witness cannot enter the private capability path.
-    forged={'contract_version':contract,
-            'registry_sha256':config['native']['registry_sha256'], 'session_id':'shadow-forged',
-            'event':'result','execution':evidence}
-    # Use the same already-tested wire contract from a real ordinary session.
-    # Any acceptance is a failure; no fabricated private capability is created.
-    try: http('/native/v1',forged)
-    except urllib.error.HTTPError as error: require(error.code==400,'shadow_forgery_wrong_refusal')
-    else: raise RuntimeError('shadow_forgery_accepted')
-    report['cases'].append({'id':'copied-attribution-wire-refused','status':'passed'})
-    report['status']='passed-diagnostic-only'
+    statuses=copied_control(ordinary,schema,invocation,raw,evidence)
+    report['cases'].append({'id':'copied-attribution-wire-refused','status':'passed','matched_outcomes':statuses})
+    report['status']='complete-diagnostic-with-preexecution-unknown'
     save()
