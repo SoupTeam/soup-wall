@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import errno
 import hashlib
 import importlib.util
 import json
@@ -40,9 +41,18 @@ def load(name, filename):
 
 PREP = load("pilot_run_preparation", "prepare-installed-pilot.py")
 GROUPS = load("pilot_run_groups", "prepare-native-pilot-prerequisites.py")
+SELECTION_LOCK = load("pilot_run_selection_lock", "pilot-selection-lock.py")
+AUDIT = load("pilot_run_audit", "pilot_audit.py")
+PROVIDER = load("pilot_run_provider", "pilot_provider.py")
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
+    'provider_unavailable',
+    'provider_input_invalid',
+    'provider_input_unsupported',
+    'linux_budget_input_invalid',
+    'linux_budget_preflight_refused',
+    'linux_budget_observation_unverified',
     'native_linux_x86_64_required',
     'non_root_operator_required',
     'native_ubuntu_required_wsl_is_separate',
@@ -85,6 +95,9 @@ PUBLIC_FAILURE_CODES = frozenset({
     'preparation_marker_mismatch',
     'prepared_assets_inside_checkout',
     'prepared_generation_required',
+    'selected_generation_in_use_or_transitioning',
+    'private_selection_root_required',
+    'owned_selection_lock_required',
     'prepared_selection_required',
     'private_output_limit',
     'registry_collision',
@@ -105,11 +118,21 @@ PUBLIC_FAILURE_CODES = frozenset({
     'private_assets_inside_workspace',
     'profile_workspace_identity_mismatch',
     'unsupported_existing_git_layout_use_supported_standalone_repository',
-})
+}) | PREP.GIT_PROFILES.FAILURES
 
 
 class Failure(Exception):
     pass
+
+
+def storage_failure(error):
+    """Finite diagnostics only; never expose paths or exception messages."""
+    codes = {errno.ENOSPC: "storage_full", errno.EROFS: "storage_read_only",
+             errno.EACCES: "storage_permission_denied", errno.EPERM: "storage_permission_denied",
+             errno.EIO: "storage_io_failed", getattr(errno, "EDQUOT", -1): "storage_quota_exceeded"}
+    if isinstance(error, OSError):
+        return codes.get(error.errno)
+    return None
 
 
 def require(ok, code):
@@ -138,8 +161,9 @@ def selected(args):
                        "selection_sha256": PREP.FS.sha(selection_path), "status": "prepared-not-active"},
             "preparation_marker_mismatch")
     _, paths = PREP.PILOT.validate_selection(selection, args.expected_commit)
+    git_profile = PREP.GIT_PROFILES.from_selection(selection)
     require(paths["git_classifier"].read_bytes() ==
-            (ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py").read_bytes(),
+            PREP.GIT_PROFILES.classifier_path(git_profile).read_bytes(),
             "accepted_two_server_classifier_required")
     require(0 <= args.ask_wait_seconds <= 25 and 1 <= args.timeout_seconds <= 3600,
             "pilot_deadline_out_of_range")
@@ -154,13 +178,41 @@ def environment(paths, private):
            "HOME": str(private), "TMPDIR": str(private), "AGENTFW_HOME": str(private / ".agentfw"),
            "AGENTFW_CLASSIFIER_PYTHON": str(paths["python"]),
            "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_OPTIONAL_LOCKS": "0"}
-    # Operator-selected provider transport only. Never copied into retained state/report.
-    for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
-                "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"):
-        if key in os.environ:
-            env[key] = os.environ[key]
     return env
 
+
+
+def budget_input(path):
+    """Read an explicit bounded owned file; the existing Rust parser owns schema validation."""
+    require(path.is_absolute() and path.resolve(strict=True) == path, "linux_budget_input_invalid")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    with os.fdopen(descriptor, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
+                and not info.st_mode & 0o022 and info.st_size <= 16384, "linux_budget_input_invalid")
+        raw = stream.read(16385)
+    require(len(raw) <= 16384, "linux_budget_input_invalid")
+    return raw
+
+
+def budget_cli(paths, private, env, option, path, probe=False):
+    # A utility never needs provider access, even before the role split in SOU-143.
+    utility = {key: value for key, value in env.items() if key not in (
+        "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE")}
+    command = [str(paths["agentfw"]), "pilot-budget", option, str(path)]
+    if probe:
+        command.append("--probe")
+    result = subprocess.run(command, cwd=private, env=utility, stdin=subprocess.DEVNULL,
+                            capture_output=True, timeout=5)
+    require(result.returncode == 0 and len(result.stdout) <= 65536,
+            "linux_budget_preflight_refused" if probe else "linux_budget_observation_unverified")
+    value = PREP.PILOT.strict_json(result.stdout)
+    require(value.get("format") == "sw-prepared-pilot-budget/1"
+            and re.fullmatch(r"[0-9a-f]{64}", value.get("budget_sha256", ""))
+            and value.get("scope") == "per-original-server-process-tree",
+            "linux_budget_observation_unverified")
+    return value
 
 def json_file(path, value):
     PREP.write_json(path, value)
@@ -242,9 +294,21 @@ def confirmed_stop(home, launcher_pid, binary, env, cwd):
 
 def run(args, report):
     PREP.supported_platform()
+    provider = PROVIDER.selected(os.environ)
+    PROVIDER.require_access(provider)
+    # Main has already validated the selection under the lifetime lock. Refuse
+    # an occupied explicit port before the additional full generation recheck.
+    # The later bind remains authoritative if the port changes meanwhile.
+    if args.port:
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", args.port))
+            except OSError:
+                raise Failure("occupied_port_refused") from None
     selection, paths, profiles = selected(args)
     if "prepared_workspaces" in selection:
-        PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent))
+        PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent),
+                                          PREP.GIT_PROFILES.from_selection(selection))
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()
@@ -263,9 +327,12 @@ def run(args, report):
             raise Failure("occupied_port_refused") from None
         port = reservation.getsockname()[1]
     private = None
+    audit_selected = False
     daemon = launcher = None
     streams = []
+    redactors = {}
     cancelled = False
+    report.update(stage="private_setup", host_started=False)
     def cancel(_signum, _frame):
         nonlocal cancelled
         cancelled = True
@@ -280,6 +347,19 @@ def run(args, report):
         home = private / ".agentfw"
         home.mkdir(mode=0o700)
         env = environment(paths, private)
+        budget_snapshot = None
+        if getattr(args, "linux_budget", None) is not None:
+            raw = budget_input(args.linux_budget)
+            budget_snapshot = private / "selected-linux-budget.json"
+            with budget_snapshot.open("xb") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(raw)
+            observation = budget_cli(paths, private, env, "--config", budget_snapshot, probe=True)
+            require(observation.get("status") == "available-not-active"
+                    and observation.get("protected_children_started") is False,
+                    "linux_budget_observation_unverified")
+            budget_expected_sha = observation["budget_sha256"]
+            report["resource_budget"] = observation
         tools = []
         for kind in ("filesystem", "git"):
             tools.extend(PREP.PILOT.strict_json((Path(profiles[kind]["profile"]["path"]).parent /
@@ -291,21 +371,35 @@ def run(args, report):
         native = {"registry_path": str(registry), "registry_sha256": registry_sha,
                   "liveness": {"default_lease_seconds": 4, "max_lease_seconds": 4,
                                "maintenance_interval_ms": 250}}
+        if PREP.GIT_PROFILES.from_selection(selection) in PREP.GIT_PROFILES.DAEMON_EXECUTION:
+            native["git_execution"] = {"profile_path": profiles["git"]["profile"]["path"],
+                                       "profile_sha256": profiles["git"]["profile"]["sha256"], "server_id": "git"}
         if args.ask_wait_seconds:
             native["approval"] = {"ttl_seconds": 120}
+        retention, audit_receipt = AUDIT.selection(private, args.expected_commit,
+            PREP.FS.sha(args.selection), PREP.FS.sha(paths["policy"]), registry_sha,
+            PREP.FS.sha(paths["agentfw"]))
+        json_file(private / "audit-run.json", audit_receipt)
+        audit_selected = True
+        report["audit"] = {"run_id": audit_receipt["run_id"], "retention": AUDIT.LIMITS,
+                           "retention_sha256": audit_receipt["retention_sha256"]}
         json_file(home / "config.yaml", {"bind": "127.0.0.1", "port": port, "enforce": True,
-                  "policy": str(paths["policy"]), "native": native})
+                  "policy": str(paths["policy"]), "native": native, "audit_retention": retention})
         token = secrets.token_urlsafe(32)
         for filename, value in (("native-token", token), ("token", secrets.token_urlsafe(32))):
             with (home / filename).open("x") as stream:
                 os.fchmod(stream.fileno(), 0o600)
                 stream.write(value)
+                stream.flush()
+                os.fsync(stream.fileno())
         # Last pre-effect verification, including source, selected bytes and package trees.
         require(selected(args)[0] == selection, "selection_changed_before_launch")
         require(not cancelled, "pilot_cancelled")
         daemon_log = (private / "daemon.private.log").open("xb")
         os.fchmod(daemon_log.fileno(), 0o600)
         streams.append(daemon_log)
+        report["stage"] = "daemon_start"
+        redactors[daemon_log] = PROVIDER.Redactor(provider)
         daemon = subprocess.Popen([str(paths["agentfw"]), "serve"], cwd=private, env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             start_new_session=True, preexec_fn=parent_death)
@@ -324,19 +418,30 @@ def run(args, report):
                 "--git-profile", profiles["git"]["profile"]["path"], "--policy", str(paths["policy"]),
                 "--classifier", str(paths["git_classifier"]), "--timeout-seconds", str(args.timeout_seconds),
                 "--ask-wait-seconds", str(args.ask_wait_seconds), "--prompt", args.prompt, "--json"]
+            if budget_snapshot is not None:
+                command.extend(["--linux-budget", str(budget_snapshot),
+                                "--linux-budget-sha256", report["resource_budget"]["budget_sha256"]])
             log = (private / "host.private.log").open("xb")
             os.fchmod(log.fileno(), 0o600)
             streams.append(log)
+            redactors[log] = PROVIDER.Redactor(provider)
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
-            launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True, preexec_fn=parent_death)
+            report["stage"] = "host_start"
+            with PROVIDER.carrier(provider) as provider_fd:
+                command.extend(["--provider-env-fd", str(provider_fd)])
+                launcher = subprocess.Popen(command, cwd=private, env=env, stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True,
+                    pass_fds=(provider_fd,), preexec_fn=parent_death)
+            report["host_started"] = True
             selector.register(launcher.stdout, selectors.EVENT_READ, (log, True))
             report["launcher_pid"] = launcher.pid
+            report["stage"] = "run_publication"
             # Non-secret rendezvous for the existing second-terminal operator CLI.
             json_file(private / "run.json", {"format": "sw-prepared-pilot-run/1", "home": str(home),
                       "supervisor_pid": os.getpid(), "launcher_pid": launcher.pid, "daemon_pid": daemon.pid, "port": port})
             print(json.dumps({"status": "running", "run_directory": str(private), "home": str(home)},
                              ensure_ascii=True), file=sys.stderr, flush=True)
+            report["stage"] = "active_run"
             deadline, count = time.monotonic() + args.timeout_seconds + 15, 0
             while not GROUPS.leader_finished(launcher):
                 require(not cancelled, "pilot_cancelled")
@@ -349,7 +454,7 @@ def run(args, report):
                         continue
                     count += len(raw)
                     require(count <= MAX_OUTPUT, "private_output_limit")
-                    key.data[0].write(raw)
+                    key.data[0].write(redactors[key.data[0]].feed(raw))
             # Let the existing launcher finish its own process-group/Ask cleanup first.
             result = os.waitid(os.P_PID, launcher.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
             require(result is not None and result.si_code == os.CLD_EXITED and result.si_status == 0,
@@ -360,6 +465,11 @@ def run(args, report):
             report.update(status="stopped", launcher_exit=0, running_effects_rolled_back=False)
         else:
             report.update(status="completed", launcher_exit=0)
+    except OSError as error:
+        code = storage_failure(error)
+        if code:
+            report["storage_failure"] = code
+        raise
     finally:
         errors = []
         for name, process in (("launcher", launcher), ("daemon", daemon)):
@@ -378,12 +488,31 @@ def run(args, report):
                     process.stdout.close()
         for stream in streams:
             try:
+                stream.write(redactors[stream].feed(b'', final=True))
                 stream.close()
-            except OSError:
+            except OSError as error:
                 errors.append("private_log")
+                if storage_failure(error):
+                    report["cleanup_storage_failure"] = storage_failure(error)
         for sig, handler in previous.items():
             signal.signal(sig, handler)
-        # Remove ordinary private state; retain explicit stop/recovery receipts below.
+        # Stop processes before snapshot/export. Retention housekeeping never
+        # resets a live session or its sticky risk, receipts or policy state.
+        if private is not None and getattr(args, "linux_budget", None) is not None:
+            try:
+                bindings = list((private / ".agentfw" / "pilot-budgets").glob("*/linux-budget-binding.json"))
+                require(len(bindings) <= 1, "linux_budget_observation_unverified")
+                if bindings:
+                    observed = budget_cli(paths, private, env, "--binding", bindings[0])
+                    require(observed["budget_sha256"] == budget_expected_sha,
+                            "linux_budget_observation_unverified")
+                    report["resource_budget"] = observed
+                    budget_status = report["resource_budget"]["status"]
+                    if budget_status in ("unresolved", "refused", "active-at-attachment"):
+                        report.update(status="failed", reason="linux_budget_observation_unverified")
+            except (OSError, ValueError, Failure, subprocess.TimeoutExpired):
+                report["resource_budget"] = {"status": "unresolved", "requested": True}
+                errors.append("resource_budget")
         if not errors and private is not None:
             try:
                 # An authenticated stop may have completed, or may still need
@@ -393,12 +522,30 @@ def run(args, report):
                 stops = list((private / ".agentfw" / "pilot-runs").glob("*/stop.json"))
                 if stops:
                     report["retained_stop_state"] = str(private)
+                elif audit_selected:
+                    # Keep only selected bounded evidence. Tokens, raw host and
+                    # daemon logs, provider state and runtime settings are removed.
+                    for child in private.iterdir():
+                        if child.name not in ("audit", "audit-run.json"):
+                            if child.is_dir() and not child.is_symlink():
+                                shutil.rmtree(child)
+                            else:
+                                child.unlink()
                 else:
                     shutil.rmtree(private)
-            except OSError:
+                if audit_selected:
+                    json_file(private / "audit-finished.json", {"format": AUDIT.FORMAT,
+                        "run_id": report["audit"]["run_id"], "owned_processes_stopped": True})
+                    report["audit"].update(directory=str(private), snapshot=AUDIT.state(private))
+            except OSError as error:
                 errors.append("private_state")
+                if storage_failure(error):
+                    report["cleanup_storage_failure"] = storage_failure(error)
         report["cleanup"] = ("failed" if errors else "owned_processes_stopped_state_retained"
-                             if report.get("retained_stop_state") else "owned_state_removed")
+                             if report.get("retained_stop_state") else "owned_processes_stopped_audit_retained"
+                             if audit_selected else "owned_state_removed")
+        if errors:
+            report["cleanup_failures"] = errors
         require(not errors, "owned_process_cleanup_failed")
 
 
@@ -408,6 +555,8 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--state-root", type=Path)
+    parser.add_argument("--linux-budget", type=Path,
+                        help="Explicit owned Linux budget JSON; absent means unbudgeted")
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--ask-wait-seconds", type=int, default=0)
@@ -415,16 +564,44 @@ def main():
     args = parser.parse_args()
     report = {"format": "sw-prepared-pilot-run/1", "status": "plan", "executed": False}
     try:
-        selection, _, profiles = selected(args)
-        report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
-                      workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}))
+        report["resource_budget"] = {"status": "unbudgeted", "requested": False}
+        if args.linux_budget is not None:
+            raw = budget_input(args.linux_budget)
+            report["resource_budget"] = {"status": "selected-not-validated", "requested": True,
+                                         "input_sha256": hashlib.sha256(raw).hexdigest()}
         if args.run:
-            run(args, report)
+            PREP.supported_platform()
+            # The lock spans admission, daemon/host lifetime and owned cleanup.
+            # Transitions take the exclusive side before observing current.json.
+            with SELECTION_LOCK.hold(args.selection.parent.parent.parent, exclusive=False):
+                selection, _, profiles = selected(args)
+                report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
+                              git_selection=selection.get("git_selection", {"id": PREP.GIT_PROFILES.DEFAULT,
+                                  "selection_version": "legacy-default-only"}),
+                              workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}),
+                              audit_retention=AUDIT.LIMITS)
+                run(args, report)
+        else:
+            selection, _, profiles = selected(args)
+            report.update(selection_sha256=PREP.FS.sha(args.selection), source=selection["source"], profiles=profiles,
+                          git_selection=selection.get("git_selection", {"id": PREP.GIT_PROFILES.DEFAULT,
+                              "selection_version": "legacy-default-only"}),
+                          workspaces=selection.get("prepared_workspaces", {"mode": "generated-demo"}),
+                              audit_retention=AUDIT.LIMITS)
     except Exception as error:
         # Never echo subprocess output, raw paths, arguments, credentials or arbitrary exception strings.
         code = str(error)
+        if args.linux_budget is not None and code in {"native_linux_x86_64_required",
+                "native_ubuntu_required_wsl_is_separate", "ubuntu_24_04_required"}:
+            report["resource_budget"]["status"] = "unsupported"
         report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
                       else "pilot_input_or_runtime_failure")
+        failure = storage_failure(error) or report.get("storage_failure") or report.get("cleanup_storage_failure")
+        if failure:
+            report.update(storage_failure=failure,
+                          recovery="Restore space and access to the owned state directory, then rerun with fresh authority.",
+                          effects="Host effects may have occurred; cleanup does not roll them back."
+                          if report.get("host_started") else "Protected host was not started.")
     print(json.dumps(report, sort_keys=True, ensure_ascii=True))
     return 1 if report["status"] == "failed" else 0
 

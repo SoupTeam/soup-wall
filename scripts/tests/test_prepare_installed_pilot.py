@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Failure boundaries for the SOU-111 preparation transaction."""
+import errno
+from contextlib import contextmanager, ExitStack, redirect_stdout, redirect_stderr
 import importlib.util
 import io
 import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -16,6 +19,246 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("sou111_preparation", ROOT / "scripts/prepare-installed-pilot.py")
 PREP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREP)
+
+
+@unittest.skipUnless(os.name == "posix", "private installer logs require POSIX permissions")
+class InstallerFailurePrivacy(unittest.TestCase):
+    @contextmanager
+    def failed_installer(self, root, kind, exit_code):
+        output = root / "output"
+        generation = "a" * 32
+        canary = b"owned-installer-diagnostic-canary"
+        contents = b"x" * (2 * 1024 * 1024) + b"\n" + canary + b"\xff\n"
+        args = SimpleNamespace(output=output, expected_commit="b" * 40, rebuild=False,
+                               npm_cache=None, wheelhouse=None, python_archive=None, node_archive=None,
+                               allow_download=True, refusal_verdict="ask", refusal_rule="exact-rule")
+        paths = {role: Path(os.sys.executable) for role in PREP.PILOT.ROLES}
+
+        def init_git(command, **_):
+            (Path(command[-1]) / ".git").mkdir()
+
+        def fail(*_, log, **__):
+            log.write(contents)
+            log.flush()
+            raise subprocess.CalledProcessError(exit_code, [canary.decode()],
+                                                output=canary, stderr=canary)
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(PREP, "supported_platform"))
+            stack.enter_context(patch.object(PREP.PILOT, "source", return_value={
+                "dirty": False, "commit": args.expected_commit}))
+            stack.enter_context(patch.object(PREP, "selected_paths", return_value=paths))
+            stack.enter_context(patch.object(PREP.uuid, "uuid4", return_value=SimpleNamespace(hex=generation)))
+            stack.enter_context(patch.object(PREP.subprocess, "run", side_effect=init_git))
+            for name, installer in (("filesystem", PREP.FS), ("git", PREP.GIT)):
+                stack.enter_context(patch.object(installer, "install", side_effect=fail if name == kind else None))
+            yield args, output / "generations" / generation / (kind + "-install.log"), contents
+
+    def assert_retained_private_log(self, args, log_path, contents):
+        self.assertEqual(log_path.read_bytes(), contents)
+        self.assertEqual(stat.S_IMODE(log_path.stat().st_mode), 0o600)
+        self.assertFalse((args.output / "current.json").exists())
+
+    def test_actual_failed_preparation_never_reads_installer_log(self):
+        for kind in ("filesystem", "git"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                with self.failed_installer(Path(temporary), kind, 9) as (args, log_path, contents):
+                    original_open = Path.open
+
+                    def no_log_reads(path, mode="r", *positional, **keywords):
+                        if path.name.endswith("-install.log") and ("r" in mode or "+" in mode):
+                            self.fail("failure formatting must not read the private installer log")
+                        return original_open(path, mode, *positional, **keywords)
+
+                    with patch.object(Path, "open", no_log_reads):
+                        with self.assertRaises(ValueError) as caught:
+                            PREP.prepare(args)
+                    self.assertEqual(str(caught.exception), kind + "_installer_failed")
+                    self.assert_retained_private_log(args, log_path, contents)
+
+    def test_actual_main_exports_only_finite_installer_failure_fields(self):
+        for kind in ("filesystem", "git"):
+            for exit_code in (9, -15):
+                with self.subTest(kind=kind, exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
+                    with self.failed_installer(Path(temporary), kind, exit_code) as (args, log_path, contents):
+                        stdout, stderr = io.StringIO(), io.StringIO()
+                        argv = ["prepare-installed-pilot.py", "--prepare", "--allow-download",
+                                "--output", str(args.output), "--expected-commit", args.expected_commit]
+                        with patch.object(PREP.sys, "argv", argv), redirect_stdout(stdout), redirect_stderr(stderr):
+                            self.assertEqual(PREP.main(), 2)
+                        self.assertEqual(json.loads(stdout.getvalue()), {
+                            "status": "failed", "reason": kind + "_installer_failed", "exit_code": exit_code,
+                            "private_log": log_path.relative_to(args.output).as_posix()})
+                        self.assertEqual(stderr.getvalue(), "")
+                        self.assert_retained_private_log(args, log_path, contents)
+
+
+class MarkerStorageRecovery(unittest.TestCase):
+    def setUp(self):
+        # These tests exercise filesystem transactions on every host. Linux
+        # ownership and actual directory fsync remain covered by POSIX checks.
+        if not hasattr(PREP.os, "fchmod"):
+            self.fchmod = patch.object(PREP.os, "fchmod", create=True)
+            self.fchmod.start()
+            self.addCleanup(self.fchmod.stop)
+
+    def test_partial_write_failures_remove_only_the_created_file(self):
+        original_open = Path.open
+        for code in (errno.ENOSPC, errno.EACCES, errno.EROFS):
+            with self.subTest(errno=code), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                target = root / "selection.json"
+                unrelated = root / "unrelated"
+                unrelated.write_bytes(b"keep")
+
+                class PartialWrite:
+                    def __enter__(self):
+                        self.output = original_open(target, "xb")
+                        return self
+
+                    def __exit__(self, *_):
+                        self.output.close()
+
+                    def fileno(self):
+                        return self.output.fileno()
+
+                    def write(self, raw):
+                        self.output.write(raw[:3])
+                        self.output.flush()
+                        raise OSError(code, "injected write failure")
+
+                with patch.object(Path, "open", return_value=PartialWrite()):
+                    with self.assertRaises(OSError) as failure:
+                        PREP.write_json(target, {"value": "complete"})
+                self.assertEqual(failure.exception.errno, code)
+                self.assertFalse(target.exists())
+                self.assertEqual(unrelated.read_bytes(), b"keep")
+                PREP.write_json(target, {"value": "retry"})
+                self.assertEqual(json.loads(target.read_bytes()), {"value": "retry"})
+
+    def test_existing_json_is_preserved_when_exclusive_create_fails(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "selection.json"
+            target.write_bytes(b"existing")
+            with self.assertRaises(FileExistsError):
+                PREP.write_json(target, {"replacement": True})
+            self.assertEqual(target.read_bytes(), b"existing")
+
+    def test_colliding_marker_temporary_is_never_removed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            marker = root / "current.json"
+            marker.write_bytes(b"prior marker")
+            collision = root / (".current-" + "a" * 32)
+            collision.write_bytes(b"another attempt")
+            with patch.object(PREP.uuid, "uuid4", return_value=SimpleNamespace(hex="a" * 32)):
+                with self.assertRaises(FileExistsError):
+                    PREP.publish_marker(root, {"generation": "new"})
+            self.assertEqual(marker.read_bytes(), b"prior marker")
+            self.assertEqual(collision.read_bytes(), b"another attempt")
+
+    def test_cleanup_failure_reports_retained_unpublished_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            marker = root / "current.json"
+            marker.write_bytes(b"prior marker")
+            with patch.object(PREP.os, "fsync", side_effect=OSError(errno.ENOSPC, "injected full disk")), \
+                 patch.object(Path, "unlink", side_effect=OSError(errno.EACCES, "injected cleanup denial")):
+                with self.assertRaisesRegex(ValueError, "unpublished_file_cleanup_failed") as failure:
+                    PREP.publish_marker(root, {"generation": "new"})
+            self.assertIn("injected full disk", str(failure.exception))
+            self.assertIn("injected cleanup denial", str(failure.exception))
+            self.assertEqual(marker.read_bytes(), b"prior marker")
+            self.assertEqual(len(list(root.glob(".current-*"))), 1)
+
+    def test_marker_write_sync_and_replace_failures_preserve_prior_selection(self):
+        for phase in ("file_sync", "replace"):
+            for code in (errno.ENOSPC, errno.EACCES, errno.EROFS):
+                with self.subTest(phase=phase, errno=code), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    marker = root / "current.json"
+                    marker.write_bytes(b"prior marker")
+                    unrelated = root / "unrelated"
+                    unrelated.write_bytes(b"keep")
+                    function = "fsync" if phase == "file_sync" else "replace"
+                    with patch.object(PREP.os, function, side_effect=OSError(code, "injected failure")), \
+                         patch.object(PREP, "sync_directory") as sync:
+                        with self.assertRaises(OSError) as failure:
+                            PREP.publish_marker(root, {"generation": "new"})
+                        sync.assert_not_called()
+                    self.assertEqual(failure.exception.errno, code)
+                    self.assertEqual(marker.read_bytes(), b"prior marker")
+                    self.assertEqual(sorted(path.name for path in root.iterdir()), ["current.json", "unrelated"])
+                    self.assertEqual(unrelated.read_bytes(), b"keep")
+                    with patch.object(PREP, "sync_directory"):
+                        PREP.publish_marker(root, {"generation": "retry"})
+                    self.assertEqual(json.loads(marker.read_bytes()), {"generation": "retry"})
+
+    def test_interrupted_unpublished_marker_is_cleaned_and_can_retry(self):
+        for phase in ("fsync", "replace"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                marker = root / "current.json"
+                marker.write_bytes(b"prior marker")
+                with patch.object(PREP.os, phase, side_effect=KeyboardInterrupt):
+                    with self.assertRaises(KeyboardInterrupt):
+                        PREP.publish_marker(root, {"generation": "new"})
+                self.assertEqual(marker.read_bytes(), b"prior marker")
+                self.assertEqual(list(root.iterdir()), [marker])
+                with patch.object(PREP, "sync_directory"):
+                    PREP.publish_marker(root, {"generation": "retry"})
+                self.assertEqual(json.loads(marker.read_bytes()), {"generation": "retry"})
+
+    def test_directory_sync_failure_reports_published_marker_without_rollback(self):
+        for failure in (OSError(errno.ENOSPC, "full"), OSError(errno.EIO, "sync failed"), KeyboardInterrupt()):
+            with self.subTest(failure=type(failure).__name__), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                marker = root / "current.json"
+                marker.write_bytes(b"prior marker")
+                with patch.object(PREP, "sync_directory", side_effect=failure):
+                    with self.assertRaisesRegex(ValueError, "completion_marker_published_durability_uncertain"):
+                        PREP.publish_marker(root, {"generation": "new"})
+                self.assertEqual(json.loads(marker.read_bytes()), {"generation": "new"})
+                self.assertEqual(list(root.iterdir()), [marker])
+
+    def test_interruption_after_replace_reports_uncertainty_and_keeps_new_marker(self):
+        original_replace = os.replace
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            marker = root / "current.json"
+            marker.write_bytes(b"prior marker")
+
+            def interrupted_replace(source, destination):
+                original_replace(source, destination)
+                raise KeyboardInterrupt()
+
+            with patch.object(PREP.os, "replace", side_effect=interrupted_replace), \
+                 patch.object(PREP, "sync_directory") as sync:
+                with self.assertRaisesRegex(ValueError, "completion_marker_publication_uncertain"):
+                    PREP.publish_marker(root, {"generation": "new"})
+                sync.assert_not_called()
+            self.assertEqual(json.loads(marker.read_bytes()), {"generation": "new"})
+            self.assertEqual(list(root.iterdir()), [marker])
+
+    def test_marker_syncs_file_before_replace_and_directory_afterwards(self):
+        original_fsync, original_replace = os.fsync, os.replace
+        events = []
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+
+            def sync_file(fd):
+                events.append("file_sync")
+                original_fsync(fd)
+
+            def replace(source, destination):
+                events.append("replace")
+                original_replace(source, destination)
+
+            with patch.object(PREP.os, "fsync", side_effect=sync_file), \
+                 patch.object(PREP.os, "replace", side_effect=replace), \
+                 patch.object(PREP, "sync_directory", side_effect=lambda _: events.append("directory_sync")):
+                PREP.publish_marker(root, {"generation": "new"})
+            self.assertEqual(events, ["file_sync", "replace", "directory_sync"])
 
 
 class PreparationBoundary(unittest.TestCase):
@@ -148,7 +391,7 @@ class PreparationBoundary(unittest.TestCase):
 
             with patch.object(PREP, "supported_platform"), patch.object(PREP.PILOT, "source", return_value=before), \
                  patch.object(PREP, "selected_paths", return_value=paths), \
-                 patch.object(PREP, "verify_profile", side_effect=lambda kind, *_: profiles[kind]), \
+                 patch.object(PREP, "verify_profile", side_effect=lambda kind, *_, **__: profiles[kind]), \
                  patch.object(PREP, "verify_generation", side_effect=lambda gen, *_: (gen / "selection.json", profiles)), \
                  patch.object(PREP.subprocess, "run", side_effect=init_git), \
                  patch.object(PREP.FS, "install") as fs_install, patch.object(PREP.GIT, "install"):

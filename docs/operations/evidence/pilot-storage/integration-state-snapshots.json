@@ -1,0 +1,815 @@
+{
+  "format": "sw-pilot-storage-published-snapshots/1",
+  "qualified_commit": "df55d6890cf826f8a7d42ae8bcb994650a0a53d5",
+  "run_id": 40115658348,
+  "snapshot_count": 13,
+  "all_snapshot_refs": [
+    {
+      "complete": true,
+      "file": "state-snapshot-00.json",
+      "sha256": "88a8e1dc78cee9fca8dce6b4030f9c132c5d38f2196abc645816bb63b12edfad"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-01.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-02.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-03.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-04.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-05.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-06.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-07.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-08.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-09.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-10.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-11.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    {
+      "complete": true,
+      "file": "state-snapshot-12.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    }
+  ],
+  "baseline": {
+    "reference": {
+      "complete": true,
+      "file": "state-snapshot-00.json",
+      "sha256": "88a8e1dc78cee9fca8dce6b4030f9c132c5d38f2196abc645816bb63b12edfad"
+    },
+    "record": {
+      "filesystem": {
+        ".": {
+          "device": 66305,
+          "inode": 9961495,
+          "kind": 16384,
+          "links": 2,
+          "mode": 448
+        },
+        "forbidden.fifo": {
+          "device": 66305,
+          "inode": 9961528,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "guide.txt": {
+          "device": 66305,
+          "inode": 9961525,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "e6bfed3dba7d1ef2b8c072127e7ad443fd791bf487c8396189d64548dc0d78ee",
+          "size": 60
+        },
+        "notes.txt": {
+          "device": 66305,
+          "inode": 9961526,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "7b4675448d856808920c4c5bb6678e927bcd08201d21b80a2b5f1177ca462b45",
+          "size": 78
+        },
+        "outage.fifo": {
+          "device": 66305,
+          "inode": 9961529,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-0.fifo": {
+          "device": 66305,
+          "inode": 9961530,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-1.fifo": {
+          "device": 66305,
+          "inode": 9961531,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-2.fifo": {
+          "device": 66305,
+          "inode": 9961532,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-3.fifo": {
+          "device": 66305,
+          "inode": 9961533,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-4.fifo": {
+          "device": 66305,
+          "inode": 9961534,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-5.fifo": {
+          "device": 66305,
+          "inode": 9961535,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-6.fifo": {
+          "device": 66305,
+          "inode": 9961536,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-7.fifo": {
+          "device": 66305,
+          "inode": 9961537,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-8.fifo": {
+          "device": 66305,
+          "inode": 9961538,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "source.txt": {
+          "device": 66305,
+          "inode": 9961527,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "388285e286390a76374e37e189ccff629bd8a40fadcc05d9174a00b29a96743f",
+          "size": 26
+        }
+      },
+      "foreign_file_sha256": "9d505f82a69a2db0556f2f8f8c734f122f383e9d78dc738bb68f788ff2799cb4",
+      "foreign_process": {
+        "alive": true,
+        "expected_start_time_ticks": 59989,
+        "observed_start_time_ticks": 59989,
+        "pid": 21619
+      },
+      "format": "sw-pilot-storage-state-snapshot/1",
+      "git": {
+        ".": {
+          "device": 66305,
+          "inode": 9961496,
+          "kind": 16384,
+          "links": 3,
+          "mode": 448
+        },
+        ".git": {
+          "device": 66305,
+          "inode": 9961497,
+          "kind": 16384,
+          "links": 5,
+          "mode": 493
+        },
+        ".git/COMMIT_EDITMSG": {
+          "device": 66305,
+          "inode": 9961507,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "dc2434c43a50b4b8eff827240fa613076d950b42963a9075048e4d273ea9a70c",
+          "size": 32
+        },
+        ".git/HEAD": {
+          "device": 66305,
+          "inode": 9961502,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80",
+          "size": 21
+        },
+        ".git/config": {
+          "device": 66305,
+          "inode": 9961499,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "cfe7ba1238c9a78be7535d7c63bcaf5a4d5011d46b07c9b45d3bbf7d6c312dfe",
+          "size": 92
+        },
+        ".git/index": {
+          "device": 66305,
+          "inode": 9961515,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "9f023a30c225f9eff1b9da125e1fb9b123b3e7f46e8f8d0d44f2e991d967e593",
+          "size": 118
+        },
+        ".git/logs": {
+          "device": 66305,
+          "inode": 9961517,
+          "kind": 16384,
+          "links": 3,
+          "mode": 493
+        },
+        ".git/logs/HEAD": {
+          "device": 66305,
+          "inode": 9961518,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "5223116bb15f1ec9f679e5d79d46f739a0974379edb20605d84830dd7024cedc",
+          "size": 189
+        },
+        ".git/logs/refs": {
+          "device": 66305,
+          "inode": 9961519,
+          "kind": 16384,
+          "links": 3,
+          "mode": 493
+        },
+        ".git/logs/refs/heads": {
+          "device": 66305,
+          "inode": 9961520,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/logs/refs/heads/main": {
+          "device": 66305,
+          "inode": 9961521,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "5223116bb15f1ec9f679e5d79d46f739a0974379edb20605d84830dd7024cedc",
+          "size": 189
+        },
+        ".git/objects": {
+          "device": 66305,
+          "inode": 9961503,
+          "kind": 16384,
+          "links": 9,
+          "mode": 493
+        },
+        ".git/objects/14": {
+          "device": 66305,
+          "inode": 9961522,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/14/73c63f9f994b57875e02b2364c2d813b71b024": {
+          "device": 66305,
+          "inode": 9961523,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "d7a2a2c95040cb7c4d007f78b579576d71c230881828f0d93a348a504ef7f3ca",
+          "size": 38
+        },
+        ".git/objects/39": {
+          "device": 66305,
+          "inode": 9961513,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/39/a390621dd509206ab9dd593ea81e426c48dcad": {
+          "device": 66305,
+          "inode": 9961514,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "66c232b766f33927132e9af143294578317c357265572489a8ded05d8d480270",
+          "size": 145
+        },
+        ".git/objects/4f": {
+          "device": 66305,
+          "inode": 9961511,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/4f/d3c4cecd88c07b6e17d7224e7ab972daf8f40a": {
+          "device": 66305,
+          "inode": 9961512,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "59aef6b482e73f2f76962170d84c2aa5af2d171a30d3d43c307ceb6954e48dcc",
+          "size": 54
+        },
+        ".git/objects/59": {
+          "device": 66305,
+          "inode": 9961508,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/59/cf462a69bd69e22c9061bdfd6f85aaf24d49ee": {
+          "device": 66305,
+          "inode": 9961509,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "c6c6ef658af7da9cae28d3e798c5eb94f56c73fe7e997cac1dc5d5ebc5938500",
+          "size": 40
+        },
+        ".git/objects/c2": {
+          "device": 66305,
+          "inode": 9961510,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/c2/7d6ac36cf2d10fe3471523a72b0e4cfbffa413": {
+          "device": 66305,
+          "inode": 9961524,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "40e499a368abb4e62a97a7c4630e6ac75ebb5080430bb8cc5ebf906157186fc5",
+          "size": 74
+        },
+        ".git/objects/info": {
+          "device": 66305,
+          "inode": 9961505,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/pack": {
+          "device": 66305,
+          "inode": 9961504,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/refs": {
+          "device": 66305,
+          "inode": 9961498,
+          "kind": 16384,
+          "links": 4,
+          "mode": 493
+        },
+        ".git/refs/heads": {
+          "device": 66305,
+          "inode": 9961500,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/refs/heads/main": {
+          "device": 66305,
+          "inode": 9961516,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "468e2e8b3aaa55304441467bb9ec86ccc92569cddb0890f7032a4d8b8d209fb6",
+          "size": 41
+        },
+        ".git/refs/tags": {
+          "device": 66305,
+          "inode": 9961501,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        "notes.txt": {
+          "device": 66305,
+          "inode": 9961506,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "895839334b39f13cd5addb5dd9436812bd553ef676d43515163631309f8697e4",
+          "size": 23
+        }
+      },
+      "phase": "prepared",
+      "receiver": {
+        "bodies": []
+      },
+      "source": {
+        "commit": "df55d6890cf826f8a7d42ae8bcb994650a0a53d5",
+        "dirty": false,
+        "files_sha256": "7e6dea8e5ebd3cafdf6f3563880bea579b255637a378bd79ac51aeb126ce3443",
+        "tree": "20523f98e34a7d4236677bd63ad71dfb49397a6d"
+      }
+    }
+  },
+  "final": {
+    "reference": {
+      "complete": true,
+      "file": "state-snapshot-12.json",
+      "sha256": "13c29474eb5edd80efb3c55a9db7b8fb4d98c65e8c12725b52bcd9242e4fb283"
+    },
+    "record": {
+      "filesystem": {
+        ".": {
+          "device": 66305,
+          "inode": 9961495,
+          "kind": 16384,
+          "links": 2,
+          "mode": 448
+        },
+        "forbidden.fifo": {
+          "device": 66305,
+          "inode": 9961528,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "guide.txt": {
+          "device": 66305,
+          "inode": 9961525,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "e6bfed3dba7d1ef2b8c072127e7ad443fd791bf487c8396189d64548dc0d78ee",
+          "size": 60
+        },
+        "notes.txt": {
+          "device": 66305,
+          "inode": 9961526,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "7b4675448d856808920c4c5bb6678e927bcd08201d21b80a2b5f1177ca462b45",
+          "size": 78
+        },
+        "outage.fifo": {
+          "device": 66305,
+          "inode": 9961529,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-0.fifo": {
+          "device": 66305,
+          "inode": 9961530,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-1.fifo": {
+          "device": 66305,
+          "inode": 9961531,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-2.fifo": {
+          "device": 66305,
+          "inode": 9961532,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-3.fifo": {
+          "device": 66305,
+          "inode": 9961533,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-4.fifo": {
+          "device": 66305,
+          "inode": 9961534,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-5.fifo": {
+          "device": 66305,
+          "inode": 9961535,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-6.fifo": {
+          "device": 66305,
+          "inode": 9961536,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-7.fifo": {
+          "device": 66305,
+          "inode": 9961537,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "parallel-8.fifo": {
+          "device": 66305,
+          "inode": 9961538,
+          "kind": 4096,
+          "links": 1,
+          "mode": 384
+        },
+        "source.txt": {
+          "device": 66305,
+          "inode": 9961527,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "388285e286390a76374e37e189ccff629bd8a40fadcc05d9174a00b29a96743f",
+          "size": 26
+        }
+      },
+      "foreign_file_sha256": "9d505f82a69a2db0556f2f8f8c734f122f383e9d78dc738bb68f788ff2799cb4",
+      "foreign_process": {
+        "alive": true,
+        "expected_start_time_ticks": 59989,
+        "observed_start_time_ticks": 59989,
+        "pid": 21619
+      },
+      "format": "sw-pilot-storage-state-snapshot/1",
+      "git": {
+        ".": {
+          "device": 66305,
+          "inode": 9961496,
+          "kind": 16384,
+          "links": 3,
+          "mode": 448
+        },
+        ".git": {
+          "device": 66305,
+          "inode": 9961497,
+          "kind": 16384,
+          "links": 5,
+          "mode": 493
+        },
+        ".git/COMMIT_EDITMSG": {
+          "device": 66305,
+          "inode": 9961507,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "dc2434c43a50b4b8eff827240fa613076d950b42963a9075048e4d273ea9a70c",
+          "size": 32
+        },
+        ".git/HEAD": {
+          "device": 66305,
+          "inode": 9961502,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "28d25bf82af4c0e2b72f50959b2beb859e3e60b9630a5e8c603dad4ddb2b6e80",
+          "size": 21
+        },
+        ".git/config": {
+          "device": 66305,
+          "inode": 9961499,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "cfe7ba1238c9a78be7535d7c63bcaf5a4d5011d46b07c9b45d3bbf7d6c312dfe",
+          "size": 92
+        },
+        ".git/index": {
+          "device": 66305,
+          "inode": 9961515,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "9f023a30c225f9eff1b9da125e1fb9b123b3e7f46e8f8d0d44f2e991d967e593",
+          "size": 118
+        },
+        ".git/logs": {
+          "device": 66305,
+          "inode": 9961517,
+          "kind": 16384,
+          "links": 3,
+          "mode": 493
+        },
+        ".git/logs/HEAD": {
+          "device": 66305,
+          "inode": 9961518,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "5223116bb15f1ec9f679e5d79d46f739a0974379edb20605d84830dd7024cedc",
+          "size": 189
+        },
+        ".git/logs/refs": {
+          "device": 66305,
+          "inode": 9961519,
+          "kind": 16384,
+          "links": 3,
+          "mode": 493
+        },
+        ".git/logs/refs/heads": {
+          "device": 66305,
+          "inode": 9961520,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/logs/refs/heads/main": {
+          "device": 66305,
+          "inode": 9961521,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "5223116bb15f1ec9f679e5d79d46f739a0974379edb20605d84830dd7024cedc",
+          "size": 189
+        },
+        ".git/objects": {
+          "device": 66305,
+          "inode": 9961503,
+          "kind": 16384,
+          "links": 9,
+          "mode": 493
+        },
+        ".git/objects/14": {
+          "device": 66305,
+          "inode": 9961522,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/14/73c63f9f994b57875e02b2364c2d813b71b024": {
+          "device": 66305,
+          "inode": 9961523,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "d7a2a2c95040cb7c4d007f78b579576d71c230881828f0d93a348a504ef7f3ca",
+          "size": 38
+        },
+        ".git/objects/39": {
+          "device": 66305,
+          "inode": 9961513,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/39/a390621dd509206ab9dd593ea81e426c48dcad": {
+          "device": 66305,
+          "inode": 9961514,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "66c232b766f33927132e9af143294578317c357265572489a8ded05d8d480270",
+          "size": 145
+        },
+        ".git/objects/4f": {
+          "device": 66305,
+          "inode": 9961511,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/4f/d3c4cecd88c07b6e17d7224e7ab972daf8f40a": {
+          "device": 66305,
+          "inode": 9961512,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "59aef6b482e73f2f76962170d84c2aa5af2d171a30d3d43c307ceb6954e48dcc",
+          "size": 54
+        },
+        ".git/objects/59": {
+          "device": 66305,
+          "inode": 9961508,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/59/cf462a69bd69e22c9061bdfd6f85aaf24d49ee": {
+          "device": 66305,
+          "inode": 9961509,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "c6c6ef658af7da9cae28d3e798c5eb94f56c73fe7e997cac1dc5d5ebc5938500",
+          "size": 40
+        },
+        ".git/objects/c2": {
+          "device": 66305,
+          "inode": 9961510,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/c2/7d6ac36cf2d10fe3471523a72b0e4cfbffa413": {
+          "device": 66305,
+          "inode": 9961524,
+          "kind": 32768,
+          "links": 1,
+          "mode": 292,
+          "sha256": "40e499a368abb4e62a97a7c4630e6ac75ebb5080430bb8cc5ebf906157186fc5",
+          "size": 74
+        },
+        ".git/objects/info": {
+          "device": 66305,
+          "inode": 9961505,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/objects/pack": {
+          "device": 66305,
+          "inode": 9961504,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/refs": {
+          "device": 66305,
+          "inode": 9961498,
+          "kind": 16384,
+          "links": 4,
+          "mode": 493
+        },
+        ".git/refs/heads": {
+          "device": 66305,
+          "inode": 9961500,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        ".git/refs/heads/main": {
+          "device": 66305,
+          "inode": 9961516,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "468e2e8b3aaa55304441467bb9ec86ccc92569cddb0890f7032a4d8b8d209fb6",
+          "size": 41
+        },
+        ".git/refs/tags": {
+          "device": 66305,
+          "inode": 9961501,
+          "kind": 16384,
+          "links": 2,
+          "mode": 493
+        },
+        "notes.txt": {
+          "device": 66305,
+          "inode": 9961506,
+          "kind": 32768,
+          "links": 1,
+          "mode": 420,
+          "sha256": "895839334b39f13cd5addb5dd9436812bd553ef676d43515163631309f8697e4",
+          "size": 23
+        }
+      },
+      "phase": "preserved",
+      "receiver": {
+        "bodies": []
+      },
+      "source": {
+        "commit": "df55d6890cf826f8a7d42ae8bcb994650a0a53d5",
+        "dirty": false,
+        "files_sha256": "7e6dea8e5ebd3cafdf6f3563880bea579b255637a378bd79ac51aeb126ce3443",
+        "tree": "20523f98e34a7d4236677bd63ad71dfb49397a6d"
+      }
+    }
+  }
+}

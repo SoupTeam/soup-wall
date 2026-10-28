@@ -23,6 +23,9 @@ package trees, libraries and the completion marker, and prints a plan. It does
 not execute selected programs, connect to a daemon, create state or launch Claude.
 An invalid selection returns nonzero with a finite reason code.
 
+For storage errors, interrupted writes or incomplete cleanup, follow the
+[storage recovery runbook](PILOT_STORAGE_RECOVERY.md) before starting a fresh run.
+
 After reviewing the plan, add `--run`:
 
 ```sh
@@ -82,7 +85,9 @@ to refuse mutations and ungranted tools before original-server execution.
 
 Normal completion, launcher errors, timeout, SIGINT, SIGTERM and daemon loss stop
 the owned launcher, allow its host/Ask cleanup to complete, stop the owned daemon,
-and remove private runtime state. Separate user services, processes, prepared
+and remove private runtime state. The bounded per-run audit store and identity
+receipts survive for explicit [loss-aware sanitized export](PREPARED_PILOT_AUDIT.md).
+Each run selects four 64 KiB segments under a 512,000-byte store cap. Separate user services, processes, prepared
 assets and workspace files remain. Cleanup failure is explicit and retains the
 private directory for recovery. SIGKILL/power loss cannot run Python cleanup;
 Linux parent-death signals stop the direct owned children, but an abandoned

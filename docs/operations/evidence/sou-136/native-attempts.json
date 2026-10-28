@@ -1,0 +1,179 @@
+{
+  "format": "sou136-native-attempts/1",
+  "runs": [
+    {
+      "run_id": 40090002007,
+      "source": "40bbf3dc26473c5483f990ca007974762bf9ea19",
+      "status": "build_failed",
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "build_diagnostic_limit": "Existing JSON-only cargo output hid the primary compiler diagnostic. The follow-up exposes rendered compiler diagnostics.",
+      "identified_source_defect": "Linux-only Boundary.membership_observations was private while parent metadata() reads it; expose it only to its parent module."
+    },
+    {
+      "run_id": 40090432914,
+      "source": "181d0ff1da18338983c884dedfc15fa8a6469694",
+      "status": "test_dependency_preparation_failed",
+      "candidate_linux_build_passed": true,
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "cause": "Offline accepted-source test compile could not download the uncached locked assert-json-diff 2.0.2 dev dependency. Fetch locked test dependencies during preparation, then keep regression compilation offline."
+    },
+    {
+      "run_id": 40090656000,
+      "source": "efd1397992f3910a128421691e48a4225122a7df",
+      "status": "test_dependency_preparation_failed",
+      "candidate_linux_build_passed": true,
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "cause": "Same uncached locked dev dependency as prior run; run completed before cancellation request."
+    },
+    {
+      "run_id": 40090846936,
+      "source": "2e0b0a59661be697ea077374068cf838e00c5eac",
+      "status": "candidate_control_failed",
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 22,
+        "failed": 1,
+        "ignored": 1
+      },
+      "cause": "Observation-only temp root inherited a nonprivate mode and was correctly rejected as limit drift. Set fixture root to 0700 and require its identity before exercising membership. Negative fixtures now assert exact refusal phases."
+    },
+    {
+      "run_id": 40091330498,
+      "source": "3b620e31c6ee2898b12a559103669ba18ce8ddd9",
+      "status": "clippy_prerequisite_missing",
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 23,
+        "failed": 0,
+        "ignored": 1
+      },
+      "original_server_cycles_attempted": 0,
+      "native_acceptance_passed": false,
+      "cause": "Pinned toolchain was installed without clippy. Declare the matching clippy component during toolchain preparation."
+    },
+    {
+      "run_id": 40091738937,
+      "source": "7cf7db91efd013884b57599f322de745d995b4a6",
+      "status": "membership_control_output_parse_failed",
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 23,
+        "failed": 0,
+        "ignored": 1
+      },
+      "strict_agentfw_linux_clippy": "passed",
+      "filesystem_cycles_attempted": 70,
+      "filesystem_cycles_passed": 70,
+      "git_cycles_attempted": 0,
+      "memory_control_passed": true,
+      "pids_control_passed": true,
+      "passed": 73,
+      "failed": 2,
+      "incomplete": 72,
+      "unexpected_closures": 0,
+      "cleanup_verified": true,
+      "delegation_removed": false,
+      "native_acceptance_passed": false,
+      "cause": "Passing libtest stdout had the exact fixed test name prefix before its JSON event. The driver missed that event and failed conservatively. The retained SHA256 matches reconstructed passing test output (686 filtered, 0.01s). No failed run is promoted; parser now accepts only the exact known prefix and requires success exit, one complete event and passing libtest count.",
+      "retained_report": "attempt-40091738937.json"
+    },
+    {
+      "run_id": 40092648569,
+      "source": "1990edf50087a75a5586fddd2d46e145c43563b0",
+      "status": "peer_wall_budget_expired",
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 23,
+        "failed": 0,
+        "ignored": 1
+      },
+      "strict_agentfw_linux_clippy": "passed",
+      "filesystem_cycles_attempted": 70,
+      "filesystem_cycles_passed": 70,
+      "git_cycles_attempted": 58,
+      "git_cycles_passed": 57,
+      "memory_control_passed": true,
+      "pids_control_passed": true,
+      "membership_control_passed": true,
+      "passed": 132,
+      "failed": 2,
+      "incomplete": 13,
+      "unexpected_closures": 1,
+      "cleanup_verified": true,
+      "delegation_removed": false,
+      "native_acceptance_passed": false,
+      "cause": "Extra sibling Git calls before and after every crash consumed its unchanged 600000ms wall budget; mcp_budget_wall_expired at churn-git-58. The focused driver now keeps the same peer alive with continuous kernel/process observation and baseline/every-10/final useful checkpoints. All 70 original subject cycles remain mandatory; no wall, cleanup or polling bound increases.",
+      "retained_report": "attempt-40092648569.json"
+    },
+    {
+      "run_id": 40094725140,
+      "source": "ff65d63",
+      "status": "independent_pressure_counter_missed",
+      "before_control": "expected_regression_reproduced",
+      "candidate_budget_controls": {
+        "passed": 23,
+        "failed": 0,
+        "ignored": 1
+      },
+      "strict_agentfw_linux_clippy": "passed",
+      "filesystem_cycles_attempted": 70,
+      "filesystem_cycles_passed": 70,
+      "git_cycles_attempted": 0,
+      "passed": 72,
+      "failed": 2,
+      "incomplete": 73,
+      "unexpected_closures": 0,
+      "cleanup_verified": true,
+      "delegation_removed": false,
+      "native_acceptance_passed": false,
+      "cause": "Production PID guard refused and cleaned up (pids peak32, max events13); independent Python observer captured peak22 and counter0, so grading correctly refused. Full ledger serialization immediately after dispatch can starve its shared-GIL sampler. Keep live stages in memory and flush before construction/crash, after close, on failure and final grading; all observations and statuses are still durably recorded. Counter guards and observer checks are unchanged.",
+      "retained_report": "attempt-40094725140.json"
+    },
+    {
+      "run_id": 40096452531,
+      "source": "dfb6194a3cf927dd39a8cab5a5f8fb9df07892cd",
+      "workflow_status": "success",
+      "status": "superseded_sparse_peer_contract_not_accepted",
+      "passed": 147,
+      "failed": 0,
+      "incomplete": 0,
+      "filesystem_cycles_attempted": 70,
+      "git_cycles_attempted": 70,
+      "unexpected_closures": 0,
+      "cleanup_verified": true,
+      "delegation_removed": true,
+      "native_acceptance_passed": false,
+      "reason": "Reviewer requires per-cycle useful-before/useful-after. The sparse-checkpoint positive remains historical evidence only and cannot satisfy the corrected segmented contract.",
+      "retained_report": "attempt-40096452531.json",
+      "review_ids": [
+        5638266584,
+        5638305841,
+        4367141943
+      ]
+    },
+    {
+      "run_id": 40098771380,
+      "source": "eb4a520e9d97a675e83d9f70a358b41687ed4c7b",
+      "status": "focused_segmented_qualification_passed",
+      "passed": 159,
+      "failed": 0,
+      "incomplete": 0,
+      "filesystem_cycles_attempted": 70,
+      "git_cycles_attempted": 70,
+      "peer_segments": 14,
+      "per_cycle_useful_before_after": true,
+      "unexpected_closures": 0,
+      "cleanup_verified": true,
+      "delegation_removed": true,
+      "native_acceptance_passed": true,
+      "final_admission_or_merge": false,
+      "retained_report": "native-qualified-report.json",
+      "receipt": "native-qualified-receipt.json"
+    }
+  ]
+}

@@ -1,0 +1,699 @@
+{
+  "acceptance_pass": false,
+  "format": "sou142-prepared-pressure-host-evidence/1",
+  "full_sou142_qualification": false,
+  "original_pressure": {
+    "attempts": [
+      {
+        "budget_sha256": "610449bf197789c6d9094bfeace97216918aca4582aa0daf2a387d393a194d99",
+        "calibration": {
+          "correlated_results": 1,
+          "error_results": 1,
+          "offered_calls": 1,
+          "provider_requests": 2,
+          "target_advertised": true
+        },
+        "calibration_refusals": {
+          "classifier_error": 0,
+          "policy_denied": 0,
+          "policy_unconfirmed_ask": 0
+        },
+        "fresh_prepared_recovery_useful": true,
+        "kernel_observations": [
+          {
+            "counter_max": {
+              "oom": 1,
+              "oom_kill": 3,
+              "pids_max": 0,
+              "throttled": 0
+            },
+            "leaf_duration_millis": 2876,
+            "memory_peak_bytes": 67108864,
+            "removed": true,
+            "tasks_peak": 25
+          }
+        ],
+        "limits": {
+          "cpuQuotaMicros": 100000,
+          "memoryMaxBytes": 67108864,
+          "pidsMax": 64,
+          "wallMillis": 120000
+        },
+        "original_runtime_observed": true,
+        "owned_cleanup_verified": true,
+        "peer_budget": {
+          "budget_sha256": "b0e26abff7e377b8246c6ec4ab568fa7acc0be16093999e1e78f125838a905a4",
+          "failed_children": 0,
+          "observations": [
+            {
+              "counters": {
+                "cpu_periods": 73,
+                "cpu_throttled_periods": 1,
+                "cpu_usage_micros": 452071,
+                "memory_current_bytes": 462848,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 36765696,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 25,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "filesystem"
+            },
+            {
+              "counters": {
+                "cpu_periods": 83,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 1225203,
+                "memory_current_bytes": 933888,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 52097024,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 5,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "git"
+            }
+          ],
+          "observed_children": 2,
+          "status": "closed-enforced",
+          "unresolved_children": 0
+        },
+        "peer_useful_after_subject": true,
+        "pinned_git_exec_counts": {
+          "diff": 0,
+          "diff-tree": 0,
+          "log": 0,
+          "other": 0,
+          "show": 0,
+          "status": 0,
+          "version": 2
+        },
+        "reason": "original_resource_refusal_verified",
+        "recovery_budget": {
+          "budget_sha256": "e914b02c279f05a58ec13d9352e04a53e5f17426b0a47d590adeaef18fe90ff6",
+          "failed_children": 0,
+          "observations": [
+            {
+              "counters": {
+                "cpu_periods": 15,
+                "cpu_throttled_periods": 1,
+                "cpu_usage_micros": 388767,
+                "memory_current_bytes": 462848,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 35188736,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 25,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "filesystem"
+            },
+            {
+              "counters": {
+                "cpu_periods": 22,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 1207263,
+                "memory_current_bytes": 921600,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 52035584,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 6,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "git"
+            }
+          ],
+          "observed_children": 2,
+          "status": "closed-enforced",
+          "unresolved_children": 0
+        },
+        "refusal_reason": "mcp_budget_memory_exhausted",
+        "resource": "memory",
+        "server": "filesystem",
+        "status": "passed",
+        "trace_sha256": "b09f5283960c8853586920299d64dfb55f2630e23d27419a14d2c2988a7d0680"
+      },
+      {
+        "budget_sha256": "0c343b1eb0a0fa59bd9f99ffd5632e06b0d6d7779a06e33fcabc621c572aa833",
+        "calibration": {
+          "correlated_results": 0,
+          "error_results": 0,
+          "offered_calls": 0,
+          "provider_requests": 1,
+          "target_advertised": false
+        },
+        "calibration_refusals": {
+          "classifier_error": 0,
+          "policy_denied": 0,
+          "policy_unconfirmed_ask": 0
+        },
+        "fresh_prepared_recovery_useful": true,
+        "kernel_observations": [
+          {
+            "counter_max": {
+              "oom": 0,
+              "oom_kill": 0,
+              "pids_max": 1,
+              "throttled": 0
+            },
+            "leaf_duration_millis": 602,
+            "memory_peak_bytes": 31457280,
+            "removed": true,
+            "tasks_peak": 16
+          }
+        ],
+        "limits": {
+          "cpuQuotaMicros": 100000,
+          "memoryMaxBytes": 536870912,
+          "pidsMax": 16,
+          "wallMillis": 120000
+        },
+        "original_runtime_observed": true,
+        "owned_cleanup_verified": true,
+        "peer_budget": {
+          "budget_sha256": "b0e26abff7e377b8246c6ec4ab568fa7acc0be16093999e1e78f125838a905a4",
+          "failed_children": 0,
+          "observations": [
+            {
+              "counters": {
+                "cpu_periods": 88,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 1269615,
+                "memory_current_bytes": 249856,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 52334592,
+                "pids_current": 0,
+                "pids_max_events": 0,
+                "pids_peak": 5,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "git"
+            },
+            {
+              "counters": {
+                "cpu_periods": 72,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 472493,
+                "memory_current_bytes": 638976,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 37253120,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 25,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "filesystem"
+            }
+          ],
+          "observed_children": 2,
+          "status": "closed-enforced",
+          "unresolved_children": 0
+        },
+        "peer_useful_after_subject": true,
+        "pinned_git_exec_counts": {
+          "diff": 0,
+          "diff-tree": 0,
+          "log": 0,
+          "other": 0,
+          "show": 0,
+          "status": 0,
+          "version": 2
+        },
+        "reason": "original_resource_refusal_verified",
+        "recovery_budget": {
+          "budget_sha256": "e914b02c279f05a58ec13d9352e04a53e5f17426b0a47d590adeaef18fe90ff6",
+          "failed_children": 0,
+          "observations": [
+            {
+              "counters": {
+                "cpu_periods": 22,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 1229024,
+                "memory_current_bytes": 180224,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 52051968,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 6,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "git"
+            },
+            {
+              "counters": {
+                "cpu_periods": 14,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 371746,
+                "memory_current_bytes": 417792,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 33619968,
+                "pids_current": 0,
+                "pids_max_events": 0,
+                "pids_peak": 25,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "filesystem"
+            }
+          ],
+          "observed_children": 2,
+          "status": "closed-enforced",
+          "unresolved_children": 0
+        },
+        "refusal_reason": "mcp_budget_pids_exhausted",
+        "resource": "pids",
+        "server": "filesystem",
+        "status": "passed",
+        "trace_sha256": "64616e7149c8fbc981cb14c8ea9f8affebb4ae8e3906921e9006dc3b20b286e0"
+      },
+      {
+        "budget_sha256": "d97cfccf6e6ee64d685147aebb29bb5dcc76c2f4f5f6414a0a3c2b4690cc2b74",
+        "calibration": {
+          "correlated_results": 0,
+          "error_results": 0,
+          "offered_calls": 0,
+          "provider_requests": 1,
+          "target_advertised": true
+        },
+        "calibration_refusals": {
+          "classifier_error": 0,
+          "policy_denied": 0,
+          "policy_unconfirmed_ask": 0
+        },
+        "fresh_prepared_recovery_useful": true,
+        "kernel_observations": [
+          {
+            "counter_max": {
+              "oom": 0,
+              "oom_kill": 0,
+              "pids_max": 0,
+              "throttled": 0
+            },
+            "leaf_duration_millis": 1087,
+            "memory_peak_bytes": 34885632,
+            "removed": true,
+            "tasks_peak": 25
+          }
+        ],
+        "limits": {
+          "cpuQuotaMicros": 100000,
+          "memoryMaxBytes": 536870912,
+          "pidsMax": 64,
+          "wallMillis": 1000
+        },
+        "original_runtime_observed": true,
+        "owned_cleanup_verified": true,
+        "peer_budget": {
+          "budget_sha256": "b0e26abff7e377b8246c6ec4ab568fa7acc0be16093999e1e78f125838a905a4",
+          "failed_children": 0,
+          "observations": [
+            {
+              "counters": {
+                "cpu_periods": 82,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 1254109,
+                "memory_current_bytes": 602112,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 52084736,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 5,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "git"
+            },
+            {
+              "counters": {
+                "cpu_periods": 74,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 457877,
+                "memory_current_bytes": 397312,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 36577280,
+                "pids_current": 0,
+                "pids_max_events": 0,
+                "pids_peak": 25,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "filesystem"
+            }
+          ],
+          "observed_children": 2,
+          "status": "closed-enforced",
+          "unresolved_children": 0
+        },
+        "peer_useful_after_subject": true,
+        "pinned_git_exec_counts": {
+          "diff": 0,
+          "diff-tree": 0,
+          "log": 0,
+          "other": 0,
+          "show": 0,
+          "status": 0,
+          "version": 0
+        },
+        "reason": "original_resource_refusal_verified",
+        "recovery_budget": {
+          "budget_sha256": "e914b02c279f05a58ec13d9352e04a53e5f17426b0a47d590adeaef18fe90ff6",
+          "failed_children": 0,
+          "observations": [
+            {
+              "counters": {
+                "cpu_periods": 22,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 1206738,
+                "memory_current_bytes": 688128,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 51904512,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 6,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "git"
+            },
+            {
+              "counters": {
+                "cpu_periods": 16,
+                "cpu_throttled_periods": 1,
+                "cpu_usage_micros": 375793,
+                "memory_current_bytes": 634880,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 34725888,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 25,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "filesystem"
+            }
+          ],
+          "observed_children": 2,
+          "status": "closed-enforced",
+          "unresolved_children": 0
+        },
+        "refusal_reason": "mcp_budget_wall_expired",
+        "resource": "wall",
+        "server": "filesystem",
+        "status": "passed",
+        "trace_sha256": "4b4fd877758cdad30388fbcb83ddcd4c0068df01044cbc8f9b1cad865f3714ba"
+      },
+      {
+        "budget_sha256": "610449bf197789c6d9094bfeace97216918aca4582aa0daf2a387d393a194d99",
+        "calibration": {
+          "correlated_results": 1,
+          "error_results": 1,
+          "offered_calls": 1,
+          "provider_requests": 2,
+          "target_advertised": true
+        },
+        "calibration_refusals": {
+          "classifier_error": 0,
+          "policy_denied": 0,
+          "policy_unconfirmed_ask": 0
+        },
+        "kernel_observations": [
+          {
+            "counter_max": {
+              "oom": 0,
+              "oom_kill": 0,
+              "pids_max": 0,
+              "throttled": 0
+            },
+            "leaf_duration_millis": 2516,
+            "memory_peak_bytes": 51986432,
+            "removed": true,
+            "tasks_peak": 5
+          }
+        ],
+        "limits": {
+          "cpuQuotaMicros": 100000,
+          "memoryMaxBytes": 67108864,
+          "pidsMax": 64,
+          "wallMillis": 120000
+        },
+        "pinned_git_exec_counts": {
+          "diff": 0,
+          "diff-tree": 0,
+          "log": 0,
+          "other": 0,
+          "show": 0,
+          "status": 0,
+          "version": 2
+        },
+        "reason": "original_resource_refusal_unproven",
+        "resource": "memory",
+        "server": "git",
+        "status": "incomplete"
+      },
+      {
+        "budget_sha256": "0c343b1eb0a0fa59bd9f99ffd5632e06b0d6d7779a06e33fcabc621c572aa833",
+        "calibration": {
+          "correlated_results": 8,
+          "error_results": 0,
+          "offered_calls": 8,
+          "provider_requests": 2,
+          "target_advertised": true
+        },
+        "calibration_refusals": {
+          "classifier_error": 0,
+          "policy_denied": 0,
+          "policy_unconfirmed_ask": 0
+        },
+        "kernel_observations": [
+          {
+            "counter_max": {
+              "oom": 0,
+              "oom_kill": 0,
+              "pids_max": 0,
+              "throttled": 0
+            },
+            "leaf_duration_millis": 2806,
+            "memory_peak_bytes": 52269056,
+            "removed": true,
+            "tasks_peak": 6
+          }
+        ],
+        "limits": {
+          "cpuQuotaMicros": 100000,
+          "memoryMaxBytes": 536870912,
+          "pidsMax": 16,
+          "wallMillis": 120000
+        },
+        "pinned_git_exec_counts": {
+          "diff": 0,
+          "diff-tree": 0,
+          "log": 0,
+          "other": 0,
+          "show": 0,
+          "status": 8,
+          "version": 2
+        },
+        "reason": "original_resource_refusal_unproven",
+        "resource": "pids",
+        "server": "git",
+        "status": "incomplete"
+      },
+      {
+        "budget_sha256": "d97cfccf6e6ee64d685147aebb29bb5dcc76c2f4f5f6414a0a3c2b4690cc2b74",
+        "calibration": {
+          "correlated_results": 0,
+          "error_results": 0,
+          "offered_calls": 0,
+          "provider_requests": 1,
+          "target_advertised": false
+        },
+        "calibration_refusals": {
+          "classifier_error": 0,
+          "policy_denied": 0,
+          "policy_unconfirmed_ask": 0
+        },
+        "fresh_prepared_recovery_useful": true,
+        "kernel_observations": [
+          {
+            "counter_max": {
+              "oom": 0,
+              "oom_kill": 0,
+              "pids_max": 0,
+              "throttled": 0
+            },
+            "leaf_duration_millis": 1033,
+            "memory_peak_bytes": 28889088,
+            "removed": true,
+            "tasks_peak": 3
+          }
+        ],
+        "limits": {
+          "cpuQuotaMicros": 100000,
+          "memoryMaxBytes": 536870912,
+          "pidsMax": 64,
+          "wallMillis": 1000
+        },
+        "original_runtime_observed": true,
+        "owned_cleanup_verified": true,
+        "peer_budget": {
+          "budget_sha256": "b0e26abff7e377b8246c6ec4ab568fa7acc0be16093999e1e78f125838a905a4",
+          "failed_children": 0,
+          "observations": [
+            {
+              "counters": {
+                "cpu_periods": 77,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 1221946,
+                "memory_current_bytes": 299008,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 52264960,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 5,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "git"
+            },
+            {
+              "counters": {
+                "cpu_periods": 73,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 449256,
+                "memory_current_bytes": 1196032,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 36802560,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 25,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "filesystem"
+            }
+          ],
+          "observed_children": 2,
+          "status": "closed-enforced",
+          "unresolved_children": 0
+        },
+        "peer_useful_after_subject": true,
+        "pinned_git_exec_counts": {
+          "diff": 0,
+          "diff-tree": 0,
+          "log": 0,
+          "other": 0,
+          "show": 0,
+          "status": 0,
+          "version": 0
+        },
+        "reason": "original_resource_refusal_verified",
+        "recovery_budget": {
+          "budget_sha256": "e914b02c279f05a58ec13d9352e04a53e5f17426b0a47d590adeaef18fe90ff6",
+          "failed_children": 0,
+          "observations": [
+            {
+              "counters": {
+                "cpu_periods": 22,
+                "cpu_throttled_periods": 0,
+                "cpu_usage_micros": 1212923,
+                "memory_current_bytes": 1007616,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 52109312,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 6,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "git"
+            },
+            {
+              "counters": {
+                "cpu_periods": 15,
+                "cpu_throttled_periods": 1,
+                "cpu_usage_micros": 391254,
+                "memory_current_bytes": 835584,
+                "memory_oom": 0,
+                "memory_oom_kill": 0,
+                "memory_peak_bytes": 34390016,
+                "pids_current": 1,
+                "pids_max_events": 0,
+                "pids_peak": 25,
+                "pids_peak_kernel": true
+              },
+              "phase": "closed",
+              "reason": "mcp_budget_enforced",
+              "server": "filesystem"
+            }
+          ],
+          "observed_children": 2,
+          "status": "closed-enforced",
+          "unresolved_children": 0
+        },
+        "refusal_reason": "mcp_budget_wall_expired",
+        "resource": "wall",
+        "server": "git",
+        "status": "passed",
+        "trace_sha256": "b282b58ee79274eac78795cf7946b70b3296c340d6a896809799a0d48c8dcf48"
+      }
+    ],
+    "observer_cleanup_performed": false,
+    "status": "incomplete",
+    "workspace_unchanged": true
+  },
+  "reason": "original_pressure_incomplete",
+  "selected_sha256": {
+    "agentfw": "7ecb68d7888836221055cbd09b8824f2cee9379ce055e2367e19541f49f9ffb1",
+    "bwrap_source": "a1d90bd44d70ec3996ee56710743befcd18cb7d911b65279a7cdc1219dc7a0d5",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "git": "a08f2f7b6f6e3a097a3f03d36ad41028e4adca513ab708e3879e73179186711f",
+    "git_launcher": "5164cf232ab862229350e24282773795f68ae5ddec302ef68262250e7673a0b2",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "8cddb1b09b3a3a00d27bd3f6a931def3638ba9112d6ef7b2cc5423f59d1c2dfe"
+  },
+  "selection_sha256": "131f8f9aa8bd9316c8df7922a17dc6b080c78ea6096a63a3126d28b52af944e6",
+  "source_commit": "9ec069c91f3747de1cd96a5008731ffeff09eb90",
+  "status": "failed",
+  "workflow_run": 40172045577
+}

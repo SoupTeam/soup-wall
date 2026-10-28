@@ -27,10 +27,26 @@ fn delimiter_hits(text: &str) -> usize {
 
 /// Compute a heuristic score in `[0.0, 1.0]`. Pure function so it is trivially testable.
 pub(crate) fn score_text(text: &str) -> f32 {
+    score_text_with_formatter_hash(text, None)
+}
+
+fn score_text_with_formatter_hash(
+    text: &str,
+    formatter_hash: Option<&std::ops::Range<usize>>,
+) -> f32 {
     let mut score = 0.0f32;
 
-    score += 0.30 * IMPERATIVE.find_iter(text).count().min(3) as f32;
-    if LONG_B64.is_match(text) {
+    let imperative_count = IMPERATIVE.find_iter(text).count().min(3);
+    score += 0.30 * imperative_count as f32;
+    // An independent body imperative retains its original coupled band/floor.
+    // Attribution of a formatter field cannot discount that separate evidence.
+    let formatter_hash = formatter_hash.filter(|_| imperative_count == 0);
+    // Exclude only the one complete encoding-shaped match authenticated by
+    // the execution owner. A duplicate hash or any other body encoding remains.
+    if LONG_B64
+        .find_iter(text)
+        .any(|found| formatter_hash.is_none_or(|span| found.range() != *span))
+    {
         score += 0.30;
     }
     score += 0.10 * delimiter_hits(text).min(3) as f32;
@@ -40,7 +56,35 @@ pub(crate) fn score_text(text: &str) -> f32 {
 
 /// Emit a single aggregate finding when the heuristic score crosses a floor.
 pub(crate) fn scan(text: &str) -> Vec<Finding> {
-    let score = score_text(text);
+    scan_with_formatter_hash(text, None)
+}
+
+/// A contextual scorer, not a parser or source authenticator. Reject malformed
+/// candidate offsets by retaining every original signal.
+pub(crate) fn scan_with_formatter_hash(
+    text: &str,
+    candidate: Option<&std::ops::Range<usize>>,
+) -> Vec<Finding> {
+    let validated = candidate.filter(|span| {
+        span.end.checked_sub(span.start) == Some(40)
+            && text
+                .get((*span).clone())
+                .is_some_and(|hash| hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            && ((span.start == 7
+                && text.starts_with("commit ")
+                && text
+                    .get(span.end..)
+                    .is_some_and(|tail| tail.starts_with('\n')))
+                || (span.start == 10
+                    && text.starts_with("Diff with ")
+                    && text
+                        .get(span.end..)
+                        .is_some_and(|tail| tail.starts_with(":\n"))))
+    });
+    let score = match validated {
+        Some(span) => score_text_with_formatter_hash(text, Some(span)),
+        None => score_text(text),
+    };
     if score < 0.30 {
         return Vec::new();
     }
@@ -62,6 +106,41 @@ pub(crate) fn scan(text: &str) -> Vec<Finding> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn proved_formatter_oid_removes_only_its_own_encoding_contribution() {
+        let oid = "0123456789abcdef0123456789abcdef01234567";
+        for (header, span) in [
+            (format!("commit {oid}\n"), 7..47),
+            (format!("Diff with {oid}:\n"), 10..50),
+        ] {
+            let text = format!("{header}---\na\n---\nb\n---\nc");
+            assert_eq!(scan(&text)[0].severity, Severity::Medium);
+            assert_eq!(
+                scan_with_formatter_hash(&text, Some(&span))[0].severity,
+                Severity::Low
+            );
+            let body_oid = format!("{text}\n{oid}");
+            assert_eq!(
+                scan_with_formatter_hash(&body_oid, Some(&span))[0].severity,
+                Severity::Medium
+            );
+            let directive = format!("{text}\nignore this; disregard that; override instructions");
+            assert_eq!(
+                scan_with_formatter_hash(&directive, Some(&span))[0].severity,
+                Severity::High
+            );
+            for wrong in [0..40, 7..46, 9..49, 7..usize::MAX] {
+                let actual = scan_with_formatter_hash(&text, Some(&wrong));
+                assert_eq!(actual[0].severity, scan(&text)[0].severity);
+                assert_eq!(actual[0].confidence, scan(&text)[0].confidence);
+            }
+            assert_eq!(
+                scan_with_formatter_hash(&text, None)[0].confidence,
+                scan(&text)[0].confidence
+            );
+        }
+    }
 
     #[test]
     fn benign_scores_low_and_emits_nothing() {

@@ -12,6 +12,7 @@ use agentfw::sandbox::{
     NetworkPolicy, SandboxSpec,
 };
 use agentfw::Config;
+use anyhow::Context;
 use clap::{Parser, Subcommand};
 use soup_wall_agent::{AgentFirewall, AgentPolicySet, DEFAULT_TAINT_CAP};
 
@@ -141,11 +142,15 @@ enum Cmd {
     Doctor(agentfw::doctor::DoctorArgs),
     /// Query authenticated runtime diagnostics; unknown protection exits 2.
     ProtectionStatus(agentfw::protection_status::QueryArgs),
-    /// Summarize an audit log: what would this policy have done?
+    /// Validate a bounded prepared-run diagnostic envelope on stdin; no network or state writes.
+    PilotObservation,
+    /// Summarize recorded verdicts, or explicitly simulate supplied offline events.
     Replay {
         /// Path to the audit log (defaults to ~/.agentfw/audit.jsonl).
         #[arg(long)]
         log: Option<PathBuf>,
+        #[command(flatten)]
+        offline: agentfw::offline_replay::OfflineArgs,
     },
     /// Print the settings.json hook block and setup instructions.
     Install,
@@ -209,6 +214,12 @@ enum Cmd {
         /// Parent host session to bind this collector and its provenance to.
         #[arg(long)]
         host_session: Option<String>,
+        /// Exact private prepared-run budget binding; environment must agree.
+        #[arg(long)]
+        pilot_budget_binding: Option<PathBuf>,
+        /// Frozen canonical identity of the prepared budget selection.
+        #[arg(long, requires = "pilot_budget_binding")]
+        pilot_budget_sha256: Option<String>,
         /// Authenticated child authority grant token minted for this session and server.
         #[arg(long)]
         child_authority: Option<String>,
@@ -224,6 +235,18 @@ enum Cmd {
         /// The real server command and its args, after `--`.
         #[arg(last = true, required = true)]
         command: Vec<String>,
+    },
+    /// Forward MCP bytes to a daemon-selected verified original runtime (Linux).
+    /// No upstream command, project profile or credentials are forwarded.
+    McpVerified {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        host_session: Option<String>,
+        #[arg(long)]
+        child_authority: Option<String>,
+        #[arg(long)]
+        home: Option<PathBuf>,
     },
     /// Manage authenticated child authority grants.
     ChildAuthority {
@@ -268,15 +291,48 @@ enum Cmd {
         #[command(subcommand)]
         command: agentfw::mcp::profile_author::Command,
     },
+    /// Read-only preview for the separately installed constrained replacement.
+    ReplaceFilePreview {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        target: PathBuf,
+        /// Read at most 4096 UTF-8 bytes; raw content is never printed.
+        #[arg(long)]
+        content_file: PathBuf,
+    },
     /// Manage one explicitly selected Claude Code stdio MCP entry.
     McpConnection {
         #[command(subcommand)]
         command: agentfw::mcp::connection::Command,
     },
+    /// Guided Linux pilot from the installed front door: preview,
+    /// prepare, run, status or help. Starts only the verified installed
+    /// component with its recorded interpreter.
+    Pilot {
+        /// Private Agent profile holding `pilot-front-door/` (default ~/.agentfw).
+        #[arg(long)]
+        home: Option<PathBuf>,
+        /// The guided command and its options, e.g. `status --prefix DIR`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<std::ffi::OsString>,
+    },
+    /// Install, verify, update, roll back or remove the guided-pilot front-door component.
+    PilotComponent {
+        /// Private Agent profile holding `pilot-front-door/` (default ~/.agentfw).
+        #[arg(long, global = true)]
+        home: Option<PathBuf>,
+        #[command(subcommand)]
+        action: PilotComponentCmd,
+    },
     /// Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
     PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
+    /// Explicit installed private-output edit session; default pilot stays read-only.
+    EditSession(agentfw::edit_session::Cli),
     /// Read-only inspection using the accepted original-profile workspace validators.
     PilotWorkspaces(agentfw::pilot_launcher::PilotWorkspacesArgs),
+    /// Inspect or probe an explicitly selected prepared-pilot Linux budget.
+    PilotBudget(agentfw::pilot_budget::BudgetArgs),
     /// Inspect and decide one exact pending call owned by a live pilot run.
     PilotApproval(agentfw::pilot_approval::OperatorArgs),
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
@@ -392,6 +448,45 @@ enum Cmd {
 }
 
 #[derive(Subcommand)]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+enum PilotComponentCmd {
+    /// Validate an archive and the interpreter; writes nothing.
+    Preview {
+        archive: PathBuf,
+        /// Expected SHA-256 of the archive file.
+        #[arg(long)]
+        sha256: String,
+        /// Absolute path of the CPython that will run the helpers.
+        #[arg(long)]
+        python: PathBuf,
+    },
+    /// Install or update and select a component (private, atomic; the
+    /// previous component stays selectable for rollback).
+    Install {
+        archive: PathBuf,
+        #[arg(long)]
+        sha256: String,
+        #[arg(long)]
+        python: PathBuf,
+    },
+    /// Re-verify the selected component, every file, mode and the interpreter.
+    Verify,
+    /// Show selected, previous and installed components.
+    Inspect,
+    /// Select the previous component (verified first).
+    Rollback,
+    /// Clear leftovers of an interrupted install; the selection is unchanged.
+    Recover,
+    /// Remove one unselected component, or all component state.
+    Remove {
+        #[arg(long)]
+        component: Option<String>,
+        #[arg(long)]
+        all: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum LifecycleCommand {
     Install {
         version: String,
@@ -445,7 +540,13 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(status);
     }
     let cli = Cli::parse();
-    match cli.cmd {
+    dispatch(cli.cmd)
+}
+
+// Keep command execution's large async temporaries out of Clap's startup stack.
+#[inline(never)]
+fn dispatch(command: Cmd) -> anyhow::Result<()> {
+    match command {
         Cmd::AuditRetentionRecover { home } => {
             let home = home.unwrap_or(Config::home_path()?);
             let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
@@ -469,6 +570,7 @@ fn main() -> anyhow::Result<()> {
         Cmd::ProtectionStatus(args) => {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
+        Cmd::PilotObservation => std::process::exit(agentfw::pilot_observation::run()),
         Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
         #[cfg(windows)]
         Cmd::OnboardWindows { command } => {
@@ -487,7 +589,10 @@ fn main() -> anyhow::Result<()> {
                 .build()?
                 .block_on(serve(Config::home()?, None))
         }
-        Cmd::Replay { log } => {
+        Cmd::Replay { log, offline } => {
+            if offline.offline {
+                std::process::exit(agentfw::offline_replay::run_cli(&offline));
+            }
             let home = Config::home()?;
             let path = log.unwrap_or_else(|| home.join("audit.jsonl"));
             let body = std::fs::read_to_string(&path)?;
@@ -748,9 +853,98 @@ fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&inventory)?);
             Ok(())
         }
+        Cmd::ReplaceFilePreview {
+            workspace,
+            target,
+            content_file,
+        } => {
+            use std::io::Read;
+            anyhow::ensure!(cfg!(target_os = "linux"), "replace_platform_unsupported");
+            let mut options = std::fs::OpenOptions::new();
+            options.read(true);
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+            }
+            let file = options
+                .open(content_file)
+                .map_err(|_| anyhow::anyhow!("replace_content_unavailable"))?;
+            let metadata = file.metadata()?;
+            anyhow::ensure!(
+                metadata.is_file()
+                    && metadata.len() <= agentfw::mcp::replace_file::MAX_BYTES as u64,
+                "replace_content_file_unsupported"
+            );
+            let mut bytes = Vec::with_capacity(agentfw::mcp::replace_file::MAX_BYTES + 1);
+            file.take((agentfw::mcp::replace_file::MAX_BYTES + 1) as u64)
+                .read_to_end(&mut bytes)?;
+            anyhow::ensure!(
+                bytes.len() <= agentfw::mcp::replace_file::MAX_BYTES,
+                "replace_content_over_cap"
+            );
+            let content = std::str::from_utf8(&bytes)
+                .map_err(|_| anyhow::anyhow!("replace_content_not_utf8"))?;
+            let preview = agentfw::mcp::replace_file::preview(&workspace, &target, content)?;
+            println!("{}", serde_json::to_string_pretty(&preview)?);
+            Ok(())
+        }
         Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        #[cfg(target_os = "linux")]
+        Cmd::Pilot { home, args } => {
+            let home = match home {
+                Some(home) => home,
+                None => agentfw::pilot_component::default_home()?,
+            };
+            std::process::exit(agentfw::pilot_component::exec_pilot(&home, &args));
+        }
+        #[cfg(target_os = "linux")]
+        Cmd::PilotComponent { home, action } => {
+            use agentfw::pilot_component as component;
+            let home = match home {
+                Some(home) => home,
+                None => component::default_home()?,
+            };
+            let store = component::Store::new(&home);
+            let value = match action {
+                PilotComponentCmd::Preview {
+                    archive,
+                    sha256,
+                    python,
+                } => store.preview(&component::read_archive_file(&archive)?, &sha256, &python)?,
+                PilotComponentCmd::Install {
+                    archive,
+                    sha256,
+                    python,
+                } => store.install(&component::read_archive_file(&archive)?, &sha256, &python)?,
+                PilotComponentCmd::Verify => store.verify()?,
+                PilotComponentCmd::Inspect => store.inspect()?,
+                PilotComponentCmd::Rollback => store.rollback()?,
+                PilotComponentCmd::Recover => store.recover()?,
+                PilotComponentCmd::Remove { component, all } => {
+                    store.remove(component.as_deref(), all)?
+                }
+            };
+            println!("{}", serde_json::to_string_pretty(&value)?);
+            Ok(())
+        }
+        #[cfg(not(target_os = "linux"))]
+        Cmd::Pilot { home, args } => {
+            let _ = (home, args);
+            anyhow::bail!("the installed guided pilot supports native Linux x86_64 only")
+        }
+        #[cfg(not(target_os = "linux"))]
+        Cmd::PilotComponent { home, action } => {
+            let _ = (home, action);
+            anyhow::bail!("the installed guided pilot supports native Linux x86_64 only")
+        }
         Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
+        Cmd::EditSession(args) => agentfw::edit_session::run(args),
         Cmd::PilotWorkspaces(args) => agentfw::pilot_launcher::inspect_workspaces(args),
+        Cmd::PilotApproval(args) if args.output.is_some() => {
+            std::process::exit(agentfw::pilot_approval::operator_json(args));
+        }
+        Cmd::PilotBudget(args) => agentfw::pilot_budget::inspect(args),
         Cmd::PilotApproval(args) => agentfw::pilot_approval::operator(args),
         Cmd::McpProfile { home, command } => {
             let home = match home {
@@ -844,9 +1038,56 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
+        Cmd::McpVerified {
+            id,
+            host_session,
+            child_authority,
+            home,
+        } => {
+            let host = host_session
+                .or_else(|| std::env::var("AGENTFW_HOST_SESSION").ok())
+                .filter(|value| !value.is_empty())
+                .context("--host-session is required")?;
+            let authority = child_authority
+                .or_else(|| std::env::var("AGENTFW_CHILD_AUTHORITY").ok())
+                .filter(|value| !value.is_empty())
+                .context("--child-authority is required")?;
+            let home = home
+                .or_else(|| std::env::var_os("AGENTFW_HOME").map(PathBuf::from))
+                .map(Ok)
+                .unwrap_or_else(Config::home)?;
+            let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
+            let selected = cfg
+                .native
+                .as_ref()
+                .and_then(|native| native.execution.as_ref())
+                .context("verified original execution is not installed")?;
+            let path = home.join("native-token");
+            anyhow::ensure!(path.is_file(), "existing native token required");
+            let token = agentfw::token::load_or_create(&path)?;
+            let preamble = agentfw::native::execution::transport::Preamble {
+                contract: agentfw::native::execution::FORMAT.into(),
+                catalogue_sha256: selected.catalogue_sha256.clone(),
+                server_id: id,
+                host_session: host,
+                child_authority: authority,
+            };
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?;
+            let result = runtime.block_on(agentfw::native::execution::transport::run_client(
+                cfg.endpoint_url(agentfw::native::execution::ENDPOINT),
+                token,
+                preamble,
+            ));
+            runtime.shutdown_timeout(Duration::from_millis(100));
+            result
+        }
         Cmd::Mcp {
             id,
             host_session,
+            pilot_budget_binding,
+            pilot_budget_sha256,
             child_authority,
             native_admission,
             native_approval_wait_seconds,
@@ -864,6 +1105,12 @@ fn main() -> anyhow::Result<()> {
                     "both --host-session and --child-authority must be provided together for authenticated binding"
                 );
             }
+            let prepared_budget = agentfw::pilot_budget::verify_launch(
+                pilot_budget_binding.as_deref(),
+                pilot_budget_sha256.as_deref(),
+                host_session.as_deref(),
+                id.as_deref().unwrap_or(""),
+            )?;
             let (cmd, args) = command
                 .split_first()
                 .ok_or_else(|| anyhow::anyhow!("no server command given after --"))?;
@@ -938,7 +1185,10 @@ fn main() -> anyhow::Result<()> {
                 let runtime = tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .build()?;
-                let result = runtime.block_on(agentfw::mcp::admission::run(admission));
+                let result = runtime.block_on(agentfw::mcp::admission::run_with_budget(
+                    admission,
+                    prepared_budget,
+                ));
                 // Tokio's stdin uses a blocking thread. A closed admission path must
                 // exit even when the MCP host keeps its stdin handle open.
                 runtime.shutdown_timeout(Duration::from_millis(100));
@@ -1280,11 +1530,27 @@ async fn probe_health(config: &Config, timeout_seconds: u64) -> agentfw::preflig
     }
 }
 
+fn load_serve_config(home: &std::path::Path) -> anyhow::Result<Config> {
+    let path = home.join("config.yaml");
+    match std::fs::read_to_string(&path) {
+        Ok(s) => Config::from_yaml(&s).with_context(|| {
+            format!(
+                "cannot parse daemon configuration {}; restore valid config.yaml before restarting",
+                path.display()
+            )
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "cannot read daemon configuration {}; restore config.yaml access before restarting",
+                path.display()
+            )
+        }),
+    }
+}
+
 async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
-    let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
-        Ok(s) => Config::from_yaml(&s)?,
-        Err(_) => Config::default(),
-    };
+    let cfg = load_serve_config(&home)?;
 
     let mut firewall = match &cfg.policy {
         Some(p) => AgentFirewall::with_taint_limits(
@@ -1307,6 +1573,7 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
             .map(|native| {
                 let native_token = agentfw::token::load_or_create(&home.join("native-token"))?;
                 let state = agentfw::native::NativeState::load(native, native_token)?
+                    .with_execution(native)?
                     .with_policy_barrier(&home)?
                     .with_continuity(&home, &mut firewall)?;
                 match &native.approval {
@@ -1465,6 +1732,61 @@ async fn serve(home: PathBuf, managed: Option<String>) -> anyhow::Result<()> {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+
+    #[test]
+    fn serve_config_defaults_only_when_missing() {
+        let home = tempfile::tempdir().unwrap();
+        let config = load_serve_config(home.path()).unwrap();
+        assert_eq!(
+            serde_json::to_value(config).unwrap(),
+            serde_json::to_value(Config::default()).unwrap()
+        );
+        assert!(!home.path().join("config.yaml").exists());
+    }
+
+    #[test]
+    fn serve_config_preserves_valid_operator_settings() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("config.yaml"),
+            "enforce: true\nport: 18787\n",
+        )
+        .unwrap();
+        let config = load_serve_config(home.path()).unwrap();
+        assert!(config.enforce);
+        assert_eq!(config.port, 18787);
+    }
+
+    #[test]
+    fn serve_config_rejects_malformed_yaml() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("config.yaml"), "enforce: [").unwrap();
+        let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore valid config.yaml"));
+    }
+
+    #[test]
+    fn serve_config_rejects_directory_instead_of_defaults() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::create_dir(home.path().join("config.yaml")).unwrap();
+        let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore config.yaml access"));
+        let error = error.downcast_ref::<std::io::Error>().unwrap();
+        assert_ne!(error.kind(), std::io::ErrorKind::NotFound);
+        assert!(home.path().join("config.yaml").is_dir());
+    }
+
+    #[test]
+    fn serve_config_rejects_invalid_utf8_instead_of_defaults() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(home.path().join("config.yaml"), [0xff, 0xfe]).unwrap();
+        let error = load_serve_config(home.path()).unwrap_err();
+        assert!(error.to_string().contains("restore config.yaml access"));
+        assert_eq!(
+            error.downcast_ref::<std::io::Error>().unwrap().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+    }
 
     #[test]
     fn managed_instance_preserves_leading_hyphens() {

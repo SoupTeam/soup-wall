@@ -1,0 +1,391 @@
+{
+  "attempts": [
+    {
+      "asset_package_tree_ms": {
+        "filesystem": {
+          "n": 17,
+          "p50": 3048.0,
+          "p95": 3178.7,
+          "worst": 3178.7
+        },
+        "git": null
+      },
+      "conditions_before": "not recorded",
+      "error": "unresolved runtime ELF dependency",
+      "families": {
+        "filesystem": {
+          "case_names": [
+            "approve",
+            "reject",
+            "expire",
+            "timeout",
+            "cancel",
+            "wrong_binding",
+            "classifier_change",
+            "profile_change",
+            "disconnect",
+            "collector_death",
+            "restart",
+            "default",
+            "deny"
+          ],
+          "cases_completed": 13,
+          "cases_passed": 13,
+          "planned": 13
+        },
+        "git": {
+          "case_names": [],
+          "cases_completed": 0,
+          "cases_passed": 0,
+          "planned": 13
+        }
+      },
+      "input_sha256": {
+        "agentfw": "303858346855e383473342051e0fdbba4f163c1d91af58b63463531941963d87",
+        "bwrap": "470d0b7aa26ee95bd0f98895291535d09af02a6eed82f3929de91f82818f11a3",
+        "git": "d1e434e3a50111100c12b32774a07f4ba43fd9be2d09c8d5af3cce448ab43e3d",
+        "git_launcher": "cd98b3519cf857304c3566720d4c80d7cdeff4245934d0dffe56281b67b70aab",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+      },
+      "note": "first attempt after environment setup, source eb6aa6a5, failed before any git case: missing libtcl8.6 / libtk8.6 for the bundled python",
+      "physical_human_presence_proved": false,
+      "report_present": true,
+      "run": "sou105-wsl-1",
+      "source": {
+        "commit": "eb6aa6a531cef67a0eac307404da981a5a600f07",
+        "dirty": false,
+        "tree": "6da4d371bae069dee954f2d5f37415dee447a7b2"
+      },
+      "status": "failed"
+    },
+    {
+      "asset_package_tree_ms": {
+        "filesystem": {
+          "n": 17,
+          "p50": 3075.5,
+          "p95": 3226.9,
+          "worst": 3226.9
+        },
+        "git": {
+          "n": 17,
+          "p50": 4264.9,
+          "p95": 4374.5,
+          "worst": 4374.5
+        }
+      },
+      "conditions_before": "not recorded",
+      "error": null,
+      "families": {
+        "filesystem": {
+          "case_names": [
+            "approve",
+            "reject",
+            "expire",
+            "timeout",
+            "cancel",
+            "wrong_binding",
+            "classifier_change",
+            "profile_change",
+            "disconnect",
+            "collector_death",
+            "restart",
+            "default",
+            "deny"
+          ],
+          "cases_completed": 13,
+          "cases_passed": 13,
+          "planned": 13
+        },
+        "git": {
+          "case_names": [
+            "approve",
+            "reject",
+            "expire",
+            "timeout",
+            "cancel",
+            "wrong_binding",
+            "classifier_change",
+            "profile_change",
+            "disconnect",
+            "collector_death",
+            "restart",
+            "default",
+            "deny"
+          ],
+          "cases_completed": 13,
+          "cases_passed": 13,
+          "planned": 13
+        }
+      },
+      "input_sha256": {
+        "agentfw": "303858346855e383473342051e0fdbba4f163c1d91af58b63463531941963d87",
+        "bwrap": "470d0b7aa26ee95bd0f98895291535d09af02a6eed82f3929de91f82818f11a3",
+        "git": "d1e434e3a50111100c12b32774a07f4ba43fd9be2d09c8d5af3cce448ab43e3d",
+        "git_launcher": "cd98b3519cf857304c3566720d4c80d7cdeff4245934d0dffe56281b67b70aab",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+      },
+      "note": "eb6aa6a5 inputs rebuilt and dependencies fixed, passed",
+      "physical_human_presence_proved": false,
+      "report_present": true,
+      "run": "sou105-wsl-2",
+      "source": {
+        "commit": "eb6aa6a531cef67a0eac307404da981a5a600f07",
+        "dirty": false,
+        "tree": "6da4d371bae069dee954f2d5f37415dee447a7b2"
+      },
+      "status": "passed"
+    },
+    {
+      "asset_package_tree_ms": {
+        "filesystem": {
+          "n": 17,
+          "p50": 3105.0,
+          "p95": 3487.8,
+          "worst": 3487.8
+        },
+        "git": {
+          "n": 3,
+          "p50": 4279.1,
+          "p95": 4799.7,
+          "worst": 4799.7
+        }
+      },
+      "conditions_before": "not recorded",
+      "error": "pending approval state missed declared deadline",
+      "families": {
+        "filesystem": {
+          "case_names": [
+            "approve",
+            "reject",
+            "expire",
+            "timeout",
+            "cancel",
+            "wrong_binding",
+            "classifier_change",
+            "profile_change",
+            "disconnect",
+            "collector_death",
+            "restart",
+            "default",
+            "deny"
+          ],
+          "cases_completed": 13,
+          "cases_passed": 13,
+          "planned": 13
+        },
+        "git": {
+          "case_names": [
+            "approve"
+          ],
+          "cases_completed": 1,
+          "cases_passed": 0,
+          "planned": 13
+        }
+      },
+      "input_sha256": {
+        "agentfw": "06213f453140bbfa38c631c88050f81baade57ade0b79872f97508dd71e195b1",
+        "bwrap": "470d0b7aa26ee95bd0f98895291535d09af02a6eed82f3929de91f82818f11a3",
+        "git": "d1e434e3a50111100c12b32774a07f4ba43fd9be2d09c8d5af3cce448ab43e3d",
+        "git_launcher": "e4bcad52ab3b4673b1e8869722108f3c58ce760193dc97d2c11329299e9cc6ed",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+      },
+      "note": "PR source (main a5c6172 + series tooling), first run right after the cargo build, failed",
+      "physical_human_presence_proved": false,
+      "report_present": true,
+      "run": "sou105-wsl-3-pr",
+      "source": {
+        "commit": "7d1b02533e6b576c18911f4d135f263af3081536",
+        "dirty": false,
+        "tree": "b6dfbf8c79b66c8c1dda012ecf7fe0b55f030751"
+      },
+      "status": "failed"
+    },
+    {
+      "asset_package_tree_ms": {
+        "filesystem": {
+          "n": 17,
+          "p50": 3125.0,
+          "p95": 3387.9,
+          "worst": 3387.9
+        },
+        "git": {
+          "n": 16,
+          "p50": 4320.0,
+          "p95": 4718.5,
+          "worst": 4718.5
+        }
+      },
+      "conditions_before": [
+        "0.01 0.33 0.31 1/179 81809",
+        "some avg10=0.00 avg60=0.00 avg300=0.17 total=119214987",
+        "full avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+        "               total        used        free      shared  buff/cache   available",
+        "Mem:            3614         446         377           3        2882        3168",
+        "2026-10-25T22:43:38Z"
+      ],
+      "error": "pending approval state missed declared deadline",
+      "families": {
+        "filesystem": {
+          "case_names": [
+            "approve",
+            "reject",
+            "expire",
+            "timeout",
+            "cancel",
+            "wrong_binding",
+            "classifier_change",
+            "profile_change",
+            "disconnect",
+            "collector_death",
+            "restart",
+            "default",
+            "deny"
+          ],
+          "cases_completed": 13,
+          "cases_passed": 13,
+          "planned": 13
+        },
+        "git": {
+          "case_names": [
+            "approve",
+            "reject",
+            "expire",
+            "timeout",
+            "cancel",
+            "wrong_binding",
+            "classifier_change",
+            "profile_change",
+            "disconnect",
+            "collector_death"
+          ],
+          "cases_completed": 10,
+          "cases_passed": 9,
+          "planned": 13
+        }
+      },
+      "input_sha256": {
+        "agentfw": "06213f453140bbfa38c631c88050f81baade57ade0b79872f97508dd71e195b1",
+        "bwrap": "470d0b7aa26ee95bd0f98895291535d09af02a6eed82f3929de91f82818f11a3",
+        "git": "d1e434e3a50111100c12b32774a07f4ba43fd9be2d09c8d5af3cce448ab43e3d",
+        "git_launcher": "e4bcad52ab3b4673b1e8869722108f3c58ce760193dc97d2c11329299e9cc6ed",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+      },
+      "note": "PR source, repeated with warm caches, failed",
+      "physical_human_presence_proved": false,
+      "report_present": true,
+      "run": "sou105-wsl-4-pr-warm",
+      "source": {
+        "commit": "7d1b02533e6b576c18911f4d135f263af3081536",
+        "dirty": false,
+        "tree": "b6dfbf8c79b66c8c1dda012ecf7fe0b55f030751"
+      },
+      "status": "failed"
+    },
+    {
+      "asset_package_tree_ms": {
+        "filesystem": {
+          "n": 17,
+          "p50": 3034.5,
+          "p95": 3363.4,
+          "worst": 3363.4
+        },
+        "git": {
+          "n": 17,
+          "p50": 3238.9,
+          "p95": 4670.1,
+          "worst": 4670.1
+        }
+      },
+      "conditions_before": [
+        "0.20 0.61 0.50 1/180 85938",
+        "               total        used        free      shared  buff/cache   available",
+        "Mem:            3614         450         197           3        3058        3164",
+        "2026-10-25T22:51:12Z"
+      ],
+      "error": null,
+      "families": {
+        "filesystem": {
+          "case_names": [
+            "approve",
+            "reject",
+            "expire",
+            "timeout",
+            "cancel",
+            "wrong_binding",
+            "classifier_change",
+            "profile_change",
+            "disconnect",
+            "collector_death",
+            "restart",
+            "default",
+            "deny"
+          ],
+          "cases_completed": 13,
+          "cases_passed": 13,
+          "planned": 13
+        },
+        "git": {
+          "case_names": [
+            "approve",
+            "reject",
+            "expire",
+            "timeout",
+            "cancel",
+            "wrong_binding",
+            "classifier_change",
+            "profile_change",
+            "disconnect",
+            "collector_death",
+            "restart",
+            "default",
+            "deny"
+          ],
+          "cases_completed": 13,
+          "cases_passed": 13,
+          "planned": 13
+        }
+      },
+      "input_sha256": {
+        "agentfw": "303858346855e383473342051e0fdbba4f163c1d91af58b63463531941963d87",
+        "bwrap": "470d0b7aa26ee95bd0f98895291535d09af02a6eed82f3929de91f82818f11a3",
+        "git": "d1e434e3a50111100c12b32774a07f4ba43fd9be2d09c8d5af3cce448ab43e3d",
+        "git_launcher": "cd98b3519cf857304c3566720d4c80d7cdeff4245934d0dffe56281b67b70aab",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+      },
+      "note": "eb6aa6a5 control run on the same machine after the two PR-source failures, passed",
+      "physical_human_presence_proved": false,
+      "report_present": true,
+      "run": "sou105-wsl-5-base",
+      "source": {
+        "commit": "eb6aa6a531cef67a0eac307404da981a5a600f07",
+        "dirty": false,
+        "tree": "6da4d371bae069dee954f2d5f37415dee447a7b2"
+      },
+      "status": "passed"
+    }
+  ],
+  "format": "sw-wsl2-acceptance-attempts/1",
+  "machine_snapshot_before_first_series": [
+    "Linux wsl2-host 6.6.114.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Mon Dec  1 20:46:23 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+    "6",
+    "MemTotal:        3701372 kB",
+    "0.64 0.49 0.30 1/183 27999",
+    "some avg10=0.01 avg60=0.53 avg300=0.28 total=18719083",
+    "full avg10=0.00 avg60=0.00 avg300=0.00 total=0",
+    "Python 3.12.3",
+    "2026-10-25T19:24:27Z",
+    "eb6aa6a531cef67a0eac307404da981a5a600f07"
+  ],
+  "note": "Every SOU-105 selected-approval acceptance attempt run on this WSL2 machine, kept in order, including failed attempts. A failed run records only the cases completed before the failure.",
+  "platform_kind": "wsl2"
+}

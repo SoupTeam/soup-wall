@@ -50,7 +50,8 @@ def generated() -> str:
         jobs = blocks(source)
         # This explicitly dispatched hour-long development exercise must never
         # enter ordinary component qualification or required admission.
-        manual = {"manual-long-session"} if workflow == "mcp-real-filesystem.yml" else set()
+        manual = {"mcp-real-filesystem.yml": {"manual-long-session"},
+                  "mcp-real-git.yml": {"manual-installed-git-profiles"}}.get(workflow, set())
         if set(jobs) != {*expected, "impact", *manual}:
             raise ValueError("Unregistered source jobs: " + workflow)
         prefix = workflow.removesuffix(".yml")

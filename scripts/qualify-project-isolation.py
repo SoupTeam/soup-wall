@@ -140,7 +140,16 @@ def qualify(args, private, report):
             '-o', str(refusal_trace), str(setup.binary), 'pilot-launch', '--claude', str(setup.selected['claude']),
             '--workspace', str(setup.workspace), '--fs-profile', str(setup.profiles['filesystem']),
             '--git-profile', str(setup.profiles['git']), '--home', str(setup.home), '--policy', str(setup.policy)],
-            cwd=private, env=dict(setup.env, TMPDIR=str(alias)), capture_output=True, timeout=20)
+            # Satisfy explicit provider admission so this reaches the private
+            # directory refusal instead of the earlier provider-unavailable gate.
+            cwd=private, env=dict(setup.env, TMPDIR=str(alias),
+                ANTHROPIC_API_KEY="owned-provider-canary", ANTHROPIC_BASE_URL=receiver.url),
+            capture_output=True, timeout=20)
+        report['private_state_alias_refusal'] = {
+            'nonzero_exit': refused.returncode != 0,
+            'outside_workspace_refusal': b'outside the workspace' in refused.stderr,
+            'provider_unavailable': b'provider_unavailable' in refused.stderr,
+        }
         require(refused.returncode != 0 and b'outside the workspace' in refused.stderr,
                 'aliased_private_configuration_not_refused')
         require('execve(' + json.dumps(str(setup.selected['claude'])) + ',' not in refusal_trace.read_text(),

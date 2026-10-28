@@ -46,7 +46,7 @@ WORKFLOW_JOBS: dict[str, tuple[str, ...]] = {
     "managed-policy-demo.yml": ("managed-rollout-e2e",),
     "managed-policy-postgres.yml": ("managed-postgres",),
     "managed-policy-tls.yml": ("agent-https-rollout",),
-    "mcp-create-file.yml": ("linux-create-file",),
+    "mcp-create-file.yml": ("linux-create-file", "linux-replace-file", "linux-installed-edit"),
     "mcp-https-get.yml": ("linux-https-get",),
     "mcp-https-post.yml": ("linux-https-post",),
     "mcp-profile-author.yml": ("author-cli",),

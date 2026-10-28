@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Prepared launch refusal and ownership controls (SOU-116)."""
 import importlib.util
+import errno
 import io
 import json
 import os
@@ -18,7 +19,83 @@ RUN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUN)
 
 
+@patch.dict(os.environ, {"ANTHROPIC_API_KEY": "owned-provider-fixture"})
 class PreparedRunBoundary(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Linux owned file-descriptor fault control")
+    def test_authority_sync_storage_failure_refuses_before_daemon_and_cleans_only_owned_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args, selection, paths, profiles = self.fixture(root)
+            paths.update(agentfw=Path("/trusted/agentfw"), claude=Path("/trusted/claude"),
+                         node=Path("/trusted/node"), python=Path("/trusted/python"), policy=Path("/trusted/policy"))
+            for role in ("agentfw", "policy"):
+                paths[role] = root / (role + ".fixture")
+                paths[role].write_bytes(b"owned selected input")
+            (root / "registry.json").write_text('{"tools": []}')
+            sentinel = root / "foreign.txt"
+            sentinel.write_bytes(b"preserve")
+            sync = RUN.os.fsync
+            faults = []
+            def fail_authority(fd):
+                if Path(os.readlink(f"/proc/self/fd/{fd}")).name == "native-token":
+                    faults.append("authority_sync")
+                    raise OSError(errno.ENOSPC, "owned storage fault")
+                return sync(fd)
+            report = {}
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN.os, "fsync", side_effect=fail_authority), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaises(OSError):
+                    RUN.run(args, report)
+                spawn.assert_not_called()
+            self.assertEqual(faults, ["authority_sync"])
+            self.assertEqual(report["storage_failure"], "storage_full")
+            self.assertFalse(report["host_started"])
+            self.assertEqual(report["cleanup"], "owned_processes_stopped_audit_retained")
+            retained = list(root.glob("soup-wall-run-*"))
+            self.assertEqual(len(retained), 1)
+            RUN.AUDIT.verify_cleanup(retained[0])
+            self.assertEqual(report["audit"]["snapshot"]["state"], "unavailable")
+            self.assertEqual(sentinel.read_bytes(), b"preserve")
+
+    def test_storage_diagnostics_are_finite_and_never_echo_paths(self):
+        for number, reason in ((errno.ENOSPC, "storage_full"), (errno.EROFS, "storage_read_only"),
+                               (errno.EACCES, "storage_permission_denied"), (errno.EIO, "storage_io_failed")):
+            with self.subTest(errno=number), \
+                 patch.object(RUN, "selected", side_effect=OSError(number, "Bearer private-secret", "/private/path")), \
+                 patch.object(sys, "argv", ["pilot-run", "--selection", "/unused", "--expected-commit", "b" * 40]), \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 1)
+                value = json.loads(output.getvalue())
+                self.assertEqual(value["storage_failure"], reason)
+                self.assertFalse(value["executed"])
+                self.assertEqual(value["effects"], "Protected host was not started.")
+                self.assertNotIn("private-secret", output.getvalue())
+                self.assertNotIn("/private/path", output.getvalue())
+
+    def test_cleanup_failure_preserves_original_storage_failure_and_effect_uncertainty(self):
+        def failed_run(_args, report):
+            report.update(executed=True, host_started=True, stage="run_publication",
+                          storage_failure="storage_full", cleanup="failed",
+                          cleanup_storage_failure="storage_permission_denied")
+            raise RUN.Failure("owned_process_cleanup_failed")
+        with patch.object(RUN.PREP, "supported_platform"), \
+             patch.object(RUN.SELECTION_LOCK, "hold"), \
+             patch.object(RUN, "selected", return_value=({"source": {}}, {}, {})), \
+             patch.object(RUN.PREP.FS, "sha", return_value="a" * 64), \
+             patch.object(RUN, "run", side_effect=failed_run), \
+             patch.object(sys, "argv", ["pilot-run", "--run", "--selection", "/unused", "--expected-commit", "b" * 40]), \
+             patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(RUN.main(), 1)
+            value = json.loads(output.getvalue())
+            self.assertEqual(value["reason"], "owned_process_cleanup_failed")
+            self.assertEqual(value["storage_failure"], "storage_full")
+            self.assertEqual(value["cleanup_storage_failure"], "storage_permission_denied")
+            self.assertIn("may have occurred", value["effects"])
+            self.assertEqual(value["stage"], "run_publication")
+            self.assertEqual(value["audit_retention"], RUN.AUDIT.LIMITS)
+
     def args(self, root):
         return SimpleNamespace(selection=root / "generations" / ("a" * 32) / "selection.json",
             expected_commit="b" * 40, run=False, state_root=root, port=0,
@@ -28,7 +105,8 @@ class PreparedRunBoundary(unittest.TestCase):
         args = self.args(root)
         args.selection.parent.mkdir(parents=True, mode=0o700)
         args.selection.parent.parent.chmod(0o700)
-        selection = {"source": {"commit": args.expected_commit}, "files": {}}
+        selection = {"format": "sw-installed-pilot-selection/2",
+                     "source": {"commit": args.expected_commit}, "files": {}}
         args.selection.write_text(json.dumps(selection))
         marker = {"format": "sw-pilot-preparation/1", "generation": "a" * 32,
                   "selection_sha256": RUN.PREP.FS.sha(args.selection), "status": "prepared-not-active"}
@@ -39,6 +117,71 @@ class PreparedRunBoundary(unittest.TestCase):
             (root / (kind + ".json")).write_text(json.dumps({"workspace": str(root / kind)}))
         paths = {"git_classifier": ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"}
         return args, selection, paths, profiles
+
+    def test_explicit_budget_plan_reads_only_owned_bytes_without_execution(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            args, selection, paths, profiles = self.fixture(root)
+            budget = root / "budget.json"
+            budget.write_bytes(b'{"operator":"selection-only"}')
+            budget.chmod(0o600)
+            before = sorted(str(p) for p in root.rglob("*"))
+            with patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(sys, "argv", ["pilot-run", "--selection", str(args.selection),
+                     "--expected-commit", args.expected_commit, "--linux-budget", str(budget)]), \
+                 patch.object(RUN.subprocess, "run") as utility, \
+                 patch.object(RUN.subprocess, "Popen") as spawn, \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 0)
+                report = json.loads(output.getvalue())
+                self.assertEqual(report["resource_budget"]["status"], "selected-not-validated")
+                self.assertFalse(report["executed"])
+                utility.assert_not_called()
+                spawn.assert_not_called()
+            self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
+
+    def test_budget_input_rejects_symlink_shared_write_and_overflow(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            budget = root / "budget"
+            budget.write_bytes(b'{}')
+            budget.chmod(0o600)
+            self.assertEqual(RUN.budget_input(budget), b'{}')
+            link = root / "link"
+            link.symlink_to(budget)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(link)
+            budget.chmod(0o622)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(budget)
+            budget.chmod(0o600)
+            budget.write_bytes(b'x' * 16385)
+            with self.assertRaises(RUN.Failure):
+                RUN.budget_input(budget)
+
+    def test_budget_probe_has_no_provider_environment_and_refusal_never_starts_daemon(self):
+        provider = {key: "distinct-owned-canary" for key in ("ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE")}
+        with patch.object(RUN.subprocess, "run", return_value=SimpleNamespace(returncode=1, stdout=b'')) as call:
+            with self.assertRaisesRegex(RUN.Failure, "linux_budget_preflight_refused"):
+                RUN.budget_cli({"agentfw": Path("/trusted/agentfw")}, Path("/owned"),
+                    {"PATH": "/usr/bin:/bin", **provider}, "--config", Path("/owned/budget"), True)
+            self.assertEqual(call.call_args.kwargs["env"], {"PATH": "/usr/bin:/bin"})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            args, selection, paths, profiles = self.fixture(root)
+            args.linux_budget = root / "budget.json"
+            args.linux_budget.write_bytes(b'{}')
+            args.linux_budget.chmod(0o600)
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "environment", return_value={}), \
+                 patch.object(RUN, "budget_cli", side_effect=RUN.Failure("linux_budget_preflight_refused")), \
+                 patch.object(RUN.subprocess, "Popen") as spawn:
+                with self.assertRaisesRegex(RUN.Failure, "linux_budget_preflight_refused"):
+                    RUN.run(args, {})
+                spawn.assert_not_called()
+            self.assertFalse(list(root.glob("soup-wall-run-*")))
 
     def test_default_command_does_not_spawn_or_create_state(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -53,9 +196,27 @@ class PreparedRunBoundary(unittest.TestCase):
                 self.assertEqual(RUN.main(), 0)
                 self.assertEqual(json.loads(output.getvalue())["status"], "plan")
                 self.assertFalse(json.loads(output.getvalue())["executed"])
+                self.assertEqual(json.loads(output.getvalue())["audit_retention"], RUN.AUDIT.LIMITS)
                 spawn.assert_not_called()
                 execute.assert_not_called()
             self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
+
+    @unittest.skipUnless(os.name == "posix", "lifetime lock requires POSIX")
+    def test_active_transition_refuses_run_before_selection_or_spawn(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            args, _, _, _ = self.fixture(root)
+            with patch.object(RUN.PREP, "supported_platform"), \
+                 RUN.SELECTION_LOCK.hold(root, exclusive=True), \
+                 patch.object(RUN, "selected") as selected, patch.object(RUN, "run") as launch, \
+                 patch.object(sys, "argv", ["pilot-run", "--run", "--selection", str(args.selection),
+                                            "--expected-commit", args.expected_commit]), \
+                 patch("sys.stdout", new_callable=io.StringIO) as output:
+                self.assertEqual(RUN.main(), 1)
+                self.assertEqual(json.loads(output.getvalue())["reason"],
+                                 "selected_generation_in_use_or_transitioning")
+                selected.assert_not_called()
+                launch.assert_not_called()
 
     def test_unsupported_platform_reports_a_finite_actionable_reason_without_spawn(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -104,7 +265,8 @@ class PreparedRunBoundary(unittest.TestCase):
         # Exercise the accepted generation validator, rather than mocking its probe switch.
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "selection.json").write_text(json.dumps({"prepared_profiles": {"filesystem": {}, "git": {}}}))
+            (root / "selection.json").write_text(json.dumps({"format": "sw-installed-pilot-selection/2",
+                "prepared_profiles": {"filesystem": {}, "git": {}}}))
             with patch.object(RUN.PREP.PILOT, "validate_selection", return_value=({}, {"node": Path(sys.executable)})), \
                  patch.object(RUN.PREP, "verify_profile", return_value={}), \
                  patch.object(RUN.PREP.FS, "NODE_SHA256", RUN.PREP.FS.sha(sys.executable)), \
@@ -120,10 +282,11 @@ class PreparedRunBoundary(unittest.TestCase):
             args.port = owner.getsockname()[1]
             before = sorted(str(p) for p in root.rglob("*"))
             with patch.object(RUN.PREP, "supported_platform"), \
-                 patch.object(RUN, "selected", return_value=(selection, paths, profiles)), \
+                 patch.object(RUN, "selected", side_effect=AssertionError("slow generation recheck reached")) as recheck, \
                  patch.object(RUN.subprocess, "Popen") as spawn:
                 with self.assertRaisesRegex(RUN.Failure, "occupied_port_refused"):
                     RUN.run(args, {})
+                recheck.assert_not_called()
                 spawn.assert_not_called()
             self.assertEqual(owner.getsockname()[1], args.port)
             self.assertEqual(before, sorted(str(p) for p in root.rglob("*")))
@@ -146,8 +309,9 @@ class PreparedRunBoundary(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             args, selection, paths, profiles = self.fixture(root)
-            paths.update(agentfw=Path("/trusted/agentfw"), claude=Path("/trusted/claude"),
-                         node=Path("/trusted/node"), python=Path("/trusted/python"), policy=Path("/trusted/policy"))
+            for role in ("agentfw", "claude", "node", "python", "policy"):
+                paths[role] = root / ("trusted-" + role)
+                paths[role].write_text("owned selected " + role)
             (root / "registry.json").write_text('{"tools": []}')
             read_fd, write_fd = os.pipe()
             os.close(write_fd)
@@ -169,7 +333,10 @@ class PreparedRunBoundary(unittest.TestCase):
                     RUN.run(args, {})
             self.assertEqual(count, 3)
             self.assertEqual(spawn.call_count, 1)  # Only the owned daemon, never a host.
-            self.assertFalse(list(root.glob("soup-wall-run-*")))
+            retained = list(root.glob("soup-wall-run-*"))
+            self.assertEqual(len(retained), 1)
+            self.assertEqual({p.name for p in retained[0].iterdir()},
+                             {"audit", "audit-run.json", "audit-finished.json"})
 
     def test_correlated_dispatch_without_useful_result_cannot_pass_qualification(self):
         spec = importlib.util.spec_from_file_location("sou116_acceptance", ROOT / "scripts/qualify-prepared-pilot-run.py")
@@ -207,7 +374,8 @@ class PreparedRunBoundary(unittest.TestCase):
         for key in ("PYTHONPATH", "LD_PRELOAD", "CLAUDE_CONFIG_DIR", "AGENTFW_TOKEN"):
             self.assertNotIn(key, env)
         self.assertNotIn("untrusted", env["PATH"])
-        self.assertEqual(env["ANTHROPIC_API_KEY"], "owned-provider")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("ANTHROPIC_BASE_URL", env)
         # serve resolves HOME/.agentfw; AGENTFW_HOME alone is not its interface.
         self.assertEqual(env["AGENTFW_HOME"], str(Path(env["HOME"]) / ".agentfw"))
 

@@ -1,0 +1,1 @@
+/tmp/sou123/ws/does-not-exist.txt: Error - ENOENT: no such file or directory, open '/tmp/sou123/ws/does-not-exist.txt'
