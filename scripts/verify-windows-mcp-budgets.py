@@ -828,6 +828,17 @@ def grade_report(report):
     grade(sibling, report["memory_accounting_controls"])
 
 
+def cleanup_failure(report, code):
+    # Fallback cleanup must fail the run, but must not replace the primary
+    # protocol/setup error with the symptom of its still-live sibling.
+    report["status"] = "fail"
+    if report.get("error") is None:
+        report["error"] = code
+    failures = report.setdefault("cleanup_errors", [])
+    if code not in failures:
+        failures.append(code)
+
+
 def run(args):
     root = args.output.resolve()
     require(not any((parent / ".git").exists() for parent in [root, *root.parents, Path.cwd(), *Path.cwd().parents]),
@@ -876,14 +887,17 @@ def run(args):
         peer_read_id = 10
         for name in CASES:
             report["active_case"] = name
+            report["active_phase"] = "create_client"
             save(root / "results.json", report)
             client = Client(rig, name)
             expected_failure = name not in {"useful", "breakaway"}
             if name not in {"missing-config", "invalid-config", "unsafe-acl", "spawn-failure", "transparent-refusal"}:
+                report["active_phase"] = "initialize_client"
                 client.initialize()
                 if name == "useful":
                     client.process.stdin.close()
                 else:
+                    report["active_phase"] = "exercise_client"
                     client.exercise()
                     if name == "breakaway":
                         result = json.loads(client.out.frames.get(timeout=8))
@@ -897,6 +911,7 @@ def run(args):
                             client.send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 4}})
                         else:
                             client.process.kill()
+            report["active_phase"] = "finish_client"
             row = client.finish(expected_failure)
             report["cases"].append(row)
             save(root / "results.json", report)
@@ -905,6 +920,7 @@ def run(args):
             except Exception as error:
                 row["passed"], row["failure_code"] = False, str(error) if isinstance(error, ValueError) else type(error).__name__
             try:
+                report["active_phase"] = "sibling_read"
                 peer_read_id += 1
                 peer.read(peer_read_id)
                 row["sibling_useful"] = True
@@ -921,12 +937,13 @@ def run(args):
         grade_report(report)
     except Exception as error:
         report["status"], report["error"] = "fail", str(error) if isinstance(error, ValueError) else type(error).__name__
+        report["primary_exception_type"] = type(error).__name__
     finally:
         if rig:
             # A private fallback cannot repair a failed row or earn a pass.
             for owned in rig.clients:
                 if owned.poll() is None:
-                    report["status"], report["error"] = "fail", "unfinished_owned_collector"
+                    cleanup_failure(report, "unfinished_owned_collector")
                     owned.kill()
                     owned.wait(5)
             report["daemon_capture"] = rig.close()

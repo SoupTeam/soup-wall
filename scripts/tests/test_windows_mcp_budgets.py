@@ -47,6 +47,30 @@ def memory_controls():
             for mode in ("hard_only", "with_notification")]
 
 
+class FailureRetention(unittest.TestCase):
+    def test_fallback_cleanup_retains_primary_error_and_still_fails(self):
+        report = {"status": "fail", "error": "protocol_result_missing",
+                  "active_case": "restart-2", "active_phase": "initialize_client"}
+        H.cleanup_failure(report, "unfinished_owned_collector")
+        self.assertEqual(report["error"], "protocol_result_missing")
+        self.assertEqual(report["active_case"], "restart-2")
+        self.assertEqual(report["active_phase"], "initialize_client")
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(report["cleanup_errors"], ["unfinished_owned_collector"])
+        with self.assertRaises(ValueError):
+            H.grade_report(report)
+
+    def test_cleanup_failure_cannot_leave_an_otherwise_successful_report_green(self):
+        report = {"status": "pass", "error": None}
+        H.cleanup_failure(report, "unfinished_owned_collector")
+        H.cleanup_failure(report, "unfinished_owned_collector")
+        self.assertEqual(report["error"], "unfinished_owned_collector")
+        self.assertEqual(report["status"], "fail")
+        self.assertEqual(len(report["cleanup_errors"]), 1)
+        with self.assertRaises(ValueError):
+            H.grade_report(report)
+
+
 class ProcessAPI:
     """Deterministic Toolhelp/handle races, not native Windows acceptance."""
     def __init__(self):
