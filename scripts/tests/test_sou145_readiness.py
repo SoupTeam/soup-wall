@@ -60,6 +60,30 @@ class ReadinessControls(unittest.TestCase):
             command = next(row[1] for row in commands if row[0] == project)
             self.assertEqual(command[command.index('--project-fixture') + 1], project)
 
+    def test_negative_controls_preserve_private_temporary_root_and_offline_inputs(self):
+        import json, tempfile, os
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        api = load('sou145_negative_controls', 'qualify-installed-pilot.py')
+        with tempfile.TemporaryDirectory() as root:
+            args = SimpleNamespace(output=Path(root), selection=Path(root)/'selection.json',
+                                   expected_commit='a'*40, offline_inputs=Path(root)/'offline')
+            reasons = dict(zip(('bad-candidate','missing-sandbox','changed-asset'),
+                               ('candidate_source_mismatch','selected_executable_unavailable','staged_classifier_changed')))
+            def run(command, **kwargs):
+                self.assertEqual(kwargs['env']['TMPDIR'], root)
+                self.assertNotIn('ANTHROPIC_API_KEY', kwargs['env'])
+                self.assertIn('--offline-inputs', command)
+                output = Path(command[command.index('--output')+1]); output.mkdir()
+                name = command[command.index('--fault')+1]
+                (output/'report.json').write_text(json.dumps({'status':'failed','cases':[{'id':'exact-installed-inputs',
+                    'status':'failed','reason':reasons[name]}], 'host_runs':[], 'bindings':[]}))
+                return SimpleNamespace(returncode=1)
+            with patch.dict(os.environ, {'TMPDIR':root, 'ANTHROPIC_API_KEY':'never-forward'}), \
+                 patch.object(api.subprocess, 'run', side_effect=run):
+                self.assertEqual(len(api.negative_controls(args)['rejected']), 3)
+
+
 
 class NewDossierLinks(unittest.TestCase):
     def setUp(self):

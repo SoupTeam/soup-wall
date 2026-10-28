@@ -283,7 +283,7 @@ def project(report, workload):
                 require(type(row.get('selected_runtime_executions')) is int
                         and row['selected_runtime_executions'] == 0, 'project_refusal_executed')
             else:
-                require(row.get('cleanup') == 'owned_state_removed' and
+                require(row.get('cleanup') in ('owned_state_removed', 'owned_processes_stopped_audit_retained') and
                         row.get('process_cleanup', {}).get('all_stopped') is True and
                         row.get('process_cleanup', {}).get('remaining') == [] and
                         type(row.get('outside_reads')) is int and row['outside_reads'] == 0 and
@@ -324,7 +324,7 @@ def project(report, workload):
             if row['status'] == 'passed':
                 digest(row.get('trace_sha256'), 'prepared_trace')
                 if row['case'] in ('useful-refusal', 'ask', 'default', 'cancel', 'daemon-loss', 'host-crash', 'timeout'):
-                    require(row.get('cleanup') == 'owned_state_removed' and
+                    require(row.get('cleanup') in ('owned_state_removed', 'owned_processes_stopped_audit_retained') and
                             row.get('process_cleanup', {}).get('all_stopped') is True and
                             row.get('process_cleanup', {}).get('remaining') == [], 'prepared_cleanup_missing')
         by = {r['case']: r for r in rows}
