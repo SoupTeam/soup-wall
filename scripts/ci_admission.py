@@ -116,7 +116,11 @@ def response_json(response: Any, deadline: float) -> Any:
         elif byte in (93, 125): depth -= 1
     if time.monotonic() >= deadline:
         raise TimeoutError()
-    value = json.loads(raw)
+    # GitHub JSON is UTF-8. Do not let json.loads auto-detect UTF-16/32 after
+    # an ASCII-byte depth scan: escaped quotes in those encodings can hide
+    # nesting from the scan. Invalid encoding remains a non-retryable format
+    # failure, like malformed complete JSON.
+    value = json.loads(raw.decode("utf-8"))
     if time.monotonic() >= deadline:
         raise TimeoutError()
     return value
@@ -370,9 +374,10 @@ class GitHub:
             data = self._request("GET", suffix + separator + urlencode({"per_page": 100, "page": page}),
                                  response_headers=headers)
             if key:
-                if not isinstance(data, dict) or type(data.get("total_count")) is not int or \
-                        not 0 <= data["total_count"] <= 3000:
+                if not isinstance(data, dict) or type(data.get("total_count")) is not int or data["total_count"] < 0:
                     raise EvidenceFormatError("pagination_count_invalid")
+                if data["total_count"] > 3000:
+                    raise EvidenceAPIError("pagination_limit_exceeded")
                 if count is not None and count != data["total_count"]:
                     raise EvidenceAPIError("pagination_count_changed")
                 count = data["total_count"]

@@ -173,6 +173,15 @@ class Transport(FixtureTestCase):
                     self.assertEqual(api.http_get_attempts, 1)
                 self.assertEqual(fixture.delays, [])
 
+    def test_non_utf8_escape_sequence_cannot_hide_deep_json_from_the_bound(self):
+        # Scanning UTF-16 bytes as ASCII can misinterpret the escaped quote,
+        # hide the nested value, bypass the bound or overflow older decoders.
+        raw = ('["escaped\\\"value",' + '[' * 1100 + '0' + ']' * 1100 + ']').encode('utf-16-le')
+        fixture = self.fixture(('ok', raw))
+        with fixture.client() as api:
+            with self.assertRaises(ValueError): api.get('/evidence')
+            self.assertEqual(api.http_get_attempts, 1)
+
     def test_socket_drip_cannot_reset_the_body_deadline_or_total_budget(self):
         fixture = self.fixture(*[('drip', {'value': 'x' * 100})] * 3)
         started = time.monotonic()
@@ -214,7 +223,7 @@ class Transport(FixtureTestCase):
                                  ([('ok', first), ('ok', {'total_count': 101, 'jobs': [{'id': 1}]})], ValueError),
                                  ([('ok', {'jobs': []})], ValueError),
                                  ([('ok', {'total_count': True, 'jobs': []})], ValueError),
-                                 ([('ok', {'total_count': 3001, 'jobs': []})], ValueError),
+                                 ([('ok', {'total_count': 3001, 'jobs': []})], gate.EvidenceAPIError),
                                  ([('ok', {'total_count': 1, 'jobs': [{'id': True}]})], ValueError),
                                  ([('ok', {'total_count': 1, 'jobs': ['not-a-job']})], ValueError)]:
             fixture = self.fixture(*responses)

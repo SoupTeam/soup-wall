@@ -16,7 +16,8 @@ chunked bodies, disconnect/reset, body timeout and the existing transient HTTP
 20-second socket/attempt and 2/4-second backoff envelope (66 seconds per GET).
 Body receives use a decreasing deadline, so a slow stream cannot restart the
 body timeout on every byte. Complete JSON input is bounded to 8 MiB and 64
-nesting levels before parsing. This is a bound on evidence input, not a change
+nesting levels before UTF-8 JSON parsing. Non-UTF-8 auto-detection cannot bypass
+the byte-level nesting check. This is a bound on evidence input, not a change
 to product limits, CI resource limits or the admission polling deadline.
 
 The reader uses CPython urllib's HTTPResponse socket-backed BufferedReader
