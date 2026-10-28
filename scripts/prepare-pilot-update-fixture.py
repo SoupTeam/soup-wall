@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -37,6 +38,9 @@ def prepare(args):
     home = args.output / "home"
     home.mkdir(mode=0o700)
     env = QUAL.qualification_environment(home)
+    cache = args.output / "npm-cache"
+    shutil.copytree(args.npm_cache, cache)
+    cache.chmod(0o700)
     project, repository = args.output / "project", args.output / "repository"
     project.mkdir(mode=0o700)
     repository.mkdir(mode=0o700)
@@ -59,7 +63,7 @@ def prepare(args):
                  "--bwrap", args.bwrap, "--git", args.git, "--claude", args.claude,
                  "--python", Path(sys.executable).resolve(),
                  "--filesystem-workspace", project, "--git-workspace", repository,
-                 "--python-archive", args.python_archive, "--npm-cache", args.npm_cache,
+                 "--python-archive", args.python_archive, "--npm-cache", cache,
                  "--wheelhouse", args.wheelhouse]
         for role in ("agentfw", "git_launcher", "sandbox_tests"):
             words += ["--" + role.replace("_", "-"), build[role]]

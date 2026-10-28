@@ -521,6 +521,10 @@ class QualificationFixtureControls(unittest.TestCase):
                                    output=parent / "fixtures", git=Path("/usr/bin/git"))
             for role in ("node_archive", "bwrap", "claude", "python_archive", "npm_cache", "wheelhouse"):
                 setattr(args, role, Path("/owned") / role)
+            args.npm_cache = parent / "source-cache"
+            args.npm_cache.mkdir(mode=0o755)
+            args.npm_cache.chmod(0o755)
+            (args.npm_cache / "cache-entry").write_text("Owned cached package")
             spec = importlib.util.spec_from_file_location("update_fixture_front_door", ROOT / "scripts/pilot.py")
             front = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(front)
@@ -533,6 +537,7 @@ class QualificationFixtureControls(unittest.TestCase):
                 if words[2].endswith("pilot.py"):
                     parsed = front.parser().parse_args(words[3:])
                     self.assertFalse(parsed.allow_download)
+                    front.PREP.private_dir(parsed.npm_cache)
                     for role in ("python_archive", "npm_cache", "wheelhouse", "agentfw", "sandbox_tests"):
                         self.assertTrue(getattr(parsed, role).is_absolute())
                     return {"status": "prepared-not-active"}
@@ -545,6 +550,9 @@ class QualificationFixtureControls(unittest.TestCase):
             result = json.loads((args.output / "inputs.json").read_text())
             self.assertEqual(result["status"], "prepared-not-qualified")
             self.assertEqual(result["entry_agent"], "/owned/agentfw")
+            self.assertEqual(args.npm_cache.stat().st_mode & 0o777, 0o755)
+            self.assertEqual((args.output / "npm-cache").stat().st_mode & 0o777, 0o700)
+            self.assertEqual((args.output / "npm-cache/cache-entry").read_text(), "Owned cached package")
 
 
 @unittest.skipUnless(sys.platform == "linux" and os.environ.get("SOU164_TEST_AGENT"),
