@@ -5,6 +5,7 @@ executables required by [pilot runtime preparation](PILOT_RUNTIME_PREPARATION.md
 `agentfw`, `agentfw-git-sandbox`, and the Agent library test executable that
 runs the positive filesystem and Git sandbox controls. It does not prepare
 profiles, start an enforcing daemon, or establish active protection.
+Concurrent calls use the [owned preparation protocol](PILOT_PREPARATION_COORDINATION.md).
 
 ## Plan and build
 

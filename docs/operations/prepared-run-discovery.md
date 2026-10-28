@@ -1,0 +1,84 @@
+# Prepared-run discovery
+
+The standalone Linux command reads an explicitly selected state parent. It
+does not create state, repair settings, start a daemon/host/helper, or contact a
+provider. Recorded state remains distinct from authenticated observed state.
+
+```sh
+python3 -B scripts/pilot-runs.py --state-parent /absolute/selected/state
+python3 -B scripts/pilot-runs.py --state-parent /absolute/selected/state \
+  --run-id EXACT_PREPARED_RUN_ID --probe --probe-seconds 10 \
+  --agentfw /absolute/reviewed/agentfw --agentfw-sha256 REVIEWED_BINARY_SHA256
+```
+
+The prepared run ID is the suffix of `soup-wall-run-…`; the inner launcher's
+32-character run ID is a different identity. Discovery does not search projects,
+home trees, or other temporary directories. A selected parent may be an owned
+private directory or a safe root-owned sticky directory, such as `/tmp`.
+Linked ancestors, linked candidate directories, foreign ownership, unsafe
+permissions, nonregular or oversized metadata, and changed identities refuse.
+
+The `sw-prepared-pilot-discovery/1` JSON result separates `recorded` identities
+from `observation`. Recorded source, selection and policy hashes are local,
+owner-editable evidence. `completed_audit_only` describes the accepted completed
+layout. `retained_stop_state` means stop/recovery authority must be preserved;
+discovery does not authenticate a stop receipt or claim that its cleanup finished.
+An active-looking record remains `active_or_interrupted` until an explicit probe.
+
+`--probe` requires an explicit trusted Agent path and SHA-256 pin selected by the
+operator from their reviewed installed/prepared selection. A run receipt alone
+cannot authorize executable selection. Missing pins or runs with different
+binary identities remain unavailable; select the appropriate reviewed binary
+when inspecting another generation. The binary pin is checked without execution.
+
+The probe checks the launcher's process start identity, sealed memfd, exact
+record bytes, executable hash and sealed configuration identity. It uses only
+the selected `127.0.0.1` port and private tokens to query the accepted
+`/native/v1/instance` and `/diagnostics/v1/protection` endpoints. Requests disable
+ambient proxies and redirects, cap response bytes, and share a total deadline.
+Nonce and instance mismatches, unavailable processes, and edited records are
+unavailable, never healthy. Tokens, native authority material, host session IDs,
+raw results and private logs are not printed.
+
+The explicitly probed launcher's held executable runs the read-only
+`pilot-observation` validator with bounded config, selected policy and response
+bytes on stdin. It receives no token, home path selection, or provider settings.
+The validator reuses the accepted Rust diagnostic contract and parsed policy and
+configuration digests. Its seven path capability/coverage results are projected
+without activity IDs or private response fields. This diagnostic child has the
+same shared deadline as the network queries; it never starts a daemon or server.
+Older selected binaries without this validator return unavailable.
+
+**Protection and execution coverage remain `unknown`**, including after a
+successful probe, according to the accepted contract. An authenticated
+observation proves neither model consumption nor execution, human approval, or
+live-model efficacy. Recorded source/selection labels remain owner-editable;
+observed binary, config and parsed policy hashes are reported separately.
+
+Defaults cap enumeration at 512 entries, results at 32 candidates, individual
+metadata at 64 KiB, and output at 256 KiB. `--scan-limit` accepts 1–4096;
+`--candidate-limit` accepts 1–64; `--probe-seconds` accepts 1–30. The executable
+hash reader has a 512 MiB cap and observes the shared deadline. Reaching a limit
+or missing a requested run sets `complete: false`. Enumeration is bounded in
+filesystem order; returned runs are sorted by identity.
+
+Exit 0 means a complete selected inventory, **not protection**. Exit 2 means
+incomplete discovery or an unavailable candidate. Exit 1 means invalid input or
+an unavailable parent. Unknown entries are counted without disclosing their names.
+
+The [native qualification report](evidence/prepared-run-operations/README.md)
+records two simultaneous real prepared runs, pinned original servers,
+completed/stopped state, daemon loss/restart, accepted diagnostic projection,
+unchanged settings and zero provider requests from discovery. Focused fixture
+checks remain separate evidence.
+
+Reproduce the fixture checks against a clean committed source tree, using an existing
+private Linux directory for the report:
+
+```sh
+python3 -B scripts/verify-prepared-run-checkpoint.py \
+  --expected-commit FULL_COMMIT --output /private/owned/checkpoint.json
+```
+
+The report includes source hashes, individual fixture outcomes and explicit
+remaining gaps. Even a passing report sets `native_acceptance: false`.

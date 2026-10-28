@@ -25,6 +25,8 @@ import uuid
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import pilot_capacity as capacity
+import pilot_git_profiles as GIT_PROFILES
 from pilot_provider import utility_environment
 MAX_JSON = 65536
 NODE_ARCHIVE_SHA256 = "9aa8e9d2298ab68c600bd6fb86a6c13bce11a4eca1ba9b39d79fa021755d7c37"
@@ -136,10 +138,11 @@ def outside_workspaces(paths, roots):
                 "private_assets_inside_workspace")
 
 
-def validate_existing_workspaces(paths, roots):
+def validate_existing_workspaces(paths, roots, git_profile=GIT_PROFILES.DEFAULT):
     """Opt-in only: reuse native validators, never run Git against user data."""
     result = subprocess.run([str(paths["agentfw"]), "pilot-workspaces", "--workspace", str(roots["filesystem"]),
-                             "--git-workspace", str(roots["git"])],
+                             "--git-workspace", str(roots["git"]),
+                             "--git-profile-format", GIT_PROFILES.selected(git_profile)[0]],
                             env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}, cwd="/",
                             stdin=subprocess.DEVNULL, capture_output=True, timeout=30)
     require(result.returncode == 0, "unsupported_existing_git_layout_use_supported_standalone_repository")
@@ -210,28 +213,35 @@ def check_native(path):
     require("not found" not in result.stdout + result.stderr, "native_dependency_missing")
 
 
-def verify_profile(kind, directory, paths, workspace):
+def verify_profile(kind, directory, paths, workspace, git_profile=GIT_PROFILES.DEFAULT, *, versioned=False):
     inside(directory, directory.parent)
     private_dir(directory)
-    receipt = json.loads(bounded_file(directory / "installation.json", MAX_JSON).read_text())
-    profile = json.loads(bounded_file(directory / "profile.json", MAX_JSON).read_text())
-    registry = json.loads(bounded_file(directory / "registry.json", MAX_JSON).read_text())
-    installer, name = (FS, "filesystem-readonly-v1") if kind == "filesystem" else (GIT, "git-readonly-v1")
-    require(receipt.get("format") == f"sou{62 if kind == 'filesystem' else 68}-profile-installation/1"
-            and receipt.get("profile") == profile, "profile_receipt_mismatch")
+    receipt = PILOT.strict_json(bounded_file(directory / "installation.json", MAX_JSON).read_bytes())
+    profile = PILOT.strict_json(bounded_file(directory / "profile.json", MAX_JSON).read_bytes())
+    registry = PILOT.strict_json(bounded_file(directory / "registry.json", MAX_JSON).read_bytes())
+    installer, name = (FS, "filesystem-readonly-v1") if kind == "filesystem" else (GIT, git_profile)
+    if kind == "git":
+        GIT_PROFILES.verify_receipt(name, receipt)
+    else:
+        require(receipt.get("format") == "sou62-profile-installation/1", "profile_receipt_mismatch")
+    require(receipt.get("profile") == profile, "profile_receipt_mismatch")
     for label, suffix in (("profile", "json"), ("registry", "json"), ("policy", "yaml")):
         asset = bounded_file(directory / f"{label}.{suffix}", MAX_JSON)
         require(FS.sha(asset) == receipt[f"{label}_sha256"],
                 "profile_asset_changed")
-    require(profile.get("format") == installer.FORMAT, "profile_format_changed")
+    require(profile.get("format") == (installer.FORMAT if kind == "filesystem" else
+            GIT_PROFILES.selected(name)[0]), "profile_format_changed")
     require(profile.get("workspace") == str(workspace) and profile.get("bwrapPath") == str(paths["bwrap"])
             and profile.get("bwrapSha256") == FS.sha(paths["bwrap"]), "profile_runtime_changed")
     require(profile.get("packageRoot") == str(directory / "package")
             and not (directory / "package").is_symlink(), "profile_package_path_changed")
     require(FS.tree_sha(directory / "package") == profile.get("packageTreeSha256"), "profile_package_changed")
-    require(registry == installer.registry(json.loads((installer.ASSETS / "upstream-tools-list.json").read_text()))
+    expected_registry = (installer.registry(json.loads((installer.ASSETS / "upstream-tools-list.json").read_text()))
+                         if kind == "filesystem" else GIT_PROFILES.registry(name))
+    require(registry == expected_registry
             and registry.get("registry_id") == name, "profile_registry_changed")
-    require(FS.sha(directory / "policy.yaml") == FS.sha(installer.ASSETS / "policy.yaml"),
+    require(FS.sha(directory / "policy.yaml") == FS.sha(installer.ASSETS / "policy.yaml" if kind == "filesystem"
+            else GIT_PROFILES.policy_path(name)),
             "profile_policy_changed")
     runtime = Path(profile["runtimePath"])
     require(FS.sha(runtime) == profile["runtimeSha256"], "profile_runtime_changed")
@@ -244,8 +254,12 @@ def verify_profile(kind, directory, paths, workspace):
         require(profile["git"] == {"path": str(paths["git"]), "sha256": FS.sha(paths["git"])}
                 and profile["gitLauncher"] == {"path": str(paths["git_launcher"]),
                                               "sha256": FS.sha(paths["git_launcher"])}, "profile_runtime_changed")
-    return {"profile": {"path": str(directory / "profile.json"), "sha256": receipt["profile_sha256"]},
-            "registry_sha256": receipt["registry_sha256"], "package_tree_sha256": profile["packageTreeSha256"]}
+    result = {"profile": {"path": str(directory / "profile.json"), "sha256": receipt["profile_sha256"]},
+              "registry_sha256": receipt["registry_sha256"], "package_tree_sha256": profile["packageTreeSha256"]}
+    if versioned:
+        result.update(format=profile["format"], policy_sha256=receipt["policy_sha256"],
+                      installation_sha256=FS.sha(directory / "installation.json"))
+    return result
 
 
 def discard_unpublished(path, error):
@@ -283,6 +297,7 @@ def sync_directory(path):
 
 
 def publish_marker(output, record):
+    capacity.recheck("before_selection")
     temporary = output / (".current-" + uuid.uuid4().hex)
     write_json(temporary, record)
     try:
@@ -306,6 +321,7 @@ def publish_marker(output, record):
 
 
 def selected_paths(args, generation):
+    capacity.recheck("before_asset_inputs")
     supplied = {role: getattr(args, role) for role in PILOT.ROLES if role not in {"node", "npm"}}
     for role, path in supplied.items():
         require(path is not None, f"missing_{role}: supply --{role.replace('_', '-')}")
@@ -340,13 +356,16 @@ def verify_generation(generation, expected_commit, *, probe_native=True):
     selection = PILOT.strict_json(selection_path.read_bytes())
     require(isinstance(selection, dict), "selection_invalid")
     _, paths = PILOT.validate_selection(selection, expected_commit)
+    git_profile = GIT_PROFILES.from_selection(selection)
+    versioned = selection["format"] == GIT_PROFILES.SELECTION_V3
     roots = workspace_paths(selection, generation)
     if "prepared_workspaces" in selection:
         outside_workspaces(paths.values(), roots)
     profiles = {
         "filesystem": verify_profile("filesystem", generation / "filesystem-profile", paths,
-                                     roots["filesystem"]),
-        "git": verify_profile("git", generation / "git-profile", paths, roots["git"]),
+                                     roots["filesystem"], versioned=versioned),
+        "git": verify_profile("git", generation / "git-profile", paths, roots["git"], git_profile,
+                              versioned=versioned),
     }
     if "prepared_workspaces" in selection:
         for kind in profiles:
@@ -373,6 +392,7 @@ def supported_platform():
 
 
 def prepare(args):
+    GIT_PROFILES.binding(getattr(args, "git_profile", GIT_PROFILES.DEFAULT))
     supported_platform()
     before = PILOT.source()
     require(not before["dirty"] and before["commit"] == args.expected_commit,
@@ -395,6 +415,7 @@ def prepare(args):
 
 
 def prepare_locked(args, output, requested):
+    git_profile = getattr(args, "git_profile", GIT_PROFILES.DEFAULT)
     generations = output / "generations"
     if not generations.exists():
         generations.mkdir(mode=0o700)
@@ -410,18 +431,21 @@ def prepare_locked(args, output, requested):
         inside(generation, generations)
         selection, _ = verify_generation(generation, args.expected_commit)
         require(FS.sha(selection) == record["selection_sha256"], "completion_marker_changed")
+        require(GIT_PROFILES.from_selection(PILOT.strict_json(selection.read_bytes())) == git_profile,
+                "git_profile_selection_differs_use_rebuild")
         require(PILOT.strict_json(selection.read_bytes()).get("prepared_workspaces") == requested,
                 "existing_workspace_selection_differs_use_rebuild")
         return {"status": "reused", "selection": str(selection), "generation": record["generation"]}
     generation = generations / uuid.uuid4().hex
     generation.mkdir(mode=0o700)
+    capacity.bind(generation)
     paths = selected_paths(args, generation)
     fs_workspace, git_workspace = generation / "filesystem-workspace", generation / "git-workspace"
     if requested:
         roots = workspace_paths({"prepared_workspaces": requested}, generation)
         outside_workspaces([*paths.values(), *[getattr(args, name) for name in
             ("node_archive", "python_archive", "npm_cache", "wheelhouse") if getattr(args, name)]], roots)
-        validate_existing_workspaces(paths, roots)
+        validate_existing_workspaces(paths, roots, git_profile)
         fs_workspace, git_workspace = roots["filesystem"], roots["git"]
     else:
         fs_workspace.mkdir(mode=0o700)
@@ -437,6 +461,7 @@ def prepare_locked(args, output, requested):
         require(npm_cache is not None and args.python_archive is not None and args.wheelhouse is not None,
                 "offline_requires_npm_cache_python_archive_wheelhouse")
     for kind in ("filesystem", "git"):
+        capacity.recheck("before_" + kind + "_install")
         log_path = generation / (kind + "-install.log")
         with log_path.open("xb") as log:
             os.fchmod(log.fileno(), 0o600)
@@ -446,7 +471,9 @@ def prepare_locked(args, output, requested):
                                paths["bwrap"], paths["npm"], npm_cache=npm_cache,
                                offline=not args.allow_download, log=log)
                 else:
-                    GIT.install(generation / "git-profile", git_workspace, paths["git"], FS.sha(paths["git"]),
+                    installer = GIT.install if git_profile == GIT_PROFILES.DEFAULT else (
+                        lambda *a, **kw: GIT_PROFILES.install(git_profile, *a, **kw))
+                    installer(generation / "git-profile", git_workspace, paths["git"], FS.sha(paths["git"]),
                                 paths["bwrap"], paths["git_launcher"], python_archive=args.python_archive,
                                 wheelhouse=args.wheelhouse, allow_download=args.allow_download, log=log)
             except subprocess.CalledProcessError as error:
@@ -455,20 +482,23 @@ def prepare_locked(args, output, requested):
                 raise InstallerFailure(kind, error.returncode,
                                        log_path.relative_to(output).as_posix()) from None
         require(log_path.stat().st_size <= 1024 * 1024, kind + "_installer_log_limit")
-        if requested:
-            bind_profile_workspace(generation / (kind + "-profile"), requested["roots"][kind])
+        if requested or (kind == "git" and git_profile != GIT_PROFILES.DEFAULT):
+            identity = requested["roots"][kind] if requested else root_identity(git_workspace)
+            bind_profile_workspace(generation / (kind + "-profile"), identity)
     profiles = {
-        "filesystem": verify_profile("filesystem", generation / "filesystem-profile", paths, fs_workspace),
-        "git": verify_profile("git", generation / "git-profile", paths, git_workspace),
+        "filesystem": verify_profile("filesystem", generation / "filesystem-profile", paths, fs_workspace,
+                                     versioned=True),
+        "git": verify_profile("git", generation / "git-profile", paths, git_workspace, git_profile, versioned=True),
     }
-    selection = {"format": "sw-installed-pilot-selection/2", "source": PILOT.source(),
+    selection = {"format": GIT_PROFILES.SELECTION_V3, "source": PILOT.source(),
+                 "git_selection": GIT_PROFILES.binding(git_profile),
                  "expected_refusal": {"verdict": args.refusal_verdict, "rule": args.refusal_rule},
                  "files": {role: {"path": str(paths[role]), "sha256": FS.sha(paths[role])}
                            for role in PILOT.ROLES}, "prepared_profiles": profiles}
     if requested:
         selection["prepared_workspaces"] = requested
         require(requested_workspaces(args) == requested, "selected_workspace_changed")
-        validate_existing_workspaces(paths, roots)
+        validate_existing_workspaces(paths, roots, git_profile)
     selection_path = generation / "selection.json"
     write_json(selection_path, selection)
     verify_generation(generation, args.expected_commit)
@@ -480,12 +510,15 @@ def prepare_locked(args, output, requested):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    capacity.add_arguments(parser)
     parser.add_argument("--prepare", action="store_true", help="explicitly prepare and select a verified generation")
     parser.add_argument("--rebuild", action="store_true", help="prepare a new generation and retain the old one")
     parser.add_argument("--allow-download", action="store_true", help="permit locked npm/pip and pinned Python download")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--filesystem-workspace", type=Path, help="canonical existing owned read-only root")
     parser.add_argument("--git-workspace", type=Path, help="canonical existing supported standalone repository")
+    parser.add_argument("--git-profile", default=GIT_PROFILES.DEFAULT, action=GIT_PROFILES.SingleProfile,
+                        help="select exactly one reviewed Git registry id; combined capabilities refuse")
     parser.add_argument("--expected-commit")
     parser.add_argument("--node-archive", type=Path)
     parser.add_argument("--python-archive", type=Path)
@@ -496,9 +529,17 @@ def main():
     for role in PILOT.ROLES:
         parser.add_argument("--" + role.replace("_", "-"), type=Path)
     args = parser.parse_args()
+    if args.capacity_plan:
+        if args.prepare or args.guard_capacity:
+            parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
+        print(json.dumps(capacity.cli_plan("assets", args), sort_keys=True))
+        return 0
+    if args.guard_capacity and not args.prepare:
+        parser.error("--guard-capacity requires --prepare")
     if not args.prepare:
         try:
             workspaces = requested_workspaces(args)
+            git_selection = GIT_PROFILES.binding(args.git_profile)
         except (OSError, ValueError) as error:
             print(json.dumps({"status": "failed", "executed": False, "reason": str(error)[:240]}))
             return 2
@@ -534,27 +575,34 @@ def main():
                 missing.append(f"provide {program} in PATH for native dependency checks")
         print(json.dumps({"status": "plan", "executed": False, "missing": [item for item in missing if item],
                           "workspaces": workspaces or {"mode": "generated-demo"},
+                          "git_selection": git_selection,
                           "capability": "read-only; all project content is untrusted",
                           "scope": "native Ubuntu 24.04 x86-64; original filesystem and Git MCP only",
                           "refused_scope": ["built-in host tools and project Claude/MCP/hooks configuration",
                               "writes, outside symlink targets and server network access",
-                              "Git remotes/user config, worktrees, submodules, attributes, active hooks, links and special files"],
+                              "unselected Git layouts, worktrees, submodules, active hooks, helpers and special files"],
                           "workspace_validation": "native profile validators run only with --prepare; unsupported layouts are refused without repair",
                           "source": PILOT.source(),
                           "inputs": {role: {"path": str(getattr(args, role)),
                               "sha256": FS.sha(getattr(args, role)) if getattr(args, role).is_file() else None}
                               for role in PILOT.ROLES if getattr(args, role) is not None},
-                          "profiles": {kind: {"format": installer.FORMAT,
+                          "profiles": {kind: {"format": installer.FORMAT if kind == "filesystem" else
+                              git_selection["profile_format"],
                               "upstream_identity_sha256": FS.sha(installer.ASSETS / "upstream-identity.json"),
-                              "policy_sha256": FS.sha(installer.ASSETS / "policy.yaml")}
+                              "policy_sha256": FS.sha(installer.ASSETS / "policy.yaml") if kind == "filesystem" else
+                              git_selection["policy_sha256"]}
                               for kind, installer in (("filesystem", FS), ("git", GIT))},
                           "node_archive": {"url": NODE_URL, "sha256": NODE_ARCHIVE_SHA256},
                           "next": "supply listed inputs, then add --prepare; qualification is a separate command"}))
         return 0
     try:
         require(re.fullmatch(r"[0-9a-f]{40}", args.expected_commit or ""), "full_expected_commit_required")
-        print(json.dumps(prepare(args)))
+        with capacity.checked("assets", args):
+            print(json.dumps(prepare(args)))
         return 0
+    except capacity.Refusal as error:
+        print(json.dumps(error.report, sort_keys=True))
+        return 2
     except InstallerFailure as error:
         print(json.dumps({"status": "failed", "reason": str(error),
                           "exit_code": error.exit_code, "private_log": error.private_log}))

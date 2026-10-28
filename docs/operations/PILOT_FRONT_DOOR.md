@@ -181,3 +181,6 @@ WSL reproduction: this flow refuses WSL by design
 in WSL2 Ubuntu 24.04 shows that refusal and no other effect.
 
 Evidence: [first-use run, 2026-10-25](evidence/PILOT_FRONT_DOOR_2026-10-25.md).
+
+Without a checkout: the [installed front door](PILOT_INSTALLED_FRONT_DOOR.md)
+(`agentfw pilot`) runs these same commands from a verified installed component.

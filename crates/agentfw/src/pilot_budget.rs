@@ -398,6 +398,31 @@ fn read_binding(
     host_session: Option<&str>,
     server_id: &str,
 ) -> Result<VerifiedSelection> {
+    let actual = std::env::var_os(crate::mcp::linux_budget::ENVIRONMENT)
+        .ok_or_else(|| anyhow::anyhow!("pilot_budget_selection_missing"))?;
+    read_binding_inner(path, host_session, server_id, Some(Path::new(&actual)))
+}
+
+pub(crate) fn verify_daemon_launch(
+    path: &Path,
+    expected: &str,
+    host: &str,
+    server: &str,
+) -> Result<VerifiedSelection> {
+    let selected = read_binding_inner(path, Some(host), server, None)?;
+    ensure!(
+        expected == selected.binding.budget_sha256,
+        "pilot_budget_selection_changed"
+    );
+    Ok(selected)
+}
+
+fn read_binding_inner(
+    path: &Path,
+    host_session: Option<&str>,
+    server_id: &str,
+    environmental: Option<&Path>,
+) -> Result<VerifiedSelection> {
     let binding: Binding = private_json(path)?;
     ensure!(
         binding.format == FORMAT
@@ -405,10 +430,8 @@ fn read_binding(
             && matches!(server_id, "filesystem" | "git"),
         "pilot_budget_run_mismatch"
     );
-    let actual = std::env::var_os(crate::mcp::linux_budget::ENVIRONMENT)
-        .ok_or_else(|| anyhow::anyhow!("pilot_budget_selection_missing"))?;
     ensure!(
-        Path::new(&actual) == binding.config,
+        environmental.is_none_or(|actual| actual == binding.config),
         "pilot_budget_selection_changed"
     );
     let config = Config::load_file(&binding.config)?;
@@ -1062,6 +1085,46 @@ mod tests {
                 "reason":"preowner_witness_setup_or_cleanup_unverified","acceptance_pass":false})
             );
             anyhow::anyhow!("preowner_witness_setup_or_cleanup_unverified")
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires explicit SOU142_BUDGET_CONFIG, SOU142_OWNER_PROFILE and SOU86_TEST_AGENTFW"]
+    fn native_outside_owner_sigkill_before_descriptor_handback() -> Result<()> {
+        preowner_witness::reproduce_owner_loss().map_err(|error| {
+            let message = error.to_string();
+            let reason = match message.as_str() {
+                "preowner_witness_child_failed_before_ready"
+                | "preowner_witness_ready_timeout"
+                | "preowner_witness_leaf_replaced"
+                | "preowner_witness_leaf_populated"
+                | "owner_loss_witness_one_outside_owner_required"
+                | "owner_loss_witness_task_bound_exceeded"
+                | "owner_loss_witness_child_bound_exceeded"
+                | "owner_loss_witness_task_inventory_empty"
+                | "owner_loss_witness_owner_image_changed"
+                | "owner_loss_witness_owner_command_changed"
+                | "owner_loss_witness_original_process_started"
+                | "owner_loss_witness_owner_did_not_hold_leaf"
+                | "owner_loss_witness_leaf_already_handed_back"
+                | "owner_loss_witness_pidfd_unavailable"
+                | "owner_loss_witness_parent_unverified"
+                | "owner_loss_witness_owner_exited_before_signal"
+                | "owner_loss_witness_sigkill_failed"
+                | "owner_loss_witness_generic_startup_failure"
+                | "owner_loss_witness_collector_failed"
+                | "owner_loss_witness_outcome_unverified"
+                | "owner_loss_witness_inventory_not_restored" => message.as_str(),
+                _ => "outside_owner_loss_or_custody_unverified",
+            };
+            println!(
+                "{}",
+                json!({"format":"sou142-owner-first-parent-loss/1","status":"incomplete",
+                    "stage":"owner-loss-before-descriptor-handback",
+                    "reason":reason,"acceptance_pass":false})
+            );
+            anyhow::anyhow!("outside_owner_loss_or_custody_unverified")
         })
     }
 

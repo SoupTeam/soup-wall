@@ -36,7 +36,7 @@ impl Runtime {
             );
             let profile = read_profile(config)?;
             anyhow::ensure!(
-                profile.format == crate::mcp::server_profile::git::FORMAT
+                crate::mcp::verified_git::supports_profile(&profile.format)
                     && profile.workspace_identity.is_some(),
                 "daemon execution requires a pinned Git workspace identity"
             );
@@ -520,7 +520,7 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        inspect_bound(st, native, request, None).unwrap();
+        inspect_bound(st, native, request, None, None).unwrap();
         let mut sessions = native.sessions.lock().unwrap();
         let s = sessions.entries.get_mut("owned-test").unwrap();
         s.server_id = Some("git".into());
@@ -547,7 +547,7 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        let receipt = inspect_bound(st, native, request, Some(identity)).unwrap();
+        let receipt = inspect_bound(st, native, request, Some(identity), None).unwrap();
         assert!(receipt.release);
         Execute {
             contract_version: CONTRACT_EXECUTE.into(),

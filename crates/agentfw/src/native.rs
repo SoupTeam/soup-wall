@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::extract::State;
@@ -22,6 +22,7 @@ use crate::handlers::Shared;
 pub mod approval;
 pub mod child_authority;
 pub mod continuity;
+pub mod execution;
 mod invocation;
 pub mod liveness;
 pub mod pilot_cleanup;
@@ -45,7 +46,7 @@ const MAX_SESSIONS: usize = 64;
 const MAX_CALLS: usize = 256;
 const MAX_SESSION_CALLS: usize = 64;
 pub(crate) const MAX_SPENT_AUTHORITIES: usize = MAX_SESSIONS * 8;
-const TTL: Duration = Duration::from_secs(300);
+pub(crate) const TTL: Duration = Duration::from_secs(300);
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -392,6 +393,8 @@ enum Stage {
 
 #[derive(Clone)]
 struct Call {
+    publication_outcome: Option<soup_wall_agent::Outcome>,
+    publication_authorized: bool,
     #[cfg(target_os = "linux")]
     execution_args: Option<Value>,
     managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
@@ -546,12 +549,51 @@ pub(crate) fn validate_lineage(
     Err("native_child_parent_unavailable")
 }
 
+fn publication_lifetime(
+    state: &Sessions,
+    session: &Session,
+    now: Instant,
+    now_ms: u64,
+) -> Result<u64, &'static str> {
+    let mut current = session;
+    let mut remaining = TTL.as_millis() as u64;
+    for _ in 0..=MAX_SESSIONS {
+        let lease = current
+            .liveness_lease
+            .as_ref()
+            .map(|l| l.expires_in_ms(now))
+            .unwrap_or_else(|| {
+                TTL.saturating_sub(now.saturating_duration_since(current.touched))
+                    .as_millis() as u64
+            });
+        remaining = remaining.min(lease);
+        if let Some(expiry) = current.authority_expires_at_ms {
+            remaining = remaining.min(expiry.saturating_sub(now_ms));
+        }
+        let Some(parent) = &current.parent_id else {
+            return Ok(remaining);
+        };
+        current = state
+            .entries
+            .values()
+            .find(|p| {
+                p.host_session == current.host_session
+                    && p.agent_id.as_ref() == Some(parent)
+                    && current.parent_epoch.as_ref() == Some(&p.epoch)
+            })
+            .ok_or("native_child_parent_unavailable")?;
+    }
+    Err("native_child_parent_unavailable")
+}
+
 pub struct NativeState {
     git_execution: Option<verified_git::Runtime>,
     pub registry: Registry,
     pub registry_sha256: String,
     pub token: String,
     instance_id: String,
+    pub(crate) execution: Option<Arc<execution::Service>>,
+    pub(crate) edit: Option<Arc<crate::edit_session::transport::Service>>,
     pub(crate) continuity: Option<continuity::Continuity>,
     pub(crate) sessions: Mutex<Sessions>,
     pub(crate) approval: Option<approval::ApprovalState>,
@@ -720,6 +762,8 @@ impl NativeState {
             registry_sha256: expected.into(),
             token,
             instance_id: crate::token::generate(),
+            execution: None,
+            edit: None,
             continuity: None,
             sessions: Mutex::default(),
             approval: None,
@@ -771,6 +815,34 @@ impl NativeState {
 
     /// Public runtime identifier, authenticated by the native transport endpoint.
     /// Scoped grant nonces bind to it without changing the HMAC wire encoding.
+    /// Only the daemon startup attaches execution custody. Collector registry
+    /// loads never initialize this authority or read the server's catalogue.
+    pub fn with_execution(mut self, config: &NativeCfg) -> anyhow::Result<Self> {
+        self.execution = config
+            .execution
+            .as_ref()
+            .map(execution::Service::load)
+            .transpose()?;
+        Ok(self)
+    }
+
+    pub(crate) fn collector_view(&self) -> Self {
+        Self {
+            git_execution: None,
+            registry: self.registry.clone(),
+            registry_sha256: self.registry_sha256.clone(),
+            token: self.token.clone(),
+            instance_id: crate::token::generate(),
+            execution: None,
+            edit: None,
+            continuity: None,
+            sessions: Mutex::default(),
+            approval: None,
+            test_time_offset_ms: std::sync::atomic::AtomicU64::new(0),
+            policy_barrier: self.policy_barrier.clone(),
+        }
+    }
+
     pub fn instance_id(&self) -> &str {
         &self.instance_id
     }
@@ -1077,6 +1149,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                     | resource::WINDOWS_CREATE_CONTRACT
                     | resource::MACOS_READ_CONTRACT
                     | resource::MACOS_CREATE_CONTRACT
+                    | resource::replacement::CONTRACT
             ) {
                 keys.insert("resource_admission");
             }
@@ -1089,6 +1162,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
             "result_kind",
             "delivery",
         ]),
+        "publish" => keys.extend(["call_id", "tool", "args"]),
         "context" => keys.extend(["call_id", "tool", "args", "content"]),
         _ => return Err("native_invalid_event"),
     }
@@ -1136,11 +1210,18 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                 | resource::WINDOWS_CREATE_CONTRACT
                 | resource::MACOS_READ_CONTRACT
                 | resource::MACOS_CREATE_CONTRACT
+                | resource::replacement::CONTRACT
         )
         || (matches!(event, "session_start" | "session_end")
             && request.contract_version != CONTRACT)
     {
         return Err("native_invalid_identity");
+    }
+    if request.contract_version == resource::replacement::CONTRACT && !cfg!(target_os = "linux") {
+        return Err("replace_platform_unsupported");
+    }
+    if event == "publish" && request.contract_version != resource::replacement::CONTRACT {
+        return Err("native_publication_contract_required");
     }
     if request.contract_version == resource::WINDOWS_READ_CONTRACT && !cfg!(windows) {
         return Err("native_windows_read_platform_unsupported");
@@ -1169,6 +1250,7 @@ fn parse(body: &str) -> Result<Request, &'static str> {
                 | resource::WINDOWS_CREATE_CONTRACT
                 | resource::MACOS_READ_CONTRACT
                 | resource::MACOS_CREATE_CONTRACT
+                | resource::replacement::CONTRACT
         )
     {
         let admission = request
@@ -1189,7 +1271,10 @@ fn parse(body: &str) -> Result<Request, &'static str> {
         let is_plain = request.contract_version == CONTRACT && request.resource_admission.is_none();
         let is_supported_resource = matches!(
             request.contract_version.as_str(),
-            resource::CONTRACT | resource::CREATE_CONTRACT | resource::NETWORK_CONTRACT
+            resource::CONTRACT
+                | resource::CREATE_CONTRACT
+                | resource::NETWORK_CONTRACT
+                | resource::replacement::CONTRACT
         ) && request.resource_admission.is_some();
         if !is_plain && !is_supported_resource {
             return Err("native_invalid_fields");
@@ -1215,6 +1300,10 @@ fn parse(body: &str) -> Result<Request, &'static str> {
 
 #[derive(Serialize)]
 struct Response {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    publication_ttl_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    execution: Option<execution::Metadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     managed_policy: Option<soup_wall_agent::engine::ManagedActivePolicy>,
     contract_version: &'static str,
@@ -1588,33 +1677,43 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
         Ok(value) => value.unwrap_or_default(),
         Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
     };
-    (
-        StatusCode::OK,
-        Json(json!({
-            "instance_id": native.instance_id(),
-            "registry_sha256": native.registry_sha256,
-            "bindings": bindings,
-            "pilot_collectors": pilot_collectors,
-            "pilot_cleanup": sessions.pilot_cleanup.iter().map(|(digest, row)| json!({
-                "authority_sha256":digest,"host_session":row.host_session,
-                "server_id":row.server_id,"verified":row.verified
-            })).collect::<Vec<_>>(),
-            "pilot_pending": pilot_pending,
-            "approval_enabled": native.approval.is_some(),
-            "liveness_enabled": st.config.native.as_ref().and_then(|n| n.liveness.as_ref()).is_some(),
-            "provenance": {
-                "accounting_revision": "sw-provenance-storage/1",
-                "limits": firewall.provenance_limits(),
-                "usage": firewall.provenance_usage(),
-            }
-        })),
-    )
+    let mut description = json!({
+        "instance_id": native.instance_id(),
+        "registry_sha256": native.registry_sha256,
+        "bindings": bindings,
+        "pilot_collectors": pilot_collectors,
+        "pilot_cleanup": sessions.pilot_cleanup.iter().map(|(digest, row)| json!({
+            "authority_sha256":digest,"host_session":row.host_session,
+            "server_id":row.server_id,"verified":row.verified
+        })).collect::<Vec<_>>(),
+        "pilot_pending": pilot_pending,
+        "approval_enabled": native.approval.is_some(),
+        "liveness_enabled": st.config.native.as_ref().and_then(|n| n.liveness.as_ref()).is_some(),
+        "provenance": {
+            "accounting_revision": "sw-provenance-storage/1",
+            "limits": firewall.provenance_limits(),
+            "usage": firewall.provenance_usage(),
+        }
+    });
+    if let Some(service) = &native.execution {
+        description["execution_service"] = service.metadata();
+    }
+    (StatusCode::OK, Json(description))
 }
 
 pub async fn handler(
     State(st): State<Shared>,
     headers: HeaderMap,
     body: String,
+) -> (StatusCode, Json<Value>) {
+    handle_with_evidence(st, headers, body, None).await
+}
+
+async fn handle_with_evidence(
+    st: Shared,
+    headers: HeaderMap,
+    body: String,
+    evidence: Option<execution::OriginalResult>,
 ) -> (StatusCode, Json<Value>) {
     let Some(native) = &st.native else {
         return failure("native_disabled", StatusCode::SERVICE_UNAVAILABLE);
@@ -1639,6 +1738,12 @@ pub async fn handler(
         Ok(request) => request,
         Err(code) => return failure(code, StatusCode::BAD_REQUEST),
     };
+    if evidence.is_some() && !mcp_host_result(&request) {
+        return failure(
+            "verified_execution_result_required",
+            StatusCode::BAD_REQUEST,
+        );
+    }
     if request.registry_sha256 != native.registry_sha256 {
         return failure("native_registry_mismatch", StatusCode::CONFLICT);
     }
@@ -1679,7 +1784,7 @@ pub async fn handler(
             StatusCode::BAD_REQUEST,
         );
     }
-    match inspect_bound(&st, native, request, identity.as_ref()) {
+    match inspect_bound(&st, native, request, identity.as_ref(), evidence) {
         Ok(response) => (
             StatusCode::OK,
             Json(serde_json::to_value(response).expect("native response serializes")),
@@ -1886,7 +1991,7 @@ fn reap_lost_sessions(st: &Shared, native: &NativeState, now: Instant, now_ms: u
 
 #[cfg(test)]
 fn inspect(st: &Shared, native: &NativeState, request: Request) -> Result<Response, &'static str> {
-    inspect_bound(st, native, request, None)
+    inspect_bound(st, native, request, None, None)
 }
 
 fn inspect_bound(
@@ -1894,10 +1999,12 @@ fn inspect_bound(
     native: &NativeState,
     request: Request,
     identity: Option<&liveness::CollectorIdentity>,
+    evidence: Option<execution::OriginalResult>,
 ) -> Result<Response, &'static str> {
-    inspect_bound_with_execution(st, native, request, identity, None)
+    inspect_bound_complete(st, native, request, identity, None, evidence)
 }
 
+#[cfg(target_os = "linux")]
 fn inspect_bound_with_execution(
     st: &Shared,
     native: &NativeState,
@@ -1905,6 +2012,20 @@ fn inspect_bound_with_execution(
     identity: Option<&liveness::CollectorIdentity>,
     execution: Option<verified_git::OwnedResult>,
 ) -> Result<Response, &'static str> {
+    inspect_bound_complete(st, native, request, identity, execution, None)
+}
+
+fn inspect_bound_complete(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+    execution: Option<verified_git::OwnedResult>,
+    evidence: Option<execution::OriginalResult>,
+) -> Result<Response, &'static str> {
+    if execution.is_some() && evidence.is_some() {
+        return Err("verified_execution_source_mismatch");
+    }
     if request.event == "session_start"
         && request.host_session.is_none()
         && native
@@ -1939,6 +2060,8 @@ fn inspect_bound_with_execution(
         session.calls.retain(|_, call| call.expires > now);
     }
     let mut response = Response {
+        publication_ttl_ms: None,
+        execution: None,
         managed_policy: firewall.active_managed_policy(),
         contract_version: match request.contract_version.as_str() {
             resource::CONTRACT => resource::CONTRACT,
@@ -1949,6 +2072,7 @@ fn inspect_bound_with_execution(
             resource::WINDOWS_CREATE_CONTRACT => resource::WINDOWS_CREATE_CONTRACT,
             resource::MACOS_READ_CONTRACT => resource::MACOS_READ_CONTRACT,
             resource::MACOS_CREATE_CONTRACT => resource::MACOS_CREATE_CONTRACT,
+            resource::replacement::CONTRACT => resource::replacement::CONTRACT,
             _ => CONTRACT,
         },
         registry_sha256: native.registry_sha256.clone(),
@@ -2327,6 +2451,11 @@ fn inspect_bound_with_execution(
         .get(&request.session_id)
         .ok_or("native_session_unknown")?;
     validate_lineage(&state, session, now_ms, now)?;
+    let publication_lifetime = if request.event == "publish" {
+        publication_lifetime(&state, session, now, now_ms)?
+    } else {
+        0
+    };
     let session = state
         .entries
         .get_mut(&request.session_id)
@@ -2697,6 +2826,12 @@ fn inspect_bound_with_execution(
             session.calls.insert(
                 id.clone(),
                 Call {
+                    publication_outcome: tool
+                        .resource_policy
+                        .as_ref()
+                        .is_some_and(|p| p.is_replace_file())
+                        .then(|| outcome.clone()),
+                    publication_authorized: false,
                     #[cfg(target_os = "linux")]
                     execution_args: native
                         .git_execution
@@ -2764,6 +2899,70 @@ fn inspect_bound_with_execution(
         || call.args_sha256 != args_hash(args)
     {
         return Err("native_call_binding_mismatch");
+    }
+    if request.event == "publish" {
+        if call.contract_version != resource::replacement::CONTRACT
+            || call.publication_authorized
+            || call.stage != Stage::Result
+            || call.managed_policy != firewall.active_managed_policy()
+        {
+            return Err("native_publication_stale_or_spent");
+        }
+        let hosts = declared_hosts(tool, args)?;
+        let kind = EventKind::ToolCall {
+            tool: name.into(),
+            args: args.clone(),
+        };
+        let mut current =
+            invocation::inspect(&mut firewall, &session.event(kind.clone()), tool, &hosts)?;
+        if let Some(host) = &session.host_session {
+            let host_outcome = invocation::inspect(
+                &mut firewall,
+                &session.host_event(host, session.seq, kind),
+                tool,
+                &hosts,
+            )?;
+            current = merge_provenance_outcomes(current, host_outcome);
+        }
+        // An Ask was already redeemed once. It remains usable only if the
+        // exact policy outcome and provenance remain unchanged; this is not a
+        // new grant and cannot rescue Deny or a newly introduced condition.
+        if resolved(&current) == Verdict::Deny
+            || call.publication_outcome.as_ref() != Some(&current)
+        {
+            return Err("native_publication_policy_changed");
+        }
+        call.publication_authorized = true;
+        let gate_now = native.monotonic_now();
+        let remaining = call.expires.saturating_duration_since(gate_now).as_millis() as u64;
+        let remaining = remaining.min(
+            publication_lifetime
+                .saturating_sub(gate_now.saturating_duration_since(now).as_millis() as u64),
+        );
+        if remaining == 0 {
+            return Err("native_publication_expired");
+        }
+        response.publication_ttl_ms = Some(remaining);
+        audit(
+            st,
+            &request,
+            session,
+            &response,
+            Some(&current),
+            started.elapsed().as_micros(),
+        )?;
+        session.calls.insert(id.into(), call);
+        return Ok(response);
+    }
+    if request.event == "result"
+        && call.publication_outcome.is_some()
+        && !call.publication_authorized
+        && request.result_kind.as_deref() != Some("error")
+    {
+        return Err("native_publication_required");
+    }
+    if let Some(evidence) = evidence {
+        response.execution = Some(evidence.consume(native, session, &request, &call, now)?);
     }
     // A previously dispatched effect cannot be undone. Its result is a new
     // release boundary: a changed policy must authorize the original action
@@ -3172,6 +3371,9 @@ fn audit(
     {
         record["mcp_result_evidence"] = json!({"complete":false,"reason":"finite evidence budget exhausted","limits":{"findings":256,"audit_reason_bytes":65536,"charged_scan_bytes":33554432,"decoded_input_bytes":1048576}});
     }
+    if let Some(execution) = &response.execution {
+        record["execution"] = json!(execution);
+    }
     if let Some(policy) = &response.managed_policy {
         record["managed_policy"] = json!(policy);
     }
@@ -3256,6 +3458,35 @@ mod tests {
                 scope_contains(&parent.to_string_lossy(), &child.to_string_lossy()),
                 allowed
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn sou155_execution_auth_and_disabled_refusals_read_zero_body_chunks() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = tempfile::tempdir().unwrap();
+        let st = fixture(dir.path());
+        for authorized in [false, true] {
+            let polls = Arc::new(AtomicUsize::new(0));
+            let observed = polls.clone();
+            let body = axum::body::Body::from_stream(futures_util::stream::once(async move {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok::<_, std::io::Error>("untrusted body")
+            }));
+            let mut headers = HeaderMap::new();
+            if authorized {
+                headers.insert("authorization", "Bearer native-unit-key".parse().unwrap());
+            }
+            let response = execution::transport::handler(State(st.clone()), headers, body).await;
+            assert_eq!(
+                response.status(),
+                if authorized {
+                    StatusCode::SERVICE_UNAVAILABLE
+                } else {
+                    StatusCode::UNAUTHORIZED
+                }
+            );
+            assert_eq!(polls.load(Ordering::SeqCst), 0);
         }
     }
 

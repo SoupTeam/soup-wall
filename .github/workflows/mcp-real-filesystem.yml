@@ -3,6 +3,10 @@ name: Real filesystem MCP profile
 on:
   workflow_dispatch:
     inputs:
+      prepared_operations_only:
+        description: Focus prepared-run discovery, private archival and interruption recovery
+        type: boolean
+        default: false
       stability_mode:
         description: Opt-in SOU-127 development exercise; off preserves ordinary qualification
         type: choice
@@ -20,6 +24,14 @@ on:
         description: Run only native Ubuntu 24.04 preparation qualification
         type: boolean
         default: false
+      capacity_only:
+        description: Run focused SOU-151 guarded preparation and capacity controls
+        type: boolean
+        default: false
+      preparation_concurrency:
+        description: Exercise SOU-139 concurrent native prerequisite and Agent source preparation
+        type: boolean
+        default: false
       storage_recovery_only:
         description: Run targeted native storage recovery on the prepared pilot
         type: boolean
@@ -30,6 +42,10 @@ on:
         default: false
       ask_latency_baseline_sha:
         description: Optional full pre-optimization SHA for native-only SOU-124 before/after qualification
+        type: string
+        default: ''
+      ask_series:
+        description: Optional native-only SOU-141 declared cold/warm Ask series, for example cold,warm,cold,warm (requires native_preparation_only)
         type: string
         default: ''
       existing_project_only:
@@ -60,7 +76,7 @@ jobs:
       workflow: mcp-real-filesystem.yml
   required-linux-sandbox-and-real-host:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true'))
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true'))
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -470,14 +486,15 @@ jobs:
   native-ubuntu-2404:
     name: native-ubuntu-2404
     needs: impact
-    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))
+    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))
     runs-on: ubuntu-24.04
     # Optional paired Ask measurement owns two <=3600s side budgets plus setup;
     # opt-in A-B-A repeats the original-host qualifier twice. Ordinary PR/default
     # native qualification retains its existing 65-minute cap.
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != '' && 140 || github.event_name == 'workflow_dispatch' && github.event.inputs.prepared_switch_lifecycle == 'true' && 105 || 65 }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ask_series != '' && 180 || github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != '' && 140 || github.event_name == 'workflow_dispatch' && github.event.inputs.prepared_switch_lifecycle == 'true' && 105 || 65 }}
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
+      PILOT_CAPACITY_ONLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.capacity_only == 'true' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -501,6 +518,29 @@ jobs:
           set -euo pipefail
           [[ "$PREPARATION_ONLY" != true && "$MATCHED_ONLY" != true && "$PROJECT_ONLY" != true && "$AUDIT_ONLY" != true && "$STORAGE_ONLY" != true && -z "$BASELINE" ]]
           python3 -B -m unittest discover -s scripts/tests -p test_operator_results.py -v
+      - name: Prepared operations formatting preflight
+        if: github.event.inputs.prepared_operations_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup component add rustfmt
+          if ! cargo fmt --all -- --check; then
+            cargo fmt --all
+            git diff --binary > "$RUNNER_TEMP/prepared-operations-format.patch"
+            git restore crates/agentfw/src/lib.rs crates/agentfw/src/main.rs crates/agentfw/src/pilot_observation.rs
+            exit 1
+          fi
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_run_operations.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_audit.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_ci_components.py -v
+      - name: Retain formatting diagnosis
+        if: failure() && github.event.inputs.prepared_operations_only == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-operations-format-${{ github.run_id }}
+          path: ${{ runner.temp }}/prepared-operations-format.patch
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Validate optional native Ask comparison
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
         shell: bash
@@ -512,6 +552,39 @@ jobs:
           [[ "$NATIVE_ONLY" == true ]]
           [[ "$ASK_BASELINE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$ASK_BASELINE_SHA" == 8c275fcc9abdee99d4997cd4a985e6ce14d751e6 ]]
+      - name: Verify capacity controls
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import json, os
+          if os.environ['PILOT_CAPACITY_ONLY'] == '1':
+              inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+              allowed = {'capacity_only', 'stability_mode'}
+              assert inputs.get('stability_mode', 'off') == 'off'
+              assert all(value in ('', 'false') for key, value in inputs.items() if key not in allowed)
+          PY
+          mkdir -m 700 "$RUNNER_TEMP/sou151-capacity"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_capacity.py -v \
+            > "$RUNNER_TEMP/sou151-capacity/controls.log" 2>&1
+          if [[ "$PILOT_CAPACITY_ONLY" == 1 ]]; then
+            sudo "$(command -v python3)" -B scripts/test-pilot-capacity.py \
+              --private-mount --standard-uid "$(id -u)" \
+              > "$RUNNER_TEMP/sou151-capacity/fixture.json"
+          fi
+      - name: Validate optional native Ask series plan
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_series != ''
+        shell: bash
+        env:
+          ASK_SERIES: ${{ github.event.inputs.ask_series }}
+          ASK_BASELINE_SHA: ${{ github.event.inputs.ask_latency_baseline_sha }}
+          NATIVE_ONLY: ${{ github.event.inputs.native_preparation_only }}
+        run: |
+          set -euo pipefail
+          [[ "$NATIVE_ONLY" == true && -z "$ASK_BASELINE_SHA" ]]
+          [[ "$ASK_SERIES" =~ ^cold(,(cold|warm)){0,5}$ ]]
       - name: Attest compiler and interpreter inputs for the native lane
         shell: bash
         run: |
@@ -537,6 +610,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_switch_prepared_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_preparation_coordination.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_cleanup.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_build_native_pilot_inputs.py -v
       - name: Verify disposable runner administration boundary before building
@@ -546,10 +620,53 @@ jobs:
       - name: Build accepted selected runtimes without global installation
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          PILOT_CONCURRENT_PREPARATION: ${{ github.event.inputs.preparation_concurrency }}
+          NATIVE_ONLY: ${{ github.event.inputs.native_preparation_only }}
         shell: bash
         run: |
           set -euo pipefail
           : "${RUNNER_TEMP:?}"
+          if [[ "$PILOT_CONCURRENT_PREPARATION" == true && "$NATIVE_ONLY" != true ]]; then
+            echo 'Concurrent preparation requires the focused native-only dispatch' >&2
+            exit 1
+          fi
+          await_preparation_owner() {
+            python3 -B - "$1" "$2" "$3" <<'PY'
+          import fcntl, json, os, sys, time
+          from pathlib import Path
+          lock = Path(sys.argv[1]) / '.pilot-input-preparation.lock'
+          owner = Path('/proc') / sys.argv[2] / 'stat'
+          record = Path(sys.argv[3])
+          deadline = time.monotonic() + 45
+          while time.monotonic() < deadline:
+              try:
+                  fd = os.open(lock, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+              except FileNotFoundError:
+                  pass
+              else:
+                  try:
+                      try:
+                          fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                      except BlockingIOError:
+                          raise SystemExit(0)
+                  finally:
+                      os.close(fd)
+              try:
+                  exited = owner.read_text().split()[2] == 'Z'
+              except OSError:
+                  exited = True
+              if exited:
+                  try:
+                      row = json.loads(record.read_bytes()[:1024])
+                      detail = ':'.join(str(row.get(key, 'unknown'))[:300]
+                                        for key in ('status', 'stage', 'reason'))
+                  except (OSError, ValueError, TypeError):
+                      detail = 'bounded_result_unavailable'
+                  raise SystemExit('owner_exited_before_lock: ' + detail)
+              time.sleep(.05)
+          raise SystemExit('owned preparation lock was not observed within 45 seconds')
+          PY
+          }
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets"
           curl --fail --location --retry 3 https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz \
             --output "$RUNNER_TEMP/sou111-assets/node.tar.xz"
@@ -581,6 +698,12 @@ jobs:
             --pkg-config-libdir "$caplib/pkgconfig"
             --pkg-config-sysroot "$RUNNER_TEMP/sou111-assets/libcap"
             --meson-pythonpath "$RUNNER_TEMP/sou111-assets/build-tools")
+          capacity_native=()
+          if [[ "$PILOT_CAPACITY_ONLY" == 1 ]]; then
+            capacity_native=(--guard-capacity --capacity-build-bytes 2147483648)
+            python3 -B scripts/prepare-native-pilot-prerequisites.py --capacity-plan \
+              --capacity-build-bytes 2147483648 "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/capacity-native.json"
+          fi
           if ! python3 -B scripts/prepare-native-pilot-prerequisites.py \
             "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-plan.json"; then
             cp "$RUNNER_TEMP/sou111-assets/native-plan.json" \
@@ -590,20 +713,45 @@ jobs:
           fi
           cat "$RUNNER_TEMP/sou111-assets/native-plan.json"
           start="$(date +%s)"
-          if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
-            "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-first.json"; then
-            cp "$RUNNER_TEMP/sou111-assets/native-first.json" \
-              "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
-            cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
-            exit 1
-          fi
-          finish="$(date +%s)"
-          if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
-            "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-reused.json"; then
-            cp "$RUNNER_TEMP/sou111-assets/native-reused.json" \
-              "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
-            cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
-            exit 1
+          if [[ "$PILOT_CONCURRENT_PREPARATION" == true ]]; then
+            python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              "${capacity_native[@]}" "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-first.json" &
+            native_owner=$!
+            await_preparation_owner "$RUNNER_TEMP/sou111-native-prerequisites" \
+              "$native_owner" "$RUNNER_TEMP/sou111-assets/native-first.json"
+            python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              --wait-seconds 2700 "${capacity_native[@]}" "${native_args[@]}" \
+              > "$RUNNER_TEMP/sou111-assets/native-reused.json" &
+            native_waiter=$!
+            if ! wait "$native_owner"; then
+              kill "$native_waiter" 2>/dev/null || true
+              wait "$native_waiter" 2>/dev/null || true
+              cat "$RUNNER_TEMP/sou111-assets/native-first.json"
+              exit 1
+            fi
+            finish="$(date +%s)"
+            if ! wait "$native_waiter"; then
+              cp "$RUNNER_TEMP/sou111-assets/native-reused.json" \
+                "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              exit 1
+            fi
+          else
+            if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              "${capacity_native[@]}" "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-first.json"; then
+              cp "$RUNNER_TEMP/sou111-assets/native-first.json" \
+                "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              exit 1
+            fi
+            finish="$(date +%s)"
+            if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              "${capacity_native[@]}" "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-reused.json"; then
+              cp "$RUNNER_TEMP/sou111-assets/native-reused.json" \
+                "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
+              exit 1
+            fi
           fi
           marker="$RUNNER_TEMP/sou111-native-prerequisites/current.json"
           marker_before="$(sha256sum "$marker" | cut -d ' ' -f1)"
@@ -615,11 +763,11 @@ jobs:
             fi
           done
           if python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --rebuild \
-            "${bad_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-rejected.json"; then
+            "${capacity_native[@]}" "${bad_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-rejected.json"; then
             echo 'Wrong prerequisite digest unexpectedly succeeded' >&2; exit 1
           fi
           test "$marker_before" = "$(sha256sum "$marker" | cut -d ' ' -f1)"
-          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare "${native_args[@]}" \
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare "${capacity_native[@]}" "${native_args[@]}" \
             > "$RUNNER_TEMP/sou111-assets/native-recovered.json"
           printf '{"native_build_seconds":%s}\n' "$((finish - start))" \
             > "$RUNNER_TEMP/sou111-assets/native-timing.json"
@@ -636,6 +784,10 @@ jobs:
           assert recovered['status'] == 'reused'
           assert all(result[role] == repeated[role] == recovered[role]
                      for role in ('git', 'bwrap', 'receipt'))
+          if os.environ.get('PILOT_CONCURRENT_PREPARATION') == 'true':
+              assert repeated['contended'] is True
+              assert len(list((Path(os.environ['RUNNER_TEMP']) /
+                               'sou111-native-prerequisites/generations').iterdir())) == 1
           receipt = json.loads(Path(result['receipt']).read_text())
           summary = {'status': 'prepared-not-qualified', 'reused': True,
                      'bad_digest_refused': True, 'old_generation_preserved': True,
@@ -653,6 +805,12 @@ jobs:
           bash scripts/ci-pilot-cleanup.sh
           source_args=(--output "$RUNNER_TEMP/sou119-agent-build"
             --expected-commit "$(git rev-parse HEAD)")
+          capacity_source=()
+          if [[ "$PILOT_CAPACITY_ONLY" == 1 ]]; then
+            capacity_source=(--guard-capacity)
+            python3 -B scripts/build-native-pilot-inputs.py --capacity-plan "${source_args[@]}" \
+              > "$RUNNER_TEMP/sou111-assets/capacity-source.json"
+          fi
           source_build() {
             local record="$1" status=0
             shift
@@ -663,20 +821,40 @@ jobs:
             fi
           }
           source_build "$RUNNER_TEMP/sou111-assets/source-plan.json" "${source_args[@]}"
-          source_build "$RUNNER_TEMP/sou111-assets/source-first.json" --build "${source_args[@]}"
-          reuse_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
-          source_build "$RUNNER_TEMP/sou111-assets/source-reused.json" --build "${source_args[@]}"
+          if [[ "$PILOT_CONCURRENT_PREPARATION" == true ]]; then
+            source_build "$RUNNER_TEMP/sou111-assets/source-first.json" --build \
+              "${capacity_source[@]}" "${source_args[@]}" &
+            source_owner=$!
+            await_preparation_owner "$RUNNER_TEMP/sou119-agent-build" \
+              "$source_owner" "$RUNNER_TEMP/sou111-assets/source-first.json"
+            reuse_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
+            source_build "$RUNNER_TEMP/sou111-assets/source-reused.json" --build \
+              --wait-seconds 2700 "${capacity_source[@]}" "${source_args[@]}" &
+            source_waiter=$!
+            if ! wait "$source_owner"; then
+              kill "$source_waiter" 2>/dev/null || true
+              wait "$source_waiter" 2>/dev/null || true
+              cat "$RUNNER_TEMP/sou111-assets/source-first.json"
+              exit 1
+            fi
+            wait "$source_waiter"
+          else
+            source_build "$RUNNER_TEMP/sou111-assets/source-first.json" --build "${capacity_source[@]}" "${source_args[@]}"
+            reuse_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
+            source_build "$RUNNER_TEMP/sou111-assets/source-reused.json" --build "${capacity_source[@]}" "${source_args[@]}"
+          fi
           reuse_finish="$(python3 -c 'import time; print(time.monotonic_ns())')"
           source_marker="$RUNNER_TEMP/sou119-agent-build/current.json"
           marker_before="$(sha256sum "$source_marker" | cut -d ' ' -f1)"
           if python3 -B scripts/build-native-pilot-inputs.py --build --rebuild \
+            "${capacity_source[@]}" \
             --output "$RUNNER_TEMP/sou119-agent-build" \
             --expected-commit 0000000000000000000000000000000000000000 \
             > "$RUNNER_TEMP/sou111-assets/source-rejected.json"; then
             echo 'Changed source identity unexpectedly rebuilt the Agent inputs' >&2; exit 1
           fi
           test "$marker_before" = "$(sha256sum "$source_marker" | cut -d ' ' -f1)"
-          source_build "$RUNNER_TEMP/sou111-assets/source-recovered.json" --build "${source_args[@]}"
+          source_build "$RUNNER_TEMP/sou111-assets/source-recovered.json" --build "${capacity_source[@]}" "${source_args[@]}"
           python3 - "$reuse_start" "$reuse_finish" <<'PY'
           import hashlib, json, os, subprocess, sys
           from pathlib import Path
@@ -707,10 +885,41 @@ jobs:
                          ['git', 'rev-parse', 'HEAD'], text=True, timeout=10).strip(),
                      'binary_sha256': binaries}
           (asset / 'source-summary.json').write_text(json.dumps(summary, sort_keys=True) + '\n')
-          (asset / 'source-build-timing.json').write_text(json.dumps({
-              'clean_build_seconds': rows['first']['build_seconds'],
-              'verified_reuse_seconds': round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3),
-          }, sort_keys=True) + '\n')
+          timing = {'clean_build_seconds': rows['first']['build_seconds']}
+          elapsed = round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3)
+          if os.environ.get('PILOT_CONCURRENT_PREPARATION') == 'true':
+              assert rows['reused']['contended'] is True
+              assert len(list((output / 'generations').iterdir())) == 1
+              timing['concurrent_wait_and_verified_reuse_seconds'] = elapsed
+              native_first = json.loads((asset / 'native-first.json').read_text())
+              native_reused = json.loads((asset / 'native-reused.json').read_text())
+              native_root = Path(os.environ['RUNNER_TEMP']) / 'sou111-native-prerequisites'
+              native_generations = list((native_root / 'generations').iterdir())
+              source_generations = list((output / 'generations').iterdir())
+              assert len(native_generations) == len(source_generations) == 1
+              assert (native_generations[0] / 'git-build.log').is_file()
+              assert (source_generations[0] / 'cargo-bins.log').is_file()
+              assert native_reused['status'] == 'reused' and native_reused['contended'] is True
+              assert native_first['receipt'] == native_reused['receipt']
+              report = {'format': 'sou139-native-concurrent-preparation/1',
+                        'status': 'passed',
+                        'source_commit': json.loads(receipt.read_text())['source']['commit'],
+                        'native': {'requests': 2, 'completed_build_invocations': 1,
+                                   'duplicate_builds_avoided': 1,
+                                   'receipt_sha256': hashlib.sha256(
+                                       Path(native_first['receipt']).read_bytes()).hexdigest(),
+                                   'waited_seconds': native_reused['waited_seconds']},
+                        'source': {'requests': 2, 'completed_build_invocations': 1,
+                                   'duplicate_builds_avoided': 1,
+                                   'receipt_sha256': hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                                   'waited_seconds': rows['reused']['waited_seconds']},
+                        'build_is_runtime_qualification': False,
+                        'active_protection_claim': False}
+              (asset / 'concurrent-preparation.json').write_text(
+                  json.dumps(report, sort_keys=True) + '\n')
+          else:
+              timing['verified_reuse_seconds'] = elapsed
+          (asset / 'source-build-timing.json').write_text(json.dumps(timing, sort_keys=True) + '\n')
           with Path(os.environ['GITHUB_ENV']).open('a') as environment:
               for role, variable in (('agentfw', 'SOU119_AGENTFW'),
                                      ('git_launcher', 'SOU119_GIT_LAUNCHER'),
@@ -791,9 +1000,17 @@ jobs:
             --filesystem-classifier "$PWD/rule_baseline/rule_baseline.py"
             --git-classifier "$PWD/rule_baseline/git_readonly_v1/rule_baseline.py"
             --policy "$asset/policy.yaml" --allow-download)
+          capacity_assets=()
+          if [[ "$PILOT_CAPACITY_ONLY" == 1 ]]; then
+            capacity_assets=(--guard-capacity --capacity-build-bytes 1073741824
+              --capacity-cache-bytes 1073741824 --capacity-temp-bytes 1073741824)
+            python3 -B scripts/prepare-installed-pilot.py --capacity-plan \
+              --capacity-build-bytes 1073741824 --capacity-cache-bytes 1073741824 \
+              --capacity-temp-bytes 1073741824 "${args[@]}" > "$asset/capacity-assets.json"
+          fi
           python3 -B scripts/prepare-installed-pilot.py "${args[@]}" > "$asset/plan.json"
           preparation_start="$(python3 -c 'import time; print(time.monotonic_ns())')"
-          python3 -B scripts/prepare-installed-pilot.py --prepare "${args[@]}" > "$asset/first.json"
+          python3 -B scripts/prepare-installed-pilot.py --prepare "${capacity_assets[@]}" "${args[@]}" > "$asset/first.json"
           preparation_finish="$(python3 -c 'import time; print(time.monotonic_ns())')"
           python3 - "$preparation_start" "$preparation_finish" "$asset/runtime-timing.json" <<'PY'
           import json, sys
@@ -801,7 +1018,7 @@ jobs:
           elapsed = round((int(sys.argv[2]) - int(sys.argv[1])) / 1e9, 3)
           Path(sys.argv[3]).write_text(json.dumps({'preparation_seconds': elapsed}) + '\n')
           PY
-          python3 -B scripts/prepare-installed-pilot.py --prepare "${args[@]}" > "$asset/reused.json"
+          python3 -B scripts/prepare-installed-pilot.py --prepare "${capacity_assets[@]}" "${args[@]}" > "$asset/reused.json"
           printf 'bad archive' > "$asset/bad-node.tar.xz"
           bad_args=("${args[@]}")
           for index in "${!bad_args[@]}"; do
@@ -810,10 +1027,11 @@ jobs:
             fi
           done
           if python3 -B scripts/prepare-installed-pilot.py --prepare --rebuild \
+            "${capacity_assets[@]}" \
             "${bad_args[@]}" > "$asset/first-failure.json"; then
             echo 'Wrong digest unexpectedly succeeded' >&2; exit 1
           fi
-          python3 -B scripts/prepare-installed-pilot.py --prepare "${args[@]}" > "$asset/recovered.json"
+          python3 -B scripts/prepare-installed-pilot.py --prepare "${capacity_assets[@]}" "${args[@]}" > "$asset/recovered.json"
           python3 - <<'PY'
           import json, os
           from pathlib import Path
@@ -826,8 +1044,16 @@ jobs:
           assert rows['first-failure']['status'] == 'failed'
           assert rows['first']['selection'] == rows['reused']['selection'] == rows['recovered']['selection']
           PY
+      - name: Verify guarded preparation outcomes
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.capacity_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/test-pilot-capacity.py --prepared-records "$RUNNER_TEMP/sou111-assets" \
+            --expected-commit "$(git rev-parse HEAD)" > "$RUNNER_TEMP/sou151-capacity/qualification.json"
+          cat "$RUNNER_TEMP/sou151-capacity/qualification.json"
       - name: Verify real installed Ask capture and resume before comparison
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
+        if: github.event_name == 'workflow_dispatch' && (github.event.inputs.ask_latency_baseline_sha != '' || github.event.inputs.ask_series != '')
         shell: bash
         run: |
           set -euo pipefail
@@ -846,7 +1072,7 @@ jobs:
                   '--ignored', '--nocapture', '--test-threads=1'], env=env, check=True, timeout=60)
           PY
       - name: Prepare hash-locked offline inputs before Ask measurement
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_latency_baseline_sha != ''
+        if: github.event_name == 'workflow_dispatch' && (github.event.inputs.ask_latency_baseline_sha != '' || github.event.inputs.ask_series != '')
         shell: bash
         run: |
           set -euo pipefail
@@ -935,8 +1161,37 @@ jobs:
               command += ['--' + role, str(path)]
           raise SystemExit(subprocess.call(command))
           PY
+      - name: Measure declared native Ask cold and warm series with real kernel reuse
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.ask_series != ''
+        shell: bash
+        env:
+          ASK_SERIES: ${{ github.event.inputs.ask_series }}
+        run: |
+          set -euo pipefail
+          [[ "$ASK_SERIES" =~ ^cold(,(cold|warm)){0,5}$ ]]
+          python3 -B - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          first = json.loads((temp / 'sou111-assets/source-first.json').read_text())
+          command = [sys.executable, '-B', 'scripts/qualify-ask-series.py', 'run',
+              '--plan', os.environ['ASK_SERIES'], '--samples', '20',
+              '--expected-commit', subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              '--output', str(temp / 'sou141-ask-series'),
+              '--private-root', str(temp / 'sou141-ask-series-private'),
+              '--offline-inputs', str(temp / 'sou124-offline-inputs'),
+              '--receipt', first['receipt'], '--agentfw', first['agentfw'],
+              '--git-launcher', first['git_launcher'], '--require-verified-reuse']
+          for role, path in {'node': temp / 'sou111-assets/node/bin/node',
+                  'npm': temp / 'sou111-assets/node/bin/npm',
+                  'claude': temp / 'sou111-assets/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude',
+                  'bwrap': os.environ['SOU111_BWRAP'], 'git': os.environ['SOU115_GIT'],
+                  'strace': subprocess.check_output(['which', 'strace'], text=True).strip()}.items():
+              command += ['--' + role, str(path)]
+          raise SystemExit(subprocess.call(command))
+          PY
       - name: Qualify exact prepared selection through enforcing daemon and original servers
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        if: github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -956,7 +1211,7 @@ jobs:
           path.write_text(json.dumps(values, sort_keys=True) + '\n')
           PY
       - name: Run the first-use demo through the prepared original host
-        if: github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        if: github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -966,7 +1221,7 @@ jobs:
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou120-demo"
       - name: Qualify the guided first-use entry point through the original host
-        if: github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        if: github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -981,8 +1236,28 @@ jobs:
             --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python "$(command -v python3)" --allow-download \
             2>&1 | tee "$RUNNER_TEMP/front-door.log"
+      - name: Qualify the installed guided pilot front door through the original host
+        if: github.event.inputs.capacity_only != 'true' && github.event.inputs.prepared_operations_only != 'true' && github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="$RUNNER_TEMP/sou111-assets"
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          cargo test --locked -p agentfw --lib pilot_component
+          # The component is built from this checkout and started only as the
+          # installed `agentfw pilot` of this job's SOU-119 build.
+          python3 -B scripts/qualify-installed-front-door.py --run \
+            --output "$RUNNER_TEMP/installed-front-door" --expected-commit "$(git rev-parse HEAD)" \
+            --component-python /usr/bin/python3.12 \
+            --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
+            --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
+            --sandbox-tests "$SOU119_SANDBOX_TESTS" \
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python "$(command -v python3)" --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/installed-front-door.log"
       - name: Qualify terminal Ask inbox through the original Claude host
-        if: github.event.inputs.operator_results_only != 'true'
+        if: github.event.inputs.capacity_only != 'true' && (github.event.inputs.operator_results_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -996,7 +1271,7 @@ jobs:
             --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou135-inbox"
       - name: Qualify owned prepared-selection launch and failures with the original host
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        if: github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1019,7 +1294,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --output "$RUNNER_TEMP/pilot-storage-qualification"
       - name: Qualify prepared-run audit rotation and failed-store continuation
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true'
+        if: github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1030,7 +1305,7 @@ jobs:
             --validation-timeout-seconds 120 --audit-retention-only \
             --output "$RUNNER_TEMP/sou132-qualification"
       - name: Qualify reused bounded audit engine restart and fail-safe retention
-        if: (github.event_name != 'workflow_dispatch' || github.event.inputs.ask_latency_baseline_sha == '') && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true'
+        if: github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -1205,6 +1480,49 @@ jobs:
                             'source_commit':json.loads((asset/'switch-rollback-a-plan.json').read_text())['target']['source']['commit'],
                             'scripted_provider':True,'active_protection_claim':False}))
           PY
+      - name: Qualify prepared-run discovery and private archival
+        if: github.event.inputs.prepared_operations_only == 'true'
+        shell: bash
+        env:
+          OTHER_FLAGS: ${{ github.event.inputs.native_preparation_only }} ${{ github.event.inputs.original_create_only }} ${{ github.event.inputs.matched_development_only }} ${{ github.event.inputs.existing_project_only }} ${{ github.event.inputs.operator_results_only }} ${{ github.event.inputs.audit_retention_only }} ${{ github.event.inputs.storage_recovery_only }} ${{ github.event.inputs.prepared_switch_lifecycle }}
+        run: |
+          set -euo pipefail
+          [[ "$OTHER_FLAGS" != *true* ]]
+          "$SOU119_SANDBOX_TESTS" 'pilot_observation::tests::' --test-threads=1
+          scratch="$RUNNER_TEMP/prepared-run-operations"
+          foreign="$RUNNER_TEMP/prepared-run-foreign"
+          mkdir -m 700 "$scratch" "$scratch/home" "$foreign" "$foreign/soup-wall-run-foreign"
+          # Only this newly created disposable fixture has a different uid.
+          sudo install -o root -g root -m 600 /dev/null "$foreign/soup-wall-run-foreign/audit-run.json"
+          selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          unit="prepared-operations-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          status=0
+          sudo systemd-run --quiet --wait --pipe --collect --unit="$unit" \
+            --property="User=$(id -un)" --property="Group=$(id -gn)" \
+            --property=PrivateNetwork=yes --property=NoNewPrivileges=yes \
+            --property=ProtectSystem=strict --property="ReadOnlyPaths=$GITHUB_WORKSPACE $foreign" \
+            --property="ReadWritePaths=$scratch $RUNNER_TEMP/sou111-preparation" \
+            --property=MemoryMax=2G --property=MemorySwapMax=0 --property=TasksMax=256 \
+            --property=CPUQuota=200% --property=RuntimeMaxSec=15min --property=KillMode=control-group \
+            --working-directory="$GITHUB_WORKSPACE" \
+            /usr/bin/env -i PATH=/usr/bin:/bin HOME="$scratch/home" TMPDIR="$scratch" LANG=C.UTF-8 \
+            "$(command -v python3)" -B "$GITHUB_WORKSPACE/scripts/qualify-prepared-run-operations.py" \
+              --selection "$selection" --expected-commit "$(git rev-parse HEAD)" \
+              --strace "$(command -v strace)" --foreign-state "$foreign" \
+              --output "$scratch/qualification" || status=$?
+          test ! -d "/sys/fs/cgroup/system.slice/$unit.service"
+          printf '{"unit_removed":true,"unit_exit_code":%s}\n' "$status" > "$scratch/cleanup.json"
+          exit "$status"
+      - name: Retain bounded prepared-run evidence
+        if: always() && github.event.inputs.prepared_operations_only == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-run-operations-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/prepared-run-operations/qualification/report.json
+            ${{ runner.temp }}/prepared-run-operations/cleanup.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Remove only this job's sandbox permission and executable
         if: always()
         shell: bash
@@ -1220,6 +1538,8 @@ jobs:
         with:
           name: sou111-native-preparation-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/sou151-capacity/**
+            ${{ runner.temp }}/sou111-assets/capacity-*.json
             ${{ runner.temp }}/sou111-assets/selected-hashes.txt
             ${{ runner.temp }}/sou140-operator-results/operator-results.json
             ${{ runner.temp }}/sou140-rust-tests.log
@@ -1230,6 +1550,7 @@ jobs:
             ${{ runner.temp }}/sou111-assets/native-diagnostic.json
             ${{ runner.temp }}/sou111-assets/native-first.json
             ${{ runner.temp }}/sou111-assets/native-reused.json
+            ${{ runner.temp }}/sou111-assets/native-recovered.json
             ${{ runner.temp }}/sou111-assets/source-plan.json
             ${{ runner.temp }}/sou111-assets/source-first.json
             ${{ runner.temp }}/sou111-assets/source-reused.json
@@ -1237,10 +1558,13 @@ jobs:
             ${{ runner.temp }}/sou111-assets/source-recovered.json
             ${{ runner.temp }}/sou111-assets/source-summary.json
             ${{ runner.temp }}/sou111-assets/source-build-timing.json
+            ${{ runner.temp }}/sou111-assets/concurrent-preparation.json
             ${{ runner.temp }}/sou111-assets/runtime-timing.json
             ${{ runner.temp }}/sou111-assets/namespace-probe.txt
             ${{ runner.temp }}/front-door/report.json
             ${{ runner.temp }}/front-door.log
+            ${{ runner.temp }}/installed-front-door/report.json
+            ${{ runner.temp }}/installed-front-door.log
             ${{ runner.temp }}/sou111-assets/apparmor-provisioning.json
             ${{ runner.temp }}/sou111-apparmor-cleanup.json
             ${{ runner.temp }}/sou111-assets/plan.json
@@ -1259,6 +1583,11 @@ jobs:
             ${{ runner.temp }}/sou124-ask-comparison/comparison.json
             ${{ runner.temp }}/sou124-ask-comparison/baseline/qualification.json
             ${{ runner.temp }}/sou124-ask-comparison/candidate/qualification.json
+            ${{ runner.temp }}/sou141-ask-series/manifest.json
+            ${{ runner.temp }}/sou141-ask-series/summary.json
+            ${{ runner.temp }}/sou141-ask-series/runs/*/run.json
+            ${{ runner.temp }}/sou141-ask-series/runs/*/qualification/qualification.json
+            ${{ runner.temp }}/sou141-ask-series/runs/*/stage-events.jsonl
             ${{ runner.temp }}/sou111-assets/native-read-lease.log
             ${{ runner.temp }}/sou111-assets/baseline-build.json
             ${{ runner.temp }}/sou134-qualification/report.json

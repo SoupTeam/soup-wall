@@ -10,9 +10,9 @@ import json
 from pathlib import Path
 import re
 
-CASES = ('plan', 'occupied-port', 'stale-source', 'changed-selection',
+CASES = ('plan', 'occupied-port', 'stale-source', 'changed-selection', 'provider-unavailable',
          'useful-refusal', 'ask', 'default', 'cancel', 'daemon-loss', 'host-crash', 'timeout')
-HOST = CASES[4:]
+HOST = CASES[5:]
 COUNTERS = frozenset(('memory_current_bytes', 'memory_peak_bytes', 'memory_oom', 'memory_oom_kill',
     'pids_current', 'pids_peak', 'pids_peak_kernel', 'pids_max_events', 'cpu_usage_micros',
     'cpu_periods', 'cpu_throttled_periods'))
@@ -221,6 +221,67 @@ def project_pressure(attempt, expected, exit_code):
     return result
 
 
+def project_owner_loss(attempt, expected, exit_code):
+    """A passing refusal control is not owner-loss recovery or full acceptance."""
+    result = {'format': 'sou142-owner-loss-boundary-evidence/1', 'status': 'failed',
+              'source_commit': expected, 'acceptance_pass': False,
+              'full_sou142_qualification': False, 'remaining_gaps': list(GAPS),
+              'raw_process_metadata_or_logs_exported': False}
+    try:
+        need(type(expected) is str and re.fullmatch('[0-9a-f]{40}', expected), 'source_identity_invalid')
+        need(type(attempt) is dict and exit_code == 0
+             and attempt.get('format') == 'sou142-offline-budget-host-attempt/1'
+             and attempt.get('phase') == 'owner-loss'
+             and attempt.get('status') == 'owner-loss-unsupported-fail-closed'
+             and attempt.get('source_commit') == expected
+             and attempt.get('source_read_only') is True
+             and attempt.get('reused_binaries_read_only') is True
+             and attempt.get('network') == 'private-loopback-only'
+             and attempt.get('owned_budget_root_empty') is True
+             and attempt.get('actual_original_host_covered') is False
+             and attempt.get('provider') == 'owned-scripted-loopback'
+             and attempt.get('paid_api_calls') == 0
+             and attempt.get('full_sou142_qualification') is False
+             and 'owner-loss-before-descriptor-handback' in attempt.get('remaining_gaps', []),
+             'owner_loss_attempt_unverified')
+        selected = attempt.get('selected_sha256')
+        need(type(selected) is dict and set(selected) == {'agentfw', 'git_launcher', 'sandbox_tests',
+             'python', 'node', 'bwrap_source', 'git', 'claude'}, 'selected_identity_missing')
+        result['selected_sha256'] = {key: digest(value) for key, value in selected.items()}
+        result['selection_sha256'] = digest(attempt.get('selection_sha256'))
+        expected_budget = digest(attempt.get('budget_sha256'))
+        rows = attempt.get('owner_controls')
+        need(type(rows) is list and len(rows) == 2
+             and [row.get('server') for row in rows] == ['filesystem', 'git'],
+             'owner_loss_denominator_invalid')
+        for row in rows:
+            need(row.get('status') == 'unsupported-fail-closed'
+                 and row.get('stage') == 'owner-loss-before-descriptor-handback'
+                 and row.get('original_started') is False
+                 and row.get('leaf_created') is True
+                 and row.get('owned_members') == 0
+                 and row.get('owner_held_leaf_descriptor') is True
+                 and row.get('collector_had_no_leaf_descriptor') is True
+                 and row.get('production_cleanup_verified') is False
+                 and row.get('witness_cleanup_attempted') is True
+                 and row.get('inventory_restored') is True
+                 and row.get('budget_sha256') == expected_budget
+                 and row.get('binary_sha256') == selected['sandbox_tests']
+                 and row.get('owner_binary_sha256') == selected['agentfw'],
+                 'owner_loss_custody_or_execution_unverified')
+        result.update(status='unsupported-fail-closed-observed',
+                      budget_sha256=expected_budget,
+                      owner_controls=[{'server': row['server'], 'status': row['status'],
+                                       'original_started': False, 'owned_members': 0,
+                                       'owner_held_leaf_descriptor': True,
+                                       'collector_had_no_leaf_descriptor': True,
+                                       'production_cleanup_verified': False,
+                                       'witness_cleanup_attempted': True} for row in rows])
+    except (Invalid, KeyError, TypeError) as error:
+        result['reason'] = str(error) if isinstance(error, Invalid) else 'malformed_private_report'
+    return result
+
+
 def project(attempt, raw, expected, exit_code):
     output = {'format': 'sou142-prepared-budget-host-evidence/1', 'status': 'failed',
               'source_commit': expected, 'full_sou142_qualification': False,
@@ -327,6 +388,8 @@ def project(attempt, raw, expected, exit_code):
             else:
                 need(type(row.get('selected_execution')) is int and row['selected_execution'] == 0,
                      'preflight_execution_observed')
+                if name == 'provider-unavailable':
+                    need(row.get('reason') == 'provider_unavailable', 'provider_preflight_refusal_unverified')
                 result['selected_execution'] = 0
             output['cases'].append(result)
         section = raw.get('emergency_stop', {})
@@ -379,7 +442,7 @@ def read(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure'), default='all')
+    parser.add_argument('--phase', choices=('all', 'baseline', 'pressure', 'owner-loss'), default='all')
     parser.add_argument('--raw', type=Path)
     for name in ('attempt', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
@@ -387,7 +450,9 @@ def main():
     parser.add_argument('--exit-code', type=int, required=True)
     args = parser.parse_args()
     try:
-        if args.phase == 'pressure':
+        if args.phase == 'owner-loss':
+            result = project_owner_loss(read(args.attempt), args.expected_commit, args.exit_code)
+        elif args.phase == 'pressure':
             result = project_pressure(read(args.attempt), args.expected_commit, args.exit_code)
         else:
             need(args.raw is not None, 'baseline_report_required')
@@ -399,7 +464,8 @@ def main():
     rendered = json.dumps(result, indent=2) + '\n'
     need(len(rendered.encode()) <= 128 * 1024, 'finite_public_report_bound')
     args.output.write_text(rendered)
-    return 0 if result['status'] in ('partial-slice-passed', 'pressure-slice-passed') else 1
+    return 0 if result['status'] in ('partial-slice-passed', 'pressure-slice-passed',
+                                      'unsupported-fail-closed-observed') else 1
 
 
 if __name__ == '__main__':

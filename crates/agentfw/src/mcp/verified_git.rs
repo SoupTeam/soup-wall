@@ -8,6 +8,16 @@ use super::server_profile::ProfileConfig;
 use anyhow::{ensure, Context};
 use std::ops::Range;
 
+/// Only separately qualified execution routes; selection remains operator opt-in.
+pub(crate) fn supports_profile(format: &str) -> bool {
+    matches!(
+        format,
+        super::server_profile::git::FORMAT
+            | super::server_profile::git::FILE_READS_FORMAT
+            | super::server_profile::git_tracked_symlinks::FORMAT
+    )
+}
+
 pub(crate) struct Completion {
     raw: Vec<u8>,
     text: Option<String>,
@@ -76,9 +86,22 @@ mod linux {
     const EXCHANGE: Duration = Duration::from_secs(5);
     static ACTIVE: LazyLock<Arc<Semaphore>> = LazyLock::new(|| Arc::new(Semaphore::new(8)));
 
+    #[cfg(test)]
+    struct DispatchBarrier {
+        key: String,
+        original: Vec<u8>,
+        workspace: std::path::PathBuf,
+        format: String,
+        written: oneshot::Sender<()>,
+        resume: oneshot::Receiver<()>,
+    }
+    #[cfg(test)]
+    static AFTER_TOOLS_WRITE: std::sync::Mutex<Option<DispatchBarrier>> =
+        std::sync::Mutex::new(None);
+
     fn request(profile: &ProfileConfig, raw: &[u8]) -> anyhow::Result<Value> {
         ensure!(
-            git::is_profile(&profile.format),
+            supports_profile(&profile.format),
             "verified Git profile unsupported"
         );
         ensure!(
@@ -103,10 +126,14 @@ mod linux {
             matches!(tool, "git_show" | "git_diff"),
             "verified Git tool unsupported"
         );
-        git::validate_arguments_with_local_refs(
+        git::validate_arguments_with_extension(
             tool,
             &value["params"]["arguments"],
-            profile.format == git::LOCAL_REFS_FORMAT,
+            if profile.format == git::FILE_READS_FORMAT {
+                git::ReadExtension::FileRevisions
+            } else {
+                git::ReadExtension::None
+            },
         )?;
         Ok(value)
     }
@@ -172,6 +199,7 @@ mod linux {
         profile: &ProfileConfig,
         original: &[u8],
         call: &Value,
+        snapshot: &Snapshot,
         reader: &mut R,
         writer: &mut W,
     ) -> anyhow::Result<(Value, Vec<u8>)> {
@@ -212,9 +240,30 @@ mod linux {
             .get(tool)
             .context("verified Git tool unavailable")?;
         selected.validate_arguments(&call["params"]["arguments"])?;
+        snapshot.validate_call(tool, &call["params"]["arguments"])?;
         // Exactly one original tools/call. Never reserialize or rerender it.
         writer.write_all(original).await?;
         writer.flush().await?;
+        #[cfg(test)]
+        {
+            // Private libtest barrier only. Production has no hook or IPC.
+            let barrier = {
+                let mut slot = AFTER_TOOLS_WRITE.lock().unwrap();
+                if slot.as_ref().is_some_and(|barrier| {
+                    barrier.original == original
+                        && barrier.workspace == profile.workspace
+                        && barrier.format == profile.format
+                }) {
+                    slot.take()
+                } else {
+                    None
+                }
+            };
+            if let Some(barrier) = barrier {
+                let _ = barrier.written.send(());
+                barrier.resume.await.context("test dispatch barrier lost")?;
+            }
+        }
         let (reply, raw) = receive(reader, &call["id"], RESULT_LIMIT).await?;
         selected.validate_result(&reply)?;
         writer.shutdown().await?;
@@ -228,6 +277,14 @@ mod linux {
     ) -> Option<Range<usize>> {
         let (prefix, id) = match tool {
             "git_show" => {
+                // A file payload receives full baseline inspection even if it
+                // happens to begin with a commit-looking line.
+                if args["revision"]
+                    .as_str()
+                    .is_some_and(|revision| revision.contains(':'))
+                {
+                    return None;
+                }
                 let target = target?;
                 if target.requested.kind != ObjectKind::Commit
                     || target.effective.kind != ObjectKind::Commit
@@ -274,6 +331,7 @@ mod linux {
             None
         };
         let args = &call["params"]["arguments"];
+        snapshot.validate_call(tool, args)?;
         let target = if tool == "git_show" {
             snapshot
                 .show_target(args["revision"].as_str().unwrap_or(""))
@@ -324,6 +382,12 @@ mod linux {
             .verified_git_snapshot()
             .context("verified Git same snapshot missing")?;
         snapshot.validate()?;
+        snapshot.validate_call(
+            call["params"]["name"]
+                .as_str()
+                .context("verified Git tool missing")?,
+            &call["params"]["arguments"],
+        )?;
         ensure!(
             Instant::now() < deadline,
             "verified Git preparation exceeded exchange deadline"
@@ -365,7 +429,7 @@ mod linux {
                 }
                 Ok::<_, anyhow::Error>(())
             }));
-            exchange(profile, original, call, &mut reader, &mut writer).await
+            exchange(profile, original, call, &snapshot, &mut reader, &mut writer).await
         };
         let result = tokio::select! {
             biased;

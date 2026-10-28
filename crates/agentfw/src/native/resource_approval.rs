@@ -47,6 +47,9 @@ pub fn is_supported_linux_resource_tool_profile(tool: &Tool) -> bool {
     let Some(policy) = &tool.resource_policy else {
         return false;
     };
+    if policy.is_replace_file() {
+        return resource::replacement::validate(policy, tool).is_ok();
+    }
 
     // Windows and macOS policies are explicitly unsupported for Linux resource approval
     if policy.windows_read.is_some() || policy.macos_read.is_some() {
@@ -115,6 +118,21 @@ pub fn build_resource_details(
         .resource_policy
         .as_ref()
         .ok_or("native_approval_resource_policy_missing")?;
+
+    if policy.is_replace_file() {
+        let current = resource::replacement::binding(policy, args)?;
+        if admission.and_then(|a| a.execution.as_ref()) != Some(&current) {
+            return Err("native_approval_binding_mismatch");
+        }
+        let a = resource::replacement::arguments(policy, args)?;
+        let replacement = current.replacement.ok_or("replace_authority_missing")?;
+        return Ok(
+            json!({"operation":"replace_file","executor_profile":crate::mcp::replace_file::PROFILE,
+            "path":a.target,"root_identity":replacement.root,"old_identity":replacement.old_identity,
+            "old_content_sha256":replacement.old_sha256,"new_content_sha256":replacement.new_sha256,
+            "new_content_bytes":replacement.new_bytes}),
+        );
+    }
 
     if policy.is_https_get() {
         let url = args
@@ -209,6 +227,15 @@ pub fn revalidate_resource_execution(
         .resource_policy
         .as_ref()
         .ok_or("native_approval_resource_policy_missing")?;
+
+    if policy.is_replace_file() {
+        let current = resource::replacement::binding(policy, args)?;
+        return if admission.and_then(|a| a.execution.as_ref()) == Some(&current) {
+            Ok(())
+        } else {
+            Err("native_approval_binding_mismatch")
+        };
+    }
 
     if policy.is_https_get() {
         let url = args
@@ -313,6 +340,7 @@ mod tests {
             }],
             execution: if !is_https {
                 Some(resource::ExecutionPolicy {
+                    replacement: None,
                     operation: if is_read {
                         resource::ExecutionOperation::ReadDocument
                     } else {
@@ -560,6 +588,7 @@ mod tests {
             "create_file",
         );
         create_tool.resource_policy.as_mut().unwrap().execution = Some(resource::ExecutionPolicy {
+            replacement: None,
             operation: resource::ExecutionOperation::CreateFile,
             action: resource::ExecutionAction::Write,
             max_content_bytes: resource::MACOS_CREATE_MAX_CONTENT,

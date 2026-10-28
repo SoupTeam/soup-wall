@@ -3,6 +3,8 @@
 The guided command [`scripts/pilot.py`](PILOT_FRONT_DOOR.md) runs the same
 preview, preparation and run steps from one entry point. The explicit steps below
 remain the reference for each underlying script.
+[`agentfw pilot`](PILOT_INSTALLED_FRONT_DOOR.md) runs the guided command from the
+installed Agent without a checkout.
 
 Use native Ubuntu 24.04 x86_64 as an ordinary user. Run the shell blocks in
 Bash. Keep the checkout clean and use the same reviewed commit for every step.
