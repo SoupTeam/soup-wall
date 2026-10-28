@@ -6,6 +6,7 @@
     pilot.py prepare --apply --prefix DIR [inputs]
     pilot.py run --prefix DIR [--prompt TEXT]
     pilot.py status --prefix DIR
+    pilot.py provider preview|create|select|remove [options]
     pilot.py help
 
 This is a front door over the accepted scripts, not a second installer:
@@ -46,6 +47,11 @@ DIR_INPUTS = ("npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace"
               "pkg_config_libdir", "pkg_config_sysroot", "meson_pythonpath")
 NEVER = ["start a daemon, Claude host or MCP server", "edit a project, Git repository or Claude configuration",
          "create or change an active selection", "download or build anything", "contact a model provider"]
+PROFILE_FAILURE_CODES = frozenset({"provider_home_invalid", "provider_home_changed", "provider_private_file_required",
+    "provider_file_changed", "provider_profile_invalid", "provider_profile_missing", "provider_profile_exists",
+    "provider_profile_limit", "provider_store_invalid", "provider_store_busy", "provider_selection_invalid",
+    "provider_selection_stale", "provider_source_conflict", "provider_name_invalid", "provider_transport_invalid",
+    "provider_secret_input_invalid", "provider_terminal_required", "provider_consent_required", "provider_unavailable"})
 HINTS = {
     "not_prepared": "No prepared selection under this prefix. Run `pilot.py preview`, then `pilot.py prepare --apply`.",
     "front_door_state_invalid": "The front-door record is unreadable or changed. Prepare again with --apply.",
@@ -82,6 +88,10 @@ def load(name, filename):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def provider_profiles():
+    return load("front_door_provider_profiles", "pilot_provider_profiles.py")
 
 
 PREP = load("front_door_preparation", "prepare-installed-pilot.py")
@@ -520,6 +530,8 @@ def run(args):
     words = [sys.executable, *PYTHON_FLAGS, str(RUNNER), "--run", "--selection", state["selection"],
              "--expected-commit", state["commit"], "--timeout-seconds", str(args.timeout_seconds),
              "--ask-wait-seconds", str(args.ask_wait_seconds), "--port", str(args.port)]
+    if getattr(args, "agent_home", None) is not None:
+        words += ["--provider-home", str(args.agent_home)]
     if args.state_root is not None:
         words += ["--state-root", str(args.state_root)]
     if args.prompt is not None:
@@ -751,7 +763,51 @@ def status(args):
                          "configured-not-running": "a verified selection exists; nothing is protected until `run`",
                          "unavailable": "a run or selection exists but cannot protect now (see selection and runs)",
                          "unknown": "state could not be read safely", "not-configured": "nothing prepared"}[report["protection"]]
+    if sys.platform.startswith("linux"):
+        try:
+            with provider_profiles().Store(getattr(args, "agent_home", None) or Path.home() / ".agentfw") as provider:
+                inventory = provider.inspect()
+            report["provider"] = {"status": "observed-local", "selected": inventory["selected"],
+                                  "selection_valid": inventory["selection_valid"],
+                                  "profiles": inventory["profiles"]}
+        except Exception:
+            report["provider"] = {"status": "invalid-or-unavailable"}
     return report
+
+
+def provider_command(args):
+    """Profile management is local and never starts a provider or pilot asset."""
+    profiles = provider_profiles()
+    if args.provider_action != "preview" and not args.apply:
+        raise profiles.Refusal("provider_consent_required")
+    with profiles.Store(args.agent_home or Path.home() / ".agentfw",
+                        create=args.provider_action == "create") as store:
+        if args.provider_action == "preview":
+            inventory = store.inspect()
+            if args.name is not None:
+                profiles.name(args.name)
+                inventory["profiles"] = [row for row in inventory["profiles"] if row["name"] == args.name]
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider preview", "status": "plan",
+                    "executed": False, "redacted": True, **inventory}
+        if args.provider_action == "create":
+            public = {"model": args.model}
+            for flag, key in (("base_url", "ANTHROPIC_BASE_URL"), ("http_proxy", "HTTP_PROXY"),
+                              ("https_proxy", "HTTPS_PROXY"), ("no_proxy", "NO_PROXY"),
+                              ("ssl_cert_file", "SSL_CERT_FILE")):
+                value = getattr(args, flag)
+                if value is not None:
+                    public[key] = value
+            profiles.validate_public(public)
+            secrets = profiles.secret_input(args)
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider create", "status": "saved",
+                    "executed": False, **store.create(args.name, public, secrets, replace=args.replace)}
+        if args.provider_action == "select":
+            result = store.environment() if args.environment else store.select(args.name)
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider select", "status": "selected",
+                    "executed": False, **result}
+        result = store.remove(args.name)
+        return {"format": profiles.SELECTED_FORMAT, "command": "provider remove", "status": "removed",
+                "executed": False, **result}
 
 
 def human(report):
@@ -790,6 +846,8 @@ def human(report):
 def parser():
     top = argparse.ArgumentParser(prog=PROG, description=re.sub(r"(?<![-\w])pilot\.py", PROG, __doc__),
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
+    top.add_argument("--agent-home", type=Path,
+                     help=argparse.SUPPRESS)
     commands = top.add_subparsers(dest="command")
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument("--prefix", type=Path, required=True, help="absolute private directory for all pilot state")
@@ -814,6 +872,29 @@ def parser():
     command.add_argument("--port", type=int, default=0)
     command = commands.add_parser("status", parents=[shared])
     command.add_argument("--state-root", type=Path)
+    provider = commands.add_parser("provider", help="manage private named provider profiles")
+    actions = provider.add_subparsers(dest="provider_action", required=True)
+    preview = actions.add_parser("preview", help="read-only redacted inventory")
+    preview.add_argument("--name")
+    create = actions.add_parser("create", help="save one private profile with explicit consent")
+    create.add_argument("--name", required=True)
+    create.add_argument("--model", default="claude-sonnet-4-20250514")
+    for flag in ("base-url", "http-proxy", "https-proxy", "no-proxy", "ssl-cert-file"):
+        create.add_argument("--" + flag)
+    source = create.add_mutually_exclusive_group(required=True)
+    source.add_argument("--secret-fd", type=int)
+    source.add_argument("--prompt-api-key", action="store_true")
+    source.add_argument("--prompt-auth-token", action="store_true")
+    create.add_argument("--replace", action="store_true")
+    create.add_argument("--apply", action="store_true")
+    select = actions.add_parser("select", help="select one profile or explicitly return to environment mode")
+    choice = select.add_mutually_exclusive_group(required=True)
+    choice.add_argument("--name")
+    choice.add_argument("--environment", action="store_true")
+    select.add_argument("--apply", action="store_true")
+    remove = actions.add_parser("remove", help="delete one private profile")
+    remove.add_argument("--name", required=True)
+    remove.add_argument("--apply", action="store_true")
     commands.add_parser("help")
     return top
 
@@ -824,6 +905,18 @@ def main(argv=None):
     if args.command in (None, "help"):
         top.print_help()
         return 0
+    if args.command == "provider":
+        try:
+            report = provider_command(args)
+            code = 0
+        except Exception as error:
+            reason = str(error)
+            report = {"format": "sw-pilot-provider-selection/1", "command": "provider " + args.provider_action,
+                      "status": "failed", "executed": False,
+                      "reason": reason if reason in PROFILE_FAILURE_CODES else "provider_input_or_store_failure"}
+            code = 2
+        print(json.dumps(report, sort_keys=True))
+        return code
     if args.command == "run":
         try:
             return run(args)
