@@ -95,12 +95,22 @@ class ImpactTests(unittest.TestCase):
                 auxiliary.add("manual-long-session")
             if filename == "mcp-real-git.yml":
                 auxiliary.add("manual-installed-git-profiles")
+            if filename == "mcp-create-file.yml":
+                auxiliary.update({"reuse-plan", "reuse-qualification"})
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
                 self.assertIn("needs: impact", body, (filename, job))
                 self.assertIn("needs.impact.outputs.jobs", body, (filename, job))
+
+    def test_build_producer_is_selected_only_with_compatible_consumers(self):
+        for path, selected in (("README.md", False), ("eval/probe.py", False), ("crates/proxy/src/main.rs", False),
+                               ("crates/agentfw/src/main.rs", True), ("Cargo.lock", True),
+                               (".github/workflows/ci-builds.yml", True)):
+            with self.subTest(path=path):
+                result = plan([path])["workflows"]
+                self.assertEqual(bool(result["ci-builds.yml"]), selected)
 
     def test_supplemental_vps_is_outside_pr_admission_only_while_main_only(self):
         text = (ROOT / '.github/workflows/vps-ci.yml').read_text(encoding='utf-8')
