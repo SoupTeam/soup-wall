@@ -64,8 +64,11 @@ def passed(report):
 
 
 class Run:
-    def __init__(self, suite, label, hold=True, useful=False):
+    def __init__(self, suite, label, active, hold=True, useful=False):
         self.suite, self.label = suite, label
+        self.process = self.witness = self.model = self.out = self.err = None
+        self.closed, self.future_release = threading.Event(), threading.Event()
+        active.append(self)
         self.root, self.target, self.plan, code, self.prepared = suite.prepare(label, replacing=not useful)
         require(code == 0, 'stop_prepare_failed')
         self.before = snapshot(self.target)
@@ -172,16 +175,17 @@ class Run:
 
     def close(self):
         self.closed.set();self.future_release.set()
-        if self.process.poll() is None:
+        if self.process is not None and self.process.poll() is None:
             self.process.send_signal(signal.SIGCONT)
             self.process.send_signal(signal.SIGTERM)
             try:
                 self.process.wait(timeout=12)
             except subprocess.TimeoutExpired:
                 os.killpg(self.process.pid, signal.SIGKILL);self.process.wait(timeout=5)
-        self.out.close();self.err.close()
-        self.witness.finish()
-        self.model.close()
+        for stream in (self.out, self.err):
+            if stream is not None: stream.close()
+        if self.witness is not None: self.witness.finish()
+        if self.model is not None: self.model.close()
 
 
 def qualify(args, report):
@@ -203,7 +207,7 @@ def qualify(args, report):
                 and snapshot(suite.sentinel) == suite.before_sentinel, 'stop_unrelated_witness_changed')
         row.update(facts, status='passed')
     def start(label, **kwargs):
-        run = Run(suite, label, **kwargs);active.append(run);return run
+        return Run(suite, label, active, **kwargs)
     try:
         row = begin('installed-identity')
         archive = args.output / 'component.tar'
@@ -220,6 +224,7 @@ def qualify(args, report):
         row = begin('two-live-exact-stop')
         selected = start('selected')
         pending = until(selected.pending, 'selected_pending_missing')
+        selected_pending = dict(pending)
         peer = start('peer', hold=False, useful=True)
         peer_pending = until(peer.pending, 'peer_pending_missing')
         code, value = selected.stop()
@@ -236,6 +241,7 @@ def qualify(args, report):
         row = begin('pending-replay-and-repeat')
         require(selected.decision(pending)[0] != 0, 'stopped_pending_approved')
         require(not any((selected.home / 'native-pending').glob('*.json')), 'selected_pending_remains')
+        require(not any((selected.home / 'native-grants').glob('*.json')), 'selected_unused_grant_remains')
         code, value = selected.stop()
         require(stop_ok(code, value, 'already_stopped') and snapshot(selected.target) == selected.before, 'repeat_stop_not_safe')
         done(row, stop=value, old_approval_refused=True)
@@ -324,6 +330,7 @@ def qualify(args, report):
                               ('foreign-instance', {'instance_id': 'foreign-instance'})]:
             altered = dict(run.control, **fields)
             refuse(label, lambda altered=altered: write(json.dumps(altered).encode()), lambda: write(original))
+        refuse('foreign-run-record', lambda: write((peer.run / 'control.json').read_bytes()), lambda: write(original))
         code, value = run.stop();require(stop_ok(code, value, 'stopped'), 'record_control_final_stop_failed')
         facts = run.finish()
         done(row, controls=results, **facts, pid_reuse_scope='controlled birth mismatch; no forced kernel PID reuse')
@@ -331,6 +338,8 @@ def qualify(args, report):
         row = begin('old-control-replay')
         fresh = start('replay-controls')
         until(fresh.pending, 'replay_control_pending_missing')
+        require(fresh.decision(selected_pending)[0] != 0 and snapshot(fresh.target) == fresh.before,
+                'old_approval_crossed_fresh_run')
         controls = []
         for name in ('stop-request.json', 'stop-receipt.json'):
             replay = fresh.run / name

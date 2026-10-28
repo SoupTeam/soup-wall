@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     fs::File,
+    io::Read,
     path::Path,
     time::{Duration, Instant},
 };
@@ -192,7 +193,10 @@ impl Selected {
             c.manifest_fd,
             &self.bytes,
         )?;
-        let command = std::fs::read(format!("/proc/{}/cmdline", c.launcher_pid))?;
+        let mut command = Vec::new();
+        File::open(format!("/proc/{}/cmdline", c.launcher_pid))?
+            .take(16385)
+            .read_to_end(&mut command)?;
         ensure!(
             command.len() <= 16384
                 && command.split(|b| *b == 0).nth(1) == Some(b"edit-session".as_slice())
@@ -359,7 +363,9 @@ fn operate(path: &Path, report: &mut Value) -> Result<()> {
     }
     report["status"] = json!("requested_unconfirmed");
     report["reason"] = json!("owner_confirmation_unavailable");
-    crate::pilot_approval::signal_launcher(&handle)?;
+    // Exit can race this signal after the owner wrote its terminal receipt.
+    // Still require that receipt; a failed signal or missing PID is no proof.
+    let _ = crate::pilot_approval::signal_launcher(&handle);
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         if let Some(receipt) = selected.receipt()? {

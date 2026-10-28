@@ -158,6 +158,15 @@ The stopped daemon shares the launcher process. Suspended-daemon and actual
 SIGKILL cases retain that distinction. Parser/MAC and stalled-preamble unit
 controls supplement, rather than replace, the installed observations.
 
+The existing `linux-installed-edit` artifact retains `source.txt`, `binary.txt`,
+the original 23-case `runtime/report.json` and `stop-runtime/report.json`. Match
+the source commit and Agent SHA-256 across both reports and the build witnesses.
+The stop report records the installed component and genuine host digests, exact
+profile and daemon identities, observed owned process IDs/birth ticks, target
+snapshots and audit digests. Private raw arguments, bearer tokens and provider
+contents stay outside that artifact. Failed/incomplete cases remain explicit;
+an observed crash cleanup never becomes an authenticated successful stop.
+
 ## Qualification
 
 `python3 -B scripts/qualify-installed-edit.py` is inert. The explicit `--run`
