@@ -2,7 +2,7 @@
 
 SOU-164 adds an update coordinator over the accepted Agent lifecycle, installed helper and prepared-selection contracts. The implementation uses a private inactive Agent home, a versioned exact-input inventory, one atomic selection and a durable phase journal. Existing preparation, policy, sandbox and approval rules remain unchanged.
 
-Accepted base: `144512b3`, a successor of the task's `d57a8696` base. Rust source, Cargo manifests and the lockfile are unchanged. The implementation uses the Python standard library.
+Integration base: `8ead460e`, a successor of the task's `d57a8696` base. Source A remains `144512b3` for the two-version qualification. This change does not modify Rust source, Cargo manifests or the lockfile relative to the integration base. The implementation uses the Python standard library.
 
 ## Local results
 

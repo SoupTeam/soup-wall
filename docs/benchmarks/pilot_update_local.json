@@ -5,7 +5,7 @@
     "full_ci": "reported_separately_in_pull_request",
     "native_ubuntu_2404_useful_a_b_a": "reported_separately_by_native_workflow"
   },
-  "accepted_base": "144512b3ed11f985c922d9911cba26f07599dea9",
+  "accepted_base": "8ead460e7460a8168459e0f02ea25c1eb2d8f7d4",
   "code_sha256": {
     "scripts/build-pilot-front-door.py": "a21c4da0ad36f1ed484782f6e608c440a037f5e9d973d649ca4ec64e9917d4e3",
     "scripts/pilot.py": "8ffa0605e4f4564e36fd421f60d76e98743fa8374f2cd57b5b506e88484509ad",
@@ -67,5 +67,6 @@
       "passed": 34,
       "skipped": 1
     }
-  }
+  },
+  "qualification_source_a": "144512b3ed11f985c922d9911cba26f07599dea9"
 }
