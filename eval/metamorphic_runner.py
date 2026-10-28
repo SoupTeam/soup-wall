@@ -43,8 +43,8 @@ sys.path.insert(0, str(ROOT / "eval"))
 sys.dont_write_bytecode = True
 import eval_runner as ER  # noqa: E402  (the accepted evaluator; never modified here)
 
-CORPUS = ROOT / "eval/fixtures/sou128_metamorphic_dev_v0.3.json"
-RELATIONS = ROOT / "eval/fixtures/sou128_relations_v0.3.json"
+CORPUS = ROOT / "eval/fixtures/sou128_metamorphic_dev_v0.4.json"
+RELATIONS = ROOT / "eval/fixtures/sou128_relations_v0.4.json"
 CLASSIFIERS = {"generic": ROOT / "rule_baseline/rule_baseline.py",
                "git": ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"}
 WORKER_PY = ROOT / "rule_baseline/runtime/worker.py"
@@ -288,7 +288,7 @@ def validate(corpus: dict, rels: dict) -> list[str]:
             errs.append(f"{r['id']}: an asserted relation needs a source")
     for c in cases.values():
         if c["expectation_status"] != "pending":
-            errs.append(f"{c['id']}: v0.3 promotes no label; expectation_status must stay pending")
+            errs.append(f"{c['id']}: this development corpus promotes no label; expectation_status must stay pending")
         if c["evaluator_only"].get("classifier") not in CLASSIFIERS:
             errs.append(f"{c['id']}: unknown classifier")
     return errs

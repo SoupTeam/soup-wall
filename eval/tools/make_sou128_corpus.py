@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Generate the SOU-128 metamorphic development corpus v0.3 (deterministic; stdlib only).
+"""Generate the SOU-128 metamorphic development corpus v0.4 (deterministic; stdlib only).
+
+v0.4 appends Git-classifier coverage (a value bound and invalid names) after every frozen v0.3 item;
+the v0.3 files are never rewritten, and --check requires v0.4 to keep them as an exact prefix.
 
 v0.3 corrects the untrusted v0.2 preparation as recorded in eval/sou128/SOU128_CORPUS_AUDIT.md:
   * real tools carry their pinned original schema and only schema-declared arguments;
@@ -28,13 +31,18 @@ sys.path.insert(0, str(ROOT / "eval"))
 sys.dont_write_bytecode = True
 from metamorphic_runner import expand, source_sha256  # noqa: E402  (shared with the runner)
 
-FIXTURE =ROOT / "eval/fixtures/sou128_metamorphic_dev_v0.3.json"
-RELATIONS = ROOT / "eval/fixtures/sou128_relations_v0.3.json"
+FIXTURE = ROOT / "eval/fixtures/sou128_metamorphic_dev_v0.4.json"
+RELATIONS = ROOT / "eval/fixtures/sou128_relations_v0.4.json"
+# Frozen v0.3: never rewritten; --check requires v0.4 to keep it as an exact prefix.
+FROZEN_FIXTURE = ROOT / "eval/fixtures/sou128_metamorphic_dev_v0.3.json"
+FROZEN_RELATIONS = ROOT / "eval/fixtures/sou128_relations_v0.3.json"
 FS_TOOLS = "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json"
 GIT_TOOLS = "profiles/mcp/git-readonly-v1/upstream-tools-list.json"
+GIT_BASELINE = "rule_baseline/git_readonly_v1/rule_baseline.py"
 CONTRACT = "contract/updated_contract2.md"
 ORIGIN_V02 = "sou128_public_synthetic_v0.2"
 ORIGIN_V03 = "sou128_v0.3_audit_correction"
+ORIGIN_V04 = "sou128_v0.4_git_coverage"
 
 
 def sha(rel: str) -> str:
@@ -224,6 +232,23 @@ def build() -> tuple[dict, dict]:
                    "_classify: a string raw_arguments is json.loads'ed, else kept as a raw leaf")],
                    "Not evidence of parser rejection.", "observation")
 
+    # v0.4 adds Git-classifier coverage after every v0.3 item (eval/sou128/PHASE3_REVIEW.md section 9).
+    git_bound = source(GIT_BASELINE, "_bounded_git_read: max_count is proven only within 1..20; otherwise the general path")
+    within = c.case("S128-GIT-BOUND-LOG-20", "bounds_value", git("git_log", {"repo_path": "/workspace", "max_count": 20}), "git",
+                    "last max_count inside the Git classifier's bounded-read proof", ORIGIN_V04)
+    past = c.case("S128-GIT-BOUND-LOG-21", "bounds_value", git("git_log", {"repo_path": "/workspace", "max_count": 21}), "git",
+                  "one past the bounded-read proof (the native profile also refuses it; not decided here)", ORIGIN_V04)
+    c.relation("BOUND-GITLOG-20-21", "no_silent_loss_past_bound", [within, past], [d01, d08, git_bound],
+               "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, "
+               "but never claim certainty with fewer actions than within the bound.", "source_backed")
+    # The two disjuncts of the Git classifier's own check: not a string, or a blank string.
+    for i, name in enumerate([None, "   "], 1):
+        cid = c.case(f"S128-GIT-NAME-{i:02}", "invalid_name", {"tool_name": name}, "git",
+                     "tool_name is not a non-empty string", ORIGIN_V04)
+        c.relation(f"GIT-NAME-{i:02}", "technical_failure_channel", [cid], [d06, runner],
+                   "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
+                   "source_backed")
+
     worker = source("rule_baseline/runtime/worker.py", "run(): frame parsed with duplicate rejection; input_json parsed with json.loads")
     single = source("rule_baseline/rule_baseline.py", "main(): size limit, then json.loads; ValueError/UnicodeError -> invalid_input")
     admission = source("crates/agentfw/src/mcp/admission.rs", "Strict visitor: duplicate JSON member and non-finite numbers rejected")
@@ -250,11 +275,11 @@ def build() -> tuple[dict, dict]:
         {"id": "FRAME-INPUT-SHA-MISMATCH", "frame": '{"v":"sw-classifier-worker/1","id":0,"input_sha256":"' + "0" * 64 + '","input_json":"{}"}',
          "expected": "worker_exit_3_no_reply", "sources": [source("rule_baseline/runtime/worker.py", "run(): input_sha256 mismatch ends the process")]},
     ]
-    fixture = {"fixture_version": "sou128-metamorphic-dev-v0.3",
+    fixture = {"fixture_version": "sou128-metamorphic-dev-v0.4",
                "description": "SOU-128 public DEVELOPMENT corpus (corrected v0.2; see eval/sou128/SOU128_CORPUS_AUDIT.md). "
-                              "Inert data; every label pending.",
+                              "v0.4 appends Git-classifier coverage to the frozen v0.3 items. Inert data; every label pending.",
                "cases": c.cases}
-    relations = {"format": "sou128-relations/1", "corpus": "sou128-metamorphic-dev-v0.3",
+    relations = {"format": "sou128-relations/1", "corpus": "sou128-metamorphic-dev-v0.4",
                  "scope": "development only; no security authorization is inferred from any relation",
                  "relations": c.relations, "boundary_probes": probes, "worker_frame_probes": frames}
     return fixture, relations
@@ -262,6 +287,24 @@ def build() -> tuple[dict, dict]:
 
 def render(value: dict) -> bytes:
     return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def frozen_prefix_errors(fixture: dict, relations: dict) -> list[str]:
+    """v0.4 must keep every frozen v0.3 case, relation and probe unchanged and in order."""
+    old_fx = json.loads(FROZEN_FIXTURE.read_bytes())
+    old_rel = json.loads(FROZEN_RELATIONS.read_bytes())
+    errors = []
+    n = len(old_fx["cases"])
+    if fixture["cases"][:n] != old_fx["cases"]:
+        errors.append("v0.4 cases do not start with the frozen v0.3 cases")
+    if any(c["origin"] != ORIGIN_V04 for c in fixture["cases"][n:]):
+        errors.append("an added case is not marked " + ORIGIN_V04)
+    if relations["relations"][:len(old_rel["relations"])] != old_rel["relations"]:
+        errors.append("v0.4 relations do not start with the frozen v0.3 relations")
+    for key in ("boundary_probes", "worker_frame_probes", "scope", "format"):
+        if relations[key] != old_rel[key]:
+            errors.append(f"v0.4 {key} differs from frozen v0.3")
+    return errors
 
 
 def main(argv=None) -> int:
@@ -279,6 +322,9 @@ def main(argv=None) -> int:
         else:
             path.write_bytes(data)  # raw bytes: LF on every platform
         print(path.relative_to(ROOT).as_posix(), hashlib.sha256(data).hexdigest())
+    for error in frozen_prefix_errors(fixture, relations):
+        print(f"frozen: {error}", file=sys.stderr)
+        status = 1
     print(f"cases {len(fixture['cases'])} relations {len(relations['relations'])} "
           f"boundary_probes {len(relations['boundary_probes'])} frame_probes {len(relations['worker_frame_probes'])}")
     return status
