@@ -100,10 +100,17 @@ the actual installed run; this increment does not certify those behaviors.
 
 ## Current evidence boundary
 
-The [October 22 current-main refresh](evidence/wsl/OCT22_REFRESH.md) records a
-new 12/12 run after native literal-argument handling, pilot preparation and
-Windows onboarding were integrated, with exact source/runtime identities and
-the preceding download-digest failure preserved separately.
+The [October 28 integrated-source refresh](evidence/wsl/OCT28_REFRESH.md) records
+a fresh actual 12/12 installed WSL2 run on exact source `7bde8267`, including
+accepted main `f4937110`. Both useful workflows completed with zero false
+interruptions. Source/assets, fixed WSL/namespace settings, refusal/recovery
+and owned cleanup passed. The npm preparation failure and subsequent 11/12
+negative-control timeout remain retained separately with the final passing run.
+The archives distinguish original witness hashes from sanitized publication
+bytes; no execution is attributed to a later documentation commit.
+
+The [October 22 refresh](evidence/wsl/OCT22_REFRESH.md) preserves the earlier
+source-specific 12/12 evidence and preceding download-digest failure.
 
 The [retained actual WSL2 qualification](evidence/wsl/QUALIFICATION.md) records
 the first missing-library failure and a complete 12/12 useful/refusal/recovery

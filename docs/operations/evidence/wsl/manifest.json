@@ -36,6 +36,16 @@
       "bytes": 128294,
       "sha256": "c4b649fec07d828ae42e1306a5c45eabd3d81e9eb526f1c9980abbf493ef67b0",
       "files": 68
+    },
+    "installed-wsl2-7bde826.zip": {
+      "bytes": 161049,
+      "sha256": "f9f8a0b0c2dc9935e5d6f0f0e1fe3c964f6e17edd4d6ed85805cfbd603bec584",
+      "files": 74
+    },
+    "failed-wsl2-7bde826.zip": {
+      "bytes": 145744,
+      "sha256": "9d787380b3338b696b441cf495c2da6555e1b62a1a230e6da662774660ea87d3",
+      "files": 77
     }
   }
 }
