@@ -92,7 +92,7 @@ struct Output {
 #[derive(Serialize)]
 struct Observation {
     format: &'static str,
-    run: PathBuf,
+    run_sha256: String,
     profile_sha256: String,
     binding_sha256: String,
     terminal: &'static str,
@@ -246,7 +246,7 @@ fn observe(args: &Args, budget: &mut Budget) -> Result<Reviewed> {
     ))?;
     let observation = Observation {
         format: FORMAT,
-        run: args.run.clone(),
+        run_sha256: audit::sha(&selection.run_bytes),
         profile_sha256: args.sha256.clone(),
         binding_sha256,
         terminal: "recorded_host_completed_and_cleanup_confirmed",

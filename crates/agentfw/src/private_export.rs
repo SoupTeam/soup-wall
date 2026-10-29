@@ -226,4 +226,27 @@ mod tests {
             .is_err()
         );
     }
+    #[test]
+    fn substituted_publication_parent_preserves_replacement_and_cleans_owned_stage() {
+        let temp = tempfile::tempdir().unwrap();
+        let parent = temp.path().join("selected");
+        fs::create_dir(&parent).unwrap();
+        fs::set_permissions(&parent, fs::Permissions::from_mode(0o700)).unwrap();
+        let held = temp.path().join("original");
+        assert!(publish(
+            &parent.join("bundle"),
+            &[("result.txt", b"private")],
+            || {
+                fs::rename(&parent, &held)?;
+                fs::create_dir(&parent)?;
+                fs::set_permissions(&parent, fs::Permissions::from_mode(0o700))?;
+                fs::write(parent.join("sentinel"), b"unrelated")?;
+                Ok(())
+            }
+        )
+        .is_err());
+        assert_eq!(fs::read_dir(&held).unwrap().count(), 0);
+        assert_eq!(fs::read_dir(&parent).unwrap().count(), 1);
+        assert_eq!(fs::read(parent.join("sentinel")).unwrap(), b"unrelated");
+    }
 }
