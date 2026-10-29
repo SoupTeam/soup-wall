@@ -69,6 +69,35 @@ unrelated files intact. The first bounded failure record stays in
 `first-failure.json`; raw build logs stay private in the incomplete generation.
 Do not copy those logs into a public issue or PR.
 
+### Explicit retry after a completed Git stage
+
+If Git finished and its private stage checkpoint was published before a later
+bubblewrap failure or cancellation, retry with the same output root and input
+arguments, adding `--resume`:
+
+```sh
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --resume "${args[@]}"
+```
+
+The retry acquires the normal per-output preparation lock and verifies the
+complete frozen Git stage before copying its verified binary into a new
+generation. The checkpoint binds the clean source, pinned Git archive, build
+recipe and flags, compiler/interpreter and native inputs, runtime libraries,
+file modes, and bounded stage-tree digests. Bubblewrap is built normally, and
+the final Git+bubblewrap receipt, hashes and runtime checks still run before
+`current.json` changes. The result distinguishes built and reused stages and
+reports their actual timings; preview/status commands do not build or select.
+
+`--resume` refuses an absent, incomplete, mutable, unsafe or identity-mismatched
+checkpoint. It never resumes compiler scratch or trusts a partial executable.
+Inspect the bounded failure reason, then run `--prepare` without `--resume` to
+start a fresh build after correcting the input or environment; use `--rebuild`
+when a complete generation is already selected and a new one is intended.
+Failed attempts remain private for diagnosis, and no failed or incomplete
+generation becomes the selected runtime. Existing local archive arguments
+keep this retry offline; network access still requires explicit
+`--allow-download` under the same pins and bounds.
+
 Pass the two emitted paths directly to the existing SOU-111 interface. Supply
 the remaining reviewed inputs described in
 [pilot runtime preparation](PILOT_RUNTIME_PREPARATION.md):
