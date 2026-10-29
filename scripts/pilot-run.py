@@ -44,12 +44,22 @@ GROUPS = load("pilot_run_groups", "prepare-native-pilot-prerequisites.py")
 SELECTION_LOCK = load("pilot_run_selection_lock", "pilot-selection-lock.py")
 AUDIT = load("pilot_run_audit", "pilot_audit.py")
 PROVIDER = load("pilot_run_provider", "pilot_provider.py")
+PROFILES = load("pilot_run_provider_profiles", "pilot_provider_profiles.py") if sys.platform.startswith("linux") else None
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
     'provider_unavailable',
     'provider_input_invalid',
     'provider_input_unsupported',
+    'provider_home_invalid',
+    'provider_home_changed',
+    'provider_private_file_required',
+    'provider_file_changed',
+    'provider_profile_invalid',
+    'provider_profile_missing',
+    'provider_selection_invalid',
+    'provider_selection_stale',
+    'provider_source_conflict',
     'linux_budget_input_invalid',
     'linux_budget_preflight_refused',
     'linux_budget_observation_unverified',
@@ -294,8 +304,14 @@ def confirmed_stop(home, launcher_pid, binary, env, cwd):
 
 def run(args, report):
     PREP.supported_platform()
-    provider = PROVIDER.selected(os.environ)
-    PROVIDER.require_access(provider)
+    provider_home = getattr(args, "provider_home", None)
+    if provider_home is not None:
+        provider, model, provider_name, provider_identity = PROFILES.chosen(provider_home, os.environ)
+    else:
+        provider, model, provider_name, provider_identity = PROVIDER.selected(os.environ), None, None, None
+        PROVIDER.require_access(provider)
+    report["provider"] = {"source": "named-profile" if provider_name else "explicit-environment",
+                          "name": provider_name, "model": model or "claude-sonnet-4-20250514"}
     # Main has already validated the selection under the lifetime lock. Refuse
     # an occupied explicit port before the additional full generation recheck.
     # The later bind remains authoritative if the port changes meanwhile.
@@ -410,6 +426,8 @@ def run(args, report):
                                            args.ask_wait_seconds)
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
             require(selected(args)[0] == selection, "selection_changed_before_host")
+            if provider_name is not None:
+                PROFILES.unchanged(provider_home, provider_name, provider_identity)
             roots = PREP.workspace_paths(selection, args.selection.parent)
             workspace, git_workspace = roots["filesystem"], roots["git"]
             command = [str(paths["agentfw"]), "pilot-launch", "--claude", str(paths["claude"]),
@@ -418,6 +436,8 @@ def run(args, report):
                 "--git-profile", profiles["git"]["profile"]["path"], "--policy", str(paths["policy"]),
                 "--classifier", str(paths["git_classifier"]), "--timeout-seconds", str(args.timeout_seconds),
                 "--ask-wait-seconds", str(args.ask_wait_seconds), "--prompt", args.prompt, "--json"]
+            if model is not None:
+                command.extend(["--model", model])
             if budget_snapshot is not None:
                 command.extend(["--linux-budget", str(budget_snapshot),
                                 "--linux-budget-sha256", report["resource_budget"]["budget_sha256"]])
@@ -555,6 +575,8 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--state-root", type=Path)
+    parser.add_argument("--provider-home", type=Path,
+                        help="private installed Agent home; absent preserves explicit environment mode")
     parser.add_argument("--linux-budget", type=Path,
                         help="Explicit owned Linux budget JSON; absent means unbudgeted")
     parser.add_argument("--port", type=int, default=0)
