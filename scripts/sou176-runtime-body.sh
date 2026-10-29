@@ -10,7 +10,7 @@ python3 -B -m unittest discover -s scripts/tests -p test_pilot_runtime_identity.
 mkdir -m 700 "$SOU145_SCRATCH/preparation"
 status=0
 python3 -B scripts/prepare-installed-pilot.py --prepare \
-  --output "$SOU145_SCRATCH/preparation" --expected-commit d4322a00fe4b3617f322fad1f0bfc4a347c033b3 \
+  --output "$SOU145_SCRATCH/preparation" --expected-commit 69b88976f5a68db5ebb5781589c3ee8556317ad7 \
   --agentfw "$SOU145_SCRATCH/target/debug/agentfw" --git-launcher "$SOU145_SCRATCH/target/debug/agentfw-git-sandbox" \
   --sandbox-tests "$(cat "$SOU145_SCRATCH/library-path.txt")" \
   --node "$SOU145_SCRATCH/node/bin/node" --npm "$SOU145_SCRATCH/node/bin/npm" \
@@ -25,5 +25,5 @@ if [ "$status" != 0 ]; then
 fi
 selection="$(python3 -c 'import json,os,pathlib;print(json.loads((pathlib.Path(os.environ["SOU145_SCRATCH"])/"seed.json").read_text())["selection"])')"
 python3 -B scripts/qualify-sou145-readiness.py --selection "$selection" \
-  --expected-commit d4322a00fe4b3617f322fad1f0bfc4a347c033b3 --strace /usr/bin/strace \
+  --expected-commit 69b88976f5a68db5ebb5781589c3ee8556317ad7 --strace /usr/bin/strace \
   --offline-inputs "$SOU145_SCRATCH/offline" --output "$SOU145_SCRATCH/results" --owned-pid-namespace
