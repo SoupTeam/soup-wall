@@ -50,7 +50,9 @@ jobs:
           meson compile -C "$RUNNER_TEMP/sou82-bwrap-build"
           python3 -m pip install cryptography==50.0.2
       - name: Verify test fixture syntax
-        run: python3 -m py_compile scripts/managed-policy-tls-demo.py scripts/managed-native-transitions.py scripts/fixtures/managed_policy_tls_edge.py
+        run: |
+          python3 -m py_compile scripts/managed-policy-tls-demo.py scripts/managed-native-transitions.py scripts/fixtures/managed_policy_tls_edge.py
+          python3 -B -m unittest scripts.tests.test_managed_policy_tls_edge -v
       - name: Build real SQLite Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw --bins
       - name: Execute isolated nonloopback HTTPS Agent exchange

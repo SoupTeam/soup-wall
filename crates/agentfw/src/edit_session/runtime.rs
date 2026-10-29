@@ -116,6 +116,18 @@ async fn owned(
     fs::DirBuilder::new().mode(0o700).create(&run)?;
     let home = run.join(crate::token::generate());
     fs::DirBuilder::new().mode(0o700).create(&home)?;
+    // Archive selection takes this daemon-home inode lock through terminal
+    // publication. Keep the run-directory lock available for the accepted short
+    // Stop request/receipt transactions; never hold that lock over host work.
+    use std::os::unix::fs::OpenOptionsExt;
+    let archive_guard = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(&home)?;
+    ensure!(
+        unsafe { libc::flock(archive_guard.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0,
+        "edit_run_lifecycle_lock_unavailable"
+    );
     let token = crate::token::generate();
     let native_token = crate::token::generate();
     launch::write(&home.join("token"), token.as_bytes(), 0o600)?;

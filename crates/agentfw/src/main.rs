@@ -1814,3 +1814,31 @@ mod cli_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod archive_cli_scope_tests {
+    use super::*;
+
+    #[test]
+    fn archive_parser_matches_supported_platform() {
+        let parsed = Cli::try_parse_from([
+            "agentfw",
+            "edit-session",
+            "archive",
+            "--home",
+            "owned-profile",
+            "preview",
+            "--run",
+            "owned-run",
+            "--destination",
+            "owned-archive",
+        ]);
+        #[cfg(target_os = "linux")]
+        assert!(parsed.is_ok());
+        #[cfg(not(target_os = "linux"))]
+        match parsed {
+            Err(error) => assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand),
+            Ok(_) => panic!("Linux-only archival must not enter another platform's parser"),
+        }
+    }
+}
