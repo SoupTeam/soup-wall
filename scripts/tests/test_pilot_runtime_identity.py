@@ -180,6 +180,7 @@ class ScopedDossierTests(unittest.TestCase):
             self.witnesses[stage]['report_sha256'] = report_ref['sha256']
             witness_ref = self.put(stage + '-identities.json', self.witnesses[stage])
             self.context['stages'].append({'id': stage, 'status': 'executed', 'report_sha256': report_ref['sha256'],
+                'identity_status': 'verified',
                 'identity_report_sha256': witness_ref['sha256'], 'independent_namespace_cleanup': {'all_stopped': True, 'remaining': []}})
             self.m['evidence'].append({'id': stage, 'owner': 'synthetic', 'scope': d.SCOPE, 'role': 'candidate',
                                       'stage': stage, 'file': report_ref, 'identity_context': witness_ref})
@@ -283,6 +284,17 @@ class ScopedDossierTests(unittest.TestCase):
         for raw in (b'{"scope":"ask","scope":"installed"}', b'{"value":NaN}', b'[]'):
             with self.assertRaises(ValueError): r.parse(raw)
 
+    def test_conflicting_context_source_or_incomplete_identity_status_is_not_ready(self):
+        self.fixture()
+        original = copy.deepcopy(self.context)
+        for mutate in (lambda c: c.update(source_before=dict(self.source, files_sha256='0' * 64),
+                                         source_after=dict(self.source, files_sha256='0' * 64)),
+                       lambda c: c['stages'][0].update(identity_status='incomplete')):
+            context = copy.deepcopy(original); mutate(context)
+            ref = self.put('execution.json', context)
+            for entry in self.m['evidence']: entry['context'] = ref
+            self.assertEqual(self.result()['status'], 'NOT_READY')
+
 
 class GitSourceDigestTests(unittest.TestCase):
     def test_recomputed_source_digest_uses_exact_git_blob_bytes(self):
@@ -308,21 +320,19 @@ class KernelCustodyTests(unittest.TestCase):
             owner = r.Custodian({'format': 'synthetic-peer-control'}, Path(tmp) / 'identity.sock', None)
             self.addCleanup(owner.close)
             owner.begin('ask')
-            def request():
-                try:
-                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                        client.connect(str(owner.address))
+            def request(*, foreign=False):
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.connect(str(owner.address))
+                    if not foreign:
                         client.sendall(r.canonical({'operation': 'unknown', 'stage': 'ask'}))
-                        client.shutdown(socket.SHUT_WR)
-                        return r._message(client)
-                except ConnectionResetError:
-                    # The custodian rejects the peer before reading its request.
-                    # Linux may reset a socket closed with those unread bytes.
-                    return {'status': 'failed', 'reason': 'peer_reset'}
+                    # No payload on the foreign connection: this tests refusal
+                    # before a request exists, without a reset/broken-pipe race.
+                    client.shutdown(socket.SHUT_WR)
+                    return r._message(client)
             owner.pid = 0
-            refused = request()
+            refused = request(foreign=True)
             self.assertEqual(refused['status'], 'failed')
-            self.assertIn(refused['reason'], ('identity_foreign_producer', 'peer_reset'))
+            self.assertEqual(refused['reason'], 'identity_foreign_producer')
             owner.pid = os.getpid(); owner.stage = 'installed'
             self.assertEqual(request()['reason'], 'identity_cross_stage_request')
             owner.stage = 'ask'

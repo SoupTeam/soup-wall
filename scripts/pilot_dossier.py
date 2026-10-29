@@ -550,10 +550,13 @@ def build(m, root, repo):
                 require(before == m['candidate'], 'runtime_evidence_source_mismatch')
                 context = parse(selected_bytes(root, entry['context']))
                 require(context.get('format') == 'sw-pilot-readiness-execution/2', 'runtime_execution_context_required')
+                require(context.get('source_before') == context.get('source_after') == plan['source'],
+                        'runtime_execution_source_conflict')
                 RUNTIME.same_digest(context['runtime_plan_sha256'], RUNTIME.sha(RUNTIME.canonical(plan)))
                 require(tuple(row['id'] for row in context['stages']) == RUNTIME.STAGES,
                         'runtime_execution_inventory_mismatch')
                 row = next(row for row in context['stages'] if row['id'] == entry['stage'])
+                require(row.get('identity_status') == 'verified', 'runtime_execution_identity_unconfirmed')
                 RUNTIME.same_digest(row['report_sha256'], sha(raw))
                 witness_raw = selected_bytes(root, entry['identity_context'])
                 RUNTIME.same_digest(row['identity_report_sha256'], sha(witness_raw))
