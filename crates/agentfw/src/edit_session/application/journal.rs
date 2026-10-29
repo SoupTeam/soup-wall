@@ -68,6 +68,11 @@ pub(super) struct Receipt {
     pub(super) after: Baseline,
     file_synced: bool,
     directory_synced: bool,
+    success_ack_sha256: String,
+}
+pub(super) struct Published {
+    pub(super) receipt: Receipt,
+    pub(super) success_ack: String,
 }
 pub(super) fn receipt_digest(r: &Receipt) -> Result<String> {
     digest(b"agentfw/edit-application-receipt/v1\0", r)
@@ -199,6 +204,7 @@ impl Journal {
                 && receipt.after.identity.gid == before.identity.gid
                 && receipt.file_synced
                 && receipt.directory_synced
+                && crate::native::is_digest(&receipt.success_ack_sha256)
                 && same(
                     &receipt.intent_sha256,
                     &digest(b"agentfw/edit-application-intent/v1\0", &intent)?
@@ -210,6 +216,7 @@ impl Journal {
     pub(super) fn acknowledged(
         &self,
         expected: Option<&str>,
+        success_ack: Option<&str>,
         budget: &mut Budget,
     ) -> Result<(Operation, Receipt)> {
         let error: Option<Failure> = self.optional("indeterminate.json", budget)?;
@@ -236,6 +243,11 @@ impl Journal {
         ensure!(
             expected.is_some_and(|e| same(e, &recorded_digest)),
             "edit_apply_successful_command_receipt_required"
+        );
+        ensure!(
+            success_ack.is_some_and(|ack| ack.len() == 43
+                && same(&audit::sha(ack.as_bytes()), &receipt.success_ack_sha256)),
+            "edit_apply_successful_command_ack_required"
         );
         recheck_target(&self.plan, &receipt.after, budget)?;
         Ok((op, receipt))
@@ -290,7 +302,7 @@ pub(super) fn publish(
     content: &str,
     previous: Option<&Receipt>,
     budget: &mut Budget,
-) -> Result<Receipt> {
+) -> Result<Published> {
     let plan = &journal.plan;
     let result = (|| {
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -339,6 +351,9 @@ pub(super) fn publish(
                 && bytes == content.as_bytes(),
             "edit_apply_published_target_changed"
         );
+        // Only the hash is retained. An interrupted command cannot manufacture
+        // a success acknowledgement by reading an already-visible receipt.
+        let success_ack = crate::token::generate();
         let receipt = Receipt {
             format: FORMAT.into(),
             operation,
@@ -348,6 +363,7 @@ pub(super) fn publish(
             after,
             file_synced: true,
             directory_synced: true,
+            success_ack_sha256: audit::sha(success_ack.as_bytes()),
         };
         journal
             .dir
@@ -355,7 +371,10 @@ pub(super) fn publish(
         journal.recheck(budget)?;
         recheck_source(plan, source, budget)?;
         recheck_target(plan, &receipt.after, budget)?;
-        Ok(receipt)
+        Ok(Published {
+            receipt,
+            success_ack,
+        })
     })();
     if result.is_err() {
         // A retained intent is single-use, even when no final receipt could be

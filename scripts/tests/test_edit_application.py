@@ -29,7 +29,7 @@ class ApplicationQualification(unittest.TestCase):
                 row.update(genuine_host_readback=True, apply_readback=True, revert_readback=True, source_unchanged=True)
             if row['id'] in application.FAULTS:
                 row.update(actual_syscall_fault=True, recovery_indeterminate=True,
-                           fault_exit=-9 if row['id'] in ('before-publication', 'after-publication') else 1)
+                           fault_exit=-9 if row['id'] in ('before-publication', 'after-publication', 'after-receipt-sync') else 1)
         return report
 
     def test_every_declared_control_must_really_be_attempted_and_pass(self):

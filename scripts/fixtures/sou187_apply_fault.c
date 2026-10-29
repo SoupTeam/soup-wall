@@ -50,5 +50,9 @@ int fsync(int fd) {
     if (mode("receipt-sync") && selected_fd(fd, getenv("SOU187_RECEIPT"))) {
         hit(); errno = EIO; return -1;
     }
-    return original(fd);
+    int result = original(fd);
+    if (result == 0 && mode("after-receipt-sync") && selected_fd(fd, getenv("SOU187_RECEIPT"))) {
+        hit(); (void)kill(getpid(), SIGKILL); _exit(89);
+    }
+    return result;
 }

@@ -61,32 +61,36 @@ agentfw edit-session apply commit "${SELECT[@]}" --confirm "$APPLY_CONFIRMATION"
 Application publishes a new owner-only journal with the preimage and exact plan
 before target publication. It retains the staged inode in a durable intent,
 uses the accepted guarded replacement, and records exact descriptor/readback and
-file/directory sync completion. Save the successful response's `plan_sha256`
-and `receipt_sha256`. A stale confirmation, existing journal, changed binding or
+file/directory sync completion. Save the successful response's `plan_sha256`,
+`receipt_sha256` and private `success_ack`. Only the acknowledgement's hash is
+retained in the journal; its random value is returned after all final checks.
+A stale confirmation, existing journal, changed binding or
 unsupported metadata refuses; an old application is never silently retried.
 
 ## Status, recovery and separately confirmed revert
 
 ```bash
 agentfw edit-session apply status --journal "$JOURNAL" --expect-plan "$PLAN_SHA256" \
-  --receipt "$APPLICATION_RECEIPT"
+  --receipt "$APPLICATION_RECEIPT" --success-ack "$APPLICATION_ACK"
 agentfw edit-session apply revert-preview --journal "$JOURNAL" \
-  --expect-plan "$PLAN_SHA256" --receipt "$APPLICATION_RECEIPT"
+  --expect-plan "$PLAN_SHA256" --receipt "$APPLICATION_RECEIPT" --success-ack "$APPLICATION_ACK"
 agentfw edit-session apply revert --journal "$JOURNAL" --expect-plan "$PLAN_SHA256" \
-  --receipt "$APPLICATION_RECEIPT" --confirm "$REVERT_CONFIRMATION" --private-sole-writer
+  --receipt "$APPLICATION_RECEIPT" --success-ack "$APPLICATION_ACK" \
+  --confirm "$REVERT_CONFIRMATION" --private-sole-writer
 ```
 
 Revert has its own preview and fresh confirmation. It restores only this
 application's retained preimage while the current target still matches the
 recorded postimage descriptor and digest. A later user edit, even one restoring
 the same bytes, invalidates that descriptor. Successful revert returns a new
-receipt; use it for subsequent status. Original generated output, prepared plan,
+receipt and acknowledgement; use both for subsequent status. Original generated output, prepared plan,
 backup and application evidence are retained. Ownership/mode restrictions remain
 those of guarded replacement; replacement changes the target inode/timestamps.
 
-`recover` is a read-only alias of `status`. Without the receipt returned by a
+`recover` is a read-only alias of `status`. Without both values returned by a
 successful command, an incomplete attempt stays `indeterminate` or refused.
-Matching current bytes alone never establish success. Interrupted publication,
+Neither matching current bytes nor a readable receipt can reconstruct the
+withheld acknowledgement. Interrupted publication,
 missing/damaged records or backups, changed roots, stale source/boot bindings and
 uncertain durability do not permit automatic rollback, cleanup or blind retry.
 Inspect the target and retained private evidence independently. Do not edit the
@@ -102,7 +106,8 @@ separate provider trap and unchanged retained native records witness operator-on
 operations. The finite negative inventory includes stale/duplicate calls, changed
 pre/postimages, active/foreign/altered runs, links, redirection, protected-root
 overlap and damaged records. An owned syscall interposer kills the operator at
-the actual pre/post-rename boundary and injects directory/receipt sync errors.
+the actual pre/post-rename boundary and after a visible receipt is synced, and
+injects directory/receipt sync errors.
 Failed attempts and incomplete controls remain failures.
 
 Public evidence contains sanitized results and exact source/binary/helper/report

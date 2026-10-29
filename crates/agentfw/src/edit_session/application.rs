@@ -63,6 +63,9 @@ pub(super) struct Retained {
     /// Receipt returned by a successful operation, not inferred from current bytes.
     #[arg(long)]
     receipt: Option<String>,
+    /// Private acknowledgement returned only by a fully successful command.
+    #[arg(long)]
+    success_ack: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -385,10 +388,16 @@ fn observed_source(j: &Journal, budget: &mut Budget) -> Result<SelectedOutput> {
     recheck_source(&j.plan, &source, budget)?;
     Ok(source)
 }
-fn response(status: &str, confirmation: &str, receipt: Option<&Receipt>) -> Result<Value> {
+fn response(
+    status: &str,
+    confirmation: &str,
+    receipt: Option<&Receipt>,
+    ack: Option<&str>,
+) -> Result<Value> {
     Ok(
         json!({"format":FORMAT,"status":status,"plan_sha256":confirmation,
         "receipt_sha256":receipt.map(receipt_digest).transpose()?,
+        "success_ack":ack,
         "local_operator_publication":receipt.is_some(),"mcp_authority":false,"tool_execution":false}),
     )
 }
@@ -422,7 +431,7 @@ fn execute(action: Action) -> Result<Value> {
             ensure!(same(&confirm, &expected), "edit_apply_stale_confirmation");
             let journal = retain(&p, &mut budget)?;
             let _lock = journal.dir.lock()?;
-            let receipt = publish(
+            let published = publish(
                 &journal,
                 &p.source,
                 Operation::Apply,
@@ -431,13 +440,22 @@ fn execute(action: Action) -> Result<Value> {
                 None,
                 &mut budget,
             )?;
-            response("applied", &expected, Some(&receipt))
+            response(
+                "applied",
+                &expected,
+                Some(&published.receipt),
+                Some(&published.success_ack),
+            )
         }
         Action::Status(args) => {
             let j = Journal::open(&args.journal, &args.expect_plan, &mut budget)?;
             let _lock = j.dir.lock()?;
             let _source = observed_source(&j, &mut budget)?;
-            let state = j.acknowledged(args.receipt.as_deref(), &mut budget);
+            let state = j.acknowledged(
+                args.receipt.as_deref(),
+                args.success_ack.as_deref(),
+                &mut budget,
+            );
             j.recheck(&mut budget)?;
             match state {
                 Ok((op, receipt)) => response(
@@ -448,15 +466,20 @@ fn execute(action: Action) -> Result<Value> {
                     },
                     &args.expect_plan,
                     Some(&receipt),
+                    args.success_ack.as_deref(),
                 ),
-                Err(_) => response("indeterminate", &args.expect_plan, None),
+                Err(_) => response("indeterminate", &args.expect_plan, None, None),
             }
         }
         Action::RevertPreview(args) => {
             let j = Journal::open(&args.journal, &args.expect_plan, &mut budget)?;
             let _lock = j.dir.lock()?;
             let _source = observed_source(&j, &mut budget)?;
-            let (op, receipt) = j.acknowledged(args.receipt.as_deref(), &mut budget)?;
+            let (op, receipt) = j.acknowledged(
+                args.receipt.as_deref(),
+                args.success_ack.as_deref(),
+                &mut budget,
+            )?;
             ensure!(op == Operation::Apply, "edit_apply_already_reverted");
             replace_file::Prepared::prepare(
                 &j.plan.selected.root,
@@ -486,12 +509,16 @@ fn execute(action: Action) -> Result<Value> {
             let j = Journal::open(&args.journal, &args.expect_plan, &mut budget)?;
             let _lock = j.dir.lock()?;
             let source = observed_source(&j, &mut budget)?;
-            let (op, applied) = j.acknowledged(args.receipt.as_deref(), &mut budget)?;
+            let (op, applied) = j.acknowledged(
+                args.receipt.as_deref(),
+                args.success_ack.as_deref(),
+                &mut budget,
+            )?;
             ensure!(
                 op == Operation::Apply && same(&confirm, &revert_confirmation(&j, &applied)?),
                 "edit_apply_stale_revert_confirmation"
             );
-            let receipt = publish(
+            let published = publish(
                 &j,
                 &source,
                 Operation::Revert,
@@ -500,7 +527,12 @@ fn execute(action: Action) -> Result<Value> {
                 Some(&applied),
                 &mut budget,
             )?;
-            response("reverted", &args.expect_plan, Some(&receipt))
+            response(
+                "reverted",
+                &args.expect_plan,
+                Some(&published.receipt),
+                Some(&published.success_ack),
+            )
         }
     }
 }

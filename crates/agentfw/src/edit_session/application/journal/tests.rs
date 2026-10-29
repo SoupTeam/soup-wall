@@ -10,6 +10,7 @@ use std::{
     os::unix::fs::{symlink, PermissionsExt},
 };
 
+const ACK: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const OLD: &[u8] = b"Original private project document.\n";
 const NEW: &str = "Reviewed generated document.\n";
 
@@ -140,6 +141,7 @@ fn actual_publication(
         after,
         file_synced: true,
         directory_synced: true,
+        success_ack_sha256: audit::sha(ACK.as_bytes()),
     };
     if finish {
         j.dir
@@ -154,12 +156,21 @@ fn application_receipt_requires_actual_bound_descriptors_and_external_success_ac
     let (_top, j) = fixture();
     let receipt = actual_publication(&j, Operation::Apply, None, true);
     let hash = receipt_digest(&receipt).unwrap();
-    assert!(j.acknowledged(None, &mut Budget::new()).is_err());
+    assert!(j.acknowledged(None, Some(ACK), &mut Budget::new()).is_err());
+    // A visible complete receipt alone cannot prove command completion.
     assert!(j
-        .acknowledged(Some(&"a".repeat(64)), &mut Budget::new())
+        .acknowledged(Some(&hash), None, &mut Budget::new())
+        .is_err());
+    assert!(j
+        .acknowledged(Some(&hash), Some(&hash), &mut Budget::new())
+        .is_err());
+    assert!(j
+        .acknowledged(Some(&"a".repeat(64)), Some(ACK), &mut Budget::new())
         .is_err());
     assert_eq!(
-        j.acknowledged(Some(&hash), &mut Budget::new()).unwrap().0,
+        j.acknowledged(Some(&hash), Some(ACK), &mut Budget::new())
+            .unwrap()
+            .0,
         Operation::Apply
     );
     assert_eq!(
@@ -178,7 +189,11 @@ fn interrupted_after_publication_never_becomes_success_from_matching_bytes() {
         NEW.as_bytes()
     );
     assert!(j
-        .acknowledged(Some(&receipt_digest(&receipt).unwrap()), &mut Budget::new())
+        .acknowledged(
+            Some(&receipt_digest(&receipt).unwrap()),
+            Some(ACK),
+            &mut Budget::new()
+        )
         .is_err());
     assert!(j
         .dir
@@ -196,9 +211,13 @@ fn later_user_edit_and_byte_restore_both_invalidate_the_postimage_descriptor() {
         &j.plan.selected.root.join("selected.txt"),
         b"Later user work",
     );
-    assert!(j.acknowledged(Some(&hash), &mut Budget::new()).is_err());
+    assert!(j
+        .acknowledged(Some(&hash), Some(ACK), &mut Budget::new())
+        .is_err());
     write(&j.plan.selected.root.join("selected.txt"), NEW.as_bytes());
-    assert!(j.acknowledged(Some(&hash), &mut Budget::new()).is_err());
+    assert!(j
+        .acknowledged(Some(&hash), Some(ACK), &mut Budget::new())
+        .is_err());
 }
 
 #[test]
@@ -211,11 +230,16 @@ fn exact_revert_keeps_original_evidence_and_requires_a_new_success_receipt() {
         OLD
     );
     assert!(j
-        .acknowledged(Some(&receipt_digest(&applied).unwrap()), &mut Budget::new())
+        .acknowledged(
+            Some(&receipt_digest(&applied).unwrap()),
+            Some(ACK),
+            &mut Budget::new()
+        )
         .is_err());
     assert_eq!(
         j.acknowledged(
             Some(&receipt_digest(&reverted).unwrap()),
+            Some(ACK),
             &mut Budget::new()
         )
         .unwrap()
@@ -271,7 +295,9 @@ fn unknown_nested_plan_or_receipt_fields_and_uncertain_records_fail_closed() {
                 &j.path.join("applied.json"),
                 &serde_json::to_vec(&changed).unwrap(),
             );
-            assert!(j.acknowledged(Some(&hash), &mut Budget::new()).is_err());
+            assert!(j
+                .acknowledged(Some(&hash), Some(ACK), &mut Budget::new())
+                .is_err());
         } else {
             let failure = Failure {
                 format: FORMAT.into(),
@@ -282,7 +308,9 @@ fn unknown_nested_plan_or_receipt_fields_and_uncertain_records_fail_closed() {
             j.dir
                 .write_new("indeterminate.json", &profile::canonical(&failure).unwrap())
                 .unwrap();
-            assert!(j.acknowledged(Some(&hash), &mut Budget::new()).is_err());
+            assert!(j
+                .acknowledged(Some(&hash), Some(ACK), &mut Budget::new())
+                .is_err());
         }
     }
 }

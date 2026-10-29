@@ -27,7 +27,7 @@ spec.loader.exec_module(REVIEW)
 EDIT = REVIEW.EDIT
 require, sha = EDIT.require, EDIT.sha
 FORMAT = 'sw-installed-edit-application-qualification/1'
-FAULTS = ('before-publication', 'after-publication', 'target-directory-sync', 'receipt-sync')
+FAULTS = ('before-publication', 'after-publication', 'target-directory-sync', 'receipt-sync', 'after-receipt-sync')
 CASES = ('installed-closure', 'genuine-create-apply-revert', 'genuine-replace-apply-revert',
          'read-only-preview', 'missing-consents', 'stale-confirmation', 'changed-target', 'changed-output',
          'duplicate-application', 'later-user-edit', 'stale-revert', 'backup-damage', 'journal-damage',
@@ -81,7 +81,7 @@ def passed_report(report):
         if (row.get('actual_syscall_fault') is not True or row.get('recovery_indeterminate') is not True
                 or type(row.get('fault_exit')) is not int or row['fault_exit'] == 0):
             return False
-        if name in ('before-publication', 'after-publication') and row['fault_exit'] != -signal.SIGKILL:
+        if name in ('before-publication', 'after-publication', 'after-receipt-sync') and row['fault_exit'] != -signal.SIGKILL:
             return False
     return True
 
@@ -193,7 +193,7 @@ def qualify(args, report):
     def retained(journal, p, receipt=None):
         words = ['--journal', journal, '--expect-plan', p['confirmation_sha256']]
         if receipt:
-            words += ['--receipt', receipt]
+            words += ['--receipt', receipt['receipt_sha256'], '--success-ack', receipt['success_ack']]
         return words
 
     def source_witness(run, output, plan):
@@ -230,11 +230,11 @@ def qualify(args, report):
             code, applied, _ = commit(words, p)
             require(code == 0 and applied['status'] == 'applied' and target.read_bytes() == output.read_bytes(), 'apply_readback_failed')
             require(target.stat().st_ino != old_target['inode'] if isinstance(old_target, dict) else True, 'apply_inode_unchanged')
-            code, state, _ = operator('status', *retained(journal, p, applied['receipt_sha256']))
+            code, state, _ = operator('status', *retained(journal, p, applied))
             require(code == 0 and state['status'] == 'applied', 'application_status_failed')
-            code, reverse, _ = operator('revert-preview', *retained(journal, p, applied['receipt_sha256']))
+            code, reverse, _ = operator('revert-preview', *retained(journal, p, applied))
             require(code == 0 and reverse['executed'] is False, 'revert_preview_failed')
-            code, undone, _ = operator('revert', *retained(journal, p, applied['receipt_sha256']),
+            code, undone, _ = operator('revert', *retained(journal, p, applied),
                 '--confirm', reverse['confirmation_sha256'], '--private-sole-writer')
             require(code == 0 and undone['status'] == 'reverted' and target.read_text() == 'Owned destination baseline.\n', 'revert_readback_failed')
             require(source_witness(run, output, plan) == before_source and snapshot(sentinel) == old_sentinel
@@ -299,17 +299,17 @@ def qualify(args, report):
         finish('duplicate-application', refused=True)
         project, target, sentinel, journal, words, p, applied, _ = applied_fixture('later-user-edit')
         target.write_text('Later user work.\n'); before = snapshot(target)
-        require(operator('revert-preview', *retained(journal, p, applied['receipt_sha256']))[0] != 0 and snapshot(target) == before,
+        require(operator('revert-preview', *retained(journal, p, applied))[0] != 0 and snapshot(target) == before,
                 'later_user_change_overwritten')
         target.write_bytes(output.read_bytes()); before = snapshot(target)
-        require(operator('revert-preview', *retained(journal, p, applied['receipt_sha256']))[0] != 0 and snapshot(target) == before,
+        require(operator('revert-preview', *retained(journal, p, applied))[0] != 0 and snapshot(target) == before,
                 'restored_bytes_forged_descriptor')
         finish('later-user-edit', changed_and_restored_bytes_refused=True)
         project, target, sentinel, journal, words, p, applied, _ = applied_fixture('stale-revert')
-        code, reverse, _ = operator('revert-preview', *retained(journal, p, applied['receipt_sha256']))
+        code, reverse, _ = operator('revert-preview', *retained(journal, p, applied))
         require(code == 0, 'revert_preview_failed')
         target.write_text('Post-preview user work.\n'); before = snapshot(target)
-        require(operator('revert', *retained(journal, p, applied['receipt_sha256']), '--confirm', reverse['confirmation_sha256'],
+        require(operator('revert', *retained(journal, p, applied), '--confirm', reverse['confirmation_sha256'],
                          '--private-sole-writer')[0] != 0 and snapshot(target) == before, 'stale_revert_overwrote_work')
         finish('stale-revert', refused=True)
         for name, leaf in [('backup-damage', 'preimage.bin'), ('journal-damage', 'identity.json'), ('unknown-record-fields', 'applied.json')]:
@@ -321,7 +321,7 @@ def qualify(args, report):
             else:
                 damaged.write_bytes(b'damaged')
             before = snapshot(target)
-            require(operator('revert-preview', *retained(journal, p, applied['receipt_sha256']))[0] != 0
+            require(operator('revert-preview', *retained(journal, p, applied))[0] != 0
                     and snapshot(target) == before, 'damaged_journal_allowed_revert')
             finish(name, refused=True)
 
@@ -398,7 +398,7 @@ def qualify(args, report):
             code, _, stderr = commit(words, p, env=env)
             fault_exit = code
             require(code != 0 and b'sou187_owned_fault_observed' in stderr, 'actual_publication_fault_not_observed')
-            if name in ('before-publication', 'after-publication'):
+            if name in ('before-publication', 'after-publication', 'after-receipt-sync'):
                 require(code == -signal.SIGKILL, 'operator_not_killed_at_publication_boundary')
             expected = original if name == 'before-publication' else output.read_bytes()
             require(target.read_bytes() == expected and (journal / 'preimage.bin').read_bytes() == original
@@ -408,7 +408,16 @@ def qualify(args, report):
                     'interruption_falsely_became_success')
             before = snapshot(target)
             require(commit(words, p)[0] != 0 and snapshot(target) == before, 'interrupted_apply_blind_retry')
-            require(operator('revert-preview', *retained(journal, p, 'a' * 64))[0] != 0, 'uncertain_revert_allowed')
+            fake = {'receipt_sha256':'a' * 64, 'success_ack':'A' * 43}
+            if (journal / 'applied.json').is_file():
+                # A visible receipt cannot reconstruct the acknowledgement
+                # withheld by an interrupted command.
+                raw = json.loads((journal / 'applied.json').read_bytes())
+                fake['receipt_sha256'] = sha(b'agentfw/edit-application-receipt/v1\0' +
+                    json.dumps(raw, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode())
+                code, recovered, _ = operator('recover', *retained(journal, p, fake))
+                require(code == 0 and recovered['status'] == 'indeterminate', 'visible_receipt_forged_completion')
+            require(operator('revert-preview', *retained(journal, p, fake))[0] != 0, 'uncertain_revert_allowed')
             finish(name, actual_syscall_fault=True, fault_exit=fault_exit, recovery_indeterminate=True, target_verified=True,
                    evidence_retained=True, no_retry=True, original_output_preserved=True)
         require(not trap.requests and EDIT.snapshot(suite.sentinel) == suite.before_sentinel, 'operator_external_effect')
