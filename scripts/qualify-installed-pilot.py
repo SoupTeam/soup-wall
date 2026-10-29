@@ -42,6 +42,7 @@ import wsl_qualification
 
 import pilot_source_identity as SOURCE_IDENTITY
 import pilot_git_profiles as GIT_PROFILES
+import pilot_runtime_identity as IDENTITY
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -432,6 +433,8 @@ class Pilot:
         if getattr(self, "wsl_qualification", False):
             self.report["wsl_foreign_port"] = wsl_qualification.foreign_port(
                 self.binary, self.paths["python"], self.env, self.private, self.port)
+        IDENTITY.capture(self.report, 'launch', dict(self.paths, agentfw=self.binary, git_launcher=self.launcher),
+                         self.installs, self.classifiers, policy, registry, self.home / '.agentfw/config.yaml')
         instance = self.start_daemon()
         return {"source_independent_runtime": True, "agentfw_sha256": sha(self.binary),
                 "profiles": self.installed, "policy_sha256": self.policy_sha256,
@@ -1023,6 +1026,10 @@ class Pilot:
                             and sha(self.classifiers[kind]) == profile["classifier_sha256"], "installed_asset_changed")
             except Exception:
                 errors.append("installed_identity_changed")
+        try:
+            IDENTITY.finish()
+        except (OSError, ValueError):
+            errors.append('runtime_identity_lifetime_unconfirmed')
         retained = self.retain()
         require(not errors, "installed_runtime_cleanup_failed")
         return {"client_count": len(self.clients), "hosts": len(self.hosts), "all_owned_processes_stopped": True,

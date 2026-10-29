@@ -60,6 +60,8 @@ SCRIPTS = (
     "scripts/pilot_provider.py",
     "scripts/pilot_qualification.py",
     "scripts/pilot_source_identity.py",
+    "scripts/pilot_runtime_identity.py",
+    "scripts/roadmap_support.py",
     "scripts/pilot_update.py",
     "scripts/switch-prepared-pilot.py",
     "scripts/prepare-installed-pilot.py",
