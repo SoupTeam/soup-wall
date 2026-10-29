@@ -1,0 +1,18 @@
+{
+  "format": "sw-sou176-retained-attempts/1",
+  "attempts": [
+    {
+      "attempt": 1,
+      "source": "119e6962d83fd1298f2092f6d20b2950167fe371",
+      "tree": "e2f5ebe2b99207f3c74adde65103b72da9fdfb20",
+      "run": 40849868838,
+      "artifact": 12886697129,
+      "archive_sha256": "1470b7c2012e338d0bec54f3f07608fbcfbfcc52a49086d136d5acded3be2c41",
+      "status": "failed_before_inventory",
+      "reason": "Linux closes an unauthorized peer socket before reading the request; the negative test incorrectly required a JSON refusal instead of accepting a connection reset.",
+      "stages_executed": 0,
+      "decision": "NOT_READY",
+      "superseded_by": null
+    }
+  ]
+}

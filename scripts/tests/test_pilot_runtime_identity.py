@@ -309,13 +309,20 @@ class KernelCustodyTests(unittest.TestCase):
             self.addCleanup(owner.close)
             owner.begin('ask')
             def request():
-                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                    client.connect(str(owner.address))
-                    client.sendall(r.canonical({'operation': 'unknown', 'stage': 'ask'}))
-                    client.shutdown(socket.SHUT_WR)
-                    return r._message(client)
+                try:
+                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                        client.connect(str(owner.address))
+                        client.sendall(r.canonical({'operation': 'unknown', 'stage': 'ask'}))
+                        client.shutdown(socket.SHUT_WR)
+                        return r._message(client)
+                except ConnectionResetError:
+                    # The custodian rejects the peer before reading its request.
+                    # Linux may reset a socket closed with those unread bytes.
+                    return {'status': 'failed', 'reason': 'peer_reset'}
             owner.pid = 0
-            self.assertEqual(request()['reason'], 'identity_foreign_producer')
+            refused = request()
+            self.assertEqual(refused['status'], 'failed')
+            self.assertIn(refused['reason'], ('identity_foreign_producer', 'peer_reset'))
             owner.pid = os.getpid(); owner.stage = 'installed'
             self.assertEqual(request()['reason'], 'identity_cross_stage_request')
             owner.stage = 'ask'
