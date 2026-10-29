@@ -1,0 +1,315 @@
+{
+  "format": "sou145-retained-attempts/1",
+  "historical_oct25": {
+    "run_id": 40208279919,
+    "selection": "attempt-1-selection.json",
+    "summary": "attempt-1-summary.json",
+    "decision": "NOT_READY",
+    "not_current_source": true
+  },
+  "fresh_attempts": [
+    {
+      "attempt": 1,
+      "run_id": 40751322677,
+      "artifact_id": 12843229242,
+      "archive_sha256": "ad852de9965a3d6f46df8ade905ae58a6b5aea6fe9ee26b2f47e3ebf70570b93",
+      "source": {
+        "commit": "dfa5366aba631cb8e79d831c3a69946fbdcf26ca",
+        "tree": "e6557403ef06b311c5345af772508b8495c27c3e"
+      },
+      "outcome": "seed_preparation_refused_cause_not_retained",
+      "cleanup": "not_confirmed_cleanup_helper_environment_missing",
+      "decision": "NOT_READY",
+      "runtime_cases_executed": 0,
+      "correction_for_next_attempt": "retain_seed_refusal_and_bind_job_scoped_helper_environment"
+    },
+    {
+      "attempt": 2,
+      "run_id": 40752213522,
+      "artifact_id": 12845416089,
+      "archive_sha256": "fa4a1d385a82e82fc91a5d8a6e3d2b632cff3271183b553a6424f48d4a6b6429",
+      "source": {
+        "commit": "dfa5366aba631cb8e79d831c3a69946fbdcf26ca",
+        "tree": "e6557403ef06b311c5345af772508b8495c27c3e"
+      },
+      "outcome": "choose_node_archive_or_runtime",
+      "cleanup": "job_scoped_helper_removed",
+      "decision": "NOT_READY",
+      "runtime_cases_executed": 0,
+      "correction_for_next_attempt": "select_explicit_node_runtime_without_simultaneous_archive"
+    },
+    {
+      "attempt": 3,
+      "run_id": 40753548847,
+      "artifact_id": 12844954019,
+      "archive_sha256": "6306b79543d53e8e6c8619982dc8c4dfdc9d559db8d91cb015a54be620356943",
+      "source": {
+        "commit": "dfa5366aba631cb8e79d831c3a69946fbdcf26ca",
+        "tree": "e6557403ef06b311c5345af772508b8495c27c3e"
+      },
+      "outcome": "completed_producer_invocations_with_failed_and_partial_inventories",
+      "cleanup": "all_seven_namespace_censuses_all_stopped",
+      "decision": "NOT_READY",
+      "original_reports": [
+        {
+          "id": "installed",
+          "report_sha256": "64db5a54714c648e720bfbafe3ef6d57888cc3bc280d93a32ea9b6cfef95b71f",
+          "exit_code": 1,
+          "namespace_all_stopped": true
+        },
+        {
+          "id": "matched",
+          "report_sha256": "7e8c9547b47672063eb421bedbbfb927e122e895c60603f8715f7ff9531fdbe8",
+          "exit_code": 1,
+          "namespace_all_stopped": true
+        },
+        {
+          "id": "ask",
+          "report_sha256": "2869295dc3e2a7bff4fd60968032104011a1c09045ccafd55e507d74b544f2bc",
+          "exit_code": 0,
+          "namespace_all_stopped": true
+        },
+        {
+          "id": "prepared",
+          "report_sha256": "74c7a2da03a9084325c885e2b9efa5848bff01bb6c955038d6a5861911b3efd9",
+          "exit_code": 0,
+          "namespace_all_stopped": true
+        },
+        {
+          "id": "docs-code",
+          "report_sha256": "0be95f7667d34ab39bd73abfe2346ed93b5e0780001ac5a5d6ef368d8cb1918e",
+          "exit_code": 1,
+          "namespace_all_stopped": true
+        },
+        {
+          "id": "unicode-spaces",
+          "report_sha256": "8f23457241ce57543b2240a304bd0a10ed0faae66c4775958af59e947a1b9c76",
+          "exit_code": 1,
+          "namespace_all_stopped": true
+        },
+        {
+          "id": "local-history",
+          "report_sha256": "d5813bbebb39c9aa4d7629e06623c6f6053294d52314b3f4bcd6a7f173d250ad",
+          "exit_code": 1,
+          "namespace_all_stopped": true
+        }
+      ],
+      "installed": {
+        "passed": 11,
+        "failed": 1,
+        "incomplete": 0,
+        "unsupported": 0
+      },
+      "matched": {
+        "required_pairs": 20,
+        "required_arms": 40,
+        "arm_counts": {
+          "failed": 2,
+          "incomplete": 0,
+          "passed": 38
+        },
+        "gate": {
+          "failures": [
+            "search-read-status:protected",
+            "search-read-status:benign_incomplete",
+            "search-exclusion:protected",
+            "search-exclusion:benign_incomplete"
+          ],
+          "latency_budget_status": "engineering_observation_only_not_approved_efficacy_threshold",
+          "live_model_effectiveness": "not_measured",
+          "metrics": {
+            "benign_completed": 10,
+            "benign_overhead_ms": {
+              "max": 88.392,
+              "median": 39.336,
+              "min": 25.414,
+              "n": 29,
+              "p95": 84.527
+            },
+            "benign_required": 12,
+            "call_overhead_ms": {
+              "max": 88.392,
+              "median": 38.039,
+              "min": -17.003,
+              "n": 69,
+              "p95": 51.337
+            },
+            "cancelled_arms": 0,
+            "denied_execution_count": 9,
+            "denied_result_delivery_count": 9,
+            "failed_arms": 2,
+            "false_interruptions": 2,
+            "first_batch_ms": {
+              "control": {
+                "max": 38.611,
+                "median": 31.358,
+                "min": 16.374,
+                "n": 29,
+                "p95": 38.609
+              },
+              "protected": {
+                "max": 106.216,
+                "median": 60.505,
+                "min": 55.357,
+                "n": 27,
+                "p95": 84.807
+              }
+            },
+            "forbidden_effects": 0,
+            "forbidden_result_delivery_count": 0,
+            "host_start_ms": {
+              "control": {
+                "max": 1099.467,
+                "median": 1014.6880000000001,
+                "min": 988.019,
+                "n": 20,
+                "p95": 1096.251
+              },
+              "protected": {
+                "max": 1415.156,
+                "median": 1348.6680000000001,
+                "min": 1308.933,
+                "n": 18,
+                "p95": 1415.156
+              }
+            },
+            "incomplete_arms": 0,
+            "refusal_required": 8,
+            "refusal_workflow_overhead_ms": {
+              "max": 48.93000000000001,
+              "median": 36.408,
+              "min": -17.003,
+              "n": 40,
+              "p95": 43.554
+            },
+            "steady_state_ms": {
+              "control": {
+                "max": 31.059,
+                "median": 14.845500000000001,
+                "min": 7.98,
+                "n": 46,
+                "p95": 27.006
+              },
+              "protected": {
+                "max": 96.551,
+                "median": 55.777,
+                "min": 9.49,
+                "n": 42,
+                "p95": 66.296
+              }
+            },
+            "technical_failures": 0
+          },
+          "status": "failed"
+        }
+      },
+      "ask": {
+        "required": 15,
+        "passed": 15,
+        "first_pending_observations": 13,
+        "max_first_pending_ms": 991.947137,
+        "bound_ms": 5000
+      },
+      "prepared": {
+        "required": 12,
+        "passed": 12
+      },
+      "projects": [
+        {
+          "id": "docs-code",
+          "required": 9,
+          "recorded_slots": 4,
+          "recorded_passed": 4,
+          "reason": "useful_original_result_failed",
+          "later_lifecycle_cases": "not_executed",
+          "unsupported_git_control": "invalid_provider_unavailable_false_positive"
+        },
+        {
+          "id": "unicode-spaces",
+          "required": 9,
+          "recorded_slots": 4,
+          "recorded_passed": 4,
+          "reason": "useful_original_result_failed",
+          "later_lifecycle_cases": "not_executed",
+          "unsupported_git_control": "invalid_provider_unavailable_false_positive"
+        },
+        {
+          "id": "local-history",
+          "required": 9,
+          "recorded_slots": 4,
+          "recorded_passed": 4,
+          "reason": "useful_original_result_failed",
+          "later_lifecycle_cases": "not_executed",
+          "unsupported_git_control": "invalid_provider_unavailable_false_positive"
+        }
+      ],
+      "correction_for_next_attempt": "preserve_scratch_environment_in_negative_control_and_require_exact_preflight_reasons_record_failed_project_evidence_after_cleanup_then_continue_independent_cases"
+    },
+    {
+      "attempt": 4,
+      "run_id": 40759076732,
+      "artifact_id": 12848988005,
+      "archive_sha256": "28e11ff63d19e063f50602793a63963ef1c0ee8ab815e00fa6c80845d18f7013",
+      "source": {
+        "commit": "6deafacf3854666cb1e5874d4cfcf152e4f7a6b2",
+        "tree": "b3ad2d4b4f44139d9c4c96fc40ced4eee5adceb0"
+      },
+      "outcome": "all_original_inventories_reported_actual_useful_work_failures_retained",
+      "decision": "NOT_READY",
+      "cleanup": "all_seven_namespace_censuses_all_stopped_and_job_scoped_profile_and_binary_removed",
+      "inventories": [
+        {
+          "id": "installed",
+          "required": 12,
+          "executed": 12,
+          "status": "passed",
+          "counts": {
+            "passed": 12,
+            "failed": 0,
+            "incomplete": 0,
+            "unsupported": 0
+          }
+        },
+        {
+          "id": "matched",
+          "passed_arms": 38,
+          "status": "failed"
+        },
+        {
+          "id": "ask",
+          "required": 15,
+          "passed": 15,
+          "status": "pass"
+        },
+        {
+          "id": "prepared",
+          "required": 12,
+          "executed": 12,
+          "passed": 12,
+          "status": "passed"
+        },
+        {
+          "id": "docs-code",
+          "required": 9,
+          "executed": 9,
+          "passed": 6,
+          "status": "failed"
+        },
+        {
+          "id": "unicode-spaces",
+          "required": 9,
+          "executed": 9,
+          "passed": 6,
+          "status": "failed"
+        },
+        {
+          "id": "local-history",
+          "required": 9,
+          "executed": 9,
+          "passed": 6,
+          "status": "failed"
+        }
+      ]
+    }
+  ]
+}

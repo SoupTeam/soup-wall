@@ -29,6 +29,24 @@ class InstalledEditEvidence(unittest.TestCase):
             self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', action, '--', '-pending'))
         suite.ask('owned-run', 'approve', '-pending', '--binding', 'a' * 64)
         self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', 'approve', '--binding', 'a' * 64, '--', '-pending'))
+    def test_cli_status_consumes_the_complete_pretty_json_document(self):
+        suite = object.__new__(probe.Suite)
+        suite.binary, suite.work, suite.env, suite.report = Path('/not-executed'), Path('/tmp'), {}, {}
+        value = {'schema': probe.DIAGNOSTIC_FORMAT, 'effects': 'indeterminate',
+                 'host_delivery': 'unknown', 'model_consumption': 'unknown'}
+        for indent in (None, 2):
+            stdout = (json.dumps(value, indent=indent) + '\n').encode()
+            completed = subprocess.CompletedProcess([], 0, stdout, b'')
+            with mock.patch.object(probe.subprocess, 'run', return_value=completed):
+                code, decoded = suite.cli('status', '--run', '/owned-run', '--json')
+            self.assertEqual(code, 0)
+            self.assertEqual(decoded, value)
+            probe.require_indeterminate_status(decoded)
+        for raw in (b'{"schema":', b'{}\n{}\n', b'null\n'):
+            with mock.patch.object(probe.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, raw, b'')):
+                _, decoded = suite.cli('status', '--run', '/owned-run', '--json')
+            with self.assertRaisesRegex(ValueError, 'diagnosis_response_not_object'):
+                probe.require_indeterminate_status(decoded)
 
     def test_shared_cli_decodes_pretty_status_and_retains_run_line_framing(self):
         suite = object.__new__(probe.Suite)

@@ -63,6 +63,8 @@ SCRIPTS = (
     "scripts/pilot_run_state.py",
     "scripts/pilot_qualification.py",
     "scripts/pilot_source_identity.py",
+    "scripts/pilot_update.py",
+    "scripts/switch-prepared-pilot.py",
     "scripts/prepare-installed-pilot.py",
     "scripts/prepare-native-pilot-prerequisites.py",
     "scripts/qualify-installed-pilot.py",

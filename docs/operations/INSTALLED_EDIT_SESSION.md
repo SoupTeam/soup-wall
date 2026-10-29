@@ -48,6 +48,10 @@ JSON needs to be written by hand. At most eight direct-child targets may be
 selected; wildcards, hidden names, aliases and create-plus-replace combinations
 are rejected.
 
+For explicitly selected per-run mutation and cumulative byte ceilings, see
+[installed edit quotas](INSTALLED_EDIT_QUOTAS.md). Omitting those options keeps
+the existing v1 profile semantics.
+
 For replacement select `--read report.txt --replace report.txt`. Preparation
 captures that exact old object and content digest. The generated tool schema
 requires those fixed old facts; it never silently refreshes an outdated version.

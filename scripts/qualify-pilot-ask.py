@@ -159,6 +159,8 @@ class Pilot:
         self.trace = root / "syscalls.private"
         self.model = BASE.DEMO.ScriptedModel([])
         self.offered, self.result_times, self.result_monotonic = set(), {}, {}
+        self.proposal_monotonic = {}
+        self.first_pending_ms = None
         self.close_after_primary = False
         self.proposals = ProposalGate(deferred)
         target = ("filesystem", "read_text_file", {"path": "/workspace/credentials.txt"}) if kind == "filesystem" else (
@@ -195,6 +197,7 @@ class Pilot:
             for identifier, (server, tool, arguments) in proposals:
                 wire_id = "toolu_pilot_ask_" + identifier
                 require(wire_id not in self.offered,"host_request_would_have_been_reissued")
+                self.proposal_monotonic.setdefault(identifier, time.monotonic_ns())
                 self.offered.add(wire_id)
                 result.append({"type": "tool_use", "id": wire_id, "name": f"mcp__{server}__{tool}", "input": arguments})
             return result
@@ -256,7 +259,10 @@ class Pilot:
                 raise ValueError("primary_result_before_pending_" + diagnostic(json.dumps(self.model.results["primary"])))
             require(self.process.poll() is None, "host_exited_before_pending")
             return rows[0] if len(rows) == 1 else None
-        return until(check, "selected_pending_missing")
+        pending = until(check, "selected_pending_missing")
+        proposal = self.proposal_monotonic.get("primary")
+        self.first_pending_ms = None if proposal is None else (time.monotonic_ns() - proposal) / 1_000_000
+        return pending
 
     def effects(self, peer=False):
         return SELECTED.trace_effects(self.trace, "filesystem" if peer else self.kind,
@@ -487,190 +493,215 @@ def qualify(args, private, report, pilot_class=None):
                 ["expire", "restart", "approve", "reject", "cancel", "approved_cancel", "default"]
                 + (["collector_term"] if kind == "git" else []))
             for sample_index, case in enumerate(selected_cases):
-                start_daemon(kind, 20 if case == "expire" else 30)
-                paired = kind == "filesystem" and case == "approve"
-                pilot = pilot_class(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
-                              enabled=case != "default", deferred=paired)
-                active.append(pilot)
-                pilot.close_after_primary = case == "collector_term"
-                row = {"profile": kind, "case": case, "sample_index": sample_index, "configured": case != "default", "pending":False,
-                    "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
-                    "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
-                cases.append(row)
-                sibling = other = None
-                if kind == "filesystem" and case == "approve":
-                    # Start both actual hosts before either pending lease is
-                    # consumed by the other host's startup. Deadlines stay fixed.
-                    row["stage"] = "start_independent_run"
-                    sibling = pilot_class(setup, private / ("independent-run-" + str(sample_index)), classifier, kind, deferred=True)
-                    active.append(sibling)
-                    row["proposals_released_at_ms"] = release_ready_pilots([pilot, sibling])
-                    row["both_hosts_ready_before_proposals"] = True
-                if case != "default":
-                    row["stage"] = "wait_primary"
-                    waiting = pilot.waiting()
-                    row.update(pending=True, binding_sha256=waiting["binding_sha256"],
-                               pending_expires_at_ms=waiting["expires_at_ms"],
-                               pending_observed_at_ms=time.time_ns() // 1_000_000)
-                    row["stage"] = "before_decision_wire_check"
-                    require(pilot.undispatched(), "dispatch_before_operator_decision")
+                try:
+                    start_daemon(kind, 20 if case == "expire" else 30)
+                    paired = kind == "filesystem" and case == "approve"
+                    pilot = pilot_class(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
+                                  enabled=case != "default", deferred=paired)
+                    active.append(pilot)
+                    pilot.close_after_primary = case == "collector_term"
+                    row = {"profile": kind, "case": case, "sample_index": sample_index, "configured": case != "default", "pending":False,
+                        "approved":False, "passed": False, "broker_ttl_seconds":20 if case == "expire" else 30, "policy_sha256":LAUNCH.sha(setup.policy),
+                        "configuration_sha256":LAUNCH.sha(setup.home / "config.yaml")}
+                    cases.append(row)
+                    sibling = other = None
                     if kind == "filesystem" and case == "approve":
-                        until(lambda: pilot.dispatches(peer=True) == 1 and pilot.effects(peer=True) == 1, "Allow_peer_blocked_by_pending_Ask", seconds=5)
-                        row["allow_peer_while_pending"] = True
-                    if case == "approve":
-                        rows = pilot.operator("list", without_home=True)
-                        require(any(r["pending_id"] == waiting["pending_id"] for r in rows),
-                            "explicit_home_depends_on_environment")
-                        row["explicit_home_without_environment"] = True
-                    if case in ("approve", "reject"):
-                        # Exact binding alone is insufficient without inspection.
-                        row["stage"] = "inspection_required_control"
-                        pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
-                        row["stage"] = "inspect_primary"
-                        pilot.inspect(waiting)
+                        # Start both actual hosts before either pending lease is
+                        # consumed by the other host's startup. Deadlines stay fixed.
+                        row["stage"] = "start_independent_run"
+                        sibling = pilot_class(setup, private / ("independent-run-" + str(sample_index)), classifier, kind, deferred=True)
+                        active.append(sibling)
+                        row["proposals_released_at_ms"] = release_ready_pilots([pilot, sibling])
+                        row["both_hosts_ready_before_proposals"] = True
+                    if case != "default":
+                        row["stage"] = "wait_primary"
+                        waiting = pilot.waiting()
+                        row["first_pending_ms"] = pilot.first_pending_ms
+                        row.update(pending=True, binding_sha256=waiting["binding_sha256"],
+                                   pending_expires_at_ms=waiting["expires_at_ms"],
+                                   pending_observed_at_ms=time.time_ns() // 1_000_000)
+                        row["stage"] = "before_decision_wire_check"
+                        require(pilot.undispatched(), "dispatch_before_operator_decision")
                         if kind == "filesystem" and case == "approve":
-                            row["stage"] = "wait_independent_pending"
-                            other = sibling.waiting()
-                            pilot.operator("approve", other["pending_id"], "--binding", other["binding_sha256"], success=False)
-                            sibling.operator("reject", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
-                            require(sibling.undispatched(), "cross_run_decision_dispatched")
-                        pilot.operator("approve", waiting["pending_id"], "--binding", "0" * 64, success=False)
-                        row["stage"] = "metadata_tamper_control"
-                        saved = pilot.metadata.read_bytes()
-                        altered = json.loads(saved); altered["host_session"] = "untrusted-label"
-                        pilot.metadata.write_text(json.dumps(altered))
-                        pilot.operator("list", success=False)
-                        pilot.metadata.write_bytes(saved)
-                        require(pilot.undispatched(), "target_dispatched_before_exact_decision")
-                        row["stage"] = "exact_decision"
-                        row["decision_attempt_at_ms"] = time.time_ns() // 1_000_000
-                        decision_monotonic = time.monotonic_ns()
-                        pilot.operator(case, waiting["pending_id"], "--binding", waiting["binding_sha256"])
-                        row["decision_submitted"] = case
-                        pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
-                    elif case in ("cancel","approved_cancel"):
-                        if case == "approved_cancel":
+                            until(lambda: pilot.dispatches(peer=True) == 1 and pilot.effects(peer=True) == 1, "Allow_peer_blocked_by_pending_Ask", seconds=5)
+                            row["allow_peer_while_pending"] = True
+                        if case == "approve":
+                            rows = pilot.operator("list", without_home=True)
+                            require(any(r["pending_id"] == waiting["pending_id"] for r in rows),
+                                "explicit_home_depends_on_environment")
+                            row["explicit_home_without_environment"] = True
+                        if case in ("approve", "reject"):
+                            # Exact binding alone is insufficient without inspection.
+                            row["stage"] = "inspection_required_control"
+                            pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
+                            row["stage"] = "inspect_primary"
                             pilot.inspect(waiting)
-                            pilot.pause_collector()
-                            pilot.operator("approve",waiting["pending_id"],"--binding",waiting["binding_sha256"])
-                            require((setup.home / "native-grants" / (waiting["pending_id"]+".json")).is_file(), "unused_grant_not_issued")
-                            require(pilot.undispatched(), "stopped_collector_dispatched")
-                            row.update(approval_issued=True,decision_submitted="approve")
+                            if kind == "filesystem" and case == "approve":
+                                row["stage"] = "wait_independent_pending"
+                                other = sibling.waiting()
+                                pilot.operator("approve", other["pending_id"], "--binding", other["binding_sha256"], success=False)
+                                sibling.operator("reject", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
+                                require(sibling.undispatched(), "cross_run_decision_dispatched")
+                            pilot.operator("approve", waiting["pending_id"], "--binding", "0" * 64, success=False)
+                            row["stage"] = "metadata_tamper_control"
+                            saved = pilot.metadata.read_bytes()
+                            altered = json.loads(saved); altered["host_session"] = "untrusted-label"
+                            pilot.metadata.write_text(json.dumps(altered))
+                            pilot.operator("list", success=False)
+                            pilot.metadata.write_bytes(saved)
+                            require(pilot.undispatched(), "target_dispatched_before_exact_decision")
+                            row["stage"] = "exact_decision"
+                            row["decision_attempt_at_ms"] = time.time_ns() // 1_000_000
+                            decision_monotonic = time.monotonic_ns()
+                            pilot.operator(case, waiting["pending_id"], "--binding", waiting["binding_sha256"])
+                            row["decision_submitted"] = case
+                            pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
+                        elif case in ("cancel","approved_cancel"):
+                            if case == "approved_cancel":
+                                pilot.inspect(waiting)
+                                pilot.pause_collector()
+                                pilot.operator("approve",waiting["pending_id"],"--binding",waiting["binding_sha256"])
+                                require((setup.home / "native-grants" / (waiting["pending_id"]+".json")).is_file(), "unused_grant_not_issued")
+                                require(pilot.undispatched(), "stopped_collector_dispatched")
+                                row.update(approval_issued=True,decision_submitted="approve")
+                            else:
+                                pilot.inspect(waiting)
+                            os.kill(pilot.launcher_pid, signal.SIGTERM)
+                        elif case == "collector_term":
+                            row["stage"] = "terminate_exact_pending_collector"
+                            terminated_collector = pilot.terminate_collector()
+                            row["cleanup"] = pilot.finish()
+                            primary = pilot.model.results.get("primary")
+                            require(primary is not None and primary["is_error"] is True,
+                                    "terminated_primary_not_refused")
+                            require(pilot.undispatched(), "terminated_collector_dispatched")
+                            lines, _ = LAUNCH.normalized_syscalls(pilot.trace.read_text())
+                            require(any(re.match(rf"^{terminated_collector}\s+exit_group\(1\)", line)
+                                        for line in lines), "collector_term_abrupt_exit_or_missing_ack")
+                            row.update(passed=True, dispatched=0, kernel_effects=0, released=False,
+                                       collector_sigterm="pidfd_pinned_graceful_cleanup_confirmed")
+                            pilot.close(); active.remove(pilot)
+                            continue
+                        elif case == "restart":
+                            pilot.inspect(waiting)
+                            start_daemon(kind, 30)
+                            pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
                         else:
-                            pilot.inspect(waiting)
-                        os.kill(pilot.launcher_pid, signal.SIGTERM)
-                    elif case == "collector_term":
-                        row["stage"] = "terminate_exact_pending_collector"
-                        terminated_collector = pilot.terminate_collector()
-                        row["cleanup"] = pilot.finish()
-                        primary = pilot.model.results.get("primary")
-                        require(primary is not None and primary["is_error"] is True,
-                                "terminated_primary_not_refused")
-                        require(pilot.undispatched(), "terminated_collector_dispatched")
-                        lines, _ = LAUNCH.normalized_syscalls(pilot.trace.read_text())
-                        require(any(re.match(rf"^{terminated_collector}\s+exit_group\(1\)", line)
-                                    for line in lines), "collector_term_abrupt_exit_or_missing_ack")
-                        row.update(passed=True, dispatched=0, kernel_effects=0, released=False,
-                                   collector_sigterm="pidfd_pinned_graceful_cleanup_confirmed")
-                        pilot.close(); active.remove(pilot)
-                        continue
-                    elif case == "restart":
-                        pilot.inspect(waiting)
-                        start_daemon(kind, 30)
-                        pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
-                    else:
-                        require(case == "expire", "unknown_case")
-                    if case in ("cancel", "approved_cancel", "restart"):
-                        row["stage"] = "finish_cancel_or_restart"
-                        row["cleanup"] = pilot.finish(expected=1)
-                        row["stage"] = "after_cancel_or_restart_wire_check"
-                        require(pilot.undispatched(), "cancelled_run_dispatched")
-                        for extension in ("json","approved","rejected","deciding"):
-                            require(not (setup.home / "native-pending" / (waiting["pending_id"]+"."+extension)).exists(), "unused_pending_file_survived")
-                        require(not (setup.home / "native-grants" / (waiting["pending_id"]+".json")).exists(), "unused_grant_survived")
-                        pilot.operator("approve",waiting["pending_id"],"--binding",waiting["binding_sha256"],success=False)
-                        row.update(passed=True, dispatched=0, kernel_effects=0, released=False)
-                        pilot.close(); active.remove(pilot)
-                        continue
-                # Git's deliberately broad synthetic Ask policy also asks about
-                # the useful follow-up. That separate request needs its own decision.
-                if kind == "git":
+                            require(case == "expire", "unknown_case")
+                        if case in ("cancel", "approved_cancel", "restart"):
+                            row["stage"] = "finish_cancel_or_restart"
+                            row["cleanup"] = pilot.finish(expected=1)
+                            row["stage"] = "after_cancel_or_restart_wire_check"
+                            require(pilot.undispatched(), "cancelled_run_dispatched")
+                            for extension in ("json","approved","rejected","deciding"):
+                                require(not (setup.home / "native-pending" / (waiting["pending_id"]+"."+extension)).exists(), "unused_pending_file_survived")
+                            require(not (setup.home / "native-grants" / (waiting["pending_id"]+".json")).exists(), "unused_grant_survived")
+                            pilot.operator("approve",waiting["pending_id"],"--binding",waiting["binding_sha256"],success=False)
+                            row.update(passed=True, dispatched=0, kernel_effects=0, released=False)
+                            pilot.close(); active.remove(pilot)
+                            continue
+                    # Git's deliberately broad synthetic Ask policy also asks about
+                    # the useful follow-up. That separate request needs its own decision.
+                    if kind == "git":
+                        if case == "expire":
+                            row["stage"] = "observe_original_expiry"
+                            await_original_expiry(waiting["expires_at_ms"])
+                            row["stage"] = "wait_useful_followup_after_original_expiry"
+                        def followup_ready():
+                            if "primary" not in pilot.model.results:
+                                return None
+                            rows = pilot.operator("list") if pilot.run_id else []
+                            return next((r for r in rows if r["tool"] == "read_text_file"), None)
+                        if pilot.run_id:
+                            followup = until(followup_ready, "useful_followup_pending_missing")
+                            row["followup_decision"] = pilot.decide(followup, "approve")
+                    row["cleanup"] = pilot.finish()
+                    if sibling:
+                        require(sibling.operator("list")[0]["pending_id"] == other["pending_id"], "cleanup_cancelled_other_run")
+                        require(sibling.undispatched(), "other_run_dispatched_without_approval")
+                        sibling.decide(other,"reject"); sibling.finish()
+                        require(sibling.undispatched(), "rejected_other_run_dispatched")
+                        sibling.close(); active.remove(sibling)
+                        row["cross_run_isolation_and_cleanup"] = True
+                    primary = pilot.model.results.get("primary")
+                    require(primary is not None and primary["is_error"] == (case != "approve"), "correlated_primary_result_missing")
+                    if case == "approve":
+                        marker = "7 red widgets" if kind == "filesystem" else "committed baseline"
+                        require(marker in json.dumps(primary),"original_approved_result_not_useful")
+                        # Conservative operator-attempt-to-correlated-result duration,
+                        # including operator verification and decision submission.
+                        row["decision_to_result_ms"] = (pilot.result_monotonic["primary"] - decision_monotonic) / 1_000_000
+                        # The exact primary collector is selected by successful
+                        # execve and server ID; a peer's proof cannot satisfy this.
+                        if getattr(args, "require_verified_reuse", False):
+                            lines, pending = LAUNCH.normalized_syscalls(pilot.trace.read_text(), thread_birth_order=True)
+                            collectors = LAUNCH.collector_processes(lines, setup.binary)
+                            selected = [pid for pid, server in collectors.items() if server == kind]
+                            require(len(selected) == 1, "one_primary_collector_required")
+                            proof = LATENCY.reuse_observation(lines, selected[0], require_completed_call=True)
+                            row["verified_inputs_resume"] = proof
+                            require(proof["immutable_files"] + proof["leased_files"] > 0, "actual_reuse_missing")
+                    primary_text = json.dumps(primary)
+                    row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
                     if case == "expire":
-                        row["stage"] = "observe_original_expiry"
-                        await_original_expiry(waiting["expires_at_ms"])
-                        row["stage"] = "wait_useful_followup_after_original_expiry"
-                    def followup_ready():
-                        if "primary" not in pilot.model.results:
-                            return None
-                        rows = pilot.operator("list") if pilot.run_id else []
-                        return next((r for r in rows if r["tool"] == "read_text_file"), None)
-                    if pilot.run_id:
-                        followup = until(followup_ready, "useful_followup_pending_missing")
-                        row["followup_decision"] = pilot.decide(followup, "approve")
-                row["cleanup"] = pilot.finish()
-                if sibling:
-                    require(sibling.operator("list")[0]["pending_id"] == other["pending_id"], "cleanup_cancelled_other_run")
-                    require(sibling.undispatched(), "other_run_dispatched_without_approval")
-                    sibling.decide(other,"reject"); sibling.finish()
-                    require(sibling.undispatched(), "rejected_other_run_dispatched")
-                    sibling.close(); active.remove(sibling)
-                    row["cross_run_isolation_and_cleanup"] = True
-                primary = pilot.model.results.get("primary")
-                require(primary is not None and primary["is_error"] == (case != "approve"), "correlated_primary_result_missing")
-                if case == "approve":
-                    marker = "7 red widgets" if kind == "filesystem" else "committed baseline"
-                    require(marker in json.dumps(primary),"original_approved_result_not_useful")
-                    # Conservative operator-attempt-to-correlated-result duration,
-                    # including operator verification and decision submission.
-                    row["decision_to_result_ms"] = (pilot.result_monotonic["primary"] - decision_monotonic) / 1_000_000
-                    # The exact primary collector is selected by successful
-                    # execve and server ID; a peer's proof cannot satisfy this.
-                    if getattr(args, "require_verified_reuse", False):
-                        lines, pending = LAUNCH.normalized_syscalls(pilot.trace.read_text(), thread_birth_order=True)
-                        collectors = LAUNCH.collector_processes(lines, setup.binary)
-                        selected = [pid for pid, server in collectors.items() if server == kind]
-                        require(len(selected) == 1, "one_primary_collector_required")
-                        proof = LATENCY.reuse_observation(lines, selected[0], require_completed_call=True)
-                        row["verified_inputs_resume"] = proof
-                        require(proof["immutable_files"] + proof["leased_files"] > 0, "actual_reuse_missing")
-                primary_text = json.dumps(primary)
-                row["primary_refusal_codes"] = [code for code in ("native_approval_expired", "native_approval_timeout") if code in primary_text]
-                if case == "expire":
-                    # The relay min(wait, remaining TTL) may report timeout on
-                    # the same boundary the daemon reports expired. Require
-                    # both a native deadline refusal and the ORIGINAL expiry.
-                    elapsed = pilot.result_times["primary"] - waiting["expires_at_ms"]
-                    row["refusal_after_original_expiry_ms"] = elapsed
-                    require(row["primary_refusal_codes"] and elapsed >= 0, "expiry_refusal_not_attributed")
-                followup = pilot.model.results.get("followup")
-                followup_text = json.dumps(followup)
-                row["followup"] = {"present": followup is not None,
-                    "is_error": None if followup is None else followup["is_error"],
-                    "refusal_codes": sorted(set(re.findall(r"native_[a-z_]{1,64}", followup_text)))[:16],
-                    "result_received_at_ms":pilot.result_times.get("followup"),
-                    "diagnostic_flags": [flag for flag in ("concurrent mcp input", "not classified", "timed out", "closed", "withheld") if flag in followup_text.lower()],
-                    "sha256":BASE.hashlib.sha256(followup_text.encode()).hexdigest()}
-                # Default Git Ask is explicitly refused without a wait; its
-                # correlated continuation is another refusal, never a fake Allow.
-                if case != "default" or kind == "filesystem":
-                    require(followup and not followup["is_error"] and "7 red widgets" in json.dumps(followup), "useful_continuation_failed")
-                effects, dispatches = pilot.effects(), pilot.dispatches()
-                require(effects == dispatches == (1 if case == "approve" else 0), "original_request_not_exactly_once_or_refused")
-                audit = [json.loads(line) for line in (setup.home / "audit.jsonl").read_text().splitlines() if line]
-                redemptions = [] if case == "default" else [item for item in audit if
-                    item.get("host_session") == pilot.session and item.get("event") == "native_call"
-                    and ("native_approval_redeemed:" + waiting["pending_id"]) in item.get("reason_codes",[])
-                    ]
-                require(len(redemptions) == (1 if case == "approve" else 0), "approval_redemption_observation_mismatch")
-                row.update(passed=True, dispatched=dispatches, kernel_effects=effects, released=not primary["is_error"],
-                    approved=bool(redemptions), approved_observation="native signed grant redemption audit",
-                    host_result_sha256=BASE.hashlib.sha256(json.dumps(primary,sort_keys=True).encode()).hexdigest(),
-                    trace_sha256=LAUNCH.sha(pilot.trace), raw_arguments_exported=False)
-                pilot.close(); active.remove(pilot)
+                        # The relay min(wait, remaining TTL) may report timeout on
+                        # the same boundary the daemon reports expired. Require
+                        # both a native deadline refusal and the ORIGINAL expiry.
+                        elapsed = pilot.result_times["primary"] - waiting["expires_at_ms"]
+                        row["refusal_after_original_expiry_ms"] = elapsed
+                        require(row["primary_refusal_codes"] and elapsed >= 0, "expiry_refusal_not_attributed")
+                    followup = pilot.model.results.get("followup")
+                    followup_text = json.dumps(followup)
+                    row["followup"] = {"present": followup is not None,
+                        "is_error": None if followup is None else followup["is_error"],
+                        "refusal_codes": sorted(set(re.findall(r"native_[a-z_]{1,64}", followup_text)))[:16],
+                        "result_received_at_ms":pilot.result_times.get("followup"),
+                        "diagnostic_flags": [flag for flag in ("concurrent mcp input", "not classified", "timed out", "closed", "withheld") if flag in followup_text.lower()],
+                        "sha256":BASE.hashlib.sha256(followup_text.encode()).hexdigest()}
+                    # Default Git Ask is explicitly refused without a wait; its
+                    # correlated continuation is another refusal, never a fake Allow.
+                    if case != "default" or kind == "filesystem":
+                        require(followup and not followup["is_error"] and "7 red widgets" in json.dumps(followup), "useful_continuation_failed")
+                    effects, dispatches = pilot.effects(), pilot.dispatches()
+                    require(effects == dispatches == (1 if case == "approve" else 0), "original_request_not_exactly_once_or_refused")
+                    audit = [json.loads(line) for line in (setup.home / "audit.jsonl").read_text().splitlines() if line]
+                    redemptions = [] if case == "default" else [item for item in audit if
+                        item.get("host_session") == pilot.session and item.get("event") == "native_call"
+                        and ("native_approval_redeemed:" + waiting["pending_id"]) in item.get("reason_codes",[])
+                        ]
+                    require(len(redemptions) == (1 if case == "approve" else 0), "approval_redemption_observation_mismatch")
+                    row.update(passed=True, dispatched=dispatches, kernel_effects=effects, released=not primary["is_error"],
+                        approved=bool(redemptions), approved_observation="native signed grant redemption audit",
+                        host_result_sha256=BASE.hashlib.sha256(json.dumps(primary,sort_keys=True).encode()).hexdigest(),
+                        trace_sha256=LAUNCH.sha(pilot.trace), raw_arguments_exported=False)
+                    pilot.close(); active.remove(pilot)
+                except Exception as error:
+                    if not getattr(args, "complete_inventory", False):
+                        raise
+                    row = next((r for r in cases if r["profile"] == kind and r["case"] == case
+                                and r["sample_index"] == sample_index), None)
+                    if row is None:
+                        row = {"profile": kind, "case": case, "sample_index": sample_index, "passed": False}
+                        cases.append(row)
+                    code = str(error)
+                    row.update(passed=False, reason=code if re.fullmatch(r"[a-z0-9_]{1,120}", code)
+                               else "case_" + type(error).__name__.lower())
+                    cleanup = []
+                    for owned in list(active):
+                        row.setdefault("failure_observations", []).append(owned.failure_observation())
+                        owned.close()
+                        remaining = [item for item in owned.witness.finish()["remaining"]
+                                     if BASE.ProcessWitness.identity(item["pid"]) == item["start_time_ticks"]]
+                        cleanup.append({"all_stopped": not remaining, "remaining": remaining})
+                        require(not remaining, "owned_cleanup_unconfirmed_stop_inventory")
+                        active.remove(owned)
+                    row["failure_cleanup"] = cleanup
         require(before == BASE.snapshot(setup.workspace) and status_before == setup.git("status","--porcelain=v1")
             and setup.index_before == LAUNCH.sha(setup.workspace / ".git/index")
             and setup.head_before == setup.git("rev-parse", "HEAD"), "workspace_or_git_state_changed")
-        report.update(status="pass", cases=cases, workspace_unchanged=True, real_host_executed=True,
+        if getattr(args, "require_five_second_pending", False):
+            enforce_pending_bound(cases)
+        report.update(status="pass" if all(row["passed"] for row in cases) else "failed", cases=cases, workspace_unchanged=True, real_host_executed=True,
             source_after=BASE.source())
         require(report["source"] == report["source_after"], "source_changed")
         require(report["classifier_sha256"] == LAUNCH.sha(classifier), "classifier_changed")
@@ -700,10 +731,29 @@ def approval_samples(value):
     return number
 
 
+def enforce_pending_bound(cases):
+    """Conservative proposal-to-observed-pending witness; never changes a wait/TTL."""
+    for row in cases:
+        if row["case"] == "default":
+            continue
+        elapsed = row.get("first_pending_ms")
+        met = type(elapsed) in (int, float) and math.isfinite(elapsed) and 0 <= elapsed <= 5000
+        row["first_pending_bound_ms"] = 5000
+        row["first_pending_bound_met"] = met
+        row["runtime_controls_passed"] = row["passed"]
+        if not met:
+            row.update(passed=False, reason="first_pending_deadline_missed" if elapsed is not None
+                       else "first_pending_observation_missing")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("agentfw", "git-launcher", "claude", "node", "npm", "bwrap", "git", "strace", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--complete-inventory", action="store_true",
+                        help="Continue independent cases only after confirmed owned cleanup; retain every failure")
+    parser.add_argument("--require-five-second-pending", action="store_true",
+                        help="Measure the original 5000 ms first-pending bound without changing waits or TTLs")
     parser.add_argument("--offline-inputs", type=Path,
                         help="Prepared npm cache, pinned Python archive and hash-locked wheelhouse")
     parser.add_argument("--require-verified-reuse", action="store_true",
@@ -713,7 +763,10 @@ def main():
                               help="One correctness probe per profile; never performance acceptance")
     samples_group.add_argument("--approval-samples", type=approval_samples, default=0,
                         help="Separate performance run: 20..100 fresh approvals per profile; no call resubmission")
-    args = parser.parse_args(); args.output.mkdir(parents=True,exist_ok=True)
+    args = parser.parse_args()
+    if args.complete_inventory and (args.approval_smoke or args.approval_samples):
+        parser.error("--complete-inventory requires the original full inventory")
+    args.output.mkdir(parents=True,exist_ok=True)
     report = {"contract_version":"sw-pilot-ask-acceptance/1", "status":"incomplete", "real_host_executed":False,
         "scripted_owned_provider":True, "paid_api_calls":0, "physical_human_presence_proven":False,
         "trace_requested":LATENCY.trace_request()}
