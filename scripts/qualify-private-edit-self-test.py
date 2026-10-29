@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,7 @@ import sys
 import tarfile
 import threading
 import time
+from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +34,8 @@ CASES = ("create-read", "replace-read", "ask-reject-replay", "aggregate-quota",
 CHECKS = ("installed-identity", "inert-preview", "tampered-selection",
           "genuine-installed-run", "changed-helper-refusal")
 STREAM_LIMIT = 512 * 1024
+NATIVE_PROFILE = "native-linux-x86_64"
+WSL_PROFILE = "wsl2-linux-x86_64"
 
 
 def require(condition, code):
@@ -41,6 +45,55 @@ def require(condition, code):
 
 def sha(raw):
     return hashlib.sha256(raw).hexdigest()
+
+
+def load(name, filename):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def environment_profile(args):
+    """An explicit WSL lane cannot substitute for native or unknown kernels."""
+    require(platform.system() == "Linux" and platform.machine() == "x86_64"
+            and os.geteuid() != 0, "native_linux_operator_required")
+    kernel = bounded_file(Path("/proc/sys/kernel/osrelease"), 4096).decode().strip()
+    wsl = load("edit_self_test_wsl_preflight", "wsl_preflight.py")
+    kind = wsl.kernel_kind(platform.system(), kernel)
+    selected_root = getattr(args, "wsl_root", None)
+    if selected_root is None:
+        require(kind == "native_linux", "native_linux_required_wsl_is_separate")
+        return {"id": NATIVE_PROFILE, "wsl_opt_in": False}
+    require(kind == "wsl2", "explicit_wsl2_kernel_required")
+    require(selected_root.is_absolute() and selected_root.resolve(strict=True) == selected_root,
+            "canonical_wsl_root_required")
+    return {"id": WSL_PROFILE, "wsl_opt_in": True, "kernel_sha256": sha(kernel.encode())}
+
+
+def host_settings_digest():
+    settings = load("edit_self_test_wsl_witness", "wsl_qualification.py").host_settings()
+    return sha(json.dumps(settings, sort_keys=True, separators=(",", ":")).encode())
+
+
+def attest_wsl(args, report):
+    """Validate accepted receipts before existing bounded namespace probes."""
+    require(getattr(args, "run", False) is True, "explicit_run_consent_required")
+    pilot = load("edit_self_test_wsl_selection", "pilot-run.py")
+    source = pilot.PREP.PILOT.source()
+    require(source.get("dirty") is False, "clean_source_required")
+    _, paths, _ = pilot.selected(SimpleNamespace(selection=args.selection,
+        expected_commit=source["commit"], ask_wait_seconds=0, timeout_seconds=550, port=0))
+    require(args.agentfw == paths["agentfw"], "selected_agent_identity_mismatch")
+    wsl = load("edit_self_test_wsl_preflight", "wsl_preflight.py")
+    checked_paths = dict(paths, source=Path(__file__).resolve(), helper_python=args.python,
+                         selection=args.selection)
+    observed = wsl.inspect(args.wsl_root, checked_paths, output=args.output)
+    report["wsl"].update(preflight_status=observed.get("status", "unavailable"),
+        preflight_sha256=sha(json.dumps(observed, sort_keys=True, separators=(",", ":")).encode()),
+        accepted_prepared_selection=True)
+    require(observed.get("status") == "ready", "wsl_prerequisites_not_ready")
+    report["wsl"]["attested"] = True
 
 
 def digest_file(path):
@@ -82,9 +135,9 @@ def write_new(path, raw):
         stream.write(raw)
 
 
-def positive_report(value, expected):
+def positive_report(value, expected, *, platform_id=NATIVE_PROFILE):
     """Missing observations, cleanup or one changed identity cannot pass."""
-    if not isinstance(value, dict):
+    if platform_id not in (NATIVE_PROFILE, WSL_PROFILE) or not isinstance(value, dict):
         return False
     rows = value.get("cases", [])
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
@@ -117,11 +170,26 @@ def positive_report(value, expected):
             and installed.get("agentfw") == expected["agentfw_sha256"]
             and inventory == {"expected": len(CASES), "attempted": len(CASES), "passed": len(CASES),
                               "failed": 0, "incomplete": 0, "unsupported": 0}
-            and profile.get("id") == "native-linux-x86_64")
+            and profile.get("id") == platform_id)
 
 
 def passed(value):
     rows = value.get("checks", [])
+    profile = value.get("platform", {"id": NATIVE_PROFILE})
+    if not isinstance(profile, dict) or profile.get("id") not in (NATIVE_PROFILE, WSL_PROFILE):
+        return False
+    if profile["id"] == WSL_PROFILE:
+        witness = value.get("wsl", {})
+        if not (isinstance(witness, dict) and profile.get("wsl_opt_in") is True
+                and witness.get("attested") is True
+                and witness.get("accepted_prepared_selection") is True
+                and witness.get("preflight_status") == "ready"
+                and isinstance(witness.get("preflight_sha256"), str)
+                and re.fullmatch(r"[0-9a-f]{64}", witness["preflight_sha256"])
+                and isinstance(witness.get("host_settings_before_sha256"), str)
+                and re.fullmatch(r"[0-9a-f]{64}", witness["host_settings_before_sha256"])
+                and witness["host_settings_before_sha256"] == witness.get("host_settings_after_sha256")):
+            return False
     return (value.get("format") == FORMAT and value.get("status") == "passed"
             and [row.get("id") for row in rows] == list(CHECKS)
             and all(row.get("attempted") is True and row.get("status") == "passed" for row in rows)
@@ -215,10 +283,8 @@ class Driver:
 
 
 def qualify(args, report):
-    require(platform.system() == "Linux" and platform.machine() == "x86_64"
-            and os.geteuid() != 0, "native_linux_operator_required")
-    require("microsoft" not in Path("/proc/sys/kernel/osrelease").read_text().lower(),
-            "native_linux_required_wsl_is_separate")
+    profile = environment_profile(args)
+    report["platform"] = profile
     for path in (args.agentfw, args.selection, args.python):
         require(path is not None and path.is_absolute() and path.resolve(strict=True) == path,
                 "absolute_canonical_inputs_required")
@@ -236,9 +302,11 @@ def qualify(args, report):
     report["output_created"] = True
     before = {"agentfw": digest_file(args.agentfw), "python": digest_file(args.python),
               "selection": sha(bounded_file(args.selection, 65536))}
-    driver = Driver(args, report)
-
     try:
+        if profile["id"] == WSL_PROFILE:
+            report["wsl"] = {"attested": False, "host_settings_before_sha256": host_settings_digest()}
+            attest_wsl(args, report)
+        driver = Driver(args, report)
         row = driver.begin("installed-identity")
         archive = args.output / "component.tar"
         code, built = driver.call([args.python, "-I", "-B", ROOT / "scripts/build-pilot-front-door.py",
@@ -300,9 +368,11 @@ def qualify(args, report):
             row["inventory"] = {key: count for key, count in child["inventory"].items()
                                 if key in ("expected", "attempted", "passed", "failed", "incomplete", "unsupported")
                                 and type(count) is int and 0 <= count <= len(CASES)}
-        require(code == 0 and positive_report(child, expected), "installed_self_test_did_not_pass")
+        require(code == 0 and positive_report(child, expected, platform_id=profile["id"]),
+                "installed_self_test_did_not_pass")
         row.update(status="passed", outside_checkout=True, exact_installed_identity=True,
-                   independent_native_runtime=True)
+                   observed_platform=profile["id"])
+        row["independent_native_runtime" if profile["id"] == NATIVE_PROFILE else "independent_wsl2_runtime"] = True
 
         row = driver.begin("changed-helper-refusal")
         helper = driver.home / "pilot-front-door/components" / built["component"] / "tree/scripts/private_edit_self_test.py"
@@ -329,6 +399,13 @@ def qualify(args, report):
                    no_output_created=True, helper_restored=True)
         report["status"] = "passed"
     finally:
+        if "wsl" in report:
+            try:
+                report["wsl"]["host_settings_after_sha256"] = host_settings_digest()
+            except Exception:
+                report["wsl"]["host_settings_after_sha256"] = None
+            if report["wsl"].get("host_settings_before_sha256") != report["wsl"].get("host_settings_after_sha256"):
+                report["status"] = "failed"
         after = {"agentfw": digest_file(args.agentfw), "python": digest_file(args.python),
                  "selection": sha(bounded_file(args.selection, 65536))}
         report["selected_inputs_unchanged"] = before == after
@@ -343,6 +420,8 @@ def main(argv=None):
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--python", type=Path, default=Path("/usr/bin/python3.12"))
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--wsl-root", type=Path,
+                        help="Explicit actual-WSL2 qualification with an existing private Linux ext4 root under /home.")
     args = parser.parse_args(argv)
     if not args.run:
         print(json.dumps({"format": FORMAT, "executed": False, "checks": list(CHECKS)}))

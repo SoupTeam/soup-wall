@@ -156,8 +156,37 @@ def platform_profile():
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         return {"id": "unsupported", "supported": False}
     kernel = bounded(Path("/proc/sys/kernel/osrelease"), 4096).decode().lower()
-    return {"id": "wsl2-linux-x86_64" if "microsoft" in kernel else "native-linux-x86_64",
+    wsl = load("self_test_wsl_platform", "wsl_preflight.py")
+    kind = wsl.kernel_kind("Linux", kernel)
+    if kind == "wsl1_or_unknown":
+        return {"id": "wsl1_or_unknown", "supported": False}
+    return {"id": "wsl2-linux-x86_64" if kind == "wsl2" else "native-linux-x86_64",
             "supported": True}
+
+
+def wsl_checks(args, paths, roots, profile):
+    """Preview checks paths only; namespace probes require explicit run consent."""
+    if profile["id"] != "wsl2-linux-x86_64":
+        return None
+    wsl = load("self_test_wsl_checks", "wsl_preflight.py")
+    mountinfo = bounded(Path("/proc/self/mountinfo"), 1024 * 1024).decode()
+    selected = dict(paths, helper_python=Path(sys.executable), source=Path(__file__).resolve(),
+                    selection=args.selection)
+    checked = dict(selected, source_tree=ROOT, stage_root=args.home,
+                   **{kind + "_workspace": root for kind, root in roots.items()})
+    if args.output is not None:
+        checked["report_output"] = args.output
+    for role, path in checked.items():
+        resolved = path.resolve(strict=role != "report_output")
+        filesystem = wsl.mount_type(resolved.as_posix(), mountinfo)
+        require(wsl.supported_path(resolved.as_posix(), filesystem, role), "wsl_linux_ext4_paths_required")
+    result = {"path_checks": "passed", "runtime_checks": "not_executed"}
+    if args.run:
+        preflight = wsl.inspect(args.home, selected, output=args.output)
+        require(preflight.get("status") == "ready", "wsl_prerequisites_not_ready")
+        result.update(runtime_checks="ready", report_sha256=sha(
+            json.dumps(preflight, sort_keys=True, separators=(",", ":")).encode()))
+    return result
 
 
 def inventory():
@@ -1051,6 +1080,9 @@ def main(argv=None):
             require(os.geteuid() != 0, "non_root_operator_required")
             pilot, paths, roots, identities = preflight(args)
             report["identities"] = identities
+            wsl = wsl_checks(args, paths, roots, profile)
+            if wsl is not None:
+                report["wsl_preflight"] = wsl
             if not args.run:
                 report.update(status="preview", reason="explicit_run_consent_required")
             else:

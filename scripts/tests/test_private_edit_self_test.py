@@ -82,6 +82,38 @@ def seed():
 
 
 class PrivateEditSelfTest(unittest.TestCase):
+    def test_wsl_preview_never_executes_preflight_probes(self):
+        args = SimpleNamespace(home=Path("/home/owned"), selection=Path("/home/selection"),
+                               output=Path("/home/attempt"), run=False)
+        wsl = SimpleNamespace(mount_type=mock.Mock(return_value="ext4"),
+                              supported_path=mock.Mock(return_value=True),
+                              inspect=mock.Mock(return_value={"status": "ready"}))
+        with mock.patch.object(probe, "load", return_value=wsl), \
+             mock.patch.object(probe, "bounded", return_value=b"mountinfo"), \
+             mock.patch.object(Path, "resolve", lambda path, **kwargs: path):
+            value = probe.wsl_checks(args, {"agentfw": Path("/home/agentfw")}, {},
+                                     {"id": "wsl2-linux-x86_64"})
+            self.assertEqual(value["runtime_checks"], "not_executed")
+            wsl.inspect.assert_not_called()
+            args.run = True
+            roots = {"filesystem": Path("/home/project"), "git": Path("/home/repository")}
+            self.assertEqual(probe.wsl_checks(args, {}, roots, {"id": "wsl2-linux-x86_64"})["runtime_checks"], "ready")
+            wsl.inspect.assert_called_once()
+            selected_files = wsl.inspect.call_args.args[1]
+            self.assertNotIn("filesystem_workspace", selected_files)
+            self.assertNotIn("git_workspace", selected_files)
+            self.assertEqual(selected_files["source"], Path(probe.__file__))
+            wsl.supported_path.return_value = False
+            with self.assertRaisesRegex(ValueError, "wsl_linux_ext4_paths_required"):
+                probe.wsl_checks(args, {}, {}, {"id": "wsl2-linux-x86_64"})
+            wsl.inspect.assert_called_once()
+
+    def test_wsl_unknown_kernel_is_not_advertised_as_wsl2(self):
+        with mock.patch.object(probe.platform, "system", return_value="Linux"), \
+             mock.patch.object(probe.platform, "machine", return_value="x86_64"), \
+             mock.patch.object(probe, "bounded", return_value=b"4.4.0-Microsoft"):
+            self.assertEqual(probe.platform_profile(), {"id": "wsl1_or_unknown", "supported": False})
+
     def test_quota_authorization_count_is_separate_from_physical_reservations(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "result"

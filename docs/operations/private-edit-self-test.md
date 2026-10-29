@@ -110,3 +110,38 @@ python3 -B scripts/qualify-private-edit-self-test.py --run \
 
 The driver is developer setup and evidence collection; operators use the
 installed front door above. Its component build requires a clean checkout.
+
+## Explicit WSL2 preparation and qualification
+
+Use Ubuntu 24.04 x86_64 on an actual WSL2 kernel, as an ordinary user. Keep the
+source, installed runtime, selected workspaces and test output on Linux ext4.
+The private stage and report output must be under `/home`; Windows mounts and
+WSL1 or unknown Microsoft kernels are refused. Namespace and bubblewrap checks
+must pass with the host's existing security settings.
+
+Add `--wsl-root /home/USER/private-stage` to the existing
+`scripts/prepare-installed-pilot.py --prepare` command with explicit pinned
+runtime inputs. Its `--output` must be inside that existing owned private stage.
+The command uses the same generation transaction, profile checks and current
+marker as native preparation. It checks mounts before executing selected
+programs, then requires the existing full WSL prerequisite checks before
+installing the filesystem/Git profiles. The default native route still rejects
+WSL unless this opt-in is supplied. Existing prepared selections are revalidated.
+
+Qualify that selection in the explicit WSL lane:
+
+```sh
+python3 -B scripts/qualify-private-edit-self-test.py --run \
+  --wsl-root /home/USER/private-stage \
+  --agentfw /home/USER/installed/agentfw \
+  --selection /home/USER/private-stage/preparation/generations/GENERATION/selection.json \
+  --python /usr/bin/python3.12 \
+  --output /home/USER/private-stage/qualification-01
+```
+
+The driver requires an actual ready WSL2 environment and records host-setting
+digests before and after execution. All eight product scenarios and five
+qualification controls remain required. Reports must name the observed WSL
+profile; native reports cannot substitute for WSL evidence. The installed
+self-test command itself stays the same. Its preview checks WSL paths without
+running namespace probes; full prerequisite probes require `--run` consent.
