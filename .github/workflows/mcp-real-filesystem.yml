@@ -12,7 +12,7 @@ jobs:
         with:
           ref: 119e6962d83fd1298f2092f6d20b2950167fe371
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
         with:
           cache-targets: false
@@ -57,7 +57,7 @@ jobs:
             --chdir / /bin/bash -euc 'mount -t proc -o nosuid,nodev,noexec proc /proc; mount -t tmpfs -o nosuid,nodev,mode=1777 tmpfs /dev/shm; exec "$@"' bash \
             /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
             --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
-            /usr/bin/env -i PATH="$HOME/.cargo/bin:/usr/bin:/bin" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.94.1 \
+            /usr/bin/env -i PATH="$HOME/.cargo/bin:/usr/bin:/bin" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
             HOME="$SOU145_SCRATCH/home" CARGO_HOME="$SOU145_SCRATCH/cargo-home" CARGO_NET_OFFLINE=true \
             CARGO_TARGET_DIR="$SOU145_SCRATCH/target" TMPDIR="$SOU145_SCRATCH/tmp" CARGO_BUILD_JOBS=4 \
             CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
