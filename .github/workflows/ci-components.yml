@@ -3128,10 +3128,30 @@ jobs:
           "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement --list > "$RUNNER_TEMP/sou134-tests.list"
           python3 -c 'import pathlib,sys; assert "pinned_existing_workspace_refuses_replacement: test" in pathlib.Path(sys.argv[1]).read_text()' "$RUNNER_TEMP/sou134-tests.list"
           "$SOU119_SANDBOX_TESTS" pinned_existing_workspace_refuses_replacement
+          if [[ '${{ github.event.inputs.existing_project_only }}' == 'true' ]]; then
+            "$SOU119_SANDBOX_TESTS" 'real_server::outcomes::tests::' --list > "$RUNNER_TEMP/sou177-outcome-tests.list"
+            python3 -c 'import pathlib,sys; assert sum(line.endswith(": test") for line in pathlib.Path(sys.argv[1]).read_text().splitlines()) == 2' "$RUNNER_TEMP/sou177-outcome-tests.list"
+            "$SOU119_SANDBOX_TESTS" 'real_server::outcomes::tests::'
+            python3 -B -m unittest discover -s scripts/tests -p test_git_outcomes.py
+            python3 -B -m unittest discover -s scripts/tests -p test_pilot_launcher_witness.py
+            python3 -B -m unittest discover -s scripts/tests -p test_prepared_trace_bounds.py
+            python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py
+            python3 -B -m unittest discover -s scripts/tests -p test_git_workflow_scope.py
+          fi
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
+          project_failed=0
           python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
-            --output "$RUNNER_TEMP/sou134-qualification"
+            --output "$RUNNER_TEMP/sou134-qualification" || project_failed=1
+          if [[ '${{ github.event.inputs.existing_project_only }}' == 'true' ]]; then
+            for project in docs-code unicode-spaces local-history; do
+              python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \
+                --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
+                --project-fixture "$project" --git-negative-controls \
+                --output "$RUNNER_TEMP/sou177-$project" || project_failed=1
+            done
+          fi
+          exit "$project_failed"
       - name: Qualify structured operator outcomes through both original servers
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.operator_results_only == 'true'
         shell: bash
@@ -3397,7 +3417,8 @@ jobs:
             ${{ runner.temp }}/sou141-ask-series/runs/*/stage-events.jsonl
             ${{ runner.temp }}/sou111-assets/native-read-lease.log
             ${{ runner.temp }}/sou111-assets/baseline-build.json
-            ${{ runner.temp }}/sou134-qualification/report.json
+            ${{ runner.temp }}/sou134-qualification/*.json
+            ${{ runner.temp }}/sou177-*/*.json
             ${{ runner.temp }}/sou120-demo/report.json
             ${{ runner.temp }}/sou135-inbox/qualification.json
             ${{ runner.temp }}/sou121-cleanup/report.json
