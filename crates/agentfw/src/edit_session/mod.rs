@@ -10,6 +10,8 @@ mod profile;
 pub(crate) mod quota;
 pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
+mod application;
+#[cfg(target_os = "linux")]
 mod control;
 #[cfg(target_os = "linux")]
 mod control_io;
@@ -37,6 +39,12 @@ pub struct Cli {
 }
 #[derive(Subcommand, Debug)]
 enum Action {
+    /// Explicit local application of one reviewed output; never an MCP grant.
+    #[cfg(target_os = "linux")]
+    Apply {
+        #[command(subcommand)]
+        action: application::Action,
+    },
     /// Review exact completed-run outputs; private content needs explicit consent.
     #[cfg(target_os = "linux")]
     Review(review::Args),
