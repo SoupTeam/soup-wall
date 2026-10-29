@@ -1,0 +1,104 @@
+{
+  "agentfw_sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e",
+  "cases": [
+    {
+      "attempted": true,
+      "id": "installed-identity",
+      "installed_outside_checkout": true,
+      "source_commit": "88c097fc7489749f6abb5e68ee527fd652acc96f",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "failure": "'NoneType' object has no attribute 'get'",
+      "id": "two-live-exact-stop",
+      "status": "failed"
+    },
+    {
+      "attempted": false,
+      "id": "pending-replay-and-repeat",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "rejected-ask-future-dispatch",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "publication-before-stop",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "publication-stop-race",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "unsafe-records",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "foreign-birth-identity",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "old-control-replay",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "daemon-unavailable",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "launcher-crash",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "fresh-useful-run",
+      "status": "incomplete"
+    }
+  ],
+  "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "component": "8d68a106e2465b18e5a8e26c4ffc9d8a32aed887f606f1a2d7b3ea804b728e66",
+  "expected": [
+    "installed-identity",
+    "two-live-exact-stop",
+    "pending-replay-and-repeat",
+    "rejected-ask-future-dispatch",
+    "publication-before-stop",
+    "publication-stop-race",
+    "unsafe-records",
+    "foreign-birth-identity",
+    "old-control-replay",
+    "daemon-unavailable",
+    "launcher-crash",
+    "fresh-useful-run"
+  ],
+  "failure": "'NoneType' object has no attribute 'get'",
+  "failure_type": "AttributeError",
+  "format": "sw-installed-edit-stop-qualification/1",
+  "inventory": {
+    "failed": 1,
+    "incomplete": 10,
+    "passed": 1
+  },
+  "last_cli": {
+    "exit_code": 0,
+    "raw_retained": false,
+    "reason": "ok",
+    "stderr_bytes": 0,
+    "stdout_bytes": 2415,
+    "stdout_sha256": "332aa88b53bc18d615e3f6f6853c3559f57c663a5ce55d90b2e62c6bfb91feba"
+  },
+  "paid_inference": false,
+  "scope": "actual-native-installed-genuine-host-owned-scripted-provider",
+  "source_commit": "88c097fc7489749f6abb5e68ee527fd652acc96f",
+  "status": "failed"
+}

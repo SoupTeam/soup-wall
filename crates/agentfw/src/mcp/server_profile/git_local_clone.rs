@@ -219,7 +219,7 @@ pub(super) fn same(a: &Metadata, b: &Metadata) -> bool {
     }
 }
 
-fn open(path: &Path, directory: bool) -> anyhow::Result<File> {
+pub(super) fn open(path: &Path, directory: bool) -> anyhow::Result<File> {
     let before = fs::symlink_metadata(path)?;
     ensure!(
         !before.is_symlink()
@@ -255,7 +255,7 @@ fn open(path: &Path, directory: bool) -> anyhow::Result<File> {
     Ok(file)
 }
 
-fn directory_path(file: &File, fallback: &Path) -> PathBuf {
+pub(super) fn directory_path(file: &File, fallback: &Path) -> PathBuf {
     #[cfg(target_os = "linux")]
     {
         use std::os::fd::AsRawFd;
@@ -269,7 +269,7 @@ fn directory_path(file: &File, fallback: &Path) -> PathBuf {
     }
 }
 
-fn contents(path: &Path) -> anyhow::Result<Vec<u8>> {
+pub(super) fn contents(path: &Path) -> anyhow::Result<Vec<u8>> {
     let mut file = open(path, false)?;
     let before = file.metadata()?;
     ensure!(before.len() <= 8192, "git_clone_control_bounds");

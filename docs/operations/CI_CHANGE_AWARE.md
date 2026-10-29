@@ -306,6 +306,9 @@ still available and the trusted verifier retains its legacy evidence support.
 
 ### SOU-118 completion evidence discrepancy
 
+For interrupted GitHub response bodies and bounded fail-closed retrieval, see
+[CI evidence transport recovery (SOU-175)](CI_EVIDENCE_TRANSPORT.md).
+
 At PR [#220](https://github.com/SoupTeam/soup-wall/pull/220) head
 `e58848b919e22d229ac8dd2d37757295c22b1616`, central CI
 [run 39794045474](https://github.com/SoupTeam/soup-wall/actions/runs/39794045474)

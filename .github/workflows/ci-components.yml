@@ -1294,10 +1294,11 @@ jobs:
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_quota.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
-          python3 -B scripts/qualify-installed-edit.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+          python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
           python3 -B scripts/qualify-installed-edit-stop.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
@@ -1308,6 +1309,12 @@ jobs:
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --publish-fault "$SOU161_SCRATCH/publish-fault.so" \
             --output "$SOU161_SCRATCH/refresh"
+          mkdir -m 700 "$SOU161_SCRATCH/quota-faults"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=1 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/withheld.so"
+          gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=2 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/interrupted.so"
+          python3 -B scripts/qualify-edit-quota.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --faults "$SOU161_SCRATCH/quota-faults" --output "$SOU161_SCRATCH/quota"
           BASH
       - name: Retain finite current-source qualification and build correlation
         if: always()
@@ -1318,6 +1325,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/quota/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json
@@ -1545,7 +1553,7 @@ jobs:
 
   mcp-real-filesystem--required-linux-sandbox-and-real-host:
     name: "mcp-real-filesystem / required-linux-sandbox-and-real-host"
-    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true'))
+    if: contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'required-linux-sandbox-and-real-host') && !(github.event_name == 'workflow_dispatch' && (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true'))
     # This selected runtime is Linux x86-64. No host sysctl/AppArmor relaxation.
     runs-on: ubuntu-22.04
     timeout-minutes: 60
@@ -1957,7 +1965,7 @@ jobs:
 
   mcp-real-filesystem--native-ubuntu-2404:
     name: "mcp-real-filesystem / native-ubuntu-2404"
-    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))
+    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))
     runs-on: ubuntu-24.04
     # Optional paired Ask measurement owns two <=3600s side budgets plus setup;
     # opt-in A-B-A repeats the original-host qualifier twice. Ordinary PR/default
@@ -1966,10 +1974,13 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: '1.94.1'
       PILOT_CAPACITY_ONLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.capacity_only == 'true' && '1' || '0' }}
+      PILOT_COORDINATED_UPDATE_ONLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.coordinated_update_only == 'true' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: ${{ github.event.inputs.coordinated_update_only == 'true' && '0' || '1' }}
+          persist-credentials: ${{ github.event.inputs.coordinated_update_only != 'true' }}
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -1989,6 +2000,53 @@ jobs:
           set -euo pipefail
           [[ "$PREPARATION_ONLY" != true && "$MATCHED_ONLY" != true && "$PROJECT_ONLY" != true && "$AUDIT_ONLY" != true && "$STORAGE_ONLY" != true && -z "$BASELINE" ]]
           python3 -B -m unittest discover -s scripts/tests -p test_operator_results.py -v
+      - name: Validate focused update qualification
+        if: github.event.inputs.coordinated_update_only == 'true'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import json, os
+          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs.get('stability_mode', 'off') == 'off'
+          assert all(value in ('', 'false') for key, value in inputs.items()
+                     if key not in {'coordinated_update_only', 'stability_mode'})
+          PY
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_update.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_prepared_qualification_coverage.py -v
+          python3 -B - <<'PY'
+          import json, os, stat, sys
+          from pathlib import Path
+          sys.path.insert(0, 'scripts')
+          import pilot_update as update
+          selected = Path('/usr/bin/python3.12')
+          paths = {'development_interpreter': Path(sys.executable).resolve(),
+                   'selected_interpreter': selected, 'checkout': Path.cwd(),
+                   'scratch': Path(os.environ['RUNNER_TEMP'])}
+          report = {'operator_uid': os.getuid(), 'os_release': Path('/etc/os-release').read_text(),
+                    'kernel': os.uname().release}
+          for role, path in paths.items():
+              parents = [path if path.is_dir() else path.parent, *path.parents]
+              unsafe = []
+              for parent in dict.fromkeys(parents):
+                  info = parent.stat()
+                  if info.st_uid not in (0, os.getuid()) or (info.st_mode & 0o022
+                          and not (info.st_uid == 0 and info.st_mode & stat.S_ISVTX)):
+                      unsafe.append({'path': str(parent), 'uid': info.st_uid,
+                                     'mode': oct(stat.S_IMODE(info.st_mode))})
+              report[role] = {'path': str(path), 'unsafe_parents': unsafe}
+          report['selected_interpreter']['identity'] = update.read_file(selected, update.MAX_BINARY)[0]
+          target = Path(os.environ['RUNNER_TEMP']) / 'sou164-input-parents.json'
+          with target.open('x') as stream:
+              os.fchmod(stream.fileno(), 0o600)
+              json.dump(report, stream, sort_keys=True, indent=2)
+              stream.write('\n')
+          print(json.dumps(report, sort_keys=True))
+          assert not report['selected_interpreter']['unsafe_parents']
+          assert not report['scratch']['unsafe_parents']
+          PY
       - name: Prepared operations formatting preflight
         if: github.event.inputs.prepared_operations_only == 'true'
         shell: bash
@@ -2081,9 +2139,17 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_switch_prepared_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_resumable_download.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_preparation_coordination.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_cleanup.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_build_native_pilot_inputs.py -v
+      - name: Qualify exact pinned public bubblewrap transfer and offline reuse
+        if: github.event.inputs.capacity_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/qualify-pilot-resumable-download.py --run \
+            --report "$RUNNER_TEMP/sou173-download.json"
       - name: Verify disposable runner administration boundary before building
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
@@ -2147,25 +2213,39 @@ jobs:
             --output "$RUNNER_TEMP/sou111-assets/git.tar.xz"
           printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 \
             "$RUNNER_TEMP/sou111-assets/git.tar.xz" | sha256sum --check
-          curl --fail --location --retry 3 \
-            https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz \
-            --output "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
-          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
-            "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets/libcap"
-          (cd "$RUNNER_TEMP/sou111-assets" && apt-get download libcap-dev)
+          if [[ "$PILOT_COORDINATED_UPDATE_ONLY" == 1 ]]; then
+            curl --fail --location --retry 3 \
+              https://archive.ubuntu.com/ubuntu/pool/main/libc/libcap2/libcap-dev_2.66-5ubuntu2.4_amd64.deb \
+              --output "$RUNNER_TEMP/sou111-assets/libcap-dev_2.66-5ubuntu2.4_amd64.deb"
+            printf '%s  %s\n' 07f2462867569a2119a2ad0f1593232663f2d1612b791c230d22a8d73a15abee \
+              "$RUNNER_TEMP/sou111-assets/libcap-dev_2.66-5ubuntu2.4_amd64.deb" | sha256sum --check
+          else
+            (cd "$RUNNER_TEMP/sou111-assets" && apt-get download libcap-dev)
+          fi
           dpkg-deb -x "$RUNNER_TEMP"/sou111-assets/libcap-dev_*.deb "$RUNNER_TEMP/sou111-assets/libcap"
           caplib="$RUNNER_TEMP/sou111-assets/libcap/usr/lib/x86_64-linux-gnu"
           cp /lib/x86_64-linux-gnu/libcap.so.2 "$caplib/"
           ln -sf libcap.so.2 "$caplib/libcap.so"
           ln -s "$caplib" "$RUNNER_TEMP/sou111-assets/libcap/usr/lib64"
-          python3 -m pip install --disable-pip-version-check --target "$RUNNER_TEMP/sou111-assets/build-tools" \
-            meson==1.9.1
+          if [[ "$PILOT_COORDINATED_UPDATE_ONLY" == 1 ]]; then
+            mkdir -m 700 "$RUNNER_TEMP/sou111-assets/meson-input"
+            python3 -m pip download --disable-pip-version-check --only-binary=:all: --no-deps \
+              --dest "$RUNNER_TEMP/sou111-assets/meson-input" meson==1.9.1
+            printf '%s  %s\n' f824ab770c041a202f532f69e114c971918ed2daff7ea56583d80642564598d0 \
+              "$RUNNER_TEMP/sou111-assets/meson-input/meson-1.9.1-py3-none-any.whl" | sha256sum --check
+            python3 -m pip install --disable-pip-version-check --no-deps --no-index \
+              --target "$RUNNER_TEMP/sou111-assets/build-tools" \
+              "$RUNNER_TEMP/sou111-assets/meson-input/meson-1.9.1-py3-none-any.whl"
+          else
+            python3 -m pip install --disable-pip-version-check --target "$RUNNER_TEMP/sou111-assets/build-tools" \
+              meson==1.9.1
+          fi
           export PATH="$RUNNER_TEMP/sou111-assets/build-tools/bin:$PATH"
           native_args=(--output "$RUNNER_TEMP/sou111-native-prerequisites"
             --expected-commit "$(git rev-parse HEAD)"
             --git-archive "$RUNNER_TEMP/sou111-assets/git.tar.xz"
-            --bwrap-archive "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
+            --allow-download
             --pkg-config-libdir "$caplib/pkgconfig"
             --pkg-config-sysroot "$RUNNER_TEMP/sou111-assets/libcap"
             --meson-pythonpath "$RUNNER_TEMP/sou111-assets/build-tools")
@@ -2273,6 +2353,16 @@ jobs:
           PY
           export SOU115_GIT="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["git"])')"
           export SOU115_BWRAP="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["bwrap"])')"
+          # The cleanup qualifier uses an isolated account and still requires a local archive.
+          # Reuse the verified transfer instead of issuing a second network request.
+          verified_bwrap="$RUNNER_TEMP/sou111-native-prerequisites/download-cache/bwrap.verified.tar.xz"
+          test -f "$verified_bwrap" && test ! -L "$verified_bwrap"
+          test "$(stat -c %s "$verified_bwrap")" = 129472
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
+            "$verified_bwrap" | sha256sum --check
+          install -m 600 "$verified_bwrap" "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
+            "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
           bash scripts/ci-pilot-cleanup.sh
           source_args=(--output "$RUNNER_TEMP/sou119-agent-build"
             --expected-commit "$(git rev-parse HEAD)")
@@ -2523,6 +2613,48 @@ jobs:
           python3 -B scripts/test-pilot-capacity.py --prepared-records "$RUNNER_TEMP/sou111-assets" \
             --expected-commit "$(git rev-parse HEAD)" > "$RUNNER_TEMP/sou151-capacity/qualification.json"
           cat "$RUNNER_TEMP/sou151-capacity/qualification.json"
+      - name: Qualify coordinated installed update and rollback
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.coordinated_update_only == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          asset="$RUNNER_TEMP/sou111-assets"
+          output="$RUNNER_TEMP/sou164-update"
+          mkdir -m 700 "$output" "$output/wheelhouse"
+          baseline="$(git rev-parse 144512b3ed11f985c922d9911cba26f07599dea9)"
+          test "$baseline" = 144512b3ed11f985c922d9911cba26f07599dea9
+          git worktree add --detach "$output/source-a" "$baseline"
+          (cd "$output/source-a" && python3 -B scripts/build-native-pilot-inputs.py --build \
+            --output "$output/build-a" --expected-commit "$baseline") > "$output/build-a.json"
+          selection="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["selection"])' "$asset/first.json")"
+          generation="$(dirname "$selection")"
+          python="$generation/git-profile/package/python/bin/python3.11"
+          "$python" -I -B -m pip --isolated download --require-hashes --only-binary=:all: \
+            --no-cache-dir --disable-pip-version-check --index-url https://pypi.org/simple \
+            --dest "$output/wheelhouse" -r profiles/mcp/git-readonly-v1/requirements.lock
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_update.py -v
+          python3 -B scripts/prepare-pilot-update-fixture.py --source-a "$output/source-a" \
+            --build-a "$output/build-a.json" --build-b "$asset/source-first.json" \
+            --node-archive "$asset/node.tar.xz" --bwrap "$SOU111_BWRAP" --git "$SOU115_GIT" \
+            --python /usr/bin/python3.12 \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python-archive "$generation/git-profile/python.tar.gz" \
+            --npm-cache "$generation/filesystem-profile/npm-cache" --wheelhouse "$output/wheelhouse" \
+            --output "$output/fixtures" > "$output/fixture-result.json"
+          python3 -B - <<'PY'
+          import json, os, subprocess, sys
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'sou164-update'
+          inputs = json.loads((root / 'fixtures/inputs.json').read_text())
+          subprocess.run([sys.executable, '-B', 'scripts/qualify-pilot-update.py', '--run',
+              '--entry-agent', inputs['entry_agent'], '--entry-home', inputs['entry_home'],
+              '--inventory-a', str(root / 'fixtures/inventory-a.json'),
+              '--inventory-b', str(root / 'fixtures/inventory-b.json'),
+              '--fixture-root', inputs['fixture_root'], '--expected-text', inputs['expected_text'],
+              '--output', str(root / 'qualification'), '--expected-commit',
+              subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()], check=True)
+          PY
       - name: Verify real installed Ask capture and resume before comparison
         if: github.event_name == 'workflow_dispatch' && (github.event.inputs.ask_latency_baseline_sha != '' || github.event.inputs.ask_series != '')
         shell: bash
@@ -2662,7 +2794,7 @@ jobs:
           raise SystemExit(subprocess.call(command))
           PY
       - name: Qualify exact prepared selection through enforcing daemon and original servers
-        if: github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
+        if: github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -2682,7 +2814,7 @@ jobs:
           path.write_text(json.dumps(values, sort_keys=True) + '\n')
           PY
       - name: Run the first-use demo through the prepared original host
-        if: github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
+        if: github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -2692,7 +2824,7 @@ jobs:
             --expected-commit "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)" \
             --strace "$(command -v strace)" --output "$RUNNER_TEMP/sou120-demo"
       - name: Qualify the guided first-use entry point through the original host
-        if: github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
+        if: github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -2708,7 +2840,7 @@ jobs:
             --python "$(command -v python3)" --allow-download \
             2>&1 | tee "$RUNNER_TEMP/front-door.log"
       - name: Qualify the installed guided pilot front door through the original host
-        if: github.event.inputs.capacity_only != 'true' && github.event.inputs.prepared_operations_only != 'true' && github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
+        if: github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && github.event.inputs.prepared_operations_only != 'true' && github.event.inputs.existing_project_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -2728,7 +2860,7 @@ jobs:
             --python "$(command -v python3)" --allow-download \
             2>&1 | tee "$RUNNER_TEMP/installed-front-door.log"
       - name: Qualify terminal Ask inbox through the original Claude host
-        if: github.event.inputs.capacity_only != 'true' && (github.event.inputs.operator_results_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
+        if: github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event.inputs.operator_results_only != 'true') && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -2742,7 +2874,7 @@ jobs:
             --strace "$(command -v strace)" --expected-commit "$(git rev-parse HEAD)" \
             --output "$RUNNER_TEMP/sou135-inbox"
       - name: Qualify owned prepared-selection launch and failures with the original host
-        if: github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
+        if: github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.audit_retention_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -2765,7 +2897,7 @@ jobs:
             --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
             --output "$RUNNER_TEMP/pilot-storage-qualification"
       - name: Qualify prepared-run audit rotation and failed-store continuation
-        if: github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
+        if: github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -2776,7 +2908,7 @@ jobs:
             --validation-timeout-seconds 120 --audit-retention-only \
             --output "$RUNNER_TEMP/sou132-qualification"
       - name: Qualify reused bounded audit engine restart and fail-safe retention
-        if: github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
+        if: github.event.inputs.coordinated_update_only != 'true' && github.event.inputs.capacity_only != 'true' && (github.event_name != 'workflow_dispatch' || (github.event.inputs.ask_latency_baseline_sha == '' && github.event.inputs.ask_series == '')) && github.event.inputs.existing_project_only != 'true' && github.event.inputs.storage_recovery_only != 'true' && github.event.inputs.operator_results_only != 'true' && github.event.inputs.prepared_operations_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -3010,12 +3142,20 @@ jobs:
           name: sou111-native-preparation-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/sou151-capacity/**
+            ${{ runner.temp }}/sou164-update/qualification/qualification.json
+            ${{ runner.temp }}/sou164-update/fixtures/inputs.json
+            ${{ runner.temp }}/sou164-update/fixtures/inventory-a.json
+            ${{ runner.temp }}/sou164-update/fixtures/inventory-b.json
+            ${{ runner.temp }}/sou164-update/build-a.json
+            ${{ runner.temp }}/sou164-update/fixture-result.json
+            ${{ runner.temp }}/sou164-input-parents.json
             ${{ runner.temp }}/sou111-assets/capacity-*.json
             ${{ runner.temp }}/sou111-assets/selected-hashes.txt
             ${{ runner.temp }}/sou140-operator-results/operator-results.json
             ${{ runner.temp }}/sou140-rust-tests.log
             ${{ runner.temp }}/sou122-toolchain/native-attestation.json
             ${{ runner.temp }}/sou111-assets/native-summary.json
+            ${{ runner.temp }}/sou173-download.json
             ${{ runner.temp }}/sou111-assets/native-timing.json
             ${{ runner.temp }}/sou111-assets/native-rejected.json
             ${{ runner.temp }}/sou111-assets/native-diagnostic.json
