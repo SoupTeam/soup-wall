@@ -7,6 +7,37 @@ import pilot_git_outcomes as outcomes
 
 
 class GitOutcomesTests(unittest.TestCase):
+    def test_full_observation_budget_is_retained_below_the_existing_file_limit(self):
+        import hashlib
+        import json
+        import tempfile
+        row = {'event': 'mcp_call_outcome', 'version': 1, 'stage': 'result_inspection',
+               'request_sha256': 'a' * 64, 'host_call_sha256': 'b' * 64,
+               'response_sha256': 'c' * 64, 'reason_codes_sha256': 'd' * 64,
+               'authority': False, 'released': False,
+               'response': {'rpc_error': True, 'tool_error': True, 'rpc_code': -(2 ** 63)}}
+        def writer(path, value):
+            raw = (json.dumps(value, sort_keys=True, indent=2) + '\n').encode()
+            self.assertLessEqual(len(raw), 65536)
+            path.write_bytes(raw)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            record = outcomes.persist([row] * 256, root, 'initial', writer)
+            restored = []
+            self.assertEqual(record['records'], 256)
+            self.assertLessEqual(len(record['files']), 8)
+            for item in record['files']:
+                data = (root / item['path']).read_bytes()
+                self.assertEqual(hashlib.sha256(data).hexdigest(), item['sha256'])
+                part = json.loads(data)
+                self.assertEqual(part['offset'], len(restored))
+                restored.extend(part['records'])
+            self.assertEqual(restored, [row] * 256)
+            for case, rows in (('../escape', [row]), ('initial', [row] * 257),
+                               ('initial', [dict(row, payload='private')]), ('initial', [None])):
+                with self.assertRaises(ValueError):
+                    outcomes.persist(rows, root, case, writer)
+
     def test_failure_boundaries_require_observed_failures_not_missing_records(self):
         base = {'event': 'mcp_call_outcome', 'version': 1,
                 'request_sha256': 'a' * 64, 'host_call_sha256': 'b' * 64,

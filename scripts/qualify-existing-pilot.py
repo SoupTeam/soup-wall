@@ -26,6 +26,7 @@ from pilot_git_outcomes import collect as git_outcomes
 from pilot_git_outcomes import negative_results
 from pilot_git_outcomes import call_hashes
 from pilot_git_outcomes import failure_boundaries
+from pilot_git_outcomes import persist as persist_outcomes
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -141,10 +142,6 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                         signal.SIGTERM if case == "cancel" else signal.SIGKILL)
             process.wait(timeout=120)
         outcome = json.loads((root / "out.private").read_text().splitlines()[-1])
-        require((process.returncode == 0) == (not hold), "existing_run_outcome_mismatch")
-        if hold:
-            require(outcome.get("reason") == ("pilot_cancelled" if case == "cancel" else "owned_daemon_lost"),
-                    "existing_lifecycle_wrong_failure")
         cleanup = witness.finish()
         require(cleanup["all_stopped"] and outcome["cleanup"] == "owned_processes_stopped_audit_retained"
                 and len(list(state.iterdir())) == 1, "existing_owned_state_survived")
@@ -159,12 +156,22 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
         result = {"case": case, "status": "passed", "cleanup": outcome["cleanup"],
             "process_cleanup": cleanup, "native_instance": outcome["identity"]["native_instance"],
             "trace_sha256": BASE.sha(trace), "outside_reads": 0, "forbidden_network_deliveries": 0}
-        result["boundary_observations"] = git_outcomes(
+        observed_rows = git_outcomes(
             '\n'.join(rows), pids=set(LAUNCH.collector_processes(rows, paths["agentfw"])))
-        observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False) if not hold else {
-            "calls": [], "collector_servers": {}}
+        result["boundary_observations"] = persist_outcomes(observed_rows, args.output, case, RUN.PREP.write_json)
+        result["host_succeeded"] = process.returncode == 0
+        observation = {"calls": [], "collector_servers": {}}
+        observer_complete = True
+        if not hold:
+            try:
+                observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
+            except (ValueError, KeyError):
+                observer_complete = False
+        result["dispatch_observer_complete"] = observer_complete
+        result["forbidden_original_dispatches"] = sum(
+            call["tool"] in {"git_reset", "write_file", "Bash"} for call in observation["calls"]) if observer_complete else None
         result["operations"] = [{"index": i, "server": server, "tool": tool,
-            "boundary_observations": [row for row in result["boundary_observations"]
+            "boundary_observation_indices": [index for index, row in enumerate(observed_rows)
                                       if row["host_call_sha256"] in call_hashes(
                                           observation["calls"], observation["collector_servers"], server, tool, arguments)],
             "result_present": f"toolu_existing_{i}" in model.results,
@@ -174,12 +181,26 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                 json.dumps(model.results.get(f"toolu_existing_{i}")))))[:16]}
             for i, (server, tool, arguments) in enumerate(steps[:original_step_count])]
         for operation in result["operations"]:
-            operation["failure_boundaries"] = failure_boundaries(operation["boundary_observations"])
+            operation["failure_boundaries"] = failure_boundaries(
+                [observed_rows[index] for index in operation["boundary_observation_indices"]])
         result["additional_negative_controls"] = negative_results(model.results, negative_indices)
+        for index, negative in zip(negative_indices, result["additional_negative_controls"]):
+            server, tool, arguments = steps[index]
+            negative["original_dispatched"] = bool(call_hashes(
+                observation["calls"], observation["collector_servers"], server, tool, arguments)) if observer_complete else None
         try:
+            require((process.returncode == 0) == (not hold), "existing_run_outcome_mismatch")
+            if hold:
+                require(outcome.get("reason") == ("pilot_cancelled" if case == "cancel" else "owned_daemon_lost"),
+                        "existing_lifecycle_wrong_failure")
+            require(observer_complete, "original_dispatch_observer_incomplete")
             if not hold:
+                require(result["forbidden_original_dispatches"] == 0, "forbidden_original_dispatch")
                 require(all(row["passed"] for row in result["additional_negative_controls"]),
                         "git_negative_control_not_refused")
+                if negative_indices:
+                    require(not result["additional_negative_controls"][-1]["original_dispatched"],
+                            "unsafe_git_object_dispatched")
                 require(len(model.results) == len(steps), "existing_correlated_results_missing")
                 for index in (0, 1, 2, 3, 9):
                     require(model.results[f"toolu_existing_{index}"]["is_error"] is False, "useful_original_result_failed")
@@ -201,8 +222,6 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                             "ordinary_project_bytes_missing")
                     require(all(message in json.dumps(model.results["toolu_existing_11"]["content"])
                                 for message in fixture["history_messages"]), "ordinary_local_history_missing")
-                forbidden = {"git_reset", "write_file", "Bash"}
-                require(not any(call["tool"] in forbidden for call in observation["calls"]), "forbidden_original_dispatch")
                 require(PREPARED.ASK.SELECTED.trace_effects(trace, "filesystem") == 1, "original_read_effect_missing")
                 git_execs = [row for row in rows if 'execve("/mcp-runtime/git",' in row and row.endswith(" = 0")]
                 require(any('"status"' in row for row in git_execs)

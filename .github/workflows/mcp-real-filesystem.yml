@@ -1738,8 +1738,8 @@ jobs:
             ${{ runner.temp }}/sou141-ask-series/runs/*/stage-events.jsonl
             ${{ runner.temp }}/sou111-assets/native-read-lease.log
             ${{ runner.temp }}/sou111-assets/baseline-build.json
-            ${{ runner.temp }}/sou134-qualification/report.json
-            ${{ runner.temp }}/sou177-*/report.json
+            ${{ runner.temp }}/sou134-qualification/*.json
+            ${{ runner.temp }}/sou177-*/*.json
             ${{ runner.temp }}/sou120-demo/report.json
             ${{ runner.temp }}/sou135-inbox/qualification.json
             ${{ runner.temp }}/sou121-cleanup/report.json

@@ -4,6 +4,22 @@ import ast
 import hashlib
 
 
+def persist(rows, output, case, writer):
+    if case not in ('initial', 'operator-edit', 'cancel', 'daemon-loss', 'recovery'):
+        raise ValueError('unsupported_outcome_case')
+    if len(rows) > 256 or any(not isinstance(row, dict) or project(row) != row for row in rows):
+        raise ValueError('invalid_outcome_inventory')
+    files = []
+    for offset in range(0, len(rows), 32):
+        path = output / f'{case}-outcomes-{offset // 32}.json'
+        part = rows[offset:offset + 32]
+        writer(path, {'format': 'sw-mcp-call-outcomes/1', 'case': case,
+                      'offset': offset, 'records': part})
+        files.append({'path': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                      'offset': offset, 'records': len(part)})
+    return {'records': len(rows), 'files': files}
+
+
 def failure_boundaries(rows):
     failures = set()
     for value in rows:
