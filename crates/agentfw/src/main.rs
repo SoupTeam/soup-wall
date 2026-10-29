@@ -262,7 +262,7 @@ enum Cmd {
     /// Exercise an installed Agent end to end in an owned temporary workspace (Linux).
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
-    SelfTest(agentfw::self_test::Args),
+    SelfTest(agentfw::self_test::Cli),
     #[cfg(windows)]
     /// Preview a native Windows Agent setup against explicitly selected local assets.
     OnboardWindows {
@@ -571,7 +571,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
         Cmd::PilotObservation => std::process::exit(agentfw::pilot_observation::run()),
-        Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
+        Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run_cli(args)),
         #[cfg(windows)]
         Cmd::OnboardWindows { command } => {
             prepare_lifecycle_process()?;

@@ -1215,7 +1215,6 @@ pub fn default_home() -> anyhow::Result<PathBuf> {
 /// with the accepted helper under the recorded interpreter. Exit status and
 /// signal disposition are the helper's own.
 pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
-    use std::os::unix::process::CommandExt;
     let command = args
         .first()
         .and_then(|a| a.to_str())
@@ -1238,12 +1237,7 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
             return 2;
         }
     };
-    let error = std::process::Command::new(&verified.python.path)
-        .arg("-I")
-        .arg("-B")
-        .arg(verified.tree.join(ENTRY))
-        .args(args)
-        .exec();
+    let error = exec_helper(&verified, ENTRY, args);
     println!(
         "{}",
         json!({"format":"sw-pilot-front-door/1","command":command,"status":"failed",
@@ -1251,6 +1245,52 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
     );
     eprintln!("agentfw pilot: the verified helper could not be started: {error}");
     2
+}
+
+/// Only this fixed entry can be selected by the edit self-test front door.
+pub fn exec_private_edit_self_test(home: &Path, args: &[std::ffi::OsString]) -> i32 {
+    const ENTRY: &str = "scripts/private_edit_self_test.py";
+    let verified = match Store::new(home).current() {
+        Ok(verified) => verified,
+        Err(_) => {
+            println!(
+                "{}",
+                json!({"format":"sw-private-edit-self-test/1", "status":"incomplete",
+                    "executed":false,"reason":"installed_component_unavailable"})
+            );
+            return crate::self_test::EXIT_INCOMPLETE;
+        }
+    };
+    if !verified
+        .manifest
+        .files
+        .iter()
+        .any(|file| file.path == ENTRY)
+    {
+        println!(
+            "{}",
+            json!({"format":"sw-private-edit-self-test/1", "status":"unsupported",
+                "executed":false,"reason":"installed_component_has_no_edit_self_test"})
+        );
+        return crate::self_test::EXIT_UNSUPPORTED;
+    }
+    let _error = exec_helper(&verified, ENTRY, args);
+    println!(
+        "{}",
+        json!({"format":"sw-private-edit-self-test/1", "status":"incomplete",
+            "executed":false,"reason":"installed_helper_start_failed"})
+    );
+    crate::self_test::EXIT_INCOMPLETE
+}
+
+fn exec_helper(verified: &Verified, entry: &str, args: &[std::ffi::OsString]) -> std::io::Error {
+    use std::os::unix::process::CommandExt;
+    std::process::Command::new(&verified.python.path)
+        .arg("-I")
+        .arg("-B")
+        .arg(verified.tree.join(entry))
+        .args(args)
+        .exec()
 }
 
 #[cfg(test)]
