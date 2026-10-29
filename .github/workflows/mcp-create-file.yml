@@ -299,6 +299,8 @@ jobs:
           cd "$SOU161_SOURCE"
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-build.json" -- build --locked --offline -p agentfw --bin agentfw
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-0.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-review-publish.json" -- test --locked --offline -p agentfw --lib private_export -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-support-export.json" -- test --locked --offline -p agentfw --lib support_bundle -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-unit.json" -- test --locked --offline -p agentfw --lib pilot_approval -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-endpoint.json" -- test --locked --offline -p agentfw --test native_endpoint sou125_stop -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-1.json" -- test --locked --offline -p agentfw --lib native::execution::transport -- --nocapture
@@ -311,6 +313,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_quota.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_review.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
           python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
@@ -329,6 +332,10 @@ jobs:
           python3 -B scripts/qualify-edit-quota.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --faults "$SOU161_SCRATCH/quota-faults" --output "$SOU161_SCRATCH/quota"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou179_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
+          python3 -B scripts/qualify-edit-review.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/review-fault.so" --output "$SOU161_SCRATCH/review"
           BASH
       - name: Retain finite current-source qualification and build correlation
         if: always()
@@ -340,6 +347,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
             ${{ runner.temp }}/sou161-scratch/quota/report.json
+            ${{ runner.temp }}/sou161-scratch/review/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json

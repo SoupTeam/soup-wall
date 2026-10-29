@@ -53,6 +53,8 @@ pub mod service;
 #[path = "service_macos.rs"]
 pub mod service;
 pub mod spans;
+#[cfg(target_os = "linux")]
+mod private_export;
 pub mod support_bundle;
 pub mod token;
 #[cfg(windows)]

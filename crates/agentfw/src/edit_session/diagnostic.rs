@@ -199,8 +199,8 @@ pub(crate) fn text(report: &Report) -> String {
 }
 
 #[cfg(target_os = "linux")]
-mod audit;
+pub(super) mod audit;
 #[cfg(target_os = "linux")]
-mod io;
+pub(super) mod io;
 #[cfg(target_os = "linux")]
-mod linux;
+pub(super) mod linux;

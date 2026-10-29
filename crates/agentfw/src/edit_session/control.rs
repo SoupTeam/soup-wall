@@ -247,6 +247,42 @@ impl Selected {
     }
 }
 
+/// Offline reuse of the owner's retained cleanup receipt. This never queries
+/// the daemon, opens a live owner handle, sends a signal or changes a record.
+pub(super) fn retained_completion(
+    run: &Path,
+    context: &super::record::Context,
+    identity: (u64, u64),
+) -> Result<Vec<u8>> {
+    let selected = Selected::open(run)?;
+    ensure!(
+        selected.dir.identity()? == identity
+            && selected.control.launcher_pid == context.owner.pid
+            && selected.control.launcher_start == context.owner.start_ticks
+            && selected.control.config_sha256 == context.config_sha256
+            && selected.record.profile_sha256 == context.profile_sha256
+            && selected.record.home == context.home
+            && selected.record.host_session == context.host_session
+            && selected.record.instance_id == context.instance_id,
+        "edit_review_control_binding"
+    );
+    let receipt = selected.receipt()?.context("edit_review_cleanup_missing")?;
+    ensure!(
+        receipt.authority_revoked
+            && receipt.cleanup_confirmed
+            && receipt.reason == "host_completed"
+            && receipt.request_sha256.is_none()
+            && selected.request()?.is_none(),
+        "edit_review_cleanup_incomplete"
+    );
+    ensure!(
+        selected.dir.read("control.json")? == selected.bytes
+            && selected.dir.read("stop-receipt.json")? == profile::canonical(&receipt)?,
+        "edit_review_receipt_changed"
+    );
+    profile::canonical(&(digest(&selected.bytes), receipt))
+}
+
 pub(super) struct Guard {
     selected: Selected,
     _manifest: File,
