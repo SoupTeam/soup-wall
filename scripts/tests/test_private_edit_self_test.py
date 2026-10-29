@@ -82,6 +82,38 @@ def seed():
 
 
 class PrivateEditSelfTest(unittest.TestCase):
+    def test_quota_authorization_count_is_separate_from_physical_reservations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "result"
+            target.write_bytes(probe.NEW)
+            row = {"id": "aggregate-quota"}
+            suite = SimpleNamespace(report={"active_case": "aggregate-quota", "cases": [row]})
+            observed = {"toolu_self_test_" + str(i): {"is_error": False, "content": text.decode()}
+                        for i, text in enumerate((probe.OLD, b"created", probe.NEW))}
+            run = SimpleNamespace(target=target, suite=suite, observed=observed)
+            facts = {"native_write_authorizations": 2,
+                     "quota": {"admitted_mutation_attempts": 1, "known_committed_mutations": 1}}
+            probe.useful(run, facts, expected_authorizations=2)
+            self.assertTrue(row["runtime_attempts"][-1]["readback"]["expected_write_authorizations"])
+            with self.assertRaisesRegex(ValueError, "useful_expected_write_authorizations_missing"):
+                probe.useful(run, facts)
+            observed["toolu_self_test_2"]["content"] = "unrelated private payload"
+            with self.assertRaisesRegex(ValueError, "useful_final_read_exact_missing"):
+                probe.useful(run, facts, expected_authorizations=2)
+            self.assertNotIn("unrelated private payload", json.dumps(row))
+
+    def test_quota_refusal_requires_exact_code_and_no_reset_or_retry(self):
+        code = "edit_quota_mutation_limit"
+        value = {"error_code": code, "automatic_retry": False, "active_run_reset_available": False}
+        result = {"is_error": True, "content": [{"type": "text", "text": json.dumps(value)}]}
+        self.assertTrue(probe.quota_refusal(result, code))
+        self.assertFalse(probe.quota_refusal(result, "edit_quota_write_byte_limit"))
+        self.assertFalse(probe.quota_refusal(dict(result, is_error=False), code))
+        for field in ("automatic_retry", "active_run_reset_available"):
+            changed = dict(value, **{field: True})
+            self.assertFalse(probe.quota_refusal(dict(result, content=json.dumps(changed)), code))
+        self.assertFalse(probe.quota_refusal(dict(result, content=code), code))
+
     def test_only_budget_scan_tolerates_vanished_entries(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

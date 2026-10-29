@@ -55,6 +55,11 @@ that rejects old authority. Target bytes and process birth identities are
 observed independently of native verdicts. Matching bytes alone never establish
 commit attribution or delivery after an interruption.
 
+Native policy/Ask authorizations and actual quota reservations are separate
+counts. The accepted runtime checks quota after exact authorization. The quota
+controls therefore require two fresh approvals but only one reservation and
+commit, an exact quota-refusal code and an unchanged second target.
+
 The edit path is the accepted native `private-output` API. The selection's
 filesystem/Git runtime pins are validated; this check does not claim that edits
 traverse the original filesystem/Git MCP servers. Their original-server

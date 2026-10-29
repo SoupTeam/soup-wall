@@ -219,7 +219,7 @@ def failure_observation(error):
     trace = error.__traceback__
     while trace is not None:
         code = trace.tb_frame.f_code
-        if code.co_filename == __file__:
+        if code.co_filename == __file__ and code.co_name != "require":
             value["helper_line"] = trace.tb_lineno
             value["helper_function"] = code.co_name if re.fullmatch(r"[a-z_][a-z0-9_]{0,79}", code.co_name) else "helper"
         trace = trace.tb_next
@@ -732,7 +732,7 @@ class Run:
                     require(all(type(n) is int for n in current) and current[0] >= previous[0]
                             and current[1] >= previous[1], "active_quota_refunded")
                     previous = current
-        self.finished = {"exit_code": self.process.returncode, "write_admissions": len(writes),
+        self.finished = {"exit_code": self.process.returncode, "native_write_authorizations": len(writes),
             "publication_gates": len(publications), "approved_or_rejected": len(self.decisions),
             "observed_results": len(self.observed), "audit_sha256": sha(raw_audit),
             "stdout_sha256": sha(stdout), "stderr_sha256": sha(stderr),
@@ -777,24 +777,37 @@ class Run:
         return self.witness.finish() if self.witness is not None else {"all_stopped": True, "observed": []}
 
 
-def useful(run, facts):
-    require(bounded(run.target, 4096) == NEW and len(run.observed) >= 3
-            and all(not run.observed["toolu_self_test_" + str(i)]["is_error"] for i in range(3))
-            and exact_result(run.observed["toolu_self_test_0"]["content"], OLD)
-            and exact_result(run.observed["toolu_self_test_2"]["content"], NEW)
-            and facts["write_admissions"] == 1, "useful_readback_missing")
+def useful(run, facts, *, expected_authorizations=1):
+    observed = [run.observed.get("toolu_self_test_" + str(i)) for i in range(3)]
+    evidence = {"target_bytes_match": bounded(run.target, 4096) == NEW,
+                "initial_results_present": all(isinstance(item, dict) for item in observed),
+                "initial_results_succeeded": all(isinstance(item, dict) and not item.get("is_error") for item in observed),
+                "initial_read_exact": exact_result((observed[0] or {}).get("content"), OLD),
+                "final_read_exact": exact_result((observed[2] or {}).get("content"), NEW),
+                "expected_write_authorizations": facts["native_write_authorizations"] == expected_authorizations}
+    # Preserve independent runtime observations even when their grading fails.
+    active = next(row for row in run.suite.report["cases"] if row["id"] == run.suite.report["active_case"])
+    active.setdefault("runtime_attempts", []).append({"witness": facts, "readback": evidence})
+    for field, complete in evidence.items():
+        require(complete, "useful_" + field + "_missing")
 
 
-def exact_result(content, expected):
+def result_text(content):
     """Normalize only accepted text envelopes, never a substring match."""
     if isinstance(content, list):
         if not content or not all(isinstance(block, dict) and block.get("type") == "text"
                                   and isinstance(block.get("text"), str) for block in content):
-            return False
+            return None
         content = "".join(block["text"] for block in content)
     if not isinstance(content, str):
+        return None
+    return re.sub(r"\n\n?<system-reminder>\n<total_tokens>[0-9]+ tokens left</total_tokens>\n</system-reminder>$", "", content)
+
+
+def exact_result(content, expected):
+    content = result_text(content)
+    if content is None:
         return False
-    content = re.sub(r"\n\n?<system-reminder>\n<total_tokens>[0-9]+ tokens left</total_tokens>\n</system-reminder>$", "", content)
     if content == expected.decode():
         return True
     try:
@@ -802,6 +815,18 @@ def exact_result(content, expected):
     except ValueError:
         return False
     return isinstance(value, dict) and value == {"content": expected.decode()}
+
+
+def quota_refusal(result, code):
+    if result.get("is_error") is not True:
+        return False
+    try:
+        value = strict(result_text(result.get("content")) or "")
+    except ValueError:
+        return False
+    return (isinstance(value, dict) and value.get("error_code") == code
+            and value.get("automatic_retry") is False
+            and value.get("active_run_reset_available") is False)
 
 
 def execute(suite, report):
@@ -836,31 +861,40 @@ def execute(suite, report):
     require(run.decide(pending) != 0, "rejected_authority_replayed")
     run.release.set()
     facts = run.finish()
-    require(facts["write_admissions"] == 0 and snapshot(run.target) == run.before,
+    require(facts["native_write_authorizations"] == 0 and snapshot(run.target) == run.before,
             "rejection_not_preserved")
     done(row, witness=facts, rejection_observed=True, replay_refused=True)
 
     row = begin("aggregate-quota")
     run = Run(suite, "quota", two=True)
     facts = run.finish()
-    useful(run, facts)
+    useful(run, facts, expected_authorizations=2)
     usage = facts["quota"] or {}
     require(not (run.root / "second.txt").exists()
             and run.observed["toolu_self_test_3"]["is_error"]
             and usage.get("admitted_mutation_attempts") == 1
             and usage.get("charged_write_bytes") == len(NEW)
-            and len(run.decisions) == 1, "aggregate_quota_not_enforced")
+            and usage.get("known_committed_mutations") == 1
+            and usage.get("known_committed_write_bytes") == len(NEW)
+            and len(run.decisions) == 2
+            and quota_refusal(run.observed["toolu_self_test_3"], "edit_quota_mutation_limit"),
+            "aggregate_quota_not_enforced")
     byte_run = Run(suite, "byte-quota", two=True, limits=(2, len(NEW) + 1))
     byte_facts = byte_run.finish()
-    useful(byte_run, byte_facts)
+    useful(byte_run, byte_facts, expected_authorizations=2)
     byte_usage = byte_facts["quota"] or {}
     require(not (byte_run.root / "second.txt").exists()
             and byte_run.observed["toolu_self_test_3"]["is_error"]
             and byte_usage.get("admitted_mutation_attempts") == 1
             and byte_usage.get("charged_write_bytes") == len(NEW)
-            and len(byte_run.decisions) == 1, "aggregate_byte_quota_not_enforced")
+            and byte_usage.get("known_committed_mutations") == 1
+            and byte_usage.get("known_committed_write_bytes") == len(NEW)
+            and len(byte_run.decisions) == 2
+            and quota_refusal(byte_run.observed["toolu_self_test_3"], "edit_quota_write_byte_limit"),
+            "aggregate_byte_quota_not_enforced")
     done(row, witness=facts, byte_witness=byte_facts, second_target_absent=True, quota_not_refunded=True,
-         mutation_ceiling_enforced=True, byte_ceiling_enforced=True)
+         mutation_ceiling_enforced=True, byte_ceiling_enforced=True,
+         native_authorizations_precede_quota=True, fresh_ask_for_each_mutation=True)
 
     row = begin("exact-run-stop")
     selected = Run(suite, "selected-stop", replace=True)
@@ -874,7 +908,7 @@ def execute(suite, report):
     require(peer.decide(peer_pending) == 0, "peer_approval_failed")
     peer_facts = peer.finish()
     useful(peer, peer_facts)
-    require(selected_facts["write_admissions"] == 0, "stopped_pending_write_dispatched")
+    require(selected_facts["native_write_authorizations"] == 0, "stopped_pending_write_dispatched")
     done(row, selected=selected_facts, peer=peer_facts, stop=stop, independent_run_preserved=True)
     row = begin("stopped-authority")
     require(selected.decide(pending) != 0, "stopped_approval_replayed")
@@ -898,7 +932,7 @@ def execute(suite, report):
     lost.process.kill()
     lost_facts = lost.finish(expected_exit=None)
     require(lost_facts["exit_code"] != 0 and snapshot(lost.target) == lost.before
-            and lost_facts["write_admissions"] == 0
+            and lost_facts["native_write_authorizations"] == 0
             and lost.decide(lost_pending) != 0, "daemon_loss_did_not_fail_closed")
     before = tree_witness(lost.run)
     code, diagnosis = suite.cli("status", "--run", lost.run, "--json")
