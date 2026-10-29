@@ -9,8 +9,26 @@ proves that an interrupted command completed.
 attempts. `native-attempt-1.json` is the exact sanitized report downloaded from
 immutable artifact 12933719608 after independently checking its ZIP digest,
 source/tree, helper digest and binary correlation. All 36 controls passed on
-`e03da1c5f08365528f3783476423a5e15b15de88`. The next helper revision adds the
-37th actual concurrent-process control; its final result is recorded separately.
+`e03da1c5f08365528f3783476423a5e15b15de88`.
+
+`native-attempt-2.json` independently verifies all **37/37 controls passed** on
+`45eb64ce3b16b87745a4473638becd4069d5f9be`, including two concurrent operator
+processes and exactly one successful publication. Its immutable artifact is
+12934438880, ZIP SHA-256
+`e0ae3bbf357c50c7373efe945bb182db067834e0617532aa914ff7087992abff`;
+the exact report SHA-256 is
+`47c50140c03f96d010420b9319cfd18c64953c943b731c33bbc283cdd673f74a`.
+Source/tree, helper and binary correlations were independently checked before
+running the finite report grader in the local enclosure. The second source
+revision changes only the qualification helper, grading and guide; the product
+code is unchanged. Later documentation/evidence commits are not represented as
+native executions of a different source revision.
+
+Both native runs passed all seven installed stages (application, read-only
+review, edit runtime, stop, refresh, archive and quota). The final report records
+107 unchanged-state observations, zero operator provider requests and zero
+operator tool requests. All five actual injected faults retain indeterminate
+recovery and refuse blind retry; all three kill controls exited by SIGKILL.
 
 The native job uses Ubuntu 24.04, read-only source, scratch-only writes, dropped
 capabilities/no-new-privs and a private loopback-only network. The installed

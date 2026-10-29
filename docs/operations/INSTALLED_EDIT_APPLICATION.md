@@ -93,7 +93,10 @@ Neither matching current bytes nor a readable receipt can reconstruct the
 withheld acknowledgement. Interrupted publication,
 missing/damaged records or backups, changed roots, stale source/boot bindings and
 uncertain durability do not permit automatic rollback, cleanup or blind retry.
-Inspect the target and retained private evidence independently. Do not edit the
+The response's `local_operator_publication` flag marks confirmed completion.
+When status is `indeterminate`, the file may already have changed even though
+that confirmation flag is false. Inspect the target and retained private evidence
+independently. Do not edit the
 journal to make an uncertain operation appear complete.
 
 ## Verification

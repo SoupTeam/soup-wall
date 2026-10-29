@@ -1,7 +1,7 @@
 {
   "format": "sw-sou187-attempts/1",
   "accepted_base": "49e89b6bf6517541a801baee4cf9834ed4de06d4",
-  "status": "final_concurrency_qualification_pending",
+  "status": "scoped_native_qualification_passed",
   "attempts": [
     {
       "run_id": 40955071370,
@@ -100,8 +100,293 @@
     {
       "run_id": 40957752053,
       "source_commit": "45eb64ce3b16b87745a4473638becd4069d5f9be",
-      "status": "in_progress",
-      "change": "Only adds actual two-process single-winner qualification and grading/guide; product code unchanged."
+      "status": "passed",
+      "change": "Only adds actual two-process single-winner qualification and grading/guide; product code unchanged.",
+      "attempt": 1,
+      "artifact_id": 12934438880,
+      "artifact_sha256": "e0ae3bbf357c50c7373efe945bb182db067834e0617532aa914ff7087992abff",
+      "report": "native-attempt-2.json",
+      "report_sha256": "47c50140c03f96d010420b9319cfd18c64953c943b731c33bbc283cdd673f74a",
+      "inventories": [
+        {
+          "stage": "application",
+          "status": "passed",
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 37
+          },
+          "report_sha256": "47c50140c03f96d010420b9319cfd18c64953c943b731c33bbc283cdd673f74a"
+        },
+        {
+          "stage": "archive-runtime",
+          "status": "passed",
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 18
+          },
+          "report_sha256": "a7792265f7078b0b1c2b4e4490bb5d5d27731ddbbcecacfa18601e66244a6845"
+        },
+        {
+          "stage": "quota",
+          "status": "passed",
+          "inventory": {
+            "attempted": 25,
+            "expected": 25,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 25
+          },
+          "report_sha256": "3a70b14e43fe7a2e3f95fe3e6365ee5acaac37954b839ef44cbe8d533ceffc93"
+        },
+        {
+          "stage": "refresh",
+          "status": "passed",
+          "inventory": {
+            "attempted": 23,
+            "expected": 23,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 23
+          },
+          "report_sha256": "1b9009f42441b6e91bc2871c930c97ed1f4d89a9f00027980a836205537ee413"
+        },
+        {
+          "stage": "review",
+          "status": "passed",
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 40
+          },
+          "report_sha256": "f76c78765238f000ea582febf7bf063945810a29b43b86df3379e7d992eee480"
+        },
+        {
+          "stage": "runtime",
+          "status": "passed",
+          "inventory": {
+            "attempted": 23,
+            "expected": 23,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 23
+          },
+          "report_sha256": "3e027cb3f476a73bab9eb2f6669d80d17e42c4a21863881a5d0c0087d986cc61"
+        },
+        {
+          "stage": "stop-runtime",
+          "status": "passed",
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 12
+          },
+          "report_sha256": "1deef37f788096a083079849e909395fa3a766e7dc1d0c0b156d04a2326b150f"
+        }
+      ],
+      "native_build_checks": [
+        {
+          "record": "sou166-edit-build.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "agentfw",
+          "arguments": [
+            "build",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--bin",
+            "agentfw"
+          ],
+          "record_sha256": "dae139d8d59f953eb4d97bfcffb00c950a99bf66000ff7c070bc078bde96eb3f"
+        },
+        {
+          "record": "sou166-edit-clippy.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "clippy",
+          "arguments": [
+            "clippy",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "record_sha256": "6b63e33c907dd60c2bfe299751005463e9f345da53b6fe67e191d5ec472494f3"
+        },
+        {
+          "record": "sou166-edit-review-publish.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "library",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--lib",
+            "private_export",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "1fbb7d1ebb226ae1623d22a13bede0c8813ef88af2a5ebaec207e561062cae05"
+        },
+        {
+          "record": "sou166-edit-stop-endpoint.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "native_endpoint",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--test",
+            "native_endpoint",
+            "sou125_stop",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "0a9d3de0437f804b983f4da21748f688cda2731dfab65d844dba67268f57d43e"
+        },
+        {
+          "record": "sou166-edit-stop-unit.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "library",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--lib",
+            "pilot_approval",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "cc367f58c9796149111bc8b743e4abbcf41f4e228b8483649524478660423a49"
+        },
+        {
+          "record": "sou166-edit-support-export.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "library",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--lib",
+            "support_bundle",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "5789dd3546dd543485d03a3a5ff89cfa5e677497df1d2070f83a4930d744ca28"
+        },
+        {
+          "record": "sou166-edit-test-0.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "library",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--lib",
+            "edit_session",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "008a5681f5f1428dda8206fd97a84a4c4c053b92423242d9b011d6918b252bbc"
+        },
+        {
+          "record": "sou166-edit-test-1.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "library",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--lib",
+            "native::execution::transport",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "30617199e225c4b9912148044f50d6f06625a83b9497f8b55296cf51db481411"
+        },
+        {
+          "record": "sou166-edit-test-2.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "library",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--lib",
+            "replace_file",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "7894e480b133ea8ee784a68a438eb6574c8c9ec69182821c9afb75b1dd2c97aa"
+        },
+        {
+          "record": "sou166-edit-test-3.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "replace_file",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--test",
+            "replace_file",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "16af6b46560fefc82472c181ef8484000440e619004eaf03cc69e3a34542052c"
+        },
+        {
+          "record": "sou166-edit-test-4.json",
+          "format": "sw-ci-build-use/1",
+          "status": "passed",
+          "role": "library",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "agentfw",
+            "--lib",
+            "create_file",
+            "--",
+            "--nocapture"
+          ],
+          "record_sha256": "0ea894796621a354e2b5a09279299a3509d6f57e0cd96065c513452594215290"
+        }
+      ]
     }
-  ]
+  ],
+  "final_native_source": "45eb64ce3b16b87745a4473638becd4069d5f9be",
+  "final_native_tree": "fdb73da6a7756fb25ddaaa5449da126fb9add141",
+  "merge_qualification": "Team-lead-owned shared Ready CI, CodeQL and exact-candidate admission remain separate."
 }
