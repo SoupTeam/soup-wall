@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import stat
 import subprocess
 import sys
@@ -30,7 +31,7 @@ CASES = ('installed-closure', 'genuine-create-review', 'genuine-replace-review',
          'individual-private-export', 'export-without-consent', 'wrong-observation', 'changed-output',
          'symlink-output', 'fifo-output', 'device-link', 'hardlink-output', 'oversized-output', 'missing-output',
          'binary-summary', 'binary-display-refused', 'replaced-root', 'redirected-parent',
-         'tampered-profile', 'missing-terminal', 'contradictory-terminal', 'missing-cleanup-receipt',
+         'tampered-profile', 'changed-retained-config', 'missing-terminal', 'contradictory-terminal', 'missing-cleanup-receipt',
          'foreign-owner', 'stale-boot', 'active-run', 'cancelled-run', 'read-substitution-race',
          'failed-publication-cleanup', 'concurrent-create-new-export', 'existing-destination',
          'sanitized-support-separate')
@@ -136,6 +137,12 @@ def qualify(args, report):
                 stdin=subprocess.DEVNULL, capture_output=True, timeout=15)
             require(len(result.stdout) <= 128 * 1024 and len(result.stderr) <= 8192, 'review_response_cap')
             require(suite.secret_canary.encode() not in result.stdout + result.stderr, 'review_prompt_leak')
+            diagnostic = EDIT.cli_observation(result.returncode, result.stdout, result.stderr)
+            for line in result.stderr.decode('utf-8', 'replace').splitlines():
+                match = re.fullmatch(r'Error: edit_review_refused: ([a-z][a-z0-9_]{0,95})', line)
+                if match: diagnostic['reason'] = match[1]
+            report['last_review'] = diagnostic
+            suite.active['review'] = diagnostic
             value = json.loads(result.stdout) if result.returncode == 0 else None
             if value:
                 require(value['observation']['authority'] is False and value['observation']['executed'] is False,
@@ -165,7 +172,8 @@ def qualify(args, report):
             run = suite.last_run
             before = selected_witness(suite, run, target, plan)
             code, value, _ = review(run, prepared)
-            require(code == 0 and value['observation']['outputs'][0]['sha256'] == sha(EDIT.NEW.encode()), 'review_digest_wrong')
+            require(code == 0, 'completed_review_refused')
+            require(value['observation']['outputs'][0]['sha256'] == sha(EDIT.NEW.encode()), 'review_digest_wrong')
             require(before == selected_witness(suite, run, target, plan), 'review_changed_inputs')
             finish(name, genuine_readback=True, unchanged=True, observed_sha256=sha(target.read_bytes()),
                    observation_sha256=value['observation_sha256'], process_cleanup=row['process_cleanup'])
@@ -240,6 +248,8 @@ def qualify(args, report):
         try: checked('redirected-parent')
         finally: root.unlink();held.rename(root)
         with replaced(run / 'profile.json', b'{}'): checked('tampered-profile')
+        config_path = EDIT.run_home(run) / 'config.yaml'
+        with replaced(config_path, config_path.read_bytes() + b'\n'): checked('changed-retained-config')
         with replaced(run / 'terminal.json'): checked('missing-terminal')
         terminal = json.loads((run / 'terminal.json').read_bytes());terminal['cleanup']['reaped'] = False
         with replaced(run / 'terminal.json', json.dumps(terminal).encode()): checked('contradictory-terminal')

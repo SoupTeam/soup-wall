@@ -196,7 +196,8 @@ fn observe(args: &Args, budget: &mut Budget) -> Result<Reviewed> {
     let host_identity: ProcessIdentity = decode(&host)?;
     inactive(&host_identity)?;
     let meta = directory.metadata().map_err(anyhow::Error::msg)?;
-    let receipt = control::retained_completion(&args.run, context, (meta.dev(), meta.ino()))?;
+    let receipt =
+        control::retained_completion(&args.run, context, (meta.dev(), meta.ino()), budget)?;
     let root = root(profile)?;
     root.observation_lock().map_err(anyhow::Error::msg)?;
     let mut outputs = vec![];
@@ -298,7 +299,8 @@ fn recheck(args: &Args, review: &Reviewed, budget: &mut Budget) -> Result<()> {
             && control::retained_completion(
                 &args.run,
                 &selected.context,
-                (meta.dev(), meta.ino())
+                (meta.dev(), meta.ino()),
+                budget
             )? == review.receipt,
         "edit_review_terminal_changed"
     );
