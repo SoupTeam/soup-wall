@@ -70,8 +70,10 @@ const rollout = (() => {
       if (group && groups.some(g => g.group_id === group)) select.value = group;
       else { group = null; clearGroup(); }
       say(groups.length ? "Choose a group to review its revisions and rollout." : "No Agent groups in this tenant.");
+      return true;
     } catch (e) {
       if (generation === epoch && id === tenant && e.name !== "AbortError") say("Unable to load Agent groups. Refresh to retry.", "error");
+      return false;
     }
   }
 
@@ -332,11 +334,23 @@ const rollout = (() => {
 
   $("rollout-group").addEventListener("change", () => {
     controller?.abort(); controller = new AbortController(); epoch++; busy = false;
-    if (blocked !== "session" && blocked !== "role") blocked = "";
+    if (blocked !== "session" && blocked !== "role" && blocked !== "group-reconcile") blocked = "";
     group = $("rollout-group").value || null; clearGroup(); if (group) load();
   });
   $("rollout-refresh").addEventListener("click", async () => {
     if (busy) return;
+    if (blocked === "group-reconcile") {
+      const generation = epoch;
+      busy = true; lock();
+      const loaded = await loadGroups();
+      if (generation === epoch) {
+        busy = false;
+        if (loaded) { blocked = ""; say("Reconciled group list: check whether the group was created before acting again. Nothing was retried automatically.", "note"); }
+        else say("The group outcome is still unknown. Changes stay disabled; refresh to reconcile the group list.", "error");
+        lock();
+      }
+      return;
+    }
     if (blocked === "reconcile") { await reconcile(); return; }
     if (group) load(); else loadGroups();
   });
@@ -393,7 +407,13 @@ const rollout = (() => {
     } catch (e) {
       if (generation !== epoch) return;
       if (e.status === 401 || e.status === 403) { blocked = e.status === 401 ? "session" : "role"; say("This session or role cannot make this change. The panel is read-only.", "error"); }
-      else if (ambiguous(e)) { say(`${label}: the outcome is unknown (${e.message}). Reloaded the group list; check it before trying again.`, "error"); await loadGroups(); }
+      else if (ambiguous(e)) {
+        blocked = "group-reconcile";
+        const loaded = await loadGroups();
+        if (generation !== epoch) return;
+        if (loaded) { blocked = ""; say(`${label}: the outcome was uncertain. Check the reloaded group list before acting again; nothing was retried.`, "error"); }
+        else say("The group outcome is still unknown. Changes stay disabled; refresh to reconcile the group list.", "error");
+      }
       else say(`${label} refused: ${e.message}.`, "error");
     } finally { if (generation === epoch) { busy = false; lock(); } }
   }

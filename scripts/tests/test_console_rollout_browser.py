@@ -299,6 +299,23 @@ class RolloutPanelBrowserTests(unittest.TestCase):
         self.assertEqual(self.posts, [])
         self.assertEqual(self.page.locator("#rollout-group").input_value(), "other")
 
+    def test_uncertain_group_creation_stays_locked_until_group_list_reconciles(self):
+        self.open()
+        groups = f"/admin/v1/tenants/{TENANT}/groups"
+        self.overrides[("POST", groups)] = "abort"
+        self.overrides[("GET", groups)] = (503, {"error": "unavailable"})
+        self.page.locator("#rollout-new-group-id").fill("new-group")
+        self.page.locator("#rollout-new-group-name").fill("New group")
+        self.page.locator("#rollout-create-group button").click()
+        self.wait_status("Changes stay disabled")
+        self.assertEqual(self.owner_buttons_enabled(), 0)
+        self.assertEqual(self.posts, [("POST", groups)])
+        self.overrides[("GET", groups)] = (200, self.groups)
+        self.page.locator("#rollout-refresh").click()
+        self.wait_status("Reconciled group list")
+        self.assertGreater(self.owner_buttons_enabled(), 0)
+        self.assertEqual(self.posts, [("POST", groups)])
+
     def test_empty_and_error_states(self):
         self.groups = []
         self.open(group=False)
