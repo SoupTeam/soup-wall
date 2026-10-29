@@ -59,6 +59,7 @@ SCRIPTS = (
     "scripts/pilot_preparation_lock.py",
     "scripts/pilot_provider.py",
     "scripts/pilot_qualification.py",
+    "scripts/pilot_resumable_download.py",
     "scripts/pilot_source_identity.py",
     "scripts/pilot_update.py",
     "scripts/switch-prepared-pilot.py",
