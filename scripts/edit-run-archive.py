@@ -414,7 +414,8 @@ def inventory(run):
                     bodies[key] = body
         directory.check()
     walk(run, '', 0)
-    S.require(S.strict(bodies['run.json']) == record and S.strict(bodies['terminal.json']) == ended,
+    S.require(S.encoded(S.strict(bodies['run.json'])) == S.encoded(record)
+              and S.encoded(S.strict(bodies['terminal.json'])) == S.encoded(ended),
               'edit_terminal_changed_during_inventory')
     S.require(dirs[''] == S.identity(os.fstat(run.fd)), 'edit_run_generation_changed')
     S.require(home + '/audit.jsonl' in bodies, 'native_audit_missing')

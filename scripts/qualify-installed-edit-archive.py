@@ -184,6 +184,7 @@ def qualify(args, report):
         facts, observed, _ = suite.host(label, root, target, plan, prepared, proposals)
         require(facts['exit'] == 0 and target.read_text() == B.NEW and len(observed) == 3
                 and all(not item['is_error'] for item in observed.values()), 'useful_installed_sequence_failed')
+        require(B.NEW.strip() in json.dumps(observed['toolu_edit_2']['content']), 'useful_installed_readback_missing')
         preserved.append((target, snapshot(target), plan, plan_witness(plan)))
         return suite.last_run, facts
     def apply_archive(bound):

@@ -237,7 +237,7 @@ class CleanupBoundary(unittest.TestCase):
         self.snapshots(quota=True)
         original = E.quota_binding
         changed = copy.deepcopy(self.terminal)
-        changed['mutation_quota']['remaining_write_bytes'] += 1
+        changed['mutation_quota']['admitted_mutation_attempts'] = True
         def replace_after_validation(profile, ended):
             original(profile, ended)
             self.write(self.run / 'terminal.json', E.S.encoded(changed), 0o400)
