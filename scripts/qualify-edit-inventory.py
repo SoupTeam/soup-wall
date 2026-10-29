@@ -311,8 +311,16 @@ def main():
         current = next((r for r in report['cases'] if r['attempted'] and r['status'] == 'incomplete'), None)
         if current is not None: current.update(status='failed', failure=code)
     report['inventory'] = {s:sum(r['status'] == s for r in report['cases']) for s in ('passed', 'failed', 'incomplete')}
-    (args.output / 'report.json').write_text(json.dumps(report, sort_keys=True, indent=2) + '\n')
-    print(json.dumps({key:report[key] for key in ('format', 'status', 'inventory', 'failure', 'failure_type') if key in report}))
+    evidence = (json.dumps(report, sort_keys=True, indent=2) + '\n').encode()
+    (args.output / 'report.json').write_bytes(evidence)
+    # Content-free CI diagnostics remain usable if artifact transfer is unavailable.
+    summary = {key:report[key] for key in ('format', 'status', 'inventory', 'failure', 'failure_type',
+               'source_commit', 'source_tree', 'agentfw_sha256', 'component', 'claude_sha256') if key in report}
+    summary['evidence_sha256'] = sha(evidence)
+    summary['case_results'] = [{'id':r['id'], 'status':r['status'], 'attempted':r['attempted'],
+        'witnesses':{key:value for key,value in r.items() if type(value) is bool and key != 'attempted'}}
+        for r in report['cases']]
+    print(json.dumps(summary, sort_keys=True))
     return 0 if passed_report(report) else 1
 
 
