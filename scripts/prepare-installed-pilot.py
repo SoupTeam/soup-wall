@@ -140,7 +140,7 @@ def outside_workspaces(paths, roots):
 
 def validate_existing_workspaces(paths, roots, git_profile=GIT_PROFILES.DEFAULT):
     """Opt-in only: reuse native validators, never run Git against user data."""
-    result = subprocess.run([str(paths["agentfw"]), "pilot-workspaces", "--workspace", str(roots["filesystem"]),
+    result = subprocess.run([str(paths["agentfw"]), "pilot-workspaces", "--validate-selection", "--workspace", str(roots["filesystem"]),
                              "--git-workspace", str(roots["git"]),
                              "--git-profile-format", GIT_PROFILES.selected(git_profile)[0]],
                             env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}, cwd="/",

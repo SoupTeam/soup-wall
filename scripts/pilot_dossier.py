@@ -401,13 +401,33 @@ def validate_manifest(m):
     validate_reference(m['workload'])
     seen = set()
     for e in m['evidence']:
-        exact(e, {'id', 'file', 'scope', 'owner', 'role'}, 'evidence')
+        fields = {'id', 'file', 'scope', 'owner', 'role'}
+        require(set(e) in (fields, fields | {'context'}), 'evidence_fields')
+        if 'context' in e:
+            require(e['role'] == 'candidate', 'historical_context_refused')
+            validate_reference(e['context'])
         require(e['role'] in ('candidate', 'history'), 'invalid_evidence_role')
         identifier(e['id'], 'evidence_id'); identifier(e['owner'], 'owner')
         validate_reference(e['file'])
         require(e['id'] not in seen and e['scope'] == SCOPE, 'duplicate_id_or_scope_mismatch')
         seen.add(e['id'])
     return m
+
+
+def linked_environment(root, entry, original_raw, before):
+    """Explicit hash-bound custodian context; never replace a runtime verdict."""
+    raw = selected_bytes(root, entry['context'])
+    context = parse(raw)
+    require(context.get('format') == 'sw-pilot-readiness-execution/1'
+            and context.get('decision') == 'NOT_READY', 'unsupported_execution_context')
+    require(report_source(context['source_before']) == before
+            and context['source_before'] == context['source_after'], 'context_source_mismatch')
+    rows = [row for row in context['stages'] if row.get('report_sha256') == sha(original_raw)]
+    require(len(rows) == 1 and rows[0].get('status') == 'executed', 'context_report_link_missing')
+    cleanup = rows[0].get('independent_namespace_cleanup', {})
+    require(cleanup.get('all_stopped') is True and cleanup.get('remaining') == [],
+            'context_cleanup_unconfirmed')
+    return context['environment'], sha(raw)
 
 
 def build(m, root, repo):
@@ -457,7 +477,17 @@ def build(m, root, repo):
             # from a filename, the reporter's OS, or a Linux-only code path.
             if any(v is None for v in m['environment'].values()):
                 record['blockers'].append('expected_environment_unbound')
-            if report.get('environment') != m['environment']:
+            environment = report.get('environment')
+            if 'context' in entry:
+                linked, context_sha = linked_environment(root, entry, raw, before)
+                if environment is not None:
+                    legacy = type(environment) is dict and set(environment) == {'os', 'machine', 'kernel', 'python'}
+                    require(environment == linked or (legacy and environment['os'] == 'Linux'
+                        and environment['machine'] == linked['architecture']
+                        and environment['kernel'] == linked['kernel_release']), 'context_environment_conflict')
+                environment = linked
+                record['execution_context_sha256'] = context_sha
+            if environment != m['environment']:
                 record['blockers'].append('environment_absent_or_mismatched')
         except (Invalid, Failure, KeyError, TypeError, ValueError, OSError,
                 subprocess.SubprocessError) as exc:

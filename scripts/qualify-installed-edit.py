@@ -340,6 +340,9 @@ def passed_report(report):
 def cli_observation(code, stdout, stderr):
     """Finite diagnostics only: no raw response, arguments, paths or stderr."""
     known = {'edit_run_ended': 'run_ended', 'edit_run_not_live': 'run_not_live',
+             'edit_quota_limits_invalid': 'quota_limits_invalid',
+             'edit_profile_contract': 'profile_contract', 'edit_plan_invalid': 'plan_invalid',
+             'edit_quota_both_limits_required': 'quota_both_limits_required',
              'pending approval has expired': 'pending_expired',
              'no such pending approval (decided, expired or restarted)': 'pending_unavailable'}
     lines = stderr[:131072].decode('utf-8', 'replace').splitlines()
@@ -608,7 +611,7 @@ class Suite:
     def ask(self, run, *words):
         return self.cli(*ask_words(run, *words))
 
-    def host(self, label, root, target, plan, prepared, proposals, mode='approve', timeout=40, on_pending=None):
+    def host(self, label, root, target, plan, prepared, proposals, mode='approve', timeout=40, batch=False, on_pending=None):
         model = HOST.ScriptedModel([])
         offered = set()
         observed = {}
@@ -625,12 +628,17 @@ class Suite:
                 for block in message.get('content', []) if isinstance(message.get('content'), list) else []:
                     if isinstance(block, dict) and block.get('type') == 'tool_result' and block.get('tool_use_id') in offered:
                         observed[block['tool_use_id']] = {'is_error': bool(block.get('is_error')), 'content': block.get('content')}
+            requests = []
             for index, (tool, arguments) in enumerate(proposals):
                 identity = f'toolu_edit_{index}'
                 if identity not in observed:
                     require(identity not in offered, 'host_reissued_request')
                     offered.add(identity)
-                    return [{'type': 'tool_use', 'id': identity, 'name': 'mcp__private-output__' + tool, 'input': arguments}]
+                    requests.append({'type': 'tool_use', 'id': identity, 'name': 'mcp__private-output__' + tool, 'input': arguments})
+                    if not batch:
+                        return requests
+            if requests:
+                return requests
             if mode == 'interruption-after-delivery':
                 time.sleep(60)
             if mode == 'ask-reject' and self.diagnose_enabled:
@@ -681,6 +689,13 @@ class Suite:
                                     require(error.code == 401, 'old_epoch_was_not_unauthorized')
                                     restart_refused = True
                                 require(restart_refused, 'old_epoch_accepted')
+                    if mode == 'postcommit-stop' and run is not None and not stopped and target.exists() and target.read_text() == NEW:
+                        # Check before the HTTP Ask probe: the actual Agent is
+                        # deliberately SIGSTOPped at the publication syscall.
+                        process.send_signal(signal.SIGKILL);stopped = True
+                    if mode == 'postcommit-stop' and stopped:
+                        time.sleep(.025)
+                        continue
                     if run is not None:
                         if mode == 'ask-reject' and self.diagnose_enabled and result_gate.is_set():
                             try:
@@ -765,7 +780,7 @@ class Suite:
         require(snapshot(self.sentinel) == self.before_sentinel, 'unrelated_sentinel_changed')
         require(len(model.requests) <= 32, 'provider_request_bound')
         terminal = json.loads((run / 'terminal.json').read_text()) if run and (run / 'terminal.json').exists() else None
-        if run and mode != 'daemon-loss':
+        if run and mode not in ('daemon-loss', 'postcommit-stop'):
             code, rows = self.ask(run, 'list');require(code == 0 and rows == [], 'stale_pending_remains')
         inventory = sorted(p.name for p in root.iterdir())
         require(not any(name.startswith('.soup-') for name in inventory), 'owned_staging_inventory_remains')

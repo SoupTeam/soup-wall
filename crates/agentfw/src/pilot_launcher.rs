@@ -54,43 +54,50 @@ pub struct PilotWorkspacesArgs {
     #[arg(long)]
     pub git_workspace: PathBuf,
     /// One reviewed profile format; never infer capabilities from repository data.
-    #[arg(long, default_value = "sw-mcp/git-readonly/1")]
+    #[arg(
+        long,
+        default_value = "sw-mcp/git-readonly/1",
+        conflicts_with = "git_profile_kind"
+    )]
     pub git_profile_format: String,
+    /// Optional short spelling for the same single selected compatibility grammar.
+    #[arg(long, value_enum)]
+    pub git_profile_kind: Option<crate::pilot_workspaces::GitProfileKind>,
+    /// Internal production root-selection preflight; not a full inspection report.
+    #[arg(long, hide = true)]
+    pub validate_selection: bool,
 }
 
 pub fn inspect_workspaces(args: PilotWorkspacesArgs) -> Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::MetadataExt;
-        for root in [&args.workspace, &args.git_workspace] {
-            ensure!(
-                crate::sandbox::validate_workspace_path(root)? == *root,
-                "canonical workspace required"
-            );
-            let metadata = fs::metadata(root)?;
-            ensure!(
-                metadata.uid() == unsafe { libc::geteuid() } && metadata.mode() & 0o022 == 0,
-                "owned workspace without shared write access required"
-            );
-        }
-        validate_selected_git_workspace(&args.git_workspace, &args.git_profile_format)
-            .context("unsupported Git layout; use a supported standalone repository; do not repair the project")?;
+    let selected = args
+        .git_profile_kind
+        .or_else(|| crate::pilot_workspaces::GitProfileKind::from_format(&args.git_profile_format))
+        .context("unsupported Git profile; select one reviewed variant")?;
+    if args.validate_selection {
+        crate::pilot_workspaces::validate_selection(
+            &args.workspace,
+            &args.git_workspace,
+            selected,
+        )?;
         println!(
             "{}",
-            serde_json::json!({"status":"supported-read-only", "executed":false,
-                               "git_profile_format":args.git_profile_format})
+            serde_json::json!({"format":"sw-pilot-workspace-preflight/1",
+            "status":"supported-read-only", "executed":false, "git_profile_format":selected.format(),
+            "inspection_complete":false, "launch_authorized":false, "runtime_protection_verified":false})
         );
-        Ok(())
+        return Ok(());
     }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = args;
-        bail!("native Linux required for original pilot workspace validation")
-    }
+    let report = crate::pilot_workspaces::inspect(&args.workspace, &args.git_workspace, selected);
+    println!("{}", serde_json::to_string(&report)?);
+    ensure!(
+        report.is_layout_compatible(),
+        "workspace compatibility not established; see reason codes"
+    );
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
-fn validate_selected_git_workspace(root: &Path, format: &str) -> Result<()> {
+pub(crate) fn validate_selected_git_workspace(root: &Path, format: &str) -> Result<()> {
     use crate::mcp::server_profile::{git, git_local_clone, git_tracked_symlinks};
     match format {
         git::FORMAT | git::FILE_READS_FORMAT | git::LOCAL_REFS_FORMAT => {

@@ -1064,6 +1064,7 @@ pub struct Collector<'a> {
     // collectors retain their current explicit environment/cwd selection.
     selected_workspace: Option<std::path::PathBuf>,
     selected_root: Option<super::replace_file::RootIdentity>,
+    mutation_quota: Option<Arc<crate::edit_session::quota::Ledger>>,
     host_session: Option<String>,
     child_authority: Option<String>,
     prepared_budget: Option<crate::pilot_budget::VerifiedSelection>,
@@ -1099,6 +1100,7 @@ impl<'a> Collector<'a> {
             config,
             selected_workspace: None,
             selected_root: None,
+            mutation_quota: None,
             host_session: config.host_session.clone(),
             child_authority: config.child_authority.clone(),
             prepared_budget: None,
@@ -3162,6 +3164,37 @@ where
                             .await?;
                             continue;
                         }
+                        // Installed quotas can only narrow an already-authorized
+                        // mutation. No reservation precedes schema/path/policy/Ask.
+                        let mut mutation_ticket = None;
+                        if let Some(quota) = collector.mutation_quota.as_ref() {
+                            if let Some(policy) = installed.resource_policy.as_ref()
+                                .filter(|p|p.is_replace_file() || p.is_create_bound_or_named(name)) {
+                                let content=crate::mcp::resources::selected(&args,policy.content_selector())
+                                    .ok().flatten().and_then(Value::as_str)
+                                    .context("edit_quota_content_missing")?;
+                                match quota.reserve(&collector.config.native.registry_sha256,
+                                    collector.host_session.as_deref(),
+                                    receipt["call_id"].as_str().context("edit_quota_call_missing")?,
+                                    receipt["binding_sha256"].as_str().context("edit_quota_binding_missing")?,
+                                    content.len() as u64) {
+                                    Ok(ticket)=>mutation_ticket=Some(ticket),
+                                    Err(error)=>{
+                                        let raw=error.response(request_id);
+                                        // Complete the spent native call without executing.
+                                        // Hard result/provenance floors remain independent.
+                                        let gate=without_resource_overlap(client,true,collector.event("result",json!({
+                                            "expected_contract_version":contract_version,"tool":name,"args":args,
+                                            "call_id":receipt["call_id"],"result_kind":"error","delivery":"mcp_host",
+                                            "content":std::str::from_utf8(&raw)?,"expected_binding_sha256":receipt["binding_sha256"]
+                                        }))).await?;
+                                        if gate["release"]==true {write_resource_reply(client,host,true,&raw).await?;}
+                                        else {write_resource_reply(client,host,true,&withheld(request_id,"result",&gate["reason_codes"])).await?;}
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
                         if let Some(prepared) = prepared_replacement {
                             let policy=installed.resource_policy.as_ref().expect("replacement policy");
                             let bound=resource_admission.as_ref().and_then(|(a,_)| a.execution.as_ref()).context("replacement binding missing")?;
@@ -3187,14 +3220,18 @@ where
                                             continue;
                                         }
                                         without_resource_overlap(client,true,async {
+                                            let deadline=publication_started+Duration::from_millis(gate["publication_ttl_ms"].as_u64().context("publication deadline missing")?);
+                                            if let Some(ticket)=mutation_ticket.as_mut() {ticket.begin_publication()?;}
                                             eprintln!("{}",json!({"event":"mcp_replace_file_publication_intent","host_call_id":request_id,
                                                 "outcome":"indeterminate_until_completion"}));
-                                            let deadline=publication_started+Duration::from_millis(gate["publication_ttl_ms"].as_u64().context("publication deadline missing")?);
                                             Ok(staged.publish_before(deadline))
                                         }).await?
                                     }
                                 }
                             };
+                            if let Some(ticket)=mutation_ticket.take() {
+                                ticket.complete(replacement.as_ref().map(|c|c.committed).unwrap_or_else(|e|e.committed))?;
+                            }
                             let (payload,committed,result_kind)=match replacement {
                                 Ok(commit)=>(json!({"success":true,"replaced":true,"committed":true,
                                     "bytes_written":commit.bytes_written,"file_synced":commit.file_synced,
@@ -3400,6 +3437,7 @@ where
                             }).await?;
                             let creation = match staged {
                                 Ok(staged) => without_resource_overlap(client, true, async {
+                                    if let Some(ticket)=mutation_ticket.as_mut() {ticket.begin_publication()?;}
                                     // The syscall can complete immediately before process
                                     // interruption. Record intent first; absent a completion,
                                     // publication is indeterminate, never evidence of no write.
@@ -3411,6 +3449,9 @@ where
                                 }).await?,
                                 Err(error) => Err(error),
                             };
+                            if let Some(ticket)=mutation_ticket.take() {
+                                ticket.complete(creation.as_ref().map(|c|c.committed).unwrap_or_else(|e|e.committed))?;
+                            }
                             let (payload, committed, result_kind) = match creation {
                                 Ok(commit) => (json!({
                                     "success": true, "created": true, "committed": commit.committed,
@@ -3836,7 +3877,11 @@ where
 /// The adapter has no filesystem API and treats forwarded tools/call as failure.
 pub(crate) async fn run_builtin_streams<R, W, F>(
     config: AdmissionCfg,
-    selection: (std::path::PathBuf, super::replace_file::RootIdentity),
+    selection: (
+        std::path::PathBuf,
+        super::replace_file::RootIdentity,
+        Option<Arc<crate::edit_session::quota::Ledger>>,
+    ),
     declarations: Value,
     client: &mut R,
     host: W,
@@ -3856,6 +3901,7 @@ where
         Collector::with_session(&config, format!("mcp:{}", crate::token::generate()))?;
     collector.selected_workspace = Some(selection.0);
     collector.selected_root = Some(selection.1);
+    collector.mutation_quota = selection.2;
     let (stop, renewal) =
         enroll_session(&mut collector, true, config.liveness_lease_seconds).await?;
     let (broker, adapter) = tokio::io::duplex(16384);
