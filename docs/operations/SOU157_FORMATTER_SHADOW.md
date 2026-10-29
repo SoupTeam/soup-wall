@@ -104,3 +104,39 @@ one skip on Windows (O_NOFOLLOW, /bin/bash, /proc and POSIX path assumptions);
 these are not counted as passing or changed to hide the unsupported platform.
 No runtime lane has been dispatched by this update; independent Linux verification
 is still required before any production change. No model replay occurred.
+# Verified diagnostic checkpoint - 2026-10-29
+
+The previously pending native diagnostic passed on exact source
+`f00889e56383e6776ca66e3e3382d2040437d861` in run
+[40860551932](https://github.com/SoupTeam/soup-wall/actions/runs/40860551932),
+job 123402467586. Independent review 5696811674 closes the refusal-contract
+and native-diagnostic blocker, not SOU-157 itself.
+
+Artifact 12891417745 ZIP SHA-256:
+`3f4e0b3f269dbd53e8f2db01b56d4063ce1f79c5be3be5a5f6daf5587dc3e480`.
+Agent SHA-256: `59d932d667a601f0b3af97e1e56641c28cdb733757f15a75ea5c87d2dc968043`.
+Downloaded hash and archive CRC verified; retained reports are under
+`evidence/sou157-passed-native-40860551932`. Local replay of the diagnostic
+projection function passes against that exact historical source, without rerunning
+native execution or inference. The command-line POSIX file-opening gate cannot
+run on this Windows host (`O_NOFOLLOW` unavailable); it was not bypassed or counted
+as passing. JSON reports were loaded directly for the pure projection comparison.
+Earlier failed evidence remains unchanged.
+
+Four 50/200 benign/attack cases have original formatter witnesses. All four
+201/256 cases remain pre-execution unknown/truncated, with the exact selected
+server refusal `classifier_unknown_approval_unsupported`. Ambiguous-body and
+matched copied-wire controls pass; cleanup and empty owned root pass. Model calls
+are zero. This proves diagnostic attribution and refusal controls only:
+`production_authority=false`, `task_complete=false`. Ten production false refusals
+remain; no Ready/Done/merge claim or new production authority is introduced.
+
+The next scoped work is a shadow comparison using this proven private binding:
+attribute only exact formatter separator spans, preserve full original body and
+cross-field inspection, and report which structural findings are exclusively
+formatter-owned versus overlapping user content. An absent/ambiguous/counterfeit
+binding must retain the complete baseline outcome. Any production decision change
+still requires separate review; the non-executed 201/256 cases cannot count as
+successful attributed executions. Historical sections below describe earlier
+checkpoints and their then-pending verification.
+
