@@ -22,6 +22,10 @@ class ReviewQualification(unittest.TestCase):
                   'all_owned_stopped':True, 'exact_export_verified':True,
                   'cases':[{'id':n, 'status':'passed', 'attempted':True} for n in review.CASES]}
         for row in report['cases'][1:3]: row.update(genuine_readback=True, unchanged=True)
+        for row in report['cases']:
+            if row['id'] == 'read-substitution-race':
+                row.update(review={'exit_code':1}, actual_descriptor_read_race=True, outside_unchanged=True)
+            if row['id'] == 'undeclared-target': row.update(exit=1, review={'exit_code':1})
         return report
 
     def test_every_control_must_be_attempted_and_pass(self):
@@ -60,3 +64,16 @@ class ReviewQualification(unittest.TestCase):
         self.assertIs(value['executed'], False)
         self.assertEqual(value['expected'], list(review.CASES))
         self.assertNotIn('status', value)
+
+    def test_followup_cannot_overwrite_a_completed_refusal_or_hide_contradiction(self):
+        for state in ['passed', 'failed']:
+            active = {'status':state, 'review':{'exit_code':1}};report = {}
+            review.retain_review_diagnostic(report, active, {'exit_code':0})
+            self.assertEqual(active['review']['exit_code'], 1)
+            self.assertEqual(report['last_review']['exit_code'], 0)
+        active = {'status':'incomplete'};review.retain_review_diagnostic({}, active, {'exit_code':1})
+        self.assertEqual(active['review']['exit_code'], 1)
+        for name in ['undeclared-target', 'read-substitution-race']:
+            report = self.report();row = next(r for r in report['cases'] if r['id'] == name)
+            row['review']['exit_code'] = 0
+            self.assertFalse(review.passed_report(report))

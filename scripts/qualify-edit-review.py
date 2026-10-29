@@ -41,15 +41,28 @@ def passed_report(report):
     rows = report.get('cases', [])
     positives = [next((r for r in rows if r.get('id') == name), {})
                  for name in ('genuine-create-review', 'genuine-replace-review')]
+    race = next((r for r in rows if r.get('id') == 'read-substitution-race'), {})
     return (report.get('format') == FORMAT and report.get('status') == 'passed'
             and report.get('paid_inference') is False and report.get('claude_sha256') == EDIT.CLAUDE
             and report.get('expected') == list(CASES) and [r.get('id') for r in rows] == list(CASES)
             and all(r.get('attempted') is True and r.get('status') == 'passed' for r in rows)
+            and all(type(r['exit']) is int and r.get('review', {}).get('exit_code') == r['exit']
+                    for r in rows if 'exit' in r)
+            and type(race.get('review', {}).get('exit_code')) is int
+            and race['review']['exit_code'] == 1
+            and race.get('actual_descriptor_read_race') is True and race.get('outside_unchanged') is True
             and all(r.get('genuine_readback') is True and r.get('unchanged') is True for r in positives)
             and type(report.get('provider_requests_during_review')) is int
             and report['provider_requests_during_review'] == 0
             and report.get('sentinel_preserved') is True and report.get('all_owned_stopped') is True
             and report.get('exact_export_verified') is True)
+
+
+def retain_review_diagnostic(report, active, diagnostic):
+    report['last_review'] = diagnostic
+    # Follow-up observations must never rewrite a completed control's evidence.
+    if active['status'] == 'incomplete':
+        active['review'] = diagnostic
 
 
 def selected_witness(suite, run, target, plan):
@@ -141,8 +154,7 @@ def qualify(args, report):
             for line in result.stderr.decode('utf-8', 'replace').splitlines():
                 match = re.fullmatch(r'Error: edit_review_refused: ([a-z][a-z0-9_]{0,95})', line)
                 if match: diagnostic['reason'] = match[1]
-            report['last_review'] = diagnostic
-            suite.active['review'] = diagnostic
+            retain_review_diagnostic(report, suite.active, diagnostic)
             value = json.loads(result.stdout) if result.returncode == 0 else None
             if value:
                 require(value['observation']['authority'] is False and value['observation']['executed'] is False,
