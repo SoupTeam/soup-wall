@@ -115,6 +115,29 @@ Access-time changes caused by filesystem reads are not an asserted invariant.
 This is a non-atomic observation of a live filesystem, not a snapshot lease:
 changes after inspection always require fresh protected-runtime validation.
 
+## Production selection is a separate contract
+
+Preparation and `pilot-run` use the internal `--validate-selection` spelling of
+`pilot-workspaces`. It preserves the accepted production question: whether the
+canonical owned roots and the explicitly selected Git profile can be selected.
+It reuses the same descriptor-pinned root check and production Git validator,
+and checks root stability before returning. It does not inventory every filesystem
+leaf. Its distinct `sw-pilot-workspace-preflight/1` response explicitly says
+`inspection_complete: false`, `launch_authorized: false` and
+`runtime_protection_verified: false`.
+
+This distinction matters for a project containing an outside symlink: default
+full inspection still refuses it with `unsafe_link_or_special_file`, while the
+existing runtime can select the root and independently refuse attempts to access
+that leaf. The preflight never authorizes a path, grants a tool, changes policy or
+reuses a cached inspection. Protected profile/startup and per-call checks remain
+mandatory. A guided inspector consumer must require the inspection format and
+must not treat the preflight as a complete inspection report.
+
+The original six CLI witnesses keep their expected states. An additional
+`selection-preflight` syscall witness checks the separate root contract with the
+same symlink fixture, without opening the outside target or claiming inspection.
+
 ## Focused verification
 
 Run on an owned Linux checkout with Rust and `strace` already available:

@@ -1,4 +1,43 @@
-# SOU-144 current-source qualification
+# SOU-144 final source qualification
+
+Accepted base: `8ead460e7460a8168459e0f02ea25c1eb2d8f7d4`.
+Qualified implementation: `561fd091306941e8107948c35df530d94995e578`,
+tree `c33f04c03d35f7fdb8677c9df21b8b84abcfef9d`.
+
+[Native run 40759188394](https://github.com/SoupTeam/soup-wall/actions/runs/40759188394)
+passed **18 inspector/preflight tests, 71 production-validator regressions, one
+selected-validator regression, eight Python controls and seven CLI/syscall cases**.
+The original six diagnostic states are unchanged. The additional case proves that
+production root selection remains usable without pretending it is a full inspection.
+All seven cases independently recorded one inspector/preflight exec, zero child,
+network and mutation syscalls, unchanged workspaces and absent helper traps.
+
+- [Original final-source witness](native-inspection-561fd091.json).
+- [Independent parent verification](native-verification-561fd091.json).
+- Artifact `12848410065`, ZIP SHA-256
+  `19bb053db61840fc277991e5b5f69d6e8bce787462c65822c5a07e0f2252b320`.
+- Binary SHA-256 `a548e4c3cd83a8edcb533dab6317bdbf5f9be0b32c48f75a507e5190d37ba51c`.
+- Local workspace after the preflight change: **1913 passed, zero failed, 13
+  existing ignored**; workspace strict Clippy and formatting passed.
+- Seven existing-workspace boundary controls passed, including exact-profile,
+  changed/moved roots, unsupported layout and legacy selection controls.
+
+The integration review found that production preparation and launch already use
+`pilot-workspaces` as a root/profile preflight. Feeding the new conservative full
+inspection into that existing gate would have refused previously selectable roots.
+The internal `--validate-selection` mode preserves the accepted production contract,
+reuses the same descriptor-pinned root and selected Git validators, and checks root
+stability. Its distinct `sw-pilot-workspace-preflight/1` response explicitly denies
+full inspection and launch/protection authority. Default inspection still refuses
+unsafe links; every actual MCP operation retains its existing path/profile gates.
+No expected attack or benign label, policy, deadline or timeout was loosened.
+
+Target execution remained read-only/offline and nonroot with private writable
+scratch and private tmpfs for mmap fixtures. No artifact code was executed by the
+independent parent. Shared Ready CI/admission/integration remain TL-owned.
+
+## Earlier qualified implementation and retained attempts
+
 
 Accepted base: `8ead460e7460a8168459e0f02ea25c1eb2d8f7d4`.
 Qualified implementation: `e296ad2d5fcca35da481fb0a3d9c18c4c357f1bf`,

@@ -10,9 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: 561fd091306941e8107948c35df530d94995e578
+          ref: 11775fc5813a15143630ab4e7dba0abd70976b39
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: dtolnay/rust-toolchain@1.94.1
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -37,7 +37,7 @@ jobs:
             --chdir / /bin/bash -euc 'mount -t proc -o nosuid,nodev,noexec proc /proc; mount -t tmpfs -o nosuid,nodev,mode=1777 tmpfs /dev/shm; exec "$@"' bash \
             /usr/bin/setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
             --inh-caps=-all --ambient-caps=-all --bounding-set=-all --no-new-privs \
-            /usr/bin/env -i PATH="$HOME/.cargo/bin:/usr/bin:/bin" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.99.1 \
+            /usr/bin/env -i PATH="$HOME/.cargo/bin:/usr/bin:/bin" RUSTUP_HOME="$HOME/.rustup" RUSTUP_TOOLCHAIN=1.94.1 \
             HOME="$SOU144_SCRATCH/home" CARGO_HOME="$SOU144_SCRATCH/cargo-home" \
             CARGO_TARGET_DIR="$SOU144_SCRATCH/target" TMPDIR="$SOU144_SCRATCH/tmp" \
             SOU144_SCRATCH="$SOU144_SCRATCH" CARGO_BUILD_JOBS=4 CARGO_NET_OFFLINE=true \
