@@ -197,6 +197,8 @@ def qualify(args, report):
         checked('baseline-without-consent', '--baseline', f'result.txt={baseline}')
         checked('content-without-consent', '--show', 'result.txt')
         checked('undeclared-target', '--show', '../native-token', '--consent-private-content')
+        code, current, _ = review(run, prepared)
+        require(code == 0, 'fresh_export_observation_failed')
         bundles = args.output / 'exports';bundles.mkdir(mode=0o700)
         out = bundles / 'selected'
         words = ('--export', out, '--include', 'result.txt', '--expect-observation', current['observation_sha256'], '--consent-private-content')

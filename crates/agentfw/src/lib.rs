@@ -40,6 +40,8 @@ pub(crate) mod macos_create;
 pub(crate) mod macos_read;
 pub mod offline_replay;
 pub mod preflight;
+#[cfg(target_os = "linux")]
+mod private_export;
 #[cfg(windows)]
 mod private_file_windows;
 pub mod protection_status;
@@ -53,8 +55,6 @@ pub mod service;
 #[path = "service_macos.rs"]
 pub mod service;
 pub mod spans;
-#[cfg(target_os = "linux")]
-mod private_export;
 pub mod support_bundle;
 pub mod token;
 #[cfg(windows)]
