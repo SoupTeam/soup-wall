@@ -440,7 +440,7 @@ def main():
         frame = traceback.extract_tb(error.__traceback__)[-1]
         report.update(status="failed", failures=1, reason=value if re.fullmatch(r"[a-z0-9_]{1,100}", value)
                       else "qualification_failure", failure_location={"function": frame.name, "line": frame.lineno})
-    RUN.PREP.write_json(args.output / "report.json", report)
+    RUN.PREP.write_json(args.output / "report.json", report, compact=True)
     print(json.dumps(report, sort_keys=True))
     return 0 if report["status"] == "passed" else 1
 

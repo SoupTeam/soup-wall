@@ -2928,6 +2928,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_git_outcomes.py
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_launcher_witness.py
           python3 -B -m unittest discover -s scripts/tests -p test_prepared_trace_bounds.py
+          python3 -B -m unittest discover -s scripts/tests -p test_prepare_installed_pilot.py
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           project_failed=0
           python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \

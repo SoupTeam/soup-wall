@@ -271,8 +271,9 @@ def discard_unpublished(path, error):
                          f"cleanup_failure={cleanup_error}") from error
 
 
-def write_json(path, value):
-    raw = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
+def write_json(path, value, *, compact=False):
+    raw = (json.dumps(value, sort_keys=True, indent=None if compact else 2,
+                      separators=(",", ":") if compact else None) + "\n").encode()
     require(len(raw) <= MAX_JSON, "manifest_size_limit")
     created = False
     try:
