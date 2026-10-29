@@ -7,6 +7,21 @@ import pilot_git_outcomes as outcomes
 
 
 class GitOutcomesTests(unittest.TestCase):
+    def test_failure_boundaries_require_observed_failures_not_missing_records(self):
+        base = {'event': 'mcp_call_outcome', 'version': 1,
+                'request_sha256': 'a' * 64, 'host_call_sha256': 'b' * 64,
+                'response_sha256': 'c' * 64, 'authority': False,
+                'response': {'rpc_error': False, 'tool_error': False, 'rpc_code': None}}
+        original = dict(base, stage='original_response')
+        self.assertEqual(outcomes.failure_boundaries([]), [])
+        self.assertEqual(outcomes.failure_boundaries([original]), [])
+        refused = dict(base, stage='result_inspection', released=False)
+        self.assertEqual(outcomes.failure_boundaries([original, refused]), ['result_inspection_refused'])
+        upstream = dict(original, response={'rpc_error': False, 'tool_error': True, 'rpc_code': None})
+        self.assertEqual(outcomes.failure_boundaries([upstream, refused]),
+                         ['original_tool_error', 'result_inspection_refused'])
+        self.assertEqual(outcomes.failure_boundaries([dict(refused, authority=True)]), [])
+
     def test_admission_and_profile_observations_do_not_claim_delivery(self):
         row = {'event': 'mcp_call_outcome', 'version': 1, 'stage': 'call_admission',
                'request_sha256': 'a' * 64, 'host_call_sha256': 'b' * 64,

@@ -25,6 +25,7 @@ from pilot_project_fixtures import PROJECTS, create_files, identity as project_i
 from pilot_git_outcomes import collect as git_outcomes
 from pilot_git_outcomes import negative_results
 from pilot_git_outcomes import call_hashes
+from pilot_git_outcomes import failure_boundaries
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -172,6 +173,8 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
             "native_codes": sorted(set(re.findall(r"native_[a-z_]{1,64}",
                 json.dumps(model.results.get(f"toolu_existing_{i}")))))[:16]}
             for i, (server, tool, arguments) in enumerate(steps[:original_step_count])]
+        for operation in result["operations"]:
+            operation["failure_boundaries"] = failure_boundaries(operation["boundary_observations"])
         result["additional_negative_controls"] = negative_results(model.results, negative_indices)
         try:
             if not hold:

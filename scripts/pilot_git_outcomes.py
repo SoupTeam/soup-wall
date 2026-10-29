@@ -4,6 +4,27 @@ import ast
 import hashlib
 
 
+def failure_boundaries(rows):
+    failures = set()
+    for value in rows:
+        row = project(value)
+        if row is None:
+            continue
+        stage = row['stage']
+        if stage == 'original_response':
+            if row['response']['rpc_error']:
+                failures.add('original_protocol_error')
+            if row['response']['tool_error'] is True:
+                failures.add('original_tool_error')
+        elif stage in ('call_admission', 'result_inspection') and row['released'] is False:
+            failures.add(stage + '_refused')
+        elif stage == 'profile_validation' and row['accepted'] is False:
+            failures.add('profile_validation_refused')
+        elif stage == 'host_delivery' and row['written'] is False:
+            failures.add('host_delivery_failed')
+    return sorted(failures)
+
+
 def call_hashes(calls, servers, server, tool, arguments):
     raw = json.dumps(arguments, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
     expected = hashlib.sha256(raw).hexdigest()

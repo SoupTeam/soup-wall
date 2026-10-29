@@ -8,6 +8,8 @@ The existing project qualifier retains these records as `boundary_observations`.
 
 `accepted` at profile validation means that the response shape passed validation. `released` describes the admission or inspection decision at its stated stage. Only a separate delivery observation with `written=true` records a completed host write. None of these records grants authority.
 
+Each correlated operation includes `failure_boundaries`: a finite list of observed admission, upstream protocol/tool, profile, inspection or delivery failures. Multiple failures remain visible. An empty list does not prove success when records are missing. In particular, a server tool error does not establish a sandbox defect, and absence of a delivery record does not establish a failed write.
+
 Run the targeted `mcp-real-filesystem.yml` workflow with `existing_project_only=true` to exercise the existing project lane and the unchanged docs-code, unicode-spaces and local-history inventories. The `--git-negative-controls` qualifier option appends missing-revision, missing-path and unsupported-object requests after the original operations. It reports their error observations separately in `additional_negative_controls`; they are never counted as useful work. Existing destructive-tool, outside-read and network witnesses remain required. No timeout is increased.
 
 Keep failed reports and exact source/input identities. No detector correction or successful utility claim is established by diagnostic instrumentation alone. A mismatch between a healthy original response and a refused inspected result must be attributed to the selected inspection rule before any detector handoff; do not change rules to make the qualifier pass.
