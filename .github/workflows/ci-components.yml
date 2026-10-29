@@ -1985,6 +1985,8 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - name: Validate focused operator qualification
         if: github.event.inputs.operator_results_only == 'true'
@@ -2650,12 +2652,13 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_private_edit_self_test.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_private_edit_qualification.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
-          cargo test --locked -p agentfw --lib self_test::tests
-          cargo fmt --all --check
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-private-edit-self-test.py --run \
             --agentfw "$SOU119_AGENTFW" --selection "$selection" --python /usr/bin/python3.12 \
             --output "$RUNNER_TEMP/private-edit-self-test"
+          cargo test --locked -p agentfw --lib self_test::tests
+          cargo clippy --locked -p agentfw --all-targets -- -D warnings
+          cargo fmt --all --check
       - name: Verify real installed Ask capture and resume before comparison
         if: (github.event_name == 'workflow_dispatch' && (github.event.inputs.ask_latency_baseline_sha != '' || github.event.inputs.ask_series != '')) && github.event.inputs.private_edit_self_test_only != 'true'
         shell: bash
