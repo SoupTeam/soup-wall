@@ -1,0 +1,107 @@
+{
+  "format": "sw-sou187-attempts/1",
+  "accepted_base": "49e89b6bf6517541a801baee4cf9834ed4de06d4",
+  "status": "final_concurrency_qualification_pending",
+  "attempts": [
+    {
+      "run_id": 40955071370,
+      "source_commit": "3a69e80946c2cf91b215e8d39cb777517a904bc5",
+      "status": "cancelled_before_target_started",
+      "reason": "Strengthened acknowledgement so readable receipt cannot reconstruct success after interruption."
+    },
+    {
+      "run_id": 40955746924,
+      "attempt": 1,
+      "source_commit": "e03da1c5f08365528f3783476423a5e15b15de88",
+      "status": "passed",
+      "artifact_id": 12933719608,
+      "artifact_sha256": "c1c538f33697b31441b9152f27285686d4ee4a95ce3aeeae483d6fa97258107c",
+      "report": "native-attempt-1.json",
+      "report_sha256": "54b36b5c98271d76c7d07a506ee1ae6d29582bfd1253f028f7b1271c49be952c",
+      "inventories": [
+        {
+          "stage": "application",
+          "status": "passed",
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 36
+          },
+          "report_sha256": "54b36b5c98271d76c7d07a506ee1ae6d29582bfd1253f028f7b1271c49be952c"
+        },
+        {
+          "stage": "archive-runtime",
+          "status": "passed",
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 18
+          },
+          "report_sha256": "bdf26bd5ae875f4051cc1892ab36cf3f618a8822fefe970cd6f42d2ce3254d4e"
+        },
+        {
+          "stage": "quota",
+          "status": "passed",
+          "inventory": {
+            "attempted": 25,
+            "expected": 25,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 25
+          },
+          "report_sha256": "c08ae55d67aaaef85ed72a2abd57455c50e8289f3e3b90562bf0d93da2793b02"
+        },
+        {
+          "stage": "refresh",
+          "status": "passed",
+          "inventory": {
+            "attempted": 23,
+            "expected": 23,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 23
+          },
+          "report_sha256": "7bbf44480f39be6dd3c78bd169fb91109708ab589c1a3a5e7c5c89282f52d22b"
+        },
+        {
+          "stage": "review",
+          "status": "passed",
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 40
+          },
+          "report_sha256": "a348bddc10dce4118a9e70f0d82df2cbc32ee232d03374646414fc4afcf14b2d"
+        },
+        {
+          "stage": "runtime",
+          "status": "passed",
+          "inventory": {
+            "attempted": 23,
+            "expected": 23,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 23
+          },
+          "report_sha256": "3d3a2bce3b4909e2892e6a81e0a46fb049118e977097e51c4309f939251ba468"
+        },
+        {
+          "stage": "stop-runtime",
+          "status": "passed",
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 12
+          },
+          "report_sha256": "eebf861f31341467ced41a61c636d4ede14a19475a069a79c075ab04e4c04bb6"
+        }
+      ]
+    },
+    {
+      "run_id": 40957752053,
+      "source_commit": "45eb64ce3b16b87745a4473638becd4069d5f9be",
+      "status": "in_progress",
+      "change": "Only adds actual two-process single-winner qualification and grading/guide; product code unchanged."
+    }
+  ]
+}
