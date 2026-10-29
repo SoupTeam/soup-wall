@@ -312,6 +312,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_run_operations.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_run_archive.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_archive_qualification.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_front_door_component.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_quota.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v

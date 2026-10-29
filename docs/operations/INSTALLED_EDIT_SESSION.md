@@ -219,7 +219,7 @@ state members refuse and remain intact. No background pruning occurs.
 Current-main run-local `profile.json`, `profile.sha256`,
 `diagnostic-context.json` and `host-process.json` are descriptive snapshots,
 distinct from the original external immutable plan. Only the complete exact
-root set with private read-only modes is accepted. The canonical v1 profile
+root set with private read-only modes is accepted. Canonical v1 and quota-v2 profile
 bytes and digest, typed nested schemas, transport resources, run/home/profile/
 session/instance bindings, process identity fields and retained control owner
 are checked through bounded no-follow reads. The walker rechecks those exact
@@ -227,6 +227,16 @@ bytes and file identities. No profile-selected path, executable, original plan,
 PID or listener is opened or contacted by this validation. Snapshot bytes are
 inventoried for explicit cleanup and excluded from the sanitized ZIP. Arbitrary
 extra members, future schema versions and all nested plan markers still refuse.
+
+Quota-v2 profiles require the exact `sw-installed-edit-mutation-quota/1` limits:
+at most 64 mutation attempts and 262144 cumulative reserved bytes; zero is valid.
+The terminal observation must bind those same limits. All counters must be
+unsigned integers with consistent attempt partitions, byte ceilings and remaining
+credits, using the accepted runtime's bookkeeping relationships. Missing/null,
+unknown, mismatched, unavailable or unsettled quota evidence refuses archival and
+remains retained. Quota counters never establish inactivity, effects or execution;
+the existing terminal cleanup facts, lifecycle locks and explicit evidence-loss
+consent remain mandatory. Legacy v1 runs retain their original quota-free shape.
 
 Known separately versioned optional stop/control records are included in the
 private inventory and excluded from the sanitized ZIP. They never substitute
@@ -261,11 +271,17 @@ and actual SIGKILL. Those controlled fault windows and synthetic parser fixtures
 are distinguished from genuine host/CLI observations. The existing installed
 job retains exact source/binary correlation, the original edit report and the
 new archive report; failed/incomplete attempts are retained. The current
-16-case archival inventory includes an ordinary current-main completed run,
+18-case archival inventory includes ordinary v1 and quota-v2 completed runs,
 typed descriptive-snapshot refusal controls and a genuine Stop after an
 approved replacement committed. That Stop case checks diagnosis, explicit
 evidence-loss refusal, sanitized archive publication and exact acknowledged
 cleanup, with independent output/immutable-plan/sentinel/active-peer witnesses.
+The v2 case retains exact quota observations, observes a real approved replacement
+and readback, preserves source after archive publication, refuses unacknowledged
+cleanup and verifies explicit cleanup plus an already-cleaned repeat. Thirteen
+negative quota controls mutate the retained metadata of another genuine completed
+v2 run; their failures, unchanged sources/output/plans/sentinel and successful
+restored preview are recorded separately from genuine host observations.
 The earlier 14-case results remain evidence for their original source only.
 ## Stop one selected live run
 

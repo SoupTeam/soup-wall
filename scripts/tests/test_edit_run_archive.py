@@ -2,6 +2,7 @@
 """Synthetic lifecycle fixtures; genuine installed qualification is separate."""
 import errno
 import base64
+import copy
 import importlib.util
 import json
 import os
@@ -20,6 +21,93 @@ spec.loader.exec_module(E)
 # Public synthetic bytes, never a credential. Native qualification separately
 # checks that its genuine disposable run tokens never enter the sanitized ZIP.
 RAW_CANARY = 'owned-raw-exclusion-marker-v1'
+
+
+class QuotaContracts(unittest.TestCase):
+    @staticmethod
+    def limits():
+        return {'contract_version': 'sw-installed-edit-mutation-quota/1',
+                'max_mutations': 2, 'max_write_bytes': 4096}
+
+    @classmethod
+    def profile(cls, version=2):
+        pin = {'path': '/owned/agentfw', 'sha256': 'a' * 64}
+        result = {'format': f'sw-installed-edit-session/{version}',
+                  'exclusion': 'operator-private-sole-writer+directory-flock/1',
+                  'root': '/owned/output', 'root_identity': {'device': 1, 'inode': 2},
+                  'agent': pin, 'claude': pin, 'policy_sha256': 'b' * 64,
+                  'component': {'home': '/owned/component', 'id': 'c' * 64,
+                                'source_commit': 'd' * 40, 'source_tree': 'e' * 40,
+                                'python': pin, 'classifier': pin, 'python_version': '3.12'},
+                  'targets': [{'name': 'result.txt', 'read': True, 'create': True, 'replacement': None}]}
+        if version == 2: result['mutation_quota'] = cls.limits()
+        return result
+
+    @classmethod
+    def usage(cls):
+        return {'limits': cls.limits(), 'admitted_mutation_attempts': 1, 'charged_write_bytes': 8,
+                'known_committed_mutations': 1, 'known_committed_write_bytes': 8,
+                'known_not_committed_mutations': 0, 'indeterminate_publications': 0,
+                'pending_prepublication_attempts': 0, 'remaining_mutations': 1,
+                'remaining_write_bytes': 4088}
+
+    def test_v2_profile_accepts_exact_limits_and_preserves_v1(self):
+        E.profile_snapshot(self.profile(1))
+        E.profile_snapshot(self.profile())
+        for mutations, size in [(0, 0), (64, 64 * 4096)]:
+            value = self.profile();value['mutation_quota'].update(max_mutations=mutations, max_write_bytes=size)
+            E.profile_snapshot(value)
+
+    def test_invalid_profile_quota_versions_null_unknown_boolean_and_overflow_refuse(self):
+        cases = [None, {}, {**self.limits(), 'contract_version': 'future'},
+                 {**self.limits(), 'max_mutations': True}, {**self.limits(), 'max_mutations': -1},
+                 {**self.limits(), 'max_mutations': 65}, {**self.limits(), 'max_mutations': 2**64},
+                 {**self.limits(), 'max_write_bytes': False}, {**self.limits(), 'max_write_bytes': 262145},
+                 {**self.limits(), 'unexpected': 1}]
+        for quota in cases:
+            value = self.profile();value['mutation_quota'] = quota
+            with self.subTest(quota=quota), self.assertRaises(E.S.Refusal): E.profile_snapshot(value)
+        for value in [self.profile(3), {k:v for k,v in self.profile().items() if k != 'mutation_quota'},
+                      {**self.profile(1), 'mutation_quota': self.limits()}]:
+            with self.assertRaises(E.S.Refusal): E.profile_snapshot(value)
+
+    def test_usage_and_exact_profile_limits_are_required_together(self):
+        value = self.usage()
+        E.quota_binding(self.profile(), {'state':'host_completed', 'mutation_quota':value})
+        E.quota_binding(self.profile(1), {'state':'host_completed'})
+        E.quota_binding(None, {'state':'host_completed'})
+        changed = copy.deepcopy(value);changed['limits']['max_mutations'] = 3;changed['remaining_mutations'] = 2
+        for profile, ended in [(self.profile(), {'state':'host_completed'}),
+                               (self.profile(), {'state':'host_completed', 'mutation_quota':changed}),
+                               (self.profile(1), {'state':'host_completed', 'mutation_quota':value}),
+                               (None, {'state':'host_completed', 'mutation_quota':value})]:
+            with self.assertRaises(E.S.Refusal): E.quota_binding(profile, ended)
+
+    def test_malformed_or_contradictory_counters_never_authorize_archival(self):
+        original = self.usage()
+        cases = [None, {}, {**original, 'future':1}, {**original, 'limits':None},
+                 {**original, 'remaining_mutations':0}, {**original, 'remaining_write_bytes':4096},
+                 {**original, 'known_committed_mutations':0}, {**original, 'charged_write_bytes':4097},
+                 {**original, 'known_committed_write_bytes':9}]
+        for name in set(original) - {'limits'}:
+            for bad in [True, -1, 2**64]: cases.append({**original, name:bad})
+        excessive = copy.deepcopy(original)
+        excessive.update(charged_write_bytes=4097, known_committed_write_bytes=4097, remaining_write_bytes=4095)
+        excessive['limits']['max_write_bytes'] = 8192;cases.append(excessive)
+        for value in cases:
+            with self.subTest(usage=value), self.assertRaises(E.S.Refusal):
+                E.quota_binding(self.profile(), {'state':'host_completed', 'mutation_quota':value})
+
+    def test_unavailable_or_unsettled_quota_is_retained_even_with_cleanup_claims(self):
+        unavailable = {'error_code':'edit_quota_state_unavailable', 'counts_known':False}
+        pending = self.usage();pending.update(known_committed_mutations=0, known_committed_write_bytes=0,
+                                            pending_prepublication_attempts=1)
+        uncertain = {**pending, 'pending_prepublication_attempts':0, 'indeterminate_publications':1}
+        for state in ['host_completed', 'failed']:
+            for value in [unavailable, {**unavailable, 'counts_known':True},
+                          {**unavailable, 'error_code':'future'}, pending, uncertain]:
+                with self.subTest(state=state, usage=value), self.assertRaises(E.S.Refusal):
+                    E.quota_binding(self.profile(), {'state':state, 'mutation_quota':value})
 
 
 class Projection(unittest.TestCase):
@@ -86,7 +174,7 @@ class CleanupBoundary(unittest.TestCase):
     def plan(self):
         return E.preview(self.run, self.destination)
 
-    def snapshots(self):
+    def snapshots(self, quota=False):
         pin = {'path': '/owned/agentfw', 'sha256': 'a' * 64}
         profile = {'format': self.record['format'], 'exclusion': 'operator-private-sole-writer+directory-flock/1',
                    'root': str(self.target.parent), 'root_identity': {'device': self.target.stat().st_dev, 'inode': 5},
@@ -94,6 +182,9 @@ class CleanupBoundary(unittest.TestCase):
                    'component': {'home': '/owned/component', 'id': 'c' * 64, 'source_commit': 'd' * 40,
                                  'source_tree': 'e' * 40, 'python': pin, 'classifier': pin, 'python_version': '3.12'},
                    'targets': [{'name': self.target.name, 'read': True, 'create': True, 'replacement': None}]}
+        if quota:
+            profile.update(format=E.PROFILE_V2, mutation_quota=QuotaContracts.limits())
+            self.terminal['mutation_quota'] = QuotaContracts.usage()
         raw = E.S.encoded(profile)
         self.record['profile_sha256'] = self.terminal['profile_sha256'] = E.S.sha(raw)
         self.write(self.run / 'run.json', E.S.encoded(self.record), 0o400)
@@ -110,6 +201,50 @@ class CleanupBoundary(unittest.TestCase):
         self.write(self.run / 'diagnostic-context.json', E.S.encoded(context), 0o400)
         self.write(self.run / 'host-process.json', E.S.encoded({**owner, 'pid': 124}), 0o400)
         return profile, context
+
+    def test_v2_archive_cleanup_requires_exact_quota_and_preserves_target_and_plan(self):
+        self.snapshots(quota=True)
+        before = (self.target.read_bytes(), self.target.stat().st_ino)
+        external = self.base / 'immutable-plan';external.mkdir(mode=0o700)
+        for name in ('profile.json', 'profile.sha256'):
+            self.write(external / name, (self.run / name).read_bytes(), 0o400)
+        original_plan = {p.name: (p.read_bytes(), p.stat().st_ino) for p in external.iterdir()}
+        terminal_path = self.run / 'terminal.json';original_terminal = terminal_path.read_bytes()
+        wrong = copy.deepcopy(self.terminal)
+        wrong['mutation_quota']['limits']['max_mutations'] = 3
+        wrong['mutation_quota']['remaining_mutations'] = 2
+        self.write(terminal_path, E.S.encoded(wrong), 0o400)
+        with self.assertRaisesRegex(E.S.Refusal, 'edit_quota_profile_mismatch'): self.plan()
+        self.assertTrue(self.run.exists());self.assertEqual(list(self.destination.iterdir()), [])
+        self.write(terminal_path, original_terminal, 0o400)
+        plan = self.plan();self.assertEqual(plan['terminal']['mutation_quota'], QuotaContracts.usage())
+        E.archive(plan)
+        with self.assertRaisesRegex(E.S.Refusal, 'explicit_raw_evidence_loss_consent_required'): E.cleanup(plan, False)
+        self.assertTrue(self.run.exists())
+        self.assertEqual(E.cleanup(plan, True)['outcome'], 'archived_and_cleaned')
+        self.assertEqual(E.cleanup(plan, True)['outcome'], 'already_cleaned')
+        self.assertEqual((self.target.read_bytes(), self.target.stat().st_ino), before)
+        self.assertEqual({p.name: (p.read_bytes(), p.stat().st_ino) for p in external.iterdir()}, original_plan)
+
+    def test_terminal_quota_without_bound_snapshot_or_with_null_cannot_archive_legacy_run(self):
+        for value in [None, QuotaContracts.usage()]:
+            self.terminal['mutation_quota'] = value
+            self.write(self.run / 'terminal.json', E.S.encoded(self.terminal), 0o400)
+            with self.assertRaisesRegex(E.S.Refusal, 'edit_quota_profile_mismatch'): self.plan()
+            self.assertTrue(self.run.exists());self.assertEqual(list(self.destination.iterdir()), [])
+
+    def test_quota_terminal_changed_after_validation_is_retained_without_archive(self):
+        self.snapshots(quota=True)
+        original = E.quota_binding
+        changed = copy.deepcopy(self.terminal)
+        changed['mutation_quota']['remaining_write_bytes'] += 1
+        def replace_after_validation(profile, ended):
+            original(profile, ended)
+            self.write(self.run / 'terminal.json', E.S.encoded(changed), 0o400)
+        with patch.object(E, 'quota_binding', replace_after_validation):
+            with self.assertRaisesRegex(E.S.Refusal, 'edit_terminal_changed_during_inventory'): self.plan()
+        self.assertEqual((self.run / 'terminal.json').read_bytes(), E.S.encoded(changed))
+        self.assertEqual(list(self.destination.iterdir()), [])
 
     def test_current_main_snapshots_are_exact_root_copies_and_external_plan_is_preserved(self):
         self.snapshots()

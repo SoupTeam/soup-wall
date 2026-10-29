@@ -52,6 +52,9 @@ CONTROL_FORMATS = {'control.json': 'sw-installed-edit-control/1',
                    'stop-request.json': 'sw-installed-edit-stop-request/1',
                    'stop-receipt.json': 'sw-installed-edit-stop-receipt/1'}
 SNAPSHOTS = {'profile.json', 'profile.sha256', 'diagnostic-context.json', 'host-process.json'}
+PROFILE_V1 = 'sw-installed-edit-session/1'
+PROFILE_V2 = 'sw-installed-edit-session/2'
+QUOTA = 'sw-installed-edit-mutation-quota/1'
 
 
 def fields(value, keys, reason='edit_snapshot_schema_invalid'):
@@ -72,20 +75,73 @@ def absolute(value):
             and str(Path(value)) == value)
 
 
+def quota_limits(value):
+    fields(value, 'contract_version max_mutations max_write_bytes', 'edit_quota_limits_invalid')
+    S.require(value['contract_version'] == QUOTA
+              and unsigned(value['max_mutations']) and value['max_mutations'] <= 64
+              and unsigned(value['max_write_bytes']) and value['max_write_bytes'] <= 64 * 4096,
+              'edit_quota_limits_invalid')
+
+
+def quota_usage(value):
+    """Mirror accepted quota::Snapshot bookkeeping, never execution proof."""
+    if type(value) is dict and set(value) == {'error_code', 'counts_known'}:
+        S.require(value['error_code'] == 'edit_quota_state_unavailable' and value['counts_known'] is False,
+                  'edit_quota_usage_invalid')
+        raise S.Refusal('edit_quota_evidence_unavailable')
+    keys = ('limits admitted_mutation_attempts charged_write_bytes known_committed_mutations '
+            'known_committed_write_bytes known_not_committed_mutations indeterminate_publications '
+            'pending_prepublication_attempts remaining_mutations remaining_write_bytes')
+    fields(value, keys, 'edit_quota_usage_invalid')
+    quota_limits(value['limits'])
+    S.require(all(unsigned(value[name]) for name in keys.split() if name != 'limits'), 'edit_quota_usage_invalid')
+    admitted, charged = value['admitted_mutation_attempts'], value['charged_write_bytes']
+    committed, committed_bytes = value['known_committed_mutations'], value['known_committed_write_bytes']
+    counts = ('known_committed_mutations', 'known_not_committed_mutations',
+              'indeterminate_publications', 'pending_prepublication_attempts')
+    S.require(admitted <= value['limits']['max_mutations'] and charged <= value['limits']['max_write_bytes']
+              and all(value[name] <= admitted for name in counts) and committed_bytes <= charged,
+              'edit_quota_usage_invalid')
+    S.require(sum(value[name] for name in counts) == admitted
+              and value['remaining_mutations'] == value['limits']['max_mutations'] - admitted
+              and value['remaining_write_bytes'] == value['limits']['max_write_bytes'] - charged
+              and committed_bytes <= committed * 4096
+              and charged - committed_bytes <= (admitted - committed) * 4096,
+              'edit_quota_usage_contradictory')
+
+
+def quota_binding(profile, ended):
+    """Additional coherence only: accepted cleanup facts and locks still apply."""
+    if profile is None or profile['format'] == PROFILE_V1:
+        S.require('mutation_quota' not in ended, 'edit_quota_profile_mismatch')
+        return
+    S.require(profile['format'] == PROFILE_V2 and 'mutation_quota' in ended, 'edit_quota_profile_mismatch')
+    quota_limits(profile['mutation_quota'])
+    usage = ended['mutation_quota'];quota_usage(usage)
+    S.require(usage['limits'] == profile['mutation_quota'], 'edit_quota_profile_mismatch')
+    # Retain uncertain raw evidence rather than turning unavailable or unsettled
+    # bookkeeping into an archived/cleaned outcome, even after process cleanup.
+    S.require(usage['indeterminate_publications'] == 0 and usage['pending_prepublication_attempts'] == 0,
+              'edit_quota_evidence_indeterminate')
+
+
 def profile_snapshot(value):
-    """Validate only the accepted descriptive v1 shape, never open its paths.
+    """Validate accepted descriptive v1/v2 shapes, never open their paths.
 
     This mirrors the bounded serialized Profile/Identity contracts. It grants
     no authority and deliberately does not re-inspect changed output targets.
     """
     S.require(type(value) is dict, 'edit_snapshot_schema_invalid')
+    S.require(value.get('format') in (PROFILE_V1, PROFILE_V2), 'edit_snapshot_profile_invalid')
     keys = 'format exclusion root root_identity agent claude component policy_sha256 targets'
+    if value['format'] == PROFILE_V2:
+        keys += ' mutation_quota'
     if 'refreshed_from_sha256' in value:
         keys += ' refreshed_from_sha256'
         S.require(digest(value['refreshed_from_sha256']), 'edit_snapshot_lineage_invalid')
     fields(value, keys)
-    S.require(value['format'] == 'sw-installed-edit-session/1'
-              and value['exclusion'] == 'operator-private-sole-writer+directory-flock/1'
+    if value['format'] == PROFILE_V2: quota_limits(value['mutation_quota'])
+    S.require(value['exclusion'] == 'operator-private-sole-writer+directory-flock/1'
               and absolute(value['root']) and digest(value['policy_sha256']), 'edit_snapshot_profile_invalid')
     root = value['root_identity'];fields(root, 'device inode')
     S.require(unsigned(root['device']) and unsigned(root['inode'], positive=True), 'edit_snapshot_root_invalid')
@@ -248,8 +304,10 @@ def terminal(run):
     S.require(len(roots) == 1 and all(not root.is_relative_to(run.path.parent)
               and not run.path.parent.is_relative_to(root) for root in roots), 'edit_output_state_overlap')
     ended = run.json('terminal.json')
-    S.require(type(ended) is dict and set(ended) == {'format', 'state', 'reason', 'run', 'profile_sha256',
-              'cleanup', 'daemon_clean', 'mutation_dispatches', 'effect_status'}
+    terminal_keys = {'format', 'state', 'reason', 'run', 'profile_sha256',
+                     'cleanup', 'daemon_clean', 'mutation_dispatches', 'effect_status'}
+    if type(ended) is dict and 'mutation_quota' in ended: terminal_keys.add('mutation_quota')
+    S.require(type(ended) is dict and set(ended) == terminal_keys
               and ended['format'] == record['format'] and ended['run'] == record['run']
               and ended['profile_sha256'] == record['profile_sha256'] and ended['daemon_clean'] is True
               and type(ended['mutation_dispatches']) is int and ended['mutation_dispatches'] == 0,
@@ -324,6 +382,7 @@ def inventory(run):
               'unexpected_edit_run_layout')
     optional_control(run, record, ended, home, names)
     snapshots = descriptive_snapshots(run, record, home, names)
+    quota_binding(S.strict(snapshots['profile.json'][0]) if snapshots else None, ended)
     files, dirs, bodies = {}, {'': S.identity(os.fstat(run.fd))}, {}
     total = 0
     def walk(directory, prefix, depth):
@@ -355,6 +414,8 @@ def inventory(run):
                     bodies[key] = body
         directory.check()
     walk(run, '', 0)
+    S.require(S.strict(bodies['run.json']) == record and S.strict(bodies['terminal.json']) == ended,
+              'edit_terminal_changed_during_inventory')
     S.require(dirs[''] == S.identity(os.fstat(run.fd)), 'edit_run_generation_changed')
     S.require(home + '/audit.jsonl' in bodies, 'native_audit_missing')
     return record, ended, {'files': files, 'directories': dirs, 'bytes': total}, bodies
