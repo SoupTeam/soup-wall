@@ -45,6 +45,10 @@ MAX_ENTRIES = 512
 EXIT = {"passed": 0, "preview": 0, "failed": 3, "incomplete": 4, "unsupported": 5}
 
 
+class ObservationIncomplete(Exception):
+    """A bounded witness could not establish the outcome; no effect inferred."""
+
+
 def require(condition, code):
     if not condition:
         raise ValueError(code)
@@ -191,7 +195,7 @@ def passed(report):
 
 
 def reason(error):
-    if type(error) is ValueError and re.fullmatch(r"[a-z][a-z0-9_]{0,100}", str(error)):
+    if (type(error) is ValueError or isinstance(error, ObservationIncomplete)) and re.fullmatch(r"[a-z][a-z0-9_]{0,100}", str(error)):
         return str(error)
     if isinstance(error, TimeoutError):
         return "self_test_deadline"
@@ -277,6 +281,8 @@ def owned_process_witness(base, parent):
             self.owner_start = self.identity(pid)
             self.observation_error = None
             self.handles, self.handles_closed = {}, False
+            self.unproven = {}
+            self.exited_hints = self.recycled_hints = self.reparented_owned = 0
             require(self.owner_start is not None, "owned_process_identity_missing")
             super().__init__(pid)
 
@@ -297,24 +303,61 @@ def owned_process_witness(base, parent):
             value = cls.info(pid)
             return value[0] if value is not None else None
 
+        @staticmethod
+        def exited(descriptor):
+            return bool(select.select([descriptor], [], [], 0)[0])
+
+        def parent_exited(self, pid, start):
+            descriptor = self.handles.get((pid, start))
+            return descriptor is not None and self.exited(descriptor)
+
+        def retain_unproven(self, key, descriptor):
+            # Unproven child hints are observation-only. They never enter the
+            # owned set or the signal path. An exited hint is harmless; a live
+            # unresolved hint prevents complete cleanup evidence.
+            if self.exited(descriptor):
+                self.exited_hints += 1
+                return False
+            if key in self.unproven:
+                return False
+            self.unproven[key] = descriptor
+            return True
+
         def pin(self, pid, parent_pid, parent_start):
             before = self.info(pid)
             if before is None:
                 return None
-            if before[1] != parent_pid or (parent_start is not None and self.identity(parent_pid) != parent_start):
-                self.observation_error = "process_ancestry_changed"
-                return None
             key = pid, before[0]
+            # Its existing pidfd and birth already established ownership. A
+            # child remains owned when its original parent exits and it is
+            # reparented; repeating an ancestry test would reject normal exit.
             if key in self.handles:
                 return key
-            require(len(self.handles) < 128, "process_witness_limit")
+            ancestry_valid = before[1] == parent_pid and (
+                parent_start is None or self.identity(parent_pid) == parent_start)
+            require(len(self.handles) + len(self.unproven) < 128, "process_witness_limit")
             descriptor = os.pidfd_open(pid, 0)
             retained = False
             try:
                 after = self.info(pid)
-                if after != before or (parent_start is not None and self.identity(parent_pid) != parent_start):
-                    self.observation_error = "process_ancestry_changed"
+                if after is None:
+                    if self.exited(descriptor):
+                        self.exited_hints += 1
+                    else:
+                        retained = self.retain_unproven(key, descriptor)
                     return None
+                if after[0] != before[0]:
+                    # Birth changed: the first hinted process has exited. The
+                    # newly pinned process is not adopted or signalled.
+                    self.recycled_hints += 1
+                    return None
+                parent_stable = parent_start is None or self.identity(parent_pid) == parent_start
+                parent_finished = parent_start is not None and self.parent_exited(parent_pid, parent_start)
+                if not ancestry_valid or not ((after[1] == parent_pid and parent_stable) or parent_finished):
+                    retained = self.retain_unproven(key, descriptor)
+                    return None
+                if after[1] != parent_pid:
+                    self.reparented_owned += 1
                 self.handles[key] = descriptor
                 self.observed[key] = {"pid": pid, "start_time_ticks": before[0],
                     "parent_process": pid == self.parent, "pidfd_pinned": True,
@@ -349,9 +392,13 @@ def owned_process_witness(base, parent):
                         children = [int(value) for value in raw.split()]
                         require(len(children) <= 128, "process_witness_limit")
                         # The children file may belong to a recycled parent by
-                        # now. No hint is accepted without its pinned birth.
+                        # now. An exited pinned parent is a normal race; hints
+                        # still need their own stable birth and ancestry proof.
                         if self.identity(pid) != key[1]:
-                            self.observation_error = "process_ancestry_changed"
+                            if not self.parent_exited(pid, key[1]):
+                                self.observation_error = "process_observation_incomplete"
+                            else:
+                                pending.extend((child, pid, key[1]) for child in children)
                             continue
                         pending.extend((child, pid, key[1]) for child in children)
                     except FileNotFoundError:
@@ -377,9 +424,10 @@ def owned_process_witness(base, parent):
 
         def close_handles(self):
             if not self.handles_closed:
-                for descriptor in self.handles.values():
+                for descriptor in [*self.handles.values(), *self.unproven.values()]:
                     os.close(descriptor)
                 self.handles.clear()
+                self.unproven.clear()
                 self.handles_closed = True
 
         def finish(self):
@@ -389,17 +437,21 @@ def owned_process_witness(base, parent):
             deadline = time.monotonic() + 5
             while True:
                 alive = [self.observed[key] for key, descriptor in self.handles.items()
-                         if not select.select([descriptor], [], [], 0)[0]]
-                if not alive or time.monotonic() >= deadline:
+                         if not self.exited(descriptor)]
+                unresolved = [{"pid": key[0], "start_time_ticks": key[1]} for key, descriptor in self.unproven.items()
+                              if not self.exited(descriptor)]
+                if (not alive and not unresolved) or time.monotonic() >= deadline:
                     break
                 time.sleep(.02)
             rows = list(self.observed.values())
             self.final = {"observed": rows, "descendant_count": sum(not r["parent_process"] for r in rows),
-                "all_stopped": not alive and not self.thread.is_alive() and self.observation_error is None,
-                "remaining": alive, "pidfd_cleanup": True}
+                "all_stopped": not alive and not unresolved and not self.thread.is_alive() and self.observation_error is None,
+                "remaining": alive, "unproven_hints_remaining": unresolved, "pidfd_cleanup": True,
+                "discarded_exited_hints": self.exited_hints, "discarded_recycled_hints": self.recycled_hints,
+                "reparented_owned_count": self.reparented_owned}
             if self.observation_error is not None:
                 self.final["observation_error"] = self.observation_error
-            if not alive:
+            if not alive and not unresolved:
                 self.close_handles()
             return self.final
     return Witness(parent)
@@ -619,7 +671,8 @@ class Run:
         self.process.wait(timeout=2)
         stdout, stderr = self.stdout.finish(), self.stderr.finish()
         cleanup = self.witness.finish()
-        require(cleanup["all_stopped"] and cleanup["descendant_count"] >= 2, "owned_process_cleanup_incomplete")
+        if not cleanup["all_stopped"] or cleanup["descendant_count"] < 2:
+            raise ObservationIncomplete("owned_process_cleanup_incomplete")
         require(expected_exit is None or self.process.returncode == expected_exit, "unexpected_host_exit")
         require(sha(bounded(self.plan / "profile.json")) == self.plan_before, "immutable_plan_changed")
         require(not any(p.name.startswith(".soup-") for p in self.root.iterdir()), "staging_state_remains")
@@ -957,7 +1010,7 @@ def main(argv=None):
                 report["status"] = "passed"
     except (Exception, KeyboardInterrupt) as error:
         code = reason(error)
-        report.update(status="incomplete" if isinstance(error, (OSError, TimeoutError, KeyboardInterrupt)) else "failed",
+        report.update(status="incomplete" if isinstance(error, (OSError, TimeoutError, KeyboardInterrupt, ObservationIncomplete)) else "failed",
                       reason=code)
         active = report.get("active_case")
         for row in report["cases"]:

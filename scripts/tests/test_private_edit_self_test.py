@@ -20,6 +20,42 @@ probe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(probe)
 
 
+@contextlib.contextmanager
+def process_fixture(infos, children, exited=None, on_open=None):
+    exited = set() if exited is None else exited
+    class BaseWitness:
+        def __init__(self, parent):
+            self.parent, self.observed = parent, {}
+            self.stopped, self.thread, self.final = mock.Mock(), mock.Mock(), None
+            self.thread.is_alive.return_value = False
+            self.sample()
+    class ProcPath:
+        def __init__(self, path):
+            self.path = path
+        def open(self, _mode):
+            pid = int(self.path.split("/")[2])
+            if pid not in infos:
+                raise FileNotFoundError()
+            if self.path.endswith("/stat"):
+                start, ppid = infos[pid]
+                tail = [b"S", str(ppid).encode(), *([b"0"] * 17), str(start).encode()]
+                return io.BytesIO(str(pid).encode() + b" (process) " + b" ".join(tail))
+            return io.BytesIO(" ".join(map(str, children.get(pid, []))).encode())
+    def pin(pid, _flags):
+        if on_open:
+            on_open(pid)
+        return pid + 1000
+    with mock.patch.object(probe, "Path", side_effect=ProcPath), \
+         mock.patch.object(probe.os, "getpid", return_value=50), \
+         mock.patch.object(probe.os, "pidfd_open", side_effect=pin, create=True), \
+         mock.patch.object(probe.signal, "pidfd_send_signal", create=True) as sending, \
+         mock.patch.object(probe.os, "kill") as numeric, \
+         mock.patch.object(probe.os, "close") as closing, \
+         mock.patch.object(probe.select, "select", side_effect=lambda read, *_: ([fd for fd in read if fd in exited], [], [])):
+        witness = probe.owned_process_witness(SimpleNamespace(ProcessWitness=BaseWitness), 100)
+        yield witness, sending, numeric, closing
+
+
 def seed():
     rows = probe.inventory()
     for row in rows:
@@ -271,7 +307,8 @@ class PrivateEditSelfTest(unittest.TestCase):
              mock.patch.object(probe.os, "getpid", return_value=50), \
              mock.patch.object(probe.os, "pidfd_open", side_effect=lambda pid, _flags: pid + 1000, create=True), \
              mock.patch.object(probe.signal, "pidfd_send_signal", create=True), \
-             mock.patch.object(probe.os, "close"):
+             mock.patch.object(probe.os, "close"), \
+             mock.patch.object(probe.select, "select", side_effect=lambda read, *_: (read, [], [])):
             witness = probe.owned_process_witness(base, 100)
             self.assertEqual(set(witness.observed), {(100, 10), (101, 11)})
             before = copy.deepcopy(witness.observed)
@@ -337,7 +374,7 @@ class PrivateEditSelfTest(unittest.TestCase):
                         return io.BytesIO(str(pid).encode() + b" (process) " + b" ".join(tail))
                     return io.BytesIO(b"101" if pid == 100 else b"")
             def pin(pid, _flags):
-                if pid == 101:
+                if pid == 101 and race:
                     # The child exits and this numeric PID becomes a foreign
                     # process between the first stat read and pidfd_open.
                     child.update(start=22, parent=999)
@@ -352,17 +389,77 @@ class PrivateEditSelfTest(unittest.TestCase):
                 witness = probe.owned_process_witness(SimpleNamespace(ProcessWitness=BaseWitness), 100)
                 self.assertEqual(set(witness.observed), {(100, 10)})
                 self.assertEqual(set(witness.handles), {(100, 10)})
-                self.assertEqual(witness.observation_error, "process_ancestry_changed")
+                self.assertIsNone(witness.observation_error)
                 witness.signal_owned(9)
                 self.assertEqual([call.args[0] for call in sending.call_args_list], [1100])
                 numeric_signal.assert_not_called()
                 result = witness.finish()
-                self.assertFalse(result["all_stopped"])
+                self.assertTrue(result["all_stopped"])
                 witness.finish(); witness.signal_owned(9)
                 self.assertEqual(len(sending.call_args_list), 1)
-                self.assertEqual(sorted(call.args[0] for call in closing.call_args_list),
-                                 [1100, 1101] if race else [1100])
-                self.assertEqual([call.args[0] for call in opening.call_args_list], [100, 101] if race else [100])
+                self.assertEqual(sorted(call.args[0] for call in closing.call_args_list), [1100, 1101])
+                self.assertEqual([call.args[0] for call in opening.call_args_list], [100, 101])
+
+    def test_already_pinned_child_remains_owned_after_original_parent_exits(self):
+        infos = {100: (10, 50), 101: (11, 100), 102: (12, 101)}
+        exited = set()
+        with process_fixture(infos, {100: [101], 101: [102]}, exited) as (witness, sending, numeric, closing):
+            infos.pop(101); infos[102] = (12, 1); exited.add(1101)
+            self.assertEqual(witness.pin(102, 101, 11), (102, 12))
+            self.assertIsNone(witness.observation_error)
+            witness.signal_owned(9)
+            self.assertEqual({call.args[0] for call in sending.call_args_list}, {1100, 1101, 1102})
+            numeric.assert_not_called()
+            exited.update((1100, 1102))
+            self.assertTrue(witness.finish()["all_stopped"])
+            self.assertEqual(closing.call_count, 3)
+
+    def test_same_birth_child_reparent_during_pin_requires_original_parent_pidfd_exit(self):
+        infos = {100: (10, 50), 101: (11, 100)}
+        exited = set()
+        def on_open(pid):
+            if pid == 101:
+                infos.pop(100); infos[101] = (11, 1); exited.add(1100)
+        with process_fixture(infos, {100: [101]}, exited, on_open) as (witness, _sending, numeric, _closing):
+            self.assertEqual(set(witness.observed), {(100, 10), (101, 11)})
+            self.assertEqual(witness.reparented_owned, 1)
+            self.assertIsNone(witness.observation_error)
+            numeric.assert_not_called()
+            exited.add(1101)
+            self.assertTrue(witness.finish()["all_stopped"])
+
+    def test_exited_hint_after_pin_is_benign_and_not_signalled(self):
+        infos = {100: (10, 50), 101: (11, 100)}
+        exited = set()
+        def on_open(pid):
+            if pid == 101:
+                infos.pop(101); exited.add(1101)
+        with process_fixture(infos, {100: [101]}, exited, on_open) as (witness, sending, numeric, closing):
+            self.assertEqual(set(witness.observed), {(100, 10)})
+            self.assertEqual(witness.exited_hints, 1)
+            witness.signal_owned(9)
+            self.assertEqual([call.args[0] for call in sending.call_args_list], [1100])
+            numeric.assert_not_called()
+            exited.add(1100)
+            self.assertTrue(witness.finish()["all_stopped"])
+            self.assertEqual(closing.call_count, 2)
+
+    def test_live_unproven_hint_prevents_complete_cleanup_and_is_never_signalled(self):
+        infos = {100: (10, 50), 101: (11, 999)}
+        exited = set()
+        with process_fixture(infos, {100: [101]}, exited) as (witness, sending, numeric, _closing):
+            self.assertEqual(set(witness.handles), {(100, 10)})
+            self.assertEqual(set(witness.unproven), {(101, 11)})
+            witness.signal_owned(9)
+            self.assertEqual([call.args[0] for call in sending.call_args_list], [1100])
+            numeric.assert_not_called()
+            exited.add(1100)
+            with mock.patch.object(probe.time, "monotonic", side_effect=(0, 6)):
+                result = witness.finish()
+            self.assertFalse(result["all_stopped"])
+            self.assertEqual(result["unproven_hints_remaining"], [{"pid": 101, "start_time_ticks": 11}])
+            exited.add(1101)
+            self.assertTrue(witness.finish()["all_stopped"])
 
     def test_missing_pidfd_support_refuses_before_creating_owned_workspace(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -374,6 +471,19 @@ class PrivateEditSelfTest(unittest.TestCase):
                     probe.Suite(args, {}, {}, {})
                 starting.assert_not_called()
                 self.assertFalse((args.output / "owned").exists())
+
+    def test_missing_observation_is_incomplete_but_forbidden_effect_is_failed(self):
+        for error, expected_code, expected_status in (
+                (probe.ObservationIncomplete("owned_process_cleanup_incomplete"), 4, "incomplete"),
+                (ValueError("rejected_write_had_effect"), 3, "failed")):
+            with mock.patch.object(probe, "platform_profile", return_value={"id": "native-linux-x86_64", "supported": True}), \
+                 mock.patch.object(probe.os, "geteuid", return_value=1000, create=True), \
+                 mock.patch.object(probe, "preflight", side_effect=error), \
+                 contextlib.redirect_stdout(io.StringIO()) as text:
+                code = probe.main(["--home", "/owned", "--selection", "/owned", "--agent", "/owned"])
+            result = json.loads(text.getvalue())
+            self.assertEqual((code, result["status"]), (expected_code, expected_status))
+            self.assertEqual(result["reason"], str(error))
 
     def test_directory_enumeration_stops_at_bound_before_retaining_all_entries(self):
         with tempfile.TemporaryDirectory() as temp:
