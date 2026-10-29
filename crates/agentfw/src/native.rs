@@ -29,6 +29,7 @@ pub mod pilot_cleanup;
 pub mod pilot_stop;
 pub mod resource;
 pub mod resource_approval;
+mod timing;
 pub(crate) mod verified_git;
 pub mod workspace;
 
@@ -1698,6 +1699,57 @@ pub async fn instance(State(st): State<Shared>, headers: HeaderMap) -> (StatusCo
     if let Some(service) = &native.execution {
         description["execution_service"] = service.metadata();
     }
+    if let Some(service) = &native.edit {
+        let tools = service.profile.tools();
+        let owns = |session_id: &str, epoch: &str, tool: &str| {
+            sessions.entries.get(session_id).is_some_and(|s| {
+                s.epoch == epoch
+                    && s.host_session.as_deref() == Some(service.host.as_str())
+                    && s.server_id.as_deref() == Some(crate::edit_session::SERVER)
+                    && tools.as_array().is_some_and(|definitions| {
+                        definitions
+                            .iter()
+                            .any(|definition| definition["name"] == tool)
+                    })
+            })
+        };
+        let (pending, decisions) = match native
+            .approval
+            .as_ref()
+            .map(|approval| approval.edit_bindings(owns))
+            .transpose()
+        {
+            Ok(value) => value.unwrap_or_default(),
+            Err(code) => return failure(code, StatusCode::SERVICE_UNAVAILABLE),
+        };
+        let collectors = sessions
+            .entries
+            .values()
+            .filter(|s| {
+                s.host_session.as_deref() == Some(service.host.as_str())
+                    && s.server_id.as_deref() == Some(crate::edit_session::SERVER)
+            })
+            .take(9)
+            .map(|s| {
+                json!({"session_epoch":s.epoch,"host_session":s.host_session,
+                    "server_id":s.server_id,
+                    "active":!s.is_dead(now, now_ms, &sessions)
+                        && validate_lineage(&sessions, s, now_ms, now).is_ok()})
+            })
+            .collect::<Vec<_>>();
+        if collectors.len() > 8 {
+            return failure(
+                "edit_diagnostic_collector_cap",
+                StatusCode::SERVICE_UNAVAILABLE,
+            );
+        }
+        description["edit_diagnostic"] = json!({
+            "format":"sw-installed-edit-live/1","profile_sha256":service.digest,
+            "host_session":service.host,"collectors":collectors,
+            "pending":pending,"decisions":decisions,
+            "observation":"authenticated_current_memory_not_result_delivery_proof"
+        });
+    }
     (StatusCode::OK, Json(description))
 }
 
@@ -2023,6 +2075,29 @@ fn inspect_bound_complete(
     execution: Option<verified_git::OwnedResult>,
     evidence: Option<execution::OriginalResult>,
 ) -> Result<Response, &'static str> {
+    let mut timing = timing::Timing::new(&request);
+    let result = inspect_bound_measured(
+        st,
+        native,
+        request,
+        identity,
+        execution,
+        evidence,
+        &mut timing,
+    );
+    timing.finish(&result);
+    result
+}
+
+fn inspect_bound_measured(
+    st: &Shared,
+    native: &NativeState,
+    request: Request,
+    identity: Option<&liveness::CollectorIdentity>,
+    execution: Option<verified_git::OwnedResult>,
+    evidence: Option<execution::OriginalResult>,
+    timing: &mut timing::Timing,
+) -> Result<Response, &'static str> {
     if execution.is_some() && evidence.is_some() {
         return Err("verified_execution_source_mismatch");
     }
@@ -2043,10 +2118,13 @@ fn inspect_bound_complete(
         .sessions
         .lock()
         .map_err(|_| "native_state_unavailable")?;
+    timing.session_wait_us = started.elapsed().as_micros();
+    let wait = Instant::now();
     let mut firewall = st
         .firewall
         .lock()
         .map_err(|_| "native_inspection_unavailable")?;
+    timing.firewall_wait_us = wait.elapsed().as_micros();
     if let Some(identity) = identity {
         let session = state
             .entries
@@ -2374,14 +2452,7 @@ fn inspect_bound_complete(
             &session.epoch,
             session.host_session.as_deref(),
         )?;
-        if let Err(reason) = audit(
-            st,
-            &request,
-            &session,
-            &response,
-            None,
-            started.elapsed().as_micros(),
-        ) {
+        if let Err(reason) = audit(st, &request, &session, &response, None, timing) {
             rollback_provenance_contexts(&mut firewall, &created);
             return Err(reason);
         }
@@ -2426,14 +2497,7 @@ fn inspect_bound_complete(
         // The accepted end request and terminal cleanup have distinct audit rows.
         // Consume this sequence before retirement allocates its next one.
         session.seq += 1;
-        audit(
-            st,
-            &request,
-            session,
-            &response,
-            None,
-            started.elapsed().as_micros(),
-        )?;
+        audit(st, &request, session, &response, None, timing)?;
         let session_epoch = session.epoch.clone();
         drop(state);
         drop(firewall);
@@ -2486,14 +2550,7 @@ fn inspect_bound_complete(
             unavailable.verdict = Verdict::Deny;
             unavailable.rule = Some("native_provenance_context_unavailable".into());
             unavailable.provenance_incomplete = true;
-            audit(
-                st,
-                &request,
-                session,
-                &response,
-                Some(&unavailable),
-                started.elapsed().as_micros(),
-            )?;
+            audit(st, &request, session, &response, Some(&unavailable), timing)?;
             return Ok(response);
         }
         if args.to_string().len() > firewall.provenance_limits().max_input_bytes {
@@ -2508,14 +2565,7 @@ fn inspect_bound_complete(
             unavailable.verdict = Verdict::Deny;
             unavailable.rule = Some("native_provenance_input".into());
             unavailable.provenance_incomplete = true;
-            audit(
-                st,
-                &request,
-                session,
-                &response,
-                Some(&unavailable),
-                started.elapsed().as_micros(),
-            )?;
+            audit(st, &request, session, &response, Some(&unavailable), timing)?;
             return Ok(response);
         }
         if session.host_session.is_some() {
@@ -2598,14 +2648,7 @@ fn inspect_bound_complete(
                 response.verdict = "deny";
                 response.release = false;
                 response.reason_codes.push(reason.into());
-                audit(
-                    st,
-                    &request,
-                    session,
-                    &response,
-                    None,
-                    started.elapsed().as_micros(),
-                )?;
+                audit(st, &request, session, &response, None, timing)?;
                 return Ok(response);
             }
         } else if request.resource_admission.is_some() {
@@ -2814,14 +2857,7 @@ fn inspect_bound_complete(
                 response.resources_sha256 = Some(admission.resources_sha256());
             }
         }
-        audit(
-            st,
-            &request,
-            session,
-            &response,
-            Some(&outcome),
-            started.elapsed().as_micros(),
-        )?;
+        audit(st, &request, session, &response, Some(&outcome), timing)?;
         if let Some(id) = &response.call_id {
             session.calls.insert(
                 id.clone(),
@@ -2943,14 +2979,7 @@ fn inspect_bound_complete(
             return Err("native_publication_expired");
         }
         response.publication_ttl_ms = Some(remaining);
-        audit(
-            st,
-            &request,
-            session,
-            &response,
-            Some(&current),
-            started.elapsed().as_micros(),
-        )?;
+        audit(st, &request, session, &response, Some(&current), timing)?;
         session.calls.insert(id.into(), call);
         return Ok(response);
     }
@@ -2990,14 +3019,7 @@ fn inspect_bound_complete(
             response.release = false;
             response.reason_codes = vec!["native_policy_transition_result_refused".into()];
             response.reason_codes.extend(outcome.rule.iter().cloned());
-            audit(
-                st,
-                &request,
-                session,
-                &response,
-                Some(&outcome),
-                started.elapsed().as_micros(),
-            )?;
+            audit(st, &request, session, &response, Some(&outcome), timing)?;
             return Ok(response);
         }
     }
@@ -3068,14 +3090,7 @@ fn inspect_bound_complete(
         response.verdict = verdict_label(Verdict::Deny);
         response.release = false;
         response.reason_codes = vec!["native_record_over_cap".into()];
-        audit(
-            st,
-            &request,
-            session,
-            &response,
-            None,
-            started.elapsed().as_micros(),
-        )?;
+        audit(st, &request, session, &response, None, timing)?;
         return Ok(response);
     }
     let provenance = match (
@@ -3096,12 +3111,14 @@ fn inspect_bound_complete(
     let inspect_mcp_result = request.event == "result"
         && request.delivery.as_deref() == Some("mcp_host")
         && matches!(tool.result_provenance, ResultProvenance::Untrusted);
+    let evidence_started = Instant::now();
     let mcp_evidence = if inspect_mcp_result {
         match soup_wall_core::InjectionDetector::mcp_result_evidence(
             &texts.iter().map(String::as_str).collect::<Vec<_>>(),
         ) {
             Ok(evidence) => Some(evidence),
             Err(limit) => {
+                timing.evidence_us = evidence_started.elapsed().as_micros();
                 // The Call was removed before result validation. No partial
                 // findings, skipped suffix, taint or raw spans can be released.
                 session.seq += 1;
@@ -3114,20 +3131,15 @@ fn inspect_bound_complete(
                 let mut refusal = Outcome::allow();
                 refusal.verdict = Verdict::Deny;
                 refusal.rule = Some("native_mcp_result_evidence_incomplete".into());
-                audit(
-                    st,
-                    &request,
-                    session,
-                    &response,
-                    Some(&refusal),
-                    started.elapsed().as_micros(),
-                )?;
+                audit(st, &request, session, &response, Some(&refusal), timing)?;
                 return Ok(response);
             }
         }
     } else {
         None
     };
+    timing.evidence_us = evidence_started.elapsed().as_micros();
+    let detectors_started = Instant::now();
     for (block_index, text) in texts.into_iter().enumerate() {
         session.seq += 1;
         let ev = session.event(EventKind::ToolResult {
@@ -3190,6 +3202,8 @@ fn inspect_bound_complete(
         .and_then(|o| o.rule.clone())
         .into_iter()
         .collect();
+    timing.detectors_us = detectors_started.elapsed().as_micros();
+    let tracking_started = Instant::now();
     let needs_tracking = request.event == "context"
         || matches!(request.delivery.as_deref(), Some("parent" | "mcp_host"));
     let shared_host = session
@@ -3259,13 +3273,14 @@ fn inspect_bound_complete(
             outcome.provenance_incomplete = true;
         }
     }
+    timing.tracking_us = tracking_started.elapsed().as_micros();
     audit(
         st,
         &request,
         session,
         &response,
         representative.as_ref(),
-        started.elapsed().as_micros(),
+        timing,
     )?;
     if response.release {
         // An outer model result is still held inside the collector until the
@@ -3324,8 +3339,9 @@ fn audit(
     session: &Session,
     response: &Response,
     outcome: Option<&Outcome>,
-    latency_us: u128,
+    timing: &mut timing::Timing,
 ) -> Result<(), &'static str> {
+    let started = Instant::now();
     let epoch = &session.epoch;
     let seq = session.seq;
     let mut record = json!({"at_ms": event(epoch, seq, EventKind::Unknown).at_ms, "session": epoch,
@@ -3339,7 +3355,7 @@ fn audit(
         "taint": outcome.and_then(|o| o.taint.as_ref()).map(|t| json!({"source": t.source.label(),
             "origin": t.source.kind(), "source_name": t.source.source_name(),
             "trust": format!("{:?}", t.source.trust()).to_lowercase(), "seq": t.seq})),
-        "latency_us": latency_us, "truncated": false, "registry_sha256": response.registry_sha256,
+        "latency_us": timing.elapsed_us(), "truncated": false, "registry_sha256": response.registry_sha256,
         "delivery": request.delivery,
         "call_id": response.call_id, "binding_sha256": response.binding_sha256,
         "content_sha256": response.content_sha256, "reason_codes": response.reason_codes});
@@ -3409,14 +3425,18 @@ fn audit(
     if let Some(parent_id) = &session.parent_id {
         record["parent_id"] = json!(parent_id);
     }
-    st.audit
+    let result = st
+        .audit
         .write_native(&record)
-        .map_err(|_| "native_audit_unavailable")
+        .map_err(|_| "native_audit_unavailable");
+    timing.audit_us += started.elapsed().as_micros();
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod concurrent_timing;
     mod literal_arguments;
     mod result_evidence_bounds;
     use crate::{

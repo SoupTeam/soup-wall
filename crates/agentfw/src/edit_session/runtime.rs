@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! One private daemon epoch and one supervised genuine host. No resumption or
 //! automatic retry is permitted after the host has obtained edit authority.
-use super::{launch, profile, transport, FORMAT, SERVER};
+use super::{launch, profile, record, transport, FORMAT, SERVER};
 use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -14,14 +14,14 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct RunRecord {
     pub format: String,
     pub run: PathBuf,
     pub home: PathBuf,
-    profile_sha256: String,
-    host_session: String,
+    pub(super) profile_sha256: String,
+    pub(super) host_session: String,
     pub(super) instance_id: String,
 }
 
@@ -105,7 +105,10 @@ async fn owned(
     model: String,
     provider: Vec<(std::ffi::OsString, std::ffi::OsString)>,
 ) -> Result<()> {
-    use std::os::unix::{fs::DirBuilderExt, process::CommandExt};
+    use std::os::{
+        fd::AsRawFd,
+        unix::{fs::DirBuilderExt, process::CommandExt},
+    };
     // Register interception before any child can exist.
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -164,6 +167,33 @@ async fn owned(
         instance_id: native.instance_id().into(),
     };
     launch::write(&run.join("run.json"), &profile::canonical(&record)?, 0o400)?;
+    // Retain the exact descriptive plan, not a reference that diagnosis would
+    // have to re-open or revalidate against an already changed output target.
+    launch::write(
+        &run.join("profile.json"),
+        &profile::canonical(&profile)?,
+        0o400,
+    )?;
+    launch::write(&run.join("profile.sha256"), digest.as_bytes(), 0o400)?;
+    let diagnostic = record::Context {
+        format: record::FORMAT.into(),
+        run: run.clone(),
+        home: home.clone(),
+        profile_sha256: digest.clone(),
+        host_session: host.clone(),
+        instance_id: native.instance_id().into(),
+        config_sha256: crate::protection_status::config_digest(&config),
+        listener: record::listener_identity(listener.as_raw_fd())?,
+        started_at_ms: crate::protection_status::now_ms(),
+        owner: record::process_identity(std::process::id())?,
+    };
+    diagnostic.validate()?;
+    launch::write(
+        &run.join("diagnostic-context.json"),
+        &profile::canonical(&diagnostic)?,
+        0o400,
+    )?;
+    let control = super::control::Guard::create(&run, &record)?;
     let tools = profile
         .tools()
         .as_array()
@@ -288,8 +318,9 @@ async fn owned(
         state.clone(),
         stop_rx.clone(),
     ));
+    let daemon = state.clone();
     let mut server = tokio::spawn(async move {
-        axum::serve(listener, crate::app(state))
+        axum::serve(listener, crate::app(daemon))
             .with_graceful_shutdown(async move {
                 let _ = stop_rx.changed().await;
             })
@@ -306,6 +337,22 @@ async fn owned(
                 anyhow::bail!("edit_host_spawn_failed");
             }
         };
+    // The leader remains owned and unreaped until cleanup. Capturing an
+    // identity is only a diagnostic observation, never new process authority.
+    let host_identity = child
+        .child_mut()
+        .id()
+        .context("edit_host_identity")
+        .and_then(record::process_identity)
+        .and_then(|identity| profile::canonical(&identity))
+        .and_then(|bytes| launch::write(&run.join("host-process.json"), &bytes, 0o400));
+    if host_identity.is_err() {
+        let _ = child.cleanup(false).await;
+        let _ = stop_tx.send(true);
+        server.abort();
+        maintenance.abort();
+        anyhow::bail!("edit_host_identity_unavailable");
+    }
     let stream_failure = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let stdout = tokio::spawn(guarded_capture(
         child
@@ -340,7 +387,7 @@ async fn owned(
     } else {
         loop {
             tokio::select! {biased;
-                _=term.recv()=>{reason="cancelled";break;},
+                _=term.recv()=>{reason=match control.requested(){Ok(true)=>"operator_stop",Ok(false)=>"cancelled",Err(_)=>"invalid_stop_request"};break;},
                 _=interrupt.recv()=>{reason="cancelled";break;},
                 _=tokio::time::sleep_until(deadline)=>{reason="deadline";break;},
                 _=tokio::time::sleep(Duration::from_millis(25))=>{
@@ -351,6 +398,22 @@ async fn owned(
             }
         }
     }
+    // Stop admission/result release at the same native lock used by execution.
+    // A publication that already held that lock may have committed; no rollback
+    // or automatic retry follows cancellation. The adapter is then joined before
+    // any owner receipt can confirm cleanup.
+    let authority = crate::mcp::replace_file::content_sha256(
+        crate::child_authority::encode_token(&grant).as_bytes(),
+    );
+    let revoked = crate::native::pilot_stop::revoke_selected(
+        &state,
+        &host,
+        &std::collections::BTreeMap::from([(SERVER.into(), authority)]),
+        grant.expires_at_ms,
+    )
+    .is_ok();
+    service.close();
+    let adapter_clean = service.wait_idle().await;
     let cleanup = child.cleanup(false).await;
     let _ = stop_tx.send(true);
     let daemon_clean = match tokio::time::timeout(Duration::from_secs(3), &mut server).await {
@@ -374,30 +437,51 @@ async fn owned(
         }
     }
     let mut input = input;
-    if !matches!(
+    let input_ok = matches!(
         tokio::time::timeout(Duration::from_secs(1), &mut input).await,
         Ok(Ok(Ok(())))
-    ) {
+    );
+    if !input_ok {
         input.abort();
         let _ = input.await;
-        streams_ok = false;
     }
+    let quota_usage = service.quota.as_ref().map(|q| q.snapshot());
+    let quota_complete = quota_usage.as_ref().is_none_or(|usage| {
+        usage.as_ref().is_ok_and(|u| {
+            u.indeterminate_publications == 0 && u.pending_prepublication_attempts == 0
+        })
+    });
+    let cleanup_confirmed =
+        cleanup.cleaned && cleanup.reaped && daemon_clean && adapter_clean && streams_ok;
+    let receipt = control.finish(revoked, cleanup_confirmed, reason);
+    let stopped = reason == "operator_stop" && revoked && cleanup_confirmed && receipt.is_ok();
     let complete = reason == "host_completed"
         && cleanup.cleaned
         && cleanup.reaped
         && cleanup.exit_success
         && daemon_clean
-        && streams_ok;
-    let outcome = json!({"format":FORMAT,"state":if complete {"host_completed"} else {"failed"},"reason":reason,
+        && streams_ok
+        && input_ok
+        && adapter_clean
+        && revoked
+        && receipt.is_ok()
+        && quota_complete;
+    let mut outcome = json!({"format":FORMAT,"state":if complete {"host_completed"} else {"failed"},"reason":reason,
         "run":run,"profile_sha256":record.profile_sha256,"cleanup":cleanup,"daemon_clean":daemon_clean,
         "mutation_dispatches":service.dispatches.load(Ordering::Acquire),
         "effect_status":"consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry"});
+    if let Some(usage) = quota_usage {
+        outcome["mutation_quota"] = match usage {
+            Ok(usage) => serde_json::to_value(super::quota::RetainedQuota::Known(usage))?,
+            Err(_) => serde_json::to_value(super::quota::RetainedQuota::unavailable())?,
+        };
+    }
     launch::write(
         &run.join("terminal.json"),
         &profile::canonical(&outcome)?,
         0o400,
     )?;
     println!("{outcome}");
-    ensure!(complete, "edit_session_incomplete");
+    ensure!(complete || stopped, "edit_session_incomplete");
     Ok(())
 }

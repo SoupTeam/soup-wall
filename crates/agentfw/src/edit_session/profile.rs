@@ -44,6 +44,15 @@ pub struct Target {
 #[serde(deny_unknown_fields)]
 pub struct Profile {
     pub format: String,
+    #[serde(
+        default,
+        deserialize_with = "super::quota::present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub mutation_quota: Option<super::quota::Limits>,
+    /// Descriptive lineage only; never a grant or a claim about execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refreshed_from_sha256: Option<String>,
     pub exclusion: String,
     pub root: PathBuf,
     pub root_identity: RootIdentity,
@@ -70,9 +79,20 @@ pub fn leaf(name: &str) -> bool {
 impl Profile {
     pub fn validate(&self) -> Result<()> {
         ensure!(
-            self.format == super::FORMAT && self.exclusion == replace_file::EXCLUSION,
+            self.refreshed_from_sha256
+                .as_ref()
+                .is_none_or(|s| crate::native::is_digest(s)),
+            "edit_refresh_lineage_invalid"
+        );
+        ensure!(
+            ((self.format == super::FORMAT && self.mutation_quota.is_none())
+                || (self.format == super::QUOTA_PROFILE && self.mutation_quota.is_some()))
+                && self.exclusion == replace_file::EXCLUSION,
             "edit_profile_contract"
         );
+        if let Some(limits) = &self.mutation_quota {
+            limits.validate()?;
+        }
         ensure!(
             self.root.is_absolute() && self.root_identity.inode != 0,
             "edit_root_invalid"
@@ -231,6 +251,8 @@ pub(super) fn fixture() -> Profile {
     };
     Profile {
         format: super::FORMAT.into(),
+        mutation_quota: None,
+        refreshed_from_sha256: None,
         exclusion: replace_file::EXCLUSION.into(),
         root: absolute("output"),
         root_identity: RootIdentity {
@@ -268,6 +290,28 @@ mod tests {
         for name in ["", "..", "a/b", "../x", ".claude", "a\\b", "a b", "a\n"] {
             assert!(!leaf(name));
         }
+    }
+    #[test]
+    fn refresh_lineage_is_optional_descriptive_and_cannot_widen_generated_authority() {
+        let original = fixture();
+        let raw = canonical(&original).unwrap();
+        assert!(!serde_json::from_slice::<Value>(&raw)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("refreshed_from_sha256"));
+        assert_eq!(serde_json::from_slice::<Profile>(&raw).unwrap(), original);
+        let mut refreshed = original.clone();
+        refreshed.refreshed_from_sha256 = Some(digest(&original).unwrap());
+        refreshed.validate().unwrap();
+        assert_eq!(refreshed.tools(), original.tools());
+        assert_eq!(
+            refreshed.registry().unwrap()["tools"],
+            original.registry().unwrap()["tools"]
+        );
+        assert_ne!(digest(&refreshed).unwrap(), digest(&original).unwrap());
+        refreshed.refreshed_from_sha256 = Some("not-a-digest".into());
+        assert!(refreshed.validate().is_err());
     }
     #[test]
     fn create_schema_cannot_widen_target_or_hide_extra_arguments() {

@@ -1,0 +1,54 @@
+{
+  "format": "sw-edit-quota-independent-artifact-check/1",
+  "source": "66e126486ea9b21f0104051a3f97a65561ee21ea",
+  "tree": "30d22de2eba1e43890a6206c7691a529ad399d77",
+  "zip_sha256": "078d96e4ea53a83f4f525e8e6dcb59cebba9cdb17226dc2b5cbe17c31197b6b7",
+  "members": [
+    "source.txt",
+    "binary.txt",
+    "runtime/report.json",
+    "quota/report.json"
+  ],
+  "agentfw_sha256": "cbfef36de57efcfdba73e0a74c3c5bda1a641b9c829fbd17f49bdd89f42caa36",
+  "component": "cb14413668a67c554670a77255edd2fb7f102fc54a7ec343d97654db42d0d4f6",
+  "quota_cases": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "legacy_cases": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "verified_executions": 19,
+  "verified": "exact source/binary/component/plan digests; monotone atomic quotas; aggregate byte and operation limits; useful readbacks; known vs indeterminate commits; actual lost-result effects; new authority and peer isolation; no over-budget execution; owned cleanup",
+  "run_id": 40679977662,
+  "job_id": 122787990877,
+  "artifact_id": 12811928830,
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/40679977662",
+  "native_rust": {
+    "passed": 53,
+    "failed": 0,
+    "ignored": 0,
+    "per_suite_passed": [
+      19,
+      6,
+      10,
+      5,
+      13
+    ],
+    "compiler_warnings": 0
+  },
+  "strict_linux_clippy": true,
+  "linux_fmt": true,
+  "script_tests": 9,
+  "log_sha256": "536a99f8a2271cd872a19ea9e943ffbd9cc536dfa5d57286ecf300c4c7c79735",
+  "atomic_race": "native barrier:16 ledger contenders one reservation, plus 2 real creators one physical file; installed host batch retains existing unsupported overlap refusal",
+  "isolation": "read-only source, private writable scratch/private network namespace, loopback only, non-root/all capabilities dropped",
+  "qualification_scope": "author focused development, final Ready/current-main admission and merge TL-owned"
+}

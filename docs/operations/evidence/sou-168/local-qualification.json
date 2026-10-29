@@ -1,0 +1,233 @@
+{
+  "format": "sw-edit-refresh-local-qualification/1",
+  "platform": "native macOS ARM64; Linux-only refresh implementation requires the separate native Linux run",
+  "accepted_base": "db4f006d74957fc1a8dc1a0a4be40c3b887d8a01",
+  "source_fingerprints": "per-command SHA256 of sorted source paths and file digests, retained before execution",
+  "isolation": "read-only source, isolated writable scratch, Seatbelt loopback-only networking",
+  "rust_workspace": {
+    "passed": 1903,
+    "failed": 0,
+    "existing_ignored": 13,
+    "suites": 75,
+    "compiler_warnings": 0
+  },
+  "strict_workspace_clippy": true,
+  "fmt": true,
+  "ci_controls": {
+    "run": 95,
+    "skipped": 1,
+    "failed": 0
+  },
+  "attempts": [
+    {
+      "label": "initial-mac-check",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--lib",
+        "edit_session",
+        "--",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "source_sha256": "ef0093b745c37211b501fbe47a464444205a58dcbcbed2d5cc72e4545aa42cef",
+      "log_sha256": "2c819c7a3ebcfb7d9077f2b3948906f237f7d6d6fa33b0b8250603f7ff67bbe5",
+      "elapsed_seconds": 78.71
+    },
+    {
+      "label": "focused-python",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*edit*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "6fd61711d4ff2acb6240a1741c013336895d20c8b2ba3c8c051dd53dbd5d0187",
+      "log_sha256": "ccd09c247ffce78ef231e25b3865ce0d1a2aa33ae754b1805823c6103b8af519",
+      "elapsed_seconds": 0.44
+    },
+    {
+      "label": "mac-workspace",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--workspace"
+      ],
+      "exit_code": 0,
+      "source_sha256": "6fd61711d4ff2acb6240a1741c013336895d20c8b2ba3c8c051dd53dbd5d0187",
+      "log_sha256": "071348541bb4ad4f86705ae1de909c30089d2c035b3cc3735bf75474ac4bc789",
+      "elapsed_seconds": 259.97
+    },
+    {
+      "label": "workspace-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "source_sha256": "d76bb9ca6609a1b9575f75cfe8b4369d04910cb0157b8471d22499dde3f243d8",
+      "log_sha256": "31fac167862bf646a75fc8a524bc62baefb95c423777164c1144e65a729e4afa",
+      "elapsed_seconds": 67.99
+    },
+    {
+      "label": "workspace-fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "d76bb9ca6609a1b9575f75cfe8b4369d04910cb0157b8471d22499dde3f243d8",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 1.31
+    },
+    {
+      "label": "ci-controls",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_ci*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "d76bb9ca6609a1b9575f75cfe8b4369d04910cb0157b8471d22499dde3f243d8",
+      "log_sha256": "9a0b14d2fb8aaf113102401befe27905eabc8f552192043890c034f9a032385c",
+      "elapsed_seconds": 0.23
+    },
+    {
+      "label": "generated-workflow",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/ci_components.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "d76bb9ca6609a1b9575f75cfe8b4369d04910cb0157b8471d22499dde3f243d8",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 0.07
+    },
+    {
+      "label": "documentation",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 1,
+      "source_sha256": "d76bb9ca6609a1b9575f75cfe8b4369d04910cb0157b8471d22499dde3f243d8",
+      "log_sha256": "324cf381fb88258339e071b61b07796a574fa6473d8aebbd903a20fec06baf1b",
+      "elapsed_seconds": 1.6
+    },
+    {
+      "label": "documentation-tracked",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "d76bb9ca6609a1b9575f75cfe8b4369d04910cb0157b8471d22499dde3f243d8",
+      "log_sha256": "305e645a3ddd5b0671ca478e440bd357016602cb9472a32f666af960f1064507",
+      "elapsed_seconds": 1.56
+    },
+    {
+      "label": "refresh-driver-final",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*edit*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "d76bb9ca6609a1b9575f75cfe8b4369d04910cb0157b8471d22499dde3f243d8",
+      "log_sha256": "f223b7321f1cb6a03fecf201096b1c33fac4b8001d0e3968a0aa85e1edacc6f0",
+      "elapsed_seconds": 0.4
+    },
+    {
+      "label": "final-fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "a45f54ddca3278a4446d9910e54ab346f4bdc7334baee9585b91f69cd1179ff7",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 1.3
+    },
+    {
+      "label": "final-documentation",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "a45f54ddca3278a4446d9910e54ab346f4bdc7334baee9585b91f69cd1179ff7",
+      "log_sha256": "d1e9a0de9920ad602610d3d8ce868e6ac8f0b9a057811c05660a6b4c80c37c46",
+      "elapsed_seconds": 1.63
+    },
+    {
+      "label": "final-generator",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/ci_components.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "a45f54ddca3278a4446d9910e54ab346f4bdc7334baee9585b91f69cd1179ff7",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 0.07
+    }
+  ],
+  "development_observations": [
+    {
+      "label": "documentation",
+      "result": "failed",
+      "reason": "new guide was not yet in the isolated Git index; added only that document to the isolated index and reran",
+      "next": "documentation-tracked passed; no broken links or source runtime changes"
+    }
+  ],
+  "final_documentation": {
+    "files": 320,
+    "links": 1087,
+    "errors": 0
+  },
+  "post_native_delta": "documentation/evidence only; qualified runtime, tests, driver, workflow and workload are unchanged"
+}

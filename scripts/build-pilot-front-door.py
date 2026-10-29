@@ -60,6 +60,8 @@ SCRIPTS = (
     "scripts/pilot_provider.py",
     "scripts/pilot_qualification.py",
     "scripts/pilot_source_identity.py",
+    "scripts/pilot_update.py",
+    "scripts/switch-prepared-pilot.py",
     "scripts/prepare-installed-pilot.py",
     "scripts/prepare-native-pilot-prerequisites.py",
     "scripts/qualify-installed-pilot.py",
@@ -67,6 +69,8 @@ SCRIPTS = (
     "scripts/verify-sou62-sou63-combined.py",
     "scripts/verify-sou68-real-mcp.py",
     "scripts/verify-sou79-resource-budgets.py",
+    "scripts/wsl_preflight.py",
+    "scripts/wsl_qualification.py",
 )
 DATA_FILES = (
     "rule_baseline/git_readonly_v1/rule_baseline.py",
