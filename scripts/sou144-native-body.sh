@@ -7,4 +7,4 @@ cargo test --locked --offline -p agentfw --lib selected_workspace_validation -- 
 cargo clippy --locked --offline -p agentfw --all-targets -- -D warnings 2>&1 | tee "$SOU144_SCRATCH/clippy.log"
 cargo build --locked --offline -p agentfw --bin agentfw 2>&1 | tee "$SOU144_SCRATCH/build.log"
 python3 -B -m unittest discover -s scripts/tests -p test_pilot_workspace_witness.py -v 2>&1 | tee "$SOU144_SCRATCH/witness-controls.log"
-python3 -B scripts/check_pilot_workspaces.py --agentfw "$CARGO_TARGET_DIR/debug/agentfw" --expected-commit 11775fc5813a15143630ab4e7dba0abd70976b39 --output "$SOU144_SCRATCH/witness"
+python3 -B scripts/check_pilot_workspaces.py --agentfw "$CARGO_TARGET_DIR/debug/agentfw" --expected-commit a6825e84923c449f32878a63873cd943efb7928a --output "$SOU144_SCRATCH/witness"
