@@ -6,6 +6,8 @@ Producers submit paths, not authoritative digests. Raw input snapshots stay priv
 """
 from __future__ import annotations
 import base64
+import copy
+from functools import wraps
 import hashlib
 import hmac
 import json
@@ -294,6 +296,14 @@ def _message(connection):
     raise ValueError('identity_request_limit')
 
 
+def custody_locked(method):
+    @wraps(method)
+    def call(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return call
+
+
 class Custodian:
     """Independent coordinator-owned reader, with Linux kernel peer PID binding.
 
@@ -302,6 +312,7 @@ class Custodian:
     root. Target source is read-only and all measurement stays inside its enclosure.
     """
     def __init__(self, plan, address, verifier):
+        self.lock = threading.RLock()
         self.plan, self.address, self.verifier = plan, Path(address), verifier
         self.plan_sha256 = sha(canonical(plan))
         self.stage = self.pid = None
@@ -315,6 +326,7 @@ class Custodian:
         self.thread = threading.Thread(target=self.serve, daemon=True)
         self.thread.start()
 
+    @custody_locked
     def begin(self, stage):
         require(not self.opened and not self.active and stage in STAGES, 'identity_stage_still_active')
         self.stage, self.pid, self.rows = stage, None, []
@@ -345,6 +357,7 @@ class Custodian:
             os.close(fd)
             raise
 
+    @custody_locked
     def finish_capture(self, scope):
         require(scope in self.active, 'identity_capture_not_active')
         files = self.active.pop(scope)
@@ -377,9 +390,11 @@ class Custodian:
             for fd, _, _, _ in files:
                 os.close(fd)
 
+    @custody_locked
     def capture(self, request):
         require(set(request) == {'operation', 'stage', 'scope', 'paths'} and not self.opened,
                 'identity_request_fields_or_lifetime')
+        require(request['stage'] == self.stage and not self.stopping.is_set(), 'identity_cross_stage_request')
         scope = request['scope']
         require(scope in self.plan['template']['stages'][self.stage]['scopes']
                 and all(row['scope'] != scope for row in self.rows), 'identity_scope_unknown_or_duplicate')
@@ -432,14 +447,18 @@ class Custodian:
                     pid, uid, _ = struct.unpack('3i', connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
                     require(pid == self.pid and uid == os.getuid(), 'identity_foreign_producer')
                     request = _message(connection)
-                    require(request.get('stage') == self.stage, 'identity_cross_stage_request')
-                    if request.get('operation') == 'capture':
-                        claim = self.capture(request)
-                    else:
-                        require(set(request) == {'operation', 'stage', 'scope'} and request['operation'] == 'finish',
-                                'identity_operation_unsupported')
-                        self.finish_capture(request['scope'])
-                        claim = None
+                    with self.lock:
+                        # Recheck after receiving: the producer can exit while a
+                        # packet is in flight and the coordinator can advance.
+                        require(pid == self.pid and not self.stopping.is_set(), 'identity_foreign_producer')
+                        require(request.get('stage') == self.stage, 'identity_cross_stage_request')
+                        if request.get('operation') == 'capture':
+                            claim = self.capture(request)
+                        else:
+                            require(set(request) == {'operation', 'stage', 'scope'} and request['operation'] == 'finish',
+                                    'identity_operation_unsupported')
+                            self.finish_capture(request['scope'])
+                            claim = None
                     response = {'status': 'captured', 'plan_sha256': self.plan_sha256, 'claim': claim}
                 except (OSError, ValueError, KeyError, TypeError) as error:
                     code = str(error)
@@ -450,14 +469,18 @@ class Custodian:
                 except OSError:
                     pass
 
+    @custody_locked
     def evidence(self, report_sha256, cleanup):
         # A killed/incomplete producer cannot complete its own custody lifetime.
         # Release descriptors so unrelated subsequent stages may still execute.
+        self.pid = None
         self.abandon()
         return {'format': 'sw-pilot-runtime-custody/1', 'source': self.plan['source'],
                 'stage': self.stage, 'plan_sha256': self.plan_sha256,
-                'observations': self.rows, 'report_sha256': report_sha256, 'cleanup': cleanup}
+                'observations': copy.deepcopy(self.rows), 'report_sha256': report_sha256,
+                'cleanup': copy.deepcopy(cleanup)}
 
+    @custody_locked
     def abandon(self):
         for files in [self.opened, *self.active.values()]:
             for fd, _, _, _ in files:

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import socket
+import threading
 import sys
 import tempfile
 import unittest
@@ -345,6 +346,7 @@ class DescriptorLifetimeTests(unittest.TestCase):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
                 path = Path(tmp) / 'input.json'; path.write_bytes(b'{"owned":true}')
                 owner = object.__new__(r.Custodian)
+                owner.lock = threading.RLock()
                 owner.opened, owner.active, owner.rows = [], {}, [{'scope': 'one', 'complete': False}]
                 owner.read(path); owner.active['one'], owner.opened = owner.opened, []
                 if mode == 'unlinked': path.unlink()
@@ -365,6 +367,7 @@ class DescriptorLifetimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'asset'; path.write_bytes(b'owned executable' * 10000)
             owner = object.__new__(r.Custodian)
+            owner.lock = threading.RLock()
             owner.opened, owner.active, owner.rows = [], {}, [{'scope': 'asset', 'complete': False}]
             self.assertEqual(owner.read(path, asset=True), r.file_sha(path))
             owner.active['asset'], owner.opened = owner.opened, []
@@ -373,6 +376,48 @@ class DescriptorLifetimeTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'identity_input_changed'):
                 owner.finish_capture('asset')
             self.assertFalse(owner.rows[0]['complete'])
+
+    def test_partial_capture_cannot_race_stage_evidence_or_leak_descriptors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'selected.json'; path.write_bytes(b'{}')
+            owner = object.__new__(r.Custodian)
+            owner.lock, owner.stopping = threading.RLock(), threading.Event()
+            owner.plan = {'source': {'commit': 'synthetic'},
+                          'template': {'stages': {'installed': {'scopes': {'launch': {}}}}}}
+            owner.plan_sha256 = r.sha(r.canonical(owner.plan))
+            owner.opened, owner.active, owner.rows = [], {}, []
+            self.addCleanup(owner.abandon); owner.begin('installed')
+            entered, release, finished = threading.Event(), threading.Event(), threading.Event()
+            original = owner.read; captured_fd = []
+            def partial_read(name):
+                original(name); captured_fd.append(owner.opened[0][0]); entered.set()
+                if not release.wait(5): raise AssertionError('capture barrier timed out')
+                raise ValueError('controlled_producer_abort')
+            failures, snapshots = [], []
+            def capture():
+                try:
+                    owner.capture({'operation': 'capture', 'stage': 'installed', 'scope': 'launch',
+                        'paths': {k: str(path) for k in ('selection', 'policy', 'registry', 'configuration',
+                                                        'profiles', 'classifiers', 'binaries')}})
+                except ValueError as error: failures.append(str(error))
+            def snapshot():
+                snapshots.append(owner.evidence('a' * 64, {'all_stopped': True, 'remaining': []}))
+                finished.set()
+            with patch.object(owner, 'read', side_effect=partial_read):
+                producer = threading.Thread(target=capture); producer.start()
+                self.assertTrue(entered.wait(5))
+                reader = threading.Thread(target=snapshot); reader.start()
+                try:
+                    self.assertFalse(finished.wait(.05))
+                finally:
+                    release.set(); producer.join(5); reader.join(5)
+            self.assertEqual(failures, ['controlled_producer_abort'])
+            self.assertTrue(finished.is_set()); self.assertEqual(owner.opened, [])
+            self.assertIsNone(owner.pid)
+            with self.assertRaises(OSError): os.fstat(captured_fd[0])
+            owner.rows.append({'scope': 'late_inflight_row'})
+            self.assertEqual(snapshots[0]['observations'], [])
+            owner.begin('matched')
 
 
 if __name__ == '__main__': unittest.main()

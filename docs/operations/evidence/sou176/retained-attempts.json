@@ -12,6 +12,25 @@
       "reason": "Linux closes an unauthorized peer socket before reading the request; the negative test incorrectly required a JSON refusal instead of accepting a connection reset.",
       "stages_executed": 0,
       "decision": "NOT_READY",
+      "superseded_by": 2,
+      "job_owned_profile_cleanup": "removed-owned-profile-and-binary"
+    },
+    {
+      "attempt": 2,
+      "source": "d4322a00fe4b3617f322fad1f0bfc4a347c033b3",
+      "tree": "b194df69e334e2976dc147a9512e70d389894cb3",
+      "run": 40850693979,
+      "artifact": 12888790784,
+      "archive_sha256": "a725232d59bb3b55c686a3f56c41379e0ced048db4c805150a04f59d2307e299",
+      "status": "cancelled_after_concrete_custodian_race_found",
+      "reason": "Interrupted input capture could race custody evidence or stage transition; serialize custody state and retain immutable evidence snapshots before repeating the full inventory.",
+      "stages_executed": 5,
+      "remaining_stages": "unicode-spaces interrupted; local-history not executed",
+      "completed_stage_identities": "verified",
+      "completed_stage_namespace_cleanup": "all_stopped",
+      "interrupted_stage_namespace_cleanup": "unconfirmed",
+      "job_owned_profile_cleanup": "removed-owned-profile-and-binary",
+      "decision": "NOT_READY",
       "superseded_by": null
     }
   ]
