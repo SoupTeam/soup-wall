@@ -82,6 +82,35 @@ def seed():
 
 
 class PrivateEditSelfTest(unittest.TestCase):
+    def test_only_budget_scan_tolerates_vanished_entries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            temporary_file = root / "publication-stage"
+            temporary_file.write_bytes(b"synthetic")
+            original = Path.lstat
+            def disappearing(path):
+                if path == temporary_file:
+                    raise FileNotFoundError(2, "private-payload", "/private/path")
+                return original(path)
+            with mock.patch.object(Path, "lstat", disappearing):
+                with self.assertRaises(FileNotFoundError):
+                    probe.tree_witness(root)
+                probe.tree_witness(root, contents=False, transient=True)
+                with self.assertRaisesRegex(ValueError, "transient_content_witness_refused"):
+                    probe.tree_witness(root, transient=True)
+
+    def test_failure_observation_omits_exception_text_paths_and_payloads(self):
+        try:
+            probe.bounded(Path("/absent-owned-failure-location/private-payload"))
+        except OSError as error:
+            value = probe.failure_observation(error)
+        self.assertEqual(value["kind"], "FileNotFoundError")
+        self.assertEqual(value["errno"], 2)
+        self.assertEqual(value["helper_function"], "bounded")
+        self.assertGreater(value["helper_line"], 0)
+        self.assertNotIn("private-payload", json.dumps(value))
+        self.assertNotIn("absent-owned", json.dumps(value))
+
     def test_symlink_witness_and_cleanup_never_follow_or_modify_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)

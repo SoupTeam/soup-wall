@@ -109,37 +109,44 @@ def snapshot(path):
             "mode": meta.st_mode, "size": meta.st_size, "sha256": sha(bounded(path, 4096))}
 
 
-def tree_witness(root, *, contents=True):
+def tree_witness(root, *, contents=True, transient=False):
     """Finite, non-following witness. Names and contents never enter the report."""
-    rows, total = [], 0
+    require(not transient or contents is False, "transient_content_witness_refused")
+    rows, total, visited = [], 0, 0
     if not root.exists():
         return sha(b"absent")
     pending = [root]
     while pending:
         path = pending.pop()
-        meta = path.lstat()
-        require(len(rows) < MAX_ENTRIES, "witness_entry_limit")
-        row = [str(path.relative_to(root)), meta.st_dev, meta.st_ino, meta.st_mode,
-               meta.st_nlink, meta.st_size, meta.st_mtime_ns]
-        if stat.S_ISDIR(meta.st_mode):
-            # Path.iterdir/listdir may eagerly materialize a huge directory.
-            # scandir yields incrementally; apply the bound before retaining it.
-            with os.scandir(path) as entries:
-                for entry in entries:
-                    require(len(rows) + len(pending) + 1 < MAX_ENTRIES, "witness_entry_limit")
-                    pending.append(Path(entry.path))
-        elif stat.S_ISREG(meta.st_mode):
-            total += meta.st_size
-            require(total <= MAX_RETAINED, "witness_byte_limit")
-            if contents:
-                row.append(sha(bounded(path, MAX_STREAM * 2)))
-        elif stat.S_ISLNK(meta.st_mode):
-            # Witness the link itself; never inspect or traverse its target.
-            target = os.fsencode(os.readlink(path))
-            require(len(target) <= 4096, "witness_link_limit")
-            row.append(sha(target))
-        else:
-            raise ValueError("witness_special_file_refused")
+        visited += 1
+        require(visited <= MAX_ENTRIES, "witness_entry_limit")
+        try:
+            meta = path.lstat()
+            row = [str(path.relative_to(root)), meta.st_dev, meta.st_ino, meta.st_mode,
+                   meta.st_nlink, meta.st_size, meta.st_mtime_ns]
+            if stat.S_ISDIR(meta.st_mode):
+                # Apply the bound to all hints, including ones that disappear.
+                with os.scandir(path) as entries:
+                    for entry in entries:
+                        require(visited + len(pending) < MAX_ENTRIES, "witness_entry_limit")
+                        pending.append(Path(entry.path))
+            elif stat.S_ISREG(meta.st_mode):
+                total += meta.st_size
+                require(total <= MAX_RETAINED, "witness_byte_limit")
+                if contents:
+                    row.append(sha(bounded(path, MAX_STREAM * 2)))
+            elif stat.S_ISLNK(meta.st_mode):
+                target = os.fsencode(os.readlink(path))
+                require(len(target) <= 4096, "witness_link_limit")
+                row.append(sha(target))
+            else:
+                raise ValueError("witness_special_file_refused")
+        except FileNotFoundError:
+            # An atomic publication or host temporary file can vanish while
+            # monitoring retained bytes. This is not a preservation witness.
+            if transient and path != root:
+                continue
+            raise
         rows.append(row)
     rows.sort(key=lambda row: row[0])
     return sha(json.dumps(rows, separators=(",", ":")).encode())
@@ -200,6 +207,23 @@ def reason(error):
     if isinstance(error, TimeoutError):
         return "self_test_deadline"
     return "self_test_observation_incomplete"
+
+
+def failure_observation(error):
+    """Only source locations and finite types; never exception text or paths."""
+    kinds = (FileNotFoundError, PermissionError, ProcessLookupError, ChildProcessError,
+             TimeoutError, OSError, ObservationIncomplete, ValueError, KeyboardInterrupt)
+    value = {"kind": next((kind.__name__ for kind in kinds if isinstance(error, kind)), "unexpected")}
+    if isinstance(error, OSError) and type(error.errno) is int:
+        value["errno"] = error.errno
+    trace = error.__traceback__
+    while trace is not None:
+        code = trace.tb_frame.f_code
+        if code.co_filename == __file__:
+            value["helper_line"] = trace.tb_lineno
+            value["helper_function"] = code.co_name if re.fullmatch(r"[a-z_][a-z0-9_]{0,79}", code.co_name) else "helper"
+        trace = trace.tb_next
+    return value
 
 
 def preflight(args):
@@ -494,7 +518,7 @@ class Suite:
     def check(self):
         self.remaining()
         require(snapshot(self.sentinel) == self.sentinel_before, "unrelated_sentinel_changed")
-        tree_witness(self.work, contents=False)
+        tree_witness(self.work, contents=False, transient=True)
 
     def cli(self, *words, timeout=12):
         process = subprocess.Popen([str(self.args.agent), "edit-session", *map(str, words)],
@@ -1010,6 +1034,7 @@ def main(argv=None):
                 report["status"] = "passed"
     except (Exception, KeyboardInterrupt) as error:
         code = reason(error)
+        report["failure_observation"] = failure_observation(error)
         report.update(status="incomplete" if isinstance(error, (OSError, TimeoutError, KeyboardInterrupt, ObservationIncomplete)) else "failed",
                       reason=code)
         active = report.get("active_case")
