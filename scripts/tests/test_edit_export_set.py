@@ -15,6 +15,15 @@ spec.loader.exec_module(driver)
 
 
 class ExportSetQualification(unittest.TestCase):
+    def test_parser_refusal_is_retained_without_inventing_product_json(self):
+        diagnostic={}
+        result=subprocess.CompletedProcess([],2,stdout=b'',stderr=b'error: consent required')
+        with self.assertRaises(Exception): driver.decode_response(result,diagnostic)
+        self.assertEqual(diagnostic['exit_code'],2)
+        self.assertIs(diagnostic['accepted'],False)
+        self.assertNotIn('status',diagnostic)
+        self.assertEqual(diagnostic['stderr_sha256'],driver.sha(result.stderr))
+
     def report(self):
         rows = []
         for i,name in enumerate(driver.CASES):

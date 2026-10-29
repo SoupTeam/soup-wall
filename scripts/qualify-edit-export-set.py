@@ -37,6 +37,19 @@ FAULTS = {'concurrent-destination-create':'concurrent-destination',
           'parent-redirection':'redirect-parent'}
 
 
+def decode_response(result, diagnostic):
+    # Capture the actual invocation before interpreting it. A parser refusal
+    # has no product JSON and must never disappear behind a JSONDecodeError.
+    diagnostic.update(exit_code=result.returncode,accepted=result.returncode == 0,
+                      stdout_sha256=sha(result.stdout),stderr_sha256=sha(result.stderr))
+    require(bool(result.stdout), 'set_response_missing_cli_refused_before_json')
+    value=json.loads(result.stdout)
+    diagnostic.update(status=value.get('status'),reason=value.get('reason'))
+    require(value.get('format') == 'sw-installed-edit-export-set/1' and value.get('executed') is False
+            and value.get('authority') is False, 'set_response_contract')
+    return value
+
+
 def passed_report(report):
     rows = report.get('cases', [])
     by = {r.get('id'):r for r in rows}
@@ -140,13 +153,9 @@ def qualify(args, report):
             result = subprocess.run(words,cwd=suite.work,env=selected_env or env,stdin=subprocess.DEVNULL,capture_output=True,timeout=15)
             require(len(result.stdout) <= 384*1024 and len(result.stderr) <= 8192, 'set_response_cap')
             require(suite.secret_canary.encode() not in result.stdout+result.stderr, 'set_prompt_leak')
-            value = json.loads(result.stdout)
-            require(value.get('format') == 'sw-installed-edit-export-set/1' and value.get('executed') is False
-                    and value.get('authority') is False, 'set_response_contract')
-            diagnostic = {'exit_code':result.returncode,'accepted':result.returncode == 0,'status':value.get('status'),
-                          'reason':value.get('reason'),'stdout_sha256':sha(result.stdout),'stderr_sha256':sha(result.stderr),
-                          'source_before':before,'source_after':witness(data),'destination_after':snapshot(out)}
+            diagnostic = {'source_before':before,'source_after':witness(data),'destination_after':snapshot(out)}
             suite.active.setdefault('calls',[]).append(diagnostic)
+            value=decode_response(result,diagnostic)
             return result.returncode,value
 
         def fresh(name):
@@ -188,7 +197,9 @@ def qualify(args, report):
             digest = preview(completed[1],names,out)
             if change_digest: digest = change_digest
             if change_out: out = out.with_name('different')
-            before = witness(completed[1]);code,value = invoke(completed[1],chosen,out,digest,consent)
+            # Apply without consent is already a Clap regression. Exercise the
+            # executable preview refusal here, using valid runtime grammar.
+            before = witness(completed[1]);code,value = invoke(completed[1],chosen,out,digest if consent else None,consent)
             require(code == 1 and value['status'] == 'incomplete' and not out.exists() and before == witness(completed[1])
                     and not list(out.parent.iterdir()), 'negative_set_effect_'+name)
             finish(name,source_preserved=True,no_partial_publication=True)
