@@ -23,6 +23,7 @@ configuration witnesses must stay unchanged. Raw traces stay private.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import importlib.util
 import json
@@ -33,6 +34,7 @@ import signal
 import stat
 import subprocess
 import sys
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAT = "sw-installed-front-door-qualification/1"
@@ -46,6 +48,8 @@ def load(name, filename):
 
 
 QUAL = load("installed_front_door_first_use", "qualify-pilot-front-door.py")
+PROVIDER = load("installed_provider_carrier", "pilot_provider.py")
+LAUNCH = load("installed_provider_trace", "qualify-pilot-launcher.py")
 BASE = QUAL.BASE
 require = BASE.require
 INPUT_NAMES = tuple(name for name in QUAL.INPUT_NAMES if name != "agent_output")
@@ -219,6 +223,213 @@ def sanitized_environment(args, home):
     return env, marker, work
 
 
+def provider_call(args, home, env, canary, words, secret_fd=None):
+    command = [str(args.agentfw), "pilot", "--home", str(home), "provider", *words]
+    result = subprocess.run(command, cwd=args.work, env=env, stdin=subprocess.DEVNULL,
+                            capture_output=True, pass_fds=(secret_fd,) if secret_fd is not None else (), timeout=30)
+    require(canary.encode() not in result.stdout + result.stderr, "provider_canary_in_operator_output")
+    require(len(result.stdout) <= 65536 and len(result.stderr) <= 65536, "provider_operator_output_limit")
+    try:
+        value = json.loads(result.stdout)
+    except ValueError:
+        value = {}
+    return result.returncode, value
+
+
+def provider_exec_witness(trace, claude, canary, url):
+    """Every successful exec is checked; only the one selected host receives the canary."""
+    raw = trace.read_bytes()
+    require(len(raw) <= 32 * 1024 * 1024, "provider_trace_limit")
+    try:
+        text = raw.decode("utf-8", "strict")
+    except UnicodeError:
+        raise ValueError("provider_trace_encoding") from None
+    # The shared normalizer pairs unfinished and resumed rows by PID. For this
+    # credential witness, also require the resumed syscall name to match.
+    unfinished_exec = {}
+    for line in text.splitlines():
+        started = re.match(r"^\s*(\d+)\s+(execve|execveat)\(.*\s+<unfinished \.\.\.>$", line)
+        resumed = re.match(r"^\s*(\d+)\s+<\.\.\. (\w+) resumed>", line)
+        if started:
+            unfinished_exec[started[1]] = started[2]
+        elif resumed and resumed[1] in unfinished_exec:
+            require(resumed[2] == unfinished_exec.pop(resumed[1]),
+                    "provider_trace_resume_mismatch")
+    rows, pending = LAUNCH.normalized_syscalls(text)
+    require(not pending, "provider_trace_incomplete")
+    host = others = 0
+    for row in rows:
+        if not re.match(r"^\d+\s+execve(?:at)?\b", row):
+            continue
+        match = re.fullmatch(r"\d+\s+(execve|execveat)\((.*)\)\s+=\s+"
+                             r"(0|-1 [A-Z][A-Z0-9_]*(?: \([^\n)]*\))?)\s*", row)
+        require(match is not None, "provider_exec_parse_incomplete")
+        if match[3].startswith("-1 "):
+            continue  # The kernel did not create a process.
+        try:
+            parsed = ast.parse("(" + match[2] + ")", mode="eval").body
+            require(isinstance(parsed, ast.Tuple) and len(parsed.elts) ==
+                    (3 if match[1] == "execve" else 5), "provider_exec_parse_incomplete")
+            if match[1] == "execve":
+                image, argv, environ = (ast.literal_eval(item) for item in parsed.elts)
+            else:
+                directory, image, argv, environ, flags = parsed.elts
+                if isinstance(directory, ast.Name):
+                    require(directory.id == "AT_FDCWD", "provider_exec_parse_incomplete")
+                else:
+                    descriptor = ast.literal_eval(directory)
+                    require(type(descriptor) is int and descriptor >= -100,
+                            "provider_exec_parse_incomplete")
+                def valid_flags(node):
+                    return (isinstance(node, ast.Constant) and node.value == 0
+                            or isinstance(node, ast.Name) and node.id in
+                            {"AT_EMPTY_PATH", "AT_SYMLINK_NOFOLLOW"}
+                            or isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr)
+                            and valid_flags(node.left) and valid_flags(node.right))
+                require(valid_flags(flags), "provider_exec_parse_incomplete")
+                image, argv, environ = (ast.literal_eval(item)
+                                        for item in (image, argv, environ))
+        except (ValueError, SyntaxError, TypeError, RecursionError):
+            raise ValueError("provider_exec_parse_incomplete") from None
+        require(isinstance(image, str) and isinstance(argv, list) and isinstance(environ, list)
+                and all(isinstance(item, str) for item in argv + environ), "provider_exec_parse_incomplete")
+        require(not any(canary in word for word in argv), "provider_canary_in_argv")
+        if match[1] == "execveat":
+            # An absolute pathname identifies the image independently of
+            # dirfd. Empty/relative and proc-fd paths do not: never promote
+            # such an execution to the selected host or silently omit it.
+            form = ("empty" if not image else "relative" if not image.startswith("/") else
+                    "fd_alias" if re.match(r"^/(?:proc/(?:self|thread-self|\d+)/fd|dev/fd)/", image)
+                    else None)
+            require(form is None, "provider_exec_identity_incomplete:" + str(form))
+        values = dict(item.split("=", 1) for item in environ if "=" in item)
+        intended = image == str(claude) and argv[1:3] == ["--restricted", "-p"]
+        if intended:
+            require(sum(item.startswith("ANTHROPIC_API_KEY=") for item in environ) <= 1
+                    and sum(item.startswith("ANTHROPIC_BASE_URL=") for item in environ) <= 1,
+                    "provider_host_values_ambiguous")
+            host += 1
+            require(values.get("ANTHROPIC_API_KEY") == canary
+                    and values.get("ANTHROPIC_BASE_URL") == url, "provider_host_values_missing")
+        else:
+            others += 1
+            require(not any(canary in word or url in word for word in environ),
+                    "provider_value_in_unrelated_child")
+    require(host == 1 and others >= 4, "provider_process_graph_incomplete")
+    return {"selected_host_execs": host, "other_execs_checked": others,
+            "canary_in_other_children": False, "canary_in_argv": False}
+
+
+def provider_files_witness(args, canary):
+    checked = 0
+    paths = [args.prefix / "front-door.json", args.prefix / "preparation/current.json",
+             *args.prefix.glob("preparation/generations/*/selection.json"),
+             *args.state_root.rglob("*")]
+    for path in paths:
+        if not path.exists() and not path.is_symlink():
+            continue
+        info = path.lstat()
+        require(not stat.S_ISLNK(info.st_mode), "provider_retained_link_unexpected")
+        if not stat.S_ISREG(info.st_mode):
+            continue
+        require(info.st_size <= 16 * 1024 * 1024 and checked < 256,
+                "provider_retained_witness_limit")
+        require(canary.encode() not in path.read_bytes(), "provider_canary_in_retained_file")
+        checked += 1
+    return {"files_checked": checked, "canary_in_retained_files": False}
+
+
+def qualify_provider_profiles(args, door, home, env, report, proposals):
+    """Opt-in SOU-172 installed original-host control; no real provider account."""
+    canary = "sou172-synthetic-" + os.urandom(16).hex()
+    profile_env = {key: value for key, value in env.items() if key not in PROVIDER.KEYS}
+    calls = []
+    authentication = []
+    models = []
+    def command(words, secret_fd=None):
+        code, value = provider_call(args, home, profile_env, canary, words, secret_fd)
+        calls.append({"action": words[0], "exit": code, "status": value.get("status"),
+                      "reason": value.get("reason")})
+        return code, value
+    code, value = command(["preview"])
+    require(code == 0 and value.get("profiles") == [] and value.get("selected") is None,
+            "provider_initial_preview_not_empty")
+    require(not (home / "pilot-providers").exists(), "provider_preview_created_store")
+    def setup(model):
+        models.append(model)
+        original = model.server.RequestHandlerClass
+        class Authenticated(original):
+            def do_POST(self):
+                authentication.append({"key": self.headers.get("x-api-key"),
+                                       "authorization": self.headers.get("authorization")})
+                return super().do_POST()
+        model.server.RequestHandlerClass = Authenticated
+        with PROVIDER.carrier({"ANTHROPIC_API_KEY": canary}) as fd:
+            code, value = command(["create", "--name", "owned-loopback", "--model", "claude-sonnet-4-20250514",
+                                   "--base-url", model.url, "--secret-fd", str(fd), "--apply"], fd)
+        require(code == 0 and value.get("status") == "saved", "provider_create_failed")
+        code, value = command(["select", "--name", "owned-loopback", "--apply"])
+        require(code == 0 and value.get("status") == "selected", "provider_select_failed")
+        code, preview = command(["preview"])
+        require(code == 0 and preview.get("selected") == "owned-loopback"
+                and preview.get("redacted") is True and canary not in json.dumps(preview)
+                and not authentication and not model.requests, "provider_preview_not_private_or_effect_free")
+        return {"ANTHROPIC_API_KEY": canary, "ANTHROPIC_BASE_URL": model.url}
+    trace = args.output / "provider-exec.trace.private"
+    try:
+        row, results, _ = QUAL.run_case(args, door, report, "provider-profile", proposals,
+                                       provider_setup=setup, provider_trace=trace)
+        require(row["exit"] == 0 and row["status"] == "completed"
+                and results["toolu_front_provider-profile_0"]["is_error"] is False
+                and results["toolu_front_provider-profile_1"]["is_error"] is False
+                and row["process_cleanup"]["all_stopped"], "provider_useful_original_flow_failed")
+        require(authentication and all(item["key"] == canary and item["authorization"] is None
+                                       for item in authentication), "provider_authentication_not_observed")
+        require(all(canary.encode() not in body for body in models[0].requests),
+                "provider_canary_in_request_body")
+        witness = provider_exec_witness(trace, args.claude, canary, models[0].url)
+    finally:
+        trace.unlink(missing_ok=True)
+    row["provider_witness"] = witness
+    row["provider_requests"] = len(authentication)
+    row["retained_witness"] = provider_files_witness(args, canary)
+    row["passed"] = True
+    def refused_run(label, run_env, reason):
+        negative = args.output / (label + ".trace.private")
+        try:
+            code, value, stderr = door.call("run", "--state-root", str(args.state_root), inputs=False,
+                                            trace=negative, env=run_env, timeout=90)
+            require(canary not in stderr and canary not in json.dumps(value),
+                    "provider_canary_in_refusal")
+            lines = negative.read_text(errors="replace").splitlines()
+            require(code != 0 and value.get("reason") == reason and value.get("host_started", False) is False,
+                    label + "_did_not_refuse")
+            require(not any('"pilot-launch"' in line or '"serve"' in line for line in lines),
+                    label + "_started_owned_child")
+            report["cases"].append({"case": label, "passed": True, "reason": reason,
+                                    "owned_daemon_or_host_started": False})
+        finally:
+            negative.unlink(missing_ok=True)
+    refused_run("provider-source-conflict", dict(profile_env, ANTHROPIC_API_KEY="other-synthetic-input"),
+                "provider_source_conflict")
+    profile = home / "pilot-providers/owned-loopback.json"
+    profile.chmod(0o644)
+    try:
+        refused_run("provider-bad-profile", profile_env, "provider_private_file_required")
+    finally:
+        profile.chmod(0o600)
+    code, value = command(["remove", "--name", "owned-loopback", "--apply"])
+    require(code == 0 and value.get("removed") == "owned-loopback", "provider_remove_failed")
+    refused_run("provider-removed-selection", profile_env, "provider_profile_missing")
+    code, value = command(["select", "--environment", "--apply"])
+    require(code == 0 and value.get("selection") == "explicit-environment",
+            "provider_environment_selection_failed")
+    require(provider_files_witness(args, canary)["canary_in_retained_files"] is False,
+            "provider_post_removal_file_witness_failed")
+    report["provider_profile_calls"] = calls
+    require(canary not in json.dumps(report), "provider_canary_in_public_report")
+
+
 def qualify(args, report):
     require(os.geteuid() != 0, "non_root_operator_required")
     before = BASE.source()
@@ -332,6 +543,8 @@ def qualify(args, report):
         code, value, _ = door.call("status", "--state-root", str(args.state_root), inputs=False, timeout=120)
         require(code == 0 and value.get("protection") == "configured-not-running", "status_after_run")
         report["cases"].append({"case": "status-after-run", "passed": True, "protection": value["protection"]})
+        if args.provider_profiles:
+            qualify_provider_profiles(args, door, agent_home, env, report, proposals[:2])
         # Ctrl-C to the foreground group reaches the accepted supervisor
         # through the installed command unchanged.
         row, _, _ = QUAL.run_case(args, door, report, "cancel", proposals[:1], hold=True, cancel=signal.SIGINT)
@@ -479,6 +692,8 @@ def main():
                         help="absolute CPython recorded for the installed helpers")
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     parser.add_argument("--allow-download", action="store_true")
+    parser.add_argument("--provider-profiles", action="store_true",
+                        help="opt in to SOU-172 private named provider original-host controls")
     for name in INPUT_NAMES:
         parser.add_argument("--" + name.replace("_", "-"), type=Path)
     args = parser.parse_args()

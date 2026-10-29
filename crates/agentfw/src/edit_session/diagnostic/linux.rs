@@ -87,7 +87,11 @@ fn protection_failure(code: &'static str) -> &'static str {
         _ => "invalid_or_mismatched",
     }
 }
-fn terminal(raw: &[u8], context: &Context, limits: Option<&Limits>) -> Result<&'static str> {
+pub(in crate::edit_session) fn terminal(
+    raw: &[u8],
+    context: &Context,
+    limits: Option<&Limits>,
+) -> Result<&'static str> {
     let terminal: Terminal = decode(raw)?;
     // Validate retained local structure and the selected plan's exact ceilings.
     // These counters are never used as authenticated commit/delivery proof.
@@ -144,26 +148,31 @@ fn terminal(raw: &[u8], context: &Context, limits: Option<&Limits>) -> Result<&'
     }
 }
 
-pub(super) fn inspect(args: &Args, report: &mut Report) -> Result<()> {
-    if !cfg!(target_arch = "x86_64") {
-        report.status = "unsupported";
-        report.reason_code = "installed_edit_diagnosis_requires_native_linux_x86_64";
-        return Ok(());
-    }
-    let mut budget = Budget::new();
-    let run_dir = Directory::open(&args.run)?;
-    let context_bytes = required(&run_dir, "diagnostic-context.json", 16 * 1024, &mut budget)?;
+pub(in crate::edit_session) struct Selection {
+    pub directory: Directory,
+    pub context: Context,
+    pub profile: Profile,
+    pub run_bytes: Vec<u8>,
+    pub context_bytes: Vec<u8>,
+    pub profile_bytes: Vec<u8>,
+}
+pub(in crate::edit_session) fn select(
+    run_path: &std::path::Path,
+    budget: &mut Budget,
+) -> Result<Selection> {
+    let run_dir = Directory::open(run_path)?;
+    let context_bytes = required(&run_dir, "diagnostic-context.json", 16 * 1024, budget)?;
     let context: Context = decode(&context_bytes)?;
     context
         .validate()
         .map_err(|_| "diagnostic_context_invalid")?;
-    if context.run != args.run
+    if context.run.as_path() != run_path
         || context.owner.uid != unsafe { libc::geteuid() }
-        || context.started_at_ms > report.observed_at_ms.saturating_add(5000)
+        || context.started_at_ms > crate::protection_status::now_ms().saturating_add(5000)
     {
         return Err("diagnostic_context_foreign_or_future");
     }
-    let run_bytes = required(&run_dir, "run.json", 16 * 1024, &mut budget)?;
+    let run_bytes = required(&run_dir, "run.json", 16 * 1024, budget)?;
     let run: Run = decode(&run_bytes)?;
     if run.format != FORMAT
         || run.run != context.run
@@ -174,16 +183,40 @@ pub(super) fn inspect(args: &Args, report: &mut Report) -> Result<()> {
     {
         return Err("run_context_binding_mismatch");
     }
-    let profile_bytes = required(&run_dir, "profile.json", 128 * 1024, &mut budget)?;
+    let profile_bytes = required(&run_dir, "profile.json", 128 * 1024, budget)?;
     let profile: Profile = decode(&profile_bytes)?;
     profile.validate().map_err(|_| "retained_profile_invalid")?;
     if profile::canonical(&profile).map_err(|_| "retained_profile_invalid")? != profile_bytes
         || audit::sha(&profile_bytes) != context.profile_sha256
-        || required(&run_dir, "profile.sha256", 64, &mut budget)?
-            != context.profile_sha256.as_bytes()
+        || required(&run_dir, "profile.sha256", 64, budget)? != context.profile_sha256.as_bytes()
     {
         return Err("retained_profile_digest_mismatch");
     }
+    Ok(Selection {
+        directory: run_dir,
+        context,
+        profile,
+        run_bytes,
+        context_bytes,
+        profile_bytes,
+    })
+}
+
+pub(super) fn inspect(args: &Args, report: &mut Report) -> Result<()> {
+    if !cfg!(target_arch = "x86_64") {
+        report.status = "unsupported";
+        report.reason_code = "installed_edit_diagnosis_requires_native_linux_x86_64";
+        return Ok(());
+    }
+    let mut budget = Budget::new();
+    let Selection {
+        directory: run_dir,
+        context,
+        profile,
+        run_bytes,
+        context_bytes,
+        profile_bytes,
+    } = select(&args.run, &mut budget)?;
     let home_name = context
         .home
         .file_name()
