@@ -83,6 +83,35 @@ fn refreshed_bindings_preserve_scope_and_require_a_distinct_plan_even_if_bytes_m
 }
 
 #[test]
+fn quota_v2_refresh_preserves_exact_limits_and_cannot_refill_a_live_ledger() {
+    let (d, mut p) = fixture();
+    replacing(&mut p);
+    let limits = crate::edit_session::quota::Limits::new(1, 4096).unwrap();
+    p.format = crate::edit_session::QUOTA_PROFILE.into();
+    p.mutation_quota = Some(limits.clone());
+    p.validate().unwrap();
+    let ledger =
+        crate::edit_session::quota::Ledger::new(limits.clone(), "a".repeat(64), "host".into())
+            .unwrap();
+    let ticket = ledger
+        .reserve(&"a".repeat(64), Some("host"), "call", &"b".repeat(64), 4096)
+        .unwrap();
+    let before = ledger.snapshot().unwrap();
+    let original = p.clone();
+    let next = descriptive(&p, &d.path().join("new-plan"));
+    next.after.validate().unwrap();
+    assert_eq!(next.after.format, crate::edit_session::QUOTA_PROFILE);
+    assert_eq!(next.after.mutation_quota, Some(limits));
+    assert_eq!(ledger.snapshot().unwrap(), before);
+    assert_eq!(p, original);
+    assert!(ledger
+        .reserve(&"a".repeat(64), Some("host"), "another", &"b".repeat(64), 0)
+        .is_err());
+    drop(ticket);
+    assert_eq!(ledger.snapshot().unwrap().remaining_mutations, 0);
+}
+
+#[test]
 fn creation_cannot_be_silently_converted_to_replacement() {
     let (d, p) = fixture();
     assert!(observe(&p).unwrap().1[0].current.is_none());

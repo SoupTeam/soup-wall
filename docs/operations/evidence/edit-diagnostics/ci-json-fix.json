@@ -1,0 +1,235 @@
+{
+  "ci_failure": {
+    "artifact_id": 12821530284,
+    "artifact_sha256": "e6c0ee4b758d9075c3a48fcac8d99505c763124f7e1537ad0fc11c6cbaa80dc7",
+    "base_edit_passed": 23,
+    "base_report_sha256": "1db72e75c242fa8b8588f9d77ab2b7429e76b67c00cf841f183d0df800348861",
+    "diagnosis_passed": 14,
+    "failure_code": "pretty_status_json_parsed_as_last_line",
+    "failure_type": "AttributeError",
+    "inventory": {
+      "failed": 1,
+      "incomplete": 10,
+      "passed": 1
+    },
+    "job_id": 122841997953,
+    "run_id": 40693246516,
+    "source_commit": "b30d2bd1e6d95d94f63e52b5b234ec15c60ff401",
+    "stop_report_sha256": "bb28e1fe40bb921c092e1b770f1c7950339739b1d47cee6ee6ab6dc55296b6cd"
+  },
+  "fix_source": "879fac7d96986a5b7e47b572859a24de4f7e22cd",
+  "format": "sw-installed-qualification-json-fix-evidence/1",
+  "local_environment": {
+    "kernel": "6.18.54.1-microsoft-standard-WSL2",
+    "machine": "x86_64",
+    "system": "Linux",
+    "uid": 1000
+  },
+  "local_installed": {
+    "refresh": {
+      "agentfw_sha256": "df40f10d69dc5574da9c68259d6c2eb786d033c0512c03b3042483e38e7eeaaf",
+      "cases": [
+        {
+          "attempted": true,
+          "id": "installed-closure",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "useful-second-replacement",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "preview-inert",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "stale-plan",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "old-digest",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "missing-confirmation",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "wrong-confirmation",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "changed-destination",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "changed-target",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "root-replacement",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "symlink-target",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "hardlink-target",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "altered-runtime-pin",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "altered-component-pin",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "altered-plan",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "create-cannot-become-replace",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "create-stays-create",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "ask-reject",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "no-approval",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "active-run-stays-pinned",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "concurrent-refresh",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "interrupted-publish",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "existing-destination",
+          "status": "passed"
+        }
+      ],
+      "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "component_sha256": "28913568a3d63a9efd2b986679f54605c0be5115b93a1d5d1d3862f2547f7c89",
+      "inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "original_report_sha256": "0dcd9c5e32a887e1e853191cbac52ac2c442cb47351f20dfdc9cc672d600647a",
+      "status": "passed"
+    },
+    "stop": {
+      "agentfw_sha256": "df40f10d69dc5574da9c68259d6c2eb786d033c0512c03b3042483e38e7eeaaf",
+      "cases": [
+        {
+          "attempted": true,
+          "id": "installed-identity",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "two-live-exact-stop",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "pending-replay-and-repeat",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "rejected-ask-future-dispatch",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "publication-before-stop",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "publication-stop-race",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "unsafe-records",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "foreign-birth-identity",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "old-control-replay",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "daemon-unavailable",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "launcher-crash",
+          "status": "passed"
+        },
+        {
+          "attempted": true,
+          "id": "fresh-useful-run",
+          "status": "passed"
+        }
+      ],
+      "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "component_sha256": "28913568a3d63a9efd2b986679f54605c0be5115b93a1d5d1d3862f2547f7c89",
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 12
+      },
+      "original_report_sha256": "54362b55a89dafca7be4bd89be0a3a66fff834fa2bd83f4ea9c9af7b2e53079c",
+      "status": "passed"
+    }
+  }
+}

@@ -396,10 +396,14 @@ class Pilot:
         require(self.policy_sha256 == self.selected_sha256["policy"], "staged_policy_changed")
         self.prepare_workspaces()
         self.installs = {kind: self.private / (kind + "-profile") for kind in TOOLS}
+        offline = getattr(self, "offline_inputs", None)
+        fs_inputs = {} if offline is None else {"npm_cache": offline / "npm-cache", "offline": True}
+        git_inputs = {} if offline is None else {"python_archive": offline / "python.tar.gz",
+            "wheelhouse": offline / "wheelhouse", "allow_download": False}
         BASE.INSTALL.install(self.installs["filesystem"], self.workspace, self.paths["node"],
-                             self.paths["bwrap"], self.paths["npm"])
+                             self.paths["bwrap"], self.paths["npm"], **fs_inputs)
         GIT.INSTALL.install(self.installs["git"], self.git_workspace, self.paths["git"], sha(self.paths["git"]),
-                            self.paths["bwrap"], self.launcher)
+                            self.paths["bwrap"], self.launcher, **git_inputs)
         tools = []
         for kind, path in self.installs.items():
             registry = json.loads((path / "registry.json").read_text())
@@ -1061,10 +1065,12 @@ def negative_controls(args):
         output = args.output / ("negative-" + name)
         command = [sys.executable, "-B", str(Path(__file__).resolve()), "--run", "--selection", str(args.selection),
                    "--expected-commit", args.expected_commit, "--output", str(output), "--fault", name]
+        if getattr(args, "offline_inputs", None):
+            command.extend(["--offline-inputs", str(args.offline_inputs)])
         if getattr(args, "wsl_root", None):
             command.extend(["--wsl-root", str(args.wsl_root)])
         result = subprocess.run(command,
-            env={key: value for key, value in os.environ.items() if key in ("PATH", "LANG")},
+            env={key: value for key, value in os.environ.items() if key in ("PATH", "LANG", "TMPDIR", "TMP", "TEMP")},
             cwd=ROOT, capture_output=True, timeout=30)
         report = json.loads((output / "report.json").read_text())
         require(result.returncode == 1 and report["status"] == "failed"
@@ -1110,6 +1116,7 @@ def run(args):
             require(report["wsl_preflight"]["status"] == "ready", "wsl_prerequisites_not_ready")
         private = tempfile.TemporaryDirectory(prefix="installed-pilot-", dir=wsl_root)
         pilot = Pilot(Path(private.name), args.output, paths, report, selection["expected_refusal"])
+        pilot.offline_inputs = getattr(args, "offline_inputs", None)
         pilot.wsl_qualification = wsl_root is not None
         if wsl_root is not None:
             report["wsl_host_settings_before"] = wsl_qualification.host_settings()
@@ -1198,6 +1205,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--matched-development", action="store_true", help="Run the frozen SOU-106 workload on both actual-host paths")
+    parser.add_argument("--offline-inputs", type=Path, help="Pinned Python archive, wheelhouse and npm cache; disable runtime downloads")
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)

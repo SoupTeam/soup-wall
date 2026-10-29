@@ -148,6 +148,9 @@ def report_source(value):
 def identities(report, kind):
     selected = report.get('selected_sha256', {})
     profiles = report.get('profiles', {})
+    if kind == 'installed':
+        setup = next(r for r in report['cases'] if r['id'] == 'exact-installed-inputs')
+        profiles = setup.get('evidence', {}).get('profiles', {})
     if kind == 'matched':
         selected = report['identity'].get('selected', {})
         profiles = report['identity'].get('profiles', {})
@@ -203,6 +206,103 @@ def project(report, workload):
         observations.append(observation('refusal-zero-effects', passed, len(refusal_cases),
             {k: metrics[k] for k in ('forbidden_effects', 'denied_execution_count',
                                      'forbidden_result_delivery_count')}))
+    elif version == 'sw-installed-pilot/1':
+        kind = 'installed'
+        from pilot_qualification import CASES, finish
+        import copy
+        require(report.get('live_model_effectiveness') == 'not_measured', 'scope_mismatch')
+        before = report_source(report['source_before'])
+        checked = finish(copy.deepcopy(report))
+        require(checked['status'] == report['status'] and checked['counts'] == report['counts'],
+                'installed_summary_mismatch')
+        require([row['id'] for row in report['cases']] == list(CASES), 'installed_case_denominator_changed')
+        by = {row['id']: row for row in report['cases']}
+        cleanup = by['final-cleanup']
+        if cleanup['status'] == 'passed':
+            proof = cleanup['evidence']
+            require(proof.get('all_owned_processes_stopped') is True and proof.get('forced_cleanup') is False
+                    and proof.get('private_installation_removed') is True
+                    and proof.get('source_and_inputs_unchanged') is True, 'installed_cleanup_missing')
+        for name in ('read-and-history', 'inspect-and-diff', 'untrusted-input-refusal', 'independent-conversation'):
+            if by[name]['status'] != 'passed':
+                continue
+            evidence = by[name]['evidence']
+            host = evidence.get('host', {})
+            require(host.get('actual_host') is True and host.get('timed_out') is False
+                    and host.get('exit_code') == 0 and host.get('process_cleanup', {}).get('all_stopped') is True
+                    and host.get('process_cleanup', {}).get('remaining') == [], 'installed_host_witness_missing')
+            for key in ('workspace_snapshot_sha256', 'repository_snapshot_sha256', 'unrelated_file_sha256'):
+                digest(evidence.get(key), key)
+            require(type(evidence.get('receiver_deliveries')) is int and evidence['receiver_deliveries'] == 0
+                    and evidence.get('unrelated_process_alive') is True, 'installed_integrity_missing')
+        refusal = by['untrusted-input-refusal']
+        if refusal['status'] == 'passed':
+            proof = refusal['evidence']
+            require(proof.get('fifo', {}).get('reader_seen') is False
+                    and type(proof.get('fifo', {}).get('bytes_written')) is int
+                    and proof['fifo']['bytes_written'] == 0
+                    and type(proof.get('opens_during_refused_mutator')) is int
+                    and proof['opens_during_refused_mutator'] == 0, 'installed_zero_effects_missing')
+        for area, names in [('install-start', ('exact-installed-inputs', 'bad-input-controls', 'sandbox-positive', 'witness-calibration')),
+                            ('useful-workflows', ('read-and-history', 'inspect-and-diff')),
+                            ('refusal-zero-effects', ('untrusted-input-refusal',)),
+                            ('daemon-loss', ('collector-recovery', 'daemon-fresh-conversation')),
+                            ('cancellation-cleanup', ('parallel-cancellation', 'final-cleanup'))]:
+            observations.append(observation(area, sum(by[n]['status'] == 'passed' for n in names),
+                                            len(names), {'cases': list(names)}))
+    elif version == 'sw-existing-pilot-acceptance/1':
+        kind = 'existing'
+        require(report.get('provider') == 'owned-scripted-loopback' and
+                report.get('live_model_effectiveness') == 'not_tested', 'scope_mismatch')
+        before = report_source(report['source'])
+        from pilot_project_fixtures import PROJECTS, identity as project_identity
+        name = report.get('project_fixture')
+        require(name in PROJECTS and report.get('project_fixture_sha256') == project_identity(name)
+                and report.get('ordinary_project_required_cases') == 9, 'project_input_identity_missing')
+        expected = ('moved-root', 'replaced-root', 'changed-selection', 'unsupported-git',
+                    'initial', 'operator-edit', 'cancel', 'daemon-loss', 'recovery')
+        rows = report['cases']
+        require([r['case'] for r in rows] == list(expected[:len(rows)])
+                and len(rows) <= len(expected), 'project_case_denominator_changed')
+        require(report['status'] != 'passed' or len(rows) == len(expected), 'project_inventory_incomplete')
+        if report['status'] == 'passed':
+            require(all(report.get(key) is True for key in ('fresh_run_authority',
+                    'external_roots_outside_prefix', 'cleanup_external_roots_untouched')),
+                    'project_global_integrity_missing')
+        instances = [row.get('native_instance') for row in rows
+                     if row['case'] in expected[4:] and row['status'] == 'passed']
+        require(all(type(value) is str and 0 < len(value) <= 128 for value in instances)
+                and len(set(instances)) == len(instances), 'project_fresh_authority_missing')
+
+        for row in rows:
+            require(row['status'] in ('passed', 'failed', 'incomplete', 'unsupported'), 'invalid_project_status')
+            if row['status'] != 'passed':
+                continue
+            digest(row.get('trace_sha256'), 'project_trace')
+            if row['case'] in expected[:4]:
+                require(type(row.get('selected_runtime_executions')) is int
+                        and row['selected_runtime_executions'] == 0, 'project_refusal_executed')
+            else:
+                require(row.get('cleanup') in ('owned_state_removed', 'owned_processes_stopped_audit_retained') and
+                        row.get('process_cleanup', {}).get('all_stopped') is True and
+                        row.get('process_cleanup', {}).get('remaining') == [] and
+                        type(row.get('outside_reads')) is int and row['outside_reads'] == 0 and
+                        type(row.get('forbidden_network_deliveries')) is int and
+                        row['forbidden_network_deliveries'] == 0 and
+                        row.get('worktree_index_head_config_unchanged') is True and
+                        row.get('untracked_preserved') is True, 'project_independent_witness_missing')
+                if row['case'] in ('initial', 'operator-edit', 'recovery'):
+                    require(row.get('useful_original_results') == 7 and row.get('refused_results') == 5 and
+                            row.get('ordinary_followup_results') == 2 and
+                            row.get('project_fixture_sha256') == project_identity(name), 'project_utility_missing')
+        by = {r['case']: r for r in rows}
+        for area, names in [('install-start', expected[:4]),
+                            ('useful-workflows', ('initial', 'operator-edit', 'recovery')),
+                            ('refusal-zero-effects', ('initial', 'operator-edit', 'recovery')),
+                            ('daemon-loss', ('daemon-loss', 'recovery')),
+                            ('cancellation-cleanup', ('cancel',))]:
+            observations.append(observation(area, sum(by.get(n, {}).get('status') == 'passed' for n in names),
+                                            len(names), {'project': name, 'cases': list(names)}))
     elif version == 'sw-prepared-pilot-acceptance/1':
         kind = 'prepared'
         require(report.get('provider') == 'owned-scripted-loopback' and
@@ -211,7 +311,8 @@ def project(report, workload):
         rows = report['cases']
         expected = ('plan', 'occupied-port', 'stale-source', 'changed-selection', 'useful-refusal',
                     'ask', 'default', 'cancel', 'daemon-loss', 'host-crash', 'timeout')
-        require([r['case'] for r in rows] == list(expected), 'prepared_case_denominator_changed')
+        with_provider = expected[:4] + ('provider-unavailable',) + expected[4:]
+        require([r['case'] for r in rows] in (list(expected), list(with_provider)), 'prepared_case_denominator_changed')
         require(all(r['status'] in ('passed', 'failed', 'incomplete', 'unsupported') for r in rows),
                 'invalid_prepared_status')
         require((report['status'] == 'passed') == all(r['status'] == 'passed' for r in rows),
@@ -223,7 +324,7 @@ def project(report, workload):
             if row['status'] == 'passed':
                 digest(row.get('trace_sha256'), 'prepared_trace')
                 if row['case'] in ('useful-refusal', 'ask', 'default', 'cancel', 'daemon-loss', 'host-crash', 'timeout'):
-                    require(row.get('cleanup') == 'owned_state_removed' and
+                    require(row.get('cleanup') in ('owned_state_removed', 'owned_processes_stopped_audit_retained') and
                             row.get('process_cleanup', {}).get('all_stopped') is True and
                             row.get('process_cleanup', {}).get('remaining') == [], 'prepared_cleanup_missing')
         by = {r['case']: r for r in rows}
@@ -250,6 +351,11 @@ def project(report, workload):
         require((report['status'] == 'pass') == all(r['passed'] for r in rows), 'ask_summary_mismatch')
         for row in rows:
             if row['passed']:
+                if row['case'] != 'default' and 'first_pending_bound_ms' in row:
+                    elapsed = row.get('first_pending_ms')
+                    require(row['first_pending_bound_ms'] == 5000 and row.get('first_pending_bound_met') is True
+                            and type(elapsed) in (int, float) and math.isfinite(elapsed)
+                            and 0 <= elapsed <= 5000, 'ask_first_pending_bound_missing')
                 digest(row.get('policy_sha256'), 'ask_policy')
                 if row['case'] not in ('restart', 'cancel', 'approved_cancel', 'collector_term'):
                     digest(row.get('trace_sha256'), 'ask_trace')
@@ -266,7 +372,7 @@ def project(report, workload):
             {'physical_human_presence_proven': report.get('physical_human_presence_proven') is True}))
     else:
         raise Invalid('unsupported_report_schema')
-    original = report['identity']['source'] if kind == 'matched' else report['source_before'] if kind == 'prepared' else report['source']
+    original = report['identity']['source'] if kind == 'matched' else report['source_before'] if kind in ('prepared', 'installed') else report['source']
     require(original == report['source_after'] and before == report_source(report['source_after']),
             'source_changed_during_run')
     return kind, before, identities(report, kind), observations
@@ -295,13 +401,33 @@ def validate_manifest(m):
     validate_reference(m['workload'])
     seen = set()
     for e in m['evidence']:
-        exact(e, {'id', 'file', 'scope', 'owner', 'role'}, 'evidence')
+        fields = {'id', 'file', 'scope', 'owner', 'role'}
+        require(set(e) in (fields, fields | {'context'}), 'evidence_fields')
+        if 'context' in e:
+            require(e['role'] == 'candidate', 'historical_context_refused')
+            validate_reference(e['context'])
         require(e['role'] in ('candidate', 'history'), 'invalid_evidence_role')
         identifier(e['id'], 'evidence_id'); identifier(e['owner'], 'owner')
         validate_reference(e['file'])
         require(e['id'] not in seen and e['scope'] == SCOPE, 'duplicate_id_or_scope_mismatch')
         seen.add(e['id'])
     return m
+
+
+def linked_environment(root, entry, original_raw, before):
+    """Explicit hash-bound custodian context; never replace a runtime verdict."""
+    raw = selected_bytes(root, entry['context'])
+    context = parse(raw)
+    require(context.get('format') == 'sw-pilot-readiness-execution/1'
+            and context.get('decision') == 'NOT_READY', 'unsupported_execution_context')
+    require(report_source(context['source_before']) == before
+            and context['source_before'] == context['source_after'], 'context_source_mismatch')
+    rows = [row for row in context['stages'] if row.get('report_sha256') == sha(original_raw)]
+    require(len(rows) == 1 and rows[0].get('status') == 'executed', 'context_report_link_missing')
+    cleanup = rows[0].get('independent_namespace_cleanup', {})
+    require(cleanup.get('all_stopped') is True and cleanup.get('remaining') == [],
+            'context_cleanup_unconfirmed')
+    return context['environment'], sha(raw)
 
 
 def build(m, root, repo):
@@ -351,7 +477,17 @@ def build(m, root, repo):
             # from a filename, the reporter's OS, or a Linux-only code path.
             if any(v is None for v in m['environment'].values()):
                 record['blockers'].append('expected_environment_unbound')
-            if report.get('environment') != m['environment']:
+            environment = report.get('environment')
+            if 'context' in entry:
+                linked, context_sha = linked_environment(root, entry, raw, before)
+                if environment is not None:
+                    legacy = type(environment) is dict and set(environment) == {'os', 'machine', 'kernel', 'python'}
+                    require(environment == linked or (legacy and environment['os'] == 'Linux'
+                        and environment['machine'] == linked['architecture']
+                        and environment['kernel'] == linked['kernel_release']), 'context_environment_conflict')
+                environment = linked
+                record['execution_context_sha256'] = context_sha
+            if environment != m['environment']:
                 record['blockers'].append('environment_absent_or_mismatched')
         except (Invalid, Failure, KeyError, TypeError, ValueError, OSError,
                 subprocess.SubprocessError) as exc:

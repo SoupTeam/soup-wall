@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('edit_stop_probe', ROOT / 'scripts/qualify-installed-edit-stop.py')
@@ -26,6 +27,22 @@ class InstalledEditStopEvidence(unittest.TestCase):
                                     '--binding', pending['binding_sha256'], '--', '--help'))
         self.assertEqual(run.decision(pending, False), (0, None))
         self.assertEqual(calls[-1], ('ask', '--run', run.run, 'reject', '--', '--help'))
+
+    def test_shared_cli_parses_complete_pretty_status_and_keeps_run_line_contract(self):
+        suite = object.__new__(probe.BASE.Suite)
+        suite.binary, suite.work, suite.env, suite.report = Path('/not-executed/agentfw'), ROOT, {}, {}
+        value = {'schema': probe.BASE.DIAGNOSTIC_FORMAT, 'effects': 'indeterminate',
+                 'audit': {'completeness': 'selected_bounded_records_only'}}
+        def observed(words, raw):
+            with patch.object(probe.BASE.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, raw, b'')):
+                return suite.cli(*words)
+        self.assertEqual(observed(('status', '--run', '/not-executed/run', '--json'),
+                                  (json.dumps(value, indent=2) + '\n').encode()), (0, value))
+        # A partial/multi-document response must not acquire status authority.
+        self.assertEqual(observed(('status', '--json'), b'not-json\n' + json.dumps(value).encode()), (0, None))
+        # Existing launchers legitimately print a run record and final outcome.
+        self.assertEqual(observed(('run',), b'{"run":"one"}\n{"state":"failed"}\n'),
+                         (0, {'state': 'failed'}))
 
     def test_partial_or_missing_native_inventory_cannot_pass(self):
         report = {'format': probe.FORMAT, 'status': 'passed', 'expected': list(probe.CASES),
