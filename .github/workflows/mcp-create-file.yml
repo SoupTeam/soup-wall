@@ -275,6 +275,8 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
           printf '%s  %s\n' fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7 \
             "$task_scratch/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum --check
+          mkdir -m 700 "$task_scratch/inventory-foreign"
+          sudo mkdir -m 700 "$task_scratch/inventory-foreign/edit-90000000-0000-4000-8000-000000000002"
           git rev-parse HEAD > "$task_scratch/source.txt"
       - name: Read-only source, private scratch, offline native installed qualification
         shell: bash
@@ -314,7 +316,12 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_review.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_inventory.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+          python3 -B scripts/qualify-edit-inventory.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --foreign-state "$SOU161_SCRATCH/inventory-foreign" \
+            --output "$SOU161_SCRATCH/inventory"
           gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou179_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
           python3 -B scripts/qualify-edit-review.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
@@ -348,6 +355,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
             ${{ runner.temp }}/sou161-scratch/quota/report.json
             ${{ runner.temp }}/sou161-scratch/review/report.json
+            ${{ runner.temp }}/sou161-scratch/inventory/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json
