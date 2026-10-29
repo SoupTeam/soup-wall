@@ -9,6 +9,9 @@ import urllib.error
 import uuid
 
 SIZES = (50, 200, 201, 256)
+# Selected original-server admit(), not the generic admission loop: unknown
+# semantics are rejected before approval/native call even when approval exists.
+UNKNOWN_REFUSAL = 'Soup Wall withheld MCP invocation (classifier_unknown_approval_unsupported)'
 
 
 def refusal_diagnostics(classification, reply, rows):
@@ -19,7 +22,7 @@ def refusal_diagnostics(classification, reply, rows):
     content=content if isinstance(content,list) else []
     texts=[b['text'] for b in content if isinstance(b,dict) and isinstance(b.get('text'),str)]
     message=' '.join(texts)
-    allowed=('policy_unconfirmed_ask','policy_denied','classifier_unknown_or_ambiguous',
+    allowed=('classifier_unknown_approval_unsupported','policy_unconfirmed_ask','policy_denied','classifier_unknown_or_ambiguous',
              'native_approval_timeout','native_approval_expired','native_approval_cancelled',
              'classifier_invalid','classifier_error','classifier_timeout','classifier_not_ready')
     reasons=classification.get('reason_codes',[])
@@ -28,7 +31,8 @@ def refusal_diagnostics(classification, reply, rows):
                 'zero_execution_records':not rows,
                 'tool_error':result.get('isError') is True,
                 'invocation_withheld':'withheld MCP invocation' in message,
-                'unconfirmed_ask':'policy_unconfirmed_ask' in message}
+                'selected_unknown_refusal':len(content)==1 and len(texts)==1
+                    and content[0].get('type')=='text' and texts[0]==UNKNOWN_REFUSAL}
     error=reply.get('error');error=error if isinstance(error,dict) else {}
     error_text=error.get('message') if isinstance(error.get('message'),str) else ''
     return {'predicates':predicates,'execution_records':len(rows),

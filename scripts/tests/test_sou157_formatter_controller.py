@@ -21,7 +21,7 @@ TOOLS=json.loads((ROOT/'profiles/mcp/filesystem-readonly-v1/upstream-tools-list.
 class Controller(unittest.TestCase):
     def test_refusal_predicates_isolate_each_failure_without_payloads(self):
         cl={'unknown':True,'reason_codes':['partial_unknown','truncated','private']}
-        reply={'result':{'isError':True,'content':[{'text':'Soup Wall withheld MCP invocation (policy_unconfirmed_ask, native_approval_timeout)'}]}}
+        reply={'result':{'isError':True,'content':[{'type':'text','text':S.UNKNOWN_REFUSAL}]}}
         self.assertTrue(all(S.refusal_diagnostics(cl,reply,[])['predicates'].values()))
         variants=[({'unknown':False,'reason_codes':['truncated']},reply,[],'classifier_unknown'),
                   ({'unknown':True,'reason_codes':[]},reply,[],'classifier_truncated'),
@@ -36,6 +36,22 @@ class Controller(unittest.TestCase):
             'classification':{'unknown':True,'actions':['read'],'reason':'SECRET'},'authoritative_verdict':'ask'})
         self.assertEqual(d,{'case_id':'shadow-201-False','unknown':True,'verdict':'ask','read_only':True})
         self.assertIsNone(S.classification_diagnostic({'event':'mcp_classification','host_call_id':'private'}))
+
+    def test_selected_unknown_reason_requires_exact_original_server_contract(self):
+        cl={'unknown':True,'reason_codes':['partial_unknown','truncated']}
+        for text in (S.UNKNOWN_REFUSAL,
+                     'Soup Wall withheld MCP invocation (policy_unconfirmed_ask)',
+                     'Soup Wall withheld MCP invocation (classifier_deny)',
+                     'Soup Wall withheld MCP invocation (native_approval_timeout)',
+                     S.UNKNOWN_REFUSAL+' unrelated',
+                     'Soup Wall withheld MCP invocation (classifier_ask)'):
+            reply={'result':{'isError':True,'content':[{'type':'text','text':text}]}}
+            d=S.refusal_diagnostics(cl,reply,[])
+            self.assertEqual(all(d['predicates'].values()),text==S.UNKNOWN_REFUSAL)
+        source=(ROOT/'crates/agentfw/src/mcp/admission/real_server.rs').read_text()
+        guard=source.split('assessment.known_read_only',1)[1].split('let mut boundary',1)[0]
+        self.assertIn('collector.config.approval.is_some()',guard)
+        self.assertIn('"classifier_unknown_approval_unsupported"',guard)
 
     def ordinary(self,wrong_error=False):
         sessions={};seen=[]
@@ -83,7 +99,7 @@ class Controller(unittest.TestCase):
                 def exchange(_,request):
                     paths=request['params']['arguments']['paths']
                     if len(paths)>200:
-                        return {'result':{'isError':True,'content':[{'text':'Soup Wall withheld MCP invocation (policy_unconfirmed_ask)'}]}},b''
+                        return {'result':{'isError':True,'content':[{'type':'text','text':S.UNKNOWN_REFUSAL}]}},b''
                     parts=[f'{p}:\n{(workspace/Path(p).name).read_text()}\n' for p in paths];text='\n---\n'.join(parts)
                     evidence={'closure_sha256':'a'*64}
                     if request['id']!='shadow-ambiguous':
