@@ -558,6 +558,10 @@ class ExplicitWslPreparation(unittest.TestCase):
         for rejected_mount in (None, "runtime", "dependency", "workspace"):
             with self.subTest(rejected_mount=rejected_mount), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary); args = self.args(root)
+                # The accepted preparer/installers record canonical runtime
+                # paths. sys.executable may instead name a POSIX symlink; the
+                # fake mount must classify its actual target, as production does.
+                runtime = Path(os.sys.executable).resolve(strict=True)
                 generation = args.output / "generations" / ("a" * 32)
                 generation.mkdir(parents=True)
                 for kind in ("filesystem", "git"):
@@ -565,7 +569,7 @@ class ExplicitWslPreparation(unittest.TestCase):
                     profile_dir = generation / (kind + "-profile"); profile_dir.mkdir()
                     (profile_dir / "package").mkdir()
                     library = profile_dir / "library"; library.write_bytes(b"owned dependency canary")
-                    (profile_dir / "profile.json").write_text(json.dumps({"runtimePath": os.sys.executable,
+                    (profile_dir / "profile.json").write_text(json.dumps({"runtimePath": str(runtime),
                         "packageRoot": str(profile_dir / "package"), "libraries": [{"path": str(library)}]}))
                 selection_path = generation / "selection.json"
                 selection_path.write_text(json.dumps({"format": PREP.GIT_PROFILES.SELECTION_V3,
@@ -574,7 +578,7 @@ class ExplicitWslPreparation(unittest.TestCase):
                 marker.write_text(json.dumps({"format": "sw-pilot-preparation/1", "generation": generation.name,
                     "selection_sha256": PREP.FS.sha(selection_path), "status": "prepared-not-active"}))
                 marker_before = marker.read_bytes()
-                paths = {role: Path(os.sys.executable) for role in PREP.PILOT.ROLES}
+                paths = {role: runtime for role in PREP.PILOT.ROLES}
                 events = []
                 def verify(*_, probe_native=True):
                     self.assertFalse(probe_native)
@@ -582,7 +586,7 @@ class ExplicitWslPreparation(unittest.TestCase):
                     return selection_path, {}
                 def mount(path, _mountinfo):
                     events.append("mount_observation")
-                    rejected = ((rejected_mount == "runtime" and path == Path(os.sys.executable).as_posix())
+                    rejected = ((rejected_mount == "runtime" and path == runtime.as_posix())
                         or (rejected_mount == "dependency" and path.endswith("/library"))
                         or (rejected_mount == "workspace" and path.endswith("/filesystem-workspace")))
                     return "9p" if rejected else "ext4"
@@ -598,8 +602,10 @@ class ExplicitWslPreparation(unittest.TestCase):
                      patch.object(PREP, "selected_paths") as selecting, \
                      patch.object(PREP.FS, "install") as filesystem, patch.object(PREP.GIT, "install") as git:
                     if rejected_mount:
-                        with self.assertRaises(PREP.WslPreparationFailure):
+                        with self.assertRaises(PREP.WslPreparationFailure) as refusal:
                             PREP.prepare_locked(args, args.output, None)
+                        self.assertEqual(refusal.exception.report["format"], "sw-wsl-preparation-input-locations/1")
+                        self.assertTrue(any(row["status"] == "unsupported" for row in refusal.exception.report["checks"]))
                         native.assert_not_called()
                         self.assertNotIn("namespace_bwrap_preflight", events)
                     else:
@@ -610,6 +616,59 @@ class ExplicitWslPreparation(unittest.TestCase):
                         self.assertEqual(native.call_count, len(PREP.PILOT.EXECUTABLE_ROLES))
                     selecting.assert_not_called(); filesystem.assert_not_called(); git.assert_not_called()
                 self.assertEqual(marker.read_bytes(), marker_before)
+
+    @unittest.skipUnless(os.name == "posix", "real runtime symlink fixture requires POSIX")
+    def test_runtime_alias_to_rejected_mount_never_runs_canary_or_native_probes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); args = self.args(root)
+            windows = root / "windows-mount"; windows.mkdir()
+            marker = root / "canary-executed"
+            target = windows / "runtime"
+            target.write_text("#!/bin/sh\ntouch '" + str(marker) + "'\n"); target.chmod(0o700)
+            alias = root / "runtime-alias"; alias.symlink_to(target)
+            args.bwrap = alias
+            observed = []
+            def mount(path, _mountinfo):
+                observed.append(path)
+                return "9p" if path == target.resolve(strict=True).as_posix() else "ext4"
+            with patch.object(PREP.wsl_preflight, "inspect", return_value=self.report()), \
+                 patch.object(PREP.wsl_preflight, "mount_type", side_effect=mount), \
+                 patch.object(PREP, "selected_paths") as selecting, \
+                 patch.object(PREP, "check_native") as native, \
+                 patch.object(PREP.subprocess, "run") as running, \
+                 patch.object(PREP.subprocess, "check_output") as version:
+                with self.assertRaises(PREP.WslPreparationFailure) as refusal:
+                    PREP.prepare(args)
+                rejected = next(row for row in refusal.exception.report["checks"] if row["id"] == "filesystem_bwrap")
+                self.assertEqual(rejected["status"], "unsupported")
+                selecting.assert_not_called(); native.assert_not_called(); running.assert_not_called(); version.assert_not_called()
+            self.assertIn(target.resolve(strict=True).as_posix(), observed)
+            self.assertNotIn(alias.as_posix(), observed)
+            self.assertFalse(marker.exists()); self.assertFalse(args.output.exists())
+
+    def test_mount_guard_classifies_canonical_runtime_not_lexical_alias_on_every_host(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); args = self.args(root)
+            (root / "alias-parent").mkdir()
+            windows = root / "windows-mount"; windows.mkdir()
+            target = windows / "runtime"; target.write_bytes(b"executable canary must never run")
+            alias = root / "alias-parent" / ".." / "windows-mount" / "runtime"
+            args.bwrap = alias
+            self.assertNotEqual(alias.as_posix(), target.resolve(strict=True).as_posix())
+            seen = []
+            def mount(path, _mountinfo):
+                seen.append(path)
+                return "9p" if path == target.resolve(strict=True).as_posix() else "ext4"
+            with patch.object(PREP.wsl_preflight, "mount_type", side_effect=mount), \
+                 patch.object(PREP.subprocess, "run") as execute, \
+                 patch.object(PREP.subprocess, "check_output") as probe:
+                with self.assertRaises(PREP.WslPreparationFailure) as refusal:
+                    PREP.wsl_input_locations(args)
+                self.assertEqual(next(row for row in refusal.exception.report["checks"]
+                    if row["id"] == "filesystem_bwrap")["status"], "unsupported")
+                execute.assert_not_called(); probe.assert_not_called()
+            self.assertIn(target.resolve(strict=True).as_posix(), seen)
+            self.assertNotIn(alias.as_posix(), seen)
 
     @unittest.skipUnless(os.name == "posix", "actual generation transaction uses POSIX ownership")
     def test_explicit_wsl_success_retains_exact_source_verification_and_atomic_marker(self):
