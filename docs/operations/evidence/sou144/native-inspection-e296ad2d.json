@@ -1,0 +1,432 @@
+{
+  "format": "sw-pilot-workspace-witness/1",
+  "status": "pass",
+  "cases": [
+    {
+      "id": "supported",
+      "status": "pass",
+      "state": "supported",
+      "exit_code": 0,
+      "syscalls": {
+        "exec": 1,
+        "children": 0,
+        "network": 0,
+        "mutation_intents": 0
+      },
+      "trace_sha256": "32eee19febbc56c4b31a6864345c4c01b8c539441f05f8ca6406943c64036289",
+      "workspace_unchanged": true,
+      "helper_marker_absent": true,
+      "report": {
+        "format": "sw-pilot-workspace-inspection/1",
+        "git_profile_format": "sw-mcp/git-readonly/1",
+        "status": "supported-read-only",
+        "state": "supported",
+        "profile": {
+          "filesystem": "sw-mcp/filesystem-readonly/1",
+          "git": "sw-mcp/git-readonly/1",
+          "identity_kind": "compiled-validator-contract",
+          "validator_sha256": "cf1ec9f2c1ba8ef563c638f5a6db6473bab732ba74930b94b63fa4e61175d478",
+          "installed_assets_verified": false
+        },
+        "checks": [
+          {
+            "role": "filesystem",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "selected_production_repository_validator",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "filesystem",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          }
+        ],
+        "executed": false,
+        "launch_authorized": false,
+        "runtime_protection_verified": false,
+        "revalidate_at_launch": true
+      }
+    },
+    {
+      "id": "helper-config",
+      "status": "pass",
+      "state": "unsupported",
+      "exit_code": 1,
+      "syscalls": {
+        "exec": 1,
+        "children": 0,
+        "network": 0,
+        "mutation_intents": 0
+      },
+      "trace_sha256": "6349aa9158b715d84705ef3d6b8f9657e808c64e15cb2ed5ae47a7aa60d3bf49",
+      "workspace_unchanged": true,
+      "helper_marker_absent": true,
+      "report": {
+        "format": "sw-pilot-workspace-inspection/1",
+        "git_profile_format": "sw-mcp/git-readonly/1",
+        "status": "unsupported",
+        "state": "unsupported",
+        "profile": {
+          "filesystem": "sw-mcp/filesystem-readonly/1",
+          "git": "sw-mcp/git-readonly/1",
+          "identity_kind": "compiled-validator-contract",
+          "validator_sha256": "cf1ec9f2c1ba8ef563c638f5a6db6473bab732ba74930b94b63fa4e61175d478",
+          "installed_assets_verified": false
+        },
+        "checks": [
+          {
+            "role": "filesystem",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "selected_production_repository_validator",
+            "state": "unsupported",
+            "reason": "git_config_unsupported",
+            "next_action": "Select a separate repository compatible with the chosen profile; inspect the reported category without executing helpers or repairing this repository."
+          },
+          {
+            "role": "filesystem",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          }
+        ],
+        "executed": false,
+        "launch_authorized": false,
+        "runtime_protection_verified": false,
+        "revalidate_at_launch": true
+      }
+    },
+    {
+      "id": "attributes",
+      "status": "pass",
+      "state": "unsupported",
+      "exit_code": 1,
+      "syscalls": {
+        "exec": 1,
+        "children": 0,
+        "network": 0,
+        "mutation_intents": 0
+      },
+      "trace_sha256": "30b64133270336d7de31f03beef79f1f864350569dddb58331b10d813cb8583c",
+      "workspace_unchanged": true,
+      "helper_marker_absent": true,
+      "report": {
+        "format": "sw-pilot-workspace-inspection/1",
+        "git_profile_format": "sw-mcp/git-readonly/1",
+        "status": "unsupported",
+        "state": "unsupported",
+        "profile": {
+          "filesystem": "sw-mcp/filesystem-readonly/1",
+          "git": "sw-mcp/git-readonly/1",
+          "identity_kind": "compiled-validator-contract",
+          "validator_sha256": "cf1ec9f2c1ba8ef563c638f5a6db6473bab732ba74930b94b63fa4e61175d478",
+          "installed_assets_verified": false
+        },
+        "checks": [
+          {
+            "role": "filesystem",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "selected_production_repository_validator",
+            "state": "unsupported",
+            "reason": "git_attributes_unsupported",
+            "next_action": "Select a separate repository compatible with the chosen profile; inspect the reported category without executing helpers or repairing this repository."
+          },
+          {
+            "role": "filesystem",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          }
+        ],
+        "executed": false,
+        "launch_authorized": false,
+        "runtime_protection_verified": false,
+        "revalidate_at_launch": true
+      }
+    },
+    {
+      "id": "alternates",
+      "status": "pass",
+      "state": "unsupported",
+      "exit_code": 1,
+      "syscalls": {
+        "exec": 1,
+        "children": 0,
+        "network": 0,
+        "mutation_intents": 0
+      },
+      "trace_sha256": "cee384e4d7ae62a6fcfb0e00e066a515a63c975776f44debe44e483b1a040701",
+      "workspace_unchanged": true,
+      "helper_marker_absent": true,
+      "report": {
+        "format": "sw-pilot-workspace-inspection/1",
+        "git_profile_format": "sw-mcp/git-readonly/1",
+        "status": "unsupported",
+        "state": "unsupported",
+        "profile": {
+          "filesystem": "sw-mcp/filesystem-readonly/1",
+          "git": "sw-mcp/git-readonly/1",
+          "identity_kind": "compiled-validator-contract",
+          "validator_sha256": "cf1ec9f2c1ba8ef563c638f5a6db6473bab732ba74930b94b63fa4e61175d478",
+          "installed_assets_verified": false
+        },
+        "checks": [
+          {
+            "role": "filesystem",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "selected_production_repository_validator",
+            "state": "unsupported",
+            "reason": "git_object_indirection_unsupported",
+            "next_action": "Select a separate repository compatible with the chosen profile; inspect the reported category without executing helpers or repairing this repository."
+          },
+          {
+            "role": "filesystem",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          }
+        ],
+        "executed": false,
+        "launch_authorized": false,
+        "runtime_protection_verified": false,
+        "revalidate_at_launch": true
+      }
+    },
+    {
+      "id": "symlink",
+      "status": "pass",
+      "state": "unsupported",
+      "exit_code": 1,
+      "syscalls": {
+        "exec": 1,
+        "children": 0,
+        "network": 0,
+        "mutation_intents": 0
+      },
+      "trace_sha256": "0322a1b2ba48530a62b58a1c63732e0a36318d55b808a5a728a5a168b1e6823f",
+      "workspace_unchanged": true,
+      "helper_marker_absent": true,
+      "report": {
+        "format": "sw-pilot-workspace-inspection/1",
+        "git_profile_format": "sw-mcp/git-readonly/1",
+        "status": "unsupported",
+        "state": "unsupported",
+        "profile": {
+          "filesystem": "sw-mcp/filesystem-readonly/1",
+          "git": "sw-mcp/git-readonly/1",
+          "identity_kind": "compiled-validator-contract",
+          "validator_sha256": "cf1ec9f2c1ba8ef563c638f5a6db6473bab732ba74930b94b63fa4e61175d478",
+          "installed_assets_verified": false
+        },
+        "checks": [
+          {
+            "role": "filesystem",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "unsupported",
+            "reason": "unsafe_link_or_special_file",
+            "next_action": "Select a separate repository compatible with the chosen profile; inspect the reported category without executing helpers or repairing this repository."
+          },
+          {
+            "role": "git",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "selected_production_repository_validator",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          }
+        ],
+        "executed": false,
+        "launch_authorized": false,
+        "runtime_protection_verified": false,
+        "revalidate_at_launch": true
+      }
+    },
+    {
+      "id": "local-clone",
+      "status": "pass",
+      "state": "conditional",
+      "exit_code": 0,
+      "syscalls": {
+        "exec": 1,
+        "children": 0,
+        "network": 0,
+        "mutation_intents": 0
+      },
+      "trace_sha256": "f5392ebaec89e31dd17296288ad9eb598a1c78fcfb24f447410a55597e5db959",
+      "workspace_unchanged": true,
+      "helper_marker_absent": true,
+      "report": {
+        "format": "sw-pilot-workspace-inspection/1",
+        "git_profile_format": "sw-mcp/git-local-clone-readonly/1",
+        "status": "conditional",
+        "state": "conditional",
+        "profile": {
+          "filesystem": "sw-mcp/filesystem-readonly/1",
+          "git": "sw-mcp/git-local-clone-readonly/1",
+          "identity_kind": "compiled-validator-contract",
+          "validator_sha256": "aa5cba1af2042d127420ca23ffabeeac54af833fcbcf3053e49d87d6109705b8",
+          "installed_assets_verified": false
+        },
+        "checks": [
+          {
+            "role": "filesystem",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "canonical_owned_root_and_bounded_tree",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "selected_production_repository_validator",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "index_and_object_semantics",
+            "state": "conditional",
+            "reason": "selected_profile_requires_runtime_proof",
+            "next_action": "Selected profile layout checks passed; the protected runtime must still validate index/object semantics before use."
+          },
+          {
+            "role": "filesystem",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          },
+          {
+            "role": "git",
+            "check": "source_stable_across_inspection",
+            "state": "supported",
+            "reason": null,
+            "next_action": "Compatibility check only; protected startup must revalidate current inputs."
+          }
+        ],
+        "executed": false,
+        "launch_authorized": false,
+        "runtime_protection_verified": false,
+        "revalidate_at_launch": true
+      }
+    }
+  ],
+  "scope": "synthetic-linux-inspection-only",
+  "runtime_protection_verified": false,
+  "source_before": "e296ad2d5fcca35da481fb0a3d9c18c4c357f1bf",
+  "source_tree": "b9f454c84c07f72a572b90211f5c9969b7301eac",
+  "environment": {
+    "system": "Linux",
+    "kernel_release": "7.0.0-1017-azure",
+    "architecture": "x86_64"
+  },
+  "binary_sha256": "322a242c1df5662668005f91fbd25138eab4be4d97308692ec68fca9b6611b01",
+  "driver_sha256": "a13d004c6b7d39f277d45792cc3ee36ffaa46291ff30d6082ebb77af8ecc8cdb",
+  "source_after": "e296ad2d5fcca35da481fb0a3d9c18c4c357f1bf"
+}
