@@ -86,12 +86,12 @@ fn handshake_metadata(row: &Value) -> Result<()> {
             row["verdict"].as_str(),
             Some("allow" | "ask" | "deny" | "escalate")
         )
-        || !row["risk_score"].as_u64().is_some_and(|n| n <= 255)
+        || row["risk_score"].as_u64().is_none_or(|n| n > 255)
         || row["latency_us"] != 0
         || row["egress_hosts"] != serde_json::json!([])
         || row
             .get("rule")
-            .is_some_and(|value| !value.as_str().is_some_and(|s| s.len() <= 256))
+            .is_some_and(|value| value.as_str().is_none_or(|s| s.len() > 256))
         || !row["findings"].as_array().is_some_and(|findings| {
             findings.len() <= 256
                 && findings.iter().all(|finding| {
@@ -137,7 +137,7 @@ fn revocation_metadata(row: &Value, context: &Context, registry: &str) -> Result
         || row["registry_sha256"] != registry
         // Current native session capacity is 64. A future producer expansion
         // needs its own reviewed diagnostic contract, not silent acceptance.
-        || !row["retired_sessions"].as_u64().is_some_and(|n| n <= 64)
+        || row["retired_sessions"].as_u64().is_none_or(|n| n > 64)
         || row["released"] != false
         || row["running_effects_rolled_back"] != false
     {
