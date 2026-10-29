@@ -128,6 +128,12 @@ programs, then requires the existing full WSL prerequisite checks before
 installing the filesystem/Git profiles. The default native route still rejects
 WSL unless this opt-in is supplied. Existing prepared selections are revalidated.
 
+Use separate installed copies of the built executables, preserving their exact
+SHA-256 values. A Cargo `target/debug` executable can have multiple hard links;
+the installed edit API requires a regular single-link pinned file and correctly
+refuses such a build output. Keep the source build and prior installed inputs
+unchanged when creating the private installed copy.
+
 Qualify that selection in the explicit WSL lane:
 
 ```sh
