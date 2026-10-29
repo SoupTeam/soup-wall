@@ -9,7 +9,7 @@
 //! not Claude Code, model-context or live-model evidence.
 
 pub mod fixture;
-mod private_edit;
+pub(crate) mod private_edit;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 #[cfg(windows)]

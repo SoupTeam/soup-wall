@@ -2,6 +2,39 @@
 //! Fixed installed helper dispatch; all mutations use accepted edit-session APIs.
 use std::path::PathBuf;
 
+pub(crate) fn unexecuted(status: &str, reason: &str) -> i32 {
+    let names = [
+        "create-read",
+        "replace-read",
+        "ask-reject-replay",
+        "aggregate-quota",
+        "exact-run-stop",
+        "stopped-authority",
+        "daemon-loss",
+        "fresh-run-recovery",
+    ];
+    let unsupported = status == "unsupported";
+    let rows: Vec<_> = names
+        .iter()
+        .map(|name| {
+            serde_json::json!({"id":name,"attempted":false,"status":if unsupported {"unsupported"} else {"incomplete"}})
+        })
+        .collect();
+    println!(
+        "{}",
+        serde_json::json!({"format":"sw-private-edit-self-test/1", "status":status,
+            "executed":false,"reason":reason,"paid_inference":false,
+            "expected":names,"cases":rows,
+            "inventory":{"expected":8,"attempted":0,"passed":0,"failed":0,
+                "incomplete":if unsupported {0} else {8},"unsupported":if unsupported {8} else {0}}})
+    );
+    if unsupported {
+        super::EXIT_UNSUPPORTED
+    } else {
+        super::EXIT_INCOMPLETE
+    }
+}
+
 #[derive(clap::Args, Debug)]
 pub struct Args {
     /// Existing private Agent home containing the verified pilot component.
@@ -30,8 +63,7 @@ pub fn run(args: Args) -> i32 {
         let agent = match std::env::current_exe() {
             Ok(path) => path,
             Err(_) => {
-                eprintln!("private edit self-test: installed_agent_unavailable");
-                return super::EXIT_INCOMPLETE;
+                return unexecuted("incomplete", "installed_agent_unavailable");
             }
         };
         let mut words = vec![
@@ -58,12 +90,6 @@ pub fn run(args: Args) -> i32 {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = args;
-        println!(
-            "{}",
-            serde_json::json!({"format":"sw-private-edit-self-test/1", "status":"unsupported",
-                "executed":false,"reason":"private_edit_requires_linux_x86_64",
-                "inventory":{"attempted":0,"passed":0,"failed":0,"incomplete":0,"unsupported":1}})
-        );
-        super::EXIT_UNSUPPORTED
+        unexecuted("unsupported", "private_edit_requires_linux_x86_64")
     }
 }

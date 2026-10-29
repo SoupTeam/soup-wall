@@ -1253,12 +1253,10 @@ pub fn exec_private_edit_self_test(home: &Path, args: &[std::ffi::OsString]) -> 
     let verified = match Store::new(home).current() {
         Ok(verified) => verified,
         Err(_) => {
-            println!(
-                "{}",
-                json!({"format":"sw-private-edit-self-test/1", "status":"incomplete",
-                    "executed":false,"reason":"installed_component_unavailable"})
+            return crate::self_test::private_edit::unexecuted(
+                "incomplete",
+                "installed_component_unavailable",
             );
-            return crate::self_test::EXIT_INCOMPLETE;
         }
     };
     if !verified
@@ -1267,20 +1265,13 @@ pub fn exec_private_edit_self_test(home: &Path, args: &[std::ffi::OsString]) -> 
         .iter()
         .any(|file| file.path == ENTRY)
     {
-        println!(
-            "{}",
-            json!({"format":"sw-private-edit-self-test/1", "status":"unsupported",
-                "executed":false,"reason":"installed_component_has_no_edit_self_test"})
+        return crate::self_test::private_edit::unexecuted(
+            "unsupported",
+            "installed_component_has_no_edit_self_test",
         );
-        return crate::self_test::EXIT_UNSUPPORTED;
     }
     let _error = exec_helper(&verified, ENTRY, args);
-    println!(
-        "{}",
-        json!({"format":"sw-private-edit-self-test/1", "status":"incomplete",
-            "executed":false,"reason":"installed_helper_start_failed"})
-    );
-    crate::self_test::EXIT_INCOMPLETE
+    crate::self_test::private_edit::unexecuted("incomplete", "installed_helper_start_failed")
 }
 
 fn exec_helper(verified: &Verified, entry: &str, args: &[std::ffi::OsString]) -> std::io::Error {
