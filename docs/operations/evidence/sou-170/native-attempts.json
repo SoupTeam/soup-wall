@@ -1,0 +1,131 @@
+{
+  "format": "sw-edit-quota-native-attempts/1",
+  "attempts": [
+    {
+      "run": 40678782295,
+      "job": 122783920141,
+      "source": "8e345beb5b050de5a63fa869d5dbaf3eb9033bb1",
+      "artifact": 12812156815,
+      "zip_sha256": "d5eb7be407213d4bf9ebf3619406ab3b5902042eb7f7bb2270459053fcc3bb19",
+      "log_sha256": "eff2dd28360b627498c14f28bf24fb2760d8401f9b2f4aee31d9f9eac55725e5",
+      "legacy_cases": "23/23 passed",
+      "quota_inventory": {
+        "expected": 23,
+        "attempted": 2,
+        "passed": 1,
+        "failed": 1,
+        "incomplete": 21
+      },
+      "failure": "profile_version at legacy-profile; checker used qualification-report FORMAT instead of installed profile FORMAT",
+      "correction": "explicit sw-installed-edit-session/1 legacy profile contract; selector regression covers legacy/v2 response shapes",
+      "runtime_delta": "none; checked implementation remains unchanged; fresh focused native qualification required"
+    },
+    {
+      "run": 40679977662,
+      "job": 122787990877,
+      "source": "66e126486ea9b21f0104051a3f97a65561ee21ea",
+      "tree": "30d22de2eba1e43890a6206c7691a529ad399d77",
+      "artifact": 12811928830,
+      "zip_sha256": "078d96e4ea53a83f4f525e8e6dcb59cebba9cdb17226dc2b5cbe17c31197b6b7",
+      "binary_sha256": "cbfef36de57efcfdba73e0a74c3c5bda1a641b9c829fbd17f49bdd89f42caa36",
+      "result": "passed",
+      "quota_inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "legacy_inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "runtime_change_since_prior": "none; only driver legacy-format comparison and its regression fixed",
+      "independent_verification": "native-verification.json"
+    },
+    {
+      "run": 40697167080,
+      "job": 122847291242,
+      "source": "88c097fc7489749f6abb5e68ee527fd652acc96f",
+      "artifact": 12819544453,
+      "zip_sha256": "c93ee2c3cbd980836afe1d59584f535016b375ae87ed965d368f54ab0782eff8",
+      "result": "failed",
+      "legacy_inventory": {
+        "expected": 23,
+        "attempted": 23,
+        "passed": 23,
+        "failed": 0,
+        "incomplete": 0
+      },
+      "legacy_diagnosis": {
+        "actual_installed": 8,
+        "simulated_retained_state": 6,
+        "passed": 14,
+        "failed": 0,
+        "incomplete": 0
+      },
+      "stop_inventory": {
+        "passed": 1,
+        "failed": 1,
+        "incomplete": 10
+      },
+      "failure": "two-live-exact-stop: Suite.cli parsed only the last line of pretty JSON from status; successful response became None and the checker failed with AttributeError.",
+      "quota_inventory": "not run after Stop checker failure",
+      "refresh_inventory": "not run after Stop checker failure",
+      "correction": "Read the complete bounded JSON document for status only; retain other commands final-line JSON parsing. Reject malformed, null and multiple documents.",
+      "runtime_delta": "none; failed attempt and correction differ only in qualification scripts/tests/evidence",
+      "failure_report": "composition-attempt-1.json"
+    },
+    {
+      "run": 40698883037,
+      "job": 122853070027,
+      "source": "fa1732a7c49f591c66d456031301d9486b8969cf",
+      "tree": "c00c3adcfbd4aea5b488db05b8556522f1044104",
+      "artifact": 12820384961,
+      "zip_sha256": "6d22cf00553af47f0b3224c9a78c597248f4db1b18cdd660c335bb1e34eaf400",
+      "binary_sha256": "4c964c8411195e8efa8bce9b97e4287e66d0d693a5894b012a1eadc08fffcf8e",
+      "result": "passed",
+      "quota_inventory": {
+        "attempted": 25,
+        "expected": 25,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 25
+      },
+      "legacy_inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "refresh_inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "stop_inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 12
+      },
+      "legacy_diagnosis": {
+        "attempted": 14,
+        "expected": 14,
+        "failed": 0,
+        "incomplete": 0,
+        "native_runtime_cases": 8,
+        "passed": 14,
+        "simulated_retained_state_cases": 6
+      },
+      "native_rust_passed": 133,
+      "runtime_change_since_prior_composition_attempt": "none; only test-helper status JSON parsing and its regression/evidence changed",
+      "independent_verification": "composition-native-verification.json"
+    }
+  ]
+}

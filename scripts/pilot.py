@@ -815,15 +815,43 @@ def parser():
     command = commands.add_parser("status", parents=[shared])
     command.add_argument("--state-root", type=Path)
     commands.add_parser("help")
+    commands.add_parser("update", help="preview, apply, recover or roll back a complete local pilot generation")
     return top
 
 
 def main(argv=None):
+    supplied = list(sys.argv[1:] if argv is None else argv)
+    if supplied and supplied[0] == "update":
+        return load("front_door_update", "pilot_update.py").main(supplied[1:])
     top = parser()
-    args = top.parse_args(argv)
+    args = top.parse_args(supplied)
     if args.command in (None, "help"):
         top.print_help()
         return 0
+    coordinated = args.command != "help" and any((args.prefix / name).exists() or (args.prefix / name).is_symlink()
+                                                for name in ("current.json", "journal.json"))
+    if coordinated and args.command == "prepare" and args.apply:
+        print(json.dumps({"format": FORMAT, "command": args.command, "status": "failed", "executed": False,
+                          "reason": "use_coordinated_update", "action": "use `pilot update preview` with a complete local inventory"}))
+        return 2
+    if args.command in ("run", "status") and coordinated:
+        try:
+            update = load("front_door_update", "pilot_update.py")
+            words = [args.command]
+            for name in ("prompt", "timeout_seconds", "ask_wait_seconds", "state_root", "port"):
+                value = getattr(args, name, None)
+                if value is not None:
+                    words += ["--" + name.replace("_", "-"), str(value)]
+            if args.json:
+                words.append("--json")
+            return update.selected_command(args.prefix, words)
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+            dispatched = getattr(error, "dispatch_started", False)
+            print(json.dumps({"format": FORMAT, "command": args.command, "status": "failed",
+                              "executed": None if dispatched else False, "dispatch_started": dispatched,
+                              "reason": "coordinated_outcome_unknown" if dispatched else "coordinated_update_unavailable",
+                              "action": "inspect the update journal and recover before retrying"}, sort_keys=True))
+            return 2
     if args.command == "run":
         try:
             return run(args)

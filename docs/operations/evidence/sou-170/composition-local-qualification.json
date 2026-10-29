@@ -1,0 +1,158 @@
+{
+  "accepted_base": "144512b3ed11f985c922d9911cba26f07599dea9",
+  "reviewed_diagnostic_dependency": "b30d2bd1e6d95d94f63e52b5b234ec15c60ff401",
+  "attempts": [
+    {
+      "label": "diagnosis-composition-targets",
+      "command": [
+        "sh",
+        "-c",
+        "cargo test --offline --locked -p agentfw --lib edit_session && cargo clippy --offline --locked -p agentfw --all-targets -- -D warnings && python3 -B -m unittest discover -s scripts/tests -p \"test_edit_*.py\" -v && python3 -B -m unittest discover -s scripts/tests -p test_installed_edit.py -v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "b9c5067b65153bb202f34867ec187665017f1dbe64bb9f0149dfd6b13dd92060",
+      "log_sha256": "9ddab096501b8cbd8ee5eb2a8d9fe9c0cf560c5b41f2bf6d8ffe2c893f6d8837",
+      "elapsed_seconds": 33.21,
+      "rust_summary": {
+        "passed": 20,
+        "failed": 0,
+        "ignored": 0
+      },
+      "python_tests": 23
+    },
+    {
+      "label": "diagnosis-composition-workspace",
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "--workspace"
+      ],
+      "exit_code": 0,
+      "source_sha256": "730caacf953cb3ce12cf7372ee9ace9464e432c17ad7c5e01e346f218fa3aba9",
+      "log_sha256": "d60a5b5c6d9a7f63dbdd1a5a36ecf44146cd7e0413e5446a3a1f9aaefee5c8cf",
+      "elapsed_seconds": 148.77,
+      "rust_summary": {
+        "passed": 1922,
+        "failed": 0,
+        "ignored": 13
+      },
+      "python_tests": 0
+    },
+    {
+      "label": "diagnosis-composition-ci-controls",
+      "command": [
+        "sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p \"test_ci_*.py\" -v && python3 -B scripts/ci_components.py --check && cargo fmt --all --check && python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 1,
+      "source_sha256": "904e38d9c6b9f2f1adfa7a9113d1cc511d47674f4fa8444f96f25913b664ed1c",
+      "log_sha256": "2374006c418c843e3d39edf280b2554e9873a81d08e0a38a243af7c6b8005fda",
+      "elapsed_seconds": 3.41,
+      "rust_summary": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      "python_tests": 122
+    },
+    {
+      "label": "diagnosis-composition-docs-current",
+      "command": [
+        "env",
+        "GIT_INDEX_FILE=/private/tmp/sou170-qualification/scratch/docs-current.index",
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "904e38d9c6b9f2f1adfa7a9113d1cc511d47674f4fa8444f96f25913b664ed1c",
+      "log_sha256": "2a1e807d0162f344492098bb773f67cd862bfd5022765b214968cfa3d46d6f39",
+      "elapsed_seconds": 1.54,
+      "rust_summary": {
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      "python_tests": 0
+    },
+    {
+      "label": "diagnosis-composition-workspace-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "source_sha256": "3e1eb51d77668a85e165b71c5469a690e09cbdff65771fe1d0ab12538086d3fc",
+      "log_sha256": "7b599b2f9a7b36621c133e201e779ee3fab9fd29610a375384e0d2d524e76dfb",
+      "elapsed_seconds": 11.09
+    },
+    {
+      "label": "diagnosis-pretty-cli-regression",
+      "command": [
+        "sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p test_installed_edit.py -v && python3 -B -m unittest discover -s scripts/tests -p test_installed_edit_stop.py -v && python3 -B -m unittest discover -s scripts/tests -p \"test_edit_*.py\" -v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "3174e1317ad781ba434e853a95735213bf3b2c28cec46f365be8a7384e8515b5",
+      "log_sha256": "b151cbc41269a654192c29113aa3a58e926fb78184453f0895288b7b3dfb0a9f",
+      "elapsed_seconds": 0.99
+    },
+    {
+      "label": "composition-final-delivery-controls",
+      "command": [
+        "sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p test_installed_edit.py -v && python3 -B -m unittest discover -s scripts/tests -p test_installed_edit_stop.py -v && python3 -B -m unittest discover -s scripts/tests -p \"test_edit_*.py\" -v && python3 -B scripts/ci_components.py --check && cargo fmt --all --check && GIT_INDEX_FILE=/private/tmp/sou170-qualification/scratch/docs-current.index python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "fc9c34ad0af42bb19fc1057d46e1a4a174e5ab0caebecad54fcd9ec8022a0b17",
+      "log_sha256": "67d226704abb670437cec4b3927c3e31b7dbced9a64f833a201be376b30a7889",
+      "elapsed_seconds": 4.19
+    },
+    {
+      "label": "final-status-contract-sync",
+      "command": [
+        "sh",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p test_installed_edit.py -v && python3 -B -m unittest discover -s scripts/tests -p test_installed_edit_stop.py -v && python3 -B -m unittest discover -s scripts/tests -p \"test_edit_*.py\" -v && python3 -B scripts/ci_components.py --check && cargo fmt --all --check && GIT_INDEX_FILE=/private/tmp/sou170-qualification/scratch/docs-current.index python3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "312f7ee526ec5cc37938884282b35fecc7be942f49c0d0fe516cf3c1af0c5494",
+      "log_sha256": "26451e02f96d9146ffbc22b3cd1b61a93259549295b74229afb83414615f7e19",
+      "elapsed_seconds": 4.02
+    }
+  ],
+  "native_composition": "passed; see composition-native-verification.json",
+  "qualification_note": "The doc-check failure was stale isolated Git-index metadata; exact current staged index was copied only into writable scratch for the read-only recheck.",
+  "later_qualifier_sync": {
+    "source": "785b934b342d3187b892a6fc3f8bdee84c064dc5",
+    "runtime_delta": "none; all crates/agentfw/src bytes match qualified fa1732a7",
+    "shared_helper": "identical status JSON implementation; comments reconciled",
+    "additional_changes": "bounded Stop diagnosis failure metadata retention and one upstream regression",
+    "focused_python_passed": 29,
+    "docs_markdown": 333,
+    "docs_links": 1161,
+    "docs_errors": 0
+  },
+  "final_status_contract_sync": {
+    "upstream": "e0ece8d8817b7466a6125db11c57f7dae9920f38",
+    "changed_behavior": "qualification failure code for non-object status only; valid-status framing/criteria unchanged",
+    "preserved_tests": "both original regression sets; expected explicit non-object refusal aligned",
+    "python_passed": 30,
+    "docs_markdown": 334,
+    "docs_links": 1163,
+    "docs_errors": 0,
+    "agent_source_delta_since_native_fa1732a7": "none"
+  }
+}
