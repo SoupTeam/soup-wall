@@ -6,6 +6,7 @@ use super::{
 };
 use crate::edit_session::{
     profile::{self, Profile},
+    quota::{Limits, RetainedQuota},
     record::{self, Context, ProcessIdentity},
     FORMAT,
 };
@@ -45,6 +46,14 @@ struct Terminal {
     daemon_clean: bool,
     mutation_dispatches: u64,
     effect_status: String,
+    #[serde(default, deserialize_with = "retained_quota")]
+    mutation_quota: Option<RetainedQuota>,
+}
+fn retained_quota<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> std::result::Result<Option<RetainedQuota>, D::Error> {
+    // Missing is legacy-v1 compatibility; explicit null is not quota metadata.
+    RetainedQuota::deserialize(d).map(Some)
 }
 fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     serde_json::from_value(audit::strict(bytes)?).map_err(|_| "selected_state_schema_invalid")
@@ -78,8 +87,18 @@ fn protection_failure(code: &'static str) -> &'static str {
         _ => "invalid_or_mismatched",
     }
 }
-fn terminal(raw: &[u8], context: &Context) -> Result<&'static str> {
+fn terminal(raw: &[u8], context: &Context, limits: Option<&Limits>) -> Result<&'static str> {
     let terminal: Terminal = decode(raw)?;
+    // Validate retained local structure and the selected plan's exact ceilings.
+    // These counters are never used as authenticated commit/delivery proof.
+    let quota_uncertain = match (limits, terminal.mutation_quota.as_ref()) {
+        (None, None) => false,
+        (Some(expected), Some(RetainedQuota::Known(usage))) if &usage.limits == expected => {
+            usage.indeterminate_publications != 0 || usage.pending_prepublication_attempts != 0
+        }
+        (Some(_), Some(RetainedQuota::Unavailable(_))) => true,
+        _ => return Err("terminal_quota_profile_mismatch"),
+    };
     if terminal.format != FORMAT || terminal.run != context.run || terminal.profile_sha256 != context.profile_sha256
         || terminal.mutation_dispatches != 0
         || terminal.effect_status != "consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry"
@@ -90,6 +109,9 @@ fn terminal(raw: &[u8], context: &Context) -> Result<&'static str> {
     // These fields are consumed only as private structure. Never render caller
     // supplied ownership/failure strings, even when all other fields agree.
     let _ = terminal.cleanup.graceful_observed;
+    if terminal.state == "host_completed" && quota_uncertain {
+        return Err("terminal_quota_completion_contradictory");
+    }
     match (terminal.state.as_str(), terminal.reason.as_str()) {
         ("host_completed", "host_completed")
             if terminal.cleanup.cleaned
@@ -98,6 +120,9 @@ fn terminal(raw: &[u8], context: &Context) -> Result<&'static str> {
                 && terminal.daemon_clean =>
         {
             Ok("recorded_host_completed")
+        }
+        ("failed", "host_completed") if quota_uncertain => {
+            Ok("recorded_indeterminate_mutation_quota")
         }
         ("failed", "host_completed")
             if terminal.cleanup.reaped && !terminal.cleanup.exit_success =>
@@ -206,7 +231,7 @@ pub(super) fn inspect(args: &Args, report: &mut Report) -> Result<()> {
     }
     let terminal_bytes = run_dir.read("terminal.json", 32 * 1024, &mut budget)?;
     report.recorded_host_outcome = match terminal_bytes.as_deref() {
-        Some(raw) => terminal(raw, &context)?,
+        Some(raw) => terminal(raw, &context, profile.mutation_quota.as_ref())?,
         None => "terminal_not_recorded",
     };
     report.audit = match home.read("audit.jsonl", 1024 * 1024, &mut budget) {
@@ -639,6 +664,63 @@ mod tests {
         assert!(!rendered.contains("not executed"));
     }
     #[test]
+    fn quota_terminal_requires_exact_bounded_profile_metadata_without_promoting_commit_proof() {
+        let (_temp, _args, mut profile, mut context) = fixture();
+        let limits = Limits::new(1, 4).unwrap();
+        profile.format = crate::edit_session::QUOTA_PROFILE.into();
+        profile.mutation_quota = Some(limits.clone());
+        context.profile_sha256 = profile::digest(&profile).unwrap();
+        let ledger =
+            crate::edit_session::quota::Ledger::new(limits.clone(), "a".repeat(64), "host".into())
+                .unwrap();
+        let usage = serde_json::to_value(ledger.snapshot().unwrap()).unwrap();
+        let mut row = json!({"format":FORMAT,"state":"host_completed","reason":"host_completed",
+            "run":context.run,"profile_sha256":context.profile_sha256,
+            "cleanup":{"cleaned":true,"reaped":true,"exit_success":true,
+                "graceful_observed":true,"ownership":"owned-process-group","failure":null},
+            "daemon_clean":true,"mutation_dispatches":0,"mutation_quota":usage,
+            "effect_status":"consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry"});
+        let encode = |v: &Value| serde_json::to_vec(v).unwrap();
+        assert_eq!(
+            terminal(&encode(&row), &context, Some(&limits)).unwrap(),
+            "recorded_host_completed"
+        );
+        assert!(terminal(&encode(&row), &context, None).is_err());
+        let other = crate::edit_session::quota::Ledger::new(
+            Limits::new(2, 4).unwrap(),
+            "a".repeat(64),
+            "host".into(),
+        )
+        .unwrap();
+        row["mutation_quota"] = serde_json::to_value(other.snapshot().unwrap()).unwrap();
+        assert!(terminal(&encode(&row), &context, Some(&limits)).is_err());
+        row["mutation_quota"] = usage.clone();
+        row["mutation_quota"]["remaining_mutations"] = json!(2);
+        assert!(terminal(&encode(&row), &context, Some(&limits)).is_err());
+        row["mutation_quota"] = json!(null);
+        assert!(terminal(&encode(&row), &context, Some(&limits)).is_err());
+        row["mutation_quota"] = serde_json::to_value(RetainedQuota::unavailable()).unwrap();
+        assert!(terminal(&encode(&row), &context, Some(&limits)).is_err());
+        row["state"] = json!("failed");
+        assert_eq!(
+            terminal(&encode(&row), &context, Some(&limits)).unwrap(),
+            "recorded_indeterminate_mutation_quota"
+        );
+        row["mutation_quota"]["authenticated_commit"] = json!(true);
+        assert!(terminal(&encode(&row), &context, Some(&limits)).is_err());
+        row["mutation_quota"] = usage;
+        row["mutation_quota"]["admitted_mutation_attempts"] = json!(1);
+        row["mutation_quota"]["remaining_mutations"] = json!(0);
+        row["mutation_quota"]["pending_prepublication_attempts"] = json!(1);
+        assert_eq!(
+            terminal(&encode(&row), &context, Some(&limits)).unwrap(),
+            "recorded_indeterminate_mutation_quota"
+        );
+        row["state"] = json!("host_completed");
+        assert!(terminal(&encode(&row), &context, Some(&limits)).is_err());
+    }
+
+    #[test]
     fn unsuccessful_reaped_host_is_distinct_from_missing_exit_or_cleanup_failure() {
         let (_temp, _args, _profile, context) = fixture();
         let mut row = json!({"format":FORMAT,"state":"failed","reason":"host_completed",
@@ -648,7 +730,7 @@ mod tests {
             "daemon_clean":true,"mutation_dispatches":0,
             "effect_status":"consult-native-audit; interrupted-or-withheld-result-is-indeterminate; no-automatic-retry"});
         assert_eq!(
-            terminal(&serde_json::to_vec(&row).unwrap(), &context).unwrap(),
+            terminal(&serde_json::to_vec(&row).unwrap(), &context, None).unwrap(),
             "recorded_unsuccessful_host_exit"
         );
         for (reason, expected) in [
@@ -657,11 +739,11 @@ mod tests {
         ] {
             row["reason"] = json!(reason);
             assert_eq!(
-                terminal(&serde_json::to_vec(&row).unwrap(), &context).unwrap(),
+                terminal(&serde_json::to_vec(&row).unwrap(), &context, None).unwrap(),
                 expected
             );
             row["state"] = json!("host_completed");
-            assert!(terminal(&serde_json::to_vec(&row).unwrap(), &context).is_err());
+            assert!(terminal(&serde_json::to_vec(&row).unwrap(), &context, None).is_err());
             row["state"] = json!("failed");
         }
         row["reason"] = json!("host_completed");
@@ -669,14 +751,14 @@ mod tests {
         row["cleanup"]["reaped"] = json!(false);
         row["cleanup"]["cleaned"] = json!(false);
         assert_eq!(
-            terminal(&serde_json::to_vec(&row).unwrap(), &context).unwrap(),
+            terminal(&serde_json::to_vec(&row).unwrap(), &context, None).unwrap(),
             "recorded_cleanup_or_stream_failure"
         );
         // A successful host can still leave incomplete owned cleanup.
         row["cleanup"]["reaped"] = json!(true);
         row["cleanup"]["exit_success"] = json!(true);
         assert_eq!(
-            terminal(&serde_json::to_vec(&row).unwrap(), &context).unwrap(),
+            terminal(&serde_json::to_vec(&row).unwrap(), &context, None).unwrap(),
             "recorded_cleanup_or_stream_failure"
         );
     }

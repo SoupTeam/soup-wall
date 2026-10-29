@@ -1,0 +1,39 @@
+{
+  "format": "sw-installed-edit-quota-plan/1",
+  "accepted_base": "db4f006d74957fc1a8dc1a0a4be40c3b887d8a01",
+  "planned": 23,
+  "cases": [
+    "installed-closure",
+    "legacy-profile",
+    "inert-preview",
+    "invalid-limits",
+    "useful-create",
+    "useful-replace",
+    "exact-byte-limit",
+    "one-byte-over",
+    "one-operation-over",
+    "zero-mutations",
+    "empty-write-count",
+    "ask-reject",
+    "no-approval",
+    "unselected-target",
+    "create-not-replace",
+    "stale-replay",
+    "parallel-last-credit",
+    "postcommit-withheld-create",
+    "postcommit-withheld-replace",
+    "postcommit-interrupted-create",
+    "postcommit-interrupted-replace",
+    "fresh-run-recovery",
+    "independent-run"
+  ],
+  "positive_workflow": "actual installed Agent/component + genuine restricted Claude + owned scripted provider; useful create/replace/readback",
+  "quota_semantics": "atomic full-payload/one-operation reservations after all original gates; monotone charges, known committed/noncommitted/indeterminate outcomes separate; never active refund/reset",
+  "concurrency": "existing transport overlap refusal unchanged; actual host two-tool batch capped at <=1 effect, plus native Rust barrier race using real creators requires exactly one winner",
+  "paid_inference": false,
+  "final_shared_qualification": "TL-owned",
+  "aggregate_byte_controls": {
+    "exact-byte-limit": "two separately authorized Unicode payloads and both readbacks; combined bytes equal selected maximum",
+    "one-byte-over": "each payload individually fits; first commits, second is exactly one byte beyond remaining total and refuses"
+  }
+}
