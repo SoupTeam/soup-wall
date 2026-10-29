@@ -1,5 +1,6 @@
 import json
 import re
+import ast
 
 
 def project(row):
@@ -31,25 +32,50 @@ def project(row):
     return row
 
 
-def collect(trace):
+def collect(trace, pids=None):
     rows = []
+    buffers = {}
+    discarded = set()
     for line in trace.splitlines():
         if not any(name in line for name in ('write(', 'writev(')) or len(line) > 2 * 1024 * 1024:
             continue
-        for quoted in re.findall(r'"(?:[^"\\]|\\.)*"', line):
-            try:
-                text = json.loads(quoted)
-            except ValueError:
+        prefix = re.match(r'^\s*(\d+)\s+(write|writev)\(2,', line)
+        if not prefix or (pids is not None and int(prefix[1]) not in pids):
+            continue
+        result = re.search(r'\)\s*=\s*(\d+)\s*$', line)
+        if result is None:
+            continue
+        quoted = re.findall(r'"(?:[^"\\]|\\.)*"', line)
+        try:
+            data = b''.join(ast.literal_eval('b' + part) for part in quoted)
+        except (ValueError, SyntaxError):
+            continue
+        written = int(result[1])
+        if written > len(data):
+            continue
+        key = int(prefix[1])
+        if key in discarded:
+            if b'\n' not in data[:written]:
                 continue
-            for message in text.splitlines():
-                if len(message) > 4096:
-                    continue
-                try:
-                    row = project(json.loads(message))
-                except ValueError:
-                    continue
-                if row is not None:
-                    rows.append(row)
-                    if len(rows) >= 256:
-                        return rows
+            data = data[:written].split(b'\n', 1)[1]
+            written = len(data)
+            discarded.remove(key)
+        text = buffers.get(key, b'') + data[:written]
+        buffers[key] = b''
+        while b'\n' in text:
+            message, text = text.split(b'\n', 1)
+            if len(message) > 4096:
+                continue
+            try:
+                row = project(json.loads(message))
+            except (ValueError, UnicodeError):
+                continue
+            if row is not None:
+                rows.append(row)
+                if len(rows) >= 256:
+                    return rows
+        if len(text) <= 4096:
+            buffers[key] = text
+        else:
+            discarded.add(key)
     return rows
