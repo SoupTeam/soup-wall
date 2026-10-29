@@ -37,6 +37,9 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pilot_provider import utility_environment
 from pilot_qualification import CASES, LIMITS, Failure, canonical, digest, measure, new_report, require, sha, write_report
+import wsl_preflight
+import wsl_qualification
+
 import pilot_source_identity as SOURCE_IDENTITY
 import pilot_git_profiles as GIT_PROFILES
 
@@ -105,6 +108,7 @@ def source():
 
 
 def validate_selection(selection, expected):
+    require(isinstance(selection, dict), "selection_invalid")
     try:
         git_profile = GIT_PROFILES.from_selection(selection)
     except ValueError as error:
@@ -392,10 +396,14 @@ class Pilot:
         require(self.policy_sha256 == self.selected_sha256["policy"], "staged_policy_changed")
         self.prepare_workspaces()
         self.installs = {kind: self.private / (kind + "-profile") for kind in TOOLS}
+        offline = getattr(self, "offline_inputs", None)
+        fs_inputs = {} if offline is None else {"npm_cache": offline / "npm-cache", "offline": True}
+        git_inputs = {} if offline is None else {"python_archive": offline / "python.tar.gz",
+            "wheelhouse": offline / "wheelhouse", "allow_download": False}
         BASE.INSTALL.install(self.installs["filesystem"], self.workspace, self.paths["node"],
-                             self.paths["bwrap"], self.paths["npm"])
+                             self.paths["bwrap"], self.paths["npm"], **fs_inputs)
         GIT.INSTALL.install(self.installs["git"], self.git_workspace, self.paths["git"], sha(self.paths["git"]),
-                            self.paths["bwrap"], self.launcher)
+                            self.paths["bwrap"], self.launcher, **git_inputs)
         tools = []
         for kind, path in self.installs.items():
             registry = json.loads((path / "registry.json").read_text())
@@ -421,6 +429,9 @@ class Pilot:
         self.unrelated = subprocess.Popen([str(self.paths["python"]), "-I", "-c", "import time; time.sleep(1800)"],
                                          env=self.env, cwd=self.private, start_new_session=True)
         self.unrelated_start = BASE.ProcessWitness.identity(self.unrelated.pid)
+        if getattr(self, "wsl_qualification", False):
+            self.report["wsl_foreign_port"] = wsl_qualification.foreign_port(
+                self.binary, self.paths["python"], self.env, self.private, self.port)
         instance = self.start_daemon()
         return {"source_independent_runtime": True, "agentfw_sha256": sha(self.binary),
                 "profiles": self.installed, "policy_sha256": self.policy_sha256,
@@ -1052,9 +1063,14 @@ def negative_controls(args):
                 "changed-asset": "staged_classifier_changed"}
     for name, reason in expected.items():
         output = args.output / ("negative-" + name)
-        result = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), "--run", "--selection", str(args.selection),
-            "--expected-commit", args.expected_commit, "--output", str(output), "--fault", name],
-            env={key: value for key, value in os.environ.items() if key in ("PATH", "LANG")},
+        command = [sys.executable, "-B", str(Path(__file__).resolve()), "--run", "--selection", str(args.selection),
+                   "--expected-commit", args.expected_commit, "--output", str(output), "--fault", name]
+        if getattr(args, "offline_inputs", None):
+            command.extend(["--offline-inputs", str(args.offline_inputs)])
+        if getattr(args, "wsl_root", None):
+            command.extend(["--wsl-root", str(args.wsl_root)])
+        result = subprocess.run(command,
+            env={key: value for key, value in os.environ.items() if key in ("PATH", "LANG", "TMPDIR", "TMP", "TEMP")},
             cwd=ROOT, capture_output=True, timeout=30)
         report = json.loads((output / "report.json").read_text())
         require(result.returncode == 1 and report["status"] == "failed"
@@ -1094,8 +1110,16 @@ def run(args):
         report["selected_sha256"] = {key: selection["files"][key]["sha256"] for key in paths}
         require(platform.system() == "Linux" and platform.machine() == "x86_64", "linux_x86_64_required")
         # Prerequisite validation happens before profile downloads or execution.
-        private = tempfile.TemporaryDirectory(prefix="installed-pilot-")
+        wsl_root = getattr(args, "wsl_root", None)
+        if wsl_root is not None:
+            report["wsl_preflight"] = wsl_preflight.inspect(wsl_root, paths, output=args.output)
+            require(report["wsl_preflight"]["status"] == "ready", "wsl_prerequisites_not_ready")
+        private = tempfile.TemporaryDirectory(prefix="installed-pilot-", dir=wsl_root)
         pilot = Pilot(Path(private.name), args.output, paths, report, selection["expected_refusal"])
+        pilot.offline_inputs = getattr(args, "offline_inputs", None)
+        pilot.wsl_qualification = wsl_root is not None
+        if wsl_root is not None:
+            report["wsl_host_settings_before"] = wsl_qualification.host_settings()
         version = subprocess.check_output([str(paths["claude"]), "--version"], env=pilot.env, cwd=pilot.private,
                                           timeout=15, text=True).strip()
         host_package = json.loads((ROOT / "profiles/mcp/filesystem-readonly-v1/claude-host/package.json").read_text())
@@ -1106,7 +1130,7 @@ def run(args):
         def observed():
             try:
                 return action()
-            except Exception:
+            except Exception as error:
                 raw = traceback.format_exc().encode("utf-8")
                 for secret in pilot.secrets if pilot else []:
                     raw = raw.replace(secret.encode(), b"[REDACTED]")
@@ -1114,6 +1138,11 @@ def run(args):
                 path.write_bytes(raw[:65536])
                 path.chmod(0o600)
                 next(row for row in report["cases"] if row["id"] == name)["evidence"]["diagnostic_sha256"] = sha(path)
+                if isinstance(error, GIT.INSTALL.RuntimeLibrariesUnavailable):
+                    evidence = next(row for row in report["cases"] if row["id"] == name)["evidence"]
+                    evidence["missing_runtime_libraries"] = error.missing_libraries
+                    evidence["next_step"] = "Install the Ubuntu runtime packages providing these SONAMEs, then retry in a new output directory."
+                    raise Failure("git_runtime_libraries_unavailable") from error
                 raise
         return measure(report, name, observed, timeout=timeout)
     ready = step("exact-installed-inputs", prepare, timeout=LIMITS["setup_seconds"])
@@ -1154,6 +1183,10 @@ def run(args):
             require(report.get("source_before") == report["source_after"], "candidate_changed_during_run")
             require(all(sha(path) == report["selected_sha256"][key] for key, path in selected.items()), "selected_runtime_changed_during_run")
             require(pilot is not None, "runtime_not_started")
+            if getattr(args, "wsl_root", None) is not None:
+                report["wsl_host_settings_after"] = wsl_qualification.host_settings()
+                require(report.get("wsl_host_settings_before") == report["wsl_host_settings_after"],
+                        "wsl_host_settings_changed")
             return {**cleanup_evidence, "private_installation_removed": True, "source_and_inputs_unchanged": True}
         if pilot is not None:
             step("final-cleanup", cleanup)
@@ -1172,11 +1205,49 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--matched-development", action="store_true", help="Run the frozen SOU-106 workload on both actual-host paths")
+    parser.add_argument("--offline-inputs", type=Path, help="Pinned Python archive, wheelhouse and npm cache; disable runtime downloads")
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--expected-commit")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--wsl-root", type=Path,
+                        help="Opt in to WSL2 checks and stage under this existing private /home directory.")
+    parser.add_argument("--wsl-preflight", action="store_true",
+                        help="Inspect WSL prerequisites only; never start the installed pilot or download assets.")
     parser.add_argument("--fault", choices=("bad-candidate", "missing-sandbox", "changed-asset"), help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.wsl_preflight:
+        if args.run or args.matched_development or not args.wsl_root:
+            parser.error("--wsl-preflight requires --wsl-root and cannot be combined with --run or --matched-development")
+        if bool(args.selection) != bool(args.expected_commit):
+            parser.error("Supply --selection and --expected-commit together")
+        paths = None
+        try:
+            if args.selection:
+                require(args.selection.stat().st_size <= 65536, "selection_byte_limit")
+                selection = strict_json(args.selection.read_bytes())
+                _, paths = validate_selection(selection, args.expected_commit)
+                require(GIT_PROFILES.from_selection(selection) == GIT_PROFILES.DEFAULT,
+                        "wsl_extended_git_profile_not_qualified")
+            report = wsl_preflight.inspect(args.wsl_root, paths, output=args.output)
+        except (Failure, OSError, ValueError, KeyError, TypeError) as error:
+            # Selection paths and parser messages may contain private operator data.
+            # Preserve a static actionable reason, never a traceback or raw input.
+            status = "unavailable" if isinstance(error, OSError) else "incompatible"
+            reason = error.code if isinstance(error, Failure) else (
+                "selection_unreadable" if isinstance(error, OSError) else "selection_invalid")
+            if reason == "wsl_extended_git_profile_not_qualified":
+                status = "unsupported"
+            report = {"format": "sw-wsl-preflight/1", "scope": "prerequisites_only",
+                      "status": status, "active_protection": "not_measured",
+                      "runtime_qualification": "not_executed", "checks": [
+                          {"id": "runtime_selection", "status": status, "reason": reason,
+                           "next_step": ("Use the exact default git-readonly-v1 selection for WSL; extended Git profiles are not WSL-qualified."
+                                         if status == "unsupported" else
+                                         "Supply a readable exact pilot selection for the clean expected commit."),
+                           "evidence": {}}]}
+        print(json.dumps(report, indent=2))
+        return 0 if report["status"] == "ready" else 1
+
     if not args.run and args.matched_development:
         from pilot_measurement import load_workload
         workload = load_workload(ROOT)

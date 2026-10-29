@@ -1,0 +1,63 @@
+{
+  "schema": "sw-installed-edit-status/1",
+  "observed_at_ms": 1793187110572,
+  "status": "live",
+  "reason_code": "authenticated_current_edit_run_not_execution_proof",
+  "provenance": "local_records_are_not_authenticated_runtime_attestation",
+  "identity": {
+    "run_sha256": "b8dfee258935e57928bcd855ca191d037d74c4658ede1ede166364f373a10335",
+    "context_sha256": "af901cc2cc4e198e3c4296a75e32aed31b5d08188074b8013369c5167b793f30",
+    "profile_sha256": "d8c88458272787fac77243400c15321cfbfc15f0329241f7cfbcb12617f927fc",
+    "registry_sha256": "0208de7cd63c27246729973506407cdbf9cc7f190466a3c3266aebe9589ba44d",
+    "source_commit": "a7ec2de899aa55726e7488f5d31bec5044b52307",
+    "source_tree": "fc1336b4e9ed706d170e52ea181b2fc359f76cc5",
+    "component_sha256": "03686312bb036238da24519f294296f5700ac6348f07fbf07c33c89d6f4a86c4",
+    "agent_sha256": "c62872d5721bda10939de9fcdd94a30fc2a7de746b482424e1a8d777a9112095",
+    "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "policy_sha256": "5a4c161efb933d00a972271dc93ccaef9c1428600e581eb622a29f2af7f43c90",
+    "config_sha256": "058680ae2981ec995c966064b9480e946d450a943f78b66a826d17864ac6695a",
+    "host_session_sha256": "ddc119797688925ae5ce0a48cb4dacb370805e5cc372d2062e8d2ef46e1a13a8",
+    "instance_sha256": "5507d961ec57fd4716800c8f28dc095b2298af5badcb28e9e96231d90010deef"
+  },
+  "recorded_host_outcome": "terminal_not_recorded",
+  "owner_process": "identity_matches_liveness_not_established",
+  "host_process": "identity_matches_liveness_not_established",
+  "authenticated_daemon": "matching_current_epoch",
+  "requests": [
+    {
+      "target_index": 0,
+      "operation": "replace",
+      "state": "rejected",
+      "binding_sha256": "d45b3d4d4d8c3e5d4873dd7565ef3dee9c94488f69157ac5e1ad571a5b5b9665",
+      "args_sha256": "c7dbd2cb551b9e330c2948833808e3332c80c452ded6baee77a809344405bd73"
+    }
+  ],
+  "audit": {
+    "provenance": "retained_local_records_not_runtime_attestation",
+    "completeness": "selected_bounded_records_only",
+    "reason_code": "local_audit_observations_not_commit_or_delivery_proof",
+    "file_sha256": "bc27c9c42d5ae88b2cbbaeb4a5eeea43ca5a93cb79ff9ecf1dc48d08441c5881",
+    "records": 5,
+    "ask_requests": 1,
+    "calls": []
+  },
+  "outputs": [
+    {
+      "target_index": 0,
+      "operation": "replace",
+      "observation": "present",
+      "sha256": "c761cdf0e1388e8cd420452bde48b458620076121373e0c128cc5f4cfcd1da96",
+      "bytes": 40,
+      "matches_prepared_baseline": true,
+      "attribution": "observed_postcondition_not_writer_or_commit_proof"
+    }
+  ],
+  "effects": "indeterminate",
+  "host_delivery": "unknown",
+  "model_consumption": "unknown",
+  "next_steps": [
+    "Inspect the intended target independently before deciding whether another edit is needed.",
+    "Prepare a fresh exact plan and obtain new exact authority for any new mutation; do not replay old approvals or spent receipts.",
+    "Cancellation and withheld or absent results do not roll back previously committed bytes."
+  ]
+}

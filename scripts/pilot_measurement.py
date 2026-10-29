@@ -58,6 +58,7 @@ def run_matched(api, args):
         old_report = new_report()
         old_report['selected_sha256'] = {k: sha(v) for k,v in paths.items()}
         pilot = api.Pilot(Path(private.name), args.output, paths, old_report, selection['expected_refusal'])
+        pilot.offline_inputs = getattr(args, "offline_inputs", None)
         version = api.subprocess.check_output([str(paths['claude']), '--version'], env=pilot.env, cwd=pilot.private, timeout=15, text=True).strip()
         package = json.loads((api.ROOT / 'profiles/mcp/filesystem-readonly-v1/claude-host/package.json').read_bytes())
         require(version == package['dependencies']['@anthropic-ai/claude-code'] + ' (Claude Code)', 'selected_host_version_changed')

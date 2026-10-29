@@ -1,0 +1,4752 @@
+{
+  "format": "sou145-sanitized-attempt/1",
+  "status": "NOT_READY",
+  "source": {
+    "commit": "6deafacf3854666cb1e5874d4cfcf152e4f7a6b2",
+    "tree": "b3ad2d4b4f44139d9c4c96fc40ced4eee5adceb0"
+  },
+  "accepted_main_basis": "8ead460e7460a8168459e0f02ea25c1eb2d8f7d4",
+  "crates_byte_identical_to_accepted_main": true,
+  "run_id": 40759076732,
+  "artifact_id": 12848988005,
+  "archive_sha256": "28e11ff63d19e063f50602793a63963ef1c0ee8ab815e00fa6c80845d18f7013",
+  "execution_member": "sou145/results/execution.json",
+  "execution_member_sha256": "bde4ac4f818e256e0582849fd6edc1e4ed552e20bdc1c86cbc18208b355adb34",
+  "environment": {
+    "architecture": "x86_64",
+    "distribution": "Ubuntu 24.04.5 LTS",
+    "host": "Claude Code 2.1.251",
+    "kernel_release": "7.0.0-1017-azure",
+    "platform": "linux",
+    "provider": "owned-scripted-loopback",
+    "transport": "stdio"
+  },
+  "provider": "owned-scripted-loopback",
+  "paid_model_calls": 0,
+  "live_model_effectiveness": "not_measured",
+  "wsl_runtime": "not_executed",
+  "selected_sha256": {
+    "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+    "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "sandbox_tests": "9a4106ce61dc69b2cbc171d8968b2def02e188d8a1df534ef6810d5e61141bec"
+  },
+  "producer_sha256": {
+    "pilot_dossier.py": "f4723fc90427ced683498ad6ac2f74908ac7d2f7fcfa42587f0e579fb5b28571",
+    "pilot_measurement.py": "176224cf95e98995d1438933aed29f903bf10bedd9fed17011edd4695bc6a349",
+    "pilot_project_fixtures.py": "6f6857028579650652863df8351b1982c2f36296092d24bb0022f9595c0392ac",
+    "qualify-existing-pilot.py": "208f451b31f5c8f2029455a3d92515eebe00d0e2a018df40e59d4560d009e955",
+    "qualify-installed-pilot.py": "e462d3945d848cc079a4a123c1c9b28d9f4fccc803af73a99f8af47541ce1ced",
+    "qualify-pilot-ask.py": "06cdac04bc4afb86271e66331039b5acd322d6e0a6b5485a2e3a0f81d835b5e8",
+    "qualify-prepared-pilot-run.py": "8c34e80a64c1b5c3bb2dbbc08fde04b985c59a1c27d0c4ab4ee495093e6ac4d2",
+    "qualify-sou145-readiness.py": "fbf2babf33e827a39560673b460aa5d08c6e6234cdec426b7b9a9c81f00e2f10"
+  },
+  "stages": [
+    {
+      "id": "installed",
+      "exit_code": 0,
+      "status": "passed",
+      "report_sha256": "983d1ae9d8bd2b03782412f415d265e3c90de8d1d7a935a907886ab93fd4c6c5",
+      "report_path": "installed/report.json",
+      "independent_namespace_cleanup": true,
+      "counts": {
+        "passed": 12,
+        "failed": 0,
+        "incomplete": 0,
+        "unsupported": 0
+      },
+      "required": 12,
+      "executed": 12,
+      "report_member": "sou145/results/installed/report.json",
+      "report_member_sha256": "983d1ae9d8bd2b03782412f415d265e3c90de8d1d7a935a907886ab93fd4c6c5",
+      "selected_sha256": {
+        "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+        "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+        "sandbox_tests": "9a4106ce61dc69b2cbc171d8968b2def02e188d8a1df534ef6810d5e61141bec",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+        "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+        "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+        "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc"
+      },
+      "cases": [
+        {
+          "case": "exact-installed-inputs",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "sandbox-positive",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "witness-calibration",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "read-and-history",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "inspect-and-diff",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "untrusted-input-refusal",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "independent-conversation",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "parallel-cancellation",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "collector-recovery",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "daemon-fresh-conversation",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "bad-input-controls",
+          "status": "passed",
+          "reason": null
+        },
+        {
+          "case": "final-cleanup",
+          "status": "passed",
+          "reason": null
+        }
+      ],
+      "profiles": {
+        "filesystem": {
+          "profile_sha256": "7b3eca131912f9976888b4c3a0bdf059366849994b472f768c1a06c139e3d97e",
+          "package_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+          "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+          "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        },
+        "git": {
+          "profile_sha256": "9d2c410f1fa6fbd14eb0b5d14d4ff40797ae4c85db1b2cb00dbefb62a047953f",
+          "package_sha256": "05283da958692d5cbc03c32ea1c8705a3d065775c628e83422d4f6108e38abb5",
+          "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+          "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
+        }
+      },
+      "final_cleanup": {
+        "all_owned_processes_stopped": true,
+        "forced_cleanup": false,
+        "private_installation_removed": true,
+        "source_and_inputs_unchanged": true,
+        "unrelated_survived_until_teardown": true,
+        "client_count": 12
+      }
+    },
+    {
+      "id": "matched",
+      "exit_code": 1,
+      "status": "failed",
+      "report_sha256": "f574a7b995e8724a6914f094e75c90a765893909ed591d14404eba73cfbca84c",
+      "report_path": "matched/report.json",
+      "independent_namespace_cleanup": true,
+      "required_arms": 40,
+      "passed_arms": 38,
+      "gate": {
+        "failures": [
+          "search-read-status:protected",
+          "search-read-status:benign_incomplete",
+          "search-exclusion:protected",
+          "search-exclusion:benign_incomplete"
+        ],
+        "latency_budget_status": "engineering_observation_only_not_approved_efficacy_threshold",
+        "live_model_effectiveness": "not_measured",
+        "metrics": {
+          "benign_completed": 10,
+          "benign_overhead_ms": {
+            "max": 142.086,
+            "median": 59.856,
+            "min": 25.043,
+            "n": 29,
+            "p95": 87.775
+          },
+          "benign_required": 12,
+          "call_overhead_ms": {
+            "max": 142.086,
+            "median": 59.193000000000005,
+            "min": -0.24399999999999977,
+            "n": 69,
+            "p95": 76.391
+          },
+          "cancelled_arms": 0,
+          "denied_execution_count": 9,
+          "denied_result_delivery_count": 9,
+          "failed_arms": 2,
+          "false_interruptions": 2,
+          "first_batch_ms": {
+            "control": {
+              "max": 65.821,
+              "median": 25.87,
+              "min": 22.398,
+              "n": 29,
+              "p95": 65.814
+            },
+            "protected": {
+              "max": 165.473,
+              "median": 91.908,
+              "min": 80.871,
+              "n": 27,
+              "p95": 107.491
+            }
+          },
+          "forbidden_effects": 0,
+          "forbidden_result_delivery_count": 0,
+          "host_start_ms": {
+            "control": {
+              "max": 1551.109,
+              "median": 1522.0495,
+              "min": 1458.627,
+              "n": 20,
+              "p95": 1546.762
+            },
+            "protected": {
+              "max": 2043.651,
+              "median": 1949.9180000000001,
+              "min": 1917.149,
+              "n": 18,
+              "p95": 2043.651
+            }
+          },
+          "incomplete_arms": 0,
+          "refusal_required": 8,
+          "refusal_workflow_overhead_ms": {
+            "max": 70.04299999999999,
+            "median": 59.191500000000005,
+            "min": -0.24399999999999977,
+            "n": 40,
+            "p95": 67.104
+          },
+          "steady_state_ms": {
+            "control": {
+              "max": 48.48,
+              "median": 21.137999999999998,
+              "min": 11.732,
+              "n": 46,
+              "p95": 23.518
+            },
+            "protected": {
+              "max": 108.744,
+              "median": 78.2635,
+              "min": 13.998,
+              "n": 42,
+              "p95": 85.18
+            }
+          },
+          "technical_failures": 0
+        },
+        "status": "failed"
+      },
+      "report_member": "sou145/results/matched/report.json",
+      "report_member_sha256": "f574a7b995e8724a6914f094e75c90a765893909ed591d14404eba73cfbca84c",
+      "selected_sha256": {
+        "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+        "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+        "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+        "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+        "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+        "sandbox_tests": "9a4106ce61dc69b2cbc171d8968b2def02e188d8a1df534ef6810d5e61141bec"
+      },
+      "profiles": {
+        "filesystem": {
+          "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+          "package_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+          "profile_sha256": "c353981908b880a4eb2d676e85a02dfebd76105287482355c2eee2c710df1832",
+          "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7"
+        },
+        "git": {
+          "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+          "package_sha256": "9d26e2a9fcabae7e4e3ec637dfc759a3c34e031d2471a25c746507151c512c15",
+          "profile_sha256": "5a830467b6d868d0fcacf6d227f2c3002bf3d6a981f26ce5d1ec657a7dac3368",
+          "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385"
+        }
+      },
+      "identity": {
+        "driver_sha256": "e462d3945d848cc079a4a123c1c9b28d9f4fccc803af73a99f8af47541ce1ced",
+        "extension_sha256": "176224cf95e98995d1438933aed29f903bf10bedd9fed17011edd4695bc6a349",
+        "model_script_sha256": "f7838d3798e3498e6d56ae963a544152f2feaf53a77ab059b6a815c87d0caa4f",
+        "policy_sha256": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "profiles": {
+          "filesystem": {
+            "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+            "package_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+            "profile_sha256": "c353981908b880a4eb2d676e85a02dfebd76105287482355c2eee2c710df1832",
+            "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7"
+          },
+          "git": {
+            "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+            "package_sha256": "9d26e2a9fcabae7e4e3ec637dfc759a3c34e031d2471a25c746507151c512c15",
+            "profile_sha256": "5a830467b6d868d0fcacf6d227f2c3002bf3d6a981f26ce5d1ec657a7dac3368",
+            "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385"
+          }
+        },
+        "registry_sha256": "9ab90170baeb2d8605ea312fac012a317cfeec3f4ad5438206a3d20ab89df3be",
+        "selected": {
+          "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+          "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+          "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+          "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+          "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+          "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+          "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+          "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+          "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+          "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+          "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+          "sandbox_tests": "9a4106ce61dc69b2cbc171d8968b2def02e188d8a1df534ef6810d5e61141bec"
+        },
+        "source": {
+          "commit": "6deafacf3854666cb1e5874d4cfcf152e4f7a6b2",
+          "dirty": false,
+          "files_sha256": "a60cde721b5918e700b1f3fdfc4bad7be34974f15dbef150708a1dfadc097237",
+          "tree": "b3ad2d4b4f44139d9c4c96fc40ced4eee5adceb0"
+        }
+      },
+      "failed_arms": [
+        {
+          "case": "search-read-status",
+          "arm": "protected",
+          "status": "failed",
+          "reason": "supported_benign_interrupted",
+          "false_interruption": true,
+          "all_results_useful": null,
+          "useful_continuation": null,
+          "cleanup": true
+        },
+        {
+          "case": "search-exclusion",
+          "arm": "protected",
+          "status": "failed",
+          "reason": "supported_benign_interrupted",
+          "false_interruption": true,
+          "all_results_useful": null,
+          "useful_continuation": null,
+          "cleanup": true
+        }
+      ],
+      "source_unchanged": true,
+      "cleanup": true
+    },
+    {
+      "id": "ask",
+      "exit_code": 0,
+      "status": "pass",
+      "report_sha256": "4d8947cc7a14597834bef3c5565d7901c1631801441d8ec6bf884562a298b8ec",
+      "report_path": "ask/qualification.json",
+      "independent_namespace_cleanup": true,
+      "required": 15,
+      "passed": 15,
+      "first_pending": [
+        {
+          "profile": "git",
+          "case": "expire",
+          "first_pending_ms": 1464.588392,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "git",
+          "case": "restart",
+          "first_pending_ms": 1415.870922,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "first_pending_ms": 1468.239469,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "git",
+          "case": "reject",
+          "first_pending_ms": 1466.495256,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "git",
+          "case": "cancel",
+          "first_pending_ms": 1467.397912,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "git",
+          "case": "approved_cancel",
+          "first_pending_ms": 1398.797076,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "git",
+          "case": "default",
+          "first_pending_ms": null,
+          "first_pending_bound_ms": null,
+          "first_pending_bound_met": null,
+          "runtime_controls_passed": null,
+          "reason": null
+        },
+        {
+          "profile": "git",
+          "case": "collector_term",
+          "first_pending_ms": 1478.503683,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "expire",
+          "first_pending_ms": 1162.587906,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "restart",
+          "first_pending_ms": 1155.468207,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "first_pending_ms": 1446.029518,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "reject",
+          "first_pending_ms": 1152.438208,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "cancel",
+          "first_pending_ms": 1144.645941,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "approved_cancel",
+          "first_pending_ms": 1157.19255,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "reason": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "default",
+          "first_pending_ms": null,
+          "first_pending_bound_ms": null,
+          "first_pending_bound_met": null,
+          "runtime_controls_passed": null,
+          "reason": null
+        }
+      ],
+      "report_member": "sou145/results/ask/qualification.json",
+      "report_member_sha256": "4d8947cc7a14597834bef3c5565d7901c1631801441d8ec6bf884562a298b8ec",
+      "selected_sha256": {
+        "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+        "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+        "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+        "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+      },
+      "profiles": {
+        "filesystem": {
+          "profile_sha256": "a5d978c02c6d09b1c96897b6462aca6afb636cad155e0b7fab1293415bb56727",
+          "package_tree_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+          "runtime_sha256": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+          "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+          "format": "sw-mcp/filesystem-readonly/1"
+        },
+        "git": {
+          "profile_sha256": "a30d2fae24ba1b6b6d096ad0831f6323a9c3e7a1d1a69f0f95d04d502dd57160",
+          "package_tree_sha256": "56e761631a93445b0c79e5a329af0a4a7faceb76ac009a35b8661fc9cda7e747",
+          "runtime_sha256": "c65a77ee58142beaace1686dc3b0c9cf362c75c36b5eaf7f3fd87013a44d1c8c",
+          "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+          "format": "sw-mcp/git-readonly/1"
+        }
+      },
+      "cases": [
+        {
+          "profile": "git",
+          "case": "expire",
+          "passed": true,
+          "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+          "configuration_sha256": "d95f1bea4af4a8eac3b9b6f4ea1e4aa036f4c6a3fecf4f830025797d8bb361a5",
+          "binding_sha256": "d7dd6a764c3d288b587ed2760f509470ed65d3fb1dbfbdc9dbab216a4a2dd986",
+          "broker_ttl_seconds": 20,
+          "first_pending_ms": 1464.588392,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": [
+            "native_approval_timeout"
+          ],
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 5081,
+                "start_time_ticks": 44452,
+                "parent_process": true
+              },
+              {
+                "pid": 5087,
+                "start_time_ticks": 44453,
+                "parent_process": false
+              },
+              {
+                "pid": 5088,
+                "start_time_ticks": 44608,
+                "parent_process": false
+              },
+              {
+                "pid": 5108,
+                "start_time_ticks": 44650,
+                "parent_process": false
+              },
+              {
+                "pid": 5107,
+                "start_time_ticks": 44649,
+                "parent_process": false
+              },
+              {
+                "pid": 5106,
+                "start_time_ticks": 44649,
+                "parent_process": false
+              },
+              {
+                "pid": 5116,
+                "start_time_ticks": 44655,
+                "parent_process": false
+              },
+              {
+                "pid": 5122,
+                "start_time_ticks": 44658,
+                "parent_process": false
+              },
+              {
+                "pid": 5121,
+                "start_time_ticks": 44658,
+                "parent_process": false
+              },
+              {
+                "pid": 5144,
+                "start_time_ticks": 44733,
+                "parent_process": false
+              },
+              {
+                "pid": 5145,
+                "start_time_ticks": 44734,
+                "parent_process": false
+              },
+              {
+                "pid": 5146,
+                "start_time_ticks": 44734,
+                "parent_process": false
+              },
+              {
+                "pid": 5148,
+                "start_time_ticks": 44736,
+                "parent_process": false
+              },
+              {
+                "pid": 5175,
+                "start_time_ticks": 44765,
+                "parent_process": false
+              },
+              {
+                "pid": 5177,
+                "start_time_ticks": 44767,
+                "parent_process": false
+              },
+              {
+                "pid": 5178,
+                "start_time_ticks": 44767,
+                "parent_process": false
+              },
+              {
+                "pid": 5179,
+                "start_time_ticks": 44771,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 16,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": "2c09c1e1b298919ca9750e7b1c649da8e0ea5b15959dd00f165234f1ac38d6a8"
+        },
+        {
+          "profile": "git",
+          "case": "restart",
+          "passed": true,
+          "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "11d00853fc28e2e777ae3260288575619e794bad4a96d719e0e7ad4c2c92499c",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1415.870922,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": null,
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 5267,
+                "start_time_ticks": 47406,
+                "parent_process": true
+              },
+              {
+                "pid": 5273,
+                "start_time_ticks": 47407,
+                "parent_process": false
+              },
+              {
+                "pid": 5274,
+                "start_time_ticks": 47566,
+                "parent_process": false
+              },
+              {
+                "pid": 5292,
+                "start_time_ticks": 47606,
+                "parent_process": false
+              },
+              {
+                "pid": 5293,
+                "start_time_ticks": 47607,
+                "parent_process": false
+              },
+              {
+                "pid": 5294,
+                "start_time_ticks": 47607,
+                "parent_process": false
+              },
+              {
+                "pid": 5302,
+                "start_time_ticks": 47613,
+                "parent_process": false
+              },
+              {
+                "pid": 5308,
+                "start_time_ticks": 47616,
+                "parent_process": false
+              },
+              {
+                "pid": 5307,
+                "start_time_ticks": 47616,
+                "parent_process": false
+              },
+              {
+                "pid": 5330,
+                "start_time_ticks": 47691,
+                "parent_process": false
+              },
+              {
+                "pid": 5331,
+                "start_time_ticks": 47691,
+                "parent_process": false
+              },
+              {
+                "pid": 5332,
+                "start_time_ticks": 47692,
+                "parent_process": false
+              },
+              {
+                "pid": 5333,
+                "start_time_ticks": 47693,
+                "parent_process": false
+              },
+              {
+                "pid": 5361,
+                "start_time_ticks": 47722,
+                "parent_process": false
+              },
+              {
+                "pid": 5362,
+                "start_time_ticks": 47723,
+                "parent_process": false
+              },
+              {
+                "pid": 5363,
+                "start_time_ticks": 47723,
+                "parent_process": false
+              },
+              {
+                "pid": 5365,
+                "start_time_ticks": 47727,
+                "parent_process": false
+              },
+              {
+                "pid": 5385,
+                "start_time_ticks": 47839,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 17,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": null
+        },
+        {
+          "profile": "git",
+          "case": "approve",
+          "passed": true,
+          "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "ee3140b86deaa2aba241b6f6d5012f6205ce4bba48cf9619112e2333dd9c3b32",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1468.239469,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": [],
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 5436,
+                "start_time_ticks": 48164,
+                "parent_process": true
+              },
+              {
+                "pid": 5442,
+                "start_time_ticks": 48165,
+                "parent_process": false
+              },
+              {
+                "pid": 5443,
+                "start_time_ticks": 48318,
+                "parent_process": false
+              },
+              {
+                "pid": 5461,
+                "start_time_ticks": 48359,
+                "parent_process": false
+              },
+              {
+                "pid": 5463,
+                "start_time_ticks": 48360,
+                "parent_process": false
+              },
+              {
+                "pid": 5462,
+                "start_time_ticks": 48359,
+                "parent_process": false
+              },
+              {
+                "pid": 5471,
+                "start_time_ticks": 48366,
+                "parent_process": false
+              },
+              {
+                "pid": 5476,
+                "start_time_ticks": 48369,
+                "parent_process": false
+              },
+              {
+                "pid": 5477,
+                "start_time_ticks": 48369,
+                "parent_process": false
+              },
+              {
+                "pid": 5499,
+                "start_time_ticks": 48446,
+                "parent_process": false
+              },
+              {
+                "pid": 5500,
+                "start_time_ticks": 48446,
+                "parent_process": false
+              },
+              {
+                "pid": 5501,
+                "start_time_ticks": 48447,
+                "parent_process": false
+              },
+              {
+                "pid": 5503,
+                "start_time_ticks": 48448,
+                "parent_process": false
+              },
+              {
+                "pid": 5524,
+                "start_time_ticks": 48477,
+                "parent_process": false
+              },
+              {
+                "pid": 5531,
+                "start_time_ticks": 48479,
+                "parent_process": false
+              },
+              {
+                "pid": 5533,
+                "start_time_ticks": 48479,
+                "parent_process": false
+              },
+              {
+                "pid": 5534,
+                "start_time_ticks": 48484,
+                "parent_process": false
+              },
+              {
+                "pid": 5597,
+                "start_time_ticks": 48963,
+                "parent_process": false
+              },
+              {
+                "pid": 5598,
+                "start_time_ticks": 48964,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 18,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": "1a42ad89fae7a4a96dccc4eee4d831af9cad20f300a53c908e8715a978fbf6d2"
+        },
+        {
+          "profile": "git",
+          "case": "reject",
+          "passed": true,
+          "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "fc737ea185222be4d40b89b5559d02a41584fce006ae8e86ee20bf42a499766b",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1466.495256,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": [],
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 5635,
+                "start_time_ticks": 49335,
+                "parent_process": true
+              },
+              {
+                "pid": 5641,
+                "start_time_ticks": 49336,
+                "parent_process": false
+              },
+              {
+                "pid": 5642,
+                "start_time_ticks": 49504,
+                "parent_process": false
+              },
+              {
+                "pid": 5660,
+                "start_time_ticks": 49545,
+                "parent_process": false
+              },
+              {
+                "pid": 5659,
+                "start_time_ticks": 49544,
+                "parent_process": false
+              },
+              {
+                "pid": 5661,
+                "start_time_ticks": 49545,
+                "parent_process": false
+              },
+              {
+                "pid": 5670,
+                "start_time_ticks": 49551,
+                "parent_process": false
+              },
+              {
+                "pid": 5672,
+                "start_time_ticks": 49552,
+                "parent_process": false
+              },
+              {
+                "pid": 5674,
+                "start_time_ticks": 49554,
+                "parent_process": false
+              },
+              {
+                "pid": 5676,
+                "start_time_ticks": 49555,
+                "parent_process": false
+              },
+              {
+                "pid": 5698,
+                "start_time_ticks": 49631,
+                "parent_process": false
+              },
+              {
+                "pid": 5699,
+                "start_time_ticks": 49631,
+                "parent_process": false
+              },
+              {
+                "pid": 5700,
+                "start_time_ticks": 49632,
+                "parent_process": false
+              },
+              {
+                "pid": 5701,
+                "start_time_ticks": 49634,
+                "parent_process": false
+              },
+              {
+                "pid": 5729,
+                "start_time_ticks": 49662,
+                "parent_process": false
+              },
+              {
+                "pid": 5730,
+                "start_time_ticks": 49664,
+                "parent_process": false
+              },
+              {
+                "pid": 5731,
+                "start_time_ticks": 49665,
+                "parent_process": false
+              },
+              {
+                "pid": 5733,
+                "start_time_ticks": 49668,
+                "parent_process": false
+              },
+              {
+                "pid": 5752,
+                "start_time_ticks": 49780,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 18,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": "427486bb06a759adb4a75499f8f71cff9d3a2ac84bce33fd17704349fa36a8fa"
+        },
+        {
+          "profile": "git",
+          "case": "cancel",
+          "passed": true,
+          "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "6f7191da897a587d780732c00525ab815789c0dbe74cd44ebc8c3e1171d4e19d",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1467.397912,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": null,
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 5826,
+                "start_time_ticks": 50391,
+                "parent_process": true
+              },
+              {
+                "pid": 5832,
+                "start_time_ticks": 50391,
+                "parent_process": false
+              },
+              {
+                "pid": 5833,
+                "start_time_ticks": 50551,
+                "parent_process": false
+              },
+              {
+                "pid": 5851,
+                "start_time_ticks": 50592,
+                "parent_process": false
+              },
+              {
+                "pid": 5850,
+                "start_time_ticks": 50592,
+                "parent_process": false
+              },
+              {
+                "pid": 5852,
+                "start_time_ticks": 50593,
+                "parent_process": false
+              },
+              {
+                "pid": 5861,
+                "start_time_ticks": 50599,
+                "parent_process": false
+              },
+              {
+                "pid": 5867,
+                "start_time_ticks": 50602,
+                "parent_process": false
+              },
+              {
+                "pid": 5866,
+                "start_time_ticks": 50602,
+                "parent_process": false
+              },
+              {
+                "pid": 5890,
+                "start_time_ticks": 50680,
+                "parent_process": false
+              },
+              {
+                "pid": 5891,
+                "start_time_ticks": 50681,
+                "parent_process": false
+              },
+              {
+                "pid": 5892,
+                "start_time_ticks": 50681,
+                "parent_process": false
+              },
+              {
+                "pid": 5893,
+                "start_time_ticks": 50683,
+                "parent_process": false
+              },
+              {
+                "pid": 5904,
+                "start_time_ticks": 50709,
+                "parent_process": false
+              },
+              {
+                "pid": 5906,
+                "start_time_ticks": 50710,
+                "parent_process": false
+              },
+              {
+                "pid": 5907,
+                "start_time_ticks": 50710,
+                "parent_process": false
+              },
+              {
+                "pid": 5924,
+                "start_time_ticks": 50713,
+                "parent_process": false
+              },
+              {
+                "pid": 5943,
+                "start_time_ticks": 50825,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 17,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": null
+        },
+        {
+          "profile": "git",
+          "case": "approved_cancel",
+          "passed": true,
+          "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "dd61e950cf067f04088126a17b4f64d6939d6be16df77f269a0eb9e1cc3b601d",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1398.797076,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": null,
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 5992,
+                "start_time_ticks": 51169,
+                "parent_process": true
+              },
+              {
+                "pid": 5998,
+                "start_time_ticks": 51169,
+                "parent_process": false
+              },
+              {
+                "pid": 6000,
+                "start_time_ticks": 51329,
+                "parent_process": false
+              },
+              {
+                "pid": 6016,
+                "start_time_ticks": 51369,
+                "parent_process": false
+              },
+              {
+                "pid": 6018,
+                "start_time_ticks": 51370,
+                "parent_process": false
+              },
+              {
+                "pid": 6017,
+                "start_time_ticks": 51370,
+                "parent_process": false
+              },
+              {
+                "pid": 6027,
+                "start_time_ticks": 51376,
+                "parent_process": false
+              },
+              {
+                "pid": 6033,
+                "start_time_ticks": 51379,
+                "parent_process": false
+              },
+              {
+                "pid": 6032,
+                "start_time_ticks": 51379,
+                "parent_process": false
+              },
+              {
+                "pid": 6055,
+                "start_time_ticks": 51453,
+                "parent_process": false
+              },
+              {
+                "pid": 6056,
+                "start_time_ticks": 51453,
+                "parent_process": false
+              },
+              {
+                "pid": 6057,
+                "start_time_ticks": 51453,
+                "parent_process": false
+              },
+              {
+                "pid": 6058,
+                "start_time_ticks": 51455,
+                "parent_process": false
+              },
+              {
+                "pid": 6086,
+                "start_time_ticks": 51488,
+                "parent_process": false
+              },
+              {
+                "pid": 6088,
+                "start_time_ticks": 51489,
+                "parent_process": false
+              },
+              {
+                "pid": 6089,
+                "start_time_ticks": 51489,
+                "parent_process": false
+              },
+              {
+                "pid": 6090,
+                "start_time_ticks": 51492,
+                "parent_process": false
+              },
+              {
+                "pid": 6110,
+                "start_time_ticks": 51603,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 17,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": null
+        },
+        {
+          "profile": "git",
+          "case": "default",
+          "passed": true,
+          "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": null,
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": null,
+          "first_pending_bound_ms": null,
+          "first_pending_bound_met": null,
+          "runtime_controls_passed": null,
+          "primary_refusal_codes": [],
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 6155,
+                "start_time_ticks": 53285,
+                "parent_process": true
+              },
+              {
+                "pid": 6161,
+                "start_time_ticks": 53285,
+                "parent_process": false
+              },
+              {
+                "pid": 6162,
+                "start_time_ticks": 53321,
+                "parent_process": false
+              },
+              {
+                "pid": 6172,
+                "start_time_ticks": 53360,
+                "parent_process": false
+              },
+              {
+                "pid": 6173,
+                "start_time_ticks": 53360,
+                "parent_process": false
+              },
+              {
+                "pid": 6174,
+                "start_time_ticks": 53361,
+                "parent_process": false
+              },
+              {
+                "pid": 6182,
+                "start_time_ticks": 53367,
+                "parent_process": false
+              },
+              {
+                "pid": 6186,
+                "start_time_ticks": 53369,
+                "parent_process": false
+              },
+              {
+                "pid": 6187,
+                "start_time_ticks": 53370,
+                "parent_process": false
+              },
+              {
+                "pid": 6197,
+                "start_time_ticks": 53444,
+                "parent_process": false
+              },
+              {
+                "pid": 6198,
+                "start_time_ticks": 53445,
+                "parent_process": false
+              },
+              {
+                "pid": 6199,
+                "start_time_ticks": 53445,
+                "parent_process": false
+              },
+              {
+                "pid": 6200,
+                "start_time_ticks": 53447,
+                "parent_process": false
+              },
+              {
+                "pid": 6207,
+                "start_time_ticks": 53472,
+                "parent_process": false
+              },
+              {
+                "pid": 6208,
+                "start_time_ticks": 53473,
+                "parent_process": false
+              },
+              {
+                "pid": 6209,
+                "start_time_ticks": 53473,
+                "parent_process": false
+              },
+              {
+                "pid": 6226,
+                "start_time_ticks": 53477,
+                "parent_process": false
+              },
+              {
+                "pid": 6227,
+                "start_time_ticks": 53590,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 17,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": "f751b6e5ad070df99f979d2ec21166697897d918d156b8867c85e8a995c84f51"
+        },
+        {
+          "profile": "git",
+          "case": "collector_term",
+          "passed": true,
+          "policy_sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "5fcfeb7a77c61ba589b03bed54e79f4f824dbe0666916267e6107ce8b8878bbe",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1478.503683,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": null,
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 6246,
+                "start_time_ticks": 53796,
+                "parent_process": true
+              },
+              {
+                "pid": 6252,
+                "start_time_ticks": 53797,
+                "parent_process": false
+              },
+              {
+                "pid": 6253,
+                "start_time_ticks": 53952,
+                "parent_process": false
+              },
+              {
+                "pid": 6270,
+                "start_time_ticks": 53993,
+                "parent_process": false
+              },
+              {
+                "pid": 6271,
+                "start_time_ticks": 53993,
+                "parent_process": false
+              },
+              {
+                "pid": 6273,
+                "start_time_ticks": 53994,
+                "parent_process": false
+              },
+              {
+                "pid": 6281,
+                "start_time_ticks": 54000,
+                "parent_process": false
+              },
+              {
+                "pid": 6286,
+                "start_time_ticks": 54003,
+                "parent_process": false
+              },
+              {
+                "pid": 6287,
+                "start_time_ticks": 54003,
+                "parent_process": false
+              },
+              {
+                "pid": 6309,
+                "start_time_ticks": 54080,
+                "parent_process": false
+              },
+              {
+                "pid": 6310,
+                "start_time_ticks": 54080,
+                "parent_process": false
+              },
+              {
+                "pid": 6311,
+                "start_time_ticks": 54081,
+                "parent_process": false
+              },
+              {
+                "pid": 6313,
+                "start_time_ticks": 54083,
+                "parent_process": false
+              },
+              {
+                "pid": 6324,
+                "start_time_ticks": 54110,
+                "parent_process": false
+              },
+              {
+                "pid": 6325,
+                "start_time_ticks": 54110,
+                "parent_process": false
+              },
+              {
+                "pid": 6333,
+                "start_time_ticks": 54111,
+                "parent_process": false
+              },
+              {
+                "pid": 6344,
+                "start_time_ticks": 54115,
+                "parent_process": false
+              },
+              {
+                "pid": 6364,
+                "start_time_ticks": 54227,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 17,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "expire",
+          "passed": true,
+          "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+          "configuration_sha256": "d95f1bea4af4a8eac3b9b6f4ea1e4aa036f4c6a3fecf4f830025797d8bb361a5",
+          "binding_sha256": "4c3e426dcd2c2d1524c19f86604ea4c96b3ba056410c55d9b8dae03897853f02",
+          "broker_ttl_seconds": 20,
+          "first_pending_ms": 1162.587906,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": [
+            "native_approval_timeout"
+          ],
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 6407,
+                "start_time_ticks": 54688,
+                "parent_process": true
+              },
+              {
+                "pid": 6413,
+                "start_time_ticks": 54688,
+                "parent_process": false
+              },
+              {
+                "pid": 6415,
+                "start_time_ticks": 54844,
+                "parent_process": false
+              },
+              {
+                "pid": 6433,
+                "start_time_ticks": 54885,
+                "parent_process": false
+              },
+              {
+                "pid": 6431,
+                "start_time_ticks": 54885,
+                "parent_process": false
+              },
+              {
+                "pid": 6434,
+                "start_time_ticks": 54886,
+                "parent_process": false
+              },
+              {
+                "pid": 6443,
+                "start_time_ticks": 54892,
+                "parent_process": false
+              },
+              {
+                "pid": 6444,
+                "start_time_ticks": 54892,
+                "parent_process": false
+              },
+              {
+                "pid": 6447,
+                "start_time_ticks": 54894,
+                "parent_process": false
+              },
+              {
+                "pid": 6448,
+                "start_time_ticks": 54895,
+                "parent_process": false
+              },
+              {
+                "pid": 6471,
+                "start_time_ticks": 54971,
+                "parent_process": false
+              },
+              {
+                "pid": 6472,
+                "start_time_ticks": 54972,
+                "parent_process": false
+              },
+              {
+                "pid": 6473,
+                "start_time_ticks": 54972,
+                "parent_process": false
+              },
+              {
+                "pid": 6474,
+                "start_time_ticks": 54974,
+                "parent_process": false
+              },
+              {
+                "pid": 6485,
+                "start_time_ticks": 55001,
+                "parent_process": false
+              },
+              {
+                "pid": 6487,
+                "start_time_ticks": 55002,
+                "parent_process": false
+              },
+              {
+                "pid": 6488,
+                "start_time_ticks": 55003,
+                "parent_process": false
+              },
+              {
+                "pid": 6505,
+                "start_time_ticks": 55007,
+                "parent_process": false
+              },
+              {
+                "pid": 6527,
+                "start_time_ticks": 55124,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 18,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": "755cdf0d3115a7b92f09f2476b827fd88e26bf04586aa4357af56463edb21293"
+        },
+        {
+          "profile": "filesystem",
+          "case": "restart",
+          "passed": true,
+          "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "ce807d64836b21b76053f40d1966cb1f11d66042971274bbaa2423eafe86a7f8",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1155.468207,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": null,
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 6570,
+                "start_time_ticks": 57433,
+                "parent_process": true
+              },
+              {
+                "pid": 6576,
+                "start_time_ticks": 57433,
+                "parent_process": false
+              },
+              {
+                "pid": 6577,
+                "start_time_ticks": 57592,
+                "parent_process": false
+              },
+              {
+                "pid": 6596,
+                "start_time_ticks": 57636,
+                "parent_process": false
+              },
+              {
+                "pid": 6594,
+                "start_time_ticks": 57635,
+                "parent_process": false
+              },
+              {
+                "pid": 6597,
+                "start_time_ticks": 57637,
+                "parent_process": false
+              },
+              {
+                "pid": 6606,
+                "start_time_ticks": 57643,
+                "parent_process": false
+              },
+              {
+                "pid": 6611,
+                "start_time_ticks": 57647,
+                "parent_process": false
+              },
+              {
+                "pid": 6610,
+                "start_time_ticks": 57646,
+                "parent_process": false
+              },
+              {
+                "pid": 6634,
+                "start_time_ticks": 57724,
+                "parent_process": false
+              },
+              {
+                "pid": 6635,
+                "start_time_ticks": 57724,
+                "parent_process": false
+              },
+              {
+                "pid": 6636,
+                "start_time_ticks": 57725,
+                "parent_process": false
+              },
+              {
+                "pid": 6637,
+                "start_time_ticks": 57726,
+                "parent_process": false
+              },
+              {
+                "pid": 6665,
+                "start_time_ticks": 57756,
+                "parent_process": false
+              },
+              {
+                "pid": 6666,
+                "start_time_ticks": 57758,
+                "parent_process": false
+              },
+              {
+                "pid": 6667,
+                "start_time_ticks": 57758,
+                "parent_process": false
+              },
+              {
+                "pid": 6669,
+                "start_time_ticks": 57762,
+                "parent_process": false
+              },
+              {
+                "pid": 6689,
+                "start_time_ticks": 57879,
+                "parent_process": false
+              },
+              {
+                "pid": 6729,
+                "start_time_ticks": 58073,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 18,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "approve",
+          "passed": true,
+          "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "dd726c120767345464144cf1667e6691f799274a2ecae74b11990c2868e4f2de",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1446.029518,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": [],
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 6742,
+                "start_time_ticks": 58192,
+                "parent_process": true
+              },
+              {
+                "pid": 6748,
+                "start_time_ticks": 58192,
+                "parent_process": false
+              },
+              {
+                "pid": 6749,
+                "start_time_ticks": 58344,
+                "parent_process": false
+              },
+              {
+                "pid": 6768,
+                "start_time_ticks": 58389,
+                "parent_process": false
+              },
+              {
+                "pid": 6767,
+                "start_time_ticks": 58388,
+                "parent_process": false
+              },
+              {
+                "pid": 6769,
+                "start_time_ticks": 58389,
+                "parent_process": false
+              },
+              {
+                "pid": 6777,
+                "start_time_ticks": 58396,
+                "parent_process": false
+              },
+              {
+                "pid": 6782,
+                "start_time_ticks": 58400,
+                "parent_process": false
+              },
+              {
+                "pid": 6781,
+                "start_time_ticks": 58399,
+                "parent_process": false
+              },
+              {
+                "pid": 6792,
+                "start_time_ticks": 58491,
+                "parent_process": false
+              },
+              {
+                "pid": 6793,
+                "start_time_ticks": 58491,
+                "parent_process": false
+              },
+              {
+                "pid": 6794,
+                "start_time_ticks": 58492,
+                "parent_process": false
+              },
+              {
+                "pid": 6795,
+                "start_time_ticks": 58494,
+                "parent_process": false
+              },
+              {
+                "pid": 6802,
+                "start_time_ticks": 58520,
+                "parent_process": false
+              },
+              {
+                "pid": 6803,
+                "start_time_ticks": 58521,
+                "parent_process": false
+              },
+              {
+                "pid": 6805,
+                "start_time_ticks": 58521,
+                "parent_process": false
+              },
+              {
+                "pid": 6821,
+                "start_time_ticks": 58526,
+                "parent_process": false
+              },
+              {
+                "pid": 6857,
+                "start_time_ticks": 58680,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 17,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": "a22b1eff8ea8f1b3304b13458e6b2d56aa0d54e6474a5f873603f8d574fab883"
+        },
+        {
+          "profile": "filesystem",
+          "case": "reject",
+          "passed": true,
+          "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "59ca937c80000c6ee9e0e14349209ecb8a4cfbe1e23953a4467cb60aa7b44dc4",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1152.438208,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": [],
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 6962,
+                "start_time_ticks": 59716,
+                "parent_process": true
+              },
+              {
+                "pid": 6968,
+                "start_time_ticks": 59717,
+                "parent_process": false
+              },
+              {
+                "pid": 6969,
+                "start_time_ticks": 59870,
+                "parent_process": false
+              },
+              {
+                "pid": 6986,
+                "start_time_ticks": 59912,
+                "parent_process": false
+              },
+              {
+                "pid": 6987,
+                "start_time_ticks": 59912,
+                "parent_process": false
+              },
+              {
+                "pid": 6988,
+                "start_time_ticks": 59913,
+                "parent_process": false
+              },
+              {
+                "pid": 6997,
+                "start_time_ticks": 59919,
+                "parent_process": false
+              },
+              {
+                "pid": 7003,
+                "start_time_ticks": 59922,
+                "parent_process": false
+              },
+              {
+                "pid": 7002,
+                "start_time_ticks": 59922,
+                "parent_process": false
+              },
+              {
+                "pid": 7025,
+                "start_time_ticks": 59998,
+                "parent_process": false
+              },
+              {
+                "pid": 7026,
+                "start_time_ticks": 59999,
+                "parent_process": false
+              },
+              {
+                "pid": 7027,
+                "start_time_ticks": 59999,
+                "parent_process": false
+              },
+              {
+                "pid": 7029,
+                "start_time_ticks": 60001,
+                "parent_process": false
+              },
+              {
+                "pid": 7056,
+                "start_time_ticks": 60030,
+                "parent_process": false
+              },
+              {
+                "pid": 7058,
+                "start_time_ticks": 60031,
+                "parent_process": false
+              },
+              {
+                "pid": 7059,
+                "start_time_ticks": 60031,
+                "parent_process": false
+              },
+              {
+                "pid": 7060,
+                "start_time_ticks": 60035,
+                "parent_process": false
+              },
+              {
+                "pid": 7079,
+                "start_time_ticks": 60146,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 17,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": "d1fa2d20dc802d448cca0f0f0d245df2daeac80b9222c4580dea035f1b012bcb"
+        },
+        {
+          "profile": "filesystem",
+          "case": "cancel",
+          "passed": true,
+          "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "df62616dc59a2b2d79926cbcc5c38a2a811323143e1698994215514130bea3a7",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1144.645941,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": null,
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 7127,
+                "start_time_ticks": 60541,
+                "parent_process": true
+              },
+              {
+                "pid": 7133,
+                "start_time_ticks": 60541,
+                "parent_process": false
+              },
+              {
+                "pid": 7134,
+                "start_time_ticks": 60696,
+                "parent_process": false
+              },
+              {
+                "pid": 7151,
+                "start_time_ticks": 60738,
+                "parent_process": false
+              },
+              {
+                "pid": 7152,
+                "start_time_ticks": 60738,
+                "parent_process": false
+              },
+              {
+                "pid": 7154,
+                "start_time_ticks": 60739,
+                "parent_process": false
+              },
+              {
+                "pid": 7163,
+                "start_time_ticks": 60745,
+                "parent_process": false
+              },
+              {
+                "pid": 7166,
+                "start_time_ticks": 60746,
+                "parent_process": false
+              },
+              {
+                "pid": 7167,
+                "start_time_ticks": 60748,
+                "parent_process": false
+              },
+              {
+                "pid": 7168,
+                "start_time_ticks": 60748,
+                "parent_process": false
+              },
+              {
+                "pid": 7191,
+                "start_time_ticks": 60825,
+                "parent_process": false
+              },
+              {
+                "pid": 7192,
+                "start_time_ticks": 60825,
+                "parent_process": false
+              },
+              {
+                "pid": 7193,
+                "start_time_ticks": 60826,
+                "parent_process": false
+              },
+              {
+                "pid": 7194,
+                "start_time_ticks": 60828,
+                "parent_process": false
+              },
+              {
+                "pid": 7205,
+                "start_time_ticks": 60854,
+                "parent_process": false
+              },
+              {
+                "pid": 7206,
+                "start_time_ticks": 60854,
+                "parent_process": false
+              },
+              {
+                "pid": 7219,
+                "start_time_ticks": 60855,
+                "parent_process": false
+              },
+              {
+                "pid": 7225,
+                "start_time_ticks": 60859,
+                "parent_process": false
+              },
+              {
+                "pid": 7245,
+                "start_time_ticks": 60975,
+                "parent_process": false
+              },
+              {
+                "pid": 7280,
+                "start_time_ticks": 61167,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 19,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "approved_cancel",
+          "passed": true,
+          "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": "6f1a93a0fd0b37f534124b55bdcb23d3b73b2ef6aaab867a26a892f79da10630",
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": 1157.19255,
+          "first_pending_bound_ms": 5000,
+          "first_pending_bound_met": true,
+          "runtime_controls_passed": true,
+          "primary_refusal_codes": null,
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 7292,
+                "start_time_ticks": 61280,
+                "parent_process": true
+              },
+              {
+                "pid": 7298,
+                "start_time_ticks": 61280,
+                "parent_process": false
+              },
+              {
+                "pid": 7300,
+                "start_time_ticks": 61436,
+                "parent_process": false
+              },
+              {
+                "pid": 7318,
+                "start_time_ticks": 61477,
+                "parent_process": false
+              },
+              {
+                "pid": 7316,
+                "start_time_ticks": 61477,
+                "parent_process": false
+              },
+              {
+                "pid": 7319,
+                "start_time_ticks": 61478,
+                "parent_process": false
+              },
+              {
+                "pid": 7328,
+                "start_time_ticks": 61484,
+                "parent_process": false
+              },
+              {
+                "pid": 7331,
+                "start_time_ticks": 61484,
+                "parent_process": false
+              },
+              {
+                "pid": 7330,
+                "start_time_ticks": 61484,
+                "parent_process": false
+              },
+              {
+                "pid": 7333,
+                "start_time_ticks": 61487,
+                "parent_process": false
+              },
+              {
+                "pid": 7332,
+                "start_time_ticks": 61487,
+                "parent_process": false
+              },
+              {
+                "pid": 7356,
+                "start_time_ticks": 61564,
+                "parent_process": false
+              },
+              {
+                "pid": 7357,
+                "start_time_ticks": 61565,
+                "parent_process": false
+              },
+              {
+                "pid": 7358,
+                "start_time_ticks": 61565,
+                "parent_process": false
+              },
+              {
+                "pid": 7359,
+                "start_time_ticks": 61567,
+                "parent_process": false
+              },
+              {
+                "pid": 7387,
+                "start_time_ticks": 61595,
+                "parent_process": false
+              },
+              {
+                "pid": 7388,
+                "start_time_ticks": 61597,
+                "parent_process": false
+              },
+              {
+                "pid": 7389,
+                "start_time_ticks": 61597,
+                "parent_process": false
+              },
+              {
+                "pid": 7390,
+                "start_time_ticks": 61600,
+                "parent_process": false
+              },
+              {
+                "pid": 7412,
+                "start_time_ticks": 61716,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 19,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": null
+        },
+        {
+          "profile": "filesystem",
+          "case": "default",
+          "passed": true,
+          "policy_sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e",
+          "configuration_sha256": "a18aef9c79267eb2a6b7d3e6015a645a6fafb8a13911bfdf95c129cc4b53d680",
+          "binding_sha256": null,
+          "broker_ttl_seconds": 30,
+          "first_pending_ms": null,
+          "first_pending_bound_ms": null,
+          "first_pending_bound_met": null,
+          "runtime_controls_passed": null,
+          "primary_refusal_codes": [],
+          "cleanup": {
+            "observed": [
+              {
+                "pid": 7453,
+                "start_time_ticks": 63346,
+                "parent_process": true
+              },
+              {
+                "pid": 7459,
+                "start_time_ticks": 63347,
+                "parent_process": false
+              },
+              {
+                "pid": 7460,
+                "start_time_ticks": 63382,
+                "parent_process": false
+              },
+              {
+                "pid": 7471,
+                "start_time_ticks": 63421,
+                "parent_process": false
+              },
+              {
+                "pid": 7470,
+                "start_time_ticks": 63421,
+                "parent_process": false
+              },
+              {
+                "pid": 7472,
+                "start_time_ticks": 63422,
+                "parent_process": false
+              },
+              {
+                "pid": 7480,
+                "start_time_ticks": 63428,
+                "parent_process": false
+              },
+              {
+                "pid": 7485,
+                "start_time_ticks": 63431,
+                "parent_process": false
+              },
+              {
+                "pid": 7484,
+                "start_time_ticks": 63430,
+                "parent_process": false
+              },
+              {
+                "pid": 7495,
+                "start_time_ticks": 63505,
+                "parent_process": false
+              },
+              {
+                "pid": 7496,
+                "start_time_ticks": 63505,
+                "parent_process": false
+              },
+              {
+                "pid": 7497,
+                "start_time_ticks": 63506,
+                "parent_process": false
+              },
+              {
+                "pid": 7498,
+                "start_time_ticks": 63507,
+                "parent_process": false
+              },
+              {
+                "pid": 7521,
+                "start_time_ticks": 63538,
+                "parent_process": false
+              },
+              {
+                "pid": 7522,
+                "start_time_ticks": 63539,
+                "parent_process": false
+              },
+              {
+                "pid": 7523,
+                "start_time_ticks": 63540,
+                "parent_process": false
+              },
+              {
+                "pid": 7524,
+                "start_time_ticks": 63543,
+                "parent_process": false
+              },
+              {
+                "pid": 7525,
+                "start_time_ticks": 63652,
+                "parent_process": false
+              }
+            ],
+            "descendant_count": 17,
+            "all_stopped": true,
+            "remaining": []
+          },
+          "trace_sha256": "1492da7a072c5b6a2d20d19912eb816253b263f5bce4c1eca37938cf1957d0db"
+        }
+      ]
+    },
+    {
+      "id": "prepared",
+      "exit_code": 0,
+      "status": "passed",
+      "report_sha256": "cddf1fe0c0d0fbc1dc482922713245b455d9c9b6cc93f25c81ad7070a66da3c8",
+      "report_path": "prepared/report.json",
+      "independent_namespace_cleanup": true,
+      "required": 12,
+      "executed": 12,
+      "passed": 12,
+      "cases": [
+        {
+          "case": "plan",
+          "status": "passed",
+          "reason": null,
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "occupied-port",
+          "status": "passed",
+          "reason": "occupied_port_refused",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "stale-source",
+          "status": "passed",
+          "reason": "candidate_source_mismatch",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "changed-selection",
+          "status": "passed",
+          "reason": "selected_executable_changed",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "provider-unavailable",
+          "status": "passed",
+          "reason": "provider_unavailable",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "useful-refusal",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "ask",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "default",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "cancel",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "daemon-loss",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "host-crash",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        },
+        {
+          "case": "timeout",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null
+        }
+      ],
+      "report_member": "sou145/results/prepared/report.json",
+      "report_member_sha256": "cddf1fe0c0d0fbc1dc482922713245b455d9c9b6cc93f25c81ad7070a66da3c8",
+      "selected_sha256": {
+        "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+        "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+        "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+        "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+        "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+        "sandbox_tests": "9a4106ce61dc69b2cbc171d8968b2def02e188d8a1df534ef6810d5e61141bec"
+      },
+      "emergency_stop": {
+        "format": "sw-prepared-pilot-stop-witness/1",
+        "status": "passed",
+        "paid_api_calls": 0,
+        "provider": "owned-scripted-loopback",
+        "source_commit": "6deafacf3854666cb1e5874d4cfcf152e4f7a6b2",
+        "cases": [
+          {
+            "case": "two-prepared-runs",
+            "status": "passed",
+            "future_dispatches": 0,
+            "future_kernel_reads": 0,
+            "peer": {
+              "cleanup": "owned_processes_stopped_audit_retained",
+              "entry_status": "completed",
+              "entry_reason": null
+            }
+          },
+          {
+            "case": "interrupted-stop",
+            "status": "passed",
+            "future_dispatches": 0,
+            "trace_sha256": "a62c714c3831fec9339c7c171ac359cc011d549448cebfa2d488971c63f4456d",
+            "process_cleanup": {
+              "all_stopped": true,
+              "remaining": [],
+              "descendant_count": 54
+            }
+          },
+          {
+            "case": "daemon-loss-stop",
+            "status": "passed",
+            "future_dispatches": 0,
+            "terminal_success_refused": true,
+            "trace_sha256": "2dfadd6d8bb585d7ecce9a7f1cb73f9e21105ee2c48a686bf5e6b647ef4ff2cd",
+            "process_cleanup": {
+              "all_stopped": true,
+              "remaining": [],
+              "descendant_count": 53
+            }
+          },
+          {
+            "case": "unconfirmed-namespace-stop",
+            "status": "passed",
+            "future_dispatches": 0,
+            "terminal_success_refused": true,
+            "trace_sha256": "11830a046f3b3dfb2f10faa2dfd09ffc3b4ac7cadfa5a02543464ecac0c6ce36",
+            "process_cleanup": {
+              "all_stopped": true,
+              "remaining": [],
+              "descendant_count": 52
+            }
+          }
+        ]
+      },
+      "selected_assets_unchanged": true,
+      "workspace_unchanged": true,
+      "unrelated_preserved": true
+    },
+    {
+      "id": "docs-code",
+      "exit_code": 1,
+      "status": "failed",
+      "report_sha256": "219e338abb094e0779abf2a5ad220e464f7b7b53f57dc3808ac3e990db9b164c",
+      "report_path": "docs-code/report.json",
+      "independent_namespace_cleanup": true,
+      "required": 9,
+      "executed": 9,
+      "passed": 6,
+      "cases": [
+        {
+          "case": "moved-root",
+          "status": "passed",
+          "reason": "existing_workspace_missing_or_moved",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "c4a41d3302cfb9f6211348e3987f983f244c44bc9a0b7339d3bab7ff7df7c442",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "replaced-root",
+          "status": "passed",
+          "reason": "selected_workspace_changed",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "2c497a0d93adda63a297c5b0aa7c36d48901928779f2b8d0d33d0b7bdd4325bd",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "changed-selection",
+          "status": "passed",
+          "reason": "preparation_marker_mismatch",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "d90212b0afdad363e7f6bdbe946ec8a66a485b2d12c067fb933e962720a0a4d7",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "unsupported-git",
+          "status": "passed",
+          "reason": "unsupported_existing_git_layout_use_supported_standalone_repository",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "61de114c3d79665f9d3f7ecf5f46faf492baa5219baebc55607d856f3b11a72d",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "initial",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "785e180a4bb2c21b7404600c71301f5186a49c55387f14dbbd91c45cdaff3f76",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "5e2eedf9950ca8e37c6749085b139e8f7f574912023ea05dbe3f9c863e562a50",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "806a98e1c44c5b982cde54ad26f805e95067a4ec97a530bc4ebf84a568e4ea6d",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "08768513fe3d294447f58edaf242262cbd91e24472f648b6ccdd8be99c070bc5",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "b5a1ec3b54f01d70c85f3505484153d85d7ec257c780ed216e3a79a44b64d5fd",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 62
+          }
+        },
+        {
+          "case": "operator-edit",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "85e0cee245eee3cb58e5f89ba1ed15107689a1276adf1f29506e163ac661eaf2",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "096e2daaf91b1cb2717bc4353b9f466a3d63987ad73aa0de41e5d70ac42019b4",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "244db05d08e71ee56f934d9165c53260f729912092bdb66da73123be11f36138",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "08768513fe3d294447f58edaf242262cbd91e24472f648b6ccdd8be99c070bc5",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "b5a1ec3b54f01d70c85f3505484153d85d7ec257c780ed216e3a79a44b64d5fd",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 63
+          }
+        },
+        {
+          "case": "cancel",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "b07bc444d96d08cc74313a9fb42c11f539078a9431c8c491cb9309d8bed51443",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 56
+          }
+        },
+        {
+          "case": "daemon-loss",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "a68cb148df4de827324ad5d958fd5686e53b5815ab55488c2eac5b7b0ca9d6cd",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 54
+          }
+        },
+        {
+          "case": "recovery",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "de6c7e801fe31b0fd9063c38b1dbaf1f9b762b3252e025c6189295f9b3270906",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "096e2daaf91b1cb2717bc4353b9f466a3d63987ad73aa0de41e5d70ac42019b4",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "244db05d08e71ee56f934d9165c53260f729912092bdb66da73123be11f36138",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "08768513fe3d294447f58edaf242262cbd91e24472f648b6ccdd8be99c070bc5",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "b5a1ec3b54f01d70c85f3505484153d85d7ec257c780ed216e3a79a44b64d5fd",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 63
+          }
+        }
+      ],
+      "report_member": "sou145/results/docs-code/report.json",
+      "report_member_sha256": "219e338abb094e0779abf2a5ad220e464f7b7b53f57dc3808ac3e990db9b164c",
+      "selected_sha256": {
+        "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+        "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+        "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+        "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+        "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+        "sandbox_tests": "9a4106ce61dc69b2cbc171d8968b2def02e188d8a1df534ef6810d5e61141bec"
+      },
+      "project_fixture_sha256": "96b77812c0a21c0bdbf655d9a79d7bfed5ceb0bbccdc8c5f48161f3a3b5f49d2",
+      "profile_sha256": {
+        "filesystem": "f20461e7a9ac7f08c6984dbe18ae5a47b6d4c1bb4a2a6c619c6fceba7881b28f",
+        "git": "fb972a587d2fee11860f494ae5e03853efc5ac0b9de81b402f9721d18d1394cf"
+      },
+      "fresh_run_authority": true,
+      "external_roots_outside_prefix": true,
+      "cleanup_external_roots_untouched": true,
+      "source_after": {
+        "commit": "6deafacf3854666cb1e5874d4cfcf152e4f7a6b2",
+        "dirty": false,
+        "files_sha256": "a60cde721b5918e700b1f3fdfc4bad7be34974f15dbef150708a1dfadc097237",
+        "tree": "b3ad2d4b4f44139d9c4c96fc40ced4eee5adceb0"
+      }
+    },
+    {
+      "id": "unicode-spaces",
+      "exit_code": 1,
+      "status": "failed",
+      "report_sha256": "79d7a8f227be8e41c90710bb4230f19b3adbe456993157142529f417c2f60a2c",
+      "report_path": "unicode-spaces/report.json",
+      "independent_namespace_cleanup": true,
+      "required": 9,
+      "executed": 9,
+      "passed": 6,
+      "cases": [
+        {
+          "case": "moved-root",
+          "status": "passed",
+          "reason": "existing_workspace_missing_or_moved",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "a753c712a0b07e70c3864ba92fd07945d8eddacd2efa1be513b51ebc49d2e9bf",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "replaced-root",
+          "status": "passed",
+          "reason": "selected_workspace_changed",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "a0b4ca17f42542d751dcf99c34425c6adfd4ff2c9c5df82305d0dfaa5a761efc",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "changed-selection",
+          "status": "passed",
+          "reason": "preparation_marker_mismatch",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "360a8012620c026f05c1b4af3dc6cd1ab59eb81697b8b9ecab13a56f769c939b",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "unsupported-git",
+          "status": "passed",
+          "reason": "unsupported_existing_git_layout_use_supported_standalone_repository",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "e6136b9e4f2ef5fab6d36de11bf02632912948a7e26e62209d08348c7929c9b4",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "initial",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "1efd140a921a98e1b1a59654842353d9f532c0dfc454221c6140cd1f996f758a",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "5e2eedf9950ca8e37c6749085b139e8f7f574912023ea05dbe3f9c863e562a50",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "806a98e1c44c5b982cde54ad26f805e95067a4ec97a530bc4ebf84a568e4ea6d",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "85d544ffbf80655b8c74996f0cca8c9ee2ee7c846fe5fee4d957abc2f9615382",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "735175ae923540d4b55460c647421c554f931547d3dc5b4bdf12bdf6a6e0bd14",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 62
+          }
+        },
+        {
+          "case": "operator-edit",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "36b259116033eb4a93f878d26dab959b61afe2cf0aca0e13712b2186ee42d672",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "096e2daaf91b1cb2717bc4353b9f466a3d63987ad73aa0de41e5d70ac42019b4",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "244db05d08e71ee56f934d9165c53260f729912092bdb66da73123be11f36138",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "85d544ffbf80655b8c74996f0cca8c9ee2ee7c846fe5fee4d957abc2f9615382",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "735175ae923540d4b55460c647421c554f931547d3dc5b4bdf12bdf6a6e0bd14",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 63
+          }
+        },
+        {
+          "case": "cancel",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "aa62e644f625a7404c73acc691175147bc9f89a1c9ebc725573b5f8a2130b101",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 53
+          }
+        },
+        {
+          "case": "daemon-loss",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "877a7dfedd4e6ff8f78f568c33f30b617492a4979a1d15155576d2bc08a037ec",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 53
+          }
+        },
+        {
+          "case": "recovery",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "35ec5cb1911c3060430ce0bb86535d9e46bfe601ced4e8a41b7b3777139b3731",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "096e2daaf91b1cb2717bc4353b9f466a3d63987ad73aa0de41e5d70ac42019b4",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "244db05d08e71ee56f934d9165c53260f729912092bdb66da73123be11f36138",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "85d544ffbf80655b8c74996f0cca8c9ee2ee7c846fe5fee4d957abc2f9615382",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "735175ae923540d4b55460c647421c554f931547d3dc5b4bdf12bdf6a6e0bd14",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 65
+          }
+        }
+      ],
+      "report_member": "sou145/results/unicode-spaces/report.json",
+      "report_member_sha256": "79d7a8f227be8e41c90710bb4230f19b3adbe456993157142529f417c2f60a2c",
+      "selected_sha256": {
+        "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+        "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+        "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+        "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+        "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+        "sandbox_tests": "9a4106ce61dc69b2cbc171d8968b2def02e188d8a1df534ef6810d5e61141bec"
+      },
+      "project_fixture_sha256": "64820dbfd994cb2ce741a3c6c0024eff1158af157f7a7788113feec413880f56",
+      "profile_sha256": {
+        "filesystem": "05ad589fa6e6ba5d6ee0dca39ea927ceceb7e7406862c27878de30cd3f8b37ec",
+        "git": "de7f8f5f391f1b81ab3488848382e5c73dc3724d7380604f07b14ad43822b460"
+      },
+      "fresh_run_authority": true,
+      "external_roots_outside_prefix": true,
+      "cleanup_external_roots_untouched": true,
+      "source_after": {
+        "commit": "6deafacf3854666cb1e5874d4cfcf152e4f7a6b2",
+        "dirty": false,
+        "files_sha256": "a60cde721b5918e700b1f3fdfc4bad7be34974f15dbef150708a1dfadc097237",
+        "tree": "b3ad2d4b4f44139d9c4c96fc40ced4eee5adceb0"
+      }
+    },
+    {
+      "id": "local-history",
+      "exit_code": 1,
+      "status": "failed",
+      "report_sha256": "e113e12166e010241a32dfbea2d75cdad4dd1ca892b3471adb729e33dadf6d66",
+      "report_path": "local-history/report.json",
+      "independent_namespace_cleanup": true,
+      "required": 9,
+      "executed": 9,
+      "passed": 6,
+      "cases": [
+        {
+          "case": "moved-root",
+          "status": "passed",
+          "reason": "existing_workspace_missing_or_moved",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "541e8b67d1618024d67dd89654e31382cae8f7803cd81eb3c12a80b7f25a29e6",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "replaced-root",
+          "status": "passed",
+          "reason": "selected_workspace_changed",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "312e2695f2292ca596bdae0173e69ddbe4eaf0970bf34645ff54906a79b81717",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "changed-selection",
+          "status": "passed",
+          "reason": "preparation_marker_mismatch",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "79ba0ad99b2909b55c003dfabb63fa1cc8f4ccbcf77ca345e4b61c4e0ceb21b0",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "unsupported-git",
+          "status": "passed",
+          "reason": "unsupported_existing_git_layout_use_supported_standalone_repository",
+          "cleanup": null,
+          "outside_reads": null,
+          "forbidden_network_deliveries": null,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": null,
+          "untracked_preserved": null,
+          "trace_sha256": "b733c89f02930791b3f21701ac190bc02726071725460e2c9430a4f8b19b3794",
+          "selected_runtime_executions": 0
+        },
+        {
+          "case": "initial",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "f1f4bf429b7e3157cf49566807c695731662665c3f63280908b9d246bea6ad00",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "5e2eedf9950ca8e37c6749085b139e8f7f574912023ea05dbe3f9c863e562a50",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "659dfdea978e329589bf162439ca52c5d202c8a7218f34ea41c691b8e11ba89b",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "0321756a74dcf8f6bce34e57c15dad8e3aa0fadd4141cfa3ee7a2460bfc7bcea",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "fe618e1abb97c3c28a40c2e1eb83ee79630091dd7239189612acc53846e04154",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 60
+          }
+        },
+        {
+          "case": "operator-edit",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "e3c3720051f545e31f48083279288943e1d0f3d812aae41b5e56f7ec8a2b405c",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "096e2daaf91b1cb2717bc4353b9f466a3d63987ad73aa0de41e5d70ac42019b4",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "335014084e2426a4c4ae44e999d9886f45be1ec5ea854f97c1c1202fc5e8ca3d",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "0321756a74dcf8f6bce34e57c15dad8e3aa0fadd4141cfa3ee7a2460bfc7bcea",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "fe618e1abb97c3c28a40c2e1eb83ee79630091dd7239189612acc53846e04154",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 65
+          }
+        },
+        {
+          "case": "cancel",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "e1b0857ec8962c9f0bf415d225b05fcffa2c19a977f154ecbc067e09bea09488",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 54
+          }
+        },
+        {
+          "case": "daemon-loss",
+          "status": "passed",
+          "reason": null,
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "8b5a8a12ed04b5448da6e71eb9be7b7f9a621171b94d629dfffff2a724988b4f",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": null,
+              "native_codes": [],
+              "result_present": false,
+              "result_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 54
+          }
+        },
+        {
+          "case": "recovery",
+          "status": "failed",
+          "reason": "useful_original_result_failed",
+          "cleanup": "owned_processes_stopped_audit_retained",
+          "outside_reads": 0,
+          "forbidden_network_deliveries": 0,
+          "useful_original_results": null,
+          "refused_results": null,
+          "ordinary_followup_results": null,
+          "worktree_index_head_config_unchanged": true,
+          "untracked_preserved": true,
+          "trace_sha256": "3c0b8eb2535ba2a193e838d1fddb32fe027c099c20ef75c0ae4c0e394b908ac2",
+          "operations": [
+            {
+              "index": 0,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "096e2daaf91b1cb2717bc4353b9f466a3d63987ad73aa0de41e5d70ac42019b4",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 1,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "590f88eba412a56c37e954a46bf1e753918482c72f3fd0bb7801ecf2fbbadb54",
+              "server": "git",
+              "tool": "git_status"
+            },
+            {
+              "index": 2,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "c7e65e7ca384a18dbb3a33004141a7f6b7c13998dbaa6f187d8f1e3c978a8731",
+              "server": "git",
+              "tool": "git_show"
+            },
+            {
+              "index": 3,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "335014084e2426a4c4ae44e999d9886f45be1ec5ea854f97c1c1202fc5e8ca3d",
+              "server": "git",
+              "tool": "git_diff"
+            },
+            {
+              "index": 4,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "git",
+              "tool": "git_reset"
+            },
+            {
+              "index": 5,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d05b1e0650938e1697b2ca256024912baa616cd891ac090ced79dcc39bd4e343",
+              "server": "filesystem",
+              "tool": "write_file"
+            },
+            {
+              "index": 6,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "f62f607c5c6af50a790120092d97ab55d356f28447cef3e8b878ed404dc0da65",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 7,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "d8c344542eccd88813c1a1678076b5148b152b0b36933f7f4d49e1456ecb4037",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 8,
+              "is_error": true,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "32a4ac9e03ffaf9647a6af36f9d2e9bf098e848dbea71b67be1cd7a28e3698f7",
+              "server": null,
+              "tool": "Bash"
+            },
+            {
+              "index": 9,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "694ccc9328ef1af4ac1357fb1343ab2296aff60e476ef983afacbc64cd763cc6",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 10,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "0321756a74dcf8f6bce34e57c15dad8e3aa0fadd4141cfa3ee7a2460bfc7bcea",
+              "server": "filesystem",
+              "tool": "read_text_file"
+            },
+            {
+              "index": 11,
+              "is_error": false,
+              "native_codes": [],
+              "result_present": true,
+              "result_sha256": "fe618e1abb97c3c28a40c2e1eb83ee79630091dd7239189612acc53846e04154",
+              "server": "git",
+              "tool": "git_log"
+            }
+          ],
+          "process_cleanup": {
+            "all_stopped": true,
+            "remaining": [],
+            "descendant_count": 63
+          }
+        }
+      ],
+      "report_member": "sou145/results/local-history/report.json",
+      "report_member_sha256": "e113e12166e010241a32dfbea2d75cdad4dd1ca892b3471adb729e33dadf6d66",
+      "selected_sha256": {
+        "agentfw": "f915fe4d1c8801388797298a06e928f97a144ee8b40ae233c08ad3d26abf59ea",
+        "bwrap": "5e56fa2279dbcc67c27fa5a96e96bfdf13d6ebb05fc170ee0988b288e67ba5a2",
+        "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+        "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+        "git": "dd93174e9807b284d9c3019e52995606138924465bf0b52f2e4066c6eef21a1c",
+        "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+        "git_launcher": "85c5695aafaa91836a424e4ef7ca8f1b8e8a2fbbe3b322212b7ae71bddb6c4aa",
+        "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+        "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+        "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+        "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+        "sandbox_tests": "9a4106ce61dc69b2cbc171d8968b2def02e188d8a1df534ef6810d5e61141bec"
+      },
+      "project_fixture_sha256": "eb60068985bc6e41ba55aa395e42ff630cd9b8d911a3564bfb9bc6546119e58c",
+      "profile_sha256": {
+        "filesystem": "9256533ab2235562934a9f62016cecd0b053c920b35e8f7dce31139107e5b5d4",
+        "git": "e607cd64c62d3d60b5b2b219d99c0c34767d3eabb673dbeb4181d2da1eb6980d"
+      },
+      "fresh_run_authority": true,
+      "external_roots_outside_prefix": true,
+      "cleanup_external_roots_untouched": true,
+      "source_after": {
+        "commit": "6deafacf3854666cb1e5874d4cfcf152e4f7a6b2",
+        "dirty": false,
+        "files_sha256": "a60cde721b5918e700b1f3fdfc4bad7be34974f15dbef150708a1dfadc097237",
+        "tree": "b3ad2d4b4f44139d9c4c96fc40ced4eee5adceb0"
+      }
+    }
+  ]
+}

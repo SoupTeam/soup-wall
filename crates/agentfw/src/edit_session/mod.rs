@@ -5,15 +5,26 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 
+pub(crate) mod diagnostic;
 mod profile;
+pub(crate) mod quota;
 pub(crate) use profile::Profile;
 #[cfg(target_os = "linux")]
+mod control;
+#[cfg(target_os = "linux")]
+mod control_io;
+#[cfg(target_os = "linux")]
 mod launch;
+#[cfg(target_os = "linux")]
+mod record;
+#[cfg(target_os = "linux")]
+mod refresh;
 #[cfg(target_os = "linux")]
 mod runtime;
 pub(crate) mod transport;
 
 pub const FORMAT: &str = "sw-installed-edit-session/1";
+pub const QUOTA_PROFILE: &str = "sw-installed-edit-session/2";
 pub const ENDPOINT: &str = "/native/edit-session/v1";
 pub const SERVER: &str = "private-output";
 
@@ -24,6 +35,8 @@ pub struct Cli {
 }
 #[derive(Subcommand, Debug)]
 enum Action {
+    /// Diagnose one selected edit run without replaying calls or changing state.
+    Status(diagnostic::Args),
     /// Inspect a proposed private output profile without writes or authority.
     Preview(Selection),
     /// Prepare an immutable operator-owned profile; defaults to preview.
@@ -35,6 +48,21 @@ enum Action {
         /// New private plan directory, outside the output root.
         #[arg(long)]
         out: PathBuf,
+    },
+    /// Preview refreshed exact bindings; publication requires the displayed confirmation.
+    Refresh {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        sha256: String,
+        /// New private immutable plan directory; the original is preserved.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, requires = "confirm")]
+        apply: bool,
+        /// Exact confirmation_sha256 from the read-only refresh preview.
+        #[arg(long, requires = "apply")]
+        confirm: Option<String>,
     },
     /// Run one explicitly prepared profile with the genuine pinned Claude host.
     Run {
@@ -59,6 +87,13 @@ enum Action {
         run: PathBuf,
         #[command(subcommand)]
         action: Ask,
+    },
+    /// Revoke and stop one exact installed run through its verified owner.
+    Stop {
+        #[arg(long)]
+        run: PathBuf,
+        #[arg(long, value_enum)]
+        output: Option<crate::pilot_approval::OutputFormat>,
     },
     /// Private host forwarder; never launches an MCP child or grants authority.
     #[command(hide = true)]
@@ -92,6 +127,12 @@ pub struct Selection {
     /// Explicit operator assertion, not discovery of other same-UID writers.
     #[arg(long)]
     private_sole_writer: bool,
+    /// Maximum admitted mutation attempts in one new run (also caps commits).
+    #[arg(long, requires = "max_write_bytes")]
+    max_mutations: Option<u64>,
+    /// Cumulative full-payload reservations; never refunded within an active run.
+    #[arg(long, requires = "max_mutations")]
+    max_write_bytes: Option<u64>,
 }
 #[derive(Subcommand, Debug)]
 pub enum Ask {
@@ -116,7 +157,38 @@ pub fn run(cli: Cli) -> Result<()> {
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = cli;
+        if let Action::Status(args) = cli.command {
+            return status(args);
+        }
         anyhow::bail!("installed_edit_requires_native_linux_x86_64")
     }
+}
+
+fn status(args: diagnostic::Args) -> Result<()> {
+    let report = diagnostic::inspect(&args);
+    if let Some(destination) = &args.support_bundle {
+        anyhow::ensure!(
+            !destination.starts_with(&args.run) && !args.run.starts_with(destination),
+            "edit_status_export_overlaps_run"
+        );
+        let wrapper = crate::doctor::Report {
+            schema: "sw-agent-doctor/1",
+            observed_at_ms: crate::protection_status::now_ms(),
+            setup: crate::doctor::Outcome::Unknown,
+            active_host_call_protection: "unknown",
+            scope: "selected_edit_session_read_only_diagnosis",
+            checks: vec![],
+            pilot: None,
+        };
+        crate::support_bundle::export_edit(&wrapper, Some(&report), destination)
+            .map_err(|_| anyhow::anyhow!("edit_status_support_export_failed"))?;
+    }
+    if args.json {
+        let bytes = serde_json::to_string_pretty(&report)?;
+        anyhow::ensure!(bytes.len() <= 128 * 1024, "edit_status_report_cap");
+        println!("{bytes}");
+    } else {
+        println!("{}", diagnostic::text(&report));
+    }
+    Ok(())
 }

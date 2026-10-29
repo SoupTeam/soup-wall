@@ -1,0 +1,31 @@
+{
+  "source": {
+    "commit": "d4aa63f297c7b1189c062577c712a093533b8b2e",
+    "tree": "58a5cc3db3e2f9e6fcd893f5d2955223cb9e8c65",
+    "dirty": false,
+    "files_sha256": "561201f95eb605c34e9ff01e7ecdc4a22536ba5ff503277a0ca76149df4161dc"
+  },
+  "observed_at": "2026-10-21T18:57:28.988893+00:00",
+  "status": "passed",
+  "counts": {
+    "passed": 12,
+    "failed": 0,
+    "incomplete": 0,
+    "unsupported": 0
+  },
+  "benign_workflows": {
+    "required": 2,
+    "completed": 2,
+    "false_interruptions": 0,
+    "incomplete": 0
+  },
+  "scope": "development-installed-host-scripted-provider",
+  "live_model_effectiveness": "not_measured",
+  "temporary_wsl_memory_cap": "4GB; original absent .wslconfig restored after VM startup",
+  "archive": {
+    "name": "installed-wsl2-d4aa63f.zip",
+    "files": 68,
+    "bytes": 128174,
+    "sha256": "7e58626063b7cdfc4b1153e22a02d07ec776f96d24028021c98fb2cf5c46b182"
+  }
+}

@@ -10,14 +10,16 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import hashlib
+from http.client import HTTPException, IncompleteRead
 import json
 import os
 import re
+import socket
 import sys
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from ci_impact import WORKFLOW_JOBS, plan
@@ -34,6 +36,94 @@ RECEIPT = re.compile(
 )
 GITHUB_ACTIONS_BOT_ID = 41898282
 ADMISSION_WORKFLOW_ID = 388366746
+HTTP_ATTEMPTS = 3
+HTTP_TIMEOUT = 20
+# The existing three 20-second attempts plus 2/4-second backoff, not a new
+# admission polling window. One attempt's deadline includes its body reads.
+HTTP_BUDGET = HTTP_ATTEMPTS * HTTP_TIMEOUT + 6
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+MAX_JSON_DEPTH = 64
+
+
+class EvidenceAPIError(RuntimeError):
+    def __init__(self, reason: str, method: str = "GET"):
+        self.reason, self.method = reason, method
+        super().__init__("GitHub evidence unavailable: " + reason)
+
+
+class EvidenceFormatError(ValueError):
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__("Invalid GitHub evidence: " + reason)
+
+
+def error_reason(error: Exception) -> str:
+    if isinstance(error, (EvidenceAPIError, EvidenceFormatError)):
+        return error.reason
+    return "malformed_json" if isinstance(error, json.JSONDecodeError) else "api_unavailable" \
+        if isinstance(error, (RuntimeError, OSError)) else "invalid_evidence_schema"
+
+
+def response_json(response: Any, deadline: float) -> Any:
+    """Bound bytes, nesting and elapsed body time on the actual urllib socket.
+
+    urllib's socket timeout otherwise restarts on every receive: a slow drip
+    can keep json.load/read() alive indefinitely. Pin its HTTPResponse socket
+    and decrease the timeout before each read1 (one underlying receive).
+    Refuse unsupported response wrappers instead of falling back to an
+    unbounded read. No URL/credential or body is included in errors.
+    """
+    header = response.getheader("Content-Length")
+    if header is not None and not re.fullmatch(r"[0-9]{1,10}", header):
+        raise EvidenceFormatError("response_length_invalid")
+    expected = int(header) if header is not None else None
+    if expected is not None and expected > MAX_RESPONSE_BYTES:
+        raise EvidenceFormatError("response_too_large")
+    raw = bytearray()
+    if expected != 0:
+        # CPython urllib returns http.client.HTTPResponse with this socket-backed
+        # BufferedReader for both HTTP and HTTPS. Real loopback tests exercise
+        # this access; wrappers without it are not accepted evidence readers.
+        sock = getattr(getattr(getattr(response, "fp", None), "raw", None), "_sock", None)
+        if sock is None or not callable(getattr(response, "read1", None)):
+            raise EvidenceAPIError("response_reader_unavailable")
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError()
+            sock.settimeout(min(HTTP_TIMEOUT, remaining))
+            chunk = response.read1(min(65536, MAX_RESPONSE_BYTES + 1 - len(raw)))
+            raw.extend(chunk)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise EvidenceFormatError("response_too_large")
+            if expected is not None and len(raw) == expected:
+                break
+            if not chunk:
+                if expected is not None and len(raw) != expected:
+                    raise IncompleteRead(b"", expected - len(raw))
+                break
+    depth, quoted, escaped = 0, False, False
+    for byte in raw:
+        if quoted:
+            if escaped: escaped = False
+            elif byte == 92: escaped = True
+            elif byte == 34: quoted = False
+        elif byte == 34: quoted = True
+        elif byte in (91, 123):
+            depth += 1
+            if depth > MAX_JSON_DEPTH:
+                raise EvidenceFormatError("json_depth_exceeded")
+        elif byte in (93, 125): depth -= 1
+    if time.monotonic() >= deadline:
+        raise TimeoutError()
+    # GitHub JSON is UTF-8. Do not let json.loads auto-detect UTF-16/32 after
+    # an ASCII-byte depth scan: escaped quotes in those encodings can hide
+    # nesting from the scan. Invalid encoding remains a non-retryable format
+    # failure, like malformed complete JSON.
+    value = json.loads(raw.decode("utf-8"))
+    if time.monotonic() >= deadline:
+        raise TimeoutError()
+    return value
 
 # A job ID can expand to several required OS/backend checks. The default is
 # the literal job ID; the exceptions below are reviewed against actual Actions
@@ -214,9 +304,15 @@ class GitHub:
         return self._request("GET", suffix)
 
     def post(self, suffix: str, body: dict[str, Any]) -> Any:
-        return self._request("POST", suffix, body)
+        try:
+            return self._request("POST", suffix, body)
+        except (ValueError, OSError, RuntimeError, HTTPException):
+            # A response failure does not establish whether the write committed.
+            # Never retry or issue a compensating status write on this path.
+            raise EvidenceAPIError("status_write_unconfirmed", "POST") from None
 
-    def _request(self, method: str, suffix: str, body: dict[str, Any] | None = None) -> Any:
+    def _request(self, method: str, suffix: str, body: dict[str, Any] | None = None,
+                 *, response_headers: dict[str, str] | None = None) -> Any:
         if not suffix.startswith("/") or ".." in suffix:
             raise ValueError("invalid API path")
         payload = None if body is None else json.dumps(body).encode("utf-8")
@@ -228,7 +324,13 @@ class GitHub:
                               "User-Agent": "sou91-ci-admission",
                               **({"Content-Type": "application/json"} if payload else {}),
                           })
-        for attempt in range(3):
+        attempts = HTTP_ATTEMPTS if method == "GET" else 1
+        deadline = time.monotonic() + HTTP_BUDGET
+        reason = "transport_unavailable"
+        for attempt in range(attempts):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             try:
                 if method == "GET":
                     self.http_get_attempts += 1
@@ -236,29 +338,89 @@ class GitHub:
                     self.http_post_attempts += 1
                     if suffix.startswith("/statuses/"):
                         self.status_posts += 1
-                with urlopen(request, timeout=20) as response:
-                    return json.load(response)
+                attempt_deadline = min(deadline, time.monotonic() + HTTP_TIMEOUT)
+                with urlopen(request, timeout=min(HTTP_TIMEOUT, remaining)) as response:
+                    value = response_json(response, attempt_deadline)
+                    if response_headers is not None:
+                        response_headers["Link"] = response.getheader("Link", "")
+                    return value
             except HTTPError as error:
-                if error.code not in {429, 500, 502, 503, 504} or attempt == 2:
-                    raise RuntimeError("GitHub API returned HTTP " + str(error.code)) from error
-            except URLError as error:
-                if attempt == 2:
-                    raise RuntimeError("GitHub API unavailable") from error
-            time.sleep(2 * (attempt + 1))
-        raise AssertionError("unreachable")
+                reason = "http_" + str(error.code) if 100 <= error.code <= 599 else "http_error"
+                error.close()
+                if error.code not in {429, 500, 502, 503, 504}:
+                    raise EvidenceAPIError(reason, method) from None
+            except IncompleteRead:
+                reason = "body_incomplete"
+            except (TimeoutError, socket.timeout):
+                reason = "read_timeout"
+            except ConnectionResetError:
+                reason = "connection_reset"
+            except (URLError, HTTPException, ConnectionError, OSError):
+                reason = "transport_interrupted"
+            if attempt + 1 < attempts:
+                delay = 2 * (attempt + 1)
+                if deadline - time.monotonic() <= delay:
+                    break
+                time.sleep(delay)
+        raise EvidenceAPIError(reason, method) from None
 
     def pages(self, suffix: str, key: str) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
+        count: int | None = None
+        identities: set[int | str] = set()
         for page in range(1, 31):
             separator = "&" if "?" in suffix else "?"
-            data = self.get(suffix + separator + urlencode({"per_page": 100, "page": page}))
-            entries = data[key] if key else data
-            if not isinstance(entries, list):
-                raise ValueError("unexpected paginated API response")
+            headers: dict[str, str] = {}
+            data = self._request("GET", suffix + separator + urlencode({"per_page": 100, "page": page}),
+                                 response_headers=headers)
+            if key:
+                if not isinstance(data, dict) or type(data.get("total_count")) is not int or data["total_count"] < 0:
+                    raise EvidenceFormatError("pagination_count_invalid")
+                if data["total_count"] > 3000:
+                    raise EvidenceAPIError("pagination_limit_exceeded")
+                if count is not None and count != data["total_count"]:
+                    raise EvidenceAPIError("pagination_count_changed")
+                count = data["total_count"]
+                entries = data.get(key)
+            else:
+                entries = data
+            if not isinstance(entries, list) or len(entries) > 100 or any(not isinstance(x, dict) for x in entries):
+                raise EvidenceFormatError("pagination_shape_invalid")
+            for entry in entries:
+                identity = entry.get("id")
+                if key or "id" in entry:
+                    if type(identity) is not int or identity <= 0:
+                        raise EvidenceFormatError("pagination_identity_invalid")
+                elif suffix.split("?", 1)[0].endswith("/files"):
+                    identity = entry.get("filename")
+                    if not isinstance(identity, str) or not identity:
+                        raise EvidenceFormatError("pagination_identity_invalid")
+                if identity is not None:
+                    if identity in identities:
+                        raise EvidenceFormatError("pagination_duplicate_identity")
+                    identities.add(identity)
             results.extend(entries)
+            link = headers.get("Link", "")
+            if len(link) > 8192:
+                raise EvidenceFormatError("pagination_link_invalid")
+            links = re.findall(r'<([^<>]+)>;\s*rel="(next|prev|first|last)"', link)
+            residue = re.sub(r'<([^<>]+)>;\s*rel="(next|prev|first|last)"', "", link)
+            if residue.strip(" ,") or len(links) > 4 or len({rel for _, rel in links}) != len(links):
+                raise EvidenceFormatError("pagination_link_invalid")
+            for url, rel in links:
+                target = urlsplit(url)
+                query = parse_qs(target.query)
+                if target.scheme != "https" or target.netloc != "api.github.com" or \
+                        len(url) > 4096 or (rel == "next" and
+                        (query.get("page") != [str(page + 1)] or query.get("per_page") != ["100"])):
+                    raise EvidenceFormatError("pagination_link_invalid")
+            if count is not None and len(results) > count:
+                raise EvidenceAPIError("pagination_count_changed")
             if len(entries) < 100:
+                if any(rel == "next" for _, rel in links) or (count is not None and len(results) != count):
+                    raise EvidenceAPIError("pagination_incomplete")
                 return results
-        raise RuntimeError("GitHub API pagination exceeded safe limit")
+        raise EvidenceAPIError("pagination_limit_exceeded")
 
 
 def latest(runs: list[dict[str, Any]], path: str, event: str, sha: str) -> dict[str, Any] | None:
@@ -645,6 +807,32 @@ def receipt_target(api: GitHub, evidence: dict[str, Any]) -> str | None:
 
 
 def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> int:
+    target: list[str] = []
+    try:
+        return _admit(api, args, pr_event, target)
+    except (RuntimeError, OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        if isinstance(error, EvidenceAPIError) and error.method == "POST":
+            print("failure: admission status write unconfirmed; no write retry", flush=True)
+            return 1
+        state = "pending" if isinstance(error, (RuntimeError, OSError)) else "failure"
+        if not target and not args.dry_run:
+            state = "failure"  # No verified target exists for a blocking status.
+        reason = error_reason(error)
+        print(state + ": admission evidence unavailable (" + reason + ")", flush=True)
+        if target and not args.dry_run:
+            try:
+                # Only downgrade the already bound candidate, never infer or
+                # publish success when a final freshness read is unavailable.
+                api.post("/statuses/" + target[0], {"state": state, "context": CONTEXT,
+                          "description": "Admission evidence unavailable: " + reason})
+            except (RuntimeError, OSError, ValueError, KeyError, TypeError, AttributeError):
+                print("failure: admission status write unconfirmed; no write retry", flush=True)
+                return 1
+        if state == "failure": return 1
+        return 2 if args.dry_run else (0 if target else 1)
+
+
+def _admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any], target: list[str]) -> int:
     deadline = time.monotonic() + max(0, min(args.wait_seconds, 2700))
     current = api.get(f"/pulls/{args.pr}")
     if current.get("state") != "open" or \
@@ -655,6 +843,7 @@ def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> in
     status_sha = current.get("merge_commit_sha") or current["head"]["sha"]
     if not SHA.fullmatch(status_sha):
         raise RuntimeError("invalid initial status target SHA")
+    target[:] = [status_sha]
     print("candidate PR #" + str(args.pr) + " base=" + current["base"]["sha"] +
           " head=" + current["head"]["sha"] + " merge=" + status_sha, flush=True)
     if current.get("draft") is True:
@@ -704,16 +893,18 @@ def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> in
                 sha, verdict = inspect(api, args.pr, pr_event["base"]["sha"],
                                        pr_event["head"]["sha"])
         except (RuntimeError, OSError) as error:
-            print("pending: admission API evidence unavailable (" + type(error).__name__ + ")", flush=True)
+            reason = error_reason(error)
+            print("pending: admission API evidence unavailable (" + reason + ")", flush=True)
             if not args.dry_run:
                 api.post("/statuses/" + status_sha, {"state": "pending", "context": CONTEXT,
-                                                   "description": "Admission API evidence unavailable"})
+                                                   "description": "Admission API evidence unavailable: " + reason})
             return 2 if args.dry_run else 0
         except (ValueError, KeyError, TypeError) as error:
-            print("failure: admission evidence unavailable (" + type(error).__name__ + ")", flush=True)
+            reason = error_reason(error)
+            print("failure: admission evidence unavailable (" + reason + ")", flush=True)
             if not args.dry_run:
                 api.post("/statuses/" + status_sha, {"state": "failure", "context": CONTEXT,
-                                                   "description": "Admission evidence unavailable"})
+                                                   "description": "Admission evidence unavailable: " + reason})
             return 1
         if not SHA.fullmatch(sha):
             raise RuntimeError("invalid status target SHA")
@@ -732,6 +923,7 @@ def admit(api: GitHub, args: argparse.Namespace, pr_event: dict[str, Any]) -> in
             return 2 if args.dry_run else 0
         if sha != status_sha:
             status_sha = sha
+            target[:] = [sha]
             if not args.dry_run:
                 api.post("/statuses/" + sha, {"state": "pending", "context": CONTEXT,
                                                 "description": "Checking exact-source CI evidence"})
@@ -798,6 +990,14 @@ def main() -> int:
         if pr_event["number"] != args.pr or pr_event["base"]["repo"]["full_name"] != repo:
             parser.error("event does not identify the requested base PR")
         return admit(api, args, pr_event)
+    except (RuntimeError, OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        # Routing/initial PR reads may fail before a safe status target exists.
+        # Fail the trusted job with a finite diagnostic, never a body/URL-bearing
+        # traceback or a guessed success/status target.
+        reason = "status_write_unconfirmed" if isinstance(error, EvidenceAPIError) and error.method == "POST" \
+            else error_reason(error)
+        print("failure: admission evidence unavailable (" + reason + ")", flush=True)
+        return 1
     finally:
         # Sanitized physical HTTP attempt counts, including retries. These
         # separate verifier cost from the independently billed CI matrix.

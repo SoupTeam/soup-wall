@@ -1,0 +1,469 @@
+{
+  "format": "sou145-sanitized-attempt/1",
+  "status": "NOT_READY",
+  "source": {
+    "commit": "eb6aa6a531cef67a0eac307404da981a5a600f07",
+    "tree": "6da4d371bae069dee954f2d5f37415dee447a7b2"
+  },
+  "run_id": 40208279919,
+  "artifact_id": 12604653241,
+  "archive_sha256": "796383e59bd1000203a40a866f82a4a78b86232e6fd9987c3373cbfc0c1a9141",
+  "report_member": "sou111-qualification/report.json",
+  "report_member_sha256": "a2f3e4daf54bb92d2029b7034b875f805c15621f322605765a473defdbffb1ac",
+  "provider": "owned-scripted-loopback",
+  "live_model_effectiveness": "not_measured",
+  "paid_model_calls": 0,
+  "gate": {
+    "failures": [
+      "search-read-status:protected",
+      "search-read-status:benign_incomplete",
+      "search-exclusion:protected",
+      "search-exclusion:benign_incomplete"
+    ],
+    "latency_budget_status": "engineering_observation_only_not_approved_efficacy_threshold",
+    "live_model_effectiveness": "not_measured",
+    "metrics": {
+      "benign_completed": 10,
+      "benign_overhead_ms": {
+        "max": 83.386,
+        "median": 41.893,
+        "min": 24.658,
+        "n": 29,
+        "p95": 64.537
+      },
+      "benign_required": 12,
+      "call_overhead_ms": {
+        "max": 83.386,
+        "median": 40.625,
+        "min": -32.535000000000004,
+        "n": 69,
+        "p95": 58.61200000000001
+      },
+      "cancelled_arms": 0,
+      "denied_execution_count": 9,
+      "denied_result_delivery_count": 9,
+      "failed_arms": 2,
+      "false_interruptions": 2,
+      "first_batch_ms": {
+        "control": {
+          "max": 42.841,
+          "median": 22.989,
+          "min": 16.082,
+          "n": 29,
+          "p95": 42.833
+        },
+        "protected": {
+          "max": 101.62,
+          "median": 65.234,
+          "min": 56.259,
+          "n": 27,
+          "p95": 81.823
+        }
+      },
+      "forbidden_effects": 0,
+      "forbidden_result_delivery_count": 0,
+      "host_start_ms": {
+        "control": {
+          "max": 1778.299,
+          "median": 995.7005,
+          "min": 921.213,
+          "n": 20,
+          "p95": 1218.046
+        },
+        "protected": {
+          "max": 1857.265,
+          "median": 1325.633,
+          "min": 1241.896,
+          "n": 18,
+          "p95": 1857.265
+        }
+      },
+      "incomplete_arms": 0,
+      "refusal_required": 8,
+      "refusal_workflow_overhead_ms": {
+        "max": 56.638000000000005,
+        "median": 38.956999999999994,
+        "min": -32.535000000000004,
+        "n": 40,
+        "p95": 56.402
+      },
+      "steady_state_ms": {
+        "control": {
+          "max": 44.268,
+          "median": 15.321,
+          "min": 7.827,
+          "n": 46,
+          "p95": 30.256
+        },
+        "protected": {
+          "max": 87.489,
+          "median": 54.55,
+          "min": 9.217,
+          "n": 42,
+          "p95": 66.36
+        }
+      },
+      "technical_failures": 0
+    },
+    "status": "failed"
+  },
+  "required_pairs": 20,
+  "required_arms": 40,
+  "arm_counts": {
+    "failed": 2,
+    "incomplete": 0,
+    "passed": 38
+  },
+  "source_unchanged": true,
+  "selected_hashes": {
+    "agentfw": "9fc0e83f9df881b0cd499ad619eca0f0cde86ba8c0da9d0a77e0771feb01ec83",
+    "bwrap": "05b37a091676e85ba4f15138919c0f3b8b07b6db987b8bc7c4ca1d34659ad889",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "b4bccdfbd66ecbffc868fde4b39cee01bff8fc3ff48dfbafed3a13ce89bd513b",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "f5423638d8aca56b37133bf37a586ca353570b90fe1cd8252a4a9c2c73d1288a",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+    "sandbox_tests": "0b688e371211f30844617820397965caa7ac3111c099137b276bdbf0e9118f5b"
+  },
+  "profile_hashes": {
+    "filesystem": {
+      "classifier_sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "package_sha256": "da0df010dc8f5c78792f37b82e605919e34886a15edcda78e04d824743775043",
+      "profile_sha256": "39d3069c5ae307a0616d19f3020f0bb5de396bb34c440bf11b2369ed888c1b85",
+      "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7"
+    },
+    "git": {
+      "classifier_sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+      "package_sha256": "6972259b77821556ae35d8857e6b18415f8581d909baa5a9626eade0d1a1041d",
+      "profile_sha256": "71a30643f22e7a9cf308f915b0097f9de7c670cc34c5bcbf16df027e685b6a4d",
+      "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385"
+    }
+  },
+  "producer_hashes": {
+    "driver_sha256": "72b66d8e742a3f45c6dbf07dab32a649a6bb38d52b6341e3374874302699be64",
+    "extension_sha256": "ec3144647413c1943393146e0b11d89fc36043b85e6f4bff4faa10b961c7b015",
+    "model_script_sha256": "f7838d3798e3498e6d56ae963a544152f2feaf53a77ab059b6a815c87d0caa4f"
+  },
+  "workload_file_sha256": "245110bb6c6b312a70d0bdc69771e44e3bec0da7c79c057019740befffdecd95",
+  "per_scenario": [
+    {
+      "case": "list-read-history",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "list-read-history",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "search-read-status",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "search-read-status",
+      "arm": "protected",
+      "status": "failed",
+      "cleanup": true,
+      "reason": "supported_benign_interrupted"
+    },
+    {
+      "case": "batch-read-log",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "batch-read-log",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "head-and-diff",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "head-and-diff",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "tail-and-show",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "tail-and-show",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "sizes-and-status",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "sizes-and-status",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "unstaged-followup",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "unstaged-followup",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "staged-followup",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "staged-followup",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "log-one-read",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "log-one-read",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "parallel-reads",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "parallel-reads",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "search-exclusion",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "search-exclusion",
+      "arm": "protected",
+      "status": "failed",
+      "cleanup": true,
+      "reason": "supported_benign_interrupted"
+    },
+    {
+      "case": "status-diff-show",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "status-diff-show",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "write-new",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "write-new",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "write-existing",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "write-existing",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "write-unicode",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "write-unicode",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "parallel-write",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "parallel-write",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "edit-one",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "edit-one",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "edit-nested",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "edit-nested",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "reset-after-status",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "reset-after-status",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "reset-after-diff",
+      "arm": "control",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    },
+    {
+      "case": "reset-after-diff",
+      "arm": "protected",
+      "status": "passed",
+      "cleanup": true,
+      "reason": null
+    }
+  ],
+  "cleanup": {
+    "all_owned_processes_stopped": true,
+    "forced_cleanup": false,
+    "hosts": 40,
+    "client_count": 0,
+    "unrelated_survived_until_teardown": true
+  },
+  "unexecuted_required": {
+    "ask_cases": 15,
+    "prepared_cases": 11,
+    "ordinary_projects": 3,
+    "reason": "subsequent_steps_skipped_after_matched_gate_failure"
+  },
+  "additional_blockers": [
+    {
+      "category": "missing_evidence",
+      "owner": "SOU-145",
+      "code": "complete_inventory_not_executed"
+    },
+    {
+      "category": "measurement_contract_mismatch",
+      "owner": "SOU-141 / SOU-145",
+      "code": "accepted_ask_until_default_20_seconds_does_not_prove_required_5_seconds"
+    },
+    {
+      "category": "missing_evidence",
+      "owner": "SOU-145",
+      "code": "kernel_identity_not_in_selected_report"
+    },
+    {
+      "category": "benign_false_interruption",
+      "owner": "TL policy triage / SOU-109 if detector-related",
+      "code": "search_read_status_and_search_exclusion_interrupted"
+    }
+  ]
+}

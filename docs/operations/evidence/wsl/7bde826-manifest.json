@@ -1,0 +1,159 @@
+{
+  "archives": {
+    "failed_and_isolated_controls": {
+      "bytes": 145744,
+      "files": 77,
+      "name": "failed-wsl2-7bde826.zip",
+      "sha256": "9d787380b3338b696b441cf495c2da6555e1b62a1a230e6da662774660ea87d3"
+    },
+    "passing": {
+      "bytes": 161049,
+      "files": 74,
+      "name": "installed-wsl2-7bde826.zip",
+      "sha256": "f9f8a0b0c2dc9935e5d6f0f0e1fe3c964f6e17edd4d6ed85805cfbd603bec584"
+    }
+  },
+  "benign_workflows": {
+    "completed": 2,
+    "false_interruptions": 0,
+    "incomplete": 0,
+    "required": 2
+  },
+  "counts": {
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 12,
+    "unsupported": 0
+  },
+  "driver_sha256": "b2e18e291ffa725b76747272d61a4298af51a979716ec0ceedd7583983642514",
+  "failed_attempts": [
+    {
+      "attempt": 1,
+      "counts": {
+        "failed": 1,
+        "incomplete": 10,
+        "passed": 1,
+        "unsupported": 0
+      },
+      "observed_at": "2026-10-28T09:39:00.061097+00:00",
+      "remaining_blockers": [
+        {
+          "case": "exact-installed-inputs",
+          "reason": "runtime_calledprocesserror",
+          "status": "failed"
+        },
+        {
+          "case": "sandbox-positive",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "witness-calibration",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "read-and-history",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "inspect-and-diff",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "untrusted-input-refusal",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "independent-conversation",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "parallel-cancellation",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "collector-recovery",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "daemon-fresh-conversation",
+          "reason": "not_executed",
+          "status": "incomplete"
+        },
+        {
+          "case": "bad-input-controls",
+          "reason": "not_executed",
+          "status": "incomplete"
+        }
+      ],
+      "status": "failed"
+    },
+    {
+      "attempt": 2,
+      "counts": {
+        "failed": 1,
+        "incomplete": 0,
+        "passed": 11,
+        "unsupported": 0
+      },
+      "observed_at": "2026-10-28T09:42:15.031953+00:00",
+      "remaining_blockers": [
+        {
+          "case": "bad-input-controls",
+          "reason": "runtime_timeoutexpired",
+          "status": "failed"
+        }
+      ],
+      "status": "failed"
+    }
+  ],
+  "format": "sw-wsl-current-evidence/1",
+  "host_settings_unchanged": true,
+  "live_model_effectiveness": "not_measured",
+  "observed_at": "2026-10-28T09:52:43.727832+00:00",
+  "privacy": {
+    "format": "sw-wsl-evidence-publication/1",
+    "hash_semantics": "archive member hashes cover public sanitized bytes; source/binary/runtime and original report witness hashes remain their measured original values",
+    "limits": "owned synthetic development fixtures only; this is not a general user-data scrubber or live-model evaluation",
+    "originals": "private original files remain retained unchanged; original per-file bytes/SHA-256 are preserved in archive-manifest.json",
+    "redaction": "known credential fields/bearer/encoded authority forms plus private workstation path prefix",
+    "selection": "explicit regular-file allowlist only; no environment, token, grant, MCP configuration, package tree or binary export",
+    "tested_source": {
+      "commit": "7bde8267cb37b7f642ed039edaa2a748a1f9a547",
+      "dirty": false,
+      "files_sha256": "8672a76ef877b4d54fe5d1b65d4d599a938077aba3bd0546a5a9503f0f2ec84f",
+      "tree": "07ab3b63541fccfb39b8dcbd939692dfa04683a9"
+    }
+  },
+  "publication_scope": "documentation/evidence only after the exact tested commit; no execution claim for a later publication commit",
+  "resource_budget_enforcement": "not_measured; delegation unavailable and not advertised",
+  "scope": "development-installed-host-scripted-provider",
+  "selected_sha256": {
+    "agentfw": "e1fadae9c248f26693fb6f11cff00af482fa1a36b052b767b18d696d24502f45",
+    "bwrap": "512dce810f536fca22b96c4765ed3737fd3de617a1d8ca487cc4138e31aba73d",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git": "7f3afdf6bda38007e65759a4febc43dfafa19bc80ccafb49ec26ee34ff0c08cd",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "git_launcher": "e1902e890b3b9b547b997bff6ffbe0b1826885f5e51ed2a44a5453fd2a2f8351",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "python": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "sandbox_tests": "4aa329b9af67c84bb99609c3996aeb23f0e011ac7008cc14cc95e52e0506634b"
+  },
+  "source": {
+    "commit": "7bde8267cb37b7f642ed039edaa2a748a1f9a547",
+    "dirty": false,
+    "files_sha256": "8672a76ef877b4d54fe5d1b65d4d599a938077aba3bd0546a5a9503f0f2ec84f",
+    "tree": "07ab3b63541fccfb39b8dcbd939692dfa04683a9"
+  },
+  "status": "passed"
+}
