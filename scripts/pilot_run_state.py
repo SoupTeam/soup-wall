@@ -72,10 +72,14 @@ def safe_component(name):
 
 
 class Directory:
-    def __init__(self, path, parent=None, name=None, state_parent=False):
+    def __init__(self, path, parent=None, name=None, state_parent=False,
+                 file_modes=(0o600,), directory_modes=(0o700,)):
         platform()
         self.path = Path(path)
         self.parent, self.name, self.fd = parent, name, None
+        # Explicit callers may inspect accepted read-only installed edit state
+        # under a private run ancestor. Prepared-run defaults stay mode-0600/0700.
+        self.file_modes, self.directory_modes = file_modes, directory_modes
         require(self.path.is_absolute() and ".." not in self.path.parts, "canonical_parent_required")
         try:
             if parent is None:
@@ -89,7 +93,7 @@ class Directory:
                 require(self.path != Path("/") and info.st_uid in (0, os.getuid())
                         and (not info.st_mode & 0o022 or info.st_mode & stat.S_ISVTX), "unsafe_state_parent")
             else:
-                require(info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700,
+                require(info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) in directory_modes,
                         "private_owner_required")
             self.object = same_object(info)
             self.check()
@@ -123,7 +127,8 @@ class Directory:
 
     def child(self, name):
         self.check()
-        return Directory(self.path / name, self, name)
+        return Directory(self.path / name, self, name, file_modes=self.file_modes,
+                         directory_modes=self.directory_modes)
 
     def names(self, limit):
         self.check()
@@ -140,14 +145,14 @@ class Directory:
         self.check()
         named_before = os.stat(name, dir_fd=self.fd, follow_symlinks=False)
         require(stat.S_ISREG(named_before.st_mode) and named_before.st_uid == os.getuid()
-                and stat.S_IMODE(named_before.st_mode) == 0o600 and named_before.st_nlink == 1,
+                and stat.S_IMODE(named_before.st_mode) in self.file_modes and named_before.st_nlink == 1,
                 "private_regular_file_required")
         require(named_before.st_size <= limit, "record_size_limit")
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.fd)
         try:
             before = os.fstat(fd)
             require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid()
-                    and stat.S_IMODE(before.st_mode) == 0o600 and before.st_nlink == 1,
+                    and stat.S_IMODE(before.st_mode) in self.file_modes and before.st_nlink == 1,
                     "private_regular_file_required")
             require(before.st_size <= limit, "record_size_limit")
             chunks, count = [], 0
