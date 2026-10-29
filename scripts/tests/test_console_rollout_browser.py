@@ -9,6 +9,7 @@ Optional: pip install playwright; python -m playwright install chromium.
 import copy
 import importlib.util
 import json
+import time
 from pathlib import Path
 import unittest
 
@@ -186,6 +187,11 @@ class RolloutPanelBrowserTests(unittest.TestCase):
         self.assertTrue(pause.is_disabled())
         pause.click(force=True)
         self.assertEqual(self.owner_buttons_enabled(), 0)
+        # UI locking precedes fetch dispatch and the Python route callback.
+        # Observe the held request, not an incidental protocol scheduling order.
+        deadline = time.monotonic() + 2
+        while not self.held and time.monotonic() < deadline:
+            self.page.wait_for_timeout(10)
         self.assertEqual(len(self.held), 1)
         self.plan["phase"] = "paused"
         self.held[0].fulfill(status=200, content_type="application/json", body=json.dumps(self.plan))
