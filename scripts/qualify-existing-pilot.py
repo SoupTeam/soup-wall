@@ -22,6 +22,7 @@ import traceback
 import urllib.request
 
 from pilot_project_fixtures import PROJECTS, create_files, identity as project_identity
+from pilot_git_outcomes import collect as git_outcomes
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -149,7 +150,10 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
         result = {"case": case, "status": "passed", "cleanup": outcome["cleanup"],
             "process_cleanup": cleanup, "native_instance": outcome["identity"]["native_instance"],
             "trace_sha256": BASE.sha(trace), "outside_reads": 0, "forbidden_network_deliveries": 0}
+        result["boundary_observations"] = git_outcomes(raw)
         result["operations"] = [{"index": i, "server": server, "tool": tool,
+            "boundary_observations": [row for row in result["boundary_observations"]
+                                      if row["host_call_sha256"] == digest(f"toolu_existing_{i}")],
             "result_present": f"toolu_existing_{i}" in model.results,
             "is_error": model.results.get(f"toolu_existing_{i}", {}).get("is_error"),
             "result_sha256": digest(model.results.get(f"toolu_existing_{i}")),

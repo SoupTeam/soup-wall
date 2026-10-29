@@ -38,6 +38,7 @@ const PATH_OUTSIDE_MESSAGE: &str =
 const PATH_SPELLING_MESSAGE: &str = "MCP path refused before execution: unsupported spelling (empty, '.', '..' or '//' segment, backslash, '~', control character, relative ':' or over 4096 bytes)";
 
 mod frames;
+mod outcomes;
 
 // Host-owned diagnostic pipes may close before the namespace owners finish.
 // Reporting must not panic past cleanup or its authenticated acknowledgement;
@@ -709,6 +710,11 @@ async fn inspect(
         timing.record(call, "result_inspection", receipt["release"] == true);
     }
     let authorized = receipt["release"] == true;
+    diagnostic!("{}", json!({"event":"mcp_call_outcome","version":1,
+        "stage":"result_inspection", "request_sha256":call.request_sha256,
+        "host_call_sha256":sha(canonical(&call.id).to_string().as_bytes()),
+        "released":authorized,"response_sha256":sha(&raw),
+        "response":parse(&raw).ok().as_ref().map(outcomes::response),"authority":false}));
     let raw = if authorized {
         raw
     } else {
@@ -1926,6 +1932,11 @@ where
                 if let Some(timing) = &mut grant.continuation {
                     timing.record(call, "original_response", value.get("result").is_some());
                 }
+                diagnostic!("{}", json!({"event":"mcp_call_outcome","version":1,
+                    "stage":"original_response","request_sha256":call.request_sha256,
+                    "host_call_sha256":sha(canonical(&call.id).to_string().as_bytes()),
+                    "response_sha256":sha(&raw),"response":outcomes::response(&value),
+                    "authority":false}));
                 let input = detached(call);
                 let worker_key = key.clone();
                 let validated = profiles[&call.tool]
