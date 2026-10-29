@@ -41,12 +41,19 @@ def failure_boundaries(rows):
     return sorted(failures)
 
 
-def call_hashes(calls, servers, server, tool, arguments):
+def call_bindings(calls, servers, server, tool, arguments):
     raw = json.dumps(arguments, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
     expected = hashlib.sha256(raw).hexdigest()
-    return {hashlib.sha256(json.dumps(call['id'], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    return {(hashlib.sha256(json.dumps(call['id'], sort_keys=True, ensure_ascii=False).encode()).hexdigest(),
+             call['request_sha256'])
             for call in calls if call['tool'] == tool and call['args_sha256'] == expected
             and servers.get(call['pid']) == server}
+
+
+def operation_indices(rows, calls, servers, server, tool, arguments):
+    bindings = call_bindings(calls, servers, server, tool, arguments)
+    return [index for index, row in enumerate(rows) if row.get('collector_server') == server
+            and (row['host_call_sha256'], row['request_sha256']) in bindings]
 
 
 def negative_results(results, indices):
@@ -73,6 +80,10 @@ def project(row):
         row.update(event='mcp_call_outcome', stage='host_delivery')
     fields = {'event', 'version', 'stage', 'request_sha256', 'host_call_sha256',
               'response_sha256', 'response', 'authority'}
+    if 'collector_server' in row:
+        fields.add('collector_server')
+        if row['collector_server'] not in ('git', 'filesystem'):
+            return None
     if row.get('stage') == 'host_delivery':
         fields.remove('response')
         fields.add('written')
@@ -153,6 +164,11 @@ def collect(trace, pids=None):
             except (ValueError, UnicodeError, RecursionError):
                 continue
             if row is not None:
+                row.pop('collector_server', None)
+                if isinstance(pids, dict):
+                    if pids[key] not in ('git', 'filesystem'):
+                        continue
+                    row['collector_server'] = pids[key]
                 rows.append(row)
                 if len(rows) >= 256:
                     return rows

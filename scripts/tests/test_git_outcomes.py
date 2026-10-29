@@ -7,6 +7,26 @@ import pilot_git_outcomes as outcomes
 
 
 class GitOutcomesTests(unittest.TestCase):
+    def test_rpc_ids_reused_by_two_servers_cannot_mix_observations(self):
+        import hashlib
+        import json
+        identifier = hashlib.sha256(b'17').hexdigest()
+        row = {'event': 'mcp_call_outcome', 'version': 1, 'stage': 'original_response',
+               'request_sha256': 'a' * 64, 'host_call_sha256': identifier,
+               'response_sha256': 'c' * 64, 'authority': False,
+               'response': {'rpc_error': False, 'tool_error': False, 'rpc_code': None}}
+        text = json.dumps(dict(row, collector_server='filesystem')) + '\n'
+        trace = ''.join(f'{pid} write(2, {json.dumps(text)}, {len(text)}) = {len(text)}\n'
+                        for pid in (101, 102))
+        rows = outcomes.collect(trace, pids={101: 'git', 102: 'filesystem'})
+        self.assertEqual([r['collector_server'] for r in rows], ['git', 'filesystem'])
+        arguments = {'repo_path': '/workspace', 'revision': 'HEAD'}
+        calls = [{'pid': 101, 'id': 17, 'tool': 'git_show', 'request_sha256': 'a' * 64,
+                  'args_sha256': hashlib.sha256(b'{"repo_path":"/workspace","revision":"HEAD"}').hexdigest()}]
+        rows.append(dict(rows[0], request_sha256='e' * 64))
+        self.assertEqual(outcomes.operation_indices(rows, calls, {101: 'git'}, 'git', 'git_show', arguments), [0])
+        self.assertEqual(outcomes.operation_indices([row], calls, {101: 'git'}, 'git', 'git_show', arguments), [])
+
     def test_full_observation_budget_is_retained_below_the_existing_file_limit(self):
         import hashlib
         import json
@@ -14,7 +34,7 @@ class GitOutcomesTests(unittest.TestCase):
         row = {'event': 'mcp_call_outcome', 'version': 1, 'stage': 'result_inspection',
                'request_sha256': 'a' * 64, 'host_call_sha256': 'b' * 64,
                'response_sha256': 'c' * 64, 'reason_codes_sha256': 'd' * 64,
-               'authority': False, 'released': False,
+               'authority': False, 'released': False, 'collector_server': 'filesystem',
                'response': {'rpc_error': True, 'tool_error': True, 'rpc_code': -(2 ** 63)}}
         def writer(path, value):
             raw = (json.dumps(value, sort_keys=True, indent=2) + '\n').encode()
@@ -85,14 +105,14 @@ class GitOutcomesTests(unittest.TestCase):
         import json
         arguments = {'repo_path': '/workspace', 'revision': 'HEAD'}
         arg_hash = hashlib.sha256(b'{"repo_path":"/workspace","revision":"HEAD"}').hexdigest()
-        calls = [{'pid': 101, 'tool': 'git_show', 'args_sha256': arg_hash, 'id': 17},
-                 {'pid': 102, 'tool': 'git_show', 'args_sha256': arg_hash, 'id': 'foreign'}]
-        hashes = outcomes.call_hashes(calls, {101: 'git', 102: 'filesystem'}, 'git', 'git_show', arguments)
-        self.assertEqual(hashes, {hashlib.sha256(b'17').hexdigest()})
-        self.assertEqual(outcomes.call_hashes(calls, {101: 'git'}, 'git', 'git_status', arguments), set())
+        calls = [{'pid': 101, 'tool': 'git_show', 'args_sha256': arg_hash, 'id': 17, 'request_sha256': 'c' * 64},
+                 {'pid': 102, 'tool': 'git_show', 'args_sha256': arg_hash, 'id': 'foreign', 'request_sha256': 'd' * 64}]
+        hashes = outcomes.call_bindings(calls, {101: 'git', 102: 'filesystem'}, 'git', 'git_show', arguments)
+        self.assertEqual(hashes, {(hashlib.sha256(b'17').hexdigest(), 'c' * 64)})
+        self.assertEqual(outcomes.call_bindings(calls, {101: 'git'}, 'git', 'git_status', arguments), set())
         calls[0]['id'] = '\u03b1'
-        self.assertEqual(outcomes.call_hashes(calls, {101: 'git'}, 'git', 'git_show', arguments),
-                         {hashlib.sha256(b'"\xce\xb1"').hexdigest()})
+        self.assertEqual(outcomes.call_bindings(calls, {101: 'git'}, 'git', 'git_show', arguments),
+                         {(hashlib.sha256(b'"\xce\xb1"').hexdigest(), 'c' * 64)})
 
     def test_negative_controls_require_an_actual_error_response(self):
         results = {'toolu_existing_12': {'is_error': True, 'content': 'private-content'},

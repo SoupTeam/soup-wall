@@ -1465,6 +1465,8 @@ jobs:
           python3 -c 'import pathlib,sys; assert sum(line.endswith(": test") for line in pathlib.Path(sys.argv[1]).read_text().splitlines()) == 2' "$RUNNER_TEMP/sou177-outcome-tests.list"
           "$SOU119_SANDBOX_TESTS" 'real_server::outcomes::tests::'
           python3 -B -m unittest discover -s scripts/tests -p test_git_outcomes.py
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_launcher_witness.py
+          python3 -B -m unittest discover -s scripts/tests -p test_prepared_trace_bounds.py
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           project_failed=0
           python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \

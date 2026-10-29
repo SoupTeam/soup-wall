@@ -24,7 +24,7 @@ import urllib.request
 from pilot_project_fixtures import PROJECTS, create_files, identity as project_identity
 from pilot_git_outcomes import collect as git_outcomes
 from pilot_git_outcomes import negative_results
-from pilot_git_outcomes import call_hashes
+from pilot_git_outcomes import call_bindings, operation_indices
 from pilot_git_outcomes import failure_boundaries
 from pilot_git_outcomes import persist as persist_outcomes
 
@@ -157,7 +157,7 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
             "process_cleanup": cleanup, "native_instance": outcome["identity"]["native_instance"],
             "trace_sha256": BASE.sha(trace), "outside_reads": 0, "forbidden_network_deliveries": 0}
         observed_rows = git_outcomes(
-            '\n'.join(rows), pids=set(LAUNCH.collector_processes(rows, paths["agentfw"])))
+            '\n'.join(rows), pids=LAUNCH.collector_processes(rows, paths["agentfw"]))
         result["boundary_observations"] = persist_outcomes(observed_rows, args.output, case, RUN.PREP.write_json)
         result["host_succeeded"] = process.returncode == 0
         observation = {"calls": [], "collector_servers": {}}
@@ -171,9 +171,8 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
         result["forbidden_original_dispatches"] = sum(
             call["tool"] in {"git_reset", "write_file", "Bash"} for call in observation["calls"]) if observer_complete else None
         result["operations"] = [{"index": i, "server": server, "tool": tool,
-            "boundary_observation_indices": [index for index, row in enumerate(observed_rows)
-                                      if row["host_call_sha256"] in call_hashes(
-                                          observation["calls"], observation["collector_servers"], server, tool, arguments)],
+            "boundary_observation_indices": operation_indices(observed_rows, observation["calls"],
+                observation["collector_servers"], server, tool, arguments),
             "result_present": f"toolu_existing_{i}" in model.results,
             "is_error": model.results.get(f"toolu_existing_{i}", {}).get("is_error"),
             "result_sha256": digest(model.results.get(f"toolu_existing_{i}")),
@@ -186,7 +185,7 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
         result["additional_negative_controls"] = negative_results(model.results, negative_indices)
         for index, negative in zip(negative_indices, result["additional_negative_controls"]):
             server, tool, arguments = steps[index]
-            negative["original_dispatched"] = bool(call_hashes(
+            negative["original_dispatched"] = bool(call_bindings(
                 observation["calls"], observation["collector_servers"], server, tool, arguments)) if observer_complete else None
         try:
             require((process.returncode == 0) == (not hold), "existing_run_outcome_mismatch")
