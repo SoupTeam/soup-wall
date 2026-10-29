@@ -277,6 +277,28 @@ class RolloutPanelBrowserTests(unittest.TestCase):
         self.page.wait_for_timeout(200)
         self.assertNotIn("ro_1", self.page.locator("#rollout-panel").inner_text())
 
+    def test_revision_digest_completion_cannot_submit_to_a_new_group(self):
+        self.groups.append({"tenant_id": TENANT, "group_id": "other", "name": "Other", "created_at_unix": 1})
+        for suffix in ("members", "revisions"):
+            self.overrides[("GET", f"/admin/v1/tenants/{TENANT}/groups/other/{suffix}")] = (200, [])
+        self.overrides[("GET", f"/admin/v1/tenants/{TENANT}/groups/other/rollout")] = (404, {"error": "no rollout"})
+        self.open()
+        self.page.evaluate("""() => {
+            window.pendingDigests = [];
+            crypto.subtle.digest = () => new Promise(resolve => window.pendingDigests.push(resolve));
+        }""")
+        self.page.locator("#rollout-revision-id").fill("old-group-revision")
+        self.page.locator("#rollout-revision-yaml").fill("default: deny\n")
+        self.page.locator("#rollout-create-revision button").click()
+        self.page.wait_for_function("() => window.pendingDigests.length >= 2")
+        self.assertEqual(self.owner_buttons_enabled(), 0)
+        self.page.locator("#rollout-group").select_option("other")
+        self.wait_status("Server state read")
+        self.page.evaluate("() => window.pendingDigests.forEach(resolve => resolve(new Uint8Array(32).buffer))")
+        self.page.wait_for_timeout(200)
+        self.assertEqual(self.posts, [])
+        self.assertEqual(self.page.locator("#rollout-group").input_value(), "other")
+
     def test_empty_and_error_states(self):
         self.groups = []
         self.open(group=False)

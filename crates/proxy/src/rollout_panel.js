@@ -353,9 +353,22 @@ const rollout = (() => {
   });
   $("rollout-create-revision").addEventListener("submit", e => {
     e.preventDefault();
+    if (busy || blocked || !owner() || !tenant || !group) return;
+    const id = tenant, g = group, generation = epoch;
     const revision = $("rollout-revision-id").value.trim(), policy_yaml = $("rollout-revision-yaml").value;
-    digest(policy_yaml).then(local => mutate(`Create revision ${revision}`, "POST", "/revisions", { revision, policy_yaml }, { digest: local }))
-      .then(done => { if (done) { $("rollout-revision-id").value = ""; $("rollout-revision-yaml").value = ""; $("rollout-revision-digest").textContent = ""; } });
+    busy = true; lock();
+    digest(policy_yaml).then(async local => {
+      if (generation !== epoch || id !== tenant || g !== group) return;
+      if (!local) throw new Error("Policy digest unavailable");
+      busy = false;
+      const done = await mutate(`Create revision ${revision}`, "POST", "/revisions", { revision, policy_yaml }, { digest: local });
+      if (done && generation === epoch && id === tenant && g === group &&
+          $("rollout-revision-id").value.trim() === revision && $("rollout-revision-yaml").value === policy_yaml) {
+        $("rollout-revision-id").value = ""; $("rollout-revision-yaml").value = ""; $("rollout-revision-digest").textContent = "";
+      }
+    }).catch(() => {
+      if (generation === epoch) say("Unable to verify the policy digest. Nothing was sent; review the form and retry.", "error");
+    }).finally(() => { if (generation === epoch) { busy = false; lock(); } });
   });
   $("rollout-revision-yaml").addEventListener("input", async () => {
     const value = $("rollout-revision-yaml").value, d = value ? await digest(value) : null;
