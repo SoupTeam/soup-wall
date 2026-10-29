@@ -45,7 +45,8 @@ def passed_report(report):
             and report.get('expected') == list(CASES) and [r.get('id') for r in rows] == list(CASES)
             and all(r.get('attempted') is True and r.get('status') == 'passed' for r in rows)
             and all(r.get('genuine_readback') is True and r.get('unchanged') is True for r in positives)
-            and report.get('provider_requests_during_review') == 0
+            and type(report.get('provider_requests_during_review')) is int
+            and report['provider_requests_during_review'] == 0
             and report.get('sentinel_preserved') is True and report.get('all_owned_stopped') is True
             and report.get('exact_export_verified') is True)
 
@@ -55,6 +56,7 @@ def selected_witness(suite, run, target, plan):
     paths = [target, target.parent / 'source.txt', suite.sentinel,
              plan / 'profile.json', plan / 'profile.sha256',
              run / 'control.json', run / 'stop-receipt.json',
+             run / 'host-settings.json', run / 'host-home/.claude/settings.json',
              suite.home / 'pilot-front-door/current.json',
              suite.home / 'pilot-front-door/previous.json',
              suite.home / 'config.yaml', suite.work / 'original-project.txt',

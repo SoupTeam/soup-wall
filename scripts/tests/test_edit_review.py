@@ -50,6 +50,8 @@ class ReviewQualification(unittest.TestCase):
             self.assertFalse(review.passed_report(report))
         report = self.report();report['provider_requests_during_review'] = 1
         self.assertFalse(review.passed_report(report))
+        report = self.report();report['provider_requests_during_review'] = False
+        self.assertFalse(review.passed_report(report))
 
     def test_default_is_inert(self):
         result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/qualify-edit-review.py')],
