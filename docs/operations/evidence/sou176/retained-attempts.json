@@ -13,7 +13,10 @@
       "stages_executed": 0,
       "decision": "NOT_READY",
       "superseded_by": 2,
-      "job_owned_profile_cleanup": "removed-owned-profile-and-binary"
+      "job_owned_profile_cleanup": "removed-owned-profile-and-binary",
+      "raw_public_artifact": "removed_after_exact_private_retention",
+      "private_retention": "local original ZIP plus AES-GCM copy in PRIVATE Nari-Ab/soup-wall-evidence-private",
+      "private_mirror_commit": "a0f633c096abdcd4c50dc53d80eba13901156da2"
     },
     {
       "attempt": 2,
@@ -31,6 +34,46 @@
       "interrupted_stage_namespace_cleanup": "unconfirmed",
       "job_owned_profile_cleanup": "removed-owned-profile-and-binary",
       "decision": "NOT_READY",
+      "superseded_by": 3,
+      "raw_public_artifact": "removed_after_exact_private_retention",
+      "private_retention": "local original ZIP plus AES-GCM copy in PRIVATE Nari-Ab/soup-wall-evidence-private",
+      "private_mirror_commit": "a0f633c096abdcd4c50dc53d80eba13901156da2"
+    },
+    {
+      "attempt": 3,
+      "source": "69b88976f5a68db5ebb5781589c3ee8556317ad7",
+      "tree": "e0a0adfca8907ab3b8c0fa48a9c0df03d165f573",
+      "run": 40854361350,
+      "artifact": null,
+      "archive_sha256": null,
+      "status": "force_cancelled_before_public_raw_upload",
+      "reason": "Repository visibility was confirmed public; raw custody transport must be encrypted before upload. The next attempt retains the same target source and enclosure.",
+      "stages_executed": null,
+      "completion": "unconfirmed",
+      "namespace_cleanup": "unconfirmed",
+      "job_owned_profile_cleanup": "skipped_on_forced_cancel_ephemeral_runner",
+      "decision": "NOT_READY",
+      "superseded_by": 4
+    },
+    {
+      "attempt": 4,
+      "source": "69b88976f5a68db5ebb5781589c3ee8556317ad7",
+      "tree": "e0a0adfca8907ab3b8c0fa48a9c0df03d165f573",
+      "repository": "Nari-Ab/soup-wall-evidence-private",
+      "visibility": "PRIVATE",
+      "run": 40857968501,
+      "workflow_commit": "a0f633c096abdcd4c50dc53d80eba13901156da2",
+      "artifact": 12891518932,
+      "artifact_sha256": "c3b0e4224ba9f79e720c137fdf5c05c7974413eb6959e5b60371816aa555f3c4",
+      "archive_sha256": "f47b5386d452fb3a0759ad445f5f1acc0b6e680cf8628aabee15c70fd272dee8",
+      "status": "complete_inventory_verified",
+      "stages_executed": 7,
+      "qualified_identity_scopes": 50,
+      "identity_blockers": 0,
+      "namespace_cleanup": "all_stopped_for_all_seven_stages",
+      "job_owned_profile_cleanup": "removed-owned-profile-and-binary",
+      "decision": "NOT_READY",
+      "reason": "Original matched useful-work failures and three projects useful_original_result_failed outcomes remain failures; WSL remains unqualified. Identity completeness never replaces existing gates.",
       "superseded_by": null
     }
   ]
