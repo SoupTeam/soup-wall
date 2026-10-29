@@ -37,6 +37,9 @@ pub struct Cli {
 }
 #[derive(Subcommand, Debug)]
 enum Action {
+    /// Preview or atomically publish an explicitly selected private result set.
+    #[cfg(target_os = "linux")]
+    ExportSet(review::export_set::Args),
     /// Review exact completed-run outputs; private content needs explicit consent.
     #[cfg(target_os = "linux")]
     Review(review::Args),
@@ -196,4 +199,39 @@ fn status(args: diagnostic::Args) -> Result<()> {
         println!("{}", diagnostic::text(&report));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod grammar_tests {
+    use super::*;
+    use clap::{CommandFactory, Parser};
+    #[derive(Parser)]
+    struct Grammar {
+        #[command(flatten)]
+        cli: Cli,
+    }
+    #[test]
+    fn result_set_types_follow_the_executor_platform_boundary() {
+        Grammar::command().debug_assert();
+        assert!(
+            Grammar::try_parse_from(["agentfw", "status", "--run", "/private/run", "--json"])
+                .is_ok()
+        );
+        let parsed = Grammar::try_parse_from([
+            "agentfw",
+            "export-set",
+            "--run",
+            "/private/run",
+            "--sha256",
+            &"a".repeat(64),
+            "--include",
+            "a.txt",
+            "--include",
+            "b.txt",
+            "--out",
+            "/private/new",
+            "--consent-private-content",
+        ]);
+        assert_eq!(parsed.is_ok(), cfg!(target_os = "linux"));
+    }
 }
