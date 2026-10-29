@@ -24,6 +24,7 @@ import urllib.request
 from pilot_project_fixtures import PROJECTS, create_files, identity as project_identity
 from pilot_git_outcomes import collect as git_outcomes
 from pilot_git_outcomes import negative_results
+from pilot_git_outcomes import negative_calls
 from pilot_git_outcomes import call_bindings, operation_indices
 from pilot_git_outcomes import failure_boundaries
 from pilot_git_outcomes import persist as persist_outcomes
@@ -64,7 +65,7 @@ def digest(value):
     return BASE.hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def run_host(args, selection_path, paths, private, case, marker, receiver, sentinel):
+def run_host(args, selection_path, paths, private, case, marker, receiver, sentinel, negative_tree=None):
     root = private / case; root.mkdir(mode=0o700)
     state = root / "state"; state.mkdir(mode=0o700)
     model = BASE.DEMO.ScriptedModel([])
@@ -85,10 +86,11 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                   ("git", "git_log", {"repo_path": "/workspace", "max_count": 2})]
     original_step_count = len(steps)
     negative_indices = ()
+    controls = []
     if not hold and getattr(args, "git_negative_controls", False):
-        negative_indices = tuple(range(len(steps), len(steps) + 3))
-        steps += [("git", "git_show", {"repo_path": "/workspace", "revision": revision})
-                  for revision in ('f' * 40, 'HEAD:sou177-nonexistent-path', 'HEAD^{tree}')]
+        controls = negative_calls(negative_tree)
+        negative_indices = tuple(range(len(steps), len(steps) + len(controls)))
+        steps += [row[1:] for row in controls]
     offered = set()
     def next_step(body):
         names = {tool.get("name") for tool in body.get("tools", [])}
@@ -183,10 +185,15 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
             operation["failure_boundaries"] = failure_boundaries(
                 [observed_rows[index] for index in operation["boundary_observation_indices"]])
         result["additional_negative_controls"] = negative_results(model.results, negative_indices)
-        for index, negative in zip(negative_indices, result["additional_negative_controls"]):
+        for control, index, negative in zip(controls, negative_indices, result["additional_negative_controls"]):
             server, tool, arguments = steps[index]
+            negative["kind"] = control[0]
             negative["original_dispatched"] = bool(call_bindings(
                 observation["calls"], observation["collector_servers"], server, tool, arguments)) if observer_complete else None
+            negative["boundary_observation_indices"] = operation_indices(observed_rows, observation["calls"],
+                observation["collector_servers"], server, tool, arguments)
+            negative["failure_boundaries"] = failure_boundaries(
+                [observed_rows[i] for i in negative["boundary_observation_indices"]])
         try:
             require((process.returncode == 0) == (not hold), "existing_run_outcome_mismatch")
             if hold:
@@ -197,9 +204,10 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                 require(result["forbidden_original_dispatches"] == 0, "forbidden_original_dispatch")
                 require(all(row["passed"] for row in result["additional_negative_controls"]),
                         "git_negative_control_not_refused")
-                if negative_indices:
-                    require(not result["additional_negative_controls"][-1]["original_dispatched"],
-                            "unsafe_git_object_dispatched")
+                require(all(row["original_dispatched"] is False
+                            for row in result["additional_negative_controls"]
+                            if row["kind"] in ("unsupported_git_expression", "unsupported_git_path")),
+                        "unsupported_git_revision_dispatched")
                 require(len(model.results) == len(steps), "existing_correlated_results_missing")
                 for index in (0, 1, 2, 3, 9):
                     require(model.results[f"toolu_existing_{index}"]["is_error"] is False, "useful_original_result_failed")
@@ -310,6 +318,12 @@ def qualify(args, private, report):
             for words in (("-C", str(git), "add", "docs/history.md", "tracked.txt"),
                           ("-C", str(git), "commit", "-qm", "Owned documentation revision")):
                 subprocess.run([str(paths["git"]), *words], env=env, check=True, capture_output=True, timeout=15)
+        negative_tree = None
+        if getattr(args, "git_negative_controls", False):
+            negative_tree = subprocess.check_output([str(paths["git"]), "-C", str(git),
+                "rev-parse", "HEAD^{tree}"], env=env, timeout=15).decode().strip()
+            require(re.fullmatch("[0-9a-f]{40}", negative_tree), "negative_git_tree_unavailable")
+            report["negative_git_tree_oid_sha256"] = digest(negative_tree)
         (git / "tracked.txt").write_text("Owned operator Git edit v1\n")
         (git / "preserved-untracked.txt").write_text("Preserve this untracked user file\n")
         for project in (fs, git):
@@ -382,7 +396,7 @@ def qualify(args, private, report):
             current = {"filesystem": snapshot(fs), "git": snapshot(git)}
             report["active_case"] = case
             try:
-                result = run_host(args, selection_path, paths, private, case, marker, receiver, sentinel)
+                result = run_host(args, selection_path, paths, private, case, marker, receiver, sentinel, negative_tree)
             except ProjectCaseFailure as error:
                 result = error.evidence
                 require(result["process_cleanup"]["all_stopped"] and not result["process_cleanup"]["remaining"],
@@ -416,7 +430,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--offline-inputs", type=Path, help="Pinned offline installer inputs; no runtime downloads")
     parser.add_argument("--git-negative-controls", action="store_true",
-                        help="Append separately reported missing-revision/path and unsupported-object refusals")
+                        help="Append separately reported missing-resource and unsupported-object requests")
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)

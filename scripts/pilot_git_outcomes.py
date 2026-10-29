@@ -4,6 +4,18 @@ import ast
 import hashlib
 
 
+def negative_calls(tree_oid):
+    if not isinstance(tree_oid, str) or not re.fullmatch('[0-9a-f]{40}', tree_oid):
+        raise ValueError('invalid_negative_tree_oid')
+    return [
+        ('missing_git_revision', 'git', 'git_show', {'repo_path': '/workspace', 'revision': 'f' * 40}),
+        ('unsupported_git_path', 'git', 'git_show', {'repo_path': '/workspace', 'revision': 'HEAD:sou177-nonexistent-path'}),
+        ('unsupported_git_expression', 'git', 'git_show', {'repo_path': '/workspace', 'revision': 'HEAD^{tree}'}),
+        ('unsupported_git_tree', 'git', 'git_show', {'repo_path': '/workspace', 'revision': tree_oid}),
+        ('missing_workspace_file', 'filesystem', 'read_text_file', {'path': '/workspace/sou177-nonexistent-path'}),
+    ]
+
+
 def persist(rows, output, case, writer):
     if case not in ('initial', 'operator-edit', 'cancel', 'daemon-loss', 'recovery'):
         raise ValueError('unsupported_outcome_case')
@@ -60,8 +72,17 @@ def negative_results(results, indices):
     rows = []
     for index in indices:
         value = results.get(f'toolu_existing_{index}')
+        refused = isinstance(value, dict) and value.get('is_error') is True
+        error_class = None
+        if refused:
+            text = json.dumps(value, sort_keys=True)
+            error_class = next((code for fragment, code in (
+                ('MCP arguments violate the selected input profile', 'input_profile_refused'),
+                ('Git local reference or file revision unavailable, unsupported, or its source changed', 'git_reference_refused'),
+                ('MCP path refused before execution: it is outside', 'outside_path_refused'),
+            ) if fragment in text), 'unclassified_tool_error')
         rows.append({'index': index, 'result_present': value is not None,
-                     'passed': isinstance(value, dict) and value.get('is_error') is True,
+                     'passed': refused, 'client_error_class': error_class,
                      'result_sha256': hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
                      if value is not None else None})
     return rows

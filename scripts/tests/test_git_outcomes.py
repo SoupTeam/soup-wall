@@ -7,6 +7,24 @@ import pilot_git_outcomes as outcomes
 
 
 class GitOutcomesTests(unittest.TestCase):
+    def test_client_error_classes_are_finite_observations_without_exception_text(self):
+        value = {'is_error': True, 'content': 'MCP arguments violate the selected input profile private-value'}
+        row = outcomes.negative_results({'toolu_existing_12': value}, (12,))[0]
+        self.assertEqual(row['client_error_class'], 'input_profile_refused')
+        self.assertNotIn('private-value', str(row))
+        value['is_error'] = False
+        self.assertIsNone(outcomes.negative_results({'toolu_existing_12': value}, (12,))[0]['client_error_class'])
+
+    def test_negative_inventory_contains_an_actual_object_id_and_missing_file(self):
+        controls = outcomes.negative_calls('a' * 40)
+        self.assertEqual([row[0] for row in controls], ['missing_git_revision', 'unsupported_git_path',
+                         'unsupported_git_expression', 'unsupported_git_tree', 'missing_workspace_file'])
+        self.assertEqual(controls[3][1:], ('git', 'git_show', {'repo_path': '/workspace', 'revision': 'a' * 40}))
+        self.assertEqual(controls[4][1:], ('filesystem', 'read_text_file', {'path': '/workspace/sou177-nonexistent-path'}))
+        for value in (None, 'HEAD^{tree}', 'a' * 39, '../private'):
+            with self.assertRaises(ValueError):
+                outcomes.negative_calls(value)
+
     def test_rpc_ids_reused_by_two_servers_cannot_mix_observations(self):
         import hashlib
         import json
