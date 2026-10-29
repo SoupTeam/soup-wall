@@ -103,7 +103,8 @@ genuine installed pinned host with the existing owned loopback scripted provider
 to create/replace/read private outputs, then runs offline review, preview,
 application, readback and revert against disposable owned project fixtures. A
 separate provider trap and unchanged retained native records witness operator-only
-operations. The finite negative inventory includes stale/duplicate calls, changed
+operations. The finite negative inventory includes stale/duplicate calls, two
+concurrent application processes with exactly one winner, changed
 pre/postimages, active/foreign/altered runs, links, redirection, protected-root
 overlap and damaged records. An owned syscall interposer kills the operator at
 the actual pre/post-rename boundary and after a visible receipt is synced, and

@@ -30,6 +30,8 @@ class ApplicationQualification(unittest.TestCase):
             if row['id'] in application.FAULTS:
                 row.update(actual_syscall_fault=True, recovery_indeterminate=True,
                            fault_exit=-9 if row['id'] in ('before-publication', 'after-publication', 'after-receipt-sync') else 1)
+            if row['id'] == 'concurrent-application':
+                row.update(actual_processes=2, exact_single_winner=True)
         return report
 
     def test_every_declared_control_must_really_be_attempted_and_pass(self):
@@ -66,6 +68,9 @@ class ApplicationQualification(unittest.TestCase):
                            ('operator_state_checks', 0), ('operator_state_checks', True),
                            ('all_owned_stopped', False), ('sentinel_preserved', False), ('paid_inference', True)]:
             report = self.report(); report[key] = value
+            self.assertFalse(application.passed_report(report))
+        for key, value in [('actual_processes', 1), ('actual_processes', True), ('exact_single_winner', False)]:
+            report = self.report(); next(r for r in report['cases'] if r['id'] == 'concurrent-application')[key] = value
             self.assertFalse(application.passed_report(report))
 
     def test_default_does_not_execute_or_publish(self):

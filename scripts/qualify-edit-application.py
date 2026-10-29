@@ -7,6 +7,7 @@ used. Raw outputs, backups, command responses and authority stay private.
 """
 from __future__ import annotations
 import argparse
+import concurrent.futures
 import contextlib
 import importlib.util
 import json
@@ -30,7 +31,7 @@ FORMAT = 'sw-installed-edit-application-qualification/1'
 FAULTS = ('before-publication', 'after-publication', 'target-directory-sync', 'receipt-sync', 'after-receipt-sync')
 CASES = ('installed-closure', 'genuine-create-apply-revert', 'genuine-replace-apply-revert',
          'read-only-preview', 'missing-consents', 'stale-confirmation', 'changed-target', 'changed-output',
-         'duplicate-application', 'later-user-edit', 'stale-revert', 'backup-damage', 'journal-damage',
+         'duplicate-application', 'concurrent-application', 'later-user-edit', 'stale-revert', 'backup-damage', 'journal-damage',
          'target-symlink', 'target-hardlink', 'target-fifo', 'target-oversize', 'target-mode',
          'output-symlink', 'output-hardlink', 'output-fifo', 'missing-output', 'run-profile-change',
          'foreign-run', 'source-plan-overlap', 'output-overlap', 'journal-overlap', 'parent-redirection',
@@ -83,6 +84,9 @@ def passed_report(report):
             return False
         if name in ('before-publication', 'after-publication', 'after-receipt-sync') and row['fault_exit'] != -signal.SIGKILL:
             return False
+    concurrent = next(r for r in rows if r['id'] == 'concurrent-application')
+    if type(concurrent.get('actual_processes')) is not int or concurrent['actual_processes'] != 2 or concurrent.get('exact_single_winner') is not True:
+        return False
     return True
 
 
@@ -297,6 +301,21 @@ def qualify(args, report):
         before = snapshot(target), sorted(journal.iterdir())
         require(commit(words, p)[0] != 0 and before == (snapshot(target), sorted(journal.iterdir())), 'duplicate_apply_replayed')
         finish('duplicate-application', refused=True)
+        begin('concurrent-application')
+        project, target, sentinel, journal, words = destination(run, plan, prepared)
+        p = preview(words); original = target.read_bytes()
+        outside = snapshot(sentinel); before_source = source_witness(run, output, plan)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            calls = [pool.submit(commit, words, p) for _ in range(2)]
+            results = [call.result() for call in calls]
+        require(sorted(code for code, *_ in results) == [0, 1], 'concurrent_apply_not_single_winner')
+        winner = next(value for code, value, _ in results if code == 0)
+        require(target.read_bytes() == output.read_bytes() and (journal / 'preimage.bin').read_bytes() == original
+                and snapshot(sentinel) == outside and source_witness(run, output, plan) == before_source,
+                'concurrent_apply_damaged_source_or_target')
+        code, state, _ = operator('status', *retained(journal, p, winner))
+        require(code == 0 and state['status'] == 'applied', 'concurrent_winner_not_confirmed')
+        finish('concurrent-application', actual_processes=2, exact_single_winner=True, source_unchanged=True)
         project, target, sentinel, journal, words, p, applied, _ = applied_fixture('later-user-edit')
         target.write_text('Later user work.\n'); before = snapshot(target)
         require(operator('revert-preview', *retained(journal, p, applied))[0] != 0 and snapshot(target) == before,
