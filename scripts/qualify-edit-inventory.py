@@ -30,6 +30,15 @@ CASES = ('installed-closure', 'completed-and-interrupted-history', 'two-live-zer
          'concurrent-disappearance', 'capacity-bound', 'helper-integrity')
 
 
+def read_only_review(value):
+    """The accepted CLI wraps execution/authority flags in its observation."""
+    return (isinstance(value, dict) and value.get('format') == 'sw-installed-edit-review/1'
+            and value.get('status') == 'reviewed'
+            and isinstance(value.get('observation'), dict)
+            and value.get('observation', {}).get('executed') is False
+            and value.get('observation', {}).get('authority') is False)
+
+
 def passed_report(report):
     rows = report.get('cases', [])
     by_id = {r.get('id'): r for r in rows}
@@ -158,6 +167,11 @@ def qualify(args, report):
         listed = inventory()
         require(listed['verified_component'] == built['component'] and len(listed['rows']) == 4,
                 'inventory_installed_binding_missing')
+        expected_profiles = {r.run.name[5:]:r.prepared['profile_sha256'] for r in (finished, interrupted, *live)}
+        require(all(r['profile_sha256'] == expected_profiles[r['run_id']]
+                    and r['source_commit'] == built['commit'] and r['source_tree'] == report['source_tree']
+                    and r['component_sha256'] == built['component'] for r in listed['rows']),
+                'inventory_retained_identity_mismatch')
         for r, (state, target, immutable, requests, offered, audit) in zip(live, before):
             row_value = next(v for v in listed['rows'] if v['run_id'] == r.run.name[5:])
             require(row_value['recorded_host_outcome'] == 'terminal_not_recorded'
@@ -166,7 +180,7 @@ def qualify(args, report):
                     and len(r.model.requests) == requests and r.offered == offered, 'inventory_mutated_or_executed')
             EDIT.live_audit_delta(audit, EDIT.live_audit_witness(r.run))
         done(row, zero_provider_requests=True, zero_tool_calls=True, state_and_outputs_preserved=True,
-             active_runs=2, report_sha256=sha(json.dumps(listed, sort_keys=True).encode()))
+             active_runs=2, listed_rows=listed['rows'], report_sha256=sha(json.dumps(listed, sort_keys=True).encode()))
 
         row = begin('exact-status-and-stop-peer-preserved')
         chosen, peer = live
@@ -188,7 +202,7 @@ def qualify(args, report):
         token = inventory(finished.run)['rows'][0]['selection_sha256']
         before = (EDIT.private_state_witness(finished.run), snapshot(finished.target), plan(finished), len(finished.model.requests))
         review = selected(finished.run, token, 'review', '--sha256', finished.prepared['profile_sha256'])
-        require(review['format'] == 'sw-installed-edit-review/1' and review['executed'] is False
+        require(read_only_review(review)
                 and (EDIT.private_state_witness(finished.run), snapshot(finished.target), plan(finished),
                      len(finished.model.requests)) == before, 'inventory_review_changed_or_executed')
         done(row, zero_provider_requests=True, output_and_plan_preserved=True)
@@ -298,7 +312,7 @@ def main():
         if current is not None: current.update(status='failed', failure=code)
     report['inventory'] = {s:sum(r['status'] == s for r in report['cases']) for s in ('passed', 'failed', 'incomplete')}
     (args.output / 'report.json').write_text(json.dumps(report, sort_keys=True, indent=2) + '\n')
-    print(json.dumps({'format':FORMAT, 'status':report['status'], 'inventory':report['inventory']}))
+    print(json.dumps({key:report[key] for key in ('format', 'status', 'inventory', 'failure', 'failure_type') if key in report}))
     return 0 if passed_report(report) else 1
 
 

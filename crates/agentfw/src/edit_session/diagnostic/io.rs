@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Descriptor-pinned, owner-private exact file selection; never enumerate state.
+//! Descriptor-pinned private reads and bounded explicit-root enumeration.
 use std::{
     ffi::{CStr, CString},
     fs::{File, Metadata},

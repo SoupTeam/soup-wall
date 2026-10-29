@@ -14,6 +14,18 @@ probe = importlib.util.module_from_spec(spec);spec.loader.exec_module(probe)
 
 
 class Evidence(unittest.TestCase):
+    def test_review_flags_are_read_from_the_accepted_response_wrapper(self):
+        response = {'format':'sw-installed-edit-review/1', 'status':'reviewed',
+                    'observation':{'executed':False, 'authority':False}}
+        self.assertTrue(probe.read_only_review(response))
+        for field in ('executed', 'authority'):
+            changed = copy.deepcopy(response);changed['observation'].pop(field)
+            self.assertFalse(probe.read_only_review(changed))
+            changed = copy.deepcopy(response);changed['observation'][field] = True
+            self.assertFalse(probe.read_only_review(changed))
+        self.assertFalse(probe.read_only_review({'format':response['format'], 'status':'reviewed', 'executed':False}))
+        self.assertFalse(probe.read_only_review(dict(response, observation=None)))
+
     def passing(self):
         report = {'format':probe.FORMAT, 'status':'passed', 'paid_inference':False,
                   'claude_sha256':probe.EDIT.CLAUDE, 'expected':list(probe.CASES),
