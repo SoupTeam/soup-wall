@@ -94,6 +94,7 @@ enum Action {
         action: Ask,
     },
     /// Preview, archive or explicitly clean one completed installed edit run.
+    #[cfg(target_os = "linux")]
     Archive {
         /// Agent profile containing the verified installed helper component.
         #[arg(long)]
@@ -163,6 +164,7 @@ pub enum Ask {
     },
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Subcommand, Debug)]
 enum Archive {
     /// Read-only exact inventory and confirmation digest; source stays intact.
@@ -192,6 +194,7 @@ enum Archive {
     },
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Args, Debug)]
 struct ArchivePlan {
     #[arg(long)]
