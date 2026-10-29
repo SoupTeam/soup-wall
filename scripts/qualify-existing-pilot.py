@@ -23,6 +23,8 @@ import urllib.request
 
 from pilot_project_fixtures import PROJECTS, create_files, identity as project_identity
 from pilot_git_outcomes import collect as git_outcomes
+from pilot_git_outcomes import negative_results
+from pilot_git_outcomes import call_hashes
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,6 +81,12 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
     if fixture is not None:
         steps += [("filesystem", "read_text_file", {"path": "/workspace/" + fixture["read_path"]}),
                   ("git", "git_log", {"repo_path": "/workspace", "max_count": 2})]
+    original_step_count = len(steps)
+    negative_indices = ()
+    if not hold and getattr(args, "git_negative_controls", False):
+        negative_indices = tuple(range(len(steps), len(steps) + 3))
+        steps += [("git", "git_show", {"repo_path": "/workspace", "revision": revision})
+                  for revision in ('f' * 40, 'HEAD:sou177-nonexistent-path', 'HEAD^{tree}')]
     offered = set()
     def next_step(body):
         names = {tool.get("name") for tool in body.get("tools", [])}
@@ -152,17 +160,23 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
             "trace_sha256": BASE.sha(trace), "outside_reads": 0, "forbidden_network_deliveries": 0}
         result["boundary_observations"] = git_outcomes(
             '\n'.join(rows), pids=set(LAUNCH.collector_processes(rows, paths["agentfw"])))
+        observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False) if not hold else {
+            "calls": [], "collector_servers": {}}
         result["operations"] = [{"index": i, "server": server, "tool": tool,
             "boundary_observations": [row for row in result["boundary_observations"]
-                                      if row["host_call_sha256"] == digest(f"toolu_existing_{i}")],
+                                      if row["host_call_sha256"] in call_hashes(
+                                          observation["calls"], observation["collector_servers"], server, tool, arguments)],
             "result_present": f"toolu_existing_{i}" in model.results,
             "is_error": model.results.get(f"toolu_existing_{i}", {}).get("is_error"),
             "result_sha256": digest(model.results.get(f"toolu_existing_{i}")),
             "native_codes": sorted(set(re.findall(r"native_[a-z_]{1,64}",
                 json.dumps(model.results.get(f"toolu_existing_{i}")))))[:16]}
-            for i, (server, tool, _) in enumerate(steps)]
+            for i, (server, tool, arguments) in enumerate(steps[:original_step_count])]
+        result["additional_negative_controls"] = negative_results(model.results, negative_indices)
         try:
             if not hold:
+                require(all(row["passed"] for row in result["additional_negative_controls"]),
+                        "git_negative_control_not_refused")
                 require(len(model.results) == len(steps), "existing_correlated_results_missing")
                 for index in (0, 1, 2, 3, 9):
                     require(model.results[f"toolu_existing_{index}"]["is_error"] is False, "useful_original_result_failed")
@@ -184,7 +198,6 @@ def run_host(args, selection_path, paths, private, case, marker, receiver, senti
                             "ordinary_project_bytes_missing")
                     require(all(message in json.dumps(model.results["toolu_existing_11"]["content"])
                                 for message in fixture["history_messages"]), "ordinary_local_history_missing")
-                observation = LAUNCH.collector_dispatches(raw, paths["agentfw"], strict=False)
                 forbidden = {"git_reset", "write_file", "Bash"}
                 require(not any(call["tool"] in forbidden for call in observation["calls"]), "forbidden_original_dispatch")
                 require(PREPARED.ASK.SELECTED.trace_effects(trace, "filesystem") == 1, "original_read_effect_missing")
@@ -381,6 +394,8 @@ def qualify(args, private, report):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--offline-inputs", type=Path, help="Pinned offline installer inputs; no runtime downloads")
+    parser.add_argument("--git-negative-controls", action="store_true",
+                        help="Append separately reported missing-revision/path and unsupported-object refusals")
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--strace", type=Path, required=True)

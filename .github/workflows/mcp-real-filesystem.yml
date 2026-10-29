@@ -1473,7 +1473,8 @@ jobs:
           for project in docs-code unicode-spaces local-history; do
             python3 -B scripts/qualify-existing-pilot.py --selection "$selection" \
               --expected-commit "$(git rev-parse HEAD)" --strace "$(command -v strace)" \
-              --project-fixture "$project" --output "$RUNNER_TEMP/sou177-$project" || project_failed=1
+              --project-fixture "$project" --git-negative-controls \
+              --output "$RUNNER_TEMP/sou177-$project" || project_failed=1
           done
           exit "$project_failed"
       - name: Qualify structured operator outcomes through both original servers

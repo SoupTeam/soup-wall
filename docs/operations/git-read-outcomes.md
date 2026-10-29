@@ -1,9 +1,13 @@
 # Original Git read outcomes
 
-The SOU-177 diagnostic records distinguish the original response from the subsequent result-inspection decision. They contain correlation hashes, response hashes, protocol-error codes and Boolean observations. Original content, exception messages, arguments and credentials are not diagnostic fields.
+The SOU-177 diagnostic records distinguish call admission, the original response, profile validation, result inspection and delivery. They contain correlation hashes, response hashes, protocol-error codes and Boolean observations. Policy reason codes are represented by a digest of the exact reason array. Original content, exception messages, arguments and credentials are not diagnostic fields.
 
 `mcp_call_outcome` version 1 is an observation, not authority to execute or release content. A server tool error and an inspection refusal are different outcomes. A successful negative control is not useful Git work.
 
-The existing project qualifier retains these records as `boundary_observations`. The projector accepts only the finite schema; unknown fields and arbitrary server text are discarded. Missing observations remain missing and must not be used to infer a failure boundary.
+The existing project qualifier retains these records as `boundary_observations`. It reconstructs successful stderr writes from identified collector processes, including fragmented and short writes. Operations are correlated through independently observed original-server calls, exact tool/argument bindings and the actual JSON-RPC ID. Model tool-use IDs are not assumed to be RPC IDs. Unknown fields and arbitrary server text are discarded. Missing observations remain missing and must not be used to infer a failure boundary.
 
-Run the targeted `mcp-real-filesystem.yml` workflow with `existing_project_only=true` to exercise the existing project lane and the unchanged docs-code, unicode-spaces and local-history inventories. Keep failed reports and exact source/input identities. No detector correction or successful utility claim is established by diagnostic instrumentation alone.
+`accepted` at profile validation means that the response shape passed validation. `released` describes the admission or inspection decision at its stated stage. Only a separate delivery observation with `written=true` records a completed host write. None of these records grants authority.
+
+Run the targeted `mcp-real-filesystem.yml` workflow with `existing_project_only=true` to exercise the existing project lane and the unchanged docs-code, unicode-spaces and local-history inventories. The `--git-negative-controls` qualifier option appends missing-revision, missing-path and unsupported-object requests after the original operations. It reports their error observations separately in `additional_negative_controls`; they are never counted as useful work. Existing destructive-tool, outside-read and network witnesses remain required. No timeout is increased.
+
+Keep failed reports and exact source/input identities. No detector correction or successful utility claim is established by diagnostic instrumentation alone. A mismatch between a healthy original response and a refused inspected result must be attributed to the selected inspection rule before any detector handoff; do not change rules to make the qualifier pass.

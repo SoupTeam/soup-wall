@@ -1,19 +1,60 @@
 import json
 import re
 import ast
+import hashlib
+
+
+def call_hashes(calls, servers, server, tool, arguments):
+    raw = json.dumps(arguments, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
+    expected = hashlib.sha256(raw).hexdigest()
+    return {hashlib.sha256(json.dumps(call['id'], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            for call in calls if call['tool'] == tool and call['args_sha256'] == expected
+            and servers.get(call['pid']) == server}
+
+
+def negative_results(results, indices):
+    rows = []
+    for index in indices:
+        value = results.get(f'toolu_existing_{index}')
+        rows.append({'index': index, 'result_present': value is not None,
+                     'passed': isinstance(value, dict) and value.get('is_error') is True,
+                     'result_sha256': hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+                     if value is not None else None})
+    return rows
 
 
 def project(row):
     if not isinstance(row, dict):
         return None
+    if row.get('event') == 'mcp_original_result_delivery_timing':
+        if set(row) != {'event', 'version', 'host_call_sha256', 'request_sha256',
+                        'response_sha256', 'elapsed_us', 'written', 'authority'}:
+            return None
+        if type(row['elapsed_us']) is not int or not 0 <= row['elapsed_us'] <= 3600 * 1000000:
+            return None
+        row = {key: value for key, value in row.items() if key not in ('event', 'elapsed_us')}
+        row.update(event='mcp_call_outcome', stage='host_delivery')
     fields = {'event', 'version', 'stage', 'request_sha256', 'host_call_sha256',
               'response_sha256', 'response', 'authority'}
-    if row.get('stage') == 'result_inspection':
+    if row.get('stage') == 'host_delivery':
+        fields.remove('response')
+        fields.add('written')
+        if type(row.get('written')) is not bool:
+            return None
+    elif row.get('stage') == 'profile_validation':
+        fields.add('accepted')
+        if type(row.get('accepted')) is not bool:
+            return None
+    elif row.get('stage') in ('result_inspection', 'call_admission'):
         fields.add('released')
         if type(row.get('released')) is not bool:
             return None
     elif row.get('stage') != 'original_response':
         return None
+    if 'reason_codes_sha256' in row:
+        fields.add('reason_codes_sha256')
+        if not isinstance(row['reason_codes_sha256'], str) or not re.fullmatch('[0-9a-f]{64}', row['reason_codes_sha256']):
+            return None
     if set(row) != fields or row.get('event') != 'mcp_call_outcome' or type(row.get('version')) is not int:
         return None
     if row['version'] != 1 or row['authority'] is not False:
@@ -21,6 +62,10 @@ def project(row):
     for key in ('request_sha256', 'host_call_sha256', 'response_sha256'):
         if not isinstance(row[key], str) or not re.fullmatch('[0-9a-f]{64}', row[key]):
             return None
+    if row['stage'] == 'host_delivery':
+        return row
+    if row['stage'] == 'call_admission' and row['response'] is None:
+        return row
     response = row['response']
     if not isinstance(response, dict) or set(response) != {'rpc_error', 'tool_error', 'rpc_code'}:
         return None
@@ -68,7 +113,7 @@ def collect(trace, pids=None):
                 continue
             try:
                 row = project(json.loads(message))
-            except (ValueError, UnicodeError):
+            except (ValueError, UnicodeError, RecursionError):
                 continue
             if row is not None:
                 rows.append(row)
