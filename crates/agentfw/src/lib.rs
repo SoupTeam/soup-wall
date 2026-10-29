@@ -40,6 +40,8 @@ pub(crate) mod macos_create;
 pub(crate) mod macos_read;
 pub mod offline_replay;
 pub mod preflight;
+#[cfg(target_os = "linux")]
+mod private_export;
 #[cfg(windows)]
 mod private_file_windows;
 pub mod protection_status;

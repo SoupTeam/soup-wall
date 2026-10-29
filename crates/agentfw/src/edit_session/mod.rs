@@ -20,6 +20,8 @@ mod record;
 #[cfg(target_os = "linux")]
 mod refresh;
 #[cfg(target_os = "linux")]
+mod review;
+#[cfg(target_os = "linux")]
 mod runtime;
 pub(crate) mod transport;
 
@@ -35,6 +37,9 @@ pub struct Cli {
 }
 #[derive(Subcommand, Debug)]
 enum Action {
+    /// Review exact completed-run outputs; private content needs explicit consent.
+    #[cfg(target_os = "linux")]
+    Review(review::Args),
     /// Diagnose one selected edit run without replaying calls or changing state.
     Status(diagnostic::Args),
     /// Inspect a proposed private output profile without writes or authority.

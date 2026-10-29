@@ -715,7 +715,8 @@ def verified_role(directory, context, role):
 
 
 FILTERS = {"library": {"create_file", "sou54_", "mcp::input::tests::", "edit_session",
-                       "native::execution::transport", "replace_file", "pilot_approval"},
+                       "native::execution::transport", "replace_file", "pilot_approval",
+                       "private_export", "support_bundle"},
            "native_endpoint": {"create_file_v2", "sou125_stop"}, "replace_file": {""}}
 
 

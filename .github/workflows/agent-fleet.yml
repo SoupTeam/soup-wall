@@ -43,6 +43,16 @@ jobs:
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend sqlite --output target/fleet-evidence/sqlite'
       - name: PostgreSQL TLS real processes and browser
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend postgres --output target/fleet-evidence/postgres'
+      - name: Managed Agent rollout panel browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_rollout_browser.py -v'
+      - name: Browser rollout to one pilot and two real Agents over HTTPS
+        shell: bash
+        run: |
+          set +e
+          "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-rollout-acceptance.py --no-build --output "$RUNNER_TEMP/rollout"
+          status=$?
+          cp -r "$RUNNER_TEMP/rollout" target/fleet-evidence/rollout
+          exit $status
       - name: Require clean formatting
         run: test ! -s target/fleet-evidence/format.patch
       - name: Retain sanitized fleet evidence

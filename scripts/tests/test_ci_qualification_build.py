@@ -310,6 +310,8 @@ class Dependency(unittest.TestCase):
     def test_stop_filters_use_existing_pinned_test_roles_without_widening_commands(self):
         prefix = ["test", "--locked", "--offline", "-p", "agentfw"]
         for selection, expected in ((["--lib", "pilot_approval"], ("library", "pilot_approval")),
+                                    (["--lib", "private_export"], ("library", "private_export")),
+                                    (["--lib", "support_bundle"], ("library", "support_bundle")),
                                     (["--test", "native_endpoint", "sou125_stop"], ("native_endpoint", "sou125_stop"))):
             command = prefix + selection + ["--", "--nocapture"]
             self.assertEqual(B.parse_cargo(command), expected)
