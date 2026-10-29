@@ -1,0 +1,18 @@
+{
+  "format": "sw-private-edit-self-test-review/1",
+  "reviewed_source_commit": "b71084b7577d4d7d3a8de5f2cace4ac00bbc4598",
+  "independent_read_only_review": true,
+  "remaining_concrete_blockers": 0,
+  "resolved_findings": [
+    "Default workspace cleanup failure must report incomplete unless retention was explicitly requested.",
+    "Directory enumeration must enforce the entry cap before retaining entries, including vanished hints.",
+    "Cleanup must validate ancestry and signal pinned kernel pidfds rather than recycled numeric descendant PIDs.",
+    "A previously pinned child remains owned after reparenting; live unproven hints remain outside the signal path and prevent complete cleanup.",
+    "Only the live retained-byte budget scan may tolerate vanished temporary entries; content-preservation witnesses remain strict.",
+    "Quota controls must distinguish native policy/Ask authorization from actual reservation and commit counters."
+  ],
+  "focused_helper_tests_passed": 32,
+  "qualification_validator_tests_passed": 4,
+  "native_runtime_evidence": "native-attempt-05.json",
+  "scope": "Correctness, privacy, resource bounds and regressions; not a repository security certification or final shared admission."
+}
