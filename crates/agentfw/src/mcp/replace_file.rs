@@ -174,7 +174,9 @@ impl Prepared {
         }
     }
 
-    /// Writable staging is available only after actual native authorization.
+    /// The caller must first enforce its own authorization boundary (the native
+    /// broker, or separately confirmed local operator publication). Prepared
+    /// metadata and previews never authorize writable staging by themselves.
     /// A detached staging worker cannot publish: its returned value must pass
     /// the broker's separate publication gate.
     pub fn stage(self) -> Result<Staged, Error> {
@@ -192,6 +194,13 @@ impl Prepared {
 }
 
 impl Staged {
+    /// Descriptor identity for a local operator's durable pre-publication
+    /// journal. This is descriptive metadata and carries no publication grant.
+    #[cfg(target_os = "linux")]
+    pub(crate) fn staged_identity(&self) -> Result<Identity, Error> {
+        self.inner.staged_identity()
+    }
+
     pub fn publish_before(self, deadline: std::time::Instant) -> Result<Commit, Error> {
         #[cfg(target_os = "linux")]
         {
@@ -631,6 +640,11 @@ mod linux {
     }
 
     impl Staged {
+        pub(super) fn staged_identity(&self) -> Result<Identity, Error> {
+            self.verify_stage()?;
+            Ok(identity(&private(&self.file, false)?))
+        }
+
         fn verify_stage(&self) -> Result<(), Error> {
             let m = private(&self.file, false)?;
             let by_name = open_regular(&self.prepared.root, &self.name)?;
@@ -779,6 +793,8 @@ mod linux {
 
 #[cfg(target_os = "linux")]
 pub(crate) use linux::create_writer_lock;
+#[cfg(target_os = "linux")]
+pub(crate) use linux::writer_lock;
 
 /// Read-only plan. This is deliberately independent of installation or policy.
 pub fn preview(workspace: &Path, target: &Path, content: &str) -> Result<Preview, Error> {

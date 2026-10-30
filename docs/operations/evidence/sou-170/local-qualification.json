@@ -1,0 +1,363 @@
+{
+  "format": "sw-edit-quota-local-qualification/1",
+  "accepted_base": "db4f006d74957fc1a8dc1a0a4be40c3b887d8a01",
+  "isolation": "read-only source / private writable scratch / loopback-only Seatbelt",
+  "workspace": {
+    "passed": 1911,
+    "failed": 0,
+    "existing_ignored": 13,
+    "suites": 75,
+    "compiler_warnings": 0
+  },
+  "strict_workspace_clippy": true,
+  "fmt": true,
+  "script_controls": 9,
+  "ci_controls": {
+    "run": 95,
+    "existing_skip": 1,
+    "failed": 0
+  },
+  "documentation": {
+    "files": 320,
+    "links": 1081,
+    "errors": 0
+  },
+  "c_fault_syntax_modes": "both passed -Wall -Wextra -Werror",
+  "attempts": [
+    {
+      "label": "initial-quota-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--lib",
+        "edit_session",
+        "--",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "source_sha256": "367d8078c176a53dc8eb44180fbf59807493a29af40194fffe51b0e64e406f70",
+      "log_sha256": "7c639cf768430fe69b3963d87795d2895023c542d3646f9962a295432ac6212f",
+      "elapsed_seconds": 79.84
+    },
+    {
+      "label": "focused-scripts",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*edit*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "e864d4dcd516713186019ef6b9eee369622a7b45bd14a8c2e387bff417a551ed",
+      "log_sha256": "0fc7fd7fb228944ec49ab0d67218c684e5176285709f083ad1e6ad9f6341cd0e",
+      "elapsed_seconds": 0.44
+    },
+    {
+      "label": "workspace-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 101,
+      "source_sha256": "3f1461d0bb0a8cf33732e72277a73605115860728127304f1e814139c7753e97",
+      "log_sha256": "caae0beb5d462d7a05aec9b08495125b20e8fcf20730d23712cf47df95af8eaa",
+      "elapsed_seconds": 64.41
+    },
+    {
+      "label": "mac-workspace",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--workspace"
+      ],
+      "exit_code": 101,
+      "source_sha256": "96f328e8b46cc0acf5a44f3ba88e6dba6b75468c1742d1ec77c2f12e0b4981d8",
+      "log_sha256": "d50fb4de7be52341bd009b0a4220fbf1c83f1bdf54831131d49613c1381bab7f",
+      "elapsed_seconds": 171.04
+    },
+    {
+      "label": "workspace-clippy-fixed",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "42a29f742c7ac51e8f7bcc929d7a70824f770a62941d4cfe8ee9610da53936ac",
+      "elapsed_seconds": 13.21
+    },
+    {
+      "label": "offline-replay-recheck",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "agentfw",
+        "--test",
+        "offline_replay_cli"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "1d45e04b347be3b31e59fbb7ddf3598f5fe70465a8f1b23ff7a5feb91326492d",
+      "elapsed_seconds": 19.24
+    },
+    {
+      "label": "mac-workspace-final",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--workspace"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "93e8b6ed5570842a886d2f274736546713cad0b25d67ff0159386f07980a522c",
+      "elapsed_seconds": 202.8
+    },
+    {
+      "label": "workspace-fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 1.31
+    },
+    {
+      "label": "ci-controls",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_ci*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "04b2bf0acae60e3e0c3d8fa071ae550307103d80becf19f6fdf4bcd7b546b3de",
+      "elapsed_seconds": 0.22
+    },
+    {
+      "label": "generated-workflow",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/ci_components.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 0.08
+    },
+    {
+      "label": "documentation",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 1,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "e53967aa56612fe565cb6d0982a9a7e07f7d236ab35cc078290e25965d949f1c",
+      "elapsed_seconds": 1.57
+    },
+    {
+      "label": "fault-c-syntax-1",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/clang",
+        "-fsyntax-only",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-DSOU170_FAULT=1",
+        "scripts/fixtures/sou170_quota_faults.c"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 0.05
+    },
+    {
+      "label": "fault-c-syntax-2",
+      "command": [
+        "/Library/Developer/CommandLineTools/usr/bin/clang",
+        "-fsyntax-only",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-DSOU170_FAULT=2",
+        "scripts/fixtures/sou170_quota_faults.c"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 0.03
+    },
+    {
+      "label": "documentation-tracked",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "cb19b1d91ac600ff550146dd90e3d2bfb94095ce7c5c4fa7149eb112f4a6b8ce",
+      "elapsed_seconds": 1.56
+    },
+    {
+      "label": "quota-driver-final",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*edit*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "068343ddbbf473958b0c3552d51d726207747e9090571551246bdb8abbada74a",
+      "log_sha256": "54ad288d0c562ec76510a70c1c81fa0a90063204b837760f0016ab8c0745490b",
+      "elapsed_seconds": 0.4
+    },
+    {
+      "label": "quota-driver-aggregate-controls",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*edit*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "13ef95d8444ba6aceeea557ab2c73405f9b0c2e8bc8698c96b085c00695712a3",
+      "log_sha256": "3b80c98ee62e5205e7f7ef043f2bf089254b8965341d848843f53d80362d269e",
+      "elapsed_seconds": 0.41
+    },
+    {
+      "label": "selector-contract-regression",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*edit*.py",
+        "-v"
+      ],
+      "exit_code": 0,
+      "source_sha256": "3f10271e721efc8a4d4348ba43fe164f392bd2dc2e19c82c15d28842a186e41c",
+      "log_sha256": "b3e93d0bc66f26e7d8a6e2d74c8926f902910b942657f54f3ab6f59336f9ba75",
+      "elapsed_seconds": 0.42
+    },
+    {
+      "label": "final-fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "adf9f2ce0a9c4f559dcf00929f56839a9a0b2ac43486e722223302bc040e43be",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 1.5
+    },
+    {
+      "label": "final-docs",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "adf9f2ce0a9c4f559dcf00929f56839a9a0b2ac43486e722223302bc040e43be",
+      "log_sha256": "b9aa0bc6e29499fc9dbbad015e3d5f63fb7773d7acb2bfa71c8e59f016b3f5ba",
+      "elapsed_seconds": 1.65
+    },
+    {
+      "label": "final-generator",
+      "command": [
+        "python3",
+        "-B",
+        "scripts/ci_components.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "source_sha256": "adf9f2ce0a9c4f559dcf00929f56839a9a0b2ac43486e722223302bc040e43be",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "elapsed_seconds": 0.08
+    }
+  ],
+  "retained_failed_attempts": [
+    {
+      "label": "workspace-clippy",
+      "reason": "Linux-only snapshot method unused in macOS production; fixed with platform cfg, no warning suppression"
+    },
+    {
+      "label": "mac-workspace",
+      "reason": "existing offline_replay_cli.rs293 nonblocking accept WouldBlock; unchanged focused3/3 and full1911/0 passed"
+    },
+    {
+      "label": "documentation",
+      "reason": "new guide untracked in isolated Git index; registered only that file, rerun passed"
+    }
+  ],
+  "native_qualification": "passed at66e12648, attribution in native-verification.json",
+  "final_documentation": {
+    "files": 320,
+    "links": 1089,
+    "errors": 0
+  }
+}

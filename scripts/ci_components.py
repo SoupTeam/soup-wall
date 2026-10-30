@@ -2,7 +2,8 @@
 """Generate shared component qualification without changing manual job bodies.
 
 The original manually dispatchable workflows remain the editable source of truth.
-Only names and planner dependencies change; commands, artifacts and matrices stay.
+Names, planner/build dependencies and the reviewed execution mode change.
+Commands, artifacts, runtime isolation and matrices stay in the source workflows.
 """
 from __future__ import annotations
 import argparse
@@ -10,7 +11,7 @@ import json
 from pathlib import Path
 import re
 
-from ci_impact import WORKFLOW_JOBS
+from ci_impact import WORKFLOW_JOBS, BUILD_CONSUMERS, BUILD_PRODUCER
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / ".github/workflows/ci-components.yml"
@@ -50,8 +51,9 @@ def generated() -> str:
         jobs = blocks(source)
         # This explicitly dispatched hour-long development exercise must never
         # enter ordinary component qualification or required admission.
-        manual = {"mcp-real-filesystem.yml": {"manual-long-session"},
-                  "mcp-real-git.yml": {"manual-installed-git-profiles"}}.get(workflow, set())
+        manual = {"mcp-real-filesystem.yml": {"manual-long-session", "manual-native-result-profile"},
+                  "mcp-real-git.yml": {"manual-installed-git-profiles", "sou182-raw-boundary"},
+                  "mcp-create-file.yml": {"reuse-plan", "reuse-qualification"}}.get(workflow, set())
         if set(jobs) != {*expected, "impact", *manual}:
             raise ValueError("Unregistered source jobs: " + workflow)
         prefix = workflow.removesuffix(".yml")
@@ -64,6 +66,23 @@ def generated() -> str:
             if before not in body:
                 raise ValueError("Missing planner condition: " + workflow)
             body = body.replace(before, "fromJSON(inputs.plan).workflows['" + workflow + "']")
+            # The selected consumers must start even when the producer failed:
+            # their explicit guard reports failure instead of skipped-green.
+            if job_id in BUILD_CONSUMERS.get(workflow, ()):
+                producer = BUILD_PRODUCER[0].removesuffix(".yml") + "--" + BUILD_PRODUCER[1]
+                body = "    needs: " + producer + "\n" + body
+                body = body.replace("    if: ", "    if: always() && ", 1)
+                body = body.replace(" && github.event.inputs.build_mode != 'shared'", "", 1)
+                body = body.replace("      SOU166_MODE: source\n", "      SOU166_MODE: shared\n", 1)
+                for key, field in {"RESULT": "result", "ATTEMPT": "outputs.producer_attempt",
+                                   "IMAGE_VERSION": "outputs.image_version",
+                                   "ARTIFACT_ID": "outputs.artifact_id", "ARCHIVE_NAME": "outputs.archive_name",
+                                   "ARCHIVE_SHA256": "outputs.archive_sha256", "MANIFEST_SHA256": "outputs.manifest_sha256"}.items():
+                    variable = "SOU166_PRODUCER_" + key if key in {"RESULT", "ATTEMPT", "IMAGE_VERSION"} else "SOU166_" + key
+                    old = "      " + variable + ": ''\n"
+                    if body.count(old) != 1:
+                        raise ValueError("Missing reviewed build dependency output: " + variable)
+                    body = body.replace(old, "      " + variable + ": ${{ needs." + producer + "." + field + " }}\n", 1)
             name = re.search(r"^    name: (.+)$", body, re.M)
             if name:
                 # Source names are scalar strings, not quoted YAML here. Refuse

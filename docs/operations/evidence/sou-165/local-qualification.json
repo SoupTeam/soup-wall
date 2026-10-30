@@ -1,0 +1,24 @@
+{
+  "format": "sw-native-result-local-qualification/1",
+  "candidate_description": "Pure scanner/provenance dev opt3 with debug assertions and overflow checks enabled, plus exact fingerprint arithmetic correction",
+  "qualification": {
+    "label": "optimized-resource-failure-check",
+    "command": [
+      "/bin/bash",
+      "-e",
+      "-c",
+      "cargo test --offline -p agentfw --test offline_replay_cli\ncargo test --offline --workspace\ncargo clippy --offline --all-targets -- -D warnings\ncargo fmt --all --check"
+    ],
+    "exit_code": 0,
+    "source_sha256": "cee3e505f387c1e90bc4cf41a72b8d8fbac1b3359296eea899afea62ec087b68",
+    "log_sha256": "68cc18ef464df2353a21988419473d06eedb31a56ab27555a399c018c3d4a84b",
+    "elapsed_seconds": 197.54
+  },
+  "passed": 1910,
+  "failed": 0,
+  "ignored": 13,
+  "suites": 76,
+  "note": "Includes3 focused offline-replay recheck tests plus1907 workspace tests;13 pre-existing ignored. The earlier WouldBlock control failure is retained in development-attempts. macOS Xcode cache-write refusal diagnostics occur under source/scratch write isolation; Rust compiler warnings0.",
+  "rust_compiler_warnings": 0,
+  "isolation": "source read-only, writable isolated scratch, loopback-only Seatbelt"
+}

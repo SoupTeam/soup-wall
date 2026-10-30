@@ -1,0 +1,126 @@
+{
+  "format": "sw-native-result-development-attempts/1",
+  "attempts": [
+    {
+      "run_id": 40562441250,
+      "source": "c36488a09187be210f1c5d8c857fa7d9aaee783d",
+      "status": "cancelled",
+      "measured_trials": 0,
+      "planned_trials": 18,
+      "reason": "Cancelled during paired-build step after static review found driver called send_frames instead of actual Client.send. No trial began; 18 unattempted planned trials. Corrected driver is covered by complete trial-interface controls."
+    },
+    {
+      "run_id": 40562757891,
+      "source": "9a86e84e167b25c2566215032f2614ee2fffc0ea",
+      "status": "failed",
+      "artifact_id": 12762870437,
+      "artifact_sha256": "cea73383259690d62b4c54e309aaa55c8fcf071fd42cd0f6f0479ca3d62def32",
+      "measured_trials": 0,
+      "planned_trials": 18,
+      "stage": "Python driver preflight after successful four builds, Rust tests, strict Clippy and fmt",
+      "reason": "Shared installer uses hashlib.file_digest, unavailable on runner-default Python 3.10. Pin Python 3.12 identically to the accepted original lane and run driver preflight before builds. This is an environment setup failure, not a latency measurement.",
+      "additional_build_control_failure": "Independent artifact inspection found identical old/candidate dev and release hashes; candidate Cargo build logs reported 0.17 s with no compilation. Shared-target freshness cannot prove a candidate build. Replaced it with distinct output roots and explicit manifest paths before any trial; the failed setup supplies no old/candidate measurements."
+    },
+    {
+      "run_id": 40564915880,
+      "source": "1f09bf1716b9918d309b113b3861c4bf76a06b32",
+      "status": "failed",
+      "artifact_id": 12763437278,
+      "artifact_sha256": "f52eb647733d7a23735c5d0db4d3b476dde41b6e376638d480ce845d3e9c5468",
+      "planned_trials": 18,
+      "attempted_trials": 18,
+      "passed": 0,
+      "failed": 18,
+      "incomplete": 0,
+      "stage": "startup before any burst; both full inventories also failed before first case",
+      "reason": "Both independent old/candidate binaries refuse with mcp_owner_startup_failed inside outer namespace. No latency comparison exists. Diagnose enclosing isolation without changing product guards."
+    },
+    {
+      "run_id": 40570524980,
+      "source": "8050dc6dbeb851e758865219a7e9fc08d15735a4",
+      "status": "failed",
+      "artifact_id": 12766311464,
+      "artifact_sha256": "1b5547947f7cdcff858afad53bce161c8e0081218bf26c3c8814990e168e7695",
+      "planned_trials": 18,
+      "attempted_trials": 18,
+      "passed": 12,
+      "failed": 6,
+      "incomplete": 0,
+      "cause": "Actual debug timeout reproduced on both variants. Baseline dev3/6 pass and candidate dev3/6 pass; release3/3 each. Provenance arithmetic alone reduced tracking work but did not stabilize complete unoptimized scanner/evidence work under5s. Candidate full inventory passed21cases, baseline failed after19cases. All original outputs/refusals retained; no claim this first correction fixed the burst."
+    },
+    {
+      "run_id": 40574476228,
+      "source": "929b863abbade7e7dd9c035a7e387d39fde59283",
+      "status": "passed",
+      "artifact_id": 12767717781,
+      "artifact_sha256": "4b289bdfa00fd97137dac20fcde620a1ea43fdda550bf596df2d2d52242361ae",
+      "planned_trials": 18,
+      "attempted_trials": 18,
+      "passed": 17,
+      "failed": 1,
+      "incomplete": 0,
+      "candidate": {
+        "planned": 9,
+        "passed": 9,
+        "failed": 0,
+        "incomplete": 0
+      },
+      "baseline": {
+        "planned": 9,
+        "passed": 8,
+        "failed": 1,
+        "incomplete": 0
+      },
+      "inventories": "Both complete21cases, genuine host and useful continuation passed. Baseline contended-debug timeout retained. Candidate max of81native result transport observations3.126115s under unchanged5s request deadline."
+    }
+  ],
+  "local_failures": [
+    {
+      "qualification": "optimized-dev-qualification",
+      "log_sha256": "33ea3f797d3675e1a8b79f785af72369b4d78162520cf8d8c2ba84bbbec5af75",
+      "result": "Existing offline_replay_cli positive loopback control accepted nonblocking receiver immediately after connect and hit macOS WouldBlock at line293. This was not a scanner or native admission assertion. Focused recheck and interrupted full qualification are retained separately; no source test or guard weakened."
+    }
+  ],
+  "draft_ci_control": {
+    "run_id": 40574464276,
+    "job_id": 122437045065,
+    "source": "929b863abbade7e7dd9c035a7e387d39fde59283",
+    "failure": "Manual-only native profiler omitted from auxiliary-job inventory in test_ci_impact. Product/runtime CI registration was already excluded correctly; new test inventory and explicit manual-only guard fix the missing declaration without changing required jobs.",
+    "log_sha256": "f6fb0b896ab795bc4c6b44fb3d469f322cdcc1059619f627243553abf10adb7d",
+    "local_recheck": {
+      "label": "complete-draft-fast-controls",
+      "command": [
+        "/bin/bash",
+        "-e",
+        "-c",
+        "python3 -B -m unittest discover -s scripts/tests -p \"test_ci_*.py\" -v\npython3 -B scripts/ci_components.py --check\npython3 -B -m unittest discover -s scripts/tests -p test_check_docs.py -v\npython3 -B scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "source_sha256": "88647e6bb66404ec2ed11bdaeeaa102f3aada16594edac8e4328246fd76e1103",
+      "log_sha256": "535b42ff78464fbc34eb4086652df8a62aedb40b4616a2e81041ebe6fa32be64",
+      "elapsed_seconds": 77.84
+    }
+  },
+  "enclosure_probes": [
+    {
+      "run_id": 40568112319,
+      "status": "completed",
+      "trial_count": 0,
+      "finding": "Both zero and preserved bounding capability set modes returned EPERM when nesting bwrap; not latency evidence."
+    },
+    {
+      "run_id": 40569094208,
+      "status": "completed",
+      "trial_count": 0,
+      "finding": "Classified nested failure: cannot mount proc. No product permissions changed."
+    },
+    {
+      "run_id": 40569786959,
+      "status": "completed",
+      "trial_count": 0,
+      "artifact_id": 12763898220,
+      "artifact_sha256": "84ae4d165680e47c0f0086bb481bd4084d4fd78d64afb6c66f54a1b9b501ffb1",
+      "finding": "Current and preserved-bound modes failed; namespace-local fresh procfs passed with UID1001, allcaps0 including bounds and NNP1. See enclosure-probe.json. No latency measurement."
+    }
+  ]
+}

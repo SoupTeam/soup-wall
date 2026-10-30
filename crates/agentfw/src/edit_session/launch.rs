@@ -148,6 +148,11 @@ fn component(home: &Path) -> Result<Component> {
     })
 }
 fn selected(args: Selection) -> Result<Profile> {
+    let mutation_quota = match (args.max_mutations, args.max_write_bytes) {
+        (None, None) => None,
+        (Some(operations), Some(bytes)) => Some(super::quota::Limits::new(operations, bytes)?),
+        _ => anyhow::bail!("edit_quota_both_limits_required"),
+    };
     ensure!(
         cfg!(target_arch = "x86_64"),
         "installed_edit_requires_native_linux_x86_64"
@@ -207,7 +212,14 @@ fn selected(args: Selection) -> Result<Profile> {
     let claude = pin(&args.claude, 512 * 1024 * 1024)?;
     crate::pilot_host::validate(&args.claude, false)?;
     let p = Profile {
-        format: FORMAT.into(),
+        format: if mutation_quota.is_some() {
+            super::QUOTA_PROFILE
+        } else {
+            FORMAT
+        }
+        .into(),
+        mutation_quota,
+        refreshed_from_sha256: None,
         exclusion: replace_file::EXCLUSION.into(),
         root: args.root,
         root_identity,
@@ -221,6 +233,10 @@ fn selected(args: Selection) -> Result<Profile> {
     Ok(p)
 }
 pub(super) fn verify(p: &Profile) -> Result<()> {
+    verify_anchors(p)?;
+    verify_targets(p)
+}
+pub(super) fn verify_anchors(p: &Profile) -> Result<()> {
     p.validate()?;
     ensure!(
         replace_file::inspect_workspace(&p.root)? == p.root_identity,
@@ -240,6 +256,9 @@ pub(super) fn verify(p: &Profile) -> Result<()> {
         p.policy_sha256 == profile::digest(&policy()?)?,
         "edit_policy_changed"
     );
+    Ok(())
+}
+pub(super) fn verify_targets(p: &Profile) -> Result<()> {
     for target in &p.targets {
         let path = p.root.join(&target.name);
         if target.create {
@@ -285,6 +304,15 @@ impl Drop for Stage {
     }
 }
 fn publish(out: &Path, p: &Profile) -> Result<()> {
+    publish_checked(out, p, || Ok(()))
+}
+/// Shared create-new staging and atomic no-clobber publication. Refresh checks
+/// its exact input again after staging, before the only publication point.
+pub(super) fn publish_checked(
+    out: &Path,
+    p: &Profile,
+    revalidate: impl FnOnce() -> Result<()>,
+) -> Result<()> {
     let parent = out.parent().context("edit_plan_parent")?;
     private_dir(parent)?;
     let name = out
@@ -309,6 +337,8 @@ fn publish(out: &Path, p: &Profile) -> Result<()> {
         0o400,
     )?;
     File::open(stage.0.as_path())?.sync_all()?;
+    revalidate()?;
+    private_dir(parent)?;
     let from = std::ffi::CString::new(stage.0.as_path().as_os_str().as_bytes())?;
     let dest = std::ffi::CString::new(parent.join(name).as_os_str().as_bytes())?;
     ensure!(
@@ -327,6 +357,13 @@ fn publish(out: &Path, p: &Profile) -> Result<()> {
     Ok(())
 }
 pub(super) fn load(path: &Path, expected: &str) -> Result<Profile> {
+    let p = read_plan(path, expected)?;
+    verify(&p)?;
+    Ok(p)
+}
+/// Exact bounded descriptor read without accepting stale target bindings for execution.
+/// Only refresh may observe new targets after independently checking the anchors.
+pub(super) fn read_plan(path: &Path, expected: &str) -> Result<Profile> {
     private_dir(path)?;
     ensure!(
         crate::native::is_digest(expected),
@@ -346,11 +383,18 @@ pub(super) fn load(path: &Path, expected: &str) -> Result<Profile> {
     let p: Profile =
         serde_json::from_value(value).map_err(|_| anyhow::anyhow!("edit_plan_invalid"))?;
     ensure!(profile::canonical(&p)? == raw, "edit_plan_not_canonical");
-    verify(&p)?;
+    p.validate()?;
     Ok(p)
 }
 pub(super) fn command(action: Action) -> Result<()> {
     match action {
+        Action::ExportSet(args) => super::review::export_set::command(args)?,
+        Action::Apply { action } => super::application::command(action)?,
+        Action::Archive { home, action } => archive(&home, action)?,
+        Action::Inventory(args) => super::inventory::command(args)?,
+        Action::WithRun(args) => super::inventory::with_run(args)?,
+        Action::Review(args) => super::review::command(args)?,
+        Action::Status(args) => super::status(args)?,
         Action::Preview(args) => {
             let p = selected(args)?;
             println!(
@@ -380,6 +424,17 @@ pub(super) fn command(action: Action) -> Result<()> {
             timeout_seconds,
             model,
         } => super::runtime::run(plan, sha256, state, prompt_file, timeout_seconds, model)?,
+        Action::Stop { run, output } => super::control::stop(&run, output)?,
+        Action::Refresh {
+            plan,
+            sha256,
+            out,
+            apply,
+            confirm,
+        } => {
+            let result = super::refresh::command(&plan, &sha256, &out, apply, confirm.as_deref())?;
+            println!("{result}");
+        }
         Action::Ask { run, action } => {
             private_dir(&run)?;
             let record: super::runtime::RunRecord =
@@ -496,6 +551,75 @@ pub(super) fn command(action: Action) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn archive(home: &Path, action: super::Archive) -> Result<()> {
+    ensure!(
+        cfg!(target_arch = "x86_64"),
+        "installed_edit_requires_native_linux_x86_64"
+    );
+    use std::ffi::OsString;
+    use std::os::unix::process::CommandExt;
+    let component = crate::pilot_component::Store::new(home)
+        .current()
+        .map_err(|_| anyhow::anyhow!("edit_archive_verified_component_required"))?;
+    const HELPER: &str = "scripts/edit-run-archive.py";
+    ensure!(
+        component
+            .manifest
+            .files
+            .iter()
+            .any(|entry| entry.path == HELPER),
+        "edit_archive_component_upgrade_required"
+    );
+    let mut words: Vec<OsString> = Vec::new();
+    let mut bound = None;
+    match action {
+        super::Archive::Preview { run, destination } => {
+            words.extend([
+                "preview".into(),
+                "--run".into(),
+                run.into_os_string(),
+                "--destination".into(),
+                destination.into_os_string(),
+            ]);
+        }
+        super::Archive::Apply(selected) => {
+            words.push("archive".into());
+            bound = Some(selected);
+        }
+        super::Archive::Cleanup {
+            selected,
+            acknowledge_evidence_loss,
+        } => {
+            words.push("cleanup".into());
+            if acknowledge_evidence_loss {
+                words.push("--acknowledge-evidence-loss".into());
+            }
+            bound = Some(selected);
+        }
+        super::Archive::Recover { selected, journal } => {
+            words.extend(["recover".into(), "--journal".into(), journal.into()]);
+            bound = Some(selected);
+        }
+    }
+    if let Some(selected) = bound {
+        words.extend([
+            "--plan".into(),
+            selected.plan.into_os_string(),
+            "--confirm".into(),
+            selected.confirm.into(),
+        ]);
+    }
+    let _ = std::process::Command::new(&component.python.path)
+        .args(["-I", "-B"])
+        .arg(component.tree.join(HELPER))
+        .args(words)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("LANG", "C.UTF-8")
+        .exec();
+    anyhow::bail!("edit_archive_verified_helper_start_failed")
 }
 
 #[cfg(test)]

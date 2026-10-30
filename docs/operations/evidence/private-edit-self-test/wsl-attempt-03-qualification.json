@@ -1,0 +1,144 @@
+{
+  "checks": [
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 330,
+          "stdout_sha256": "d52e96892f28bfbdc0de6aaaf4faa60b170cfed1f59d70418499a809294d854d"
+        },
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 436,
+          "stdout_sha256": "aa8d3181d569e4a44148c60d414b28a9ae2d29c2ae38941f993c9de7374f3c24"
+        }
+      ],
+      "component_verified": true,
+      "id": "installed-identity",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1824,
+          "stdout_sha256": "e4c466b18dc43b8a46ce63c526edc04df737fab1d95c2a07d6e30d61ab84edb8"
+        }
+      ],
+      "current_pointer_unchanged": true,
+      "id": "inert-preview",
+      "no_execution": true,
+      "no_output_created": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 3,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 456,
+          "stdout_sha256": "d5b8644b1e8c1de00dc7f5f2d6bf99f17ee575c86ea8cc1f584629226a8f420a"
+        }
+      ],
+      "current_pointer_unchanged": true,
+      "id": "tampered-selection",
+      "no_execution": true,
+      "no_output_created": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 14081,
+          "stdout_sha256": "5f04c68a8ff6be7ee58dc9a755b4b6ae3fa546aeb41e48e2bc844fabeb62fad5"
+        }
+      ],
+      "exact_installed_identity": true,
+      "id": "genuine-installed-run",
+      "independent_wsl2_runtime": true,
+      "inventory": {
+        "attempted": 8,
+        "expected": 8,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 8,
+        "unsupported": 0
+      },
+      "observed_platform": "wsl2-linux-x86_64",
+      "outside_checkout": true,
+      "report_bytes": 81829,
+      "report_sha256": "595924192ea9e1fe88764431597b9dd2ecb579494952798a59e2c15102e4791d",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "canary_absent": true,
+      "commands": [
+        {
+          "exit_code": 4,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 917,
+          "stdout_sha256": "eb5bd3bc9b35e7d097a1ffc4207d21528be53c50b289c8b1af443143ec91fee2"
+        }
+      ],
+      "helper_restored": true,
+      "id": "changed-helper-refusal",
+      "no_fallback": true,
+      "no_output_created": true,
+      "status": "passed"
+    }
+  ],
+  "executed": true,
+  "format": "sw-private-edit-self-test-qualification/1",
+  "identities": {
+    "agentfw_sha256": "f886d656b0743eff017737959ee1f4af5f597cc94e4dacc0664a950eef6feb57",
+    "component_sha256": "2edf27e98692020e192c1c5cbf327f84897a035690e22b95bb44a8f6134fef9d",
+    "selection_sha256": "e104d1f7cf5e29124de426ebf644af81cd14b282da93179fc98e7b822700224d",
+    "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+    "source_tree": "16131804dc19067bf1b68f4368a4383e42c48a76"
+  },
+  "inventory": {
+    "attempted": 5,
+    "expected": 5,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 5
+  },
+  "paid_inference": false,
+  "platform": {
+    "id": "wsl2-linux-x86_64",
+    "kernel_sha256": "b81b0fe7ad414ed9b01a3ca094eb67921b4251157df6d9702089be665f4182c7",
+    "wsl_opt_in": true
+  },
+  "selected_inputs_unchanged": true,
+  "status": "passed",
+  "wsl": {
+    "accepted_prepared_selection": true,
+    "attested": true,
+    "host_settings_after_sha256": "f4dea6b4b2510a6f55bd08485263fec1e63e0468b20007fb992d0b92e019b41b",
+    "host_settings_before_sha256": "f4dea6b4b2510a6f55bd08485263fec1e63e0468b20007fb992d0b92e019b41b",
+    "preflight_sha256": "bcaf532126670edc060840a636d2c3452c2b03e717bec378f04b8e79ec9ef86c",
+    "preflight_status": "ready"
+  }
+}

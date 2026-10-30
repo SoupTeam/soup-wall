@@ -540,7 +540,8 @@ def run(args, report):
     workspace, installed = args.output / "workspace", args.output / "installed"
     workspace.mkdir(mode=0o700)
     files = make_workspace(workspace, report["budgets"]["text_bytes"])
-    BASE.INSTALL.install(installed, workspace, args.node, args.bwrap, args.npm)
+    BASE.INSTALL.install(installed, workspace, args.node, args.bwrap, args.npm,
+                         npm_cache=getattr(args, "npm_cache", None), offline=getattr(args, "offline", False))
     report["installation"] = json.loads((installed / "installation.json").read_text())
     report["profile_sha256"] = sha(installed / "profile.json")
     report["registry_sha256"] = sha(installed / "registry.json")
@@ -592,6 +593,8 @@ def main():
     for name in ("agentfw", "node", "npm", "bwrap", "strace", "claude", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--expected-commit")
+    parser.add_argument("--npm-cache", type=Path)
+    parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
     args.output = args.output.resolve()
     require(not args.output.exists() and not args.output.is_relative_to(ROOT), "new output outside checkout required")

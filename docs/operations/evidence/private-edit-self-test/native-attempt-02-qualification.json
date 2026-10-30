@@ -1,0 +1,115 @@
+{
+  "checks": [
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 325,
+          "stdout_sha256": "b1f27761bb072ef8d19975be62856346a6ccda23478b89efeb7ebcbd3951d1d3"
+        },
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 436,
+          "stdout_sha256": "87c8d84605dd483572097d848f762c0789ce7b0c155ae7fbcce9a169dcf9449e"
+        }
+      ],
+      "component_verified": true,
+      "id": "installed-identity",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1826,
+          "stdout_sha256": "ea21fcf9be7fc7d297dc216de606bb15068c602e5a388dd6aff1151ff6b691e1"
+        }
+      ],
+      "current_pointer_unchanged": true,
+      "id": "inert-preview",
+      "no_execution": true,
+      "no_output_created": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 3,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 463,
+          "stdout_sha256": "c9df4486d1299c9b2f17ec1c6e050d7537614fe5e7cd2600946428c403be4e3e"
+        }
+      ],
+      "current_pointer_unchanged": true,
+      "id": "tampered-selection",
+      "no_execution": true,
+      "no_output_created": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 3,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 6494,
+          "stdout_sha256": "0135918f66f2a60eec491b61f6c02047ba3095c0076a4f5e74ab9fbda21fbc1f"
+        }
+      ],
+      "id": "genuine-installed-run",
+      "inventory": {
+        "attempted": 4,
+        "expected": 8,
+        "failed": 1,
+        "incomplete": 4,
+        "passed": 3,
+        "unsupported": 0
+      },
+      "reason": "installed_self_test_did_not_pass",
+      "report_bytes": 20979,
+      "report_sha256": "4aee57d3694d93c77637d3c4da26adf7b44837ad284eb554fd19a910ebfb9c24",
+      "status": "failed"
+    },
+    {
+      "attempted": false,
+      "id": "changed-helper-refusal",
+      "status": "incomplete"
+    }
+  ],
+  "executed": true,
+  "format": "sw-private-edit-self-test-qualification/1",
+  "identities": {
+    "agentfw_sha256": "59d6fb9b1db91c720207e359e42651a0c7f5fde9fcb45a2b5faa41367978366c",
+    "component_sha256": "4b10c250f27b0b7315144866f8eddba4036468eb7cc285f70ff08c34489503b1",
+    "selection_sha256": "4b2c448f44fe446da093c60528ec80c1fbf56c75f39d6c9879fecca591006835",
+    "source_commit": "6c81eb1fc58ac9cbefa0d56a065a1171e08b0011",
+    "source_tree": "e61b219cbc8ca28aa3a3c75a2a7f19fcc095742d"
+  },
+  "inventory": {
+    "attempted": 4,
+    "expected": 5,
+    "failed": 1,
+    "incomplete": 1,
+    "passed": 3
+  },
+  "paid_inference": false,
+  "reason": "installed_self_test_did_not_pass",
+  "selected_inputs_unchanged": true,
+  "status": "failed"
+}

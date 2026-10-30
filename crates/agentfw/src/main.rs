@@ -123,8 +123,23 @@ enum ClassifierPackageCmd {
     },
 }
 
+// Bound generated parser frames while preserving the flat public command tree.
 #[derive(Subcommand)]
 enum Cmd {
+    #[command(flatten)]
+    Diagnostics(DiagnosticCommands),
+    #[command(flatten)]
+    Lifecycle(LifecycleCommands),
+    #[command(flatten)]
+    Mcp(McpCommands),
+    #[command(flatten)]
+    Pilot(PilotCommands),
+    #[command(flatten)]
+    Constrained(ConstrainedCommands),
+}
+
+#[derive(Subcommand)]
+enum DiagnosticCommands {
     /// Verify and resume an opt-in Linux audit segment store after a stopped writer.
     AuditRetentionRecover {
         /// Agent profile containing config.yaml.
@@ -139,7 +154,7 @@ enum Cmd {
     /// Run the daemon.
     Serve,
     /// Diagnose an installed Agent without modifying host settings or starting tools.
-    Doctor(agentfw::doctor::DoctorArgs),
+    Doctor(Box<agentfw::doctor::DoctorArgs>),
     /// Query authenticated runtime diagnostics; unknown protection exits 2.
     ProtectionStatus(agentfw::protection_status::QueryArgs),
     /// Validate a bounded prepared-run diagnostic envelope on stdin; no network or state writes.
@@ -152,6 +167,10 @@ enum Cmd {
         #[command(flatten)]
         offline: agentfw::offline_replay::OfflineArgs,
     },
+}
+
+#[derive(Subcommand)]
+enum LifecycleCommands {
     /// Print the settings.json hook block and setup instructions.
     Install,
     /// Manage a user-scoped Agent binary lifecycle.
@@ -201,6 +220,10 @@ enum Cmd {
         #[arg(long, default_value_t = 5)]
         ttl_minutes: u64,
     },
+}
+
+#[derive(Subcommand)]
+enum McpCommands {
     /// Proxy an MCP server, pinning its tool manifest at handshake.
     Mcp {
         /// Stable identity for this server (keys its pin + audit). Defaults to a
@@ -262,12 +285,12 @@ enum Cmd {
     /// Exercise an installed Agent end to end in an owned temporary workspace (Linux).
     ///
     /// Writes a versioned JSON report. Exit 0 passed, 3 failed, 4 incomplete, 5 unsupported.
-    SelfTest(agentfw::self_test::Args),
+    SelfTest(agentfw::self_test::Cli),
     #[cfg(windows)]
     /// Preview a native Windows Agent setup against explicitly selected local assets.
     OnboardWindows {
         #[command(subcommand)]
-        command: agentfw::windows_onboarding::Command,
+        command: Box<agentfw::windows_onboarding::Command>,
     },
     /// First-use onboarding: read-only preview, explicit apply of the reviewed plan, and undo (Linux).
     ///
@@ -306,6 +329,10 @@ enum Cmd {
         #[command(subcommand)]
         command: agentfw::mcp::connection::Command,
     },
+}
+
+#[derive(Subcommand)]
+enum PilotCommands {
     /// Guided Linux pilot from the installed front door: preview,
     /// prepare, run, status or help. Starts only the verified installed
     /// component with its recorded interpreter.
@@ -326,15 +353,19 @@ enum Cmd {
         action: PilotComponentCmd,
     },
     /// Trusted per-run Claude Code pilot launcher for two pinned MCP servers (SOU-99).
-    PilotLaunch(agentfw::pilot_launcher::PilotLaunchArgs),
+    PilotLaunch(Box<agentfw::pilot_launcher::PilotLaunchArgs>),
     /// Explicit installed private-output edit session; default pilot stays read-only.
-    EditSession(agentfw::edit_session::Cli),
+    EditSession(Box<agentfw::edit_session::Cli>),
     /// Read-only inspection using the accepted original-profile workspace validators.
-    PilotWorkspaces(agentfw::pilot_launcher::PilotWorkspacesArgs),
+    PilotWorkspaces(Box<agentfw::pilot_launcher::PilotWorkspacesArgs>),
     /// Inspect or probe an explicitly selected prepared-pilot Linux budget.
-    PilotBudget(agentfw::pilot_budget::BudgetArgs),
+    PilotBudget(Box<agentfw::pilot_budget::BudgetArgs>),
     /// Inspect and decide one exact pending call owned by a live pilot run.
-    PilotApproval(agentfw::pilot_approval::OperatorArgs),
+    PilotApproval(Box<agentfw::pilot_approval::OperatorArgs>),
+}
+
+#[derive(Subcommand)]
+enum ConstrainedCommands {
     /// Run one high-risk command inside the Linux bubblewrap sandbox.
     Sandbox {
         /// Writable directory exposed as `/workspace`.
@@ -547,7 +578,7 @@ fn main() -> anyhow::Result<()> {
 #[inline(never)]
 fn dispatch(command: Cmd) -> anyhow::Result<()> {
     match command {
-        Cmd::AuditRetentionRecover { home } => {
+        Cmd::Diagnostics(DiagnosticCommands::AuditRetentionRecover { home }) => {
             let home = home.unwrap_or(Config::home_path()?);
             let cfg = Config::from_yaml(&std::fs::read_to_string(home.join("config.yaml"))?)?;
             let retention = cfg
@@ -566,20 +597,28 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                 anyhow::bail!("bounded audit retention is supported on Linux and Windows only")
             }
         }
-        Cmd::Doctor(args) => std::process::exit(agentfw::doctor::run(args)),
-        Cmd::ProtectionStatus(args) => {
+        Cmd::Diagnostics(DiagnosticCommands::Doctor(args)) => {
+            std::process::exit(agentfw::doctor::run(*args))
+        }
+        Cmd::Diagnostics(DiagnosticCommands::ProtectionStatus(args)) => {
             std::process::exit(agentfw::protection_status::run_cli(args))
         }
-        Cmd::PilotObservation => std::process::exit(agentfw::pilot_observation::run()),
-        Cmd::SelfTest(args) => std::process::exit(agentfw::self_test::run(args)),
-        #[cfg(windows)]
-        Cmd::OnboardWindows { command } => {
-            prepare_lifecycle_process()?;
-            agentfw::windows_onboarding::run(command)
+        Cmd::Diagnostics(DiagnosticCommands::PilotObservation) => {
+            std::process::exit(agentfw::pilot_observation::run())
         }
-        Cmd::Onboard(command) => std::process::exit(agentfw::onboarding::run(command)),
-        Cmd::SelfTestFixture(args) => agentfw::self_test::fixture::serve(args),
-        Cmd::Serve => {
+        Cmd::Mcp(McpCommands::SelfTest(args)) => {
+            std::process::exit(agentfw::self_test::run_cli(args))
+        }
+        #[cfg(windows)]
+        Cmd::Mcp(McpCommands::OnboardWindows { command }) => {
+            prepare_lifecycle_process()?;
+            agentfw::windows_onboarding::run(*command)
+        }
+        Cmd::Mcp(McpCommands::Onboard(command)) => {
+            std::process::exit(agentfw::onboarding::run(command))
+        }
+        Cmd::Mcp(McpCommands::SelfTestFixture(args)) => agentfw::self_test::fixture::serve(args),
+        Cmd::Diagnostics(DiagnosticCommands::Serve) => {
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             let _direct_guard =
                 agentfw::lifecycle::Manager::new(Config::home()?).direct_serve_guard()?;
@@ -589,7 +628,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                 .build()?
                 .block_on(serve(Config::home()?, None))
         }
-        Cmd::Replay { log, offline } => {
+        Cmd::Diagnostics(DiagnosticCommands::Replay { log, offline }) => {
             if offline.offline {
                 std::process::exit(agentfw::offline_replay::run_cli(&offline));
             }
@@ -599,7 +638,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             print!("{}", agentfw::replay::summarize(&body).render());
             Ok(())
         }
-        Cmd::Install => {
+        Cmd::Lifecycle(LifecycleCommands::Install) => {
             let home = Config::home()?;
             let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
                 Ok(s) => Config::from_yaml(&s)?,
@@ -612,7 +651,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             );
             Ok(())
         }
-        Cmd::Lifecycle { command } => {
+        Cmd::Lifecycle(LifecycleCommands::Lifecycle { command }) => {
             if let LifecycleCommand::ServeManaged { instance, home } = command {
                 tracing_subscriber::fmt().json().init();
                 let manager = agentfw::lifecycle::Manager::new(&home);
@@ -677,7 +716,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Cmd::Service { home, command } => {
+        Cmd::Lifecycle(LifecycleCommands::Service { home, command }) => {
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             {
                 // Unlike Config::home(), preview must not create the default profile.
@@ -728,10 +767,10 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                 anyhow::bail!("user service management requires Linux/systemd or macOS/launchd");
             }
         }
-        Cmd::Preflight {
+        Cmd::Lifecycle(LifecycleCommands::Preflight {
             require_enforce,
             timeout_seconds,
-        } => {
+        }) => {
             let home = Config::home()?;
             let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
                 Ok(s) => Config::from_yaml(&s)?,
@@ -745,12 +784,12 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             println!("{}", report.render(require_enforce));
             std::process::exit(report.exit_code(require_enforce));
         }
-        Cmd::Approve {
+        Cmd::Lifecycle(LifecycleCommands::Approve {
             session,
             tool,
             args,
             ttl_minutes,
-        } => {
+        }) => {
             let parsed: serde_json::Value = serde_json::from_str(&args)
                 .map_err(|e| anyhow::anyhow!("--args must be JSON: {e}"))?;
             let home = Config::home()?;
@@ -780,7 +819,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             );
             Ok(())
         }
-        Cmd::ClassifierPackage { action } => {
+        Cmd::Diagnostics(DiagnosticCommands::ClassifierPackage { action }) => {
             use agentfw::classifier_runtime::package as pkg;
             let value = match action {
                 ClassifierPackageCmd::Build {
@@ -812,7 +851,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&value)?);
             Ok(())
         }
-        Cmd::NativeApproval { action } => {
+        Cmd::Mcp(McpCommands::NativeApproval { action }) => {
             let home = Config::home()?;
             match action {
                 NativeApprovalCmd::List => {
@@ -843,7 +882,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Cmd::McpInspectConfig { path } => {
+        Cmd::Mcp(McpCommands::McpInspectConfig { path }) => {
             use std::io::Read;
             let mut bytes = Vec::new();
             std::fs::File::open(path)?
@@ -853,11 +892,11 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&inventory)?);
             Ok(())
         }
-        Cmd::ReplaceFilePreview {
+        Cmd::Mcp(McpCommands::ReplaceFilePreview {
             workspace,
             target,
             content_file,
-        } => {
+        }) => {
             use std::io::Read;
             anyhow::ensure!(cfg!(target_os = "linux"), "replace_platform_unsupported");
             let mut options = std::fs::OpenOptions::new();
@@ -889,9 +928,9 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&preview)?);
             Ok(())
         }
-        Cmd::McpConnection { command } => agentfw::mcp::connection::run(command),
+        Cmd::Mcp(McpCommands::McpConnection { command }) => agentfw::mcp::connection::run(command),
         #[cfg(target_os = "linux")]
-        Cmd::Pilot { home, args } => {
+        Cmd::Pilot(PilotCommands::Pilot { home, args }) => {
             let home = match home {
                 Some(home) => home,
                 None => agentfw::pilot_component::default_home()?,
@@ -899,7 +938,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             std::process::exit(agentfw::pilot_component::exec_pilot(&home, &args));
         }
         #[cfg(target_os = "linux")]
-        Cmd::PilotComponent { home, action } => {
+        Cmd::Pilot(PilotCommands::PilotComponent { home, action }) => {
             use agentfw::pilot_component as component;
             let home = match home {
                 Some(home) => home,
@@ -929,24 +968,26 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             Ok(())
         }
         #[cfg(not(target_os = "linux"))]
-        Cmd::Pilot { home, args } => {
+        Cmd::Pilot(PilotCommands::Pilot { home, args }) => {
             let _ = (home, args);
             anyhow::bail!("the installed guided pilot supports native Linux x86_64 only")
         }
         #[cfg(not(target_os = "linux"))]
-        Cmd::PilotComponent { home, action } => {
+        Cmd::Pilot(PilotCommands::PilotComponent { home, action }) => {
             let _ = (home, action);
             anyhow::bail!("the installed guided pilot supports native Linux x86_64 only")
         }
-        Cmd::PilotLaunch(args) => agentfw::pilot_launcher::run(args),
-        Cmd::EditSession(args) => agentfw::edit_session::run(args),
-        Cmd::PilotWorkspaces(args) => agentfw::pilot_launcher::inspect_workspaces(args),
-        Cmd::PilotApproval(args) if args.output.is_some() => {
-            std::process::exit(agentfw::pilot_approval::operator_json(args));
+        Cmd::Pilot(PilotCommands::PilotLaunch(args)) => agentfw::pilot_launcher::run(*args),
+        Cmd::Pilot(PilotCommands::EditSession(args)) => agentfw::edit_session::run(*args),
+        Cmd::Pilot(PilotCommands::PilotWorkspaces(args)) => {
+            agentfw::pilot_launcher::inspect_workspaces(*args)
         }
-        Cmd::PilotBudget(args) => agentfw::pilot_budget::inspect(args),
-        Cmd::PilotApproval(args) => agentfw::pilot_approval::operator(args),
-        Cmd::McpProfile { home, command } => {
+        Cmd::Pilot(PilotCommands::PilotApproval(args)) if args.output.is_some() => {
+            std::process::exit(agentfw::pilot_approval::operator_json(*args));
+        }
+        Cmd::Pilot(PilotCommands::PilotBudget(args)) => agentfw::pilot_budget::inspect(*args),
+        Cmd::Pilot(PilotCommands::PilotApproval(args)) => agentfw::pilot_approval::operator(*args),
+        Cmd::Mcp(McpCommands::McpProfile { home, command }) => {
             let home = match home {
                 Some(h) => h,
                 None => match &command {
@@ -961,7 +1002,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             };
             agentfw::mcp::profile_author::run(command, &home)
         }
-        Cmd::ChildAuthority { action } => {
+        Cmd::Mcp(McpCommands::ChildAuthority { action }) => {
             use agentfw::native::child_authority;
             let home = Config::home()?;
             let path = home.join("native-token");
@@ -1038,12 +1079,12 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             }
             Ok(())
         }
-        Cmd::McpVerified {
+        Cmd::Mcp(McpCommands::McpVerified {
             id,
             host_session,
             child_authority,
             home,
-        } => {
+        }) => {
             let host = host_session
                 .or_else(|| std::env::var("AGENTFW_HOST_SESSION").ok())
                 .filter(|value| !value.is_empty())
@@ -1083,7 +1124,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             runtime.shutdown_timeout(Duration::from_millis(100));
             result
         }
-        Cmd::Mcp {
+        Cmd::Mcp(McpCommands::Mcp {
             id,
             host_session,
             pilot_budget_binding,
@@ -1093,7 +1134,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             native_approval_wait_seconds,
             home,
             command,
-        } => {
+        }) => {
             let host_session = host_session.or_else(|| std::env::var("AGENTFW_HOST_SESSION").ok());
             let child_authority =
                 child_authority.or_else(|| std::env::var("AGENTFW_CHILD_AUTHORITY").ok());
@@ -1207,12 +1248,12 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                 .build()?
                 .block_on(agentfw::mcp::proxy::run(proxy_cfg))
         }
-        Cmd::Sandbox {
+        Cmd::Constrained(ConstrainedCommands::Sandbox {
             workspace,
             timeout_seconds,
             max_output_bytes,
             command,
-        } => {
+        }) => {
             let (program, args) = command
                 .split_first()
                 .ok_or_else(|| anyhow::anyhow!("no command given after --"))?;
@@ -1236,7 +1277,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                     Ok(())
                 })
         }
-        Cmd::GuardedShell {
+        Cmd::Constrained(ConstrainedCommands::GuardedShell {
             session,
             agent,
             seq,
@@ -1244,7 +1285,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             timeout_seconds,
             max_output_bytes,
             command,
-        } => {
+        }) => {
             let command = command.join(" ");
             if command.is_empty() {
                 anyhow::bail!("no command given after --");
@@ -1286,14 +1327,14 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                     Ok(())
                 })
         }
-        Cmd::GuardedWrite {
+        Cmd::Constrained(ConstrainedCommands::GuardedWrite {
             session,
             agent,
             seq,
             workspace,
             path,
             content,
-        } => {
+        }) => {
             let home = Config::home()?;
             let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
                 Ok(s) => Config::from_yaml(&s)?,
@@ -1326,13 +1367,13 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                     Ok(())
                 })
         }
-        Cmd::GuardedDelete {
+        Cmd::Constrained(ConstrainedCommands::GuardedDelete {
             session,
             agent,
             seq,
             workspace,
             path,
-        } => {
+        }) => {
             let home = Config::home()?;
             let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
                 Ok(s) => Config::from_yaml(&s)?,
@@ -1364,14 +1405,14 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                     Ok(())
                 })
         }
-        Cmd::GuardedRename {
+        Cmd::Constrained(ConstrainedCommands::GuardedRename {
             session,
             agent,
             seq,
             workspace,
             from,
             to,
-        } => {
+        }) => {
             let home = Config::home()?;
             let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
                 Ok(s) => Config::from_yaml(&s)?,
@@ -1404,7 +1445,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                     Ok(())
                 })
         }
-        Cmd::GuardedFetch {
+        Cmd::Constrained(ConstrainedCommands::GuardedFetch {
             session,
             agent,
             seq,
@@ -1412,7 +1453,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
             proxy_url,
             timeout_seconds,
             max_response_bytes,
-        } => {
+        }) => {
             let home = Config::home()?;
             let cfg = match std::fs::read_to_string(home.join("config.yaml")) {
                 Ok(s) => Config::from_yaml(&s)?,
@@ -1803,14 +1844,42 @@ mod cli_tests {
             ])
             .expect("URL-safe instance IDs can begin with hyphens");
             match cli.cmd {
-                Cmd::Lifecycle {
+                Cmd::Lifecycle(LifecycleCommands::Lifecycle {
                     command: LifecycleCommand::ServeManaged { instance, home },
-                } => {
+                }) => {
                     assert_eq!(instance, expected);
                     assert_eq!(home, PathBuf::from("owned-profile"));
                 }
                 _ => panic!("expected the managed lifecycle command"),
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod archive_cli_scope_tests {
+    use super::*;
+
+    #[test]
+    fn archive_parser_matches_supported_platform() {
+        let parsed = Cli::try_parse_from([
+            "agentfw",
+            "edit-session",
+            "archive",
+            "--home",
+            "owned-profile",
+            "preview",
+            "--run",
+            "owned-run",
+            "--destination",
+            "owned-archive",
+        ]);
+        #[cfg(target_os = "linux")]
+        assert!(parsed.is_ok());
+        #[cfg(not(target_os = "linux"))]
+        match parsed {
+            Err(error) => assert_eq!(error.kind(), clap::error::ErrorKind::InvalidSubcommand),
+            Ok(_) => panic!("Linux-only archival must not enter another platform's parser"),
         }
     }
 }

@@ -30,7 +30,18 @@ fn canonicalize(text: &str) -> Vec<u8> {
 /// `u64::wrapping_mul` (which silently wraps mod 2^64, not mod `MODULUS`)
 /// can represent correctly.
 fn mul_mod(a: u64, b: u64) -> u64 {
-    ((a as u128 * b as u128) % MODULUS as u128) as u64
+    // 2^61 == 1 (mod MODULUS). Two folds cover even a full u64 product:
+    // the first is <2^68 and the second <= MODULUS + 127. One subtraction
+    // gives the exact same residue as u128 remainder, without its debug-build
+    // division helper. No hash, normalization or detection threshold changes.
+    let product = a as u128 * b as u128;
+    let folded = (product & MODULUS as u128) + (product >> 61);
+    let folded = ((folded & MODULUS as u128) + (folded >> 61)) as u64;
+    if folded >= MODULUS {
+        folded - MODULUS
+    } else {
+        folded
+    }
 }
 
 /// The Rabin–Karp rolling hash of every `K`-byte window of `bytes`, computed
@@ -77,9 +88,16 @@ pub fn fingerprints(text: &str) -> BTreeSet<u64> {
         out.extend(hashes.iter().copied().min());
         return out;
     }
+    let mut previous = None;
     for w in hashes.windows(WINDOW) {
         if let Some(m) = w.iter().copied().min() {
-            out.insert(m);
+            // Adjacent windows often retain the same minimum. The set already
+            // contains it; avoid an identical tree lookup without skipping a
+            // byte/window or retaining anything between input invocations.
+            if previous != Some(m) {
+                out.insert(m);
+                previous = Some(m);
+            }
         }
     }
     out
@@ -164,5 +182,86 @@ mod tests {
     #[test]
     fn short_text_yields_no_fingerprints() {
         assert!(fingerprints("hello").is_empty());
+    }
+    #[test]
+    fn mersenne_reduction_matches_independent_full_width_remainder() {
+        let boundary = [0, 1, 2, 256, MODULUS - 1, MODULUS, MODULUS + 1, u64::MAX];
+        for a in boundary {
+            for b in boundary {
+                assert_eq!(
+                    mul_mod(a, b),
+                    ((a as u128 * b as u128) % MODULUS as u128) as u64
+                );
+            }
+        }
+        let mut x = 0x8c679e741529ab03u64;
+        for _ in 0..16_384 {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let a = x;
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1);
+            assert_eq!(
+                mul_mod(a, x),
+                ((a as u128 * x as u128) % MODULUS as u128) as u64
+            );
+        }
+    }
+
+    /// Independent pre-change implementation. It deliberately keeps full
+    /// remainder and inserts every minimum, including consecutive duplicates.
+    fn legacy_fingerprints(text: &str) -> BTreeSet<u64> {
+        let bytes = canonicalize(text);
+        if bytes.len() < K {
+            return BTreeSet::new();
+        }
+        let mul = |a: u64, b: u64| ((a as u128 * b as u128) % MODULUS as u128) as u64;
+        let mut high = 1;
+        for _ in 0..K - 1 {
+            high = mul(high, BASE);
+        }
+        let mut h = 0;
+        for &b in &bytes[..K] {
+            h = (mul(h, BASE) + b as u64) % MODULUS;
+        }
+        let mut hashes = vec![h];
+        for i in K..bytes.len() {
+            let drop = mul(bytes[i - K] as u64, high);
+            h = (h + MODULUS - drop) % MODULUS;
+            h = (mul(h, BASE) + bytes[i] as u64) % MODULUS;
+            hashes.push(h);
+        }
+        if hashes.len() <= WINDOW {
+            return hashes.into_iter().min().into_iter().collect();
+        }
+        hashes
+            .windows(WINDOW)
+            .filter_map(|w| w.iter().copied().min())
+            .collect()
+    }
+
+    #[test]
+    fn optimized_fingerprints_match_legacy_at_boundaries_and_complete_large_inputs() {
+        for text in ["", "A", "İ Ι Σ ß 日本語 🥣", "A \n\t B", ""]
+            .into_iter()
+            .map(str::to_owned)
+            .chain(["x".repeat(262_144), PASSAGE.repeat(1024)])
+        {
+            assert_eq!(fingerprints(&text), legacy_fingerprints(&text));
+        }
+        let mut x = 0x12345678u64;
+        for len in [
+            0, 1, 31, 32, 33, 38, 39, 40, 41, 1024, 122_880, 262_144, 1_048_576,
+        ] {
+            let text: String = (0..len)
+                .map(|_| {
+                    x = x.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    char::from(b' ' + ((x >> 32) % 95) as u8)
+                })
+                .collect();
+            assert_eq!(
+                fingerprints(&text),
+                legacy_fingerprints(&text),
+                "length {len}"
+            );
+        }
     }
 }

@@ -1300,6 +1300,75 @@ async fn selected_git_withdrawn_nonresponding_request_keeps_its_original_deadlin
 }
 
 #[tokio::test]
+async fn selected_raw_request_boundary_never_dispatches_ambiguous_frames() {
+    let call = r#"{"jsonrpc":"2.0","id":"raw","method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful"}}}"#;
+    let mut cases: Vec<(&str, Vec<u8>, bool)> = vec![
+        ("duplicate-name", br#"{"jsonrpc":"2.0","id":"raw","method":"tools/call","params":{"name":"read_text_file","name":"write_file","arguments":{"path":"/workspace/useful"}}}"#.to_vec(), false),
+        ("duplicate-arguments", br#"{"jsonrpc":"2.0","id":"raw","method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful","path":"/workspace/other"}}}"#.to_vec(), false),
+        ("nested-duplicate", br#"{"jsonrpc":"2.0","id":"raw","method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful","extra":{"key":1,"key":2}}}}"#.to_vec(), false),
+        ("nan", br#"{"jsonrpc":"2.0","id":"raw","method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful","weight":NaN}}}"#.to_vec(), false),
+        ("lone-surrogate", br#"{"jsonrpc":"2.0","id":"raw","method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"\ud800"}}}"#.to_vec(), false),
+        ("incomplete", call.as_bytes()[..call.len() - 1].to_vec(), false),
+        ("unterminated", call.as_bytes()[..call.len() - 1].to_vec(), true),
+        ("trailing-json", format!("{call}{{}}").into_bytes(), false),
+        ("duplicate-id", br#"{"jsonrpc":"2.0","id":"raw","id":"other","method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful"}}}"#.to_vec(), false),
+        ("invalid-id", br#"{"jsonrpc":"2.0","id":true,"method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful"}}}"#.to_vec(), false),
+        ("null-id", br#"{"jsonrpc":"2.0","id":null,"method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful"}}}"#.to_vec(), false),
+        ("fractional-id", br#"{"jsonrpc":"2.0","id":1.5,"method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful"}}}"#.to_vec(), false),
+        ("unsafe-integer-id", br#"{"jsonrpc":"2.0","id":9007199254740992,"method":"tools/call","params":{"name":"read_text_file","arguments":{"path":"/workspace/useful"}}}"#.to_vec(), false),
+        ("over-depth", format!(r#"{{"jsonrpc":"2.0","id":"raw","method":"tools/call","params":{{"name":"read_text_file","arguments":{{"path":"/workspace/useful","extra":{}{}}}}}}}"#, "[".repeat(22), "]".repeat(22)).into_bytes(), false),
+    ];
+    let mut invalid_utf8 = call.as_bytes().to_vec();
+    let at = invalid_utf8
+        .windows(b"/workspace/useful".len())
+        .position(|part| part == b"/workspace/useful")
+        .unwrap();
+    invalid_utf8[at] = 0xff;
+    cases.push(("invalid-utf8", invalid_utf8, false));
+    let mut oversized = call.as_bytes().to_vec();
+    oversized.extend(std::iter::repeat_n(b' ', crate::native::MAX_CONTENT));
+    cases.push(("oversized", oversized, false));
+
+    for (label, mut raw, incomplete_eof) in cases {
+        let mut fixture = Harness::new("ordinary").await;
+        fixture.ready().await;
+        if !incomplete_eof {
+            raw.push(b'\n');
+        }
+        fixture.host_input.write_all(&raw).await.unwrap();
+        if incomplete_eof {
+            fixture.host_input.shutdown().await.unwrap();
+        }
+        let reason = fixture.failed().await;
+        assert!(reason.len() <= 256, "{label}: unbounded refusal reason");
+        assert!(
+            !reason.contains("/workspace/useful"),
+            "{label}: raw input leaked in refusal"
+        );
+        assert!(
+            Harness::read(&mut fixture.server_input).await.is_none(),
+            "{label}: reached original server"
+        );
+        assert!(
+            Harness::read(&mut fixture.host_output).await.is_none(),
+            "{label}: ambiguous ID got a reply"
+        );
+        assert!(
+            !fixture
+                .daemon
+                .received_requests()
+                .await
+                .unwrap()
+                .iter()
+                .any(|request| request.url.path() == "/native"
+                    && serde_json::from_slice::<Value>(&request.body)
+                        .is_ok_and(|value| value["event"] == "call")),
+            "{label}: obtained native admission"
+        );
+    }
+}
+
+#[tokio::test]
 async fn selected_fault_original_call_and_result_bytes_remain_untouched() {
     let mut fixture = Harness::new("ordinary").await;
     fixture.ready().await;

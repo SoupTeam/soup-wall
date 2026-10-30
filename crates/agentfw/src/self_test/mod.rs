@@ -9,6 +9,7 @@
 //! not Claude Code, model-context or live-model evidence.
 
 pub mod fixture;
+pub(crate) mod private_edit;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod unix;
 #[cfg(windows)]
@@ -65,6 +66,33 @@ pub const LIMITATIONS: [&str; 6] = [
     PLATFORM_LIMITATION,
     "Configured and healthy daemon state is reported separately and is never counted as witnessed protection",
 ];
+
+/// Keep the established fixture profile separate from explicit edit consent.
+#[derive(clap::Args, Debug)]
+#[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+pub struct Cli {
+    #[command(subcommand)]
+    mode: Option<Mode>,
+    #[command(flatten)]
+    baseline: Option<Args>,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Mode {
+    /// Preview or explicitly run the installed private-output edit self-test.
+    PrivateEdit(private_edit::Args),
+}
+
+pub fn run_cli(cli: Cli) -> i32 {
+    match (cli.mode, cli.baseline) {
+        (Some(Mode::PrivateEdit(args)), None) => private_edit::run(args),
+        (None, Some(args)) => run(args),
+        _ => {
+            eprintln!("Select the baseline fixture inputs or `self-test private-edit --help`.");
+            2
+        }
+    }
+}
 
 #[derive(clap::Args, Debug, Clone)]
 pub struct Args {
@@ -291,6 +319,78 @@ fn unsupported(args: Args) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
+
+    #[derive(Parser)]
+    struct TestCli {
+        #[command(flatten)]
+        args: Cli,
+    }
+
+    #[test]
+    fn private_edit_has_separate_consent_and_preserves_baseline_cli() {
+        assert!(TestCli::try_parse_from([
+            "self-test",
+            "private-edit",
+            "--home",
+            "/agent",
+            "--selection",
+            "/selection"
+        ])
+        .is_ok());
+        assert!(TestCli::try_parse_from([
+            "self-test",
+            "private-edit",
+            "--home",
+            "/agent",
+            "--selection",
+            "/selection",
+            "--run"
+        ])
+        .is_err());
+        assert!(TestCli::try_parse_from([
+            "self-test",
+            "private-edit",
+            "--home",
+            "/agent",
+            "--selection",
+            "/selection",
+            "--run",
+            "--output",
+            "/fresh"
+        ])
+        .is_ok());
+        assert!(TestCli::try_parse_from(["self-test", "--agent", "/agent"]).is_err());
+        let baseline = TestCli::try_parse_from([
+            "self-test",
+            "--agent",
+            "/agent",
+            "--classifier",
+            "rule-baseline",
+            "--classifier-script",
+            "/classifier.py",
+            "--classifier-sha256",
+            "digest",
+            "--classifier-python",
+            "/python",
+            "--report",
+            "/report",
+        ])
+        .expect("baseline self-test arguments remain compatible");
+        assert!(baseline.args.baseline.is_some());
+        assert!(baseline.args.mode.is_none());
+        assert!(TestCli::try_parse_from([
+            "self-test",
+            "--agent",
+            "/agent",
+            "private-edit",
+            "--home",
+            "/agent",
+            "--selection",
+            "/selection"
+        ])
+        .is_err());
+    }
 
     fn scenario(status: Status) -> Scenario {
         Scenario {

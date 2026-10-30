@@ -1,0 +1,67 @@
+{
+  "format": "sw-edit-refresh-independent-artifact-check/1",
+  "source": "635f9dfdf08e904e98ad45c565f784033a33ff05",
+  "artifact_zip_sha256": "86d0e3d5b63370ccb385f247e59086988359fcd80a1a594afb17531a0773467b",
+  "members": [
+    "source.txt",
+    "runtime/report.json",
+    "binary.txt",
+    "refresh/report.json"
+  ],
+  "agentfw_sha256": "5689bd050b966854945f0af917cea2b6b2a9e11259089d6c0f2a0fffd08c7200",
+  "new_refresh_cases": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "accepted_edit_cases": {
+    "attempted": 23,
+    "expected": 23,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 23
+  },
+  "exact_plan_digests_and_confirmation": "verified",
+  "scope_unchanged": "verified",
+  "actual_two_replacements_and_readbacks": "verified",
+  "fresh_epoch_and_binding": "verified",
+  "old_authority_401": "verified",
+  "actual_publish_sigkill": "verified",
+  "zero_unapproved_effects_and_owned_cleanup": "verified",
+  "run_id": 40666360513,
+  "job_id": 122741835268,
+  "artifact_id": 12805844920,
+  "run_url": "https://github.com/SoupTeam/soup-wall/actions/runs/40666360513",
+  "qualified_tree": "e69b5b7add651da037e55b4b4a91a3b192e98a5d",
+  "native_rust": {
+    "passed": 53,
+    "failed": 0,
+    "ignored": 0,
+    "suites": 5,
+    "compiler_warnings": 0,
+    "per_suite_passed": [
+      19,
+      6,
+      10,
+      5,
+      13
+    ],
+    "reporting_correction": "Original summary said 63 in error; retained native log proves 19+6+10+5+13=53, all passed. No runtime or qualification delta."
+  },
+  "strict_linux_clippy": true,
+  "linux_fmt": true,
+  "script_controls": {
+    "run": 8,
+    "failed": 0
+  },
+  "isolation": "native Ubuntu 24.04 x86_64; read-only checkout, private writable scratch, private loopback-only network, non-root/all capabilities dropped; genuine pinned Claude and actual installed component; owned scripted provider only",
+  "log_sha256": "6b3bd32804ee3f04c138ba350356f9fb25bdaa2c01f5125b00c27bc99f7ca574",
+  "attempts": {
+    "native_runs": 1,
+    "failed": 0,
+    "incomplete": 0
+  },
+  "scope": "author focused development qualification; final shared Ready CI, CodeQL, admission and merge remain TL-owned"
+}

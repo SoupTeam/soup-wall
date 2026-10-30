@@ -1,0 +1,2256 @@
+{
+  "cases": [
+    {
+      "attempted": true,
+      "exact_readback": true,
+      "id": "create-read",
+      "runtime_attempts": [
+        {
+          "readback": {
+            "expected_write_authorizations": true,
+            "final_read_exact": true,
+            "initial_read_exact": true,
+            "initial_results_present": true,
+            "initial_results_succeeded": true,
+            "target_bytes_match": true
+          },
+          "witness": {
+            "approved_or_rejected": 1,
+            "audit_sha256": "b2e3bd8c9a5f21fc3d54f1e4740658a80ee0922d205d0388dc003681d9b2685f",
+            "exit_code": 0,
+            "native_write_authorizations": 1,
+            "observed_results": 3,
+            "processes": {
+              "all_stopped": true,
+              "descendant_count": 6,
+              "discarded_exited_hints": 0,
+              "discarded_recycled_hints": 0,
+              "observed": [
+                {
+                  "parent_pid": 15400,
+                  "parent_process": true,
+                  "parent_start_time_ticks": null,
+                  "pid": 15407,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38022
+                },
+                {
+                  "parent_pid": 15407,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38022,
+                  "pid": 15412,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38120
+                },
+                {
+                  "parent_pid": 15412,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38120,
+                  "pid": 15443,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38153
+                },
+                {
+                  "parent_pid": 15412,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38120,
+                  "pid": 15442,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38153
+                },
+                {
+                  "parent_pid": 15412,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38120,
+                  "pid": 15441,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38152
+                },
+                {
+                  "parent_pid": 15412,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38120,
+                  "pid": 15453,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38156
+                },
+                {
+                  "parent_pid": 15412,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38120,
+                  "pid": 15460,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38158
+                }
+              ],
+              "pidfd_cleanup": true,
+              "remaining": [],
+              "reparented_owned_count": 0,
+              "unproven_hints_remaining": []
+            },
+            "provider_bytes": 68276,
+            "provider_requests": 4,
+            "publication_gates": 0,
+            "quota": {
+              "admitted_mutation_attempts": 1,
+              "charged_write_bytes": 39,
+              "known_committed_mutations": 1,
+              "known_committed_write_bytes": 39
+            },
+            "stderr_sha256": "db9d74ae48587d4b8b09a25680c104b25eca50ad3ecb1bcbabdde4fd28f649d3",
+            "stdout_sha256": "abafb30bb0ea700a7568d8e624cc9902642b38cd3ab764198931802c49bd6b5b",
+            "target_after": {
+              "device": 66305,
+              "exists": true,
+              "inode": 9218180,
+              "mode": 33152,
+              "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+              "size": 39
+            },
+            "target_before": {
+              "exists": false
+            }
+          }
+        }
+      ],
+      "status": "passed",
+      "witness": {
+        "approved_or_rejected": 1,
+        "audit_sha256": "b2e3bd8c9a5f21fc3d54f1e4740658a80ee0922d205d0388dc003681d9b2685f",
+        "exit_code": 0,
+        "native_write_authorizations": 1,
+        "observed_results": 3,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 6,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 15407,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38022
+            },
+            {
+              "parent_pid": 15407,
+              "parent_process": false,
+              "parent_start_time_ticks": 38022,
+              "pid": 15412,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38120
+            },
+            {
+              "parent_pid": 15412,
+              "parent_process": false,
+              "parent_start_time_ticks": 38120,
+              "pid": 15443,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38153
+            },
+            {
+              "parent_pid": 15412,
+              "parent_process": false,
+              "parent_start_time_ticks": 38120,
+              "pid": 15442,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38153
+            },
+            {
+              "parent_pid": 15412,
+              "parent_process": false,
+              "parent_start_time_ticks": 38120,
+              "pid": 15441,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38152
+            },
+            {
+              "parent_pid": 15412,
+              "parent_process": false,
+              "parent_start_time_ticks": 38120,
+              "pid": 15453,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38156
+            },
+            {
+              "parent_pid": 15412,
+              "parent_process": false,
+              "parent_start_time_ticks": 38120,
+              "pid": 15460,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38158
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 68276,
+        "provider_requests": 4,
+        "publication_gates": 0,
+        "quota": {
+          "admitted_mutation_attempts": 1,
+          "charged_write_bytes": 39,
+          "known_committed_mutations": 1,
+          "known_committed_write_bytes": 39
+        },
+        "stderr_sha256": "db9d74ae48587d4b8b09a25680c104b25eca50ad3ecb1bcbabdde4fd28f649d3",
+        "stdout_sha256": "abafb30bb0ea700a7568d8e624cc9902642b38cd3ab764198931802c49bd6b5b",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9218180,
+          "mode": 33152,
+          "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+          "size": 39
+        },
+        "target_before": {
+          "exists": false
+        }
+      }
+    },
+    {
+      "attempted": true,
+      "exact_readback": true,
+      "id": "replace-read",
+      "runtime_attempts": [
+        {
+          "readback": {
+            "expected_write_authorizations": true,
+            "final_read_exact": true,
+            "initial_read_exact": true,
+            "initial_results_present": true,
+            "initial_results_succeeded": true,
+            "target_bytes_match": true
+          },
+          "witness": {
+            "approved_or_rejected": 1,
+            "audit_sha256": "c732c503d7d34eec4f753868612bcd9326ae745ae50a8f1c5f937ba94442fb6f",
+            "exit_code": 0,
+            "native_write_authorizations": 1,
+            "observed_results": 3,
+            "processes": {
+              "all_stopped": true,
+              "descendant_count": 5,
+              "discarded_exited_hints": 0,
+              "discarded_recycled_hints": 0,
+              "observed": [
+                {
+                  "parent_pid": 15400,
+                  "parent_process": true,
+                  "parent_start_time_ticks": null,
+                  "pid": 15537,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38310
+                },
+                {
+                  "parent_pid": 15537,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38310,
+                  "pid": 15541,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38386
+                },
+                {
+                  "parent_pid": 15541,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38386,
+                  "pid": 15574,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38414
+                },
+                {
+                  "parent_pid": 15541,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38386,
+                  "pid": 15573,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38414
+                },
+                {
+                  "parent_pid": 15541,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38386,
+                  "pid": 15572,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38414
+                },
+                {
+                  "parent_pid": 15541,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38386,
+                  "pid": 15584,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38419
+                }
+              ],
+              "pidfd_cleanup": true,
+              "remaining": [],
+              "reparented_owned_count": 0,
+              "unproven_hints_remaining": []
+            },
+            "provider_bytes": 72082,
+            "provider_requests": 4,
+            "publication_gates": 1,
+            "quota": {
+              "admitted_mutation_attempts": 1,
+              "charged_write_bytes": 39,
+              "known_committed_mutations": 1,
+              "known_committed_write_bytes": 39
+            },
+            "stderr_sha256": "3dc5e38b995144e3cfca5227aad8757eb57ae6d75ebfc5bbc106c34ef6819c0c",
+            "stdout_sha256": "7571cc3903ab8dcac59a1cd4f607a9430148771f4b321bc6341e8fb0ace200c2",
+            "target_after": {
+              "device": 66305,
+              "exists": true,
+              "inode": 9218230,
+              "mode": 33152,
+              "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+              "size": 39
+            },
+            "target_before": {
+              "device": 66305,
+              "exists": true,
+              "inode": 9218190,
+              "mode": 33152,
+              "sha256": "d0c737b127072d00b3ae6c8a555d1d6e534699bd18a6f9f573b8908619228fe7",
+              "size": 39
+            }
+          }
+        }
+      ],
+      "status": "passed",
+      "witness": {
+        "approved_or_rejected": 1,
+        "audit_sha256": "c732c503d7d34eec4f753868612bcd9326ae745ae50a8f1c5f937ba94442fb6f",
+        "exit_code": 0,
+        "native_write_authorizations": 1,
+        "observed_results": 3,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 5,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 15537,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38310
+            },
+            {
+              "parent_pid": 15537,
+              "parent_process": false,
+              "parent_start_time_ticks": 38310,
+              "pid": 15541,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38386
+            },
+            {
+              "parent_pid": 15541,
+              "parent_process": false,
+              "parent_start_time_ticks": 38386,
+              "pid": 15574,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38414
+            },
+            {
+              "parent_pid": 15541,
+              "parent_process": false,
+              "parent_start_time_ticks": 38386,
+              "pid": 15573,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38414
+            },
+            {
+              "parent_pid": 15541,
+              "parent_process": false,
+              "parent_start_time_ticks": 38386,
+              "pid": 15572,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38414
+            },
+            {
+              "parent_pid": 15541,
+              "parent_process": false,
+              "parent_start_time_ticks": 38386,
+              "pid": 15584,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38419
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 72082,
+        "provider_requests": 4,
+        "publication_gates": 1,
+        "quota": {
+          "admitted_mutation_attempts": 1,
+          "charged_write_bytes": 39,
+          "known_committed_mutations": 1,
+          "known_committed_write_bytes": 39
+        },
+        "stderr_sha256": "3dc5e38b995144e3cfca5227aad8757eb57ae6d75ebfc5bbc106c34ef6819c0c",
+        "stdout_sha256": "7571cc3903ab8dcac59a1cd4f607a9430148771f4b321bc6341e8fb0ace200c2",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9218230,
+          "mode": 33152,
+          "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+          "size": 39
+        },
+        "target_before": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9218190,
+          "mode": 33152,
+          "sha256": "d0c737b127072d00b3ae6c8a555d1d6e534699bd18a6f9f573b8908619228fe7",
+          "size": 39
+        }
+      }
+    },
+    {
+      "attempted": true,
+      "id": "ask-reject-replay",
+      "rejection_observed": true,
+      "replay_refused": true,
+      "status": "passed",
+      "witness": {
+        "approved_or_rejected": 1,
+        "audit_sha256": "8724820f957cc290ae0153a615bc068a09d4e0e33c179933da8665f1db925247",
+        "exit_code": 0,
+        "native_write_authorizations": 0,
+        "observed_results": 3,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 6,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 15662,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38571
+            },
+            {
+              "parent_pid": 15662,
+              "parent_process": false,
+              "parent_start_time_ticks": 38571,
+              "pid": 15666,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38647
+            },
+            {
+              "parent_pid": 15666,
+              "parent_process": false,
+              "parent_start_time_ticks": 38647,
+              "pid": 15705,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38696
+            },
+            {
+              "parent_pid": 15666,
+              "parent_process": false,
+              "parent_start_time_ticks": 38647,
+              "pid": 15704,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38695
+            },
+            {
+              "parent_pid": 15666,
+              "parent_process": false,
+              "parent_start_time_ticks": 38647,
+              "pid": 15703,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38695
+            },
+            {
+              "parent_pid": 15666,
+              "parent_process": false,
+              "parent_start_time_ticks": 38647,
+              "pid": 15715,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38700
+            },
+            {
+              "parent_pid": 15666,
+              "parent_process": false,
+              "parent_start_time_ticks": 38647,
+              "pid": 15719,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38702
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 71918,
+        "provider_requests": 4,
+        "publication_gates": 0,
+        "quota": {
+          "admitted_mutation_attempts": 0,
+          "charged_write_bytes": 0,
+          "known_committed_mutations": 0,
+          "known_committed_write_bytes": 0
+        },
+        "stderr_sha256": "c21ef3ea2a44a6bfc7ab2dcaedf039734900b10c62610f6ef372952c5dc49ba1",
+        "stdout_sha256": "bec348449d187a99dec72c8833fbb24a1480cd23161cb03ceb37c138c1fb4f05",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9218239,
+          "mode": 33152,
+          "sha256": "d0c737b127072d00b3ae6c8a555d1d6e534699bd18a6f9f573b8908619228fe7",
+          "size": 39
+        },
+        "target_before": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9218239,
+          "mode": 33152,
+          "sha256": "d0c737b127072d00b3ae6c8a555d1d6e534699bd18a6f9f573b8908619228fe7",
+          "size": 39
+        }
+      }
+    },
+    {
+      "attempted": true,
+      "byte_ceiling_enforced": true,
+      "byte_witness": {
+        "approved_or_rejected": 2,
+        "audit_sha256": "2c7546a6a1dd01ac1a303278de8dd12cd2bc57da05181c6030b61dbcad6fa28a",
+        "exit_code": 0,
+        "native_write_authorizations": 2,
+        "observed_results": 5,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 5,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 15923,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39173
+            },
+            {
+              "parent_pid": 15923,
+              "parent_process": false,
+              "parent_start_time_ticks": 39173,
+              "pid": 15927,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39249
+            },
+            {
+              "parent_pid": 15927,
+              "parent_process": false,
+              "parent_start_time_ticks": 39249,
+              "pid": 15972,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39300
+            },
+            {
+              "parent_pid": 15927,
+              "parent_process": false,
+              "parent_start_time_ticks": 39249,
+              "pid": 15971,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39300
+            },
+            {
+              "parent_pid": 15927,
+              "parent_process": false,
+              "parent_start_time_ticks": 39249,
+              "pid": 15970,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39300
+            },
+            {
+              "parent_pid": 15927,
+              "parent_process": false,
+              "parent_start_time_ticks": 39249,
+              "pid": 15986,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39306
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 110209,
+        "provider_requests": 6,
+        "publication_gates": 0,
+        "quota": {
+          "admitted_mutation_attempts": 1,
+          "charged_write_bytes": 39,
+          "known_committed_mutations": 1,
+          "known_committed_write_bytes": 39
+        },
+        "stderr_sha256": "097c57b6b20cec02a29dae15acc91c6ae59550157b8eab8dc04b3a1cf62df1d6",
+        "stdout_sha256": "6cd0ac419ae75b60ebbdcade4bf7e6057f2cc64e330bee72cffdf452a8c38400",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9437277,
+          "mode": 33152,
+          "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+          "size": 39
+        },
+        "target_before": {
+          "exists": false
+        }
+      },
+      "fresh_ask_for_each_mutation": true,
+      "id": "aggregate-quota",
+      "mutation_ceiling_enforced": true,
+      "native_authorizations_precede_quota": true,
+      "quota_not_refunded": true,
+      "runtime_attempts": [
+        {
+          "readback": {
+            "expected_write_authorizations": true,
+            "final_read_exact": true,
+            "initial_read_exact": true,
+            "initial_results_present": true,
+            "initial_results_succeeded": true,
+            "target_bytes_match": true
+          },
+          "witness": {
+            "approved_or_rejected": 2,
+            "audit_sha256": "a7a277dfb1154aadfe88996df85af32a390d17ecb2c52adb5c228503e5ab0540",
+            "exit_code": 0,
+            "native_write_authorizations": 2,
+            "observed_results": 5,
+            "processes": {
+              "all_stopped": true,
+              "descendant_count": 5,
+              "discarded_exited_hints": 0,
+              "discarded_recycled_hints": 0,
+              "observed": [
+                {
+                  "parent_pid": 15400,
+                  "parent_process": true,
+                  "parent_start_time_ticks": null,
+                  "pid": 15773,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38874
+                },
+                {
+                  "parent_pid": 15773,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38874,
+                  "pid": 15777,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38951
+                },
+                {
+                  "parent_pid": 15777,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38951,
+                  "pid": 15811,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38981
+                },
+                {
+                  "parent_pid": 15777,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38951,
+                  "pid": 15810,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38981
+                },
+                {
+                  "parent_pid": 15777,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38951,
+                  "pid": 15809,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38981
+                },
+                {
+                  "parent_pid": 15777,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 38951,
+                  "pid": 15821,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 38986
+                }
+              ],
+              "pidfd_cleanup": true,
+              "remaining": [],
+              "reparented_owned_count": 0,
+              "unproven_hints_remaining": []
+            },
+            "provider_bytes": 110177,
+            "provider_requests": 6,
+            "publication_gates": 0,
+            "quota": {
+              "admitted_mutation_attempts": 1,
+              "charged_write_bytes": 39,
+              "known_committed_mutations": 1,
+              "known_committed_write_bytes": 39
+            },
+            "stderr_sha256": "991aea6000663005b452dead424616ce1e414dd1774e90182f01aabbe0d6756f",
+            "stdout_sha256": "7b1b1670066dbcfda852f133a8957469019d3708263e504aba970e595881eaad",
+            "target_after": {
+              "device": 66305,
+              "exists": true,
+              "inode": 9437229,
+              "mode": 33152,
+              "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+              "size": 39
+            },
+            "target_before": {
+              "exists": false
+            }
+          }
+        },
+        {
+          "readback": {
+            "expected_write_authorizations": true,
+            "final_read_exact": true,
+            "initial_read_exact": true,
+            "initial_results_present": true,
+            "initial_results_succeeded": true,
+            "target_bytes_match": true
+          },
+          "witness": {
+            "approved_or_rejected": 2,
+            "audit_sha256": "2c7546a6a1dd01ac1a303278de8dd12cd2bc57da05181c6030b61dbcad6fa28a",
+            "exit_code": 0,
+            "native_write_authorizations": 2,
+            "observed_results": 5,
+            "processes": {
+              "all_stopped": true,
+              "descendant_count": 5,
+              "discarded_exited_hints": 0,
+              "discarded_recycled_hints": 0,
+              "observed": [
+                {
+                  "parent_pid": 15400,
+                  "parent_process": true,
+                  "parent_start_time_ticks": null,
+                  "pid": 15923,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39173
+                },
+                {
+                  "parent_pid": 15923,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39173,
+                  "pid": 15927,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39249
+                },
+                {
+                  "parent_pid": 15927,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39249,
+                  "pid": 15972,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39300
+                },
+                {
+                  "parent_pid": 15927,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39249,
+                  "pid": 15971,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39300
+                },
+                {
+                  "parent_pid": 15927,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39249,
+                  "pid": 15970,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39300
+                },
+                {
+                  "parent_pid": 15927,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39249,
+                  "pid": 15986,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39306
+                }
+              ],
+              "pidfd_cleanup": true,
+              "remaining": [],
+              "reparented_owned_count": 0,
+              "unproven_hints_remaining": []
+            },
+            "provider_bytes": 110209,
+            "provider_requests": 6,
+            "publication_gates": 0,
+            "quota": {
+              "admitted_mutation_attempts": 1,
+              "charged_write_bytes": 39,
+              "known_committed_mutations": 1,
+              "known_committed_write_bytes": 39
+            },
+            "stderr_sha256": "097c57b6b20cec02a29dae15acc91c6ae59550157b8eab8dc04b3a1cf62df1d6",
+            "stdout_sha256": "6cd0ac419ae75b60ebbdcade4bf7e6057f2cc64e330bee72cffdf452a8c38400",
+            "target_after": {
+              "device": 66305,
+              "exists": true,
+              "inode": 9437277,
+              "mode": 33152,
+              "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+              "size": 39
+            },
+            "target_before": {
+              "exists": false
+            }
+          }
+        }
+      ],
+      "second_target_absent": true,
+      "status": "passed",
+      "witness": {
+        "approved_or_rejected": 2,
+        "audit_sha256": "a7a277dfb1154aadfe88996df85af32a390d17ecb2c52adb5c228503e5ab0540",
+        "exit_code": 0,
+        "native_write_authorizations": 2,
+        "observed_results": 5,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 5,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 15773,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38874
+            },
+            {
+              "parent_pid": 15773,
+              "parent_process": false,
+              "parent_start_time_ticks": 38874,
+              "pid": 15777,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38951
+            },
+            {
+              "parent_pid": 15777,
+              "parent_process": false,
+              "parent_start_time_ticks": 38951,
+              "pid": 15811,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38981
+            },
+            {
+              "parent_pid": 15777,
+              "parent_process": false,
+              "parent_start_time_ticks": 38951,
+              "pid": 15810,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38981
+            },
+            {
+              "parent_pid": 15777,
+              "parent_process": false,
+              "parent_start_time_ticks": 38951,
+              "pid": 15809,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38981
+            },
+            {
+              "parent_pid": 15777,
+              "parent_process": false,
+              "parent_start_time_ticks": 38951,
+              "pid": 15821,
+              "pidfd_pinned": true,
+              "start_time_ticks": 38986
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 110177,
+        "provider_requests": 6,
+        "publication_gates": 0,
+        "quota": {
+          "admitted_mutation_attempts": 1,
+          "charged_write_bytes": 39,
+          "known_committed_mutations": 1,
+          "known_committed_write_bytes": 39
+        },
+        "stderr_sha256": "991aea6000663005b452dead424616ce1e414dd1774e90182f01aabbe0d6756f",
+        "stdout_sha256": "7b1b1670066dbcfda852f133a8957469019d3708263e504aba970e595881eaad",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9437229,
+          "mode": 33152,
+          "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+          "size": 39
+        },
+        "target_before": {
+          "exists": false
+        }
+      }
+    },
+    {
+      "attempted": true,
+      "id": "exact-run-stop",
+      "independent_run_preserved": true,
+      "peer": {
+        "approved_or_rejected": 1,
+        "audit_sha256": "f7302461f86e56483c3e344300dd6259ef3fb9f6bfc1a3a568ae6fea60a1a67e",
+        "exit_code": 0,
+        "native_write_authorizations": 1,
+        "observed_results": 3,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 6,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 16166,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39724
+            },
+            {
+              "parent_pid": 16166,
+              "parent_process": false,
+              "parent_start_time_ticks": 39724,
+              "pid": 16170,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39800
+            },
+            {
+              "parent_pid": 16170,
+              "parent_process": false,
+              "parent_start_time_ticks": 39800,
+              "pid": 16198,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39830
+            },
+            {
+              "parent_pid": 16170,
+              "parent_process": false,
+              "parent_start_time_ticks": 39800,
+              "pid": 16197,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39830
+            },
+            {
+              "parent_pid": 16170,
+              "parent_process": false,
+              "parent_start_time_ticks": 39800,
+              "pid": 16196,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39830
+            },
+            {
+              "parent_pid": 16170,
+              "parent_process": false,
+              "parent_start_time_ticks": 39800,
+              "pid": 16208,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39834
+            },
+            {
+              "parent_pid": 16170,
+              "parent_process": false,
+              "parent_start_time_ticks": 39800,
+              "pid": 16212,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39836
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 68296,
+        "provider_requests": 4,
+        "publication_gates": 0,
+        "quota": {
+          "admitted_mutation_attempts": 1,
+          "charged_write_bytes": 39,
+          "known_committed_mutations": 1,
+          "known_committed_write_bytes": 39
+        },
+        "stderr_sha256": "4e93a8de2bd276ed47b9c289bfe36167987ee051d2a1bf9a0c37d028ddb8e72a",
+        "stdout_sha256": "550d86d850f993d55f48d9210453731f4d116f662432447762bf2244cff1a20c",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9437371,
+          "mode": 33152,
+          "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+          "size": 39
+        },
+        "target_before": {
+          "exists": false
+        }
+      },
+      "runtime_attempts": [
+        {
+          "readback": {
+            "expected_write_authorizations": true,
+            "final_read_exact": true,
+            "initial_read_exact": true,
+            "initial_results_present": true,
+            "initial_results_succeeded": true,
+            "target_bytes_match": true
+          },
+          "witness": {
+            "approved_or_rejected": 1,
+            "audit_sha256": "f7302461f86e56483c3e344300dd6259ef3fb9f6bfc1a3a568ae6fea60a1a67e",
+            "exit_code": 0,
+            "native_write_authorizations": 1,
+            "observed_results": 3,
+            "processes": {
+              "all_stopped": true,
+              "descendant_count": 6,
+              "discarded_exited_hints": 0,
+              "discarded_recycled_hints": 0,
+              "observed": [
+                {
+                  "parent_pid": 15400,
+                  "parent_process": true,
+                  "parent_start_time_ticks": null,
+                  "pid": 16166,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39724
+                },
+                {
+                  "parent_pid": 16166,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39724,
+                  "pid": 16170,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39800
+                },
+                {
+                  "parent_pid": 16170,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39800,
+                  "pid": 16198,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39830
+                },
+                {
+                  "parent_pid": 16170,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39800,
+                  "pid": 16197,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39830
+                },
+                {
+                  "parent_pid": 16170,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39800,
+                  "pid": 16196,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39830
+                },
+                {
+                  "parent_pid": 16170,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39800,
+                  "pid": 16208,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39834
+                },
+                {
+                  "parent_pid": 16170,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 39800,
+                  "pid": 16212,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 39836
+                }
+              ],
+              "pidfd_cleanup": true,
+              "remaining": [],
+              "reparented_owned_count": 0,
+              "unproven_hints_remaining": []
+            },
+            "provider_bytes": 68296,
+            "provider_requests": 4,
+            "publication_gates": 0,
+            "quota": {
+              "admitted_mutation_attempts": 1,
+              "charged_write_bytes": 39,
+              "known_committed_mutations": 1,
+              "known_committed_write_bytes": 39
+            },
+            "stderr_sha256": "4e93a8de2bd276ed47b9c289bfe36167987ee051d2a1bf9a0c37d028ddb8e72a",
+            "stdout_sha256": "550d86d850f993d55f48d9210453731f4d116f662432447762bf2244cff1a20c",
+            "target_after": {
+              "device": 66305,
+              "exists": true,
+              "inode": 9437371,
+              "mode": 33152,
+              "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+              "size": 39
+            },
+            "target_before": {
+              "exists": false
+            }
+          }
+        }
+      ],
+      "selected": {
+        "approved_or_rejected": 0,
+        "audit_sha256": "42973b65ed96787c1f8c93333eff0421524a5d815c74d4accad513b796a15002",
+        "exit_code": 0,
+        "native_write_authorizations": 0,
+        "observed_results": 2,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 7,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 16088,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39505
+            },
+            {
+              "parent_pid": 16088,
+              "parent_process": false,
+              "parent_start_time_ticks": 39505,
+              "pid": 16094,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39582
+            },
+            {
+              "parent_pid": 16094,
+              "parent_process": false,
+              "parent_start_time_ticks": 39582,
+              "pid": 16125,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39612
+            },
+            {
+              "parent_pid": 16094,
+              "parent_process": false,
+              "parent_start_time_ticks": 39582,
+              "pid": 16124,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39612
+            },
+            {
+              "parent_pid": 16094,
+              "parent_process": false,
+              "parent_start_time_ticks": 39582,
+              "pid": 16123,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39612
+            },
+            {
+              "parent_pid": 16094,
+              "parent_process": false,
+              "parent_start_time_ticks": 39582,
+              "pid": 16135,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39616
+            },
+            {
+              "parent_pid": 16135,
+              "parent_process": false,
+              "parent_start_time_ticks": 39616,
+              "pid": 16138,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39616
+            },
+            {
+              "parent_pid": 16094,
+              "parent_process": false,
+              "parent_start_time_ticks": 39582,
+              "pid": 16139,
+              "pidfd_pinned": true,
+              "start_time_ticks": 39618
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 53089,
+        "provider_requests": 3,
+        "publication_gates": 0,
+        "quota": {
+          "admitted_mutation_attempts": 0,
+          "charged_write_bytes": 0,
+          "known_committed_mutations": 0,
+          "known_committed_write_bytes": 0
+        },
+        "stderr_sha256": "d2a7cf9aee8828912f2bb37f589a32a67924b15c02d66b19c47074768c38b0dd",
+        "stdout_sha256": "ec91d7655f979bc321df8a2f8273af412011d74e85c2bcb94f2ac754f8540623",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9437288,
+          "mode": 33152,
+          "sha256": "d0c737b127072d00b3ae6c8a555d1d6e534699bd18a6f9f573b8908619228fe7",
+          "size": 39
+        },
+        "target_before": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9437288,
+          "mode": 33152,
+          "sha256": "d0c737b127072d00b3ae6c8a555d1d6e534699bd18a6f9f573b8908619228fe7",
+          "size": 39
+        }
+      },
+      "status": "passed",
+      "stop": {
+        "automatic_retry": false,
+        "cleanup_confirmed": true,
+        "effects_may_remain_committed": true,
+        "revocation_confirmed": true,
+        "status": "stopped"
+      }
+    },
+    {
+      "attempted": true,
+      "id": "stopped-authority",
+      "repeat_stop": {
+        "automatic_retry": false,
+        "cleanup_confirmed": true,
+        "effects_may_remain_committed": true,
+        "revocation_confirmed": true,
+        "status": "already_stopped"
+      },
+      "stale_approval_refused": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "daemon_owner": {
+        "pid": 16283,
+        "start_ticks": 40118
+      },
+      "daemon_owner_birth_verified": true,
+      "effects": "indeterminate",
+      "host_delivery": "unknown",
+      "id": "daemon-loss",
+      "interruption_scope": "combined-owner-and-in-process-daemon-loss",
+      "model_consumption": "unknown",
+      "read_only_diagnosis": true,
+      "status": "passed",
+      "witness": {
+        "approved_or_rejected": 0,
+        "audit_sha256": "f874aec2d44da75b47ab42e38ac7d164460d3ff41b2bd4dbdda358ad0ee3ddce",
+        "exit_code": -9,
+        "native_write_authorizations": 0,
+        "observed_results": 1,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 6,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 16283,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40118
+            },
+            {
+              "parent_pid": 16283,
+              "parent_process": false,
+              "parent_start_time_ticks": 40118,
+              "pid": 16287,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40194
+            },
+            {
+              "parent_pid": 16287,
+              "parent_process": false,
+              "parent_start_time_ticks": 40194,
+              "pid": 16315,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40224
+            },
+            {
+              "parent_pid": 16287,
+              "parent_process": false,
+              "parent_start_time_ticks": 40194,
+              "pid": 16314,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40224
+            },
+            {
+              "parent_pid": 16287,
+              "parent_process": false,
+              "parent_start_time_ticks": 40194,
+              "pid": 16313,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40224
+            },
+            {
+              "parent_pid": 16287,
+              "parent_process": false,
+              "parent_start_time_ticks": 40194,
+              "pid": 16325,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40229
+            },
+            {
+              "parent_pid": 16287,
+              "parent_process": false,
+              "parent_start_time_ticks": 40194,
+              "pid": 16329,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40230
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 34755,
+        "provider_requests": 2,
+        "publication_gates": 0,
+        "quota": null,
+        "stderr_sha256": "3e1872bfbfd926de37cbe465f777da2cf3973bab5a067cb83f80518548f037ab",
+        "stdout_sha256": "2f6942efe68e90c9e987de5f0b800300ca87dd46e33d8eff7d5da4b0c545c246",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9437386,
+          "mode": 33152,
+          "sha256": "d0c737b127072d00b3ae6c8a555d1d6e534699bd18a6f9f573b8908619228fe7",
+          "size": 39
+        },
+        "target_before": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9437386,
+          "mode": 33152,
+          "sha256": "d0c737b127072d00b3ae6c8a555d1d6e534699bd18a6f9f573b8908619228fe7",
+          "size": 39
+        }
+      }
+    },
+    {
+      "attempted": true,
+      "automatic_retry": false,
+      "fresh_ask_required": true,
+      "id": "fresh-run-recovery",
+      "old_epoch_refused": true,
+      "old_quota_not_refilled": true,
+      "old_run_preserved": true,
+      "runtime_attempts": [
+        {
+          "readback": {
+            "expected_write_authorizations": true,
+            "final_read_exact": true,
+            "initial_read_exact": true,
+            "initial_results_present": true,
+            "initial_results_succeeded": true,
+            "target_bytes_match": true
+          },
+          "witness": {
+            "approved_or_rejected": 1,
+            "audit_sha256": "b7d59ac57782ae2fb89a6c203db143572db66e6d16f7fc7b0791ddddd7713a0e",
+            "exit_code": 0,
+            "native_write_authorizations": 1,
+            "observed_results": 3,
+            "processes": {
+              "all_stopped": true,
+              "descendant_count": 6,
+              "discarded_exited_hints": 0,
+              "discarded_recycled_hints": 0,
+              "observed": [
+                {
+                  "parent_pid": 15400,
+                  "parent_process": true,
+                  "parent_start_time_ticks": null,
+                  "pid": 16362,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 40343
+                },
+                {
+                  "parent_pid": 16362,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 40343,
+                  "pid": 16366,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 40421
+                },
+                {
+                  "parent_pid": 16366,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 40421,
+                  "pid": 16394,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 40451
+                },
+                {
+                  "parent_pid": 16366,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 40421,
+                  "pid": 16393,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 40451
+                },
+                {
+                  "parent_pid": 16366,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 40421,
+                  "pid": 16392,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 40451
+                },
+                {
+                  "parent_pid": 16366,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 40421,
+                  "pid": 16404,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 40455
+                },
+                {
+                  "parent_pid": 16366,
+                  "parent_process": false,
+                  "parent_start_time_ticks": 40421,
+                  "pid": 16408,
+                  "pidfd_pinned": true,
+                  "start_time_ticks": 40457
+                }
+              ],
+              "pidfd_cleanup": true,
+              "remaining": [],
+              "reparented_owned_count": 0,
+              "unproven_hints_remaining": []
+            },
+            "provider_bytes": 68288,
+            "provider_requests": 4,
+            "publication_gates": 0,
+            "quota": {
+              "admitted_mutation_attempts": 1,
+              "charged_write_bytes": 39,
+              "known_committed_mutations": 1,
+              "known_committed_write_bytes": 39
+            },
+            "stderr_sha256": "f2ebe806eb668bc94e3b2a3a3cb4498ccda6becd9769ed135345361a5ef8cf72",
+            "stdout_sha256": "dec6bf62bd171001e311b57fd9979be46817f5f673da0d1315b0a9b29ff357eb",
+            "target_after": {
+              "device": 66305,
+              "exists": true,
+              "inode": 9437464,
+              "mode": 33152,
+              "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+              "size": 39
+            },
+            "target_before": {
+              "exists": false
+            }
+          }
+        }
+      ],
+      "status": "passed",
+      "witness": {
+        "approved_or_rejected": 1,
+        "audit_sha256": "b7d59ac57782ae2fb89a6c203db143572db66e6d16f7fc7b0791ddddd7713a0e",
+        "exit_code": 0,
+        "native_write_authorizations": 1,
+        "observed_results": 3,
+        "processes": {
+          "all_stopped": true,
+          "descendant_count": 6,
+          "discarded_exited_hints": 0,
+          "discarded_recycled_hints": 0,
+          "observed": [
+            {
+              "parent_pid": 15400,
+              "parent_process": true,
+              "parent_start_time_ticks": null,
+              "pid": 16362,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40343
+            },
+            {
+              "parent_pid": 16362,
+              "parent_process": false,
+              "parent_start_time_ticks": 40343,
+              "pid": 16366,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40421
+            },
+            {
+              "parent_pid": 16366,
+              "parent_process": false,
+              "parent_start_time_ticks": 40421,
+              "pid": 16394,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40451
+            },
+            {
+              "parent_pid": 16366,
+              "parent_process": false,
+              "parent_start_time_ticks": 40421,
+              "pid": 16393,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40451
+            },
+            {
+              "parent_pid": 16366,
+              "parent_process": false,
+              "parent_start_time_ticks": 40421,
+              "pid": 16392,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40451
+            },
+            {
+              "parent_pid": 16366,
+              "parent_process": false,
+              "parent_start_time_ticks": 40421,
+              "pid": 16404,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40455
+            },
+            {
+              "parent_pid": 16366,
+              "parent_process": false,
+              "parent_start_time_ticks": 40421,
+              "pid": 16408,
+              "pidfd_pinned": true,
+              "start_time_ticks": 40457
+            }
+          ],
+          "pidfd_cleanup": true,
+          "remaining": [],
+          "reparented_owned_count": 0,
+          "unproven_hints_remaining": []
+        },
+        "provider_bytes": 68288,
+        "provider_requests": 4,
+        "publication_gates": 0,
+        "quota": {
+          "admitted_mutation_attempts": 1,
+          "charged_write_bytes": 39,
+          "known_committed_mutations": 1,
+          "known_committed_write_bytes": 39
+        },
+        "stderr_sha256": "f2ebe806eb668bc94e3b2a3a3cb4498ccda6becd9769ed135345361a5ef8cf72",
+        "stdout_sha256": "dec6bf62bd171001e311b57fd9979be46817f5f673da0d1315b0a9b29ff357eb",
+        "target_after": {
+          "device": 66305,
+          "exists": true,
+          "inode": 9437464,
+          "mode": 33152,
+          "sha256": "144f520119405b0376e66d861d9a2150b318df32289a35bd8e519403591af8b8",
+          "size": 39
+        },
+        "target_before": {
+          "exists": false
+        }
+      }
+    }
+  ],
+  "cleanup": {
+    "all_owned_processes_stopped": true,
+    "keep_workspace_requested": false,
+    "process_groups": [
+      {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 15407,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38022
+          },
+          {
+            "parent_pid": 15407,
+            "parent_process": false,
+            "parent_start_time_ticks": 38022,
+            "pid": 15412,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38120
+          },
+          {
+            "parent_pid": 15412,
+            "parent_process": false,
+            "parent_start_time_ticks": 38120,
+            "pid": 15443,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38153
+          },
+          {
+            "parent_pid": 15412,
+            "parent_process": false,
+            "parent_start_time_ticks": 38120,
+            "pid": 15442,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38153
+          },
+          {
+            "parent_pid": 15412,
+            "parent_process": false,
+            "parent_start_time_ticks": 38120,
+            "pid": 15441,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38152
+          },
+          {
+            "parent_pid": 15412,
+            "parent_process": false,
+            "parent_start_time_ticks": 38120,
+            "pid": 15453,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38156
+          },
+          {
+            "parent_pid": 15412,
+            "parent_process": false,
+            "parent_start_time_ticks": 38120,
+            "pid": 15460,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38158
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 5,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 15537,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38310
+          },
+          {
+            "parent_pid": 15537,
+            "parent_process": false,
+            "parent_start_time_ticks": 38310,
+            "pid": 15541,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38386
+          },
+          {
+            "parent_pid": 15541,
+            "parent_process": false,
+            "parent_start_time_ticks": 38386,
+            "pid": 15574,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38414
+          },
+          {
+            "parent_pid": 15541,
+            "parent_process": false,
+            "parent_start_time_ticks": 38386,
+            "pid": 15573,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38414
+          },
+          {
+            "parent_pid": 15541,
+            "parent_process": false,
+            "parent_start_time_ticks": 38386,
+            "pid": 15572,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38414
+          },
+          {
+            "parent_pid": 15541,
+            "parent_process": false,
+            "parent_start_time_ticks": 38386,
+            "pid": 15584,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38419
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 15662,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38571
+          },
+          {
+            "parent_pid": 15662,
+            "parent_process": false,
+            "parent_start_time_ticks": 38571,
+            "pid": 15666,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38647
+          },
+          {
+            "parent_pid": 15666,
+            "parent_process": false,
+            "parent_start_time_ticks": 38647,
+            "pid": 15705,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38696
+          },
+          {
+            "parent_pid": 15666,
+            "parent_process": false,
+            "parent_start_time_ticks": 38647,
+            "pid": 15704,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38695
+          },
+          {
+            "parent_pid": 15666,
+            "parent_process": false,
+            "parent_start_time_ticks": 38647,
+            "pid": 15703,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38695
+          },
+          {
+            "parent_pid": 15666,
+            "parent_process": false,
+            "parent_start_time_ticks": 38647,
+            "pid": 15715,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38700
+          },
+          {
+            "parent_pid": 15666,
+            "parent_process": false,
+            "parent_start_time_ticks": 38647,
+            "pid": 15719,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38702
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 5,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 15773,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38874
+          },
+          {
+            "parent_pid": 15773,
+            "parent_process": false,
+            "parent_start_time_ticks": 38874,
+            "pid": 15777,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38951
+          },
+          {
+            "parent_pid": 15777,
+            "parent_process": false,
+            "parent_start_time_ticks": 38951,
+            "pid": 15811,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38981
+          },
+          {
+            "parent_pid": 15777,
+            "parent_process": false,
+            "parent_start_time_ticks": 38951,
+            "pid": 15810,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38981
+          },
+          {
+            "parent_pid": 15777,
+            "parent_process": false,
+            "parent_start_time_ticks": 38951,
+            "pid": 15809,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38981
+          },
+          {
+            "parent_pid": 15777,
+            "parent_process": false,
+            "parent_start_time_ticks": 38951,
+            "pid": 15821,
+            "pidfd_pinned": true,
+            "start_time_ticks": 38986
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 5,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 15923,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39173
+          },
+          {
+            "parent_pid": 15923,
+            "parent_process": false,
+            "parent_start_time_ticks": 39173,
+            "pid": 15927,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39249
+          },
+          {
+            "parent_pid": 15927,
+            "parent_process": false,
+            "parent_start_time_ticks": 39249,
+            "pid": 15972,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39300
+          },
+          {
+            "parent_pid": 15927,
+            "parent_process": false,
+            "parent_start_time_ticks": 39249,
+            "pid": 15971,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39300
+          },
+          {
+            "parent_pid": 15927,
+            "parent_process": false,
+            "parent_start_time_ticks": 39249,
+            "pid": 15970,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39300
+          },
+          {
+            "parent_pid": 15927,
+            "parent_process": false,
+            "parent_start_time_ticks": 39249,
+            "pid": 15986,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39306
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 7,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 16088,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39505
+          },
+          {
+            "parent_pid": 16088,
+            "parent_process": false,
+            "parent_start_time_ticks": 39505,
+            "pid": 16094,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39582
+          },
+          {
+            "parent_pid": 16094,
+            "parent_process": false,
+            "parent_start_time_ticks": 39582,
+            "pid": 16125,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39612
+          },
+          {
+            "parent_pid": 16094,
+            "parent_process": false,
+            "parent_start_time_ticks": 39582,
+            "pid": 16124,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39612
+          },
+          {
+            "parent_pid": 16094,
+            "parent_process": false,
+            "parent_start_time_ticks": 39582,
+            "pid": 16123,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39612
+          },
+          {
+            "parent_pid": 16094,
+            "parent_process": false,
+            "parent_start_time_ticks": 39582,
+            "pid": 16135,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39616
+          },
+          {
+            "parent_pid": 16135,
+            "parent_process": false,
+            "parent_start_time_ticks": 39616,
+            "pid": 16138,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39616
+          },
+          {
+            "parent_pid": 16094,
+            "parent_process": false,
+            "parent_start_time_ticks": 39582,
+            "pid": 16139,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39618
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 16166,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39724
+          },
+          {
+            "parent_pid": 16166,
+            "parent_process": false,
+            "parent_start_time_ticks": 39724,
+            "pid": 16170,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39800
+          },
+          {
+            "parent_pid": 16170,
+            "parent_process": false,
+            "parent_start_time_ticks": 39800,
+            "pid": 16198,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39830
+          },
+          {
+            "parent_pid": 16170,
+            "parent_process": false,
+            "parent_start_time_ticks": 39800,
+            "pid": 16197,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39830
+          },
+          {
+            "parent_pid": 16170,
+            "parent_process": false,
+            "parent_start_time_ticks": 39800,
+            "pid": 16196,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39830
+          },
+          {
+            "parent_pid": 16170,
+            "parent_process": false,
+            "parent_start_time_ticks": 39800,
+            "pid": 16208,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39834
+          },
+          {
+            "parent_pid": 16170,
+            "parent_process": false,
+            "parent_start_time_ticks": 39800,
+            "pid": 16212,
+            "pidfd_pinned": true,
+            "start_time_ticks": 39836
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 16283,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40118
+          },
+          {
+            "parent_pid": 16283,
+            "parent_process": false,
+            "parent_start_time_ticks": 40118,
+            "pid": 16287,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40194
+          },
+          {
+            "parent_pid": 16287,
+            "parent_process": false,
+            "parent_start_time_ticks": 40194,
+            "pid": 16315,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40224
+          },
+          {
+            "parent_pid": 16287,
+            "parent_process": false,
+            "parent_start_time_ticks": 40194,
+            "pid": 16314,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40224
+          },
+          {
+            "parent_pid": 16287,
+            "parent_process": false,
+            "parent_start_time_ticks": 40194,
+            "pid": 16313,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40224
+          },
+          {
+            "parent_pid": 16287,
+            "parent_process": false,
+            "parent_start_time_ticks": 40194,
+            "pid": 16325,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40229
+          },
+          {
+            "parent_pid": 16287,
+            "parent_process": false,
+            "parent_start_time_ticks": 40194,
+            "pid": 16329,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40230
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      },
+      {
+        "all_stopped": true,
+        "descendant_count": 6,
+        "discarded_exited_hints": 0,
+        "discarded_recycled_hints": 0,
+        "observed": [
+          {
+            "parent_pid": 15400,
+            "parent_process": true,
+            "parent_start_time_ticks": null,
+            "pid": 16362,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40343
+          },
+          {
+            "parent_pid": 16362,
+            "parent_process": false,
+            "parent_start_time_ticks": 40343,
+            "pid": 16366,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40421
+          },
+          {
+            "parent_pid": 16366,
+            "parent_process": false,
+            "parent_start_time_ticks": 40421,
+            "pid": 16394,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40451
+          },
+          {
+            "parent_pid": 16366,
+            "parent_process": false,
+            "parent_start_time_ticks": 40421,
+            "pid": 16393,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40451
+          },
+          {
+            "parent_pid": 16366,
+            "parent_process": false,
+            "parent_start_time_ticks": 40421,
+            "pid": 16392,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40451
+          },
+          {
+            "parent_pid": 16366,
+            "parent_process": false,
+            "parent_start_time_ticks": 40421,
+            "pid": 16404,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40455
+          },
+          {
+            "parent_pid": 16366,
+            "parent_process": false,
+            "parent_start_time_ticks": 40421,
+            "pid": 16408,
+            "pidfd_pinned": true,
+            "start_time_ticks": 40457
+          }
+        ],
+        "pidfd_cleanup": true,
+        "remaining": [],
+        "reparented_owned_count": 0,
+        "unproven_hints_remaining": []
+      }
+    ],
+    "workspace_removed": true,
+    "workspace_retained": false
+  },
+  "effects_of_interrupted_runs": "indeterminate; no automatic retry or mutation replay",
+  "executed": true,
+  "expected": [
+    "create-read",
+    "replace-read",
+    "ask-reject-replay",
+    "aggregate-quota",
+    "exact-run-stop",
+    "stopped-authority",
+    "daemon-loss",
+    "fresh-run-recovery"
+  ],
+  "format": "sw-private-edit-self-test/1",
+  "identities": {
+    "component_sha256": "022b36116bdf0dade75a3c5fb95d580d1821de8be1706f315114a488f63b812f",
+    "helper_python_sha256": "e50d468e8b0adfb05733f5b87b3cff34829c4a8c1aea50c865aa8bdfe4bb150f",
+    "installed_sha256": {
+      "agentfw": "bb59fb149cab45aaa80982f1dba40abe234174a2aa4674a19061e52eb12083c1",
+      "bwrap": "331003ab2121d8b2d0fff1ef3164bb8758a2cb43ba4653ad783ff443e898d0aa",
+      "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+      "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+      "git": "9f27c38de1072df8d63ff04aa79014368ed9a9232e4108eacb1fe26ca42e629a",
+      "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+      "git_launcher": "b72fcffc8d6882e2805dc91caeae8e8cb0ab43499faa64b4837e226307a8deac",
+      "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+      "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+      "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+      "python": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+      "sandbox_tests": "20e08bcd5e68d6c444e2cd1d72c359ef36151cbb1361978203dceb7991ccc191"
+    },
+    "selection_sha256": "bdc932f2d891163b31c0b990c23b30da2597144189e26e1d2d9d7951984aca54",
+    "source_commit": "b71084b7577d4d7d3a8de5f2cace4ac00bbc4598",
+    "source_tree": "ddd418f9149ede6563650e94b75027e3d35d0b58"
+  },
+  "inventory": {
+    "attempted": 8,
+    "expected": 8,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 8,
+    "unsupported": 0
+  },
+  "last_command": {
+    "exit_code": 0,
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 3,
+    "stdout_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  "original_filesystem_git": "selected-runtime-pins-validated; private-output edits use the accepted native edit API",
+  "paid_inference": false,
+  "platform": {
+    "id": "native-linux-x86_64",
+    "supported": true
+  },
+  "preservation": {
+    "installed_state_unchanged": true,
+    "original_projects_unchanged": true,
+    "unrelated_sentinel_unchanged": true
+  },
+  "scope": "selected-genuine-Claude-owned-scripted-provider-native-private-output",
+  "status": "passed"
+}

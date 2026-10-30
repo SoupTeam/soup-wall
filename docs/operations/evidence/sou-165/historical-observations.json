@@ -1,0 +1,58 @@
+{
+  "format": "sw-native-result-historical-observations/1",
+  "run": 40542391786,
+  "source": "cb2860fa6dc2fe070d7eb1b55613a8652d8cd788",
+  "original_attempt": {
+    "attempt": 1,
+    "status": "failed",
+    "completed_cases": 19,
+    "error": "large-main closed before correlated response",
+    "log_sha256": "c53dcf42d479e04903f309fb9b644ddbb540c6afb0a9f8904ca35e0e17be41a4",
+    "excerpt": [
+      "2026-10-27T16:51:04.8777413Z {",
+      "2026-10-27T16:51:04.8777821Z   \"status\": \"failed\",",
+      "2026-10-27T16:51:04.8778202Z   \"cases\": 19,",
+      "2026-10-27T16:51:04.8778537Z   \"platform\": \"linux\",",
+      "2026-10-27T16:51:04.8778996Z   \"error\": \"large-main closed before correlated response\"",
+      "2026-10-27T16:51:04.8779503Z }"
+    ]
+  },
+  "repeat": {
+    "artifact_id": 12756122345,
+    "artifact_sha256": "64f1c85f777363f09b86e1f56224a4911f19240a5ef92078ec9b30b06db662d9",
+    "status": "passed",
+    "binary_sha256": "14740544322acc483b43163494f3010f65ba9ef158e74145e7c9e55e596b8e89",
+    "concurrency": {
+      "ids": [
+        1028,
+        1029,
+        1030,
+        1031,
+        1032,
+        1033,
+        1034,
+        1035,
+        1036
+      ],
+      "exact": 8,
+      "oversized_refused": true,
+      "memory": {
+        "pid": 9216,
+        "vm_hwm_kib": 44888,
+        "vm_rss_kib": 38580
+      },
+      "useful_followup": {
+        "id": 1037,
+        "released": true,
+        "response_sha256": "0d23450622a5a5ad34df1ef7ed70ccdd690393e5a034592782448b75c67c383e"
+      }
+    },
+    "source": {
+      "commit": "cb2860fa6dc2fe070d7eb1b55613a8652d8cd788",
+      "tree": "95d4976880b80ea263abf0ae137b3eea61dc12ea",
+      "dirty": false
+    },
+    "report_sha256": "70b9e96505f0f8f9cd34af384e93cfdfaba1f63ed8271718cae39ce3ae65fbbc"
+  },
+  "interpretation": "An unchanged retry passed. No code regression or causal fix was established by that retry."
+}

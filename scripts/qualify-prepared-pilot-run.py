@@ -19,6 +19,8 @@ import time
 import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+import pilot_runtime_identity as IDENTITY
 
 
 def load(name, filename):
@@ -116,6 +118,8 @@ def qualify(args, private, report):
     config = argparse.Namespace(selection=args.selection, expected_commit=args.expected_commit,
         ask_wait_seconds=0, timeout_seconds=60, port=0)
     selection, paths, profiles = RUN.selected(config)
+    IDENTITY.capture_prepared(report, 'selection', args.selection)
+    IDENTITY.finish()
     transition_plan = None
     if args.transition_target:
         transition_plan = SWITCH.plan(args.selection.parent.parent.parent, args.transition_target,
@@ -327,6 +331,7 @@ def qualify(args, private, report):
                                 "selected_generation_in_use_or_transitioning", "active_transition_not_refused")
                         report["active_transition_refused"] = True
                     home = Path(record["home"])
+                    IDENTITY.capture_prepared(report, case, args.selection, home)
                     if case in ("audit-rotation", "audit-unavailable"):
                         audit_token = (home / "native-token").read_text().strip()
                         hook_token = (home / "token").read_text().strip()
@@ -553,6 +558,7 @@ def qualify(args, private, report):
                         report['trace_capture_failure'] = str(error)
                         if not preserving_failure:
                             raise
+                IDENTITY.finish(case)
         if not audit_only:
             STOP.qualify(args, private, report, RUN, LAUNCH, ASK, paths, env, notes, useful_result, unrelated)
         if getattr(args, "verify_provider_isolation", False):
