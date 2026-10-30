@@ -4264,7 +4264,9 @@ jobs:
           printf 'SOU155_SCRATCH=%s\nSOU155_COMMIT=%s\n' "$scratch" "$commit" >> "$GITHUB_ENV"
           git rev-parse HEAD > "$scratch/source.txt"
           test -z "$(git status --porcelain --untracked-files=all)"
-          accepted=3c9cfb08c0f1498676dcc70de131bd2f324dd13b
+          # Reviewed main includes SOU-165's bounded dev optimizations. Keep
+          # exact manifest/lock/config equality; this does not permit new deps.
+          accepted=9720f5f4f008609b3023069d3c9727cd699057b0
           git merge-base --is-ancestor "$accepted" "$commit"
           python3 - "$accepted" <<'PY'
           import subprocess,sys
