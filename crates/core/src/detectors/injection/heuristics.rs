@@ -63,6 +63,28 @@ fn score_text_with_formatter_hash(
     text: &str,
     formatter_hash: Option<&std::ops::Range<usize>>,
 ) -> f32 {
+    score_components(text, formatter_hash, delimiter_hits(text))
+}
+
+/// Diagnostic candidate only. Every supplied coordinate must be valid and unique;
+/// malformed or duplicate attribution retains the complete baseline.
+pub(super) fn formatter_shadow_scores(
+    text: &str,
+    separators: &[std::ops::Range<usize>],
+) -> (f32, f32) {
+    let baseline = score_text(text);
+    let (total, owned) = delimiter_accounting(text, separators);
+    if owned != separators.len() {
+        return (baseline, baseline);
+    }
+    (baseline, score_components(text, None, total - owned))
+}
+
+fn score_components(
+    text: &str,
+    formatter_hash: Option<&std::ops::Range<usize>>,
+    delimiters: usize,
+) -> f32 {
     let mut score = 0.0f32;
 
     let imperative_count = IMPERATIVE.find_iter(text).count().min(3);
@@ -78,7 +100,7 @@ fn score_text_with_formatter_hash(
     {
         score += 0.30;
     }
-    score += 0.10 * delimiter_hits(text).min(3) as f32;
+    score += 0.10 * delimiters.min(3) as f32;
 
     score.min(1.0)
 }
@@ -135,6 +157,43 @@ pub(crate) fn scan_with_formatter_hash(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shadow_removes_only_owned_hits_before_cap_and_preserves_other_signals() {
+        for body in [
+            "ordinary",
+            "ignore override",
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN",
+            "### ``` <|",
+        ] {
+            let text = format!("a\n---\nb\n---\nc\n---\n{body}");
+            let spans: Vec<_> = text
+                .match_indices("\n---\n")
+                .map(|(i, _)| i..i + 5)
+                .collect();
+            let (baseline, candidate) = formatter_shadow_scores(&text, &spans);
+            assert_eq!(baseline, score_text(&text));
+            assert_eq!(candidate, score_text(body));
+            assert!(candidate <= baseline);
+            let mut duplicate = spans.clone();
+            duplicate.push(spans[0].clone());
+            assert_eq!(
+                formatter_shadow_scores(&text, &duplicate),
+                (baseline, baseline)
+            );
+            assert_eq!(
+                formatter_shadow_scores(&text, &[1..usize::MAX]),
+                (baseline, baseline)
+            );
+            assert_eq!(formatter_shadow_scores(&text, &[]), (baseline, baseline));
+        }
+        let text = "é\n---\nignore";
+        assert_eq!(
+            formatter_shadow_scores(text, &[2..7]).1,
+            score_text("ignore")
+        );
+        assert_eq!(formatter_shadow_scores(text, &[1..6]).1, score_text(text));
+    }
 
     #[test]
     fn diagnostic_separator_counts_preserve_score_and_reject_bad_coordinates() {

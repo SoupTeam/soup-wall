@@ -169,3 +169,27 @@ one skip on Windows (O_NOFOLLOW, /bin/bash, /proc and POSIX path assumptions);
 these are not counted as passing or changed to hide the unsupported platform.
 No runtime lane has been dispatched by this update; independent Linux verification
 is still required before any production change. No model replay occurred.
+
+## Agreed shadow heuristic experiment (review 5709070027)
+
+Private original-result receipts now freeze baseline and candidate heuristic
+scores over the same complete text. Only verified separator hits are removed,
+before applying the three-hit cap. No text is stripped. The production scorer
+uses the same component function with the original delimiter count; release,
+signatures, directives, cross-field inspection, ML invocation and budgets remain
+unchanged. These two numbers are not complete policy verdicts or public authority.
+Malformed or duplicate ranges in the diagnostic helper retain the full baseline;
+missing or ambiguous private attribution produces no candidate receipt.
+
+Public local controls at 50/200/201/256 paths cover ordinary text (candidate 0),
+two imperative tokens (0.6), three body delimiter types (0.3), long encoding (0.3),
+and destructive instructions (heuristic 0, NOT benign: the independent directive
+detector remains necessary). An injected filename retains its 0.6 contribution.
+UTF-8 boundaries, invalid ranges, duplicates and absent ranges are also covered.
+The existing custody/native suite checks identical release and private receipt
+before/after inspection, forged metadata and cross-field evidence.
+
+These are local unit controls, not native executed witnesses at 201/256 paths or
+a new full public-development corpus result. The historical 10 benign false
+refusals remain unresolved. No model replay or new Linux run was performed.
+Exact-source native qualification and independent review are still required.

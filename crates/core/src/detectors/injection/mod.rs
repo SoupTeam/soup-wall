@@ -38,6 +38,12 @@ impl Default for InjectionDetector {
 }
 
 impl InjectionDetector {
+    /// Shadow-only heuristic comparison, not a verdict or source authentication.
+    /// Callers must never use these public numbers to authorize release.
+    pub fn formatter_shadow_scores(text: &str, spans: &[std::ops::Range<usize>]) -> (f32, f32) {
+        heuristics::formatter_shadow_scores(text, spans)
+    }
+
     /// Diagnostic accounting only; supplied spans confer no policy authority.
     /// Returns (all delimiter hits, hits inside exact newline separator spans).
     pub fn formatter_delimiter_counts(
