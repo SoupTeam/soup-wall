@@ -606,7 +606,9 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
         Cmd::Diagnostics(DiagnosticCommands::PilotObservation) => {
             std::process::exit(agentfw::pilot_observation::run())
         }
-        Cmd::Mcp(McpCommands::SelfTest(args)) => std::process::exit(agentfw::self_test::run_cli(args)),
+        Cmd::Mcp(McpCommands::SelfTest(args)) => {
+            std::process::exit(agentfw::self_test::run_cli(args))
+        }
         #[cfg(windows)]
         Cmd::Mcp(McpCommands::OnboardWindows { command }) => {
             prepare_lifecycle_process()?;
