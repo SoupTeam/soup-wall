@@ -94,7 +94,7 @@ class ImpactTests(unittest.TestCase):
             if filename == "mcp-real-filesystem.yml":
                 auxiliary.update({"manual-long-session", "manual-native-result-profile"})
             if filename == "mcp-real-git.yml":
-                auxiliary.add("manual-installed-git-profiles")
+                auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
                 auxiliary.update({"reuse-plan", "reuse-qualification"})
             self.assertEqual(registered, set(jobs) | {"impact"} | auxiliary, filename)
@@ -103,6 +103,18 @@ class ImpactTests(unittest.TestCase):
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
                 self.assertIn("needs: impact", body, (filename, job))
                 self.assertIn("needs.impact.outputs.jobs", body, (filename, job))
+
+    def test_sou182_raw_boundary_is_manual_and_does_not_replace_required_git(self):
+        text = (ROOT / ".github/workflows/mcp-real-git.yml").read_text()
+        body = text.split("  sou182-raw-boundary:\n", 1)[1]
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.raw_boundary_only", body)
+        self.assertNotIn("needs: impact", body)
+        required = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
+                            text.split("  required-linux-git:\n", 1)[1], maxsplit=1)[0]
+        impact = text.split("  impact:\n", 1)[1].split("  required-linux-git:\n", 1)[0]
+        self.assertIn("if: ${{ !inputs.raw_boundary_only }}", impact)
+        self.assertIn("needs: impact", required)
+        self.assertNotIn("sou182-raw-boundary", WORKFLOW_JOBS["mcp-real-git.yml"])
 
     def test_native_result_profile_remains_explicit_manual_only(self):
         text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
