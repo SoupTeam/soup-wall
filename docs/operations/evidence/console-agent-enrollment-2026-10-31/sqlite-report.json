@@ -1,0 +1,65 @@
+{
+  "backend": "sqlite",
+  "binary_sha256": {
+    "agentfw": "85561f380dc566ffbcfb9148196b127cd507f8f5ed3d44eafb86adfcbdec7fd7",
+    "llm-firewall": "0d2eaa802bd4403e45f474405cada4a63456fb2ca5a622ffe94e13057689854b"
+  },
+  "checks": {
+    "agent-credential-cannot-administer": true,
+    "agent-used-https-edge": true,
+    "ambiguous-rotation-shows-no-credential": true,
+    "ambiguous-rotation-two-identical-posts-one-change": true,
+    "browser-no-storage": true,
+    "credential-not-in-url-or-storage": true,
+    "cross-tenant-lifecycle-refused": true,
+    "enrolled-agent-fetched-and-acknowledged": true,
+    "enrolled-whoami": true,
+    "evidence-sanitized": true,
+    "late-enrollment-committed-only-to-submitted-tenant": true,
+    "late-enrollment-not-shown-in-other-tenant": true,
+    "narrow-layout-no-horizontal-overflow": true,
+    "negatives-changed-nothing": true,
+    "old-credential-refused-after-rotation": true,
+    "restart-retains-lifecycle-state": true,
+    "revoked-agent-keeps-last-policy": true,
+    "revoked-credential-refused": true,
+    "same-agent-process-uses-rotated-credential": true,
+    "second-credential-refused": true,
+    "secret-cleared-after-confirmed-rotation": true,
+    "secret-cleared-after-enrollment": true,
+    "secret-cleared-after-rotation": true,
+    "unavailable-api-keeps-changes-disabled": true,
+    "viewer-and-operator-lifecycle-refused-403": true,
+    "viewer-browser-has-no-enrollment-controls": true
+  },
+  "cleanup": "temporary directory, Console, Agent, edge stopped and removed",
+  "config_sha256": {
+    "agent": "fd9b4e850ed9de0568b202a0c690389c29ec47253003828c83b1f5cabf83ffea",
+    "console": "d67e1830d69750a7f7d1ebc743718b437736c7cc8a27b0c9f0b634224cbefbb9"
+  },
+  "format": "sw-console-enrollment-acceptance/1",
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; not production, multi-host or runtime attestation",
+  "snapshots": {
+    "refused": {
+      "cross-tenant revoke": 404,
+      "cross-tenant rotate": 409,
+      "operator enroll": 403,
+      "operator revoke": 403,
+      "operator rotate": 403,
+      "viewer enroll": 403,
+      "viewer revoke": 403,
+      "viewer rotate": 403
+    }
+  },
+  "source_commit": "874cfb27d917d643e9aee7609fbde23073969b7c",
+  "source_dirty": false,
+  "source_tree": "cdec9b292108399139185a5e0695da17bfd9aafc",
+  "status": "passed",
+  "transport": {
+    "agent_to_console": "HTTPS through an owned private-CA edge on 127.0.0.1",
+    "browser_to_console": "loopback HTTP",
+    "ca_sha256_fingerprint": "05:52:DB:D2:42:CC:2C:97:2A:4C:BD:E4:99:FF:83:35:27:99:32:39:7C:2B:98:48:C1:97:70:90:FB:DF:32:CB",
+    "console_to_database": "local SQLite file",
+    "edge_forwarded_requests": 6
+  }
+}
