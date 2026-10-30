@@ -290,7 +290,7 @@ enum McpCommands {
     /// Preview a native Windows Agent setup against explicitly selected local assets.
     OnboardWindows {
         #[command(subcommand)]
-        command: agentfw::windows_onboarding::Command,
+        command: Box<agentfw::windows_onboarding::Command>,
     },
     /// First-use onboarding: read-only preview, explicit apply of the reviewed plan, and undo (Linux).
     ///
@@ -610,7 +610,7 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
         #[cfg(windows)]
         Cmd::Mcp(McpCommands::OnboardWindows { command }) => {
             prepare_lifecycle_process()?;
-            agentfw::windows_onboarding::run(command)
+            agentfw::windows_onboarding::run(*command)
         }
         Cmd::Mcp(McpCommands::Onboard(command)) => {
             std::process::exit(agentfw::onboarding::run(command))
