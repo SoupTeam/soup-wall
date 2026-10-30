@@ -32,6 +32,8 @@ FORMAT = "sw-pilot-provider-profile/1"
 SELECTED_FORMAT = "sw-pilot-provider-selection/1"
 INDEX_FORMAT = "sw-pilot-provider-index/2"
 VERSIONED_FORMAT = "sw-pilot-provider-versioned/1"
+INDEX_FILE = ".index-v2"
+VERSIONED_FILE = ".versioned-v2"
 DIRECTORY = "pilot-providers"
 NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
 MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}\Z")
@@ -387,14 +389,23 @@ class Store:
         return validate_profile(strict(raw), profile_name), digest(raw)
 
     def index(self):
-        raw = self.read("index.json")
-        marker = self.read("versioned.json")
+        raw = self.read(INDEX_FILE)
+        marker = self.read(VERSIONED_FILE)
         if marker is not None:
             require(strict(marker) == {"format": VERSIONED_FORMAT}, "provider_index_invalid")
         # The marker is published after the first complete index. Once it
         # exists, loss of that index must never reselect retained legacy bytes.
         require((raw is None) == (marker is None), "provider_index_invalid")
         if raw is None:
+            # Accepted v1 permits these profile names. Old draft metadata at
+            # those paths must refuse, never reactivate retained credentials.
+            for legacy_name in ("index", "versioned"):
+                legacy = self.read(legacy_name + ".json")
+                if legacy is not None:
+                    value = strict(legacy)
+                    require(value.get("format") not in (INDEX_FORMAT, VERSIONED_FORMAT),
+                            "provider_index_invalid")
+                    validate_profile(value, legacy_name)
             return None
         return self._validated_index(strict(raw))
 
@@ -473,7 +484,7 @@ class Store:
     def _write_index(self, value):
         require(len(encoded(value)) <= MAX_FILE, "provider_profile_limit")
         self._validated_index(value)
-        self._write("index.json", encoded(value), replace=True)
+        self._write(INDEX_FILE, encoded(value), replace=True)
 
     def _migrate(self):
         """Make legacy profiles immutable before one atomic v2 commit point."""
@@ -498,7 +509,7 @@ class Store:
         # A crash before the index commit leaves the accepted legacy selection
         # usable. A crash between the two publications refuses until repaired;
         # no reader may treat an unmarked v2 index as an active selection.
-        self._write("versioned.json", encoded({"format": VERSIONED_FORMAT}))
+        self._write(VERSIONED_FILE, encoded({"format": VERSIONED_FORMAT}))
         return result
 
     def profile(self, profile_name, version=None):
@@ -522,10 +533,10 @@ class Store:
         self._check()
         legacy = []
         for entry in self._entries():
-            if entry.endswith(".json") and entry not in ("selected.json", "index.json"):
+            if entry.endswith(".json") and entry != "selected.json":
                 legacy.append(name(entry[:-5]))
                 self.read(entry)
-            elif entry in ("selected.json", "index.json", "versioned.json"):
+            elif entry in ("selected.json", INDEX_FILE, VERSIONED_FILE):
                 self.read(entry)
                 continue
             elif VERSION_FILE.fullmatch(entry):

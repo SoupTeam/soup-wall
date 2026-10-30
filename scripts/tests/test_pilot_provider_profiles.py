@@ -284,15 +284,15 @@ class ProviderProfiles(unittest.TestCase):
             store.select("owned")
             original = store._write
             def interrupted(filename, raw, **kwargs):
-                if filename == "index.json":
+                if filename == PROFILE.INDEX_FILE:
                     raise OSError("simulated index publication interruption")
                 return original(filename, raw, **kwargs)
             with patch.object(store, "_write", side_effect=interrupted):
                 with self.assertRaises(OSError):
                     store.update("owned", {"model": "claude-sonnet-4-20250515"},
                                  None, "legacy")
-            self.assertIsNone(store.read("index.json"))
-            self.assertIsNone(store.read("versioned.json"))
+            self.assertIsNone(store.read(PROFILE.INDEX_FILE))
+            self.assertIsNone(store.read(PROFILE.VERSIONED_FILE))
             self.assertEqual(store.selected()["name"], "owned")
         self.assertEqual(PROFILE.chosen(self.home, {})[0]["ANTHROPIC_API_KEY"], self.secret)
         with PROFILE.Store(self.home) as store:
@@ -316,7 +316,7 @@ class ProviderProfiles(unittest.TestCase):
                     elif final_action == "environment":
                         store.environment()
                 with PROFILE.Store(home) as reopened:
-                    self.assertIsNotNone(reopened.read("versioned.json"))
+                    self.assertIsNotNone(reopened.read(PROFILE.VERSIONED_FILE))
                     if final_action == "update":
                         self.assertEqual(PROFILE.chosen(home, {})[0]["ANTHROPIC_API_KEY"],
                                          "SOU181-SYNTHETIC-NEW")
@@ -324,7 +324,7 @@ class ProviderProfiles(unittest.TestCase):
                         self.assertEqual(PROFILE.chosen(home, {})[0]["ANTHROPIC_API_KEY"], self.secret)
                     else:
                         self.assertIsNone(reopened.selected())
-                (home / PROFILE.DIRECTORY / "index.json").unlink()
+                (home / PROFILE.DIRECTORY / PROFILE.INDEX_FILE).unlink()
                 with PROFILE.Store(home) as reopened:
                     with self.assertRaisesRegex(PROFILE.Refusal, "provider_index_invalid"):
                         reopened.selected()
@@ -342,7 +342,7 @@ class ProviderProfiles(unittest.TestCase):
                     store.select("owned")
                     store.update("owned", {"model": "claude-sonnet-4-20250515"},
                                  {"ANTHROPIC_API_KEY": "SOU181-SYNTHETIC-NEW"}, "legacy")
-                marker = home / PROFILE.DIRECTORY / "versioned.json"
+                marker = home / PROFILE.DIRECTORY / PROFILE.VERSIONED_FILE
                 if alteration == "missing":
                     marker.unlink()
                 elif alteration == "content":
@@ -469,6 +469,47 @@ class ProviderProfiles(unittest.TestCase):
             self.assertEqual([row["name"] for row in store.inspect()["profiles"]], ["other", "owned"])
             store.select("other")
         self.assertEqual(PROFILE.chosen(self.home, {})[0]["ANTHROPIC_API_KEY"], "SOU181-OTHER-SECRET")
+
+    def test_all_legacy_names_and_full_profile_capacity_survive_rotation(self):
+        names = ["index", "versioned"] + ["owned" + str(i) for i in range(14)]
+        with PROFILE.Store(self.home, create=True) as store:
+            for item in names:
+                store.create(item, self.public, {"ANTHROPIC_API_KEY": self.secret})
+            store.select("index")
+            store.update("index", {"model": "rotated-model"},
+                         {"ANTHROPIC_API_KEY": "SYNTHETIC-ROTATED"}, "legacy")
+        with PROFILE.Store(self.home) as reopened:
+            self.assertEqual(reopened.names(), sorted(names))
+            self.assertEqual(len(reopened.inspect()["profiles"]), 16)
+            self.assertEqual(PROFILE.chosen(self.home, {})[0]["ANTHROPIC_API_KEY"],
+                             "SYNTHETIC-ROTATED")
+            reopened.select("versioned")
+        self.assertEqual(PROFILE.chosen(self.home, {})[0]["ANTHROPIC_API_KEY"], self.secret)
+
+    def test_old_draft_metadata_never_reactivates_retained_legacy_credentials(self):
+        for old_layout in ("both", "index-only", "marker-only"):
+            with self.subTest(old_layout=old_layout), tempfile.TemporaryDirectory() as temporary:
+                home = Path(temporary) / ".agentfw"
+                home.mkdir(mode=0o700)
+                with PROFILE.Store(home, create=True) as store:
+                    store.create("owned", self.public, {"ANTHROPIC_API_KEY": self.secret})
+                    store.select("owned")
+                    store.update("owned", {"model": "rotated-model"},
+                                 {"ANTHROPIC_API_KEY": "SYNTHETIC-ROTATED"}, "legacy")
+                    old_index = store.read(PROFILE.INDEX_FILE)
+                    old_marker = store.read(PROFILE.VERSIONED_FILE)
+                directory = home / PROFILE.DIRECTORY
+                old_files = {"both": (("index.json", old_index), ("versioned.json", old_marker)),
+                             "index-only": (("index.json", old_index),),
+                             "marker-only": (("versioned.json", old_marker),)}
+                for filename, raw in old_files[old_layout]:
+                    descriptor = os.open(directory / filename, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    with os.fdopen(descriptor, "wb") as stream:
+                        stream.write(raw)
+                (directory / PROFILE.INDEX_FILE).unlink()
+                (directory / PROFILE.VERSIONED_FILE).unlink()
+                with self.assertRaisesRegex(PROFILE.Refusal, "provider_index_invalid"):
+                    PROFILE.chosen(home, {})
 
     def test_selected_version_rejects_wrong_mode_symlink_and_hardlink(self):
         for altered in ("mode", "symlink", "hardlink"):

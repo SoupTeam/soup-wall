@@ -77,7 +77,7 @@ update migrates them inside that directory. Migration and later updates write
 new immutable owner-private versions first, verify them, then atomically
 publish one owner-private index containing the current named versions and
 selection. After the first index commit, an independently validated private
-`versioned.json` marker records that the legacy selection must never become
+`.versioned-v2` marker records that the legacy selection must never become
 authoritative again. A missing index after a completed migration refuses,
 including after restore or explicit environment selection; it cannot silently
 reactivate an old credential. An interrupted write before the first index
@@ -85,7 +85,11 @@ commit leaves the previous selection usable. If interruption lands between
 index and marker publication, reads refuse until the store is repaired; they
 do not guess which version was selected. An unpublished version is never
 adopted as a runtime input. The old flat files remain private as compatibility
-evidence. Reads use no-follow directory descriptors and refuse wrong owner,
+evidence. The index uses `.index-v2`; both metadata names are outside the
+accepted profile-name namespace. Existing profiles named `index` or `versioned`
+and the full 16-profile capacity remain valid. Earlier private draft metadata
+at `index.json`/`versioned.json` is explicitly refused rather than adopted or
+used to revive an older credential. Reads use no-follow directory descriptors and refuse wrong owner,
 mode, hardlink/symlink, FIFO, changed identity and over-limit data. A selection
 binds the exact version bytes; malformed, changed or removed selected data
 refuses before the daemon or host starts.
