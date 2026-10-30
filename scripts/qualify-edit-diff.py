@@ -175,7 +175,11 @@ def qualify(args,report):
         return value
 
     def fixture(label,count,old=EDIT.OLD,new=EDIT.NEW,mode='approve',pending=None):
-        root=suite.work/label;root.mkdir(mode=0o700);plan=suite.work/(label+' plan')
+        root=suite.work/label;root.mkdir(mode=0o700)
+        # Existing plan publication requires an ASCII leaf; exercise Unicode
+        # and spaces in its parent without changing the accepted plan grammar.
+        plan_parent=suite.work/(label+' plans ü');plan_parent.mkdir(mode=0o700)
+        plan=plan_parent/'selected-plan'
         base=args.output/(label+' baselines ü');base.mkdir(mode=0o700)
         names=['result.txt']+[('replace-'if i%2==0 else'created-')+str(i)+'.txt'for i in range(1,count)]
         baselines={};words=['prepare','--home',suite.home,'--root',root,'--claude',suite.claude,'--private-sole-writer',
@@ -193,7 +197,7 @@ def qualify(args,report):
             if target.get('replacement'):payload.update(old_identity=target['replacement']['identity'],old_sha256=target['replacement']['sha256'])
             proposals.append((('replace'if target.get('replacement')else'create')+f'_output_{i}',payload))
         for i,target in enumerate(targets):proposals.append((f'read_output_{i}',{'path':target['name']}))
-        if pending: pending.prepared=prepared;pending.baselines=baselines
+        if pending: pending.prepared=prepared;pending.baselines=baselines;pending.plan=plan
         host,observed,_=suite.host(label,root,root/'result.txt',plan,prepared,proposals,mode=mode,timeout=90,on_pending=pending)
         require(host['process_cleanup']['all_stopped'],'diff_owned_cleanup_failed')
         if mode=='approve':
@@ -277,7 +281,7 @@ def qualify(args,report):
         begin('active-run-refused');seen=[]
         def pending(active,_):
             if seen:return
-            live=(suite.work/'cancelled owned',suite.work/'cancelled owned plan',pending.prepared,active,
+            live=(suite.work/'cancelled owned',pending.plan,pending.prepared,active,
                 ['created-1.txt','result.txt'],pending.baselines,None)
             code,value,raw,diagnostic=invoke(live)
             require(code==1 and diagnostic['before']==diagnostic['after'],'active_run_diff_accepted');seen.append(True)
@@ -333,7 +337,7 @@ def main():
         if active is not None:active.update(status='failed',failure=code)
     report['inventory']={s:sum(r['status']==s for r in report['cases'])for s in ('passed','failed','incomplete')}
     raw=(json.dumps(report,sort_keys=True,indent=2)+'\n').encode();(args.output/'report.json').write_bytes(raw)
-    summary={k:report[k]for k in ('format','status','inventory','failure','failure_type','source_commit','source_tree','component','agentfw_sha256','claude_sha256')if k in report}
+    summary={k:report[k]for k in ('format','status','inventory','failure','failure_type','source_commit','source_tree','component','agentfw_sha256','claude_sha256','last_cli')if k in report}
     summary.update(evidence_sha256=sha(raw),case_results=[{'id':r['id'],'status':r['status'],'attempted':r['attempted'],
         'witnesses':{k:v for k,v in r.items()if type(v)is bool}}for r in report['cases']])
     print(json.dumps(summary,sort_keys=True));return 0 if passed_report(report)else 1
