@@ -1,0 +1,58 @@
+{
+  "format": "sw-private-edit-self-test-platform-attempt/1",
+  "date": "2026-10-29",
+  "platform": "wsl2-ubuntu-24.04-x86_64",
+  "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+  "source_tree": "16131804dc19067bf1b68f4368a4383e42c48a76",
+  "status": "passed",
+  "runtime_executed": true,
+  "archive_sha256": "bc373553ec602562203e6c2dc7fe07250fabb358cb5c5e1b0234c364efa67734",
+  "transfer_sha256_verified": true,
+  "zip_crc_verified": true,
+  "strict_report_validator_passed": true,
+  "product_cases": {
+    "attempted": 8,
+    "expected": 8,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 8,
+    "unsupported": 0
+  },
+  "qualification_controls": {
+    "attempted": 5,
+    "expected": 5,
+    "failed": 0,
+    "incomplete": 0,
+    "passed": 5
+  },
+  "checks": {
+    "preparation_tests_passed": 27,
+    "helper_tests_passed": 34,
+    "qualification_validator_tests_passed": 9,
+    "component_tests_passed": 6,
+    "wsl_preflight_tests_passed": 8,
+    "expected_non_wsl_refusal_skips": 1,
+    "rust_cli_tests_passed": 3,
+    "clippy_agentfw_all_targets": "passed",
+    "cargo_fmt_all_check": "passed"
+  },
+  "preflight_status": "ready",
+  "host_security_settings_unchanged": true,
+  "temporary_host_resource_limits": {
+    "memory_gib": 4,
+    "processors": 4,
+    "explicitly_user_authorized": true,
+    "restoration_receipt": "wsl-host-restoration.json",
+    "original_configuration_restored": true
+  },
+  "all_owned_processes_stopped": true,
+  "workspace_removed": true,
+  "installed_state_unchanged": true,
+  "original_projects_unchanged": true,
+  "unrelated_sentinel_unchanged": true,
+  "report_sha256": "595924192ea9e1fe88764431597b9dd2ecb579494952798a59e2c15102e4791d",
+  "qualification_sha256": "81d8b5889f5ec53d172abc229a3e7dd3f7358a9d3c1031032f1bfd165ff1a597",
+  "source_checks_sha256": "99f4ebb57c1fc2eebaa1b0af9ec111e1ceb276d9d5768ea2b0bca779d7d9e809",
+  "paid_inference": false,
+  "final_ready_codeql_admission_merge": "maintainer-owned; not inferred from this focused run"
+}

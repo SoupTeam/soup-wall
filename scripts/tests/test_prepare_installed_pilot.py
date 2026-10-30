@@ -411,5 +411,307 @@ class PreparationBoundary(unittest.TestCase):
                 self.assertEqual(len(list((output / "generations").iterdir())), 2)
 
 
+class ExplicitWslPreparation(unittest.TestCase):
+    def setUp(self):
+        # Route tests run on Windows as well. The dedicated location tests
+        # below override this pure mount observation to reject canary paths.
+        original_open = Path.open
+        def mount_metadata(path, *args, **kwargs):
+            if path.as_posix() == "/proc/self/mountinfo":
+                return io.StringIO("owned fixture mount observation")
+            return original_open(path, *args, **kwargs)
+        for target in (patch.object(Path, "open", mount_metadata),
+                       patch.object(PREP.wsl_preflight, "mount_type", return_value="ext4")):
+            target.start(); self.addCleanup(target.stop)
+
+    @staticmethod
+    def report(*, full=False, failed=None):
+        names = ("wsl_kernel", "architecture", "distribution", "process_owner",
+                 "filesystem_stage_root", "stage_owner", "filesystem_report_output")
+        checks = [{"id": name, "status": "ready"} for name in names]
+        if full:
+            checks.extend({"id": name, "status": "ready"} for name in ("user_namespace", "bubblewrap"))
+        else:
+            checks.append({"id": "selected_runtime", "status": "unavailable"})
+        if failed:
+            next(row for row in checks if row["id"] == failed[0])["status"] = failed[1]
+        return {"format": "sw-wsl-preflight/1", "scope": "prerequisites_only",
+                "status": failed[1] if failed else ("ready" if full else "unavailable"), "checks": checks}
+
+    @staticmethod
+    def args(root):
+        return SimpleNamespace(wsl_root=root, output=root / "prepared", expected_commit="a" * 40,
+            git_profile=PREP.GIT_PROFILES.DEFAULT, rebuild=False, node_archive=None, python_archive=None,
+            npm_cache=None, wheelhouse=None, allow_download=True, refusal_verdict="ask", refusal_rule="exact-rule")
+
+    def test_native_default_still_refuses_wsl_before_source_or_effects(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            args = self.args(Path(temporary)); args.wsl_root = None
+            with patch.object(PREP.platform, "system", return_value="Linux"), \
+                 patch.object(PREP.platform, "machine", return_value="x86_64"), \
+                 patch.object(PREP.os, "geteuid", return_value=1000, create=True), \
+                 patch.object(Path, "read_text", return_value="6.18-microsoft-standard-WSL2"), \
+                 patch.object(PREP.PILOT, "source") as source, \
+                 patch.object(PREP.wsl_preflight, "inspect") as explicit_probe:
+                with self.assertRaisesRegex(ValueError, "native_ubuntu_required_wsl_is_separate"):
+                    PREP.prepare(args)
+                source.assert_not_called(); explicit_probe.assert_not_called()
+                self.assertFalse(args.output.exists())
+
+    def test_explicit_static_checks_are_read_only_and_full_probe_requires_validated_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            args = self.args(Path(temporary))
+            paths = {"bwrap": Path(os.sys.executable)}
+            with patch.object(PREP.wsl_preflight, "inspect", side_effect=[self.report(), self.report(full=True)]) as inspect:
+                self.assertEqual(PREP.wsl_preparation_preflight(args)["status"], "unavailable")
+                self.assertEqual(PREP.wsl_preparation_preflight(args, paths)["status"], "ready")
+                self.assertEqual(inspect.call_args_list[0].args, (args.wsl_root, None))
+                self.assertEqual(inspect.call_args_list[1].args, (args.wsl_root, paths))
+                self.assertFalse(args.output.exists())
+
+    def test_wsl1_root_drvfs_distribution_and_namespace_denials_do_not_create_output(self):
+        denials = (("wsl_kernel", "unsupported"), ("process_owner", "unsupported"),
+                   ("filesystem_stage_root", "unsupported"), ("distribution", "unsupported"))
+        for denial in denials:
+            with self.subTest(denial=denial), tempfile.TemporaryDirectory() as temporary:
+                args = self.args(Path(temporary))
+                with patch.object(PREP.wsl_preflight, "inspect", return_value=self.report(failed=denial)), \
+                     patch.object(PREP.PILOT, "source") as source, \
+                     patch.object(PREP, "private_dir") as private:
+                    with self.assertRaises(PREP.WslPreparationFailure):
+                        PREP.prepare(args)
+                    source.assert_not_called(); private.assert_not_called()
+                    self.assertFalse(args.output.exists())
+        with tempfile.TemporaryDirectory() as temporary:
+            args = self.args(Path(temporary))
+            with patch.object(PREP.wsl_preflight, "inspect", return_value=self.report(full=True, failed=("bubblewrap", "incompatible"))):
+                with self.assertRaises(PREP.WslPreparationFailure):
+                    PREP.wsl_preparation_preflight(args, {"bwrap": Path(os.sys.executable)})
+
+    def test_output_outside_stage_and_extended_git_refuse_before_probes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary); stage = parent / "stage"; stage.mkdir()
+            args = self.args(stage)
+            args.output = parent / "outside"
+            with patch.object(PREP.wsl_preflight, "inspect") as inspect:
+                with self.assertRaisesRegex(ValueError, "wsl_preparation_output_outside_stage"):
+                    PREP.wsl_preparation_preflight(args)
+                args.output = stage / "prepared"
+                args.git_profile = "git-readonly-file-revisions-v1"
+                with self.assertRaisesRegex(ValueError, "wsl_extended_git_profile_not_qualified"):
+                    PREP.wsl_preparation_preflight(args)
+                inspect.assert_not_called()
+            self.assertFalse(args.output.exists())
+
+    def test_failed_full_preflight_keeps_old_marker_and_never_starts_installers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); args = self.args(root); args.output.mkdir(); args.rebuild = True
+            marker = args.output / "current.json"; marker.write_bytes(b"preceding accepted marker")
+            paths = {role: Path(os.sys.executable) for role in PREP.PILOT.ROLES}
+            denied = self.report(full=True, failed=("user_namespace", "incompatible"))
+            with patch.object(PREP, "private_dir", side_effect=lambda path, **_: path), \
+                 patch.object(PREP.capacity, "bind"), \
+                 patch.object(PREP, "selected_paths", return_value=paths) as validated, \
+                 patch.object(PREP.wsl_preflight, "inspect", return_value=denied) as inspect, \
+                 patch.object(PREP.FS, "install") as filesystem, patch.object(PREP.GIT, "install") as git, \
+                 patch.object(PREP.subprocess, "run") as child, patch.object(PREP, "publish_marker") as publish:
+                with self.assertRaises(PREP.WslPreparationFailure):
+                    PREP.prepare_locked(args, args.output, None)
+                validated.assert_called_once()
+                self.assertEqual(inspect.call_args.args, (root, paths))
+                filesystem.assert_not_called(); git.assert_not_called(); child.assert_not_called(); publish.assert_not_called()
+            self.assertEqual(marker.read_bytes(), b"preceding accepted marker")
+
+    def test_every_drvfs_input_is_refused_before_selected_program_or_dependency_probes(self):
+        roles = (*PREP.PILOT.ROLES, "node_archive", "python_archive", "npm_cache", "wheelhouse",
+                 "filesystem_workspace", "git_workspace", "source_tree")
+        for role in roles:
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary); args = self.args(root)
+                rejected = root / "windows-mount"; rejected.mkdir()
+                marker = root / "canary-executed"
+                executable = rejected / "canary"
+                executable.write_text("#!/bin/sh\ntouch '" + str(marker) + "'\n")
+                executable.chmod(0o700)
+                directories = {"npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "source_tree"}
+                candidate = rejected if role in directories else executable
+                if role != "source_tree":
+                    setattr(args, role, candidate)
+                def filesystem(path, _mountinfo):
+                    return "9p" if str(path).startswith(rejected.as_posix()) else "ext4"
+                with patch.object(PREP.wsl_preflight, "inspect", return_value=self.report()), \
+                     patch.object(PREP.wsl_preflight, "mount_type", side_effect=filesystem), \
+                     patch.object(PREP, "ROOT", rejected if role == "source_tree" else PREP.ROOT), \
+                     patch.object(PREP, "selected_paths") as selecting, \
+                     patch.object(PREP, "check_native") as dependency_probe, \
+                     patch.object(PREP.subprocess, "run") as running, \
+                     patch.object(PREP.subprocess, "check_output") as version_probe, \
+                     patch.object(PREP.PILOT, "source") as source:
+                    with self.assertRaises(PREP.WslPreparationFailure):
+                        PREP.prepare(args)
+                    selecting.assert_not_called(); dependency_probe.assert_not_called()
+                    running.assert_not_called(); version_probe.assert_not_called(); source.assert_not_called()
+                self.assertFalse(marker.exists())
+                self.assertFalse(args.output.exists())
+
+    def test_reused_generation_verifies_without_probes_then_mounts_then_native_dependencies(self):
+        for rejected_mount in (None, "runtime", "dependency", "workspace"):
+            with self.subTest(rejected_mount=rejected_mount), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary); args = self.args(root)
+                # The accepted preparer/installers record canonical runtime
+                # paths. sys.executable may instead name a POSIX symlink; the
+                # fake mount must classify its actual target, as production does.
+                runtime = Path(os.sys.executable).resolve(strict=True)
+                generation = args.output / "generations" / ("a" * 32)
+                generation.mkdir(parents=True)
+                for kind in ("filesystem", "git"):
+                    (generation / (kind + "-workspace")).mkdir()
+                    profile_dir = generation / (kind + "-profile"); profile_dir.mkdir()
+                    (profile_dir / "package").mkdir()
+                    library = profile_dir / "library"; library.write_bytes(b"owned dependency canary")
+                    (profile_dir / "profile.json").write_text(json.dumps({"runtimePath": str(runtime),
+                        "packageRoot": str(profile_dir / "package"), "libraries": [{"path": str(library)}]}))
+                selection_path = generation / "selection.json"
+                selection_path.write_text(json.dumps({"format": PREP.GIT_PROFILES.SELECTION_V3,
+                    "git_selection": PREP.GIT_PROFILES.binding(PREP.GIT_PROFILES.DEFAULT)}))
+                marker = args.output / "current.json"
+                marker.write_text(json.dumps({"format": "sw-pilot-preparation/1", "generation": generation.name,
+                    "selection_sha256": PREP.FS.sha(selection_path), "status": "prepared-not-active"}))
+                marker_before = marker.read_bytes()
+                paths = {role: runtime for role in PREP.PILOT.ROLES}
+                events = []
+                def verify(*_, probe_native=True):
+                    self.assertFalse(probe_native)
+                    events.append("identity_verification_without_execution")
+                    return selection_path, {}
+                def mount(path, _mountinfo):
+                    events.append("mount_observation")
+                    rejected = ((rejected_mount == "runtime" and path == runtime.as_posix())
+                        or (rejected_mount == "dependency" and path.endswith("/library"))
+                        or (rejected_mount == "workspace" and path.endswith("/filesystem-workspace")))
+                    return "9p" if rejected else "ext4"
+                def inspect(*_, **__):
+                    events.append("namespace_bwrap_preflight")
+                    return self.report(full=True)
+                with patch.object(PREP, "private_dir", side_effect=lambda path, **_: path), \
+                     patch.object(PREP, "verify_generation", side_effect=verify), \
+                     patch.object(PREP.PILOT, "validate_selection", return_value=({}, paths)), \
+                     patch.object(PREP.wsl_preflight, "mount_type", side_effect=mount), \
+                     patch.object(PREP.wsl_preflight, "inspect", side_effect=inspect), \
+                     patch.object(PREP, "check_native", side_effect=lambda *_: events.append("native_dependency_probe")) as native, \
+                     patch.object(PREP, "selected_paths") as selecting, \
+                     patch.object(PREP.FS, "install") as filesystem, patch.object(PREP.GIT, "install") as git:
+                    if rejected_mount:
+                        with self.assertRaises(PREP.WslPreparationFailure) as refusal:
+                            PREP.prepare_locked(args, args.output, None)
+                        self.assertEqual(refusal.exception.report["format"], "sw-wsl-preparation-input-locations/1")
+                        self.assertTrue(any(row["status"] == "unsupported" for row in refusal.exception.report["checks"]))
+                        native.assert_not_called()
+                        self.assertNotIn("namespace_bwrap_preflight", events)
+                    else:
+                        result = PREP.prepare_locked(args, args.output, None)
+                        self.assertEqual(result["status"], "reused")
+                        self.assertLess(events.index("identity_verification_without_execution"), events.index("namespace_bwrap_preflight"))
+                        self.assertLess(events.index("namespace_bwrap_preflight"), events.index("native_dependency_probe"))
+                        self.assertEqual(native.call_count, len(PREP.PILOT.EXECUTABLE_ROLES))
+                    selecting.assert_not_called(); filesystem.assert_not_called(); git.assert_not_called()
+                self.assertEqual(marker.read_bytes(), marker_before)
+
+    @unittest.skipUnless(os.name == "posix", "real runtime symlink fixture requires POSIX")
+    def test_runtime_alias_to_rejected_mount_never_runs_canary_or_native_probes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); args = self.args(root)
+            windows = root / "windows-mount"; windows.mkdir()
+            marker = root / "canary-executed"
+            target = windows / "runtime"
+            target.write_text("#!/bin/sh\ntouch '" + str(marker) + "'\n"); target.chmod(0o700)
+            alias = root / "runtime-alias"; alias.symlink_to(target)
+            args.bwrap = alias
+            observed = []
+            def mount(path, _mountinfo):
+                observed.append(path)
+                return "9p" if path == target.resolve(strict=True).as_posix() else "ext4"
+            with patch.object(PREP.wsl_preflight, "inspect", return_value=self.report()), \
+                 patch.object(PREP.wsl_preflight, "mount_type", side_effect=mount), \
+                 patch.object(PREP, "selected_paths") as selecting, \
+                 patch.object(PREP, "check_native") as native, \
+                 patch.object(PREP.subprocess, "run") as running, \
+                 patch.object(PREP.subprocess, "check_output") as version:
+                with self.assertRaises(PREP.WslPreparationFailure) as refusal:
+                    PREP.prepare(args)
+                rejected = next(row for row in refusal.exception.report["checks"] if row["id"] == "filesystem_bwrap")
+                self.assertEqual(rejected["status"], "unsupported")
+                selecting.assert_not_called(); native.assert_not_called(); running.assert_not_called(); version.assert_not_called()
+            self.assertIn(target.resolve(strict=True).as_posix(), observed)
+            self.assertNotIn(alias.as_posix(), observed)
+            self.assertFalse(marker.exists()); self.assertFalse(args.output.exists())
+
+    def test_mount_guard_classifies_canonical_runtime_not_lexical_alias_on_every_host(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); args = self.args(root)
+            (root / "alias-parent").mkdir()
+            windows = root / "windows-mount"; windows.mkdir()
+            target = windows / "runtime"; target.write_bytes(b"executable canary must never run")
+            alias = root / "alias-parent" / ".." / "windows-mount" / "runtime"
+            args.bwrap = alias
+            self.assertNotEqual(alias.as_posix(), target.resolve(strict=True).as_posix())
+            seen = []
+            def mount(path, _mountinfo):
+                seen.append(path)
+                return "9p" if path == target.resolve(strict=True).as_posix() else "ext4"
+            with patch.object(PREP.wsl_preflight, "mount_type", side_effect=mount), \
+                 patch.object(PREP.subprocess, "run") as execute, \
+                 patch.object(PREP.subprocess, "check_output") as probe:
+                with self.assertRaises(PREP.WslPreparationFailure) as refusal:
+                    PREP.wsl_input_locations(args)
+                self.assertEqual(next(row for row in refusal.exception.report["checks"]
+                    if row["id"] == "filesystem_bwrap")["status"], "unsupported")
+                execute.assert_not_called(); probe.assert_not_called()
+            self.assertIn(target.resolve(strict=True).as_posix(), seen)
+            self.assertNotIn(alias.as_posix(), seen)
+
+    @unittest.skipUnless(os.name == "posix", "actual generation transaction uses POSIX ownership")
+    def test_explicit_wsl_success_retains_exact_source_verification_and_atomic_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); args = self.args(root)
+            source = {"commit": args.expected_commit, "tree": "b" * 40, "dirty": False, "files_sha256": "c" * 64}
+            paths = {role: Path(os.sys.executable) for role in PREP.PILOT.ROLES}
+            profiles = {kind: {"profile": {"path": str(root / kind), "sha256": "d" * 64}}
+                        for kind in ("filesystem", "git")}
+            events = []
+            def validate(*_):
+                events.append("validated_inputs"); return paths
+            def preflight(_root, selected, **_):
+                events.append("full_preflight" if selected is not None else "static_preflight")
+                return self.report(full=selected is not None)
+            def init(command, **_):
+                (Path(command[-1]) / ".git").mkdir()
+            def verify(generation, commit):
+                events.append("verify_generation")
+                self.assertEqual(commit, args.expected_commit)
+                retained = json.loads((generation / "selection.json").read_text())
+                self.assertEqual(retained["source"], source)
+                return generation / "selection.json", profiles
+            with patch.object(PREP, "supported_platform", side_effect=AssertionError("native guard must not be spoofed")), \
+                 patch.object(PREP.wsl_preflight, "inspect", side_effect=preflight), \
+                 patch.object(PREP.PILOT, "source", return_value=source), \
+                 patch.object(PREP, "selected_paths", side_effect=validate), \
+                 patch.object(PREP, "verify_profile", side_effect=lambda kind, *_, **__: profiles[kind]), \
+                 patch.object(PREP, "verify_generation", side_effect=verify), \
+                 patch.object(PREP.subprocess, "run", side_effect=init), \
+                 patch.object(PREP.FS, "install", side_effect=lambda *_, **__: events.append("filesystem_install")), \
+                 patch.object(PREP.GIT, "install", side_effect=lambda *_, **__: events.append("git_install")):
+                result = PREP.prepare(args)
+            self.assertEqual(result["status"], "prepared-not-active")
+            self.assertEqual(result["platform"], "wsl2-linux-x86_64")
+            self.assertEqual(result["wsl_preflight"]["status"], "ready")
+            self.assertLess(events.index("validated_inputs"), events.index("full_preflight"))
+            self.assertLess(events.index("full_preflight"), events.index("filesystem_install"))
+            self.assertLess(events.index("git_install"), events.index("verify_generation"))
+            marker = json.loads((args.output / "current.json").read_text())
+            self.assertEqual(marker, {"format": "sw-pilot-preparation/1", "generation": result["generation"],
+                "selection_sha256": PREP.FS.sha(result["selection"]), "status": "prepared-not-active"})
+
+
 if __name__ == "__main__":
     unittest.main()
