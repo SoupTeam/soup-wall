@@ -12,10 +12,12 @@ Output: core   {"actions": [...], "unknown": bool}  (the approved contract's sem
 Technical failures use status "error" plus a `failure` code and are never a valid classification.
 The module is a single stdlib-only file because the daemon executes it as one source snapshot.
 
-Revision pilot_readonly_v1.1 (SOU-97) is git_readonly_v1 plus one exact-schema proof for three original
+Revision pilot_readonly_v1.2 (SOU-97) is git_readonly_v1 plus one exact-schema proof for three original
 read-only filesystem tools (see _bounded_fs_read). It is selected only explicitly; it grants nothing.
-It supersedes pilot_readonly_v1 (sha256 82a41dde...), which bounded glob patterns by 4096 characters and
-refused control characters in them.
+It supersedes pilot_readonly_v1.1 (sha256 9f4a532b...), which lost a proven action or reported unknown=false
+when a call carried an argument its pinned original schema does not declare (D01, see _unmodelled_keys),
+and pilot_readonly_v1 (sha256 82a41dde...), which bounded glob patterns by 4096 characters and refused
+control characters in them.
 
 Principles
 - The tool description is UNTRUSTED. It never adds or removes a category. It is
@@ -43,7 +45,7 @@ UNKNOWN = "unknown"
 THRESHOLD = 0.5
 MAX_DEPTH, MAX_LEAVES, MAX_LEAF_CHARS, MAX_DESC_CHARS = 6, 200, 4096, 2000
 # Output envelope bounds. The Rust bridge reads at most 16 KiB of reply and a reason of 1..1024 bytes.
-REVISION = "pilot_readonly_v1.1"
+REVISION = "pilot_readonly_v1.2"
 INTERFACE = "sw-classifier-core/0.4"
 MAX_NAME_CHARS, MAX_INPUT_BYTES, MAX_REASON_CHARS = 256, 1024 * 1024, 1000
 MAX_EVIDENCE, MAX_CODES, MAX_REPLY_BYTES = 8, 24, 12 * 1024
@@ -746,6 +748,55 @@ def _bounded_fs_read(name: str, args: Any, event: dict) -> bool:
     return 'pattern' not in args or _glob_list([args['pattern']], 1)
 
 
+# D01 (TL decision on SOU-128 10.3, 2026-10-29): every input schema of the two pinned original servers,
+# canonicalized with _canon (profiles/mcp/{filesystem,git}-readonly-v1/upstream-tools-list.json). None sets
+# additionalProperties, so an undeclared argument does not violate it: the filesystem SDK parses with a
+# non-strict zod object, which drops the member, and mcp-server-git reads only declared keys. Such an
+# argument is an unmodelled parameter: proven actions stay and unknown is true. An unpinned, drifted or
+# closed schema never takes this path; a violation of it stays with _schema_violation, and the selected
+# profiles refuse it before admission (D06). Like the tables above, this is never identity or authority.
+ORIGINAL_SCHEMAS = {
+    'read_file': 'c9346df6b828cf0972adca2b2a111d87cd41a2c63c991091e333a5a54da9790e',
+    'read_text_file': 'c9346df6b828cf0972adca2b2a111d87cd41a2c63c991091e333a5a54da9790e',
+    'read_media_file': '39c920569ac041d803142e4ced31208e6e2745f9ecb6b850768f4c0bb266aa51',
+    'read_multiple_files': '6f26113dbd3ca808b91378a83045e07e02d9cf2d0397c6ad6073d53db28cbcad',
+    'write_file': 'b86697b0bda6adf65a32ab789213078eb880919209f0e9c159110302d88fc6ef',
+    'edit_file': 'c2d0352923929473def8c16dcfe5d3f00ce23a4b61eb6b43810d6666e960e44c',
+    'create_directory': '39c920569ac041d803142e4ced31208e6e2745f9ecb6b850768f4c0bb266aa51',
+    'list_directory': '39c920569ac041d803142e4ced31208e6e2745f9ecb6b850768f4c0bb266aa51',
+    'list_directory_with_sizes': 'c9b1af82a45e1532ee9727b508f9ad83a72585ae547b66675cbdc0730395352f',
+    'directory_tree': '177d2a6bbf9a0879c3c3c245ad7a731eca099825db8d9bcbdcc3122d63415baa',
+    'move_file': '84116c60394a9ad16961e82974ecebc9c371f60906e6d4c2c6757cab6ced53e4',
+    'search_files': 'e5c74cfd621ada64c07af3f822a3d08fa8dc0e2b268c80cc3898ccef2bf0e49e',
+    'get_file_info': '39c920569ac041d803142e4ced31208e6e2745f9ecb6b850768f4c0bb266aa51',
+    'list_allowed_directories': 'a6e59a0e9cc2caac9d3c507e367aa670ade389ec327faa9adb78114ce6267e71',
+    'git_status': '1860b4cdb5a84dfd037bf6a0ab39408f7f12e9d8b5059624bbf837951f25bcda',
+    'git_diff_unstaged': 'fdfa2e3759e0963d7c896850031e4224a67a9b19280596c7fc6254cb415255dd',
+    'git_diff_staged': '0a08fd75b4b1971f2726a93e0572a99e2487125440796ac21d9d1485a776acfa',
+    'git_diff': 'e1d4050ef0a1419a7478c6d6656c4010c995a318f624c0f30a010d2b29844edf',
+    'git_commit': 'bb13938fda286025b57771e6a256860806be8ccf651492cc43f2ceab5df99931',
+    'git_add': 'af34e7d5b37fb5995a7b26fe0ca5b33d76876e87cddf4a6d3d18add0e2007445',
+    'git_reset': '4f71608b3752c676db03cd98ae9f4f3a1273f81382a593b2fa8d51c484603999',
+    'git_log': '24d0d296ada01f385549756674a28b6cd48718446ad32a34c0b805271f284cb3',
+    'git_create_branch': '61c074ee76cb3183a5217419f44512c2e9c426ce003ffb1792d508a7151beb13',
+    'git_checkout': '7933caf8dd4e2b9196229d6ec7f2461adee9139046adeb174cb8ab5ddf13ee36',
+    'git_show': '1ed494818a3d86742310267537e8ab6cf707a8d95f08eaede1472c481066ff50',
+    'git_branch': '65ce29a50235c449ac98028f60016079cf0feeeeceafd68908c3b56f15c816e1',
+}
+
+
+def _unmodelled_keys(name: str, args: Any, event: dict) -> set[str]:
+    """Top-level arguments that the verified pinned original schema of `name` does not declare."""
+    declared, pinned = event.get('tool_schema'), event.get('pinned_schema')
+    if name not in ORIGINAL_SCHEMAS or not isinstance(args, dict) or not isinstance(declared, dict):
+        return set()
+    if hashlib.sha256(_canon(declared).encode()).hexdigest() != ORIGINAL_SCHEMAS[name]:
+        return set()
+    if pinned is not None and _canon(pinned) != _canon(declared):
+        return set()
+    return set(args) - set(declared['properties'])
+
+
 def _classify(event: Any) -> dict[str, Any]:
     if not isinstance(event, dict):
         return _error("invalid_input: event must be an object")
@@ -776,21 +827,28 @@ def _classify(event: Any) -> dict[str, Any]:
     noun_cats, compound_unresolved = _name_evidence(name, ev, bool(walk.keys & SHELL_KEYS or walk.children))
     name_cats = {c for c, items in evid.items() if any(s == "name" for _, s, _ in items)}
     before = {c: len(v) for c, v in evid.items()}
-    git_read = _bounded_git_read(name, args, event)
-    fs_read = _bounded_fs_read(name, args, event)
+    unmodelled = _unmodelled_keys(name, args, event)
+    # D01: the exact proofs see only the declared arguments. Undeclared ones never extend a proof: they
+    # are still inspected by the generic rules below and leave the result unknown.
+    declared_args = {k: v for k, v in args.items() if k not in unmodelled} if unmodelled else args
+    git_read = _bounded_git_read(name, declared_args, event)
+    fs_read = _bounded_fs_read(name, declared_args, event)
     if fs_read:
         # Paths and glob patterns of an exact original read form are data; each was checked above,
         # so the generic walker's leaf-count and leaf-length bounds no longer limit what was examined.
         ev('read', 0.95, 'args', 'bounded original filesystem read with exact schema')
-        walk.truncated = False
+        if not unmodelled:
+            walk.truncated = False
     elif git_read is True:
         # Exact bounded integer context_lines is display context, not content
         # to write. No arbitrary field/value is omitted from this proof.
         ev('read', 0.95, 'args', 'bounded original Git read with exact schema')
-    else:
+    if unmodelled or not (fs_read or git_read is True):
         _arg_evidence(walk, ev)
         if git_read is False:
             walk.unmatched += 1  # retain risky evidence, but never prove unsupported Git forms
+    if unmodelled:
+        walk.unmatched += 1  # D01: an unmodelled parameter keeps proven actions and sets unknown
     if set(_tokens(name.split("__")[-1])) & SHELL_TOKENS and not (walk.keys & SHELL_KEYS):
         walk.unmatched += _shell(" ".join(v for _, v in walk.leaves), ev)
     if set(_tokens(name.split("__")[-1])) & OPAQUE_TOKENS and not (walk.keys & SHELL_KEYS):
@@ -859,7 +917,8 @@ def _classify(event: Any) -> dict[str, Any]:
         return seal(out)
     if not included:
         out.update(status="unknown", actions=[], unknown=True, confidence=0.0, uncertainty=1.0,
-                   reason_codes=["no_rule_matched"] + [k for k, v in flags.items() if v],
+                   reason_codes=["no_rule_matched"] + (["unmodelled_argument"] if unmodelled else []) +
+                   [k for k, v in flags.items() if v],
                    reason="no rule matched; weak signals: " + (", ".join(f"{c}={s}" for c, s in scores.items()) or "none"),
                    scores=scores)
         return seal(out)
@@ -876,7 +935,8 @@ def _classify(event: Any) -> dict[str, Any]:
                    key=lambda x: (x.split(":")[1], x))
     out.update(status="ok", actions=included, unknown=partial, confidence=round(confidence, 2),
                uncertainty=round(1 - confidence, 2),
-               reason_codes=codes + (["partial_unknown"] if partial else []) + [k for k, v in flags.items() if v and k not in ("name_conflict",)] +
+               reason_codes=codes + (["partial_unknown"] if partial else []) +
+               (["unmodelled_argument"] if unmodelled else []) + [k for k, v in flags.items() if v and k not in ("name_conflict",)] +
                (["name_conflict"] if flags["name_conflict"] else []),
                reason="; ".join(f"{s}: {d}" for _, s, d in top) + ("; input truncated" if walk.truncated else ""),
                scores=scores)

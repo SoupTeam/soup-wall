@@ -37,7 +37,7 @@ class ClassifierSelection(unittest.TestCase):
     def test_exact_identity_and_revision(self):
         identity = REPLAY.classifier_identity(CANDIDATE, MANIFEST["candidate"]["sha256"])
         self.assertEqual((identity["sha256"], identity["revision"], identity["mode"]),
-                         (MANIFEST["candidate"]["sha256"], "pilot_readonly_v1.1", "candidate"))
+                         (MANIFEST["candidate"]["sha256"], "pilot_readonly_v1.2", "candidate"))
 
     def test_mismatch_or_malformed_digest_refuses(self):
         for digest in ("0" * 64, "", "ABC", MANIFEST["candidate"]["sha256"].upper()):

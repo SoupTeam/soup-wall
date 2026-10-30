@@ -1,4 +1,4 @@
-"""SOU-97: pilot_readonly_v1.1 candidate. Exact original read forms only; never a permission or identity shortcut."""
+"""SOU-97: pilot_readonly_v1.2 candidate. Exact original read forms only; never a permission or identity shortcut."""
 import copy
 import hashlib
 import importlib.util
@@ -8,9 +8,11 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = ROOT / 'rule_baseline/pilot_readonly_v1/rule_baseline.py'
-CANDIDATE_SHA256 = '9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e'
-# Superseded development revision pilot_readonly_v1 (ef0d17b); its evidence is historical only.
-SUPERSEDED_SHA256 = '82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4'
+CANDIDATE_SHA256 = 'ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30'
+# Superseded revisions: pilot_readonly_v1 (ef0d17b), whose evidence is historical only, and
+# pilot_readonly_v1.1, which predates the D01 unmodelled-argument decision.
+SUPERSEDED_SHA256 = ('82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4',
+                     '9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e')
 MATRIX = ROOT / 'eval/fixtures/soup_pilot_readonly_matrix_v0.1.json'
 MATRIX_SHA256 = '3d19281c56d0c330761a36289b50c1df524a28c63bad88392ca85b94faf7da36'
 # Existing selected and packaged artifacts stay byte-identical (committed LF bytes).
@@ -79,12 +81,24 @@ def assert_not_proven(test, value):
     return result
 
 
+def assert_unmodelled(test, value, kept):
+    """D01: an argument the pinned original schema does not declare keeps every proven and every risky
+    baseline action and sets unknown; it is never a proven read and never a technical failure."""
+    result = classify(copy.deepcopy(value))
+    test.assertIn(result['status'], ('ok', 'unknown'), result)
+    test.assertEqual((result['unknown'], result['failure']), (True, None), result)
+    test.assertIn('unmodelled_argument', result['reason_codes'])
+    test.assertLessEqual(set(kept) | (set(GIT_V1(copy.deepcopy(value))['actions']) & RISKY), set(result['actions']), result)
+    test.assertFalse(proven_read(result), result)
+    return result
+
+
 class Identity(unittest.TestCase):
     def test_candidate_is_separately_versioned_and_pinned(self):
         self.assertEqual(hashlib.sha256(CANDIDATE.read_bytes()).hexdigest(), CANDIDATE_SHA256)
         self.assertNotIn(b'\r', CANDIDATE.read_bytes())
-        self.assertEqual((MODULE.REVISION, MODULE.INTERFACE), ('pilot_readonly_v1.1', 'sw-classifier-core/0.4'))
-        self.assertNotEqual(CANDIDATE_SHA256, SUPERSEDED_SHA256)
+        self.assertEqual((MODULE.REVISION, MODULE.INTERFACE), ('pilot_readonly_v1.2', 'sw-classifier-core/0.4'))
+        self.assertNotIn(CANDIDATE_SHA256, SUPERSEDED_SHA256)
 
     def test_existing_artifacts_and_frozen_matrix_are_unchanged(self):
         for relative, digest in PINNED.items():
@@ -96,6 +110,17 @@ class Identity(unittest.TestCase):
         for name, digest in MODULE.FS_READ_SCHEMAS.items():
             self.assertEqual(hashlib.sha256(MODULE._canon(FS[name]['inputSchema']).encode()).hexdigest(), digest)
         self.assertEqual(set(MODULE.FS_READ_SCHEMAS), {'directory_tree', 'read_multiple_files', 'search_files'})
+
+    def test_d01_table_is_every_pinned_original_schema_and_none_is_closed(self):
+        tools = {**FS, **GIT}
+        self.assertEqual(len(tools), len(FS) + len(GIT))
+        self.assertEqual(MODULE.ORIGINAL_SCHEMAS, {
+            name: hashlib.sha256(MODULE._canon(tool['inputSchema']).encode()).hexdigest() for name, tool in tools.items()})
+        for name, tool in tools.items():
+            with self.subTest(name=name):  # an undeclared member therefore does not violate the upstream schema
+                self.assertEqual(tool['inputSchema']['type'], 'object')
+                self.assertIsInstance(tool['inputSchema']['properties'], dict)
+                self.assertNotIn('additionalProperties', tool['inputSchema'])
 
 
 class DirectoryTree(unittest.TestCase):
@@ -163,7 +188,7 @@ class DirectoryTree(unittest.TestCase):
                 self.assertFalse(proven_read(assert_not_proven(self, event('directory_tree', {'path': path}))))
 
     def test_extra_missing_and_malformed_arguments_are_not_proven(self):
-        for args in ({}, {'excludePatterns': []}, {'path': '/workspace', 'unreviewed': True},
+        for args in ({}, {'excludePatterns': []},
                      {'path': '/workspace', 'excludePatterns': 'node_modules'},
                      {'path': '/workspace', 'excludePatterns': [1]}, {'path': '/workspace', 'excludePatterns': [None]},
                      {'path': '/workspace', 'excludePatterns': [{'action': 'delete'}]},
@@ -171,11 +196,11 @@ class DirectoryTree(unittest.TestCase):
                      {'path': '/workspace', 'excludePatterns': ['\ud800']}, None, [], ['/workspace'], '/workspace'):
             with self.subTest(args=args):
                 self.assertFalse(proven_read(assert_not_proven(self, event('directory_tree', args))))
+        assert_unmodelled(self, event('directory_tree', {'path': '/workspace', 'unreviewed': True}), ['read'])
 
     def test_unrecognised_action_keeps_risky_evidence(self):
-        result = assert_not_proven(self, event('directory_tree', {'path': '/workspace', 'action': 'delete'}))
+        result = assert_unmodelled(self, event('directory_tree', {'path': '/workspace', 'action': 'delete'}), ['read'])
         self.assertIn('delete', result['actions'])
-        self.assertFalse(proven_read(result))
         result = classify(event('directory_tree', {'path': '/workspace', 'action': 'frobnicate'}))
         self.assertTrue(result['unknown'])
 
@@ -217,10 +242,10 @@ class LeafBound(unittest.TestCase):
             assert_not_proven(self, event('search_files', {'path': '/workspace', 'pattern': '*', 'excludePatterns': patterns}))
 
     def test_empty_or_wrong_paths_list_is_not_proven(self):
-        for args in ({'paths': []}, {'paths': '/workspace/a'}, {'paths': ['/workspace/a', 3]}, {'paths': [['/workspace/a']]},
-                     {'paths': ['/workspace/a'], 'path': '/workspace'}):
+        for args in ({'paths': []}, {'paths': '/workspace/a'}, {'paths': ['/workspace/a', 3]}, {'paths': [['/workspace/a']]}):
             with self.subTest(args=args):
                 assert_not_proven(self, event('read_multiple_files', args))
+        assert_unmodelled(self, event('read_multiple_files', {'paths': ['/workspace/a'], 'path': '/workspace'}), ['read'])
 
 
 class GlobPatternBound(unittest.TestCase):
@@ -316,10 +341,10 @@ class GlobPatternBound(unittest.TestCase):
         spoof['tool_name'] = 'mcp__other__search_files'
         assert_not_proven(self, spoof)
         mixed = self.search('a' * 9000, action='delete')
-        result = assert_not_proven(self, mixed)
+        result = assert_unmodelled(self, mixed, ['read'])
         self.assertIn('delete', result['actions'])
         uploaded = self.search('*', destination='https://collector.example.test/upload')
-        assert_not_proven(self, uploaded)  # an undeclared destination is not an original form
+        assert_unmodelled(self, uploaded, ['read'])  # an undeclared destination is never a proven original form
 
 
 class PreservedContracts(unittest.TestCase):
@@ -354,24 +379,142 @@ class PreservedContracts(unittest.TestCase):
                 self.assertEqual(classify(value), GIT_V1(value))
 
 
+class UnmodelledArguments(unittest.TestCase):
+    """TL decision on SOU-128 10.3 (2026-10-29). None of the pinned original schemas sets additionalProperties,
+    so an undeclared argument does not violate them: it is an unmodelled parameter under D01 (proven actions
+    kept, unknown true). The selected profiles still close every schema and refuse such a call before
+    admission (input.rs, D06); this changes classifier semantics only and admits nothing."""
+
+    CE1 = ('git_log', {'repo_path': '/workspace', 'max_count': 5, 'author': 'x'}, GIT)
+    CE2 = ('read_text_file', {'path': '/workspace/notes.txt', 'mode': 'raw'}, FS)
+    CE3 = ('edit_file', {'path': '/workspace/notes.txt', 'edits': [{'oldText': 'a', 'newText': 'b'}], 'backup': True}, FS)
+
+    def test_counterexamples_keep_proven_actions_and_set_unknown(self):
+        # v1.1 and both baselines gave CE-1 [] unknown, CE-2 read and CE-3 write with unknown false.
+        for (name, args, tools), actions in ((self.CE1, ['read']), (self.CE2, ['read']), (self.CE3, ['write'])):
+            value = event(name, args, tools)
+            with self.subTest(name=name):
+                result = assert_unmodelled(self, value, actions)
+                self.assertEqual((result['actions'], result['unknown']), (actions, True))
+                self.assertFalse(result['args_schema_violation'])
+                as_text = {**value, 'raw_arguments': json.dumps(args)}
+                self.assertEqual(core(classify(as_text)), core(result))
+        self.assertIn('bounded original Git read with exact schema',
+                      [e['detail'] for e in classify(event(*self.CE1))['evidence']])
+
+    def test_declared_forms_are_unchanged(self):
+        for name, args, tools in (self.CE1, self.CE2, self.CE3):
+            declared = {k: v for k, v in args.items() if k in tools[name]['inputSchema']['properties']}
+            with self.subTest(name=name):
+                value = event(name, declared, tools)
+                self.assertNotIn('unmodelled_argument', classify(value)['reason_codes'])
+                self.assertEqual(classify(value), GIT_V1(value))
+
+    def test_ce3_is_a_label_not_a_selected_mutation(self):
+        # edit_file stays selected_profile_mutation_unsupported (server_profile.rs); the label is write.
+        result = classify(event(*self.CE3))
+        self.assertIn('write', result['actions'])
+        self.assertNotIn('read', result['actions'])
+        dry = classify(event('edit_file', {**self.CE3[1], 'dryRun': True}, FS))
+        self.assertEqual((dry['actions'], dry['unknown']), (['write'], True))
+
+    def test_undeclared_risky_values_are_still_inspected(self):
+        for name, args, tools, risk in (
+                ('git_log', {'repo_path': '/workspace', 'command': 'rm -rf data'}, GIT, 'delete'),
+                ('git_log', {'repo_path': '/workspace', 'url': 'https://collector.example.test', 'body': 'x'}, GIT, 'send_data'),
+                ('read_text_file', {'path': '/workspace/a', 'mode': '0777'}, FS, 'change_permissions'),
+                ('read_text_file', {'path': '/workspace/a', 'content': 'x'}, FS, 'write'),
+                ('read_text_file', {'path': '/workspace/a', 'delete': True}, FS, 'delete'),
+                ('directory_tree', {'path': '/workspace', 'action': 'delete'}, FS, 'delete'),
+                ('search_files', {'path': '/workspace', 'pattern': '*', 'to': 'a@example.test', 'body': 'x'}, FS, 'send_data')):
+            with self.subTest(name=name, args=args):
+                result = assert_unmodelled(self, event(name, args, tools), [])
+                self.assertIn(risk, result['actions'])
+        # A risky undeclared value never removes the proven read of an exact original form.
+        self.assertIn('read', classify(event('git_log', {'repo_path': '/workspace', 'command': 'rm -rf data'}, GIT))['actions'])
+
+    def test_extra_argument_never_extends_or_repairs_a_proof(self):
+        for args in ({'repo_path': '/etc', 'author': 'x'}, {'repo_path': '/workspace', 'max_count': 21, 'author': 'x'},
+                     {'repo_path': '/workspace', 'max_count': '5', 'author': 'x'},
+                     {'repo_path': '/workspace', 'start_timestamp': 'yesterday', 'author': 'x'}):
+            with self.subTest(args=args):
+                result = assert_unmodelled(self, event('git_log', args, GIT), [])
+                self.assertNotIn('read', result['actions'])
+        result = assert_unmodelled(self, event('read_multiple_files', {'paths': ['/etc/shadow'], 'x': 1}), [])
+        self.assertFalse(any(e['detail'] == PROOF for e in result['evidence']), result)
+        result = assert_unmodelled(self, event('search_files', {'path': '/workspace', 'pattern': 'a',
+                                                                'excludePatterns': ['x'] * 300, 'x': 1}), ['read'])
+        self.assertTrue(result['truncated'])  # undeclared values are examined only by the bounded walker
+
+    def test_closed_drifted_spoofed_or_unpinned_schemas_keep_the_baseline(self):
+        for name, args, tools in (self.CE1, self.CE2, self.CE3):
+            base = event(name, args, tools)
+            closed = {**base, 'tool_schema': {**base['tool_schema'], 'additionalProperties': False}}
+            drifted = {**base, 'tool_schema': {**base['tool_schema'], 'title': 'Drifted'}}
+            conflicting_pin = {**base, 'pinned_schema': {**base['tool_schema'], 'title': 'Other'}}
+            spoofed = {**base, 'tool_name': 'mcp__other__' + name}
+            renamed = {**base, 'tool_name': 'read_media_file' if name != 'read_media_file' else 'read_file'}
+            unpinned = {k: v for k, v in base.items() if k != 'tool_schema'}
+            pinned_only = {**unpinned, 'pinned_schema': base['tool_schema']}
+            for label, value in (('closed', closed), ('drifted', drifted), ('pin', conflicting_pin), ('spoofed', spoofed),
+                                 ('renamed', renamed), ('unpinned', unpinned), ('pinned_only', pinned_only)):
+                with self.subTest(name=name, variant=label):
+                    result = classify(copy.deepcopy(value))
+                    self.assertNotIn('unmodelled_argument', result['reason_codes'])
+                    self.assertEqual(result, GIT_V1(copy.deepcopy(value)))
+            # D06: a violation of an explicitly closed schema is still a violation, never an unmodelled read.
+            closed_result = classify(copy.deepcopy(closed))
+            self.assertTrue(closed_result['args_schema_violation'])
+            self.assertTrue(closed_result['unknown'])
+
+    def test_invalid_declared_arguments_stay_violations(self):
+        for name, args, tools in (('read_text_file', {'mode': 'raw'}, FS),
+                                  ('read_text_file', {'path': 7, 'mode': 'raw'}, FS),
+                                  ('git_log', {'max_count': 5, 'author': 'x'}, GIT),
+                                  ('edit_file', {'path': '/workspace/a', 'edits': 'x', 'backup': True}, FS)):
+            with self.subTest(name=name, args=args):
+                result = assert_unmodelled(self, event(name, args, tools), [])
+                self.assertTrue(result['args_schema_violation'], result)
+
+    def test_technical_failures_are_not_masked(self):
+        for name, args, tools in (self.CE1, self.CE2, self.CE3):
+            value = event(name, args, tools)
+            with self.subTest(name=name):
+                for bad in ({**value, 'tool_name': ''}, {**value, 'tool_name': 'x' * 257},
+                            {**value, 'raw_arguments': object()}):
+                    self.assertEqual(classify(bad)['failure']['code'], 'classifier_invalid')
+                deep = {**value, 'raw_arguments': '{"author":' + '[' * 100000 + ']' * 100000 + '}'}
+                self.assertEqual(classify(deep)['failure']['code'], 'classifier_invalid')
+                nested = copy.deepcopy(value)
+                nested['raw_arguments']['extra'] = {'a': {'b': {'c': {'d': {'e': {'f': {'g': 'rm -rf /'}}}}}}}
+                result = assert_unmodelled(self, nested, [])
+                self.assertTrue(result['truncated'])
+
+
 class Parity(unittest.TestCase):
-    """Outside the exact filesystem proof the candidate is byte-for-byte git_readonly_v1 output."""
+    """Outside the exact filesystem proof and D01 the candidate is byte-for-byte git_readonly_v1 output."""
 
     def assert_parity(self, case_input, where):
         candidate, git_v1 = classify(copy.deepcopy(case_input)), GIT_V1(copy.deepcopy(case_input))
-        if MODULE._bounded_fs_read(case_input.get('tool_name'), parsed(case_input), case_input):
+        if MODULE._unmodelled_keys(case_input.get('tool_name'), parsed(case_input), case_input):
+            assert_unmodelled(self, case_input, git_v1['actions'])
+        elif MODULE._bounded_fs_read(case_input.get('tool_name'), parsed(case_input), case_input):
             self.assertTrue(proven_read(candidate), where)
             self.assertFalse(set(git_v1['actions']) & RISKY, where)  # a proof never hides a risky baseline action
         else:
             self.assertEqual(candidate, git_v1, where)
 
     def test_frozen_matrix(self):
-        proven = []
+        proven, unmodelled = [], []
         for case in json.loads(MATRIX.read_bytes())['cases']:
             with self.subTest(case=case['id']):
                 self.assert_parity(case['input'], case['id'])
-            if MODULE._bounded_fs_read(case['input']['tool_name'], parsed(case['input']), case['input']):
+            if MODULE._unmodelled_keys(case['input']['tool_name'], parsed(case['input']), case['input']):
+                unmodelled.append(case['id'])
+            elif MODULE._bounded_fs_read(case['input']['tool_name'], parsed(case['input']), case['input']):
                 proven.append(case['id'])
+        # Only these frozen cases carry an argument their pinned original schema does not declare.
+        self.assertEqual(unmodelled, ['PMF-A01', 'PMG-A01'])
         # Every proven case is an expected read; the list is fixed so a widened proof is noticed.
         self.assertEqual(proven, ['PMF-B14', 'PMF-B15', 'PMF-B16', 'PMF-B17', 'PMF-B18', 'PMF-B19', 'PMF-B20',
                                   'PMF-B27', 'PMF-B28', 'PMF-B29', 'PMF-B30', 'PMF-B31', 'PMF-B32', 'PMF-B33',

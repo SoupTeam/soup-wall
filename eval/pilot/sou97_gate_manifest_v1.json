@@ -3,11 +3,12 @@
   "purpose": "SOU-97 acceptance gate inputs. Every identity is the sha256 of raw committed bytes. This manifest selects nothing at runtime and grants no authority.",
   "candidate": {
     "path": "rule_baseline/pilot_readonly_v1/rule_baseline.py",
-    "sha256": "9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e",
-    "revision": "pilot_readonly_v1.1"
+    "sha256": "ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30",
+    "revision": "pilot_readonly_v1.2"
   },
   "superseded_candidates": {
-    "82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4": "pilot_readonly_v1 (ef0d17b); historical development result only"
+    "82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4": "pilot_readonly_v1 (ef0d17b); historical development result only",
+    "9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e": "pilot_readonly_v1.1 (ca13021); superseded by the D01 unmodelled-argument decision"
   },
   "baselines": {
     "filesystem": {"path": "rule_baseline/rule_baseline.py", "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"},

@@ -15,7 +15,7 @@ MATRIX = ROOT / "eval/fixtures/soup_pilot_readonly_matrix_v0.1.json"
 CANDIDATE = ROOT / "rule_baseline/pilot_readonly_v1/rule_baseline.py"
 FROZEN = ROOT / "rule_baseline/rule_baseline.py"
 GIT_V1 = ROOT / "rule_baseline/git_readonly_v1/rule_baseline.py"
-CANDIDATE_SHA256 = "9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e"
+CANDIDATE_SHA256 = "ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30"
 
 
 def run(*args, cwd=ROOT):
@@ -60,7 +60,7 @@ class PilotReport(unittest.TestCase):
         self.assertEqual(self.done.returncode, 0, self.done.stderr)
         rep = self.rep
         self.assertEqual(rep["classifiers"]["candidate"]["sha256"], CANDIDATE_SHA256)
-        self.assertEqual(rep["classifiers"]["candidate"]["revision"], "pilot_readonly_v1.1")
+        self.assertEqual(rep["classifiers"]["candidate"]["revision"], "pilot_readonly_v1.2")
         self.assertEqual(rep["native_policy"]["status"], "not_measured")
         self.assertEqual(rep["execution_effects"]["status"], "not_measured")
         self.assertTrue(rep["drift_check"].startswith("passed"))
