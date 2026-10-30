@@ -94,12 +94,38 @@ def delivered_text(value,text):
     return False
 
 
+
+def host_failure_diagnostic(work,label):
+    """Known outcome tags and byte digests only; never retain private logs."""
+    known={'host_completed','provider_child_environment_unavailable','operator_stop','cancelled',
+           'invalid_stop_request','deadline','host_stream_failure','daemon_lost','edit_session_incomplete'}
+    rows=[]
+    for kind in ('stdout','stderr'):
+        path=work/(label+'-'+kind+'.private')
+        if not path.exists():rows.append({'kind':kind,'present':False});continue
+        size=path.stat().st_size;row={'kind':kind,'present':True,'bytes':size,'raw_retained':False}
+        if size<=128*1024:
+            raw=path.read_bytes();codes=set();row['sha256']=sha(raw)
+            for line in raw.decode('utf-8','replace').splitlines():
+                token=line.removeprefix('Error: ').strip()
+                if token in known:codes.add(token)
+                try:value=json.loads(line)
+                except ValueError:continue
+                if isinstance(value,dict)and isinstance(value.get('reason'),str)and value['reason']in known:codes.add(value['reason'])
+            row['known_outcomes']=sorted(codes)
+        rows.append(row)
+    return rows
+
+
 def qualify(args,report):
     require(platform.system()=='Linux'and platform.machine()=='x86_64'and os.geteuid()!=0,'native_linux_operator_required')
     require(sha(args.claude.read_bytes())==EDIT.CLAUDE and not args.output.is_relative_to(ROOT),'genuine_installed_host_required')
     report['cases'][0]['attempted']=True;suite=EDIT.Suite(args,report)
     suite.before_sentinel_full=witness(suite.sentinel)
-    state_path=suite.state.with_name('run state ü');suite.state.rename(state_path);suite.state=state_path
+    # The accepted Bun bootstrap embeds its config path in BUN_OPTIONS.
+    # Keep host state free of spaces; roots, plan parents and baselines exercise
+    # spaces and Unicode without changing provider/environment authority.
+    state_path=suite.state.with_name('run-state-ü');suite.state.rename(state_path);suite.state=state_path
     archive=args.output/'component.tar'
     built_result=subprocess.run([sys.executable,'-B',str(ROOT/'scripts/build-pilot-front-door.py'),'--out',str(archive)],
         cwd=ROOT,env=suite.env,capture_output=True,timeout=60)
@@ -198,7 +224,11 @@ def qualify(args,report):
             proposals.append((('replace'if target.get('replacement')else'create')+f'_output_{i}',payload))
         for i,target in enumerate(targets):proposals.append((f'read_output_{i}',{'path':target['name']}))
         if pending: pending.prepared=prepared;pending.baselines=baselines;pending.plan=plan
-        host,observed,_=suite.host(label,root,root/'result.txt',plan,prepared,proposals,mode=mode,timeout=90,on_pending=pending)
+        try:
+            host,observed,_=suite.host(label,root,root/'result.txt',plan,prepared,proposals,mode=mode,timeout=90,on_pending=pending)
+        except Exception:
+            report['host_failure']=host_failure_diagnostic(suite.work,label)
+            raise
         require(host['process_cleanup']['all_stopped'],'diff_owned_cleanup_failed')
         if mode=='approve':
             require(host['exit']==0 and host['write_admissions']==count,'diff_genuine_run_failed')
@@ -337,7 +367,7 @@ def main():
         if active is not None:active.update(status='failed',failure=code)
     report['inventory']={s:sum(r['status']==s for r in report['cases'])for s in ('passed','failed','incomplete')}
     raw=(json.dumps(report,sort_keys=True,indent=2)+'\n').encode();(args.output/'report.json').write_bytes(raw)
-    summary={k:report[k]for k in ('format','status','inventory','failure','failure_type','source_commit','source_tree','component','agentfw_sha256','claude_sha256','last_cli')if k in report}
+    summary={k:report[k]for k in ('format','status','inventory','failure','failure_type','source_commit','source_tree','component','agentfw_sha256','claude_sha256','last_cli','host_failure')if k in report}
     summary.update(evidence_sha256=sha(raw),case_results=[{'id':r['id'],'status':r['status'],'attempted':r['attempted'],
         'witnesses':{k:v for k,v in r.items()if type(v)is bool}}for r in report['cases']])
     print(json.dumps(summary,sort_keys=True));return 0 if passed_report(report)else 1

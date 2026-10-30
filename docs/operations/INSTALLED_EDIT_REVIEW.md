@@ -99,7 +99,7 @@ Bounds per invocation:
 Repeated identical inputs use an equality fast path. Other comparisons charge
 the common algorithmic budget; a large repeated-line edit may explicitly exceed
 it. No input, line, file or hunk is silently omitted or truncated to fit a cap.
-Any refusal returns nonzero and an explicit content-free `incomplete` outcome
+Runtime refusals return nonzero and an explicit content-free `incomplete` outcome
 with an empty display, never a partial clean preview or private path in an error.
 
 `observation_sha256` retains the existing run/output observation contract.
@@ -212,7 +212,11 @@ scope and file-type refusals, baseline/output/parent races and sibling preservat
 A separately exercised test-only preload observer records attempted external
 process execution; every diff call must observe zero such attempts and zero
 provider requests. Controlled race mutations are labelled separately from product
-behavior. No paid inference or private evaluation data is used.
+behavior. The fixture exercises spaces/Unicode in output roots, plan parents and
+baselines, and Unicode in host state. Host startup with spaces in its state path
+failed qualification and remains unqualified; the fixture keeps that path free
+of spaces under the accepted Bun bootstrap setup. No paid inference or private
+evaluation data is used.
 
 The targeted installed-edit workflow retains finite `diff/report.json`, failed
 attempts, per-file preservation witnesses and exact source/component/Agent/host

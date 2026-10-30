@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -75,3 +76,14 @@ class DiffQualification(unittest.TestCase):
 
     def test_malformed_inventory_is_not_accepted(self):
         for bad in (None,[],{'cases':None},{'cases':[None]}):self.assertFalse(driver.passed_report(bad))
+
+    def test_host_failure_diagnostics_retain_only_known_tags_and_digests(self):
+        with tempfile.TemporaryDirectory()as tmp:
+            work=Path(tmp);secret='private-path-secret\x1b'
+            (work/'owned-stdout.private').write_text(json.dumps({'run':secret,'reason':'provider_child_environment_unavailable'})+'\n'+json.dumps({'reason':{'private':secret}})+'\n')
+            (work/'owned-stderr.private').write_text('Error: edit_session_incomplete\n'+secret+'\n')
+            result=driver.host_failure_diagnostic(work,'owned');raw=json.dumps(result)
+            self.assertNotIn(secret,raw);self.assertNotIn('private-path-secret',raw)
+            self.assertEqual(result[0]['known_outcomes'],['provider_child_environment_unavailable'])
+            self.assertEqual(result[1]['known_outcomes'],['edit_session_incomplete'])
+            self.assertTrue(all(r['raw_retained']is False and driver.digest(r['sha256'],64)for r in result))
