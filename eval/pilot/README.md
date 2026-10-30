@@ -1,7 +1,7 @@
 # SOU-97 acceptance gate
 
 `eval/tools/check_pilot_gate.py` is a deterministic, fail-closed comparator for the
-`pilot_readonly_v1.1` candidate. Its inputs are pinned in
+`pilot_readonly_v1.2` candidate. Its inputs are pinned in
 [`sou97_gate_manifest_v1.json`](sou97_gate_manifest_v1.json).
 
 The gate never runs a classifier, never simulates native policy and never infers execution effects
@@ -34,8 +34,8 @@ values, so identical inputs give byte-identical results.
 1. **Identities.** The candidate, both selected baselines, the matrix, the supplement, the runner,
    `evaluate_dev.py`, the policies, the original tool lists and the upstream identities must all
    match their pinned sha256. A superseded candidate hash fails as `stale_candidate`.
-2. **Evidence lineage.** The reports were generated from `evidence.source_commit` (`ca13021`) and
-   recorded in `evidence.recorded_in` (`47bd8fa`). The gate requires that:
+2. **Evidence lineage.** The reports were generated from `evidence.source_commit` (`54e1b40`) and
+   recorded in `evidence.recorded_in` (`179232f`). The gate requires that:
    - `source_commit` is an ancestor of `recorded_in`, which is an ancestor of the evaluated commit;
    - every pinned input is identical at `source_commit` and at the evaluated commit;
    - each report has its pinned hash at `recorded_in` and is absent at `source_commit`.

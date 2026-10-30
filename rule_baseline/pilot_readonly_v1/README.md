@@ -17,8 +17,7 @@ rev2 and `git_readonly_v1` artifacts are unchanged byte for byte.
   No default, profile, package or required CI step selects it. Only an explicit operator
   environment (below), the drivers' opt-in `--classifier-script`/`--classifier-sha256` flags, or the
   `sou97_candidate` workflow dispatch input does.
-- Regressions: `rule_baseline/test_pilot_readonly.py`. Evidence for v1.2 has not been regenerated yet;
-  `eval/evidence/sou97/v1.1/` and the gate manifest still describe v1.1 (see the revision history).
+- Regressions: `rule_baseline/test_pilot_readonly.py`. Current evidence: `eval/evidence/sou97/v1.2/`.
 
 ## Selection and rollback
 
@@ -53,7 +52,7 @@ It cannot undo calls the candidate already admitted.
 |---|---|---|---|
 | `pilot_readonly_v1` | `82a41dded79cf560cefc5ab6894e9f247d31fec2992b2b7b6d0fcad02c0494f4` | `ef0d17b` | Superseded. Its results in `eval/evidence/sou97/candidate/` and `eval/evidence/sou97/pilot_report/` are historical development results and are **not** evidence for v1.1. |
 | `pilot_readonly_v1.1` | `9f4a532b5d1b1f6d375eba1e9a2ffca1164bfab038bdc6fa3532cbd9584eef1e` | `ca13021` | Superseded by v1.2 (D01). Its evidence in `eval/evidence/sou97/v1.1/` is not evidence for v1.2. |
-| `pilot_readonly_v1.2` | `ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30` | this revision | Current candidate. Offline evidence and the gate manifest are not yet regenerated for it. |
+| `pilot_readonly_v1.2` | `ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30` | `ffce703` | Current candidate. Evidence from clean `54e1b40` in `eval/evidence/sou97/v1.2/`. |
 
 v1.2 changes one semantic rule, after the TL's D01/D06 decision on the SOU-128 review (section 10.3,
 2026-10-29):
