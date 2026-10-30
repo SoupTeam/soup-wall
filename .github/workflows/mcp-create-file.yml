@@ -323,14 +323,20 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_review.py' -v
-          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_inventory.py' -v
-          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_application.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_diff.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
           python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_removal.py' -v
           gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou188_removal_fault.c -ldl -o "$SOU161_SCRATCH/removal-fault.so"
           python3 -B scripts/qualify-pilot-removal.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/removal-fault.so" --output "$SOU161_SCRATCH/removal"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou189_diff_fault.c -ldl -o "$SOU161_SCRATCH/diff-fault.so"
+          python3 -B scripts/qualify-edit-diff.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/diff-fault.so" --foreign "$SOU161_SCRATCH/foreign-record" \
+            --output "$SOU161_SCRATCH/diff"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_inventory.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_application.py' -v
           python3 -B scripts/qualify-edit-inventory.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --foreign-state "$SOU161_SCRATCH/inventory-foreign" \
@@ -382,6 +388,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/archive-runtime/report.json
             ${{ runner.temp }}/sou161-scratch/quota/report.json
             ${{ runner.temp }}/sou161-scratch/review/report.json
+            ${{ runner.temp }}/sou161-scratch/diff/report.json
             ${{ runner.temp }}/sou161-scratch/inventory/report.json
             ${{ runner.temp }}/sou161-scratch/export-set/report.json
             ${{ runner.temp }}/sou161-scratch/application/report.json
