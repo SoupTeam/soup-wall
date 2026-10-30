@@ -26,7 +26,7 @@ agentfw tool-preview --profile filesystem|git|<profile format> --frame <file|-> 
 | --- | --- |
 | `--frame` | One JSON frame, at most 256 KiB, regular file or `-` (stdin). Either `{"tool", "arguments", "description"?, "inputSchema"?}` or one MCP `tools/call` request. Duplicate keys, unknown keys, trailing data and non-object arguments are refused. |
 | `--profile` | `filesystem` or `git` (the original read-only profiles), or the exact format string of a shipped profile. |
-| `--export` | Writes the sanitized JSON report to a **new** file (Linux): absolute path, owner-only parent directory, mode 0600, never replaces an existing file. The report is written to a private temp file and published with a no-replace rename; on failure only that temp file is removed, and only while it is still the file this run created. |
+| `--export` | Writes the sanitized JSON report to a **new** file (Linux): absolute path, owner-only parent directory, mode 0600, never replaces an existing file. The report is written to an unnamed file (`O_TMPFILE`) in the pinned directory and linked into place from that exact descriptor, so there is no temporary name to substitute, nothing is ever unlinked, an existing object is never replaced, and a filesystem without unnamed files is refused (`export_filesystem_unsupported`). |
 
 Exit codes: `0` a classification was produced (including `unknown` and
 `partial_unknown`), `2` the input or the selected profile's validator refused it, `3`

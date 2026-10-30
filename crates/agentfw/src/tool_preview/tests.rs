@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
 use std::cell::RefCell;
-use std::path::PathBuf;
 
 const CANARY: &str = "CANARY-SECRET-7f3a9c";
 
@@ -490,57 +489,161 @@ fn private_dir() -> tempfile::TempDir {
     dir
 }
 
-/// A named object the exporter did not create must never be deleted by cleanup, whichever
-/// name it is substituted under (the exporter's own file name or the final destination).
+/// Rename away and replace every name currently present in `dir`, returning those names. An
+/// exporter that publishes through a named temporary file has exactly that file to replace;
+/// one that publishes by descriptor has no name to take, so the list stays empty.
+#[cfg(target_os = "linux")]
+fn substitute_every_entry(dir: &Path, plant: &dyn Fn(&Path)) -> Vec<String> {
+    let names = dir_names(dir);
+    for name in &names {
+        let path = dir.join(name);
+        std::fs::rename(&path, dir.join(format!("{name}.held-original"))).unwrap();
+        plant(&path);
+    }
+    names
+}
+
+/// Successful write, temporary object replaced by a regular file with unrelated bytes: the
+/// published report must still be the object the exporter created and wrote.
 #[cfg(target_os = "linux")]
 #[test]
-fn failed_export_never_deletes_a_substituted_object() {
+fn successful_export_never_publishes_a_substituted_regular_file() {
     let dir = private_dir();
-    let target = dir.path().join("report.json");
-    let mut created_seen = PathBuf::new();
-    let mut hook = |created: &Path| {
-        created_seen = created.to_path_buf();
-        let held = PathBuf::from(format!("{}.held-original", created.display()));
-        std::fs::rename(created, &held).unwrap();
-        std::fs::write(created, "sentinel-at-created-name").unwrap();
-        if created != target {
-            std::fs::write(&target, "sentinel-at-destination").unwrap();
-        }
+    let root = dir.path().to_path_buf();
+    let target = root.join("report.json");
+    let report = json!({"schema": SCHEMA});
+    let mut seen = Vec::new();
+    let mut hook = |_: &Path| {
+        seen = substitute_every_entry(&root, &|p| {
+            std::fs::write(p, "sentinel-regular-bytes").unwrap()
+        });
+        Ok(())
+    };
+    assert_eq!(export_inner(&report, &target, &mut hook), Ok(()));
+    let published = std::fs::symlink_metadata(&target).unwrap();
+    assert!(published.is_file() && !published.file_type().is_symlink());
+    assert_eq!(
+        std::fs::read_to_string(&target).unwrap(),
+        report_json(&report).unwrap(),
+        "published object is not the one the exporter created"
+    );
+    assert!(
+        seen.is_empty(),
+        "a named object existed between creation and publication: {seen:?}"
+    );
+}
+
+/// Same, with a symlink to unrelated private bytes planted over the temporary object.
+#[cfg(target_os = "linux")]
+#[test]
+fn successful_export_never_publishes_a_substituted_symlink() {
+    let dir = private_dir();
+    let elsewhere = private_dir();
+    let unrelated = elsewhere.path().join("unrelated-private");
+    std::fs::write(&unrelated, "unrelated private bytes").unwrap();
+    let root = dir.path().to_path_buf();
+    let target = root.join("report.json");
+    let report = json!({"schema": SCHEMA});
+    let mut seen = Vec::new();
+    let mut hook = |_: &Path| {
+        seen = substitute_every_entry(&root, &|p| {
+            std::os::unix::fs::symlink(&unrelated, p).unwrap()
+        });
+        Ok(())
+    };
+    assert_eq!(export_inner(&report, &target, &mut hook), Ok(()));
+    let published = std::fs::symlink_metadata(&target).unwrap();
+    assert!(
+        published.is_file() && !published.file_type().is_symlink(),
+        "a symlink was published"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&target).unwrap(),
+        report_json(&report).unwrap()
+    );
+    assert_eq!(
+        std::fs::read_to_string(&unrelated).unwrap(),
+        "unrelated private bytes"
+    );
+    assert!(
+        seen.is_empty(),
+        "a named object existed between creation and publication: {seen:?}"
+    );
+}
+
+/// A destination that appears while the export is in flight is never replaced (no-replace
+/// contract) and nothing else is left behind.
+#[cfg(target_os = "linux")]
+#[test]
+fn destination_appearing_during_export_is_kept_and_refused() {
+    let dir = private_dir();
+    let root = dir.path().to_path_buf();
+    let target = root.join("report.json");
+    let mut hook = |_: &Path| {
+        std::fs::write(&target, "sentinel-at-destination").unwrap();
+        Ok(())
+    };
+    assert_eq!(
+        export_inner(&json!({"schema": SCHEMA}), &target, &mut hook),
+        Err("export_destination_exists_or_unwritable")
+    );
+    assert_eq!(
+        std::fs::read_to_string(&target).unwrap(),
+        "sentinel-at-destination"
+    );
+    assert_eq!(dir_names(&root), ["report.json"]);
+}
+
+/// Failed write: unrelated objects, whatever their names, are never removed.
+#[cfg(target_os = "linux")]
+#[test]
+fn failed_export_never_deletes_an_unrelated_object() {
+    let dir = private_dir();
+    let root = dir.path().to_path_buf();
+    let target = root.join("report.json");
+    let mut seen = Vec::new();
+    let mut hook = |_: &Path| {
+        seen = substitute_every_entry(&root, &|p| {
+            std::fs::write(p, "sentinel-at-created-name").unwrap()
+        });
+        std::fs::write(&target, "sentinel-at-destination").unwrap();
         Err(())
     };
     assert_eq!(
         export_inner(&json!({"schema": SCHEMA}), &target, &mut hook),
         Err("export_write_failed")
     );
-    let expected_target = if created_seen == target {
-        "sentinel-at-created-name"
-    } else {
-        "sentinel-at-destination"
-    };
-    assert_eq!(std::fs::read_to_string(&target).unwrap(), expected_target);
     assert_eq!(
-        std::fs::read_to_string(&created_seen).unwrap(),
-        "sentinel-at-created-name",
-        "an object the exporter did not create was deleted"
+        std::fs::read_to_string(&target).unwrap(),
+        "sentinel-at-destination"
     );
-    assert!(PathBuf::from(format!("{}.held-original", created_seen.display())).exists());
+    for name in &seen {
+        assert_eq!(
+            std::fs::read_to_string(root.join(name)).unwrap(),
+            "sentinel-at-created-name",
+            "an object the exporter did not create was deleted"
+        );
+        assert!(root.join(format!("{name}.held-original")).exists());
+    }
+    assert!(
+        seen.is_empty(),
+        "a named object existed between creation and publication: {seen:?}"
+    );
+    assert_eq!(dir_names(&root), ["report.json"]);
 }
 
 #[cfg(target_os = "linux")]
 #[test]
-fn failed_export_removes_only_its_own_file_and_leaves_nothing() {
+fn successful_export_leaves_exactly_one_private_regular_file() {
+    use std::os::unix::fs::MetadataExt;
     let dir = private_dir();
     let target = dir.path().join("report.json");
-    let mut hook = |_: &Path| Err(());
-    assert_eq!(
-        export_inner(&json!({"schema": SCHEMA}), &target, &mut hook),
-        Err("export_write_failed")
-    );
-    assert!(
-        dir_names(dir.path()).is_empty(),
-        "{:?}",
-        dir_names(dir.path())
-    );
+    assert_eq!(export(&json!({"schema": SCHEMA}), &target), Ok(()));
+    assert_eq!(dir_names(dir.path()), ["report.json"]);
+    let meta = std::fs::symlink_metadata(&target).unwrap();
+    assert!(meta.is_file() && !meta.file_type().is_symlink());
+    assert_eq!(meta.mode() & 0o777, 0o600);
+    assert_eq!(meta.nlink(), 1);
 }
 
 /// Reason codes are a closed reviewed vocabulary: syntax-valid worker strings that carry an

@@ -1095,8 +1095,9 @@ pub fn export(report: &Value, destination: &Path) -> Result<(), Code> {
     export_inner(report, destination, &mut |_| Ok(()))
 }
 
-/// Test seam: `after_create` gets the path of the exporter's temp file before it is written;
-/// an `Err` is handled exactly like a failed write. Production passes a no-op.
+/// Test seam: `after_create` runs with the export directory's path once the exporter's unnamed
+/// file exists and before it is written; an `Err` is handled exactly like a failed write.
+/// Production passes a no-op.
 #[cfg(target_os = "linux")]
 fn export_inner(
     report: &Value,
@@ -1144,76 +1145,91 @@ fn export_inner(
     if !owner.is_dir() || owner.uid() != unsafe { libc::geteuid() } || owner.mode() & 0o077 != 0 {
         return Err("export_parent_not_private");
     }
-    // Write a private temp file next to the destination, then publish it with a no-replace
-    // rename, so the destination name never holds a partial file and an existing object at
-    // the destination is never touched.
-    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let nonce = (std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0) as u64)
-        ^ (u64::from(std::process::id()) << 32)
-        ^ COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let temp_name = format!(".tool-preview-{nonce:016x}.tmp");
-    let temp = CString::new(temp_name.as_bytes()).map_err(|_| "export_path_invalid")?;
+    // Publish by identity, not by name. The report is written to an unnamed regular file
+    // (O_TMPFILE) inside the validated, pinned directory and linked into place from that exact
+    // descriptor. No temporary name exists for another process to substitute, an object at the
+    // destination is never replaced (linkat does not replace), and nothing is ever unlinked:
+    // an unnamed inode disappears with its descriptor. A filesystem without unnamed files is
+    // refused instead of falling back to a named temporary file.
+    let euid = unsafe { libc::geteuid() };
+    let here = CString::new(".").map_err(|_| "export_path_invalid")?;
     let fd = unsafe {
         libc::openat(
             dir.as_raw_fd(),
-            temp.as_ptr(),
-            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            here.as_ptr(),
+            libc::O_TMPFILE | libc::O_WRONLY | libc::O_CLOEXEC,
             0o600,
         )
     };
     if fd < 0 {
-        return Err("export_destination_exists_or_unwritable");
+        return Err(match std::io::Error::last_os_error().raw_os_error() {
+            Some(libc::EOPNOTSUPP) | Some(libc::EISDIR) | Some(libc::EINVAL) => {
+                "export_filesystem_unsupported"
+            }
+            _ => "export_destination_exists_or_unwritable",
+        });
     }
     let mut file = unsafe { File::from_raw_fd(fd) };
-    // Remove the temp name only while it still names the file this call created.
-    let cleanup = |file: &File| {
-        let Ok(mine) = file.metadata() else { return };
-        let mut st: libc::stat = unsafe { std::mem::zeroed() };
-        let rc = unsafe {
-            libc::fstatat(
-                dir.as_raw_fd(),
-                temp.as_ptr(),
-                &mut st,
-                libc::AT_SYMLINK_NOFOLLOW,
-            )
-        };
-        if rc == 0 && st.st_dev == mine.dev() && st.st_ino == mine.ino() {
-            unsafe {
-                libc::unlinkat(dir.as_raw_fd(), temp.as_ptr(), 0);
-            }
-        }
-    };
-    if after_create(&parent_path.join(&temp_name)).is_err()
+    let created = file.metadata().map_err(|_| "export_write_failed")?;
+    if !created.is_file()
+        || created.uid() != euid
+        || created.mode() & 0o077 != 0
+        || created.nlink() != 0
+        || created.dev() != owner.dev()
+    {
+        return Err("export_write_failed");
+    }
+    if after_create(parent_path).is_err()
         || file
             .write_all(bytes.as_bytes())
             .and_then(|_| file.sync_all())
             .is_err()
     {
-        cleanup(&file);
         return Err("export_write_failed");
     }
-    const RENAME_NOREPLACE: libc::c_uint = 1;
-    let rc = unsafe {
-        libc::syscall(
-            libc::SYS_renameat2,
-            dir.as_raw_fd(),
-            temp.as_ptr(),
+    // The pinned directory must still be the same private directory when the link is made.
+    let pinned = dir.metadata().map_err(|_| "export_parent_unsafe")?;
+    if !pinned.is_dir()
+        || pinned.uid() != euid
+        || pinned.mode() & 0o077 != 0
+        || pinned.dev() != owner.dev()
+        || pinned.ino() != owner.ino()
+    {
+        return Err("export_parent_unsafe");
+    }
+    let source = CString::new(format!("/proc/self/fd/{}", file.as_raw_fd()))
+        .map_err(|_| "export_path_invalid")?;
+    let linked = unsafe {
+        libc::linkat(
+            libc::AT_FDCWD,
+            source.as_ptr(),
             dir.as_raw_fd(),
             name.as_ptr(),
-            RENAME_NOREPLACE,
+            libc::AT_SYMLINK_FOLLOW,
         )
     };
-    if rc != 0 {
-        let exists = std::io::Error::last_os_error().raw_os_error() == Some(libc::EEXIST);
-        cleanup(&file);
-        return Err(if exists {
-            "export_destination_exists_or_unwritable"
-        } else {
-            "export_write_failed"
-        });
+    if linked != 0 {
+        return Err(
+            if std::io::Error::last_os_error().raw_os_error() == Some(libc::EEXIST) {
+                "export_destination_exists_or_unwritable"
+            } else {
+                "export_write_failed"
+            },
+        );
+    }
+    // Confirm the name now refers to the object this call created; never remove anything.
+    let mut st: libc::stat = unsafe { std::mem::zeroed() };
+    let rc = unsafe {
+        libc::fstatat(
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            &mut st,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    };
+    let mine = file.metadata().map_err(|_| "export_write_failed")?;
+    if rc != 0 || st.st_dev != mine.dev() || st.st_ino != mine.ino() {
+        return Err("export_write_failed");
     }
     dir.sync_all().map_err(|_| "export_write_failed")?;
     Ok(())

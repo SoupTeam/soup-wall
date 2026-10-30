@@ -227,10 +227,10 @@ def main():
             allowed_names = {os.path.basename(a) for a in allow_writes}  # export opens relative to a pinned dir fd
 
             def is_export_write(path):
-                # the exporter writes a private temp file next to the destination, then renames it
+                # the exporter writes an unnamed O_TMPFILE inside the pinned export directory
+                # (traced as an open of "."), then links it into place with linkat
                 base = os.path.basename(path)
-                return path in allow_writes or base in allowed_names or (
-                    bool(allow_writes) and base.startswith(".tool-preview-") and base.endswith(".tmp"))
+                return path in allow_writes or base in allowed_names or (bool(allow_writes) and path == ".")
 
             for path in facts["write_opens"]:
                 if path not in ALLOWED_WRITES and not is_export_write(path):
