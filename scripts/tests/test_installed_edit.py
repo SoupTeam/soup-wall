@@ -20,6 +20,15 @@ spec.loader.exec_module(probe)
 
 
 class InstalledEditEvidence(unittest.TestCase):
+    def test_generated_leading_hyphen_pending_ids_are_explicit_positional_arguments(self):
+        suite = object.__new__(probe.Suite)
+        calls = []
+        suite.cli = lambda *words: calls.append(words)
+        for action in ('inspect', 'reject'):
+            suite.ask('owned-run', action, '-pending')
+            self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', action, '--', '-pending'))
+        suite.ask('owned-run', 'approve', '-pending', '--binding', 'a' * 64)
+        self.assertEqual(calls[-1], ('ask', '--run', 'owned-run', 'approve', '--binding', 'a' * 64, '--', '-pending'))
     def test_cli_status_consumes_the_complete_pretty_json_document(self):
         suite = object.__new__(probe.Suite)
         suite.binary, suite.work, suite.env, suite.report = Path('/not-executed'), Path('/tmp'), {}, {}

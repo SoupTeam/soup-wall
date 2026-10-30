@@ -269,7 +269,8 @@ jobs:
           cargo fetch --locked
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           mkdir -m 700 "$task_scratch"
-          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host}
+          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host,low-space}
+          sudo install -o 0 -g 0 -m 600 /dev/null "$task_scratch/foreign-record"
           ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
           cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
           npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
@@ -283,6 +284,7 @@ jobs:
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --size 65536 --perms 1777 --tmpfs "$task_scratch/low-space" \
             --proc /proc --dev /dev --cap-drop ALL \
             --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
             --chdir / /usr/bin/setpriv \
@@ -299,6 +301,8 @@ jobs:
           cd "$SOU161_SOURCE"
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-build.json" -- build --locked --offline -p agentfw --bin agentfw
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-0.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-review-publish.json" -- test --locked --offline -p agentfw --lib private_export -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-support-export.json" -- test --locked --offline -p agentfw --lib support_bundle -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-unit.json" -- test --locked --offline -p agentfw --lib pilot_approval -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-endpoint.json" -- test --locked --offline -p agentfw --test native_endpoint sou125_stop -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-1.json" -- test --locked --offline -p agentfw --lib native::execution::transport -- --nocapture
@@ -308,10 +312,19 @@ jobs:
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_run_operations.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_run_archive.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_archive_qualification.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_front_door_component.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_quota.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_review.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou179_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
+          python3 -B scripts/qualify-edit-review.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/review-fault.so" --output "$SOU161_SCRATCH/review"
           python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
@@ -323,6 +336,10 @@ jobs:
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --publish-fault "$SOU161_SCRATCH/publish-fault.so" \
             --output "$SOU161_SCRATCH/refresh"
+          python3 -B scripts/qualify-installed-edit-archive.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/archive-runtime" \
+            --low-space "$SOU161_SCRATCH/low-space" --foreign-record "$SOU161_SCRATCH/foreign-record"
           mkdir -m 700 "$SOU161_SCRATCH/quota-faults"
           gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=1 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/withheld.so"
           gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=2 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/interrupted.so"
@@ -339,7 +356,9 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/archive-runtime/report.json
             ${{ runner.temp }}/sou161-scratch/quota/report.json
+            ${{ runner.temp }}/sou161-scratch/review/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json

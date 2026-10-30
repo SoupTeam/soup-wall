@@ -20,6 +20,8 @@ mod record;
 #[cfg(target_os = "linux")]
 mod refresh;
 #[cfg(target_os = "linux")]
+mod review;
+#[cfg(target_os = "linux")]
 mod runtime;
 pub(crate) mod transport;
 
@@ -35,6 +37,9 @@ pub struct Cli {
 }
 #[derive(Subcommand, Debug)]
 enum Action {
+    /// Review exact completed-run outputs; private content needs explicit consent.
+    #[cfg(target_os = "linux")]
+    Review(review::Args),
     /// Diagnose one selected edit run without replaying calls or changing state.
     Status(diagnostic::Args),
     /// Inspect a proposed private output profile without writes or authority.
@@ -87,6 +92,15 @@ enum Action {
         run: PathBuf,
         #[command(subcommand)]
         action: Ask,
+    },
+    /// Preview, archive or explicitly clean one completed installed edit run.
+    #[cfg(target_os = "linux")]
+    Archive {
+        /// Agent profile containing the verified installed helper component.
+        #[arg(long)]
+        home: PathBuf,
+        #[command(subcommand)]
+        action: Archive,
     },
     /// Revoke and stop one exact installed run through its verified owner.
     Stop {
@@ -148,6 +162,45 @@ pub enum Ask {
     Reject {
         id: String,
     },
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Subcommand, Debug)]
+enum Archive {
+    /// Read-only exact inventory and confirmation digest; source stays intact.
+    Preview {
+        #[arg(long)]
+        run: PathBuf,
+        /// Existing private archive directory outside the selected run.
+        #[arg(long)]
+        destination: PathBuf,
+    },
+    /// Publish a sanitized archive; retain all original run state.
+    Apply(ArchivePlan),
+    /// Remove only inventoried run state after verifying the sanitized archive.
+    Cleanup {
+        #[command(flatten)]
+        selected: ArchivePlan,
+        /// Acknowledge irreversible loss of raw evidence excluded from the archive.
+        #[arg(long)]
+        acknowledge_evidence_loss: bool,
+    },
+    /// Read-only inspection of an interrupted cleanup; never resumes deletion.
+    Recover {
+        #[command(flatten)]
+        selected: ArchivePlan,
+        #[arg(long)]
+        journal: String,
+    },
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Args, Debug)]
+struct ArchivePlan {
+    #[arg(long)]
+    plan: PathBuf,
+    #[arg(long)]
+    confirm: String,
 }
 
 pub fn run(cli: Cli) -> Result<()> {

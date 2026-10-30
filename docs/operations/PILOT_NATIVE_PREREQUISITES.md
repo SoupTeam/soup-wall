@@ -50,6 +50,67 @@ for bubblewrap setup/compile. The build environment passes only selected tool
 paths and a small fixed set of variables. On timeout or cancellation it stops
 the owned process group.
 
+### Resumable bubblewrap download (SOU-173)
+
+The pinned bubblewrap 0.13.1 archive has an exact 129,472-byte length and the
+SHA-256 above. With explicit `--prepare --allow-download`, the preparer keeps
+its incomplete transfer in the owner's `0700` output root under
+`download-cache/`. The SOU-139 preparation claim serializes same-root callers.
+The `0600` versioned resume record binds the canonical URL, expected bytes,
+full digest, partial inode, offset and a bounded history of failed attempts.
+It is evidence, not authority: the complete archive is hashed against the
+repository pin before reuse, extraction or selection. HTTP validators and
+Content-Length are never accepted as a substitute for that digest.
+
+Each explicit invocation makes at most one HTTP request. A matching strong
+ETag permits a `Range` request; a valid `206` appends, and an ignored Range
+(`200`) starts over from byte zero within the same request. Missing validators
+start fresh. Changed validators, incorrect Content-Range, premature EOF,
+unexpected `416`, over-limit data and digest mismatches refuse publication.
+The transfer chain permits at most three attempts and at most twice the
+existing 16 MiB compressed bound of transferred data, with the existing
+120-second request budget, including connection, response headers, HTTPS
+redirects and redirect bodies, and 25-second socket timeout. A cancellation or
+disconnect retains only the recorded private prefix; an uncommitted tail is
+discarded after the next identity and prefix check. No ambient proxy,
+credentials or caller headers enter the download helper.
+
+The JSON result includes finite `download_progress` counts for the selected
+archive. A failed attempt reports its reason and retained/transferred bytes
+without URLs, headers or private paths. Keep this evidence private; do not
+publish the cache or a generation from a failed attempt. The existing
+`first-failure.json` remains the first failure, while the resume record retains
+up to three later transfer failures. On verified transfer, the bounded private
+`bwrap.transfer-evidence.json` keeps those counts and failures after the resume
+record is removed; this evidence is never archive authority. A completed cache
+entry is rehashed on every use. An offline rebuild can use it with the exact
+local Git archive:
+
+```sh
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --rebuild \
+  --offline-bwrap-cache --output "$HOME/private-native-prerequisites" \
+  --expected-commit "$commit" --git-archive /absolute/git-2.51.2.tar.xz
+```
+
+For an invalid or exhausted partial, inspect the bounded failure reason and
+run a fresh explicit transfer with `--prepare --rebuild --allow-download
+--clear-bwrap-cache` plus the other required inputs. That flag deletes only
+the four identity-checked private bubblewrap cache names while holding the
+same-root claim; it does not remove an installed generation or unrelated
+files. The default inventory and ordinary pilot run/status/preview never
+contact the network.
+
+The native Ubuntu 24.04 job runs the local Range/disconnect/ownership controls
+and `qualify-pilot-resumable-download.py --run` against the exact public pin.
+Its accepted Git/bubblewrap preparation also selects the bwrap archive through
+this explicitly consented transfer path, then builds, verifies and uses the
+resulting binary in the existing original-server qualification.
+Its `sou173-download.json` artifact records the complete transfer and offline
+reuse byte counts, durations and extraction result. A failed job retains a
+bounded failure report rather than treating a fixture or WSL result as native
+qualification. Record the exact job SHA and artifact digest before citing it
+as acceptance evidence.
+
 ## Prepare, reuse, and select for the accepted runtime
 
 ```sh
@@ -68,6 +129,35 @@ generation; a failure leaves `current.json`, the last valid generation, and
 unrelated files intact. The first bounded failure record stays in
 `first-failure.json`; raw build logs stay private in the incomplete generation.
 Do not copy those logs into a public issue or PR.
+
+### Explicit retry after a completed Git stage
+
+If Git finished and its private stage checkpoint was published before a later
+bubblewrap failure or cancellation, retry with the same output root and input
+arguments, adding `--resume`:
+
+```sh
+python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --resume "${args[@]}"
+```
+
+The retry acquires the normal per-output preparation lock and verifies the
+complete frozen Git stage before copying its verified binary into a new
+generation. The checkpoint binds the clean source, pinned Git archive, build
+recipe and flags, compiler/interpreter and native inputs, runtime libraries,
+file modes, and bounded stage-tree digests. Bubblewrap is built normally, and
+the final Git+bubblewrap receipt, hashes and runtime checks still run before
+`current.json` changes. The result distinguishes built and reused stages and
+reports their actual timings; preview/status commands do not build or select.
+
+`--resume` refuses an absent, incomplete, mutable, unsafe or identity-mismatched
+checkpoint. It never resumes compiler scratch or trusts a partial executable.
+Inspect the bounded failure reason, then run `--prepare` without `--resume` to
+start a fresh build after correcting the input or environment; use `--rebuild`
+when a complete generation is already selected and a new one is intended.
+Failed attempts remain private for diagnosis, and no failed or incomplete
+generation becomes the selected runtime. Existing local archive arguments
+keep this retry offline; network access still requires explicit
+`--allow-download` under the same pins and bounds.
 
 Pass the two emitted paths directly to the existing SOU-111 interface. Supply
 the remaining reviewed inputs described in

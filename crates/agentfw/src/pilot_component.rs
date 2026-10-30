@@ -1219,7 +1219,12 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
     let command = args
         .first()
         .and_then(|a| a.to_str())
-        .filter(|a| matches!(*a, "preview" | "prepare" | "run" | "status" | "help"))
+        .filter(|a| {
+            matches!(
+                *a,
+                "preview" | "prepare" | "run" | "status" | "provider" | "help"
+            )
+        })
         .unwrap_or("help");
     let store = Store::new(home);
     let verified = match store.current() {
@@ -1242,6 +1247,8 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
         .arg("-I")
         .arg("-B")
         .arg(verified.tree.join(ENTRY))
+        .arg("--agent-home")
+        .arg(home)
         .args(args)
         .exec();
     println!(

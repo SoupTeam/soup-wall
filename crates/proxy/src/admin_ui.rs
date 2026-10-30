@@ -13,7 +13,8 @@ use axum::response::{Html, IntoResponse, Response};
 pub async fn dashboard() -> Response {
     let mut response = Html(
         include_str!("admin_dashboard.html")
-            .replace("/* FLEET_PANEL */", include_str!("fleet_panel.js")),
+            .replace("/* FLEET_PANEL */", include_str!("fleet_panel.js"))
+            .replace("/* ROLLOUT_PANEL */", include_str!("rollout_panel.js")),
     )
     .into_response();
     let headers = response.headers_mut();

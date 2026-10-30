@@ -94,9 +94,11 @@ python3 -B scripts/qualify-prepared-pilot-run.py --selection ABSOLUTE_SELECTION 
 ```
 
 This opt-in extension supplies seven distinct synthetic inputs, captures kernel
-successful `execve` environment arrays privately, and exports only finite role
-counts and presence/absence booleans. Incomplete/missing role evidence cannot
-prove isolation. An independent loopback handler verifies expected synthetic
+successful `execve` and `execveat` environment arrays privately, and exports
+only finite role counts and presence/absence booleans. Incomplete/missing role
+evidence cannot prove isolation; unresolved FD-based execution identities are
+incomplete rather than counted as a known host or child. An independent loopback
+handler verifies expected synthetic
 request authentication. A 401 case deliberately echoes owned canaries through the
 error path; the next useful run is a fresh restart. Ordinary cancellation, host
 crash, daemon loss, timeout, exact Ask and emergency stop reuse the existing

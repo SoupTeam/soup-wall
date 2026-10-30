@@ -73,6 +73,16 @@ jobs:
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend sqlite --output target/fleet-evidence/sqlite'
       - name: PostgreSQL TLS real processes and browser
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend postgres --output target/fleet-evidence/postgres'
+      - name: Managed Agent rollout panel browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_rollout_browser.py -v'
+      - name: Browser rollout to one pilot and two real Agents over HTTPS
+        shell: bash
+        run: |
+          set +e
+          "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-rollout-acceptance.py --no-build --output "$RUNNER_TEMP/rollout"
+          status=$?
+          cp -r "$RUNNER_TEMP/rollout" target/fleet-evidence/rollout
+          exit $status
       - name: Require clean formatting
         run: test ! -s target/fleet-evidence/format.patch
       - name: Retain sanitized fleet evidence
@@ -151,6 +161,11 @@ jobs:
             Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.profile.test -and $_.executable }
           if (@($tests).Count -ne 1) { throw 'Unique native test binary required' }
           "SELF_TEST_BINARY=$($tests.executable)" | Add-Content $env:GITHUB_ENV
+      - name: Verify platform-scoped CLI on the normal Windows stack
+        shell: pwsh
+        run: |
+          cargo test --locked -p agentfw --bin agentfw archive_parser_matches_supported_platform -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Platform-scoped CLI regression failed' }
       - name: Exercise installed Agent under a disposable standard account
         shell: pwsh
         run: |
@@ -981,7 +996,9 @@ jobs:
           meson compile -C "$RUNNER_TEMP/sou82-bwrap-build"
           python3 -m pip install cryptography==50.0.2
       - name: Verify test fixture syntax
-        run: python3 -m py_compile scripts/managed-policy-tls-demo.py scripts/managed-native-transitions.py scripts/fixtures/managed_policy_tls_edge.py
+        run: |
+          python3 -m py_compile scripts/managed-policy-tls-demo.py scripts/managed-native-transitions.py scripts/fixtures/managed_policy_tls_edge.py
+          python3 -B -m unittest scripts.tests.test_managed_policy_tls_edge -v
       - name: Build real SQLite Console and Agent
         run: cargo build --locked -p llm-firewall -p agentfw --bins
       - name: Execute isolated nonloopback HTTPS Agent exchange
@@ -1255,7 +1272,8 @@ jobs:
           cargo fetch --locked
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           mkdir -m 700 "$task_scratch"
-          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host}
+          mkdir -m 700 "$task_scratch"/{home,cargo-home,tmp,host,low-space}
+          sudo install -o 0 -g 0 -m 600 /dev/null "$task_scratch/foreign-record"
           ln -s "$HOME/.cargo/registry" "$task_scratch/cargo-home/registry"
           cp profiles/mcp/filesystem-readonly-v1/claude-host/package*.json "$task_scratch/host/"
           npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
@@ -1269,6 +1287,7 @@ jobs:
           task_scratch="$RUNNER_TEMP/sou161-scratch"
           sudo -- bwrap --unshare-net --unshare-pid --die-with-parent \
             --ro-bind / / --bind "$task_scratch" "$task_scratch" \
+            --size 65536 --perms 1777 --tmpfs "$task_scratch/low-space" \
             --proc /proc --dev /dev --cap-drop ALL \
             --cap-add CAP_SETUID --cap-add CAP_SETGID --cap-add CAP_SETPCAP \
             --chdir / /usr/bin/setpriv \
@@ -1285,6 +1304,8 @@ jobs:
           cd "$SOU161_SOURCE"
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-build.json" -- build --locked --offline -p agentfw --bin agentfw
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-0.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-review-publish.json" -- test --locked --offline -p agentfw --lib private_export -- --nocapture
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-support-export.json" -- test --locked --offline -p agentfw --lib support_bundle -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-unit.json" -- test --locked --offline -p agentfw --lib pilot_approval -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-stop-endpoint.json" -- test --locked --offline -p agentfw --test native_endpoint sou125_stop -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-1.json" -- test --locked --offline -p agentfw --lib native::execution::transport -- --nocapture
@@ -1294,10 +1315,19 @@ jobs:
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_run_operations.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_run_archive.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_archive_qualification.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_front_door_component.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_quota.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit_stop.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_refresh.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_review.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou179_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
+          python3 -B scripts/qualify-edit-review.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/review-fault.so" --output "$SOU161_SCRATCH/review"
           python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
@@ -1309,6 +1339,10 @@ jobs:
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --publish-fault "$SOU161_SCRATCH/publish-fault.so" \
             --output "$SOU161_SCRATCH/refresh"
+          python3 -B scripts/qualify-installed-edit-archive.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/archive-runtime" \
+            --low-space "$SOU161_SCRATCH/low-space" --foreign-record "$SOU161_SCRATCH/foreign-record"
           mkdir -m 700 "$SOU161_SCRATCH/quota-faults"
           gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=1 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/withheld.so"
           gcc -shared -fPIC -Wall -Wextra -Werror -DSOU170_FAULT=2 scripts/fixtures/sou170_quota_faults.c -ldl -o "$SOU161_SCRATCH/quota-faults/interrupted.so"
@@ -1325,7 +1359,9 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/source.txt
             ${{ runner.temp }}/sou161-scratch/binary.txt
             ${{ runner.temp }}/sou161-scratch/runtime/report.json
+            ${{ runner.temp }}/sou161-scratch/archive-runtime/report.json
             ${{ runner.temp }}/sou161-scratch/quota/report.json
+            ${{ runner.temp }}/sou161-scratch/review/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json
@@ -1982,7 +2018,7 @@ jobs:
 
   mcp-real-filesystem--native-ubuntu-2404:
     name: "mcp-real-filesystem / native-ubuntu-2404"
-    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))
+    if: (github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(inputs.plan).workflows['mcp-real-filesystem.yml'], 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.stage_reuse_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))
     runs-on: ubuntu-24.04
     # Optional paired Ask measurement owns two <=3600s side budgets plus setup;
     # opt-in A-B-A repeats the original-host qualifier twice. Ordinary PR/default
@@ -1998,6 +2034,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: ${{ github.event.inputs.coordinated_update_only == 'true' && '0' || '1' }}
           persist-credentials: ${{ github.event.inputs.coordinated_update_only != 'true' }}
+      - name: Validate Git stage-reuse qualification dispatch
+        if: github.event.inputs.stage_reuse_only == 'true'
+        env:
+          NATIVE_ONLY: ${{ github.event.inputs.native_preparation_only }}
+          CONCURRENT_PREPARATION: ${{ github.event.inputs.preparation_concurrency }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$NATIVE_ONLY" == true && "$CONCURRENT_PREPARATION" != true ]]
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -2156,9 +2201,17 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_switch_prepared_pilot.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_ci_bwrap_userns.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_prepare_native_pilot_prerequisites.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_resumable_download.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_preparation_coordination.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_cleanup.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_build_native_pilot_inputs.py -v
+      - name: Qualify exact pinned public bubblewrap transfer and offline reuse
+        if: github.event.inputs.capacity_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B scripts/qualify-pilot-resumable-download.py --run \
+            --report "$RUNNER_TEMP/sou173-download.json"
       - name: Verify disposable runner administration boundary before building
         env:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
@@ -2168,6 +2221,7 @@ jobs:
           SOUP_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
           PILOT_CONCURRENT_PREPARATION: ${{ github.event.inputs.preparation_concurrency }}
           NATIVE_ONLY: ${{ github.event.inputs.native_preparation_only }}
+          STAGE_REUSE_ONLY: ${{ github.event.inputs.stage_reuse_only }}
         shell: bash
         run: |
           set -euo pipefail
@@ -2222,11 +2276,6 @@ jobs:
             --output "$RUNNER_TEMP/sou111-assets/git.tar.xz"
           printf '%s  %s\n' 233d7143a2d58e60755eee9b76f559ec73ea2b3c297f5b503162ace95966b4e3 \
             "$RUNNER_TEMP/sou111-assets/git.tar.xz" | sha256sum --check
-          curl --fail --location --retry 3 \
-            https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz \
-            --output "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
-          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
-            "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
           mkdir -m 700 "$RUNNER_TEMP/sou111-assets/libcap"
           if [[ "$PILOT_COORDINATED_UPDATE_ONLY" == 1 ]]; then
             curl --fail --location --retry 3 \
@@ -2259,7 +2308,7 @@ jobs:
           native_args=(--output "$RUNNER_TEMP/sou111-native-prerequisites"
             --expected-commit "$(git rev-parse HEAD)"
             --git-archive "$RUNNER_TEMP/sou111-assets/git.tar.xz"
-            --bwrap-archive "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
+            --allow-download
             --pkg-config-libdir "$caplib/pkgconfig"
             --pkg-config-sysroot "$RUNNER_TEMP/sou111-assets/libcap"
             --meson-pythonpath "$RUNNER_TEMP/sou111-assets/build-tools")
@@ -2301,6 +2350,141 @@ jobs:
               cat "$RUNNER_TEMP/sou111-assets/native-diagnostic.json"
               exit 1
             fi
+          elif [[ "$STAGE_REUSE_ONLY" == true ]]; then
+            # Exercise one real pinned Git build, then interrupt only after its
+            # fully verified checkpoint is atomically published and bubblewrap
+            # has entered an owned build. Never select the interrupted output.
+            sou180_first_start="$(date +%s%N)"
+            python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              "${capacity_native[@]}" "${native_args[@]}" \
+              > "$RUNNER_TEMP/sou111-assets/sou180-interrupted.json" &
+            native_owner=$!
+            if ! python3 -B - "$RUNNER_TEMP/sou111-native-prerequisites" "$native_owner" \
+              "$RUNNER_TEMP/sou111-assets/sou180-watch.json" <<'PY'
+          import hashlib, json, os, re, signal, stat, sys, time
+          from pathlib import Path
+          root, owner, record = Path(sys.argv[1]), int(sys.argv[2]), Path(sys.argv[3])
+          marker = root / 'git-stage-current.json'
+          deadline = time.monotonic() + 720
+          while time.monotonic() < deadline:
+              try:
+                  state = (Path('/proc') / str(owner) / 'stat').read_text().rsplit(') ', 1)[1][0]
+              except (OSError, IndexError):
+                  raise SystemExit('preparation_exited_before_git_checkpoint')
+              if state in ('Z', 'X'):
+                  raise SystemExit('preparation_exited_before_git_checkpoint')
+              try:
+                  fd = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+              except FileNotFoundError:
+                  time.sleep(.02)
+                  continue
+              try:
+                  info = os.fstat(fd)
+                  if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 4096:
+                      raise SystemExit('git_checkpoint_marker_unsafe')
+                  blob = os.read(fd, 4097)
+                  row = json.loads(blob)
+                  if (row.get('format') != 'sw-native-pilot-git-stage-current/1'
+                          or not re.fullmatch(r'[0-9a-f]{32}', row.get('stage', ''))
+                          or not re.fullmatch(r'[0-9a-f]{64}', row.get('receipt_sha256', ''))):
+                      raise SystemExit('git_checkpoint_marker_invalid')
+              finally:
+                  os.close(fd)
+              while time.monotonic() < deadline:
+                  try:
+                      os.kill(owner, 0)
+                  except ProcessLookupError:
+                      raise SystemExit('preparation_exited_before_controlled_interruption')
+                  # Meson setup may complete between polls. Compilation is the
+                  # longer owned child and has its signal handler before this
+                  # private log is opened.
+                  if list((root / 'generations').glob('*/bwrap-build.log')):
+                      os.kill(owner, signal.SIGTERM)
+                      record.write_text(json.dumps({'format': 'sw-sou180-native-watch/1',
+                          'checkpoint_marker_sha256': hashlib.sha256(blob).hexdigest(),
+                          'signalled_after_git_checkpoint': True}, sort_keys=True) + '\n')
+                      raise SystemExit(0)
+                  time.sleep(.02)
+              break
+          raise SystemExit('git_checkpoint_interruption_deadline')
+          PY
+            then
+              kill -TERM "$native_owner" 2>/dev/null || true
+              wait "$native_owner" 2>/dev/null || true
+              echo 'Controlled post-Git interruption did not complete' >&2
+              exit 1
+            fi
+            first_exit=0
+            wait "$native_owner" || first_exit=$?
+            test "$first_exit" -ne 0
+            sou180_first_end="$(date +%s%N)"
+            test ! -e "$RUNNER_TEMP/sou111-native-prerequisites/current.json"
+            # The second invocation is traced independently. No make execve
+            # may occur during explicit resume; raw trace stays runner-private.
+            sou180_retry_start="$(date +%s%N)"
+            strace -f -qq -e trace=execve \
+              -o "$RUNNER_TEMP/sou111-assets/sou180-retry.exec" \
+              python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --resume \
+              "${capacity_native[@]}" "${native_args[@]}" \
+              > "$RUNNER_TEMP/sou111-assets/native-first.json"
+            sou180_retry_end="$(date +%s%N)"
+            python3 -B - "$RUNNER_TEMP/sou111-assets" "$RUNNER_TEMP/sou111-native-prerequisites" \
+              "$sou180_first_start" "$sou180_first_end" \
+              "$sou180_retry_start" "$sou180_retry_end" <<'PY'
+          import hashlib, json, os, re, sys
+          from pathlib import Path
+          asset, root = Path(sys.argv[1]), Path(sys.argv[2])
+          interrupted = json.loads((asset / 'sou180-interrupted.json').read_text())
+          resumed = json.loads((asset / 'native-first.json').read_text())
+          watch = json.loads((asset / 'sou180-watch.json').read_text())
+          assert interrupted['status'] == 'failed'
+          assert interrupted['stage'] in ('bwrap_setup', 'bwrap_build')
+          assert interrupted['reason'] == interrupted['stage'] + '_cancelled'
+          assert interrupted['stages']['git']['status'] == 'built'
+          assert interrupted['stages']['bwrap']['status'] == 'failed'
+          assert resumed['status'] == 'prepared-not-qualified'
+          assert resumed['stages']['git']['status'] == 'reused'
+          assert resumed['stages']['bwrap']['status'] == 'built'
+          assert (interrupted['stages']['git']['checkpoint_sha256'] ==
+                  resumed['stages']['git']['checkpoint_sha256'])
+          assert watch['signalled_after_git_checkpoint'] is True
+          trace_path = asset / 'sou180-retry.exec'
+          assert trace_path.stat().st_size <= 4 * 1024 * 1024, 'bounded exec trace exceeded'
+          trace = trace_path.read_text()
+          invoked = [os.path.basename(path) for path in re.findall(r'\bexecve\("([^"]+)"', trace)]
+          make_count = sum(name == 'make' for name in invoked)
+          assert make_count == 0, 'Git make executed during checkpoint reuse'
+          assert (root / 'current.json').is_file()
+          retained_failure = json.loads((root / 'first-failure.json').read_text())
+          assert retained_failure == interrupted
+          receipt_blob = Path(resumed['receipt']).read_bytes()
+          receipt = json.loads(receipt_blob)
+          assert receipt['stages']['git']['status'] == 'reused'
+          assert receipt['stages']['bwrap']['status'] == 'built'
+          timing = {'first_wall_seconds': round((int(sys.argv[4]) - int(sys.argv[3])) / 1e9, 3),
+                    'retry_wall_seconds': round((int(sys.argv[6]) - int(sys.argv[5])) / 1e9, 3),
+                    'first_git_seconds': interrupted['stages']['git']['seconds'],
+                    'retry_git_verification_seconds': resumed['stages']['git']['seconds'],
+                    'retry_bwrap_seconds': resumed['stages']['bwrap']['seconds']}
+          report = {'format': 'sw-sou180-native-stage-reuse/1', 'status': 'passed',
+                    'first_status': interrupted['status'], 'first_stage': interrupted['stage'],
+                    'first_reason': interrupted['reason'],
+                    'checkpoint_sha256': resumed['stages']['git']['checkpoint_sha256'],
+                    'checkpoint_marker_sha256': watch['checkpoint_marker_sha256'],
+                    'retry_status': resumed['status'], 'retry_stages':
+                    {name: stage['status'] for name, stage in resumed['stages'].items()},
+                    'retry_make_invocations': make_count, 'timing': timing,
+                    'source_commit': receipt['source_commit'],
+                    'archive_sha256': {name: row['sha256'] for name, row in receipt['archives'].items()},
+                    'binary_sha256': {name: row['sha256'] for name, row in receipt['binaries'].items()},
+                    'final_receipt_sha256': hashlib.sha256(receipt_blob).hexdigest(),
+                    'partial_selected': False, 'active_protection': False}
+          (asset / 'sou180-stage-reuse.json').write_text(json.dumps(report, sort_keys=True) + '\n')
+          PY
+            finish="$(date +%s)"
+            python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
+              "${capacity_native[@]}" "${native_args[@]}" \
+              > "$RUNNER_TEMP/sou111-assets/native-reused.json"
           else
             if ! python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare \
               "${capacity_native[@]}" "${native_args[@]}" > "$RUNNER_TEMP/sou111-assets/native-first.json"; then
@@ -2334,8 +2518,19 @@ jobs:
           test "$marker_before" = "$(sha256sum "$marker" | cut -d ' ' -f1)"
           python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare "${capacity_native[@]}" "${native_args[@]}" \
             > "$RUNNER_TEMP/sou111-assets/native-recovered.json"
-          printf '{"native_build_seconds":%s}\n' "$((finish - start))" \
-            > "$RUNNER_TEMP/sou111-assets/native-timing.json"
+          if [[ "$STAGE_REUSE_ONLY" == true ]]; then
+            python3 -B - "$RUNNER_TEMP/sou111-assets" <<'PY'
+          import json, sys
+          from pathlib import Path
+          asset = Path(sys.argv[1])
+          timing = json.loads((asset / 'sou180-stage-reuse.json').read_text())['timing']
+          (asset / 'native-timing.json').write_text(json.dumps({
+              'mode': 'interrupted_git_checkpoint_resume', **timing}, sort_keys=True) + '\n')
+          PY
+          else
+            printf '{"native_build_seconds":%s}\n' "$((finish - start))" \
+              > "$RUNNER_TEMP/sou111-assets/native-timing.json"
+          fi
           python3 -B - <<'PY' >> "$GITHUB_ENV"
           import json, os
           from pathlib import Path
@@ -2367,6 +2562,16 @@ jobs:
           PY
           export SOU115_GIT="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["git"])')"
           export SOU115_BWRAP="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/native-first.json").read_text())["bwrap"])')"
+          # The cleanup qualifier uses an isolated account and still requires a local archive.
+          # Reuse the verified transfer instead of issuing a second network request.
+          verified_bwrap="$RUNNER_TEMP/sou111-native-prerequisites/download-cache/bwrap.verified.tar.xz"
+          test -f "$verified_bwrap" && test ! -L "$verified_bwrap"
+          test "$(stat -c %s "$verified_bwrap")" = 129472
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
+            "$verified_bwrap" | sha256sum --check
+          install -m 600 "$verified_bwrap" "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz"
+          printf '%s  %s\n' 0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d \
+            "$RUNNER_TEMP/sou111-assets/bwrap.tar.xz" | sha256sum --check
           bash scripts/ci-pilot-cleanup.sh
           source_args=(--output "$RUNNER_TEMP/sou119-agent-build"
             --expected-commit "$(git rev-parse HEAD)")
@@ -2850,10 +3055,11 @@ jobs:
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_front_door_component.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_pilot_provider_profiles.py -v
           cargo test --locked -p agentfw --lib pilot_component
           # The component is built from this checkout and started only as the
           # installed `agentfw pilot` of this job's SOU-119 build.
-          python3 -B scripts/qualify-installed-front-door.py --run \
+          python3 -B scripts/qualify-installed-front-door.py --run --provider-profiles \
             --output "$RUNNER_TEMP/installed-front-door" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
             --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
@@ -3159,7 +3365,11 @@ jobs:
             ${{ runner.temp }}/sou140-rust-tests.log
             ${{ runner.temp }}/sou122-toolchain/native-attestation.json
             ${{ runner.temp }}/sou111-assets/native-summary.json
+            ${{ runner.temp }}/sou173-download.json
             ${{ runner.temp }}/sou111-assets/native-timing.json
+            ${{ runner.temp }}/sou111-assets/sou180-interrupted.json
+            ${{ runner.temp }}/sou111-assets/sou180-watch.json
+            ${{ runner.temp }}/sou111-assets/sou180-stage-reuse.json
             ${{ runner.temp }}/sou111-assets/native-rejected.json
             ${{ runner.temp }}/sou111-assets/native-diagnostic.json
             ${{ runner.temp }}/sou111-assets/native-first.json

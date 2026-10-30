@@ -247,6 +247,67 @@ impl Selected {
     }
 }
 
+/// Offline reuse of the owner's retained cleanup receipt. This never queries
+/// the daemon, opens a live owner handle, sends a signal or changes a record.
+pub(super) fn retained_completion(
+    run: &Path,
+    context: &super::record::Context,
+    identity: (u64, u64),
+    budget: &mut super::diagnostic::io::Budget,
+) -> Result<Vec<u8>> {
+    // At most nine bounded control reads, including failed optional lookups.
+    // Charge their full ceilings before using the existing descriptor primitive.
+    budget
+        .tick(9 * super::control_io::CAP as usize)
+        .map_err(anyhow::Error::msg)?;
+    let selected = Selected::open(run)?;
+    ensure!(
+        selected.dir.identity()? == identity
+            && selected.control.launcher_pid == context.owner.pid
+            && selected.control.launcher_start == context.owner.start_ticks
+            && selected.record.profile_sha256 == context.profile_sha256
+            && selected.record.home == context.home
+            && selected.record.host_session == context.host_session
+            && selected.record.instance_id == context.instance_id,
+        "edit_review_control_binding"
+    );
+    retained_config(
+        &selected.home.read("config.yaml")?,
+        &selected.control.config_sha256,
+        &context.config_sha256,
+    )?;
+    let receipt = selected.receipt()?.context("edit_review_cleanup_missing")?;
+    ensure!(
+        receipt.authority_revoked
+            && receipt.cleanup_confirmed
+            && receipt.reason == "host_completed"
+            && receipt.request_sha256.is_none()
+            && selected.request()?.is_none(),
+        "edit_review_cleanup_incomplete"
+    );
+    ensure!(
+        selected.dir.read("control.json")? == selected.bytes
+            && selected.dir.read("stop-receipt.json")? == profile::canonical(&receipt)?,
+        "edit_review_receipt_changed"
+    );
+    profile::canonical(&(digest(&selected.bytes), receipt))
+}
+
+fn retained_config(bytes: &[u8], control_digest: &str, context_digest: &str) -> Result<()> {
+    // The Stop control binds exact YAML bytes. Diagnostics bind the validated
+    // Config serialization. Verify both producer-owned domains independently.
+    ensure!(
+        digest(bytes) == control_digest,
+        "edit_review_config_bytes_changed"
+    );
+    let config = crate::Config::from_yaml(std::str::from_utf8(bytes)?)?;
+    ensure!(
+        crate::protection_status::config_digest(&config) == context_digest,
+        "edit_review_config_identity_changed"
+    );
+    Ok(())
+}
+
 pub(super) struct Guard {
     selected: Selected,
     _manifest: File,
@@ -403,6 +464,25 @@ pub(super) fn stop(run: &Path, output: Option<crate::pilot_approval::OutputForma
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn review_binds_yaml_bytes_and_semantic_configuration_without_crossing_domains() {
+        let config = crate::Config::default();
+        let bytes = serde_yaml::to_string(&config).unwrap();
+        let raw = digest(bytes.as_bytes());
+        let semantic = crate::protection_status::config_digest(&config);
+        assert_ne!(raw, semantic);
+        retained_config(bytes.as_bytes(), &raw, &semantic).unwrap();
+        assert!(retained_config(bytes.as_bytes(), &semantic, &raw).is_err());
+        assert!(retained_config(bytes.as_bytes(), &raw, &raw).is_err());
+        let reformatted = format!("\n{bytes}");
+        assert!(retained_config(reformatted.as_bytes(), &raw, &semantic).is_err());
+        retained_config(
+            reformatted.as_bytes(),
+            &digest(reformatted.as_bytes()),
+            &semantic,
+        )
+        .unwrap();
+    }
     #[test]
     fn request_and_receipt_authentication_cannot_cross_controls_or_domains() {
         let key = b"owned-private-test-key";

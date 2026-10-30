@@ -1,6 +1,6 @@
 # Staged managed Agent group policy rollout (SOU-47)
 
-An Owner can deploy an approved policy to a frozen Agent inventory in two waves: pilots, then standard workers. The existing signed bundle and authenticated Agent acknowledgement contract is unchanged. A matching `applied` acknowledgement, including Agent, sequence, revision and digest, is required; issuance, delivery and process health do not satisfy a gate.
+An Owner can deploy an approved policy to a frozen Agent inventory in two waves: pilots, then standard workers. The Console admin page offers this workflow in the browser: see [Console Agent rollout](CONSOLE_AGENT_ROLLOUT.md). The existing signed bundle and authenticated Agent acknowledgement contract is unchanged. A matching `applied` acknowledgement, including Agent, sequence, revision and digest, is required; issuance, delivery and process health do not satisfy a gate.
 
 ## State transitions
 

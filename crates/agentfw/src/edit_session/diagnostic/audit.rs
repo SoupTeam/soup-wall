@@ -6,15 +6,18 @@ use crate::edit_session::{profile::Profile, record::Context};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(super) fn sha(bytes: &[u8]) -> String {
+pub(in crate::edit_session) fn sha(bytes: &[u8]) -> String {
     crate::mcp::replace_file::content_sha256(bytes)
 }
-pub(super) fn strict(bytes: &[u8]) -> Result<Value> {
+pub(in crate::edit_session) fn strict(bytes: &[u8]) -> Result<Value> {
     let crate::mcp::admission::Strict(value) =
         serde_json::from_slice(bytes).map_err(|_| "selected_json_malformed_or_duplicate")?;
     Ok(value)
 }
-pub(super) fn operation(profile: &Profile, name: &str) -> Result<(usize, &'static str)> {
+pub(in crate::edit_session) fn operation(
+    profile: &Profile,
+    name: &str,
+) -> Result<(usize, &'static str)> {
     for (index, target) in profile.targets.iter().enumerate() {
         for (prefix, enabled, operation) in [
             ("read_output_", target.read, "read"),
@@ -86,12 +89,12 @@ fn handshake_metadata(row: &Value) -> Result<()> {
             row["verdict"].as_str(),
             Some("allow" | "ask" | "deny" | "escalate")
         )
-        || !row["risk_score"].as_u64().is_some_and(|n| n <= 255)
+        || row["risk_score"].as_u64().is_none_or(|n| n > 255)
         || row["latency_us"] != 0
         || row["egress_hosts"] != serde_json::json!([])
         || row
             .get("rule")
-            .is_some_and(|value| !value.as_str().is_some_and(|s| s.len() <= 256))
+            .is_some_and(|value| value.as_str().is_none_or(|s| s.len() > 256))
         || !row["findings"].as_array().is_some_and(|findings| {
             findings.len() <= 256
                 && findings.iter().all(|finding| {
@@ -137,7 +140,7 @@ fn revocation_metadata(row: &Value, context: &Context, registry: &str) -> Result
         || row["registry_sha256"] != registry
         // Current native session capacity is 64. A future producer expansion
         // needs its own reviewed diagnostic contract, not silent acceptance.
-        || !row["retired_sessions"].as_u64().is_some_and(|n| n <= 64)
+        || row["retired_sessions"].as_u64().is_none_or(|n| n > 64)
         || row["released"] != false
         || row["running_effects_rolled_back"] != false
     {
@@ -146,7 +149,12 @@ fn revocation_metadata(row: &Value, context: &Context, registry: &str) -> Result
     Ok(())
 }
 
-pub(super) fn inspect(bytes: &[u8], profile: &Profile, context: &Context, registry: &str) -> Audit {
+pub(in crate::edit_session) fn inspect(
+    bytes: &[u8],
+    profile: &Profile,
+    context: &Context,
+    registry: &str,
+) -> Audit {
     let mut report = Audit {
         file_sha256: Some(sha(bytes)),
         ..Audit::default()
