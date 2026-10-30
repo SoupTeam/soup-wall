@@ -312,6 +312,7 @@ jobs:
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-3.json" -- test --locked --offline -p agentfw --test replace_file -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-4.json" -- test --locked --offline -p agentfw --lib create_file -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-removal-unit.json" -- test --locked --offline -p agentfw --lib pilot_component -- --nocapture
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_run_operations.py' -v
@@ -342,6 +343,11 @@ jobs:
           python3 -B scripts/qualify-edit-application.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/application-fault.so" --output "$SOU161_SCRATCH/application"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_removal.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou188_removal_fault.c -ldl -o "$SOU161_SCRATCH/removal-fault.so"
+          python3 -B scripts/qualify-pilot-removal.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/removal-fault.so" --output "$SOU161_SCRATCH/removal"
           python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
@@ -379,6 +385,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/inventory/report.json
             ${{ runner.temp }}/sou161-scratch/export-set/report.json
             ${{ runner.temp }}/sou161-scratch/application/report.json
+            ${{ runner.temp }}/sou161-scratch/removal/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json

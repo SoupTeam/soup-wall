@@ -333,6 +333,9 @@ enum McpCommands {
 
 #[derive(Subcommand)]
 enum PilotCommands {
+    /// Explicit receipt-verified pilot component removal; user data stays retained.
+    #[cfg(target_os = "linux")]
+    PilotRemoval(Box<agentfw::pilot_component::removal::Cli>),
     /// Guided Linux pilot from the installed front door: preview,
     /// prepare, run, status or help. Starts only the verified installed
     /// component with its recorded interpreter.
@@ -936,6 +939,10 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
                 None => agentfw::pilot_component::default_home()?,
             };
             std::process::exit(agentfw::pilot_component::exec_pilot(&home, &args));
+        }
+        #[cfg(target_os = "linux")]
+        Cmd::Pilot(PilotCommands::PilotRemoval(args)) => {
+            agentfw::pilot_component::removal::run(*args)
         }
         #[cfg(target_os = "linux")]
         Cmd::Pilot(PilotCommands::PilotComponent { home, action }) => {

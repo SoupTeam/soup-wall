@@ -29,6 +29,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+pub mod removal;
+
 pub const COMPONENT_SCHEMA: &str = "sw-pilot-front-door-component/1";
 pub const POINTER_SCHEMA: &str = "sw-pilot-front-door-current/1";
 pub const SOURCE_FORMAT: &str = "sw-pilot-source-identity/1";

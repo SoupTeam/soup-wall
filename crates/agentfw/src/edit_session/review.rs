@@ -120,6 +120,28 @@ pub(super) struct SelectedOutput {
     index: usize,
 }
 
+/// Narrow read-only lifecycle check for installed component removal. It reuses
+/// the completed-run, owner/host inactivity and cleanup-receipt checks; it does
+/// not issue an edit, cleanup or publication grant.
+pub(crate) fn removal_inactive(run: &Path) -> Result<()> {
+    let mut budget = Budget::new();
+    let selection = linux::select(run, &mut budget).map_err(anyhow::Error::msg)?;
+    let expected = audit::sha(&selection.profile_bytes);
+    drop(selection);
+    let args = Args {
+        run: run.into(),
+        sha256: expected,
+        show: vec![],
+        baseline: vec![],
+        consent_private_content: false,
+        export: None,
+        include: vec![],
+        expect_observation: None,
+    };
+    let observation = observe(&args, &mut budget)?;
+    recheck(&args, &observation, &mut budget)
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(super) struct OutputBinding {
