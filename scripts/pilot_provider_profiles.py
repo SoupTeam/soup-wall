@@ -12,6 +12,7 @@ import getpass
 import hashlib
 import ipaddress
 import importlib.util
+import itertools
 import json
 import os
 from pathlib import Path
@@ -29,6 +30,8 @@ _provider_spec.loader.exec_module(PROVIDER)
 
 FORMAT = "sw-pilot-provider-profile/1"
 SELECTED_FORMAT = "sw-pilot-provider-selection/1"
+INDEX_FORMAT = "sw-pilot-provider-index/2"
+VERSIONED_FORMAT = "sw-pilot-provider-versioned/1"
 DIRECTORY = "pilot-providers"
 NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
 MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}\Z")
@@ -36,7 +39,10 @@ SHA = re.compile(r"[0-9a-f]{64}\Z")
 SECRET_KEYS = frozenset(("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"))
 PUBLIC_KEYS = frozenset(PROVIDER.KEYS) - SECRET_KEYS
 MAX_PROFILES = 16
+MAX_VERSIONS = 64
 MAX_FILE = PROVIDER.MAX_BYTES
+VERSION = re.compile(r"[0-9a-f]{32}\Z")
+VERSION_FILE = re.compile(r"v-([0-9a-f]{32})\Z")
 
 
 class Refusal(ValueError):
@@ -264,6 +270,14 @@ class Store:
             named = os.stat(DIRECTORY, dir_fd=self.home_fd, follow_symlinks=False)
             require(_same(os.fstat(self.fd), named), "provider_home_changed")
 
+    def _entries(self):
+        require(self.fd is not None, "provider_home_invalid")
+        limit = MAX_PROFILES + MAX_VERSIONS + 32
+        with os.scandir(self.fd) as entries:
+            found = [entry.name for entry in itertools.islice(entries, limit + 1)]
+        require(len(found) <= limit, "provider_profile_limit")
+        return found
+
     @contextmanager
     def locked(self):
         require(self.fd is not None, "provider_home_invalid")
@@ -288,12 +302,13 @@ class Store:
             self._check()
             # A killed writer can leave only its unpublished create-new file.
             # The lock proves no current writer owns it; never follow or adopt it.
-            for entry in os.listdir(self.fd):
+            for entry in self._entries():
                 if not re.fullmatch(r"\.next-[0-9a-f]{32}", entry):
                     continue
                 temporary = os.stat(entry, dir_fd=self.fd, follow_symlinks=False)
                 require(stat.S_ISREG(temporary.st_mode) and temporary.st_uid == os.getuid()
-                        and stat.S_IMODE(temporary.st_mode) == 0o600 and temporary.st_nlink == 1
+                        and stat.S_IMODE(temporary.st_mode) in (0o600, 0o400)
+                        and temporary.st_nlink == 1
                         and temporary.st_size <= MAX_FILE, "provider_store_invalid")
                 os.unlink(entry, dir_fd=self.fd)
             os.fsync(self.fd)
@@ -301,7 +316,7 @@ class Store:
         finally:
             os.close(lock)
 
-    def read(self, filename):
+    def read(self, filename, *, mode=0o600):
         if self.fd is None:
             return None
         self._check()
@@ -310,7 +325,7 @@ class Store:
         except FileNotFoundError:
             return None
         require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid()
-                and stat.S_IMODE(before.st_mode) == 0o600 and before.st_nlink == 1
+                and stat.S_IMODE(before.st_mode) == mode and before.st_nlink == 1
                 and before.st_size <= MAX_FILE, "provider_private_file_required")
         descriptor = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
                              dir_fd=self.fd)
@@ -360,8 +375,144 @@ class Store:
             except FileNotFoundError:
                 pass
 
-    def profile(self, profile_name):
-        raw = self.read(name(profile_name) + ".json")
+    @staticmethod
+    def _version_file(version):
+        require(type(version) is str and VERSION.fullmatch(version), "provider_version_missing")
+        return "v-" + version
+
+    def _version_profile(self, profile_name, version, expected):
+        raw = self.read(self._version_file(version), mode=0o400)
+        require(raw is not None, "provider_version_missing")
+        require(digest(raw) == expected, "provider_file_changed")
+        return validate_profile(strict(raw), profile_name), digest(raw)
+
+    def index(self):
+        raw = self.read("index.json")
+        marker = self.read("versioned.json")
+        if marker is not None:
+            require(strict(marker) == {"format": VERSIONED_FORMAT}, "provider_index_invalid")
+        # The marker is published after the first complete index. Once it
+        # exists, loss of that index must never reselect retained legacy bytes.
+        require((raw is None) == (marker is None), "provider_index_invalid")
+        if raw is None:
+            return None
+        return self._validated_index(strict(raw))
+
+    def _validated_index(self, value):
+        require(set(value) == {"format", "profiles", "selected"}
+                and value["format"] == INDEX_FORMAT
+                and type(value["profiles"]) is dict
+                and len(value["profiles"]) <= MAX_PROFILES, "provider_store_invalid")
+        count = 0
+        seen = set()
+        for profile_name, entry in value["profiles"].items():
+            name(profile_name)
+            require(type(entry) is dict and set(entry) == {"current", "versions"}
+                    and type(entry["versions"]) is dict and entry["versions"],
+                    "provider_store_invalid")
+            current, versions = entry["current"], entry["versions"]
+            require(type(current) is str and VERSION.fullmatch(current) and current in versions,
+                    "provider_store_invalid")
+            count += len(versions)
+            require(count <= MAX_VERSIONS, "provider_profile_limit")
+            for version, identity in versions.items():
+                require(type(version) is str and VERSION.fullmatch(version)
+                        and version not in seen and type(identity) is str and SHA.fullmatch(identity),
+                        "provider_store_invalid")
+                seen.add(version)
+                self._version_profile(profile_name, version, identity)
+        selected = value["selected"]
+        if selected is not None:
+            require(type(selected) is dict and set(selected) == {"name", "version", "profile_sha256"}
+                    and type(selected["name"]) is str and type(selected["version"]) is str
+                    and type(selected["profile_sha256"]) is str
+                    and VERSION.fullmatch(selected["version"])
+                    and SHA.fullmatch(selected["profile_sha256"]), "provider_selection_invalid")
+            name(selected["name"])
+            entry = value["profiles"].get(selected["name"])
+            if entry is not None and selected["version"] in entry["versions"]:
+                require(entry["versions"][selected["version"]] == selected["profile_sha256"],
+                        "provider_selection_invalid")
+        return value
+
+    def _publish_version(self, profile_name, value):
+        raw = encoded(validate_profile(value, profile_name))
+        require(len(raw) <= MAX_FILE, "provider_profile_invalid")
+        self._check()
+        require(sum(1 for item in self._entries() if VERSION_FILE.fullmatch(item)) < MAX_VERSIONS,
+                "provider_profile_limit")
+        version = uuid.uuid4().hex
+        filename = self._version_file(version)
+        temporary = ".next-" + uuid.uuid4().hex
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                             os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=self.fd)
+        try:
+            with os.fdopen(descriptor, "wb", closefd=True) as stream:
+                stream.write(raw)
+                stream.flush()
+                os.fsync(stream.fileno())
+                os.fchmod(stream.fileno(), 0o400)
+                os.fsync(stream.fileno())
+            self._check()
+            try:
+                os.stat(filename, dir_fd=self.fd, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                raise Refusal("provider_file_changed")
+            os.rename(temporary, filename, src_dir_fd=self.fd, dst_dir_fd=self.fd)
+            os.fsync(self.fd)
+        finally:
+            try:
+                os.unlink(temporary, dir_fd=self.fd)
+            except FileNotFoundError:
+                pass
+        self._version_profile(profile_name, version, digest(raw))
+        return version, digest(raw)
+
+    def _write_index(self, value):
+        require(len(encoded(value)) <= MAX_FILE, "provider_profile_limit")
+        self._validated_index(value)
+        self._write("index.json", encoded(value), replace=True)
+
+    def _migrate(self):
+        """Make legacy profiles immutable before one atomic v2 commit point."""
+        existing = self.index()
+        if existing is not None:
+            return existing
+        profiles = {}
+        legacy = self.names()
+        selected = self.selected()
+        for profile_name in legacy:
+            value, identity = self.profile(profile_name)
+            version, bound = self._publish_version(profile_name, value)
+            profiles[profile_name] = {"current": version, "versions": {version: bound}}
+            if selected is not None and selected["name"] == profile_name:
+                require(selected["profile_sha256"] == identity,
+                        "provider_selection_stale")
+                selected = {"name": profile_name, "version": version,
+                            "profile_sha256": bound}
+        require(selected is None or "version" in selected, "provider_selection_stale")
+        result = {"format": INDEX_FORMAT, "profiles": profiles, "selected": selected}
+        self._write_index(result)
+        # A crash before the index commit leaves the accepted legacy selection
+        # usable. A crash between the two publications refuses until repaired;
+        # no reader may treat an unmarked v2 index as an active selection.
+        self._write("versioned.json", encoded({"format": VERSIONED_FORMAT}))
+        return result
+
+    def profile(self, profile_name, version=None):
+        profile_name = name(profile_name)
+        index = self.index()
+        if index is not None:
+            entry = index["profiles"].get(profile_name)
+            require(entry is not None, "provider_profile_missing")
+            selected_version = version or entry["current"]
+            identity = entry["versions"].get(selected_version)
+            require(identity is not None, "provider_version_missing")
+            return self._version_profile(profile_name, selected_version, identity)
+        require(version is None, "provider_version_missing")
+        raw = self.read(profile_name + ".json")
         require(raw is not None, "provider_profile_missing")
         return validate_profile(strict(raw), profile_name), digest(raw)
 
@@ -369,25 +520,41 @@ class Store:
         if self.fd is None:
             return []
         self._check()
-        entries = os.listdir(self.fd)
-        require(len(entries) <= MAX_PROFILES + 32, "provider_profile_limit")
-        names = []
-        for entry in entries:
-            if entry.endswith(".json") and entry != "selected.json":
-                names.append(name(entry[:-5]))
-            elif entry == "selected.json":
+        legacy = []
+        for entry in self._entries():
+            if entry.endswith(".json") and entry not in ("selected.json", "index.json"):
+                legacy.append(name(entry[:-5]))
+                self.read(entry)
+            elif entry in ("selected.json", "index.json", "versioned.json"):
+                self.read(entry)
                 continue
+            elif VERSION_FILE.fullmatch(entry):
+                # An interrupted pre-commit version write may be an owned
+                # 0600 orphan. Never adopt its bytes, but do not let it make
+                # the previous selected configuration unusable either.
+                info = os.stat(entry, dir_fd=self.fd, follow_symlinks=False)
+                require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
+                        and info.st_nlink == 1 and info.st_size <= MAX_FILE
+                        and stat.S_IMODE(info.st_mode) in (0o400, 0o600),
+                        "provider_store_invalid")
             elif entry == ".lock" or re.fullmatch(r"\.next-[0-9a-f]{32}", entry):
                 info = os.stat(entry, dir_fd=self.fd, follow_symlinks=False)
                 require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
-                        and stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1
+                        and (stat.S_IMODE(info.st_mode) == 0o600 if entry == ".lock"
+                             else stat.S_IMODE(info.st_mode) in (0o600, 0o400))
+                        and info.st_nlink == 1
                         and info.st_size <= MAX_FILE, "provider_store_invalid")
             else:
                 raise Refusal("provider_store_invalid")
-        require(len(names) <= MAX_PROFILES, "provider_profile_limit")
-        return sorted(names)
+        require(len(legacy) <= MAX_PROFILES, "provider_profile_limit")
+        index = self.index()
+        return sorted(index["profiles"] if index is not None else legacy)
 
     def selected(self):
+        index = self.index()
+        if index is not None:
+            value = index["selected"]
+            return None if value is None else {"format": SELECTED_FORMAT, **value}
         raw = self.read("selected.json")
         if raw is None:
             return None
@@ -402,18 +569,42 @@ class Store:
     def inspect(self):
         names = self.names()
         selected = self.selected()
+        index = self.index()
         profiles = []
         identities = {}
+        models = {}
         for item in names:
             value, identity = self.profile(item)
             identities[item] = identity
             public = value["public"]
-            profiles.append({"name": item, "public_sha256": digest(encoded(public)), "model": public["model"],
+            models[item] = public["model"]
+            profiles.append({"name": item,
+                             **({"version": index["profiles"][item]["current"],
+                                 "retained_versions": sorted(index["profiles"][item]["versions"])}
+                                if index is not None else {}),
+                             "public_sha256": digest(encoded(public)), "model": public["model"],
                              "endpoint_sha256": digest(public.get("ANTHROPIC_BASE_URL", "").encode()),
                              "transport_fields": sorted(set(public) - {"model", "ANTHROPIC_BASE_URL"})})
+        valid = selected is None
+        selected_is_current = selected is None
+        selected_model = None
+        if selected is not None and selected["name"] in names:
+            if index is None:
+                valid = identities[selected["name"]] == selected["profile_sha256"]
+                selected_is_current = valid
+                selected_model = models[selected["name"]] if valid else None
+            else:
+                entry = index["profiles"][selected["name"]]
+                bound = entry["versions"].get(selected["version"])
+                valid = bound == selected["profile_sha256"]
+                selected_is_current = valid and entry["current"] == selected["version"]
+                if valid:
+                    selected_model = self.profile(selected["name"], selected["version"])[0]["public"]["model"]
         return {"format": SELECTED_FORMAT, "profiles": profiles,
                 "selected": selected["name"] if selected else None,
-                "selection_valid": selected is None or identities.get(selected["name"]) == selected["profile_sha256"]}
+                "selected_version": selected.get("version") if selected else None,
+                "selected_is_current": selected_is_current, "selected_model": selected_model,
+                "selection_valid": valid}
 
     def create(self, profile_name, public, secrets, *, replace=False):
         profile_name = name(profile_name)
@@ -422,20 +613,48 @@ class Store:
         with self.locked():
             names = self.names()
             require(profile_name in names or len(names) < MAX_PROFILES, "provider_profile_limit")
-            self._write(profile_name + ".json", encoded(value), replace=replace)
+            index = self.index()
+            if index is None and replace and profile_name in names:
+                index = self._migrate()
+            if index is None:
+                self._write(profile_name + ".json", encoded(value), replace=replace)
+            else:
+                require(replace or profile_name not in index["profiles"], "provider_profile_exists")
+                version, identity = self._publish_version(profile_name, value)
+                if profile_name in index["profiles"]:
+                    index["profiles"][profile_name]["versions"][version] = identity
+                    index["profiles"][profile_name]["current"] = version
+                else:
+                    index["profiles"][profile_name] = {"current": version,
+                                                        "versions": {version: identity}}
+                # create --replace retains the old selected version until an
+                # explicit select, matching the accepted reselect workflow.
+                self._write_index(index)
         return {"name": profile_name, "public_sha256": digest(encoded(public)), "selected": False}
 
     def select(self, profile_name):
         with self.locked():
             value, identity = self.profile(profile_name)
-            self._write("selected.json", encoded({"format": SELECTED_FORMAT, "name": value["name"],
-                        "profile_sha256": identity}), replace=True)
+            index = self.index()
+            if index is None:
+                self._write("selected.json", encoded({"format": SELECTED_FORMAT, "name": value["name"],
+                            "profile_sha256": identity}), replace=True)
+            else:
+                version = index["profiles"][profile_name]["current"]
+                index["selected"] = {"name": profile_name, "version": version,
+                                     "profile_sha256": identity}
+                self._write_index(index)
         return {"name": value["name"], "public_sha256": digest(encoded(value["public"]))}
 
     def environment(self):
         if self.fd is not None:
             with self.locked():
-                if self.read("selected.json") is not None:
+                index = self.index()
+                if index is not None:
+                    if index["selected"] is not None:
+                        index["selected"] = None
+                        self._write_index(index)
+                elif self.read("selected.json") is not None:
                     os.unlink("selected.json", dir_fd=self.fd)
                     os.fsync(self.fd)
         return {"selection": "explicit-environment"}
@@ -443,10 +662,134 @@ class Store:
     def remove(self, profile_name):
         with self.locked():
             self.profile(profile_name)
-            self._check()
-            os.unlink(name(profile_name) + ".json", dir_fd=self.fd)
-            os.fsync(self.fd)
+            index = self.index()
+            if index is None:
+                self._check()
+                os.unlink(name(profile_name) + ".json", dir_fd=self.fd)
+                os.fsync(self.fd)
+            else:
+                del index["profiles"][profile_name]
+                self._write_index(index)
         return {"removed": profile_name, "selection": "stale-if-selected"}
+
+    @staticmethod
+    def _changed_public(value, changes):
+        require(type(changes) is dict and set(changes) <= PUBLIC_KEYS | {"model"},
+                "provider_profile_invalid")
+        public = dict(value["public"])
+        public.update(changes)
+        validate_public(public)
+        return public, sorted(key for key in changes if value["public"].get(key) != public[key])
+
+    def preview_update(self, profile_name, changes, rotate_requested):
+        profile_name = name(profile_name)
+        require(type(rotate_requested) is bool, "provider_profile_invalid")
+        value, identity = self.profile(profile_name)
+        index = self.index()
+        version = index["profiles"][profile_name]["current"] if index is not None else "legacy"
+        selected = self.selected()
+        if selected is not None and selected["name"] == profile_name:
+            require(selected["profile_sha256"] == identity and
+                    (index is None or selected["version"] == version),
+                    "provider_selection_stale")
+        _public, fields = self._changed_public(value, changes)
+        return {"name": profile_name, "version": version, "changed_fields": fields,
+                "credential_rotation_requested": rotate_requested,
+                "selected": selected is not None and selected["name"] == profile_name,
+                "retained_versions": (sorted(index["profiles"][profile_name]["versions"])
+                                      if index is not None else [])}
+
+    def update(self, profile_name, changes, secrets_or_none, expected_version):
+        profile_name = name(profile_name)
+        require(type(expected_version) is str, "provider_version_stale")
+        with self.locked():
+            value, identity = self.profile(profile_name)
+            index = self.index()
+            current = index["profiles"][profile_name]["current"] if index is not None else "legacy"
+            require(expected_version == current, "provider_version_stale")
+            selected = self.selected()
+            selected_here = selected is not None and selected["name"] == profile_name
+            if selected_here:
+                require(selected["profile_sha256"] == identity and
+                        (index is None or selected["version"] == current),
+                        "provider_selection_stale")
+            public, fields = self._changed_public(value, changes)
+            require(fields or secrets_or_none is not None, "provider_update_no_changes")
+            replacement = validate_profile({"format": FORMAT, "name": profile_name,
+                                            "public": public,
+                                            "secrets": (secrets_or_none if secrets_or_none is not None
+                                                        else value["secrets"])}, profile_name)
+            if index is None:
+                index = self._migrate()
+            previous = index["profiles"][profile_name]["current"]
+            require(index["profiles"][profile_name]["versions"].get(previous) == identity,
+                    "provider_version_stale")
+            version, bound = self._publish_version(profile_name, replacement)
+            index["profiles"][profile_name]["versions"][version] = bound
+            index["profiles"][profile_name]["current"] = version
+            if selected_here:
+                index["selected"] = {"name": profile_name, "version": version,
+                                     "profile_sha256": bound}
+            self._write_index(index)
+        return {"name": profile_name, "previous_version": previous, "version": version,
+                "changed_fields": fields, "credential_rotated": secrets_or_none is not None,
+                "selected": selected_here}
+
+    def restore(self, profile_name, version, expected_version):
+        profile_name = name(profile_name)
+        self._version_file(version)
+        require(type(expected_version) is str, "provider_version_stale")
+        with self.locked():
+            index = self.index()
+            require(index is not None and profile_name in index["profiles"],
+                    "provider_version_missing")
+            entry = index["profiles"][profile_name]
+            require(entry["current"] == expected_version, "provider_version_stale")
+            identity = entry["versions"].get(version)
+            require(identity is not None, "provider_version_missing")
+            self._version_profile(profile_name, version, identity)
+            entry["current"] = version
+            selected_here = index["selected"] is not None and index["selected"]["name"] == profile_name
+            if selected_here:
+                index["selected"] = {"name": profile_name, "version": version,
+                                     "profile_sha256": identity}
+            self._write_index(index)
+        return {"name": profile_name, "version": version, "selected": selected_here}
+
+    def prune(self, profile_name, version):
+        """Explicitly remove only an unselected old or orphaned version."""
+        profile_name = name(profile_name)
+        filename = self._version_file(version)
+        with self.locked():
+            index = self.index()
+            if index is not None:
+                require(index["selected"] is None or index["selected"]["name"] != profile_name
+                        or index["selected"]["version"] != version, "provider_version_in_use")
+                for other, entry in index["profiles"].items():
+                    if version in entry["versions"]:
+                        require(other == profile_name, "provider_version_in_use")
+                entry = index["profiles"].get(profile_name)
+                if entry is not None and version in entry["versions"]:
+                    require(entry["current"] != version, "provider_version_in_use")
+                    self._version_profile(profile_name, version, entry["versions"][version])
+                    del entry["versions"][version]
+                    self._write_index(index)
+                else:
+                    raw = self.read(filename, mode=0o400)
+                    require(raw is not None, "provider_version_missing")
+                    validate_profile(strict(raw), profile_name)
+            else:
+                # A crash after freezing/renaming a first version but before
+                # publishing the first index leaves only this complete orphan.
+                raw = self.read(filename, mode=0o400)
+                require(raw is not None, "provider_version_missing")
+                validate_profile(strict(raw), profile_name)
+            # Publication removes the reference first. A killed writer may
+            # leave an unreferenced private file, never a dangling selection.
+            self._check()
+            os.unlink(filename, dir_fd=self.fd)
+            os.fsync(self.fd)
+        return {"name": profile_name, "removed_version": version}
 
 
 def chosen(home, environment):
@@ -458,12 +801,13 @@ def chosen(home, environment):
             PROVIDER.require_access(values)
             return values, None, None, None
         require(not PROVIDER.selected(environment), "provider_source_conflict")
-        profile, identity = store.profile(selected["name"])
+        profile, identity = store.profile(selected["name"], selected.get("version"))
         require(identity == selected["profile_sha256"], "provider_selection_stale")
         values = dict(profile["public"])
         model = values.pop("model")
         values.update(profile["secrets"])
-        return values, model, selected["name"], identity
+        token = (selected["version"] + ":" + identity if "version" in selected else identity)
+        return values, model, selected["name"], token
 
 
 def unchanged(home, profile_name, identity):
@@ -471,6 +815,10 @@ def unchanged(home, profile_name, identity):
         return
     with Store(home) as store:
         selected = store.selected()
+        token = (selected["version"] + ":" + selected["profile_sha256"]
+                 if selected is not None and "version" in selected else
+                 selected["profile_sha256"] if selected is not None else None)
         require(selected is not None and selected["name"] == profile_name
-                and selected["profile_sha256"] == identity
-                and store.profile(profile_name)[1] == identity, "provider_selection_stale")
+                and identity in (token, selected["profile_sha256"])
+                and store.profile(profile_name, selected.get("version"))[1] ==
+                    selected["profile_sha256"], "provider_selection_stale")

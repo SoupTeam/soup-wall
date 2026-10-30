@@ -140,9 +140,9 @@ PROVIDER_TRACE_STRING_BYTES = 131072  # Linux MAX_ARG_STRLEN, including NUL.
 
 
 def run_case(args, door, report, label, proposals, hold=False, cancel=None,
-             provider_setup=None, provider_trace=None):
+             provider_setup=None, provider_trace=None, model=None, close_model=True):
     """One protected run through `pilot.py run` with the owned scripted provider."""
-    model = BASE.DEMO.ScriptedModel([])
+    model = model if model is not None else BASE.DEMO.ScriptedModel([])
     offered, live = set(), {}
     ready = threading.Event()
 
@@ -181,7 +181,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
     try:
         profile_values = provider_setup(model) if provider_setup is not None else None
     except BaseException:
-        model.close()
+        if close_model:
+            model.close()
         raise
     env = {key: value for key, value in door.env.items() if key not in (
         "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "HTTP_PROXY",
@@ -206,7 +207,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
         stdout, stderr = process.communicate(timeout=240)
         cleanup = witness.finish()
     finally:
-        model.close()
+        if close_model:
+            model.close()
     if profile_values is not None:
         require(not any(value.encode() in stdout + stderr for value in profile_values.values() if value),
                 "provider_canary_in_public_output")
@@ -215,7 +217,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
     row = {"case": label, "exit": process.returncode, "status": outcome.get("status"), "reason": outcome.get("reason"),
            "cleanup": outcome.get("cleanup"), "live_status": live, "elapsed_seconds": round(time.monotonic() - started, 3),
            "process_cleanup": {"all_stopped": cleanup["all_stopped"], "descendants": cleanup["descendant_count"]},
-           "stderr_hint": stderr.decode("utf-8", "replace").strip().splitlines()[-1:] if stderr else [],
+           "stderr_hint": (stderr.decode("utf-8", "replace").strip().splitlines()[-1:]
+                           if stderr and profile_values is None else []),
            "results": {key: {"is_error": value["is_error"],
                              "content_sha256": hashlib.sha256(json.dumps(value["content"]).encode()).hexdigest()}
                        for key, value in model.results.items()}}
