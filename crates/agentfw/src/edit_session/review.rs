@@ -23,6 +23,7 @@ use std::{
 const FORMAT: &str = "sw-installed-edit-review/1";
 const CAP: u64 = 4096;
 
+mod diff;
 pub(super) mod export_set;
 
 #[derive(ClapArgs, Debug)]
@@ -38,6 +39,15 @@ pub(super) struct Args {
     /// Explicit NAME=/absolute/baseline file. Verifies recorded pre-edit content identity.
     #[arg(long)]
     baseline: Vec<String>,
+    /// Exact outputs for bounded read-only unified diff; no export or apply.
+    #[arg(long, conflicts_with_all = ["show", "baseline", "export"])]
+    diff: Vec<String>,
+    /// Explicit NAME=/absolute/copy, matching the plan's pre-edit content.
+    #[arg(long, requires = "diff")]
+    diff_baseline: Vec<String>,
+    /// Separately consent to reading and displaying selected baseline copies.
+    #[arg(long, requires = "diff_baseline")]
+    consent_baseline_content: bool,
     /// This operation may display or save the selected private file contents.
     #[arg(long)]
     consent_private_content: bool,
@@ -143,6 +153,9 @@ impl SelectedOutput {
             sha256: expected.into(),
             show: vec![],
             baseline: vec![],
+            diff: vec![],
+            diff_baseline: vec![],
+            consent_baseline_content: false,
             consent_private_content: false,
             export: None,
             include: vec![],
@@ -464,14 +477,7 @@ fn baseline(spec: &str, review: &Reviewed, budget: &mut Budget) -> Result<(Strin
     let (name, path) = spec
         .split_once('=')
         .context("edit_review_baseline_selection")?;
-    let target = review
-        .selection
-        .profile
-        .targets
-        .iter()
-        .find(|t| t.name == name)
-        .and_then(|t| t.replacement.as_ref())
-        .context("edit_review_baseline_not_replacement")?;
+    baseline_target(name, review)?;
     let path = Path::new(path);
     let leaf = path
         .file_name()
@@ -484,17 +490,42 @@ fn baseline(spec: &str, review: &Reviewed, budget: &mut Budget) -> Result<(Strin
         .read_output(leaf, CAP, budget)
         .map_err(anyhow::Error::msg)?
         .context("edit_review_baseline_unavailable")?;
-    // A separately retained copy can verify the plan's content identity, never
-    // the old inode's provenance or the source/writer of these bytes.
-    ensure!(
-        bytes.len() as u64 == target.identity.size && audit::sha(&bytes) == target.sha256,
-        "edit_review_baseline_content_identity_mismatch"
-    );
+    verify_baseline(name, &bytes, review)?;
     ensure!(text(&bytes), "edit_review_baseline_text_required");
     Ok((name.to_owned(), bytes))
 }
+fn baseline_target<'a>(name: &str, review: &'a Reviewed) -> Result<&'a profile::Baseline> {
+    review
+        .selection
+        .profile
+        .targets
+        .iter()
+        .find(|t| t.name == name)
+        .and_then(|t| t.replacement.as_ref())
+        .context("edit_review_baseline_not_replacement")
+}
+fn verify_baseline(name: &str, bytes: &[u8], review: &Reviewed) -> Result<()> {
+    let target = baseline_target(name, review)?;
+    // Explicit copies verify recorded content, not old inode/writer provenance.
+    ensure!(
+        bytes.len() as u64 == target.identity.size && audit::sha(bytes) == target.sha256,
+        "edit_review_baseline_content_identity_mismatch"
+    );
+    Ok(())
+}
 pub(super) fn command(args: Args) -> Result<()> {
-    let result = run(&args);
+    let result = if args.diff.is_empty() {
+        run(&args)
+    } else {
+        diff::run(&args)
+    };
+    if let (false, Err(error)) = (args.diff.is_empty(), &result) {
+        println!(
+            "{}",
+            serde_json::json!({"format":"sw-installed-edit-diff/1","status":"incomplete",
+                "reason":diff::reason(error),"complete":false,"display":[],"executed":false,"authority":false})
+        );
+    }
     // Never echo an untrusted path, payload or underlying OS/parser error.
     result.map_err(|e| {
         anyhow::anyhow!(
