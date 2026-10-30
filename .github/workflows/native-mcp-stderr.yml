@@ -106,6 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p agentfw --test mcp_stderr -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou76-native-platform.log"
+          cargo test --locked -p agentfw --lib edit_session::grammar_tests -- --nocapture
           python - <<'PY'
           import os,re
           from pathlib import Path

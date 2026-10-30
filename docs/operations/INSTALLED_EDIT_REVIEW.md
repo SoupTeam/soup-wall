@@ -94,7 +94,7 @@ Bounds per invocation:
 | Aggregate LCS table cells | 1,048,576; at most 2 MiB table storage |
 | Aggregate escaped unified display | 32 KiB |
 | Complete JSON response | 128 KiB |
-| Existing shared read/recheck budget | 2 MiB / cooperative 10 seconds |
+| Existing shared read/recheck budget | 512 file reads / 2 MiB / cooperative 10 seconds |
 
 Repeated identical inputs use an equality fast path. Other comparisons charge
 the common algorithmic budget; a large repeated-line edit may explicitly exceed
@@ -148,6 +148,60 @@ An OS error after rename can leave a complete published bundle; inspect it rathe
 than overwrite or automatically retry. Process termination may retain private
 staging. No run deletion, pruning, rollback or automatic application is provided.
 
+## Confirm and export a complete selected set
+
+On native Linux x86_64, select two to eight declared mutation outputs from one
+completed run. Existing 4096-byte file limits apply. First preview the entire
+selected set and exact new destination:
+
+```sh
+agentfw edit-session export-set --run "$EDIT_RUN" --sha256 "$EDIT_PROFILE_SHA256" \
+  --include first.txt --include second.txt --out "$PRIVATE_EXPORT_PARENT/new-set" \
+  --consent-private-content
+```
+
+Private-content consent is required even for this preview. Text is displayed
+using the existing escaped untrusted-text rendering; binary content has a
+size/hash summary. Preview creates no stage or destination. Review every file
+and the destination, then use the exact `confirmation_sha256`:
+
+```sh
+agentfw edit-session export-set --run "$EDIT_RUN" --sha256 "$EDIT_PROFILE_SHA256" \
+  --include first.txt --include second.txt --out "$PRIVATE_EXPORT_PARENT/new-set" \
+  --consent-private-content --apply --confirm "$EDIT_EXPORT_CONFIRMATION_SHA256"
+```
+
+The confirmation binds the selected names, per-file descriptor identities,
+hashes and sizes, retained run/profile/terminal/cleanup observation, and exact
+canonical destination plus parent identity. Choose a new absolute path with an
+existing owner-private parent, no aliases/symlink ancestors and no overlap with
+the run, output root or Agent component home. Changed selection, source state,
+files or destination require a fresh preview. Duplicate, undeclared, absent,
+linked, hardlinked, special and oversized files refuse the whole set. Active or
+incomplete runs refuse too. No checkout or inventory prerequisite is needed.
+
+The shared private exporter stages at most eight regular files and one manifest
+on the destination filesystem (nine files / 144 KiB total primitive bound).
+Directory mode is 0700; file modes are 0600. Final source, destination and stage
+checks precede atomic no-replace publication. The versioned
+`sw-installed-edit-private-result-set/1` manifest contains the confirmation,
+run/profile digests and selected per-file identities/hashes/sizes. It excludes
+prompts, tokens, raw receipts, authority, unselected output observations and
+unrelated retained files. Original outputs, immutable plans and pre-existing
+destinations are preserved. No provider or tool is invoked. Export does not
+upload content or grant authority. This local copy does not attest its writer.
+
+Read, copy, validation, cancellation and publication failures return nonzero
+with an explicit `incomplete` response. Cleanup unlinks only exact created
+regular inodes after independently checking their identities, then attempts
+empty-directory removal through the pinned parent. Changed/unavailable stages,
+substituted files and injected entries remain for inspection; cleanup never
+recursively deletes a destination. SIGINT/SIGTERM cancellation is cooperative
+before publication. A signal racing commit or a parent-sync error can leave a
+complete destination despite an incomplete response. Inspect the exact result
+before retrying; forced termination can retain a hidden `.agentfw-doctor-*`
+stage. A confirmation does not authorize rollback, pruning or manual cleanup.
+
 ## Qualification
 
 `scripts/qualify-edit-diff.py` is inert by default. Explicit `--run` performs a
@@ -166,6 +220,15 @@ identities. The complete console summary also binds the report digest. Native
 execution is Linux x86_64 only; macOS/Windows remain unsupported for this command.
 Shared final Ready qualification, CodeQL, candidate admission and merge remain
 with the TL; this focused workflow does not replace them.
+
+`scripts/qualify-edit-export-set.py` is inert by default. Explicit `--run` uses
+the genuine installed host and owned local scripted provider for two- and
+eight-file create/replacement runs, exact manifests/bytes, refusal boundaries,
+last-file and destination races, copy/publication I/O faults, cancellation and
+stage/parent substitution. All 31 controls must be attempted and pass with zero
+provider requests during export and independent preservation witnesses.
+The focused workflow retains `export-set/report.json` and exact source,
+component, binary, genuine-host and report digests, including failed attempts.
 
 `scripts/qualify-edit-review.py` is inert by default. Its explicit `--run` mode
 uses the genuine pinned installed host with an owned local scripted model, no

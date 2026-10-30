@@ -1279,6 +1279,8 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund --prefix "$task_scratch/host"
           printf '%s  %s\n' fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7 \
             "$task_scratch/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum --check
+          mkdir -m 700 "$task_scratch/inventory-foreign"
+          sudo mkdir -m 700 "$task_scratch/inventory-foreign/edit-90000000-0000-4000-8000-000000000002"
           git rev-parse HEAD > "$task_scratch/source.txt"
       - name: Read-only source, private scratch, offline native installed qualification
         shell: bash
@@ -1330,10 +1332,25 @@ jobs:
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/diff-fault.so" --foreign "$SOU161_SCRATCH/foreign-record" \
             --output "$SOU161_SCRATCH/diff"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_inventory.py' -v
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_application.py' -v
+          python3 -B scripts/qualify-edit-inventory.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --foreign-state "$SOU161_SCRATCH/inventory-foreign" \
+            --output "$SOU161_SCRATCH/inventory"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_export_set.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou186_export_fault.c -ldl -o "$SOU161_SCRATCH/export-set-fault.so"
+          python3 -B scripts/qualify-edit-export-set.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/export-set-fault.so" --output "$SOU161_SCRATCH/export-set"
           gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou179_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
           python3 -B scripts/qualify-edit-review.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/review-fault.so" --output "$SOU161_SCRATCH/review"
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou187_apply_fault.c -ldl -o "$SOU161_SCRATCH/application-fault.so"
+          python3 -B scripts/qualify-edit-application.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/application-fault.so" --output "$SOU161_SCRATCH/application"
           python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"
@@ -1369,6 +1386,9 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/quota/report.json
             ${{ runner.temp }}/sou161-scratch/review/report.json
             ${{ runner.temp }}/sou161-scratch/diff/report.json
+            ${{ runner.temp }}/sou161-scratch/inventory/report.json
+            ${{ runner.temp }}/sou161-scratch/export-set/report.json
+            ${{ runner.temp }}/sou161-scratch/application/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json
@@ -4058,6 +4078,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo test --locked -p agentfw --test mcp_stderr -- --nocapture 2>&1 | tee "$RUNNER_TEMP/sou76-native-platform.log"
+          cargo test --locked -p agentfw --lib edit_session::grammar_tests -- --nocapture
           python - <<'PY'
           import os,re
           from pathlib import Path

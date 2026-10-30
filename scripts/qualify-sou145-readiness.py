@@ -18,10 +18,13 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+import pilot_runtime_identity as IDENTITY
 STAGES = ("installed", "matched", "ask", "prepared", "docs-code", "unicode-spaces", "local-history")
 PRODUCERS = ("qualify-installed-pilot.py", "pilot_measurement.py", "qualify-pilot-ask.py",
              "qualify-prepared-pilot-run.py", "qualify-existing-pilot.py", "pilot_project_fixtures.py",
-             "pilot_dossier.py", "qualify-sou145-readiness.py")
+             "pilot_dossier.py", "pilot_runtime_identity.py", "prepared_stop_witness.py",
+             "qualify-sou145-readiness.py")
 
 
 def sha(path):
@@ -105,6 +108,7 @@ def main(argv=None):
               "stages": [{"id": name, "status": "incomplete", "reason": "not_executed"} for name in STAGES]}
     destination = a.output / "execution.json"
     write(destination, report)
+    custodian = None
     try:
         if platform.system() != "Linux" or os.geteuid() == 0 or not (os.statvfs(ROOT).f_flag & os.ST_RDONLY):
             raise ValueError("nonroot_readonly_linux_required")
@@ -118,6 +122,15 @@ def main(argv=None):
             raise ValueError("selection_byte_limit")
         selection = api.strict_json(a.selection.read_bytes())
         source, paths = api.validate_selection(selection, a.expected_commit)
+        runtime_plan = IDENTITY.freeze(source, paths, a.selection)
+        IDENTITY.verify_plan(runtime_plan, source, lambda name: (ROOT / name).read_bytes())
+        plan_path = a.output / 'runtime-plan.json'
+        plan_path.write_bytes(IDENTITY.canonical(runtime_plan))
+        plan_path.chmod(0o600)
+        prepared = api.load('scoped_preparation', 'prepare-installed-pilot.py')
+        custodian = IDENTITY.Custodian(runtime_plan, a.output / 'identity.sock', prepared.verify_profile)
+        report['format'] = 'sw-pilot-readiness-execution/2'
+        report['runtime_plan_sha256'] = IDENTITY.sha(IDENTITY.canonical(runtime_plan))
         report.update(source_before=source, selection_sha256=sha(a.selection),
                       selected_sha256={name: sha(path) for name, path in paths.items()},
                       producer_sha256={name: sha(ROOT / "scripts" / name) for name in PRODUCERS},
@@ -139,11 +152,16 @@ def main(argv=None):
             write(destination, report)
             started = time.monotonic()
             log = a.output / (stage + ".private.log")
+            custodian.begin(stage)
             # Existing producers retain their own unchanged runtime deadlines.
             with log.open("xb") as stream:
                 log.chmod(0o600)
-                result = subprocess.run(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT)
-            row.update(status="executed", exit_code=result.returncode,
+                process = subprocess.Popen(command, cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT,
+                    env=dict(os.environ, SOU_PILOT_IDENTITY_SOCKET=str(custodian.address),
+                             SOU_PILOT_IDENTITY_STAGE=stage, SOU_PILOT_IDENTITY_SELECTION=str(a.selection)))
+                custodian.pid = process.pid
+                exit_code = process.wait()
+            row.update(status="executed", exit_code=exit_code,
                        elapsed_seconds=round(time.monotonic() - started, 3), log_sha256=sha(log))
             if original.is_file() and original.stat().st_size <= 2 * 1024 * 1024:
                 row.update(report=original.relative_to(a.output).as_posix(), report_sha256=sha(original))
@@ -153,6 +171,16 @@ def main(argv=None):
             remaining = [{"pid": pid, "start": start} for pid, start in after.items()
                          if baseline.get(pid) != start]
             row["independent_namespace_cleanup"] = {"all_stopped": not remaining, "remaining": remaining}
+            witness = custodian.evidence(row.get('report_sha256'), row['independent_namespace_cleanup'])
+            identity_path = a.output / (stage + '-identities.json')
+            write(identity_path, witness)
+            row.update(identity_report=identity_path.name, identity_report_sha256=sha(identity_path))
+            try:
+                IDENTITY.verify_stage(runtime_plan, stage, witness, api.strict_json(original.read_bytes()),
+                                      row['report_sha256'], row['independent_namespace_cleanup'])
+                row['identity_status'] = 'verified'
+            except (OSError, ValueError, KeyError, TypeError):
+                row['identity_status'] = 'incomplete'
             write(destination, report)
             if remaining:
                 raise ValueError("owned_cleanup_unconfirmed_stop_inventory")
@@ -164,6 +192,9 @@ def main(argv=None):
                       meaning="Producer invocations attempted; missing original reports remain incomplete. Use pilot_dossier for readiness.")
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         report["reason"] = str(error) if type(error) is ValueError and str(error).replace("_", "").isalnum() else type(error).__name__
+    finally:
+        if custodian is not None:
+            custodian.close()
     write(destination, report)
     print(json.dumps({"status": report["status"], "decision": report["decision"]}))
     return 0 if report["status"] == "executed" else 1
