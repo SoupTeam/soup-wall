@@ -330,11 +330,25 @@ elif action == "verify_policy":
     if "error" in resp:
         sys.exit(f"CRITICAL: Expected structured policy denial result, but got raw JSON-RPC error: {resp}")
     
+    # ENVELOPE SHAPE VALIDATION
+    if resp.get("jsonrpc") != "2.0":
+        sys.exit(f"CRITICAL: Invalid JSON-RPC version (expected 2.0): {resp}")
+    if resp.get("id") != 3:
+        sys.exit(f"CRITICAL: Invalid response ID (expected 3): {resp}")
+    
     result = resp.get("result", {})
-    if result.get("isError") is not True:
+    if not isinstance(result, dict) or result.get("isError") is not True:
         sys.exit(f"CRITICAL: Expected strict policy denial (isError=True), got {resp}")
         
-    text_content = result.get("content", [{}])[0].get("text", "").strip()
+    content_list = result.get("content", [])
+    if not isinstance(content_list, list) or len(content_list) == 0:
+        sys.exit(f"CRITICAL: Invalid or missing content array in policy denial: {resp}")
+        
+    content_item = content_list[0]
+    if not isinstance(content_item, dict) or content_item.get("type") != "text":
+        sys.exit(f"CRITICAL: Expected content type 'text' in policy denial, got {resp}")
+        
+    text_content = content_item.get("text", "").strip()
     expected_framing = "Soup Wall withheld MCP result (filesystem-profile-refuse-result-injection)"
     
     if text_content != expected_framing:
@@ -420,6 +434,29 @@ if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_substring
     echo "CRITICAL: Substring setup error containing the exact expected phrase was falsely accepted as a policy denial!"
     exit 1
 fi
+
+echo "Testing Fake Policy Setup Error Negative Control (Malformed Envelope)..."
+cat <<'EOF' > mock_agent_malformed.py
+import sys, json
+for line in sys.stdin:
+    if not line.strip(): continue
+    req = json.loads(line)
+    mid = req.get("id")
+    method = req.get("method")
+    if method == "initialize":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{}}))
+    elif method == "tools/list":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{"tools":[]}}))
+    elif method == "tools/call":
+        print(json.dumps({"jsonrpc":"wrong-protocol","id":3,"result":{"isError":True,"content":[{"type":"image","text":"Soup Wall withheld MCP result (filesystem-profile-refuse-result-injection)"}]}}))
+    sys.stdout.flush()
+EOF
+
+if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_malformed.py >/dev/null 2>&1; then
+    echo "CRITICAL: Malformed envelope (wrong protocol/type) was falsely accepted as a policy denial!"
+    exit 1
+fi
+
 
 echo "Testing Useful Read (Offline)..."
 python3 mcp_test_driver.py "read" "/workspace/test_secret.txt" "" \
