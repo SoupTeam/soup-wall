@@ -162,7 +162,9 @@ class RecordedEvidence(unittest.TestCase):
         fs = result["observed"]["offline_evidence"][MATRIX]["classification"]["filesystem"]
         self.assertEqual(fs["inherited"]["known_risk_misses"], ["PMF-U05"])
         self.assertEqual(fs["inherited"]["expected_d06_not_met"], ["PMF-V01", "PMF-V02", "PMF-V03"])
-        self.assertEqual(fs["inherited"]["pending_safety_violations"], ["PMF-A01"])
+        # v1.2 (D01) resolves PMF-A01: read with an undeclared field is now unknown=true.
+        self.assertEqual(fs["inherited"]["pending_safety_violations"], [])
+        self.assertEqual(fs["resolved"]["pending_safety_violations"], ["PMF-A01"])
         self.assertEqual(fs["denominators"]["supported_benign"], 46)
         git_profile = result["observed"]["offline_evidence"][MATRIX]["classification"]["git"]
         self.assertEqual(git_profile["inherited"]["known_risk_misses"], ["PMG-U03", "PMG-U04"])
