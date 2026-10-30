@@ -45,6 +45,19 @@ jobs:
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" scripts/fleet-console-acceptance.py --backend postgres --output target/fleet-evidence/postgres'
       - name: Managed Agent rollout panel browser regressions
         run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_rollout_browser.py -v'
+      - name: Agent enrollment panel browser regressions
+        run: '"$RUNNER_TEMP/fleet-driver/bin/python" -B -m unittest scripts/tests/test_console_enrollment_browser.py -v'
+      - name: Browser enrollment and credential lifecycle with a real Agent over HTTPS
+        shell: bash
+        run: |
+          set +e
+          status=0
+          for backend in sqlite postgres; do
+            "$RUNNER_TEMP/fleet-driver/bin/python" -B scripts/console-enrollment-acceptance.py --no-build \
+              --backend "$backend" --output "$RUNNER_TEMP/enrollment" || status=1
+          done
+          cp -r "$RUNNER_TEMP/enrollment" target/fleet-evidence/enrollment
+          exit $status
       - name: Browser rollout to one pilot and two real Agents over HTTPS
         shell: bash
         run: |
