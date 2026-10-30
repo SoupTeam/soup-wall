@@ -26,7 +26,7 @@ agentfw tool-preview --profile filesystem|git|<profile format> --frame <file|-> 
 | --- | --- |
 | `--frame` | One JSON frame, at most 256 KiB, regular file or `-` (stdin). Either `{"tool", "arguments", "description"?, "inputSchema"?}` or one MCP `tools/call` request. Duplicate keys, unknown keys, trailing data and non-object arguments are refused. |
 | `--profile` | `filesystem` or `git` (the original read-only profiles), or the exact format string of a shipped profile. |
-| `--export` | Writes the sanitized JSON report to a **new** file (Linux): absolute path, owner-only parent directory, mode 0600, never replaces an existing file. |
+| `--export` | Writes the sanitized JSON report to a **new** file (Linux): absolute path, owner-only parent directory, mode 0600, never replaces an existing file. The report is written to a private temp file and published with a no-replace rename; on failure only that temp file is removed, and only while it is still the file this run created. |
 
 Exit codes: `0` a classification was produced (including `unknown` and
 `partial_unknown`), `2` the input or the selected profile's validator refused it, `3`
@@ -43,7 +43,7 @@ reply), `4` the explicit export was refused (the report is still printed).
   metadata is shown to the classifier as untrusted evidence and the tool name is not
   printed (digest only).
 - **Classification**: known action labels, `unknown` (partial or full), confidence,
-  fixed flags and reason codes. `effective_unknown` is conservative: a tool outside the
+  fixed flags and reason codes (reason codes come from a closed reviewed list; any other worker string is dropped and only counted). `effective_unknown` is conservative: a tool outside the
   reviewed profile or arguments the profile rejects are never fully known, while known
   risky labels are kept. Free-text reasons are omitted.
 - **Resources and destinations**: typed summaries from validated arguments (class,

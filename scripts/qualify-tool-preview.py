@@ -225,10 +225,17 @@ def main():
                 if os.path.realpath(path) not in allowed_exec:
                     problems.append("unexpected execve " + path)
             allowed_names = {os.path.basename(a) for a in allow_writes}  # export opens relative to a pinned dir fd
+
+            def is_export_write(path):
+                # the exporter writes a private temp file next to the destination, then renames it
+                base = os.path.basename(path)
+                return path in allow_writes or base in allowed_names or (
+                    bool(allow_writes) and base.startswith(".tool-preview-") and base.endswith(".tmp"))
+
             for path in facts["write_opens"]:
-                if path not in ALLOWED_WRITES and path not in allow_writes and path not in allowed_names:
+                if path not in ALLOWED_WRITES and not is_export_write(path):
                     problems.append("write open " + path)
-            if allow_writes and sum(1 for p in facts["write_opens"] if p in allowed_names or p in allow_writes) != len(allow_writes):
+            if allow_writes and sum(1 for p in facts["write_opens"] if is_export_write(p)) != len(allow_writes):
                 problems.append("expected exactly the explicit export write")
             allowed_mut = [m for m in facts["mutating_calls"]]
             if allowed_mut and not allow_writes:

@@ -207,3 +207,61 @@ fn canaries_never_reach_text_json_or_export() {
     );
     assert_eq!(second.status.code(), Some(4));
 }
+
+/// A real write failure (file-size limit) leaves nothing behind and spares neighbours.
+#[test]
+fn a_real_write_failure_cleans_up_only_its_own_file() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::process::CommandExt;
+    let home = installed_home();
+    let out = tempfile::tempdir().unwrap();
+    std::fs::set_permissions(out.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    let neighbour = out.path().join("neighbour.json");
+    std::fs::write(&neighbour, "keep me").unwrap();
+    let export = out.path().join("report.json");
+    let cwd = tempfile::tempdir().unwrap();
+    let frame = cwd.path().join("frame.json");
+    std::fs::write(
+        &frame,
+        r#"{"tool":"read_text_file","arguments":{"path":"/workspace/notes.txt"}}"#,
+    )
+    .unwrap();
+    let mut command = Command::new(env!("CARGO_BIN_EXE_agentfw"));
+    command
+        .args([
+            "tool-preview",
+            "--json",
+            "--profile",
+            "filesystem",
+            "--frame",
+        ])
+        .arg(&frame)
+        .arg("--export")
+        .arg(&export)
+        .env_clear()
+        .env("HOME", home.path())
+        .current_dir(cwd.path())
+        .stdin(Stdio::null());
+    unsafe {
+        command.pre_exec(|| {
+            libc::signal(libc::SIGXFSZ, libc::SIG_IGN);
+            let limit = libc::rlimit {
+                rlim_cur: 64,
+                rlim_max: 64,
+            };
+            if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let output = command.output().unwrap();
+    assert_eq!(output.status.code(), Some(4), "{:?}", output);
+    let mut names: Vec<_> = std::fs::read_dir(out.path())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["neighbour.json"], "export left files behind");
+    assert_eq!(std::fs::read_to_string(&neighbour).unwrap(), "keep me");
+}

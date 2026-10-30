@@ -58,6 +58,46 @@ const FLAG_KEYS: [&str; 8] = [
     "truncated",
     "definition_invocation_diff",
 ];
+/// Closed, reviewed vocabulary of reason codes the preview may print. The worker's codes are
+/// worker-controlled strings; only members of this list are ever shown, everything else is
+/// counted in `reason_codes_dropped`. Mirrors the codes emitted by the packaged classifiers.
+const REASON_CODES: &[&str] = &[
+    "args:read",
+    "args:write",
+    "args:delete",
+    "args:send_data",
+    "args:change_permissions",
+    "name:read",
+    "name:write",
+    "name:delete",
+    "name:send_data",
+    "name:change_permissions",
+    "schema:read",
+    "schema:write",
+    "schema:delete",
+    "schema:send_data",
+    "schema:change_permissions",
+    "shell:read",
+    "shell:write",
+    "shell:delete",
+    "shell:send_data",
+    "shell:change_permissions",
+    "proven_noop",
+    "pure_computation",
+    "no_rule_matched",
+    "partial_unknown",
+    "description_conflict",
+    "description_suspicious",
+    "name_conflict",
+    "schema_mismatch",
+    "args_schema_violation",
+    "dry_run_declared",
+    "truncated",
+    "invalid_input",
+    "classifier_timeout",
+    "classifier_internal_error",
+    "classifier_invalid",
+];
 const MISSING_CONTEXT: [&str; 6] = [
     "live_session_state",
     "taint_state",
@@ -440,14 +480,6 @@ fn validation_code(error: &anyhow::Error) -> Code {
 
 // ---------------------------------------------------------------- redaction helpers
 
-fn is_token(text: &str, max: usize) -> bool {
-    !text.is_empty()
-        && text.len() <= max
-        && text.bytes().all(|b| {
-            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b':' | b'.' | b'-')
-        })
-}
-
 fn digest8(domain: &str, value: &str) -> String {
     sha(format!("{domain}\0{value}").as_bytes())[..8].to_owned()
 }
@@ -546,7 +578,7 @@ fn describe_reply(raw: &str) -> Result<Described, Code> {
     if let Some(codes) = extras["reason_codes"].as_array() {
         for code in codes {
             match code.as_str() {
-                Some(text) if is_token(text, 48) && reason_codes.len() < MAX_CODES => {
+                Some(text) if REASON_CODES.contains(&text) && reason_codes.len() < MAX_CODES => {
                     reason_codes.push(text.to_owned())
                 }
                 _ => dropped += 1,
@@ -1060,6 +1092,17 @@ pub fn report_json(report: &Value) -> anyhow::Result<String> {
 /// mode 0600, bounded, removed again if the write fails. An existing path is never replaced.
 #[cfg(target_os = "linux")]
 pub fn export(report: &Value, destination: &Path) -> Result<(), Code> {
+    export_inner(report, destination, &mut |_| Ok(()))
+}
+
+/// Test seam: `after_create` gets the path of the exporter's temp file before it is written;
+/// an `Err` is handled exactly like a failed write. Production passes a no-op.
+#[cfg(target_os = "linux")]
+fn export_inner(
+    report: &Value,
+    destination: &Path,
+    after_create: &mut dyn FnMut(&Path) -> Result<(), ()>,
+) -> Result<(), Code> {
     use std::ffi::CString;
     use std::fs::File;
     use std::io::Write;
@@ -1101,10 +1144,22 @@ pub fn export(report: &Value, destination: &Path) -> Result<(), Code> {
     if !owner.is_dir() || owner.uid() != unsafe { libc::geteuid() } || owner.mode() & 0o077 != 0 {
         return Err("export_parent_not_private");
     }
+    // Write a private temp file next to the destination, then publish it with a no-replace
+    // rename, so the destination name never holds a partial file and an existing object at
+    // the destination is never touched.
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nonce = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0) as u64)
+        ^ (u64::from(std::process::id()) << 32)
+        ^ COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let temp_name = format!(".tool-preview-{nonce:016x}.tmp");
+    let temp = CString::new(temp_name.as_bytes()).map_err(|_| "export_path_invalid")?;
     let fd = unsafe {
         libc::openat(
             dir.as_raw_fd(),
-            name.as_ptr(),
+            temp.as_ptr(),
             libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC,
             0o600,
         )
@@ -1113,15 +1168,52 @@ pub fn export(report: &Value, destination: &Path) -> Result<(), Code> {
         return Err("export_destination_exists_or_unwritable");
     }
     let mut file = unsafe { File::from_raw_fd(fd) };
-    if file
-        .write_all(bytes.as_bytes())
-        .and_then(|_| file.sync_all())
-        .is_err()
-    {
-        unsafe {
-            libc::unlinkat(dir.as_raw_fd(), name.as_ptr(), 0);
+    // Remove the temp name only while it still names the file this call created.
+    let cleanup = |file: &File| {
+        let Ok(mine) = file.metadata() else { return };
+        let mut st: libc::stat = unsafe { std::mem::zeroed() };
+        let rc = unsafe {
+            libc::fstatat(
+                dir.as_raw_fd(),
+                temp.as_ptr(),
+                &mut st,
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        };
+        if rc == 0 && st.st_dev == mine.dev() && st.st_ino == mine.ino() {
+            unsafe {
+                libc::unlinkat(dir.as_raw_fd(), temp.as_ptr(), 0);
+            }
         }
+    };
+    if after_create(&parent_path.join(&temp_name)).is_err()
+        || file
+            .write_all(bytes.as_bytes())
+            .and_then(|_| file.sync_all())
+            .is_err()
+    {
+        cleanup(&file);
         return Err("export_write_failed");
+    }
+    const RENAME_NOREPLACE: libc::c_uint = 1;
+    let rc = unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            dir.as_raw_fd(),
+            temp.as_ptr(),
+            dir.as_raw_fd(),
+            name.as_ptr(),
+            RENAME_NOREPLACE,
+        )
+    };
+    if rc != 0 {
+        let exists = std::io::Error::last_os_error().raw_os_error() == Some(libc::EEXIST);
+        cleanup(&file);
+        return Err(if exists {
+            "export_destination_exists_or_unwritable"
+        } else {
+            "export_write_failed"
+        });
     }
     dir.sync_all().map_err(|_| "export_write_failed")?;
     Ok(())

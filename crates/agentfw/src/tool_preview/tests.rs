@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use super::*;
 use std::cell::RefCell;
+use std::path::PathBuf;
 
 const CANARY: &str = "CANARY-SECRET-7f3a9c";
 
@@ -469,5 +470,136 @@ fn worker_errors_map_to_fixed_codes_without_free_text() {
         let error = anyhow::anyhow!("{text}");
         assert_eq!(technical_code(&error), code, "{text}");
         assert!(!code.contains(CANARY));
+    }
+}
+
+fn dir_names(path: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(path)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[cfg(target_os = "linux")]
+fn private_dir() -> tempfile::TempDir {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    dir
+}
+
+/// A named object the exporter did not create must never be deleted by cleanup, whichever
+/// name it is substituted under (the exporter's own file name or the final destination).
+#[cfg(target_os = "linux")]
+#[test]
+fn failed_export_never_deletes_a_substituted_object() {
+    let dir = private_dir();
+    let target = dir.path().join("report.json");
+    let mut created_seen = PathBuf::new();
+    let mut hook = |created: &Path| {
+        created_seen = created.to_path_buf();
+        let held = PathBuf::from(format!("{}.held-original", created.display()));
+        std::fs::rename(created, &held).unwrap();
+        std::fs::write(created, "sentinel-at-created-name").unwrap();
+        if created != target {
+            std::fs::write(&target, "sentinel-at-destination").unwrap();
+        }
+        Err(())
+    };
+    assert_eq!(
+        export_inner(&json!({"schema": SCHEMA}), &target, &mut hook),
+        Err("export_write_failed")
+    );
+    let expected_target = if created_seen == target {
+        "sentinel-at-created-name"
+    } else {
+        "sentinel-at-destination"
+    };
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), expected_target);
+    assert_eq!(
+        std::fs::read_to_string(&created_seen).unwrap(),
+        "sentinel-at-created-name",
+        "an object the exporter did not create was deleted"
+    );
+    assert!(PathBuf::from(format!("{}.held-original", created_seen.display())).exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn failed_export_removes_only_its_own_file_and_leaves_nothing() {
+    let dir = private_dir();
+    let target = dir.path().join("report.json");
+    let mut hook = |_: &Path| Err(());
+    assert_eq!(
+        export_inner(&json!({"schema": SCHEMA}), &target, &mut hook),
+        Err("export_write_failed")
+    );
+    assert!(
+        dir_names(dir.path()).is_empty(),
+        "{:?}",
+        dir_names(dir.path())
+    );
+}
+
+/// Reason codes are a closed reviewed vocabulary: syntax-valid worker strings that carry an
+/// argument value must never be printed, in any token shape.
+#[test]
+fn unknown_reason_codes_are_dropped_in_every_token_shape() {
+    let secret = "canary-secret-7f3a9c";
+    let leaky = [
+        "canary-secret-7f3a9c",
+        "7f3a9c",
+        "tok:7f3a9c",
+        "a.7f3a9c.b",
+        "key-7f3a9c9",
+        "path:canary-secret-7f3a9c",
+    ];
+    let mut codes: Vec<Value> = leaky.iter().map(|c| json!(c)).collect();
+    codes.extend([
+        json!("args:read"),
+        json!("name:read"),
+        json!("partial_unknown"),
+        json!("name_conflict"),
+    ]);
+    let raw = json!({"status": "ok", "actions": ["read"], "unknown": false, "confidence": 0.9,
+        "uncertainty": 0.1, "reason": "x", "reason_codes": codes})
+    .to_string();
+    let fake = Fake::new(Ok(raw));
+    let frame = format!(r#"{{"tool":"read_text_file","arguments":{{"path":"{secret}.txt"}}}}"#);
+    let out = run(fs(), &frame, &fake);
+    let all = everything(&out);
+    assert!(!all.contains("7f3a9c"), "token-shaped code leaked");
+    assert_eq!(
+        out.report["classification"]["reason_codes"],
+        json!(["args:read", "name:read", "partial_unknown", "name_conflict"])
+    );
+    assert_eq!(
+        out.report["classification"]["reason_codes_dropped"],
+        leaky.len()
+    );
+}
+
+#[test]
+fn every_reason_code_the_installed_classifiers_emit_is_in_the_vocabulary() {
+    for source in ["args", "name", "schema", "shell"] {
+        for label in CATEGORIES {
+            assert!(REASON_CODES.contains(&format!("{source}:{label}").as_str()));
+        }
+    }
+    for code in [
+        "proven_noop",
+        "pure_computation",
+        "no_rule_matched",
+        "partial_unknown",
+    ]
+    .into_iter()
+    .chain(
+        FLAG_KEYS
+            .into_iter()
+            .filter(|k| *k != "definition_invocation_diff"),
+    ) {
+        assert!(REASON_CODES.contains(&code), "{code}");
     }
 }
