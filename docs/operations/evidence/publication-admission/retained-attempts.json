@@ -1,0 +1,45 @@
+{
+  "format": "sw-publication-admission-retained-attempts/1",
+  "attempts": [
+    {
+      "id": "windows-ci-controls",
+      "scope": "uncommitted Windows working tree; broad existing CI controls",
+      "status": "failed",
+      "executed": 142,
+      "failures": 2,
+      "errors": 44,
+      "skipped": 2,
+      "retained_log_sha256": "7633bb1b6b235c6ef29736c579db44d843bb85c542ca4b2fb23d507789676bec",
+      "observed_environment_reasons": [
+        "Unix-only O_NOFOLLOW absent on Windows",
+        "CRLF workflow bytes rejected by LF inventory parser",
+        "existing source-build subprocess fixture did not return expected exit status"
+      ],
+      "claim": "No complete-suite or native Linux success inferred."
+    },
+    {
+      "id": "windows-related-readiness",
+      "report": "windows-related-attempt.json",
+      "status": "failed",
+      "executed": 113,
+      "failures": 3,
+      "errors": 5,
+      "skipped": 2,
+      "observed_environment_reasons": [
+        "Unix descriptor custody requires O_NOFOLLOW",
+        "Linux profile-path fixtures used Windows path separators"
+      ],
+      "claim": "Original producer tests/guards were not changed."
+    },
+    {
+      "id": "windows-consumer-final",
+      "report": "offline-report.json",
+      "status": "passed",
+      "executed": 43,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "claim": "New offline verifier and publication-spy controls only; product remains blocked."
+    }
+  ]
+}

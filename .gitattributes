@@ -84,3 +84,4 @@ scripts/tests/test_validate_candidate.py text eol=lf
 scripts/tests/test_publication_readiness.py text eol=lf
 scripts/benchmarks/pilot-readiness-policies/*.yaml text eol=lf
 scripts/qualify-publication-admission.py text eol=lf
+docs/operations/evidence/publication-admission/** text eol=lf
