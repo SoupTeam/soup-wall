@@ -1,0 +1,1304 @@
+{
+  "format": "sou128-relations/1",
+  "corpus": "sou128-metamorphic-dev-v0.4",
+  "scope": "development only; no security authorization is inferred from any relation",
+  "relations": [
+    {
+      "id": "ORDER-READ",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-ORDER-READ-A",
+        "S128-ORDER-READ-B"
+      ],
+      "sources": [
+        {
+          "path": "RFC 8259 section 4",
+          "rule": "a JSON object is an unordered collection of members",
+          "sha256": null
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "META-READ",
+      "kind": "metadata_invariant",
+      "members": [
+        "S128-ORDER-READ-A",
+        "S128-META-READ"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "ORDER-SIZES",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-ORDER-SIZES-A",
+        "S128-ORDER-SIZES-B"
+      ],
+      "sources": [
+        {
+          "path": "RFC 8259 section 4",
+          "rule": "a JSON object is an unordered collection of members",
+          "sha256": null
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "META-SIZES",
+      "kind": "metadata_invariant",
+      "members": [
+        "S128-ORDER-SIZES-A",
+        "S128-META-SIZES"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "ORDER-SEARCH",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-ORDER-SEARCH-A",
+        "S128-ORDER-SEARCH-B"
+      ],
+      "sources": [
+        {
+          "path": "RFC 8259 section 4",
+          "rule": "a JSON object is an unordered collection of members",
+          "sha256": null
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "META-SEARCH",
+      "kind": "metadata_invariant",
+      "members": [
+        "S128-ORDER-SEARCH-A",
+        "S128-META-SEARCH"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "ORDER-DEL",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-ORDER-DEL-A",
+        "S128-ORDER-DEL-B"
+      ],
+      "sources": [
+        {
+          "path": "RFC 8259 section 4",
+          "rule": "a JSON object is an unordered collection of members",
+          "sha256": null
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "META-DEL",
+      "kind": "metadata_invariant",
+      "members": [
+        "S128-ORDER-DEL-A",
+        "S128-META-DEL"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "ORDER-MIX",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-ORDER-MIX-A",
+        "S128-ORDER-MIX-B"
+      ],
+      "sources": [
+        {
+          "path": "RFC 8259 section 4",
+          "rule": "a JSON object is an unordered collection of members",
+          "sha256": null
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "META-MIX",
+      "kind": "metadata_invariant",
+      "members": [
+        "S128-ORDER-MIX-A",
+        "S128-META-MIX"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "ORDER-SHELL",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-ORDER-SHELL-A",
+        "S128-ORDER-SHELL-B"
+      ],
+      "sources": [
+        {
+          "path": "RFC 8259 section 4",
+          "rule": "a JSON object is an unordered collection of members",
+          "sha256": null
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "META-SHELL",
+      "kind": "metadata_invariant",
+      "members": [
+        "S128-ORDER-SHELL-A",
+        "S128-META-SHELL"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "ORDER-UNKNOWN",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-ORDER-UNKNOWN-A",
+        "S128-ORDER-UNKNOWN-B"
+      ],
+      "sources": [
+        {
+          "path": "RFC 8259 section 4",
+          "rule": "a JSON object is an unordered collection of members",
+          "sha256": null
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "META-UNKNOWN",
+      "kind": "metadata_invariant",
+      "members": [
+        "S128-ORDER-UNKNOWN-A",
+        "S128-META-UNKNOWN"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "ORDER-GITLOG",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-ORDER-GITLOG-A",
+        "S128-ORDER-GITLOG-B"
+      ],
+      "sources": [
+        {
+          "path": "RFC 8259 section 4",
+          "rule": "a JSON object is an unordered collection of members",
+          "sha256": null
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Same JSON value with reordered members: identical status, actions, unknown and failure channel.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "META-GITLOG",
+      "kind": "metadata_invariant",
+      "members": [
+        "S128-ORDER-GITLOG-A",
+        "S128-META-GITLOG"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "An added untrusted description must not change actions or unknown (classifier level only; authority/permission effects need native policy evidence and are not decided here).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "DEFAULT-DTREE",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-DEFAULT-DTREE-ABSENT",
+        "S128-DEFAULT-DTREE-EXPLICIT"
+      ],
+      "sources": [
+        {
+          "path": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+          "rule": "directory_tree.inputSchema.properties.excludePatterns.default = []",
+          "sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+        }
+      ],
+      "basis": "Absent and explicit schema default describe the same invocation.",
+      "review_status": "schema_default_annotation; upstream implementation not vendored"
+    },
+    {
+      "id": "DEFAULT-SEARCH",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-DEFAULT-SEARCH-ABSENT",
+        "S128-DEFAULT-SEARCH-EXPLICIT"
+      ],
+      "sources": [
+        {
+          "path": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+          "rule": "search_files.inputSchema.properties.excludePatterns.default = []",
+          "sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+        }
+      ],
+      "basis": "Absent and explicit schema default describe the same invocation.",
+      "review_status": "schema_default_annotation; upstream implementation not vendored"
+    },
+    {
+      "id": "DEFAULT-SIZES",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-DEFAULT-SIZES-ABSENT",
+        "S128-DEFAULT-SIZES-EXPLICIT"
+      ],
+      "sources": [
+        {
+          "path": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+          "rule": "list_directory_with_sizes.inputSchema.properties.sortBy.default = \"name\"",
+          "sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+        }
+      ],
+      "basis": "Absent and explicit schema default describe the same invocation.",
+      "review_status": "schema_default_annotation; upstream implementation not vendored"
+    },
+    {
+      "id": "DEFAULT-EDIT",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-DEFAULT-EDIT-ABSENT",
+        "S128-DEFAULT-EDIT-EXPLICIT"
+      ],
+      "sources": [
+        {
+          "path": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+          "rule": "edit_file.inputSchema.properties.dryRun.default = false",
+          "sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+        }
+      ],
+      "basis": "Absent and explicit schema default describe the same invocation.",
+      "review_status": "schema_default_annotation; upstream implementation not vendored"
+    },
+    {
+      "id": "DEFAULT-GITDIFF",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-DEFAULT-GITDIFF-ABSENT",
+        "S128-DEFAULT-GITDIFF-EXPLICIT"
+      ],
+      "sources": [
+        {
+          "path": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+          "rule": "git_diff_unstaged.inputSchema.properties.context_lines.default = 3",
+          "sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b"
+        }
+      ],
+      "basis": "Absent and explicit schema default describe the same invocation.",
+      "review_status": "schema_default_annotation; upstream implementation not vendored"
+    },
+    {
+      "id": "DEFAULT-GITLOG",
+      "kind": "equal_outcome",
+      "members": [
+        "S128-DEFAULT-GITLOG-ABSENT",
+        "S128-DEFAULT-GITLOG-EXPLICIT"
+      ],
+      "sources": [
+        {
+          "path": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+          "rule": "git_log.inputSchema.properties.max_count.default = 10",
+          "sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b"
+        }
+      ],
+      "basis": "Absent and explicit schema default describe the same invocation.",
+      "review_status": "schema_default_annotation; upstream implementation not vendored"
+    },
+    {
+      "id": "OBSERVE-EDIT-DRYRUN",
+      "kind": "observe",
+      "members": [
+        "S128-DEFAULT-EDIT-ABSENT",
+        "S128-OBSERVE-EDIT-DRYRUN-TRUE"
+      ],
+      "sources": [
+        {
+          "path": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+          "rule": "edit_file.dryRun default false",
+          "sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+        }
+      ],
+      "basis": "A changed optional value is not asserted equivalent.",
+      "review_status": "observation"
+    },
+    {
+      "id": "MIXED-SHELL-MIX",
+      "kind": "preserve_risk_mark_unknown",
+      "members": [
+        "S128-MIXED-SHELL-MIX-KNOWN",
+        "S128-MIXED-SHELL-MIX-PLUS-UNKNOWN"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Adding an unrecognised component keeps every risky action of the source and sets unknown = true.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "MIXED-SHELL-SEND",
+      "kind": "preserve_risk_mark_unknown",
+      "members": [
+        "S128-MIXED-SHELL-SEND-KNOWN",
+        "S128-MIXED-SHELL-SEND-PLUS-UNKNOWN"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Adding an unrecognised component keeps every risky action of the source and sets unknown = true.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "MIXED-WF-DELETE",
+      "kind": "preserve_risk_mark_unknown",
+      "members": [
+        "S128-MIXED-WF-DELETE-KNOWN",
+        "S128-MIXED-WF-DELETE-PLUS-UNKNOWN"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Adding an unrecognised component keeps every risky action of the source and sets unknown = true.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "MIXED-WF-PERM",
+      "kind": "preserve_risk_mark_unknown",
+      "members": [
+        "S128-MIXED-WF-PERM-KNOWN",
+        "S128-MIXED-WF-PERM-PLUS-UNKNOWN"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Adding an unrecognised component keeps every risky action of the source and sets unknown = true.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "BOUND-DEPTH-4-5",
+      "kind": "no_silent_loss_past_bound",
+      "members": [
+        "S128-DEPTH-4",
+        "S128-DEPTH-5"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "BOUND-DEPTH-4-20",
+      "kind": "no_silent_loss_past_bound",
+      "members": [
+        "S128-DEPTH-4",
+        "S128-DEPTH-20"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "BOUND-ARRAY-200-201",
+      "kind": "no_silent_loss_past_bound",
+      "members": [
+        "S128-ARRAY-200",
+        "S128-ARRAY-201"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "BOUND-ARRAY-200-256",
+      "kind": "no_silent_loss_past_bound",
+      "members": [
+        "S128-ARRAY-200",
+        "S128-ARRAY-256"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "NAME-01",
+      "kind": "technical_failure_channel",
+      "members": [
+        "S128-NAME-01"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "eval/eval_runner.py",
+          "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
+        }
+      ],
+      "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "NAME-02",
+      "kind": "technical_failure_channel",
+      "members": [
+        "S128-NAME-02"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "eval/eval_runner.py",
+          "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
+        }
+      ],
+      "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "NAME-03",
+      "kind": "technical_failure_channel",
+      "members": [
+        "S128-NAME-03"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "eval/eval_runner.py",
+          "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
+        }
+      ],
+      "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "NAME-04",
+      "kind": "technical_failure_channel",
+      "members": [
+        "S128-NAME-04"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "eval/eval_runner.py",
+          "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
+        }
+      ],
+      "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "NAME-05",
+      "kind": "technical_failure_channel",
+      "members": [
+        "S128-NAME-05"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "eval/eval_runner.py",
+          "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
+        }
+      ],
+      "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "OBSERVE-UNICODE-NFC",
+      "kind": "observe",
+      "members": [
+        "S128-UNICODE-NFC-A",
+        "S128-UNICODE-NFC-B"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D05: literal data is not an executed command",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-UNICODE-CYR",
+      "kind": "observe",
+      "members": [
+        "S128-UNICODE-CYR-A",
+        "S128-UNICODE-CYR-B"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D05: literal data is not an executed command",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-UNICODE-PATH",
+      "kind": "observe",
+      "members": [
+        "S128-UNICODE-PATH-A",
+        "S128-UNICODE-PATH-B"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D05: literal data is not an executed command",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-LITERAL-RM",
+      "kind": "observe",
+      "members": [
+        "S128-LITERAL-RM-A",
+        "S128-LITERAL-RM-B"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D05: literal data is not an executed command",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-LITERAL-QUOTED",
+      "kind": "observe",
+      "members": [
+        "S128-LITERAL-QUOTED-A",
+        "S128-LITERAL-QUOTED-B"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D05: literal data is not an executed command",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Byte-distinct data; not asserted equal (Linux path/search semantics are byte based).",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-RENAMED-1",
+      "kind": "observe",
+      "members": [
+        "S128-RENAMED-1"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Name-driven classification is recorded, not scored.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-RENAMED-2",
+      "kind": "observe",
+      "members": [
+        "S128-RENAMED-2"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Name-driven classification is recorded, not scored.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-RENAMED-3",
+      "kind": "observe",
+      "members": [
+        "S128-RENAMED-3"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Name-driven classification is recorded, not scored.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-RENAMED-4",
+      "kind": "observe",
+      "members": [
+        "S128-RENAMED-4"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Name-driven classification is recorded, not scored.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-RENAMED-5",
+      "kind": "observe",
+      "members": [
+        "S128-RENAMED-5"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D04 / section 4.1: description metadata is untrusted and does not dictate tool actions",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        }
+      ],
+      "basis": "Name-driven classification is recorded, not scored.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-STRARG-01",
+      "kind": "observe",
+      "members": [
+        "S128-STRARG-01"
+      ],
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "_classify: a string raw_arguments is json.loads'ed, else kept as a raw leaf",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        }
+      ],
+      "basis": "Not evidence of parser rejection.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-STRARG-02",
+      "kind": "observe",
+      "members": [
+        "S128-STRARG-02"
+      ],
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "_classify: a string raw_arguments is json.loads'ed, else kept as a raw leaf",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        }
+      ],
+      "basis": "Not evidence of parser rejection.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-STRARG-03",
+      "kind": "observe",
+      "members": [
+        "S128-STRARG-03"
+      ],
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "_classify: a string raw_arguments is json.loads'ed, else kept as a raw leaf",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        }
+      ],
+      "basis": "Not evidence of parser rejection.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-STRARG-04",
+      "kind": "observe",
+      "members": [
+        "S128-STRARG-04"
+      ],
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "_classify: a string raw_arguments is json.loads'ed, else kept as a raw leaf",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        }
+      ],
+      "basis": "Not evidence of parser rejection.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-STRARG-05",
+      "kind": "observe",
+      "members": [
+        "S128-STRARG-05"
+      ],
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "_classify: a string raw_arguments is json.loads'ed, else kept as a raw leaf",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        }
+      ],
+      "basis": "Not evidence of parser rejection.",
+      "review_status": "observation"
+    },
+    {
+      "id": "OBSERVE-STRARG-06",
+      "kind": "observe",
+      "members": [
+        "S128-STRARG-06"
+      ],
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "_classify: a string raw_arguments is json.loads'ed, else kept as a raw leaf",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        }
+      ],
+      "basis": "Not evidence of parser rejection.",
+      "review_status": "observation"
+    },
+    {
+      "id": "BOUND-GITLOG-20-21",
+      "kind": "no_silent_loss_past_bound",
+      "members": [
+        "S128-GIT-BOUND-LOG-20",
+        "S128-GIT-BOUND-LOG-21"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01: actions + Boolean unknown; partially known actions are preserved with unknown = true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D08: unknown = true is forwarded to policy and gated (Ask/Deny), never silently allowed",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "rule_baseline/git_readonly_v1/rule_baseline.py",
+          "rule": "_bounded_git_read: max_count is proven only within 1..20; otherwise the general path",
+          "sha256": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474"
+        }
+      ],
+      "basis": "Past an inspection bound the result may add uncertainty (unknown = true) or fail technically, but never claim certainty with fewer actions than within the bound.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "GIT-NAME-01",
+      "kind": "technical_failure_channel",
+      "members": [
+        "S128-GIT-NAME-01"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "eval/eval_runner.py",
+          "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
+        }
+      ],
+      "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "GIT-NAME-02",
+      "kind": "technical_failure_channel",
+      "members": [
+        "S128-GIT-NAME-02"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06: technical failures use dedicated channels (classifier_invalid, classifier_timeout, classifier_internal_error)",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "eval/eval_runner.py",
+          "rule": "FAILURE_CODES and failure_channel(): an established D06 channel, never a masked classification",
+          "sha256": "86dded74283e7dc38e3ea8b2996a8cccf900912ccb847ea0fdad482abcbd0662"
+        }
+      ],
+      "basis": "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "EXTRA-ARG-CE1",
+      "kind": "preserve_actions_mark_unknown",
+      "members": [
+        "S128-EXTRA-ARG-CE1-SOURCE",
+        "S128-EXTRA-ARG-CE1-VARIANT"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01 / section 3.1: when some actions are proven but unmodeled parameters remain, proven actions are preserved alongside unknown: true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06 / section 3.2: classifier_invalid covers an input that violates the admitted schema/profile; an argument an open schema permits violates none",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "profiles/mcp/git-readonly-v1/upstream-tools-list.json",
+          "rule": "git_log.inputSchema: 'author' is not a declared property and additionalProperties is unset",
+          "sha256": "8819c85d38867065dd429515e612f25300811a304e8f9235a46bed943e02ff9b"
+        },
+        {
+          "path": "SoupTeam/soup-wall PR #246 review by @winux125 (2026-10-29)",
+          "rule": "outside the closed selected profile a schema-permitted additional argument is unmodelled semantics under D01: preserve established actions, unknown = true; a violation of an explicitly closed schema stays invalid under D06",
+          "sha256": null
+        }
+      ],
+      "basis": "A schema-permitted argument the classifier does not model keeps every action proven for the source invocation and sets unknown = true (classifier semantics only; not admission or server authorization).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "EXTRA-ARG-CE2",
+      "kind": "preserve_actions_mark_unknown",
+      "members": [
+        "S128-EXTRA-ARG-CE2-SOURCE",
+        "S128-EXTRA-ARG-CE2-VARIANT"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01 / section 3.1: when some actions are proven but unmodeled parameters remain, proven actions are preserved alongside unknown: true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06 / section 3.2: classifier_invalid covers an input that violates the admitted schema/profile; an argument an open schema permits violates none",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+          "rule": "read_text_file.inputSchema: 'mode' is not a declared property and additionalProperties is unset",
+          "sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+        },
+        {
+          "path": "SoupTeam/soup-wall PR #246 review by @winux125 (2026-10-29)",
+          "rule": "outside the closed selected profile a schema-permitted additional argument is unmodelled semantics under D01: preserve established actions, unknown = true; a violation of an explicitly closed schema stays invalid under D06",
+          "sha256": null
+        }
+      ],
+      "basis": "A schema-permitted argument the classifier does not model keeps every action proven for the source invocation and sets unknown = true (classifier semantics only; not admission or server authorization).",
+      "review_status": "source_backed"
+    },
+    {
+      "id": "EXTRA-ARG-CE3",
+      "kind": "preserve_actions_mark_unknown",
+      "members": [
+        "S128-EXTRA-ARG-CE3-SOURCE",
+        "S128-EXTRA-ARG-CE3-VARIANT"
+      ],
+      "sources": [
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D01 / section 3.1: when some actions are proven but unmodeled parameters remain, proven actions are preserved alongside unknown: true",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "contract/updated_contract2.md",
+          "rule": "D06 / section 3.2: classifier_invalid covers an input that violates the admitted schema/profile; an argument an open schema permits violates none",
+          "sha256": "a3c85a29c85cf8eb2cbb30155e4dd0d696970d99206541c8aa1c6fca0100dcf0"
+        },
+        {
+          "path": "profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+          "rule": "edit_file.inputSchema: 'backup' is not a declared property and additionalProperties is unset",
+          "sha256": "d9df6889798a48dee9ad78b557dfd638eb618ec580adbd75923af0f64e48f954"
+        },
+        {
+          "path": "SoupTeam/soup-wall PR #246 review by @winux125 (2026-10-29)",
+          "rule": "outside the closed selected profile a schema-permitted additional argument is unmodelled semantics under D01: preserve established actions, unknown = true; a violation of an explicitly closed schema stays invalid under D06",
+          "sha256": null
+        }
+      ],
+      "basis": "A schema-permitted argument the classifier does not model keeps every action proven for the source invocation and sets unknown = true (classifier semantics only; not admission or server authorization).",
+      "review_status": "source_backed"
+    }
+  ],
+  "boundary_probes": [
+    {
+      "id": "TRUNCATED",
+      "payload": {
+        "hex": "7b22746f6f6c5f6e616d65223a22726561645f746578745f66696c65222c227261775f617267756d656e7473223a7b2270617468223a"
+      },
+      "payload_bytes": 54,
+      "payload_sha256": "887439d4849b0dc9969c842ff67b1971a871adaa2faab532aa6d0153ec3b80af",
+      "expected": "technical_failure",
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "main(): size limit, then json.loads; ValueError/UnicodeError -> invalid_input",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        },
+        {
+          "path": "rule_baseline/runtime/worker.py",
+          "rule": "run(): frame parsed with duplicate rejection; input_json parsed with json.loads",
+          "sha256": "ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c"
+        }
+      ]
+    },
+    {
+      "id": "TRAILING-COMMA",
+      "payload": {
+        "hex": "7b22746f6f6c5f6e616d65223a22726561645f746578745f66696c65222c227261775f617267756d656e7473223a7b2270617468223a222f776f726b73706163652f61222c7d7d"
+      },
+      "payload_bytes": 71,
+      "payload_sha256": "de0d4b1e9afea29fef3737bab82dff4ef0d9131649465366528940e3e9f22b3f",
+      "expected": "technical_failure",
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "main(): size limit, then json.loads; ValueError/UnicodeError -> invalid_input",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        },
+        {
+          "path": "rule_baseline/runtime/worker.py",
+          "rule": "run(): frame parsed with duplicate rejection; input_json parsed with json.loads",
+          "sha256": "ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c"
+        }
+      ]
+    },
+    {
+      "id": "INVALID-UTF8",
+      "payload": {
+        "hex": "7b22746f6f6c5f6e616d65223a22726561645f746578745f66696c65222c227261775f617267756d656e7473223a7b2270617468223a222f776f726b73706163652fff227d7d"
+      },
+      "payload_bytes": 70,
+      "payload_sha256": "f975178a1900acf1dd27dc5b5da2e80536a129e6459ead3021dc16f08584d62a",
+      "expected": "technical_failure",
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "main(): size limit, then json.loads; ValueError/UnicodeError -> invalid_input",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        },
+        {
+          "path": "rule_baseline/runtime/worker.py",
+          "rule": "run(): frame parsed with duplicate rejection; input_json parsed with json.loads",
+          "sha256": "ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c"
+        }
+      ]
+    },
+    {
+      "id": "OVERSIZE",
+      "payload": {
+        "hex": "7b22746f6f6c5f6e616d65223a22726561645f746578745f66696c65222c227261775f617267756d656e7473223a7b2270617468223a22",
+        "fill_hex": "61",
+        "fill_count": 1048519,
+        "suffix_hex": "227d7d"
+      },
+      "payload_bytes": 1048577,
+      "payload_sha256": "e21782adc8521d3e0c7910ecdc3a27d5a66b3254ed0cbd194a77eabdb20e73b1",
+      "expected": "technical_failure",
+      "sources": [
+        {
+          "path": "rule_baseline/rule_baseline.py",
+          "rule": "main(): size limit, then json.loads; ValueError/UnicodeError -> invalid_input",
+          "sha256": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd"
+        },
+        {
+          "path": "rule_baseline/runtime/worker.py",
+          "rule": "run(): frame parsed with duplicate rejection; input_json parsed with json.loads",
+          "sha256": "ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c"
+        }
+      ]
+    },
+    {
+      "id": "DUPLICATE-ARGUMENT",
+      "payload": {
+        "hex": "7b22746f6f6c5f6e616d65223a22726561645f746578745f66696c65222c227261775f617267756d656e7473223a7b2270617468223a222f776f726b73706163652f61222c2270617468223a222f6574632f736861646f77227d7d"
+      },
+      "payload_bytes": 91,
+      "payload_sha256": "b3b788d32c15578ec0947237380782b4c5f9829ec7c465fc08b5c1cd229051ef",
+      "expected": "mcp_admission",
+      "sources": [
+        {
+          "path": "crates/agentfw/src/mcp/admission.rs",
+          "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
+          "sha256": "c550d58994ec29427b37ff943f4167261a3e7fc6e467b7ac393088bb2eda747a"
+        }
+      ]
+    },
+    {
+      "id": "DUPLICATE-TOOL-NAME",
+      "payload": {
+        "hex": "7b22746f6f6c5f6e616d65223a22726561645f746578745f66696c65222c22746f6f6c5f6e616d65223a2264656c6574655f66696c65222c227261775f617267756d656e7473223a7b2270617468223a222f776f726b73706163652f61227d7d"
+      },
+      "payload_bytes": 96,
+      "payload_sha256": "b6e2d3a0b4d3da1ab4ef295a2f356b55e6a9901c768be8e13aab036a19c63ddb",
+      "expected": "mcp_admission",
+      "sources": [
+        {
+          "path": "crates/agentfw/src/mcp/admission.rs",
+          "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
+          "sha256": "c550d58994ec29427b37ff943f4167261a3e7fc6e467b7ac393088bb2eda747a"
+        }
+      ]
+    },
+    {
+      "id": "NAN",
+      "payload": {
+        "hex": "7b22746f6f6c5f6e616d65223a22726561645f746578745f66696c65222c227261775f617267756d656e7473223a7b2270617468223a222f776f726b73706163652f61222c2268656164223a4e614e7d7d"
+      },
+      "payload_bytes": 81,
+      "payload_sha256": "8076a39e84031cce63ab72c6f719acd8827df6913d4d4f029dc009e118ce0f2a",
+      "expected": "mcp_admission",
+      "sources": [
+        {
+          "path": "crates/agentfw/src/mcp/admission.rs",
+          "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
+          "sha256": "c550d58994ec29427b37ff943f4167261a3e7fc6e467b7ac393088bb2eda747a"
+        }
+      ]
+    },
+    {
+      "id": "LONE-SURROGATE",
+      "payload": {
+        "hex": "7b22746f6f6c5f6e616d65223a22726561645f746578745f66696c65222c227261775f617267756d656e7473223a7b2270617468223a222f776f726b73706163652f5c7564383030227d7d"
+      },
+      "payload_bytes": 75,
+      "payload_sha256": "59e35f16937723696ac6a473216aba7719feb7da0239fc1feaf0c9c4824ec954",
+      "expected": "mcp_admission",
+      "sources": [
+        {
+          "path": "crates/agentfw/src/mcp/admission.rs",
+          "rule": "Strict visitor: duplicate JSON member and non-finite numbers rejected",
+          "sha256": "c550d58994ec29427b37ff943f4167261a3e7fc6e467b7ac393088bb2eda747a"
+        }
+      ]
+    }
+  ],
+  "worker_frame_probes": [
+    {
+      "id": "FRAME-DUPLICATE-MEMBER",
+      "frame": "{\"v\":\"sw-classifier-worker/1\",\"id\":0,\"id\":1,\"input_sha256\":\"x\",\"input_json\":\"{}\"}",
+      "expected": "worker_exit_3_no_reply",
+      "sources": [
+        {
+          "path": "rule_baseline/runtime/worker.py",
+          "rule": "run(): frame parsed with duplicate rejection; input_json parsed with json.loads",
+          "sha256": "ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c"
+        }
+      ]
+    },
+    {
+      "id": "FRAME-INPUT-SHA-MISMATCH",
+      "frame": "{\"v\":\"sw-classifier-worker/1\",\"id\":0,\"input_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"input_json\":\"{}\"}",
+      "expected": "worker_exit_3_no_reply",
+      "sources": [
+        {
+          "path": "rule_baseline/runtime/worker.py",
+          "rule": "run(): input_sha256 mismatch ends the process",
+          "sha256": "ecd1d972a034f05676d44d4bf9ce7f74f15ced4605a70d18721db63f118ca38c"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "checks": [
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 330,
+          "stdout_sha256": "c8a1e0f61df9f61c5b7dcea1a95b5821389768509816c7421b1e72083f2832c3"
+        },
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 436,
+          "stdout_sha256": "aa8d3181d569e4a44148c60d414b28a9ae2d29c2ae38941f993c9de7374f3c24"
+        }
+      ],
+      "component_verified": true,
+      "id": "installed-identity",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 0,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1824,
+          "stdout_sha256": "2c22a0eb7e1c5c6dfd7fc3b7d014ff42445655aef2f04f8e48daa488b2076872"
+        }
+      ],
+      "current_pointer_unchanged": true,
+      "id": "inert-preview",
+      "no_execution": true,
+      "no_output_created": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 3,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 456,
+          "stdout_sha256": "d5b8644b1e8c1de00dc7f5f2d6bf99f17ee575c86ea8cc1f584629226a8f420a"
+        }
+      ],
+      "current_pointer_unchanged": true,
+      "id": "tampered-selection",
+      "no_execution": true,
+      "no_output_created": true,
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "commands": [
+        {
+          "exit_code": 3,
+          "raw_retained": false,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 1875,
+          "stdout_sha256": "71e64b1493e246a1f18089019d686af9b843aa79186b5360078e38fb25c56b97"
+        }
+      ],
+      "id": "genuine-installed-run",
+      "inventory": {
+        "attempted": 1,
+        "expected": 8,
+        "failed": 1,
+        "incomplete": 7,
+        "passed": 0,
+        "unsupported": 0
+      },
+      "reason": "installed_self_test_did_not_pass",
+      "report_bytes": 4164,
+      "report_sha256": "e7095484590b128cb5ab9b9dddb1a8a2125f34b89d89be57ea8f23e4f06050a9",
+      "status": "failed"
+    },
+    {
+      "attempted": false,
+      "id": "changed-helper-refusal",
+      "status": "incomplete"
+    }
+  ],
+  "executed": true,
+  "format": "sw-private-edit-self-test-qualification/1",
+  "identities": {
+    "agentfw_sha256": "f886d656b0743eff017737959ee1f4af5f597cc94e4dacc0664a950eef6feb57",
+    "component_sha256": "2edf27e98692020e192c1c5cbf327f84897a035690e22b95bb44a8f6134fef9d",
+    "selection_sha256": "a35608b182241de331f508039e01ae76d65d6ad1b6a6a1414dc14edc0e31e295",
+    "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+    "source_tree": "16131804dc19067bf1b68f4368a4383e42c48a76"
+  },
+  "inventory": {
+    "attempted": 4,
+    "expected": 5,
+    "failed": 1,
+    "incomplete": 1,
+    "passed": 3
+  },
+  "paid_inference": false,
+  "platform": {
+    "id": "wsl2-linux-x86_64",
+    "kernel_sha256": "b81b0fe7ad414ed9b01a3ca094eb67921b4251157df6d9702089be665f4182c7",
+    "wsl_opt_in": true
+  },
+  "reason": "installed_self_test_did_not_pass",
+  "selected_inputs_unchanged": true,
+  "status": "failed",
+  "wsl": {
+    "accepted_prepared_selection": true,
+    "attested": true,
+    "host_settings_after_sha256": "f4dea6b4b2510a6f55bd08485263fec1e63e0468b20007fb992d0b92e019b41b",
+    "host_settings_before_sha256": "f4dea6b4b2510a6f55bd08485263fec1e63e0468b20007fb992d0b92e019b41b",
+    "preflight_sha256": "a3de2c36d3c966fce6a8c36f68e916a06728db9944bcb84c109f1f62638922fb",
+    "preflight_status": "ready"
+  }
+}

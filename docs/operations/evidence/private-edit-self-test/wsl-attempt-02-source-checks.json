@@ -1,0 +1,75 @@
+{
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "checks": {
+    "clippy": {
+      "last_summary": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 49.92s",
+      "log_bytes": 469,
+      "log_sha256": "ffdbf60ffbd7772ef4d85c2fad451e643103318d7c4dad00a7cd83b7a7f60652"
+    },
+    "fmt": {
+      "last_summary": "empty-successful-format-check",
+      "log_bytes": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "rust-tests": {
+      "last_summary": "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1035 filtered out; finished in 0.01s",
+      "log_bytes": 559,
+      "log_sha256": "b0c6e0b438715e942c0b342a14e4130d15dbcc38a59a9dfcb4611cf940ca3b0e"
+    },
+    "test_pilot_front_door_component.py": {
+      "last_summary": "OK",
+      "log_bytes": 1020,
+      "log_sha256": "17f6edc8a050d5e795b0b131cda889ef6723c8991937ec8793457ea677ceab5f"
+    },
+    "test_prepare_installed_pilot.py": {
+      "last_summary": "OK",
+      "log_bytes": 5275,
+      "log_sha256": "6d9fc393889d657634b35bd516d9d1db3dee4aed71673042c4b5da54e1af7fe0"
+    },
+    "test_private_edit_qualification.py": {
+      "last_summary": "OK",
+      "log_bytes": 1861,
+      "log_sha256": "1e1fa31c80af36a65c2e56330b0340259bc56f936ecffc147228065b2f857868"
+    },
+    "test_private_edit_self_test.py": {
+      "last_summary": "OK",
+      "log_bytes": 6343,
+      "log_sha256": "0b62f8d6889eeacc7b8f5ae441bdff4bb4d251215871cc36b3d17c2b50793dc0"
+    },
+    "test_wsl_preflight.py": {
+      "last_summary": "OK (skipped=1)",
+      "log_bytes": 1643,
+      "log_sha256": "c322763efc2d00aafd53b7268e453a875612885991c8e36e5396703f022fd1d8"
+    }
+  },
+  "clean_source": true,
+  "format": "sw-private-edit-wsl-source-checks/1",
+  "kernel": "6.18.54.1-microsoft-standard-WSL2",
+  "machine": "x86_64",
+  "non_root": true,
+  "os_release_sha256": "87458b3b1f1ca0e5c693ade771de7007c3783bdc692fa6b39eb6414bf2af2763",
+  "preparation": {
+    "preflight_sha256": "8b5cbb8981b119c174a6a11f54a1d84c934c75286da56fb8ad8f9b399f4813cc",
+    "preflight_status": "ready",
+    "status": "prepared-not-active"
+  },
+  "python": "3.12.3",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "selected_binaries": {
+    "agentfw": {
+      "links": 2,
+      "sha256": "f886d656b0743eff017737959ee1f4af5f597cc94e4dacc0664a950eef6feb57"
+    },
+    "git_launcher": {
+      "links": 2,
+      "sha256": "666f69f9507fee6c2a56b9a0997f80a74860bfc9e92eef9a6a4ac8cd1e01553f"
+    },
+    "sandbox_tests": {
+      "links": 1,
+      "sha256": "e028e9eb01a2c088aef7eaa1f131c3abcc8231d59cb6e34fe50b6600cf488a26"
+    }
+  },
+  "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+  "source_tree": "16131804dc19067bf1b68f4368a4383e42c48a76",
+  "system": "Linux"
+}
