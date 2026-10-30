@@ -295,6 +295,14 @@ pub fn read_frame(source: &str) -> Result<Vec<u8>, Code> {
             // A FIFO must refuse, not block the preview.
             options.custom_flags(libc::O_NONBLOCK);
         }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            // Open directory handles for the same held-object type check below;
+            // this does not permit reading a directory as a frame.
+            options
+                .custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS);
+        }
         let file = options.open(source).map_err(|_| "frame_unreadable")?;
         if !file.metadata().map_err(|_| "frame_unreadable")?.is_file() {
             return Err("frame_not_regular_file");
