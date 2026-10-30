@@ -472,6 +472,7 @@ fn worker_errors_map_to_fixed_codes_without_free_text() {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn dir_names(path: &Path) -> Vec<String> {
     let mut names: Vec<String> = std::fs::read_dir(path)
         .unwrap()
