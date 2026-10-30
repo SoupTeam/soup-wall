@@ -136,8 +136,22 @@ def qualify(args, report):
         for canary in (suite.secret_canary.encode(), EDIT.NEW.encode().strip(), b'owned-private-provider-credential'):
             require(canary not in v.stdout+v.stderr, 'operator_private_content_leak')
         suite.active['last_operator'] = EDIT.cli_observation(v.returncode, v.stdout, v.stderr)
+        parsed=json.loads(v.stdout) if v.stdout else None
+        if isinstance(parsed,dict):
+            statuses=('preview','blocked','refused','removed','retained','failed','uncertain')
+            suite.active['last_operator']['outcome']=parsed.get('status') if parsed.get('status') in statuses else 'unknown'
+            known=('removal_stale_confirmation','removal_active_or_uncertain','removal_unsafe_or_unavailable',
+                   'removal_file_metadata','removal_directory_changed','removal_record_schema','removal_read_cap',
+                   'removal_completion_invalid','removal_progress_invalid','removal_home_changed','removal_object_substituted',
+                   'removal_uncertain_or_substituted_object','removal_record_invalid','removal_file_changed','removal_record_cap',
+                   'removal_retained_scope_changed','removal_plan_mismatch','removal_nested_mount','removal_retry_limit',
+                   'removal_host_user_namespace_required','removal_unsafe_ancestry','removal_private_directory_required')
+            suite.active['last_operator']['refusal']=parsed.get('reason') if parsed.get('reason') in known else None
+            if isinstance(parsed.get('objects'),list):
+                suite.active['last_operator']['object_counts']={s:sum(row.get('status')==s for row in parsed['objects']) for s in ('removed','retained','failed','uncertain')}
+
         require(EDIT.private_state_witness(completed_run) == before_run, 'operator_changed_retained_tool_state')
-        return v.returncode, json.loads(v.stdout) if v.stdout else None, v.stderr
+        return v.returncode, parsed, v.stderr
     def fixture(name):
         nonlocal counter; counter += 1
         base = suite.work / f'fixture-{counter}'; base.mkdir(mode=0o700)

@@ -304,7 +304,7 @@ fn original_ack_may_start_with_a_hyphen() {
     ])
     .unwrap();
     assert!(
-        matches!(parsed.cli.action, super::super::Action::Status(r) if r.success_ack.is_some_and(|a|a.starts_with('-')))
+        matches!(parsed.cli.action, super::super::Action::Status(r) if r.success_ack.as_ref().is_some_and(|a|a.starts_with('-')))
     );
 }
 
@@ -313,4 +313,39 @@ fn future_object_progress_without_completed_prefix_refuses() {
     let (_t, j) = fixture();
     j.write_record(1, "intent").unwrap();
     assert!(j.validate_progress(&mut Budget::new()).is_err());
+}
+
+#[test]
+fn malformed_or_premature_completion_refuses_before_more_removal() {
+    for malformed in [true, false] {
+        let (_t, j) = fixture();
+        let raw = if malformed {
+            b"{}".to_vec()
+        } else {
+            canonical(&Completion {
+                format: FORMAT.into(),
+                plan: j.hash.clone(),
+                success_ack_sha256: "b".repeat(64),
+            })
+            .unwrap()
+        };
+        j.dir.write_new("complete.json", &raw).unwrap();
+        assert!(Journal::open(
+            &Retained {
+                journal: j.plan.selected.journal.clone(),
+                expect_plan: j.hash.clone(),
+                success_ack: None
+            },
+            &mut Budget::new()
+        )
+        .is_err());
+        assert_eq!(
+            fs::read(j.plan.selected.home.join("pilot-front-door/owned")).unwrap(),
+            b"verified fixture"
+        );
+        assert_eq!(
+            fs::read(j.plan.selected.home.join("credentials")).unwrap(),
+            b"private retained sentinel"
+        );
+    }
 }

@@ -157,6 +157,18 @@ impl Journal {
             success_ack: r.success_ack.clone(),
         };
         journal.validate_progress(b)?;
+        // A truncated or premature completion is not a harmless extra file.
+        // Validate it before a resumed operation can issue any more unlinks.
+        if journal.dir.optional("complete.json")?.is_some() {
+            journal.acknowledged(b)?;
+            for index in 0..journal.plan.entries.len() {
+                ensure!(
+                    journal.check_record(index, "done", b)?
+                        && !journal.check_record(index, "failed", b)?,
+                    "removal_completion_invalid"
+                );
+            }
+        }
         Ok(journal)
     }
     fn check_record(&self, index: usize, phase: &str, b: &mut Budget) -> Result<bool> {
