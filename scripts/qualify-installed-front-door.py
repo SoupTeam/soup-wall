@@ -436,6 +436,13 @@ def qualify_provider_profiles(args, door, home, env, report, proposals):
     require(canary not in json.dumps(report), "provider_canary_in_public_report")
 
 
+def provider_index_commit_interrupted(evidence, index_filename):
+    target = re.escape(index_filename.encode("ascii"))
+    destination = rb'renameat\([^,\n]*,\s*"[^"\n]*",\s*[^,\n]*,\s*"' + target + rb'"'
+    return (re.search(destination, evidence) is not None and
+            b"killed by SIGKILL" in evidence)
+
+
 def qualify_provider_rotation(args, door, home, env, report, proposals):
     """SOU-181: real installed-host launches with only owned synthetic providers."""
     old_key, new_key, wrong_key = (
@@ -650,8 +657,8 @@ def qualify_provider_rotation(args, door, home, env, report, proposals):
                     evidence = fault_trace.read_bytes()
                     require(len(evidence) <= 65536 and
                             all(key.encode() not in evidence for key in secrets) and
-                            re.search(rb'renameat\([^\n]*"index\.json"[^\n]*', evidence) is not None and
-                            b"killed by SIGKILL" in evidence,
+                            provider_index_commit_interrupted(
+                                evidence, load("rotation_profile_store", "pilot_provider_profiles.py").INDEX_FILE),
                             "provider_interruption_not_at_index_commit")
                 finally:
                     fault_trace.unlink(missing_ok=True)
