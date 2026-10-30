@@ -41,6 +41,11 @@ jobs:
             Where-Object { $_.reason -eq 'compiler-artifact' -and $_.target.name -eq 'agentfw' -and $_.profile.test -and $_.executable }
           if (@($tests).Count -ne 1) { throw 'Unique native test binary required' }
           "SELF_TEST_BINARY=$($tests.executable)" | Add-Content $env:GITHUB_ENV
+      - name: Verify platform-scoped CLI on the normal Windows stack
+        shell: pwsh
+        run: |
+          cargo test --locked -p agentfw --bin agentfw archive_parser_matches_supported_platform -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Platform-scoped CLI regression failed' }
       - name: Exercise installed Agent under a disposable standard account
         shell: pwsh
         run: |

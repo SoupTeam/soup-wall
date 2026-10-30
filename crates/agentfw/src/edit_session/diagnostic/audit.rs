@@ -6,15 +6,18 @@ use crate::edit_session::{profile::Profile, record::Context};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(super) fn sha(bytes: &[u8]) -> String {
+pub(in crate::edit_session) fn sha(bytes: &[u8]) -> String {
     crate::mcp::replace_file::content_sha256(bytes)
 }
-pub(super) fn strict(bytes: &[u8]) -> Result<Value> {
+pub(in crate::edit_session) fn strict(bytes: &[u8]) -> Result<Value> {
     let crate::mcp::admission::Strict(value) =
         serde_json::from_slice(bytes).map_err(|_| "selected_json_malformed_or_duplicate")?;
     Ok(value)
 }
-pub(super) fn operation(profile: &Profile, name: &str) -> Result<(usize, &'static str)> {
+pub(in crate::edit_session) fn operation(
+    profile: &Profile,
+    name: &str,
+) -> Result<(usize, &'static str)> {
     for (index, target) in profile.targets.iter().enumerate() {
         for (prefix, enabled, operation) in [
             ("read_output_", target.read, "read"),
@@ -146,7 +149,12 @@ fn revocation_metadata(row: &Value, context: &Context, registry: &str) -> Result
     Ok(())
 }
 
-pub(super) fn inspect(bytes: &[u8], profile: &Profile, context: &Context, registry: &str) -> Audit {
+pub(in crate::edit_session) fn inspect(
+    bytes: &[u8],
+    profile: &Profile,
+    context: &Context,
+    registry: &str,
+) -> Audit {
     let mut report = Audit {
         file_sha256: Some(sha(bytes)),
         ..Audit::default()

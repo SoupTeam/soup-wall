@@ -1,0 +1,307 @@
+{
+  "binary_sha256": {
+    "agentfw": "88e18df9954d2bace4837fb020b4603efe4be197c68bac3ecafc43b1c05acdaf",
+    "llm-firewall": "792ce4ee7f4ac5071190784adf23a9d17912dd03a5f619ebb5244de7305490c6"
+  },
+  "checks": {
+    "agent-credential-cannot-administer": true,
+    "agents-used-https-edge": true,
+    "ambiguous-pause-reconciled-without-retry": true,
+    "baseline-pilot-read-allowed": true,
+    "baseline-pilot-send-allow": true,
+    "baseline-worker-1-read-allowed": true,
+    "baseline-worker-1-send-allow": true,
+    "baseline-worker-2-read-allowed": true,
+    "baseline-worker-2-send-allow": true,
+    "browser-no-token-storage": true,
+    "browser-url-has-no-credentials": true,
+    "candidate-pilot-issued-only": true,
+    "candidate-pilot-read-allowed": true,
+    "candidate-pilot-send-deny": true,
+    "candidate-worker-1-read-allowed": true,
+    "candidate-worker-1-send-deny": true,
+    "candidate-worker-2-read-allowed": true,
+    "candidate-worker-2-send-deny": true,
+    "evidence-sanitized": true,
+    "offline-pilot-keeps-gate-closed": true,
+    "refused-mutations-changed-nothing": true,
+    "restart-retains-frozen-plan": true,
+    "rollback-needs-exact-confirmation": true,
+    "rollback-pilot-read-allowed": true,
+    "rollback-pilot-send-allow": true,
+    "rollback-uses-higher-sequences": true,
+    "rollback-worker-1-read-allowed": true,
+    "rollback-worker-1-send-allow": true,
+    "rollback-worker-2-read-allowed": true,
+    "rollback-worker-2-send-allow": true,
+    "viewer-and-operator-mutations-refused-403": true,
+    "viewer-browser-read-only": true,
+    "viewer-no-browser-storage": true,
+    "worker-1-send-still-allowed": true,
+    "worker-1-still-on-baseline": true,
+    "worker-2-send-still-allowed": true,
+    "worker-2-still-on-baseline": true,
+    "workers-not-issued": true
+  },
+  "config_sha256": {
+    "console": "06c41e8a149693ab876441d2579f2c8eaa6d38f9c1356a5c60f9acef73af15c3",
+    "pilot": "aa005b28b027e566e63655a7abda40b007b89963e238a711e79cbc99545a5241",
+    "worker-1": "f91c775c5f952b66aa2a7bfa997d9bf4903a821cecba4362f8743bc26daa14ae",
+    "worker-2": "a15277c3ea5270e62a3ad557625828212a93c0a47203b469e8ebce220fe54116"
+  },
+  "format": "sw-console-rollout-acceptance/1",
+  "policies": {
+    "baseline_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+    "candidate_sha256": "8ec4f363d3cb26598eb030adb74de7b12011b0ca26ee994590b3a8460072ca5a"
+  },
+  "scope": "one disposable private Linux deployment: loopback Console, private-CA HTTPS edge, one pilot and two worker Agents; synthetic tenant and policies; not production or multi-host",
+  "snapshots": {
+    "candidate-completed": {
+      "active_deployments": {
+        "pilot": 2,
+        "worker-1": 2,
+        "worker-2": 2
+      },
+      "agents": {
+        "pilot": {
+          "acknowledgement_deadline_unix": 1793211902,
+          "expected_sequence": 2,
+          "last_matching_acknowledgement": {
+            "action": "activate",
+            "agent_id": "pilot",
+            "applied_at_unix": 1793211605,
+            "deployment_sequence": 2,
+            "issued_at_unix": 1793211602,
+            "policy_sha256": "8ec4f363d3cb26598eb030adb74de7b12011b0ca26ee994590b3a8460072ca5a",
+            "revision": "candidate",
+            "status": "applied",
+            "tenant_id": "tenant_VrFgJSS2hx0m9ID2dvYAMA"
+          },
+          "latest_sequence": 2,
+          "status": "applied"
+        },
+        "worker-1": {
+          "acknowledgement_deadline_unix": 1793211905,
+          "expected_sequence": 2,
+          "last_matching_acknowledgement": {
+            "action": "activate",
+            "agent_id": "worker-1",
+            "applied_at_unix": 1793211607,
+            "deployment_sequence": 2,
+            "issued_at_unix": 1793211605,
+            "policy_sha256": "8ec4f363d3cb26598eb030adb74de7b12011b0ca26ee994590b3a8460072ca5a",
+            "revision": "candidate",
+            "status": "applied",
+            "tenant_id": "tenant_VrFgJSS2hx0m9ID2dvYAMA"
+          },
+          "latest_sequence": 2,
+          "status": "applied"
+        },
+        "worker-2": {
+          "acknowledgement_deadline_unix": 1793211905,
+          "expected_sequence": 2,
+          "last_matching_acknowledgement": {
+            "action": "activate",
+            "agent_id": "worker-2",
+            "applied_at_unix": 1793211607,
+            "deployment_sequence": 2,
+            "issued_at_unix": 1793211605,
+            "policy_sha256": "8ec4f363d3cb26598eb030adb74de7b12011b0ca26ee994590b3a8460072ca5a",
+            "revision": "candidate",
+            "status": "applied",
+            "tenant_id": "tenant_VrFgJSS2hx0m9ID2dvYAMA"
+          },
+          "latest_sequence": 2,
+          "status": "applied"
+        }
+      },
+      "created_at_unix": 1793211602,
+      "failure_reason": null,
+      "group_id": "fleet",
+      "initial_sequences": {
+        "pilot": 1,
+        "worker-1": 1,
+        "worker-2": 1
+      },
+      "issuer_key_id": "rollout-issuer",
+      "phase": "completed",
+      "pilot_agents": [
+        "pilot"
+      ],
+      "policy_sha256": "8ec4f363d3cb26598eb030adb74de7b12011b0ca26ee994590b3a8460072ca5a",
+      "previous_revisions": {
+        "pilot": "baseline",
+        "worker-1": "baseline",
+        "worker-2": "baseline"
+      },
+      "revision": "candidate",
+      "rollout_id": "ro_INGJhOXzlzbjnXvw",
+      "standard_agents": [
+        "worker-1",
+        "worker-2"
+      ],
+      "tenant_id": "tenant_VrFgJSS2hx0m9ID2dvYAMA",
+      "updated_at_unix": 1793211607
+    },
+    "decisions-baseline": {
+      "pilot": {
+        "read": "allow",
+        "send": "allow"
+      },
+      "worker-1": {
+        "read": "allow",
+        "send": "allow"
+      },
+      "worker-2": {
+        "read": "allow",
+        "send": "allow"
+      }
+    },
+    "decisions-candidate": {
+      "pilot": {
+        "read": "allow",
+        "send": "deny"
+      },
+      "worker-1": {
+        "read": "allow",
+        "send": "deny"
+      },
+      "worker-2": {
+        "read": "allow",
+        "send": "deny"
+      }
+    },
+    "decisions-rollback": {
+      "pilot": {
+        "read": "allow",
+        "send": "allow"
+      },
+      "worker-1": {
+        "read": "allow",
+        "send": "allow"
+      },
+      "worker-2": {
+        "read": "allow",
+        "send": "allow"
+      }
+    },
+    "refused_mutations": {
+      "operator DELETE /fleet/members/worker-1": 403,
+      "operator POST /": 403,
+      "operator POST /fleet/members": 403,
+      "operator POST /fleet/revisions": 403,
+      "operator POST /fleet/revisions/candidate/approve": 403,
+      "operator POST /fleet/rollout": 403,
+      "operator POST /fleet/rollout/advance": 403,
+      "operator POST /fleet/rollout/pause": 403,
+      "operator POST /fleet/rollout/resume": 403,
+      "operator POST /fleet/rollout/rollback": 403,
+      "viewer DELETE /fleet/members/worker-1": 403,
+      "viewer POST /": 403,
+      "viewer POST /fleet/members": 403,
+      "viewer POST /fleet/revisions": 403,
+      "viewer POST /fleet/revisions/candidate/approve": 403,
+      "viewer POST /fleet/rollout": 403,
+      "viewer POST /fleet/rollout/advance": 403,
+      "viewer POST /fleet/rollout/pause": 403,
+      "viewer POST /fleet/rollout/resume": 403,
+      "viewer POST /fleet/rollout/rollback": 403
+    },
+    "rolled-back": {
+      "active_deployments": {
+        "pilot": 3,
+        "worker-1": 3,
+        "worker-2": 3
+      },
+      "agents": {
+        "pilot": {
+          "acknowledgement_deadline_unix": 1793211908,
+          "expected_sequence": 3,
+          "last_matching_acknowledgement": {
+            "action": "rollback",
+            "agent_id": "pilot",
+            "applied_at_unix": 1793211609,
+            "deployment_sequence": 3,
+            "issued_at_unix": 1793211608,
+            "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+            "revision": "baseline",
+            "status": "applied",
+            "tenant_id": "tenant_VrFgJSS2hx0m9ID2dvYAMA"
+          },
+          "latest_sequence": 3,
+          "status": "applied"
+        },
+        "worker-1": {
+          "acknowledgement_deadline_unix": 1793211908,
+          "expected_sequence": 3,
+          "last_matching_acknowledgement": {
+            "action": "rollback",
+            "agent_id": "worker-1",
+            "applied_at_unix": 1793211609,
+            "deployment_sequence": 3,
+            "issued_at_unix": 1793211608,
+            "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+            "revision": "baseline",
+            "status": "applied",
+            "tenant_id": "tenant_VrFgJSS2hx0m9ID2dvYAMA"
+          },
+          "latest_sequence": 3,
+          "status": "applied"
+        },
+        "worker-2": {
+          "acknowledgement_deadline_unix": 1793211908,
+          "expected_sequence": 3,
+          "last_matching_acknowledgement": {
+            "action": "rollback",
+            "agent_id": "worker-2",
+            "applied_at_unix": 1793211609,
+            "deployment_sequence": 3,
+            "issued_at_unix": 1793211608,
+            "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+            "revision": "baseline",
+            "status": "applied",
+            "tenant_id": "tenant_VrFgJSS2hx0m9ID2dvYAMA"
+          },
+          "latest_sequence": 3,
+          "status": "applied"
+        }
+      },
+      "created_at_unix": 1793211602,
+      "failure_reason": "operator requested rollback",
+      "group_id": "fleet",
+      "initial_sequences": {
+        "pilot": 1,
+        "worker-1": 1,
+        "worker-2": 1
+      },
+      "issuer_key_id": "rollout-issuer",
+      "phase": "rolled_back",
+      "pilot_agents": [
+        "pilot"
+      ],
+      "policy_sha256": "8ec4f363d3cb26598eb030adb74de7b12011b0ca26ee994590b3a8460072ca5a",
+      "previous_revisions": {
+        "pilot": "baseline",
+        "worker-1": "baseline",
+        "worker-2": "baseline"
+      },
+      "revision": "candidate",
+      "rollout_id": "ro_INGJhOXzlzbjnXvw",
+      "standard_agents": [
+        "worker-1",
+        "worker-2"
+      ],
+      "tenant_id": "tenant_VrFgJSS2hx0m9ID2dvYAMA",
+      "updated_at_unix": 1793211609
+    }
+  },
+  "source_commit": "cf196f65e22ccc582e93f4dff0dde573c8e68fd5",
+  "source_dirty": false,
+  "status": "passed",
+  "transport": {
+    "agents_to_console": "HTTPS through an owned private-CA edge on 127.0.0.1",
+    "browser_to_console": "loopback HTTP",
+    "ca_sha256_fingerprint": "92:A4:EC:0C:A3:6B:67:AD:BE:1B:91:11:2C:0A:51:5D:2B:0C:C3:8A:1A:30:A9:C9:C3:5D:4E:97:33:88:1D:73",
+    "edge_forwarded_requests": 29
+  }
+}

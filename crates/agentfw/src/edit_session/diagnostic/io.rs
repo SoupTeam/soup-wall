@@ -12,8 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(super) type Result<T> = std::result::Result<T, &'static str>;
-pub(super) struct Budget {
+pub(in crate::edit_session) type Result<T> = std::result::Result<T, &'static str>;
+pub(in crate::edit_session) struct Budget {
     started: Instant,
     bytes: usize,
 }
@@ -36,7 +36,7 @@ impl Budget {
     }
 }
 
-pub(super) fn stable(a: &Metadata, b: &Metadata) -> bool {
+pub(in crate::edit_session) fn stable(a: &Metadata, b: &Metadata) -> bool {
     (
         a.dev(),
         a.ino(),
@@ -64,7 +64,7 @@ pub(super) fn stable(a: &Metadata, b: &Metadata) -> bool {
     )
 }
 
-pub(super) struct Directory(File);
+pub(in crate::edit_session) struct Directory(File);
 fn openat(parent: &File, name: &CStr, flags: i32) -> Result<Option<File>> {
     let fd = unsafe {
         libc::openat(
@@ -93,6 +93,21 @@ fn protected(meta: &Metadata, private: bool) -> bool {
         }
 }
 impl Directory {
+    pub fn observation_lock(&self) -> Result<()> {
+        if unsafe { libc::flock(self.0.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+            return Err("selected_output_writer_busy");
+        }
+        Ok(())
+    }
+    pub fn immutable(&self, name: &str, cap: u64, budget: &mut Budget) -> Result<Vec<u8>> {
+        let (bytes, meta) = self
+            .read_observed(name, cap, budget, false)?
+            .ok_or("selected_state_missing")?;
+        if meta.mode() & 0o7777 != 0o400 {
+            return Err("selected_plan_not_immutable");
+        }
+        Ok(bytes)
+    }
     pub fn open(path: &Path) -> Result<Self> {
         let raw = path.as_os_str().as_bytes();
         if !path.is_absolute() || raw.len() > 4096 || raw.len() < 2 {
@@ -226,6 +241,13 @@ impl Directory {
                 &file.metadata().map_err(|_| "selected_state_changed")?,
             )
         {
+            return Err("selected_state_changed");
+        }
+        let current = openat(&self.0, &name, libc::O_PATH)?.ok_or("selected_state_changed")?;
+        if !stable(
+            &before,
+            &current.metadata().map_err(|_| "selected_state_changed")?,
+        ) {
             return Err("selected_state_changed");
         }
         Ok(Some((bytes, before)))
