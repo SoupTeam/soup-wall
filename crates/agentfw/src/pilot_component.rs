@@ -1215,6 +1215,8 @@ pub fn default_home() -> anyhow::Result<PathBuf> {
 /// with the accepted helper under the recorded interpreter. Exit status and
 /// signal disposition are the helper's own.
 pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
+    use std::os::unix::process::CommandExt;
+
     let command = args
         .first()
         .and_then(|a| a.to_str())
