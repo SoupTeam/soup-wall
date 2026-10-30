@@ -113,3 +113,6 @@ stay private. No paid inference or personal project data is used.
 
 Final shared Ready CI, CodeQL, exact-source candidate admission and merge are
 team-lead-owned; an author Draft or a successful preview is not merge approval.
+
+Source-specific author qualification and limitations are recorded in the
+[SOU-188 acceptance evidence](evidence/sou-188-acceptance/README.md).
