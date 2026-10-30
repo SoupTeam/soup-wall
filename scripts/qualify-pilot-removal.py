@@ -25,10 +25,10 @@ spec = importlib.util.spec_from_file_location('removal_edit', ROOT / 'scripts/qu
 EDIT = importlib.util.module_from_spec(spec); spec.loader.exec_module(EDIT)
 require, sha = EDIT.require, EDIT.sha
 FORMAT = 'sw-installed-pilot-removal-qualification/1'
-FAULTS = ('before-unlink', 'after-unlink', 'unlink-io', 'directory-sync')
+FAULTS = ('before-unlink', 'between-objects', 'after-unlink', 'unlink-io', 'directory-sync')
 CASES = ('installed-closure', 'genuine-completed-edit', 'preview-preserves-all', 'consent-required',
          'changed-selection', 'tampered-receipt', 'unexpected-entry', 'component-symlink', 'component-hardlink',
-         'special-file', 'redirected-parent', 'changed-root', 'journal-overlap', 'active-read-only-owner',
+         'special-file', 'redirected-parent', 'changed-root', 'journal-overlap', 'active-process-reference',
          'active-edit-run', 'uncertain-run', 'unknown-journal', 'changed-journal',
          'actual-removal-preserves-user-data', 'already-removed', 'substitution-after-interruption', *FAULTS)
 
@@ -48,8 +48,8 @@ def passed(report):
     for name in FAULTS:
         row = next(r for r in rows if r['id'] == name)
         if row.get('actual_syscall_fault') is not True or row.get('preserved') is not True: return False
-        if name in ('before-unlink', 'after-unlink') and row.get('fault_exit') != -signal.SIGKILL: return False
-        if name in ('before-unlink', 'unlink-io') and row.get('explicit_retry_completed') is not True: return False
+        if name in ('before-unlink', 'between-objects', 'after-unlink') and row.get('fault_exit') != -signal.SIGKILL: return False
+        if name in ('before-unlink', 'between-objects', 'unlink-io') and row.get('explicit_retry_completed') is not True: return False
         if name in ('after-unlink', 'directory-sync') and row.get('uncertain_not_success') is not True: return False
     for name in ('genuine-completed-edit', 'actual-removal-preserves-user-data'):
         row = next(r for r in rows if r['id'] == name)
@@ -183,13 +183,13 @@ def qualify(args, report):
                 code,_,_=apply(words,p)
                 require(code!=0 and before==(witness(home if not home.is_symlink() else held),witness(prefix)) and not j.exists(),'unsafe_scope_not_refused')
             done(name,preserved=True,refused=True)
-        begin('active-read-only-owner');home,prefix,j,words=fixture('active-read')
+        begin('active-process-reference');home,prefix,j,words=fixture('active-read')
         hold=subprocess.Popen(['/bin/sleep','30'],cwd=home/'pilot-front-door',env=env)
         try:
             before=witness(home);code,v,_=operator('preview',words)
             require(code==0 and v['status']=='blocked' and not v['confirmation_sha256'] and witness(home)==before,'live_owner_not_refused')
         finally: hold.terminate();hold.wait(timeout=5)
-        done('active-read-only-owner',actual_live_process=True,preserved=True)
+        done('active-process-reference',actual_live_process=True,preserved=True)
         begin('active-edit-run'); root2,out2,plan2,code,prepared2=suite.prepare('active-edit');checked=[]
         index2=next(i for i,t in enumerate(prepared2['profile']['targets']) if t['name']=='result.txt')
         def active(run,row):
@@ -212,14 +212,16 @@ def qualify(args, report):
             begin(name);home,prefix,j,words=fixture(name);p=preview(words);before=witness(prefix), (home/'provider-credentials').read_bytes()
             code,v,err=apply(words,p,fault=name)
             require(b'sou188_owned_fault_observed' in err,'actual_fault_not_observed')
-            if name in ('before-unlink','after-unlink'):require(code==-signal.SIGKILL,'actual_kill_missing')
+            if name in ('before-unlink','between-objects','after-unlink'):require(code==-signal.SIGKILL,'actual_kill_missing')
             if name=='unlink-io':require(code==0 and v['status']=='failed','unlink_failure_not_reported')
             if name=='directory-sync':require(code==0 and v['status']=='uncertain','sync_uncertainty_not_reported')
             code,state,_=operator('status',retained(j,p));require(code==0,'status_failed')
-            if name in ('before-unlink','unlink-io'):
+            if name=='between-objects':
+                require(state['objects'][0]['status']=='removed' and any(x['status']!='removed' for x in state['objects'][1:]), 'completed_prefix_not_observed')
+            if name in ('before-unlink','between-objects','unlink-io'):
                 code,resumed,_=operator('resume',retained(j,p),flags)
                 require(code==0 and resumed['status']=='removed' and not (home/'pilot-front-door').exists(),'explicit_retry_failed')
-                done(name,actual_syscall_fault=True,fault_exit=-9 if name=='before-unlink' else 0,explicit_retry_completed=True,preserved=True)
+                done(name,actual_syscall_fault=True,fault_exit=-9 if name in ('before-unlink','between-objects') else 0,explicit_retry_completed=True,preserved=True)
             else:
                 require(state['status']=='uncertain','interruption_falsely_successful')
                 before_component=witness(home/'pilot-front-door')

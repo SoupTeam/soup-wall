@@ -134,7 +134,7 @@ pub(super) fn blockers(plan: &Plan, b: &mut Budget) -> Result<Vec<&'static str>>
                     }
                 }
                 if let Some(i) = line.find('/') {
-                    if referenced(line[i..].as_bytes(), &roots) {
+                    if referenced(&line.as_bytes()[i..], &roots) {
                         return Ok(true);
                     }
                 }

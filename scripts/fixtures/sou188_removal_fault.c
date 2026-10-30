@@ -21,6 +21,7 @@ static int mode(const char *m){const char *v=getenv("SOU188_FAULT");return v&&st
 static void hit(void){const char msg[]="sou188_owned_fault_observed\n";(void)write(2,msg,sizeof(msg)-1);}
 int unlinkat(int fd,const char *name,int flags){
     int(*original)(int,const char*,int)=dlsym(RTLD_NEXT,"unlinkat");
+    if(removed&&mode("between-objects")){hit();(void)kill(getpid(),SIGKILL);_exit(89);}
     int match=selected(fd)&&strcmp(name,"current.json")==0;
     if(match&&mode("before-unlink")){hit();(void)kill(getpid(),SIGKILL);_exit(87);}
     if(match&&mode("unlink-io")){hit();errno=EIO;return -1;}

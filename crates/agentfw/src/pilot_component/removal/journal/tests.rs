@@ -111,9 +111,14 @@ fn durable_completed_objects_are_skipped_and_already_removed_is_repeatable() {
     for (i, e) in j.plan.entries.iter().enumerate() {
         j.write_record(i, "intent").unwrap();
         let (p, n) = location(&j.plan, e).unwrap();
+        let expected = if e.identity.directory() {
+            j.directory_stamp(&e.name, &mut Budget::new()).unwrap()
+        } else {
+            e.identity.clone()
+        };
         Dir::open(&p)
             .unwrap()
-            .remove(&n, &e.identity, e.sha256.as_deref(), &mut Budget::new())
+            .remove(&n, &expected, e.sha256.as_deref(), &mut Budget::new())
             .unwrap();
         j.write_record(i, "done").unwrap();
     }
@@ -248,4 +253,33 @@ fn orphan_and_damaged_earlier_attempt_records_fail_closed() {
         )
         .is_err());
     }
+}
+
+#[test]
+fn changed_directory_after_completed_child_is_not_an_original_object() {
+    let (_t, j) = fixture();
+    let e = &j.plan.entries[0];
+    let (parent, name) = location(&j.plan, e).unwrap();
+    j.write_record(0, "intent").unwrap();
+    Dir::open(&parent)
+        .unwrap()
+        .remove(&name, &e.identity, e.sha256.as_deref(), &mut Budget::new())
+        .unwrap();
+    j.write_record(0, "done").unwrap();
+    assert!(j
+        .verify_remaining(&j.inspect(&mut Budget::new()).unwrap(), &mut Budget::new())
+        .is_ok());
+    // Same directory/inode, altered after the recorded child removal. Ignoring
+    // ctime would silently adopt this later object state on restart.
+    let original = Dir::open(&parent).unwrap().id;
+    fs::set_permissions(&parent, fs::Permissions::from_mode(0o500)).unwrap();
+    fs::set_permissions(&parent, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(Dir::open(&parent).unwrap().id.object(&original));
+    let rows = j.inspect(&mut Budget::new()).unwrap();
+    assert_eq!(rows[1].reason, "substituted_or_reappeared_object");
+    assert!(j.verify_remaining(&rows, &mut Budget::new()).is_err());
+    assert_eq!(
+        fs::read(j.plan.selected.home.join("credentials")).unwrap(),
+        b"private retained sentinel"
+    );
 }

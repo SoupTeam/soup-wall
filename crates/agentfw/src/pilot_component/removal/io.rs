@@ -280,7 +280,7 @@ impl Dir {
         self.recheck()?;
         let now = self.optional(name)?.context("removal_object_missing")?;
         if expected.directory() {
-            ensure!(now.object(expected), "removal_object_substituted");
+            ensure!(now == *expected, "removal_object_substituted");
             let child = Self::open(&self.path.join(name))?;
             ensure!(
                 child.id.object(expected) && child.names()?.is_empty(),

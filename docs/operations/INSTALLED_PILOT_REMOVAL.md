@@ -81,7 +81,10 @@ attempt; a fully completed resume returns its own acknowledgement.
 Resume skips objects with verified completion records, rechecks all remaining
 objects and rejects new occupants of any original name. A failed unlink with the
 unchanged original still present may enter another recorded attempt, at most
-three per object. A kill before unlink can continue. An unlink without a complete
+three per object. A kill before unlink can continue. A kill between completed objects resumes the
+remaining exact objects and skips the durably completed prefix. Directory
+metadata is pinned after each completed child removal, so later directory
+changes are not silently adopted. An unlink without a complete
 durability record stays uncertain and cannot be converted into success merely
 because the name is absent. A kill after unlink or failed directory sync retains
 the journal and all remaining evidence, and refuses blind retry. A readable but
@@ -101,7 +104,7 @@ a real installed component and the pinned genuine Claude host with the existing
 scripted loopback provider. It checks usable installed startup, a completed
 create/read edit run, live-process/edit-run refusal, read-only preview, explicit
 consent, stale/tampered/link/alias/unknown-state controls, actual removal and
-retained built-in recovery. Actual syscall faults exercise SIGKILL before and
+retained built-in recovery. Actual syscall faults exercise SIGKILL before unlink, between completed objects and
 after unlink, unlink I/O failure, directory-sync failure, explicit retry and a
 new object substituted before retry. Independent project/sibling/credential/run
 and output witnesses remain unchanged. Reports publish only finite outcomes,

@@ -55,16 +55,36 @@ pub(super) fn no_mounts(path: &Path) -> Result<()> {
             .split_whitespace()
             .nth(4)
             .context("removal_mount_inventory_invalid")?;
-        // Do not guess at escaped mount names: ambiguous ancestry blocks.
-        ensure!(
-            !name.contains('\\') || !path.to_string_lossy().contains(' '),
-            "removal_mount_inventory_ambiguous"
-        );
-        ensure!(!Path::new(name).starts_with(path), "removal_nested_mount");
+        let mut decoded = Vec::new();
+        let bytes = name.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'\\' {
+                let escape = bytes
+                    .get(i + 1..i + 4)
+                    .context("removal_mount_inventory_invalid")?;
+                let value = match escape {
+                    b"040" => b' ',
+                    b"011" => b'\t',
+                    b"012" => b'\n',
+                    b"134" => b'\\',
+                    _ => anyhow::bail!("removal_mount_inventory_invalid"),
+                };
+                decoded.push(value);
+                i += 4;
+            } else {
+                decoded.push(bytes[i]);
+                i += 1;
+            }
+        }
+        use std::os::unix::ffi::OsStrExt;
+        let mount = Path::new(std::ffi::OsStr::from_bytes(&decoded));
+        ensure!(!mount.starts_with(path), "removal_nested_mount");
     }
     Ok(())
 }
 fn retained(path: &Path, b: &mut Budget) -> Result<RetainedInventory> {
+    no_mounts(path)?;
     let d = Dir::open(path)?;
     let mut entries = vec![];
     for name in d.names()? {
@@ -109,7 +129,14 @@ fn retained(path: &Path, b: &mut Budget) -> Result<RetainedInventory> {
             ),
             "removal_selection_changed"
         );
-        let _: serde_json::Value = decode(&selected)?;
+        let selected_value: serde_json::Value = decode(&selected)?;
+        ensure!(
+            matches!(
+                selected_value["format"].as_str(),
+                Some("sw-installed-pilot-selection/2" | "sw-installed-pilot-selection/3")
+            ),
+            "removal_invalid_preparation_receipt"
+        );
         row.identity = id;
         row.sha256 = Some(sha(&raw));
     }
@@ -127,7 +154,16 @@ fn retained(path: &Path, b: &mut Budget) -> Result<RetainedInventory> {
         ensure!(names.len() <= 32, "removal_generation_cap");
         if preparation.optional("current.json")?.is_some() {
             let (raw, id) = preparation.read("current.json", 65536, b)?;
-            let _: serde_json::Value = decode(&raw)?;
+            let value: serde_json::Value = decode(&raw)?;
+            ensure!(
+                value["format"]
+                    == if kind == "preparation" {
+                        "sw-pilot-preparation/1"
+                    } else {
+                        "sw-native-pilot-current/1"
+                    },
+                "removal_invalid_preparation_receipt"
+            );
             entries.push(Entry {
                 name: format!("{kind}/current.json"),
                 identity: id,
@@ -148,9 +184,20 @@ fn retained(path: &Path, b: &mut Budget) -> Result<RetainedInventory> {
             let (raw, id) = generation.read(receipt, 65536, b)?;
             let value: serde_json::Value = decode(&raw)?;
             ensure!(
-                value["format"]
-                    .as_str()
-                    .is_some_and(|v| v.starts_with("sw-")),
+                if kind == "preparation" {
+                    matches!(
+                        value["format"].as_str(),
+                        Some("sw-installed-pilot-selection/2" | "sw-installed-pilot-selection/3")
+                    ) && value["source"]["commit"]
+                        .as_str()
+                        .is_some_and(|v| super::super::is_hex(v, 40))
+                } else {
+                    value["format"] == "sw-native-pilot-prerequisites/1"
+                        && value["status"] == "built-not-qualified"
+                        && value["source_commit"]
+                            .as_str()
+                            .is_some_and(|v| super::super::is_hex(v, 40))
+                },
                 "removal_invalid_preparation_receipt"
             );
             entries.push(Entry {
@@ -337,7 +384,23 @@ pub(super) fn preview(s: &Selection, b: &mut Budget) -> Result<Plan> {
     separate(&s.journal, &s.home)?;
     let mut kept = vec![];
     for p in retained_roots {
-        kept.push(retained(&p, b)?);
+        let inventory = retained(&p, b)?;
+        let removed_alias = |id: &super::Identity| {
+            component.id.object(id)
+                || entries
+                    .iter()
+                    .filter(|e| e.identity.directory())
+                    .any(|e| e.identity.object(id))
+        };
+        ensure!(
+            !removed_alias(&inventory.identity)
+                && inventory
+                    .entries
+                    .iter()
+                    .all(|e| !removed_alias(&e.identity)),
+            "removal_retained_alias"
+        );
+        kept.push(inventory);
     }
     Ok(Plan {
         format: FORMAT.into(),

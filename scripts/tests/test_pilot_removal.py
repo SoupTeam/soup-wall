@@ -18,7 +18,7 @@ class RemovalEvidence(unittest.TestCase):
         for key in ('agentfw_sha256','helper_sha256','component_sha256','fault_sha256'):v[key]='b'*64
         for r in v['cases']:
             if r['id'] in M.FAULTS:r.update(actual_syscall_fault=True,preserved=True,
-                fault_exit=-9 if r['id'] in ('before-unlink','after-unlink') else 0,
+                fault_exit=-9 if r['id'] in ('before-unlink','between-objects','after-unlink') else 0,
                 explicit_retry_completed=True,uncertain_not_success=True)
             if r['id'] in ('genuine-completed-edit','actual-removal-preserves-user-data'):
                 r.update(actual_installed_effect=True,preserved=True)
@@ -42,7 +42,7 @@ class RemovalEvidence(unittest.TestCase):
             for key in keys:
                 # Only assertions applicable to this particular fault count.
                 v=self.report();target=next(x for x in v['cases'] if x['id']==r['id']);target[key]=False
-                if key=='explicit_retry_completed' and r['id'] not in ('before-unlink','unlink-io'):continue
+                if key=='explicit_retry_completed' and r['id'] not in ('before-unlink','between-objects','unlink-io'):continue
                 if key=='uncertain_not_success' and r['id'] not in ('after-unlink','directory-sync'):continue
                 self.assertFalse(M.passed(v))
         for key,val in [('operator_provider_requests',False),('operator_provider_requests',1),('all_owned_stopped',False),('sibling_and_project_preserved',False)]:

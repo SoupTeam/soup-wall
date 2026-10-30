@@ -25,6 +25,7 @@ struct Record {
     attempt: usize,
     entry_sha256: String,
     phase: String,
+    parent_after: Option<Identity>,
 }
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -180,11 +181,22 @@ impl Journal {
                 ),
             "removal_progress_invalid"
         );
+        ensure!(
+            if phase == "done" {
+                value.parent_after.as_ref().is_some_and(|p| p.directory())
+            } else {
+                value.parent_after.is_none()
+            },
+            "removal_progress_invalid"
+        );
         Ok(true)
     }
     fn validate_progress(&self, b: &mut Budget) -> Result<()> {
+        let mut preceding_complete = true;
         for index in 0..self.plan.entries.len() {
             let mut previous_failed = false;
+            let mut started = false;
+            let mut complete = false;
             for attempt in 0..3 {
                 let intent = self.check_at(index, attempt, "intent", b)?;
                 let done = self.check_at(index, attempt, "done", b)?;
@@ -193,8 +205,12 @@ impl Journal {
                     (intent || (!done && !failed)) && (!intent || attempt == 0 || previous_failed),
                     "removal_progress_invalid"
                 );
+                ensure!(!intent || preceding_complete, "removal_progress_invalid");
+                started |= intent;
+                complete |= intent && done && !failed;
                 previous_failed = intent && failed && !done;
             }
+            preceding_complete &= started && complete;
         }
         Ok(())
     }
@@ -224,8 +240,45 @@ impl Journal {
                 attempt,
                 entry_sha256: sha(&canonical(&self.plan.entries[index])?),
                 phase: phase.into(),
+                parent_after: if phase == "done" {
+                    Some(Dir::open(&location(&self.plan, &self.plan.entries[index])?.0)?.id)
+                } else {
+                    None
+                },
             })?,
         )
+    }
+    /// Direct-child deletion changes this directory's timestamps/link count.
+    /// Pin the last recorded parent state instead of ignoring those fields:
+    /// after restart even an inode-reused replacement must remain untouched.
+    fn directory_stamp(&self, name: &str, b: &mut Budget) -> Result<Identity> {
+        let root = self.plan.selected.home.join("pilot-front-door");
+        let path = if name.is_empty() {
+            root
+        } else {
+            root.join(name)
+        };
+        let original = self
+            .plan
+            .entries
+            .iter()
+            .find(|e| e.name == name && e.identity.directory())
+            .context("removal_directory_unlisted")?;
+        let mut expected = original.identity.clone();
+        for (i, e) in self.plan.entries.iter().enumerate() {
+            if location(&self.plan, e)?.0 == path && self.check_record(i, "done", b)? {
+                let r: Record =
+                    self.dir
+                        .json(&record_name(i, self.attempt(i)?, "done"), 16384, b)?;
+                let observed = r.parent_after.context("removal_progress_invalid")?;
+                ensure!(
+                    observed.object(&original.identity),
+                    "removal_progress_invalid"
+                );
+                expected = observed;
+            }
+        }
+        Ok(expected)
     }
     fn inspect(&self, b: &mut Budget) -> Result<Vec<Outcome>> {
         self.dir.recheck()?;
@@ -276,7 +329,7 @@ impl Journal {
                 Some(now)
                     if done
                         || (if e.identity.directory() {
-                            !now.object(&e.identity)
+                            now != self.directory_stamp(&e.name, b)?
                         } else {
                             now != e.identity
                         }) =>
@@ -308,7 +361,10 @@ impl Journal {
             let d = Dir::open(&parent)?;
             if e.identity.directory() {
                 let child = Dir::open(&parent.join(&leaf))?;
-                ensure!(child.id.object(&e.identity), "removal_object_substituted");
+                ensure!(
+                    child.id == self.directory_stamp(&e.name, b)?,
+                    "removal_object_substituted"
+                );
                 let expected: BTreeSet<_> = self
                     .plan
                     .entries
@@ -405,7 +461,25 @@ impl Journal {
             let operation = (|| -> Result<()> {
                 self.dir.recheck()?;
                 inventory::retained_recheck(&self.plan, b)?;
-                Dir::open(&parent)?.remove(&leaf, &e.identity, e.sha256.as_deref(), b)?;
+                let parent_dir = Dir::open(&parent)?;
+                if parent == self.plan.selected.home {
+                    ensure!(parent_dir.id == self.plan.home, "removal_home_changed");
+                } else {
+                    let relative = parent
+                        .strip_prefix(self.plan.selected.home.join("pilot-front-door"))?
+                        .to_str()
+                        .context("removal_invalid_name")?;
+                    ensure!(
+                        parent_dir.id == self.directory_stamp(relative, b)?,
+                        "removal_directory_changed"
+                    );
+                }
+                let expected = if e.identity.directory() {
+                    self.directory_stamp(&e.name, b)?
+                } else {
+                    e.identity.clone()
+                };
+                parent_dir.remove(&leaf, &expected, e.sha256.as_deref(), b)?;
                 self.write_record(index, "done")
             })();
             if operation.is_err() {
