@@ -1,0 +1,5 @@
+agent_policies:
+  - name: owned-read-ask
+    when: { action_class: read_only }
+    action: ask
+default: allow

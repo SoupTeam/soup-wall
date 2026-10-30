@@ -96,9 +96,11 @@ class DossierTests(unittest.TestCase):
         a['cases'].insert(7, terminated)
         self.add('ask', a)
 
-    def test_complete_synthetic_fixture_can_be_ready(self):
+    def test_complete_legacy_fixture_is_readable_but_unqualified(self):
         self.full_fixture()
-        self.assertEqual(self.result()['status'], 'READY')
+        result = self.result()
+        self.assertEqual(result['status'], 'NOT_READY')
+        self.assertTrue(all('legacy_identity_contract_unqualified' in row['blockers'] for row in result['evidence']))
 
     def test_empty_evidence_not_ready(self):
         self.assertEqual(self.result()['status'], 'NOT_READY')
@@ -138,7 +140,7 @@ class DossierTests(unittest.TestCase):
         self.m['evidence'][0]['file']=self.put('matched.json',r)
         out=self.result();self.assertEqual(out['status'],'NOT_READY')
         row=next(x for x in out['ledger'] if x['item']=='useful-workflows')
-        self.assertEqual(row['status'],'fail');self.assertEqual(row['counts'],{'passed':11,'required':12})
+        self.assertEqual(row['status'],'fail');self.assertEqual(row['observations'][0]['counts'],{'passed':11,'required':12})
 
     def test_stored_green_gate_cannot_override_rows(self):
         r=self.matched();r['rows'][1].update(status='failed',false_interruption=True);self.add('lie',r)
@@ -290,11 +292,12 @@ class DossierTests(unittest.TestCase):
     def test_current_scenario_denominators(self):
         self.full_fixture()
         out=self.result()
-        self.assertEqual(out['status'],'READY')
+        self.assertEqual(out['status'],'NOT_READY')
         ask=next(r for r in out['ledger'] if r['item']=='ask')
         cleanup=next(r for r in out['ledger'] if r['item']=='cancellation-cleanup')
-        self.assertEqual(ask['counts'],{'passed':15,'required':15})
-        self.assertEqual(cleanup['counts'],{'passed':3,'required':3})
+        self.assertEqual(ask['observations'][0]['counts'],{'passed':15,'required':15})
+        self.assertEqual(cleanup['observations'][0]['counts'],{'passed':3,'required':3})
+        self.assertFalse(ask['observations'][0]['eligible'])
         self.assertEqual(len(json.loads((self.root/'prepared.json').read_text(encoding='utf-8'))['cases']),11)
 
     def test_new_required_cases_cannot_be_omitted_or_duplicated(self):
@@ -357,7 +360,8 @@ class LinkedExecutionContext(unittest.TestCase):
     def test_explicit_context_binds_missing_environment_without_rescoring(self):
         self.context()
         result = self.result()
-        self.assertEqual(result['status'], 'READY')
+        self.assertEqual(result['status'], 'NOT_READY')
+        self.assertIn('legacy_identity_contract_unqualified', result['evidence'][0]['blockers'])
         self.assertIn('execution_context_sha256', result['evidence'][0])
 
     def test_foreign_source_unconfirmed_cleanup_or_unlinked_report_cannot_pass(self):

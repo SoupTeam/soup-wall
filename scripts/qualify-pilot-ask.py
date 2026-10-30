@@ -21,10 +21,13 @@ import time
 import uuid
 import traceback
 import threading
+import sys
 
 import importlib.util
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+import pilot_runtime_identity as IDENTITY
 
 
 def load(name, filename):
@@ -458,6 +461,7 @@ def finish_qualification(report, cases, samples, active, daemon):
                 cleanup_error = error
         if cleanup_error is not None:
             raise cleanup_error
+        IDENTITY.finish()
 
 
 def qualify(args, private, report, pilot_class=None):
@@ -473,15 +477,20 @@ def qualify(args, private, report, pilot_class=None):
     status_before = setup.git("status","--porcelain=v1")
     cases, active, daemon = [], [], None
 
-    def start_daemon(kind, ttl):
+    def start_daemon(kind, ttl, scope):
         nonlocal daemon
         stop(daemon)
+        IDENTITY.finish()
         sensitive = ", touches_sensitive_path: true" if kind == "filesystem" else ""
         setup.policy.write_text("agent_policies:\n  - name: owned-read-ask\n    when: { action_class: read_only" + sensitive + " }\n    action: ask\ndefault: allow\n")
         BASE.write(setup.home / "config.yaml", {"port": setup.port, "enforce": True, "policy": str(setup.policy),
             "native": {"registry_path": str(setup.registry), "registry_sha256": LAUNCH.sha(setup.registry),
                 "approval": {"ttl_seconds": ttl}, "liveness": {"default_lease_seconds": 4,
                     "max_lease_seconds": 60, "maintenance_interval_ms": 100}}})
+        IDENTITY.capture(report, scope, dict(setup.selected, agentfw=setup.binary,
+                         git_launcher=private / 'installed/agentfw-git-sandbox'), setup.profiles,
+                         {name: classifier for name in setup.profiles}, setup.policy, setup.registry,
+                         setup.home / 'config.yaml')
         with (private / "daemon.private").open("ab") as log:
             daemon = subprocess.Popen([str(setup.binary), "serve"], cwd=private, env=setup.env, stdout=log, stderr=log)
         require(BASE.DEMO.wait_healthy(setup.port, daemon), "daemon_not_ready")
@@ -494,7 +503,7 @@ def qualify(args, private, report, pilot_class=None):
                 + (["collector_term"] if kind == "git" else []))
             for sample_index, case in enumerate(selected_cases):
                 try:
-                    start_daemon(kind, 20 if case == "expire" else 30)
+                    start_daemon(kind, 20 if case == "expire" else 30, kind + ':' + case)
                     paired = kind == "filesystem" and case == "approve"
                     pilot = pilot_class(setup, private / (kind + "-" + case + "-" + str(sample_index)), classifier, kind,
                                   enabled=case != "default", deferred=paired)
@@ -584,7 +593,7 @@ def qualify(args, private, report, pilot_class=None):
                             continue
                         elif case == "restart":
                             pilot.inspect(waiting)
-                            start_daemon(kind, 30)
+                            start_daemon(kind, 30, kind + ':restart:resumed')
                             pilot.operator("approve", waiting["pending_id"], "--binding", waiting["binding_sha256"], success=False)
                         else:
                             require(case == "expire", "unknown_case")

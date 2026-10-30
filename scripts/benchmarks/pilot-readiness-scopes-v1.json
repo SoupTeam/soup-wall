@@ -1,0 +1,526 @@
+{
+  "format": "sw-pilot-runtime-scopes/1",
+  "policies": {
+    "baseline": {
+      "path": "scripts/benchmarks/pilot-readiness-policies/baseline.yaml",
+      "sha256": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc"
+    },
+    "ask-filesystem": {
+      "path": "scripts/benchmarks/pilot-readiness-policies/ask-filesystem.yaml",
+      "sha256": "fd60f9e53011d1a37cff8888b96136470a6643e2bce0e98166a8e3796b75888e"
+    },
+    "ask-git": {
+      "path": "scripts/benchmarks/pilot-readiness-policies/ask-git.yaml",
+      "sha256": "29a8d854ac6cc54717d55bc6ac1368e5764acae9e06aca1e083925972db2190d"
+    }
+  },
+  "profiles": {
+    "filesystem": {
+      "format": "sw-mcp/filesystem-readonly/1",
+      "registry_sha256": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+      "policy": {
+        "path": "profiles/mcp/filesystem-readonly-v1/policy.yaml",
+        "sha256": "55b0f70c4e7a59a4668eb83189ab6b1fbb7865f8b3baa5ef4a0f29c7db015eec"
+      }
+    },
+    "git": {
+      "format": "sw-mcp/git-readonly/1",
+      "registry_sha256": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+      "policy": {
+        "path": "profiles/mcp/git-readonly-v1/policy.yaml",
+        "sha256": "788a52b8c5159cb40f6ccc2752ad1c9920cd94d55029f1aa81880bc3d7b5a67c"
+      }
+    }
+  },
+  "classifier_sources": {
+    "filesystem": "rule_baseline/rule_baseline.py",
+    "git": "rule_baseline/git_readonly_v1/rule_baseline.py"
+  },
+  "stages": {
+    "installed": {
+      "producer": "qualify-installed-pilot.py",
+      "scopes": {
+        "launch": {
+          "policy": "baseline",
+          "configuration": "installed",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "filesystem",
+            "git": "git"
+          }
+        }
+      }
+    },
+    "matched": {
+      "producer": "qualify-installed-pilot.py",
+      "scopes": {
+        "launch": {
+          "policy": "baseline",
+          "configuration": "installed",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "filesystem",
+            "git": "git"
+          }
+        }
+      }
+    },
+    "ask": {
+      "producer": "qualify-pilot-ask.py",
+      "scopes": {
+        "git:expire": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 20,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "git:restart": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "git:restart:resumed": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "git:approve": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "git:reject": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "git:cancel": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "git:approved_cancel": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "git:default": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "git:collector_term": {
+          "policy": "ask-git",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "filesystem:expire": {
+          "policy": "ask-filesystem",
+          "configuration": "ask",
+          "approval_ttl_seconds": 20,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "filesystem:restart": {
+          "policy": "ask-filesystem",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "filesystem:restart:resumed": {
+          "policy": "ask-filesystem",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "filesystem:approve": {
+          "policy": "ask-filesystem",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "filesystem:reject": {
+          "policy": "ask-filesystem",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "filesystem:cancel": {
+          "policy": "ask-filesystem",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "filesystem:approved_cancel": {
+          "policy": "ask-filesystem",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "filesystem:default": {
+          "policy": "ask-filesystem",
+          "configuration": "ask",
+          "approval_ttl_seconds": 30,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        }
+      }
+    },
+    "prepared": {
+      "producer": "qualify-prepared-pilot-run.py",
+      "scopes": {
+        "selection": {
+          "policy": "baseline",
+          "configuration": "selection",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "useful-refusal": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "ask": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": 120,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "default": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "cancel": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "daemon-loss": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "host-crash": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "timeout": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "stop:two-prepared-runs:selected": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "stop:two-prepared-runs:peer": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "stop:interrupted-stop": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "stop:daemon-loss-stop": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "stop:unconfirmed-namespace-stop": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        }
+      }
+    },
+    "docs-code": {
+      "producer": "qualify-existing-pilot.py",
+      "scopes": {
+        "selection": {
+          "policy": "baseline",
+          "configuration": "selection",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "initial": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "operator-edit": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "cancel": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "daemon-loss": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "recovery": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        }
+      }
+    },
+    "unicode-spaces": {
+      "producer": "qualify-existing-pilot.py",
+      "scopes": {
+        "selection": {
+          "policy": "baseline",
+          "configuration": "selection",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "initial": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "operator-edit": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "cancel": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "daemon-loss": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "recovery": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        }
+      }
+    },
+    "local-history": {
+      "producer": "qualify-existing-pilot.py",
+      "scopes": {
+        "selection": {
+          "policy": "baseline",
+          "configuration": "selection",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "initial": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "operator-edit": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "cancel": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "daemon-loss": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        },
+        "recovery": {
+          "policy": "baseline",
+          "configuration": "prepared",
+          "approval_ttl_seconds": null,
+          "classifiers": {
+            "filesystem": "git",
+            "git": "git"
+          }
+        }
+      }
+    }
+  }
+}
