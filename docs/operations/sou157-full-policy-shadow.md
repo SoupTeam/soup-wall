@@ -13,3 +13,9 @@ The existing native controller retains the full comparisons for the eligible 50/
 ## Outstanding acceptance
 
 Review this new implementation and its public corpus pair report. Ten existing benign refusals must not be described as fixed. Establish actual eligible native results for corpus cases before claiming a full-corpus hypothetical relief count; the saved-byte pass alone cannot provide that evidence. Keep quoted/reviewer-bot and other independent refusals visible. No production enablement, paid/model/held-out run, or repeat of the accepted earlier matrix is part of this checkpoint.
+
+## Validation at 02d3495a
+
+Retained report: `evidence/sou157-02d3495a-policy-pairs/`. All 51 production case/status/verdict/rule tuples match b94acf78. There are 49 policy pairs, and two explicit over-budget rows; all three technical-labelled cases remain in the manifest/report. Eligible offline cases: zero. Confirmed false-refusal relief: zero. Existing result: 24/24 attacks withheld, 10/24 benign refusals. Diagnostic exit 1 is expected for that failing development gate.
+
+Windows validation: core 100/100, agent 183/183, native execution 21/21, Python controller/reporter 9/9. Full agentfw library pass: 718 passed, two ignored, one port-ownership collision in preview_preserves_source_and_rejects_server_rebinding; that test passed immediately in isolation. All-target Clippy for core/agent/agentfw and offline core ML compilation pass; no inference. An initial report attempt used a stale executable while linking failed; rejected and retained only in local notes. The reporter now rejects inspected rows lacking a full-policy comparison; the retained run followed a successful build with a clean source diff.
