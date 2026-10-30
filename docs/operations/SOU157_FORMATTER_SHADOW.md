@@ -1,3 +1,25 @@
+# Local paired-finding diagnostic increment - 2026-10-30
+
+`InjectionDetector::inspect_formatter_shadow` returns original and diagnostic
+finding sets from a shared staged inspection. Only the heuristic component uses
+the previously reviewed separator subtraction. Signature findings retain their
+original coordinates, confidence and direction. The ML branch still uses the
+original findings for escalation and the complete original text, sharing its
+single prediction with both views. No model inference was run for this increment.
+
+This API is absent from the production Detector interface and has no native
+caller or release authority. Caller-supplied coordinates are diagnostic only.
+Missing, malformed or duplicate coordinates preserve the baseline. Empty shadow
+findings are not evidence of benignness. Full policy recomposition, opaque native
+custody integration and independent acceptance remain outstanding; this does not
+repair the ten corpus false refusals or qualify as a new Linux runtime witness.
+
+Validation: 100 core unit tests passed; core all-targets Clippy with warnings
+as errors passed; ML-feature compilation passed without inference; all 181
+agent library tests passed. Tests retain original findings, signatures, UTF-8 direction,
+body encoding/imperatives/delimiters and malformed-attribution baseline behavior.
+External publication is held by the user's instruction.
+
 # Current verified shadow checkpoint - 2026-10-30
 
 Independent review 5711682866 accepted the bounded scoring increment at

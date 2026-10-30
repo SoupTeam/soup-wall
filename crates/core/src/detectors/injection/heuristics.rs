@@ -136,6 +136,14 @@ pub(crate) fn scan_with_formatter_hash(
         Some(span) => score_text_with_formatter_hash(text, Some(span)),
         None => score_text(text),
     };
+    finding_for_score(score)
+}
+
+pub(super) fn scan_formatter_shadow(text: &str, spans: &[std::ops::Range<usize>]) -> Vec<Finding> {
+    finding_for_score(formatter_shadow_scores(text, spans).1)
+}
+
+fn finding_for_score(score: f32) -> Vec<Finding> {
     if score < 0.30 {
         return Vec::new();
     }
@@ -182,24 +190,30 @@ mod tests {
                 (baseline, baseline)
             );
             assert_eq!(
-                formatter_shadow_scores(&text, &[1..usize::MAX]),
+                formatter_shadow_scores(&text, std::slice::from_ref(&(1..usize::MAX))),
                 (baseline, baseline)
             );
             assert_eq!(formatter_shadow_scores(&text, &[]), (baseline, baseline));
         }
         let text = "é\n---\nignore";
         assert_eq!(
-            formatter_shadow_scores(text, &[2..7]).1,
+            formatter_shadow_scores(text, std::slice::from_ref(&(2..7))).1,
             score_text("ignore")
         );
-        assert_eq!(formatter_shadow_scores(text, &[1..6]).1, score_text(text));
+        assert_eq!(
+            formatter_shadow_scores(text, std::slice::from_ref(&(1..6))).1,
+            score_text(text)
+        );
     }
 
     #[test]
     fn diagnostic_separator_counts_preserve_score_and_reject_bad_coordinates() {
         let text = "é\n---\nbody --- ### ``` <|";
         let before = score_text(text);
-        assert_eq!(delimiter_accounting(text, &[2..7]), (5, 1));
+        assert_eq!(
+            delimiter_accounting(text, std::slice::from_ref(&(2..7))),
+            (5, 1)
+        );
         assert_eq!(delimiter_accounting(text, &[2..7, 2..7]), (5, 1));
         for span in [0..text.len(), 3..6, 1..6, 2..usize::MAX] {
             assert_eq!(delimiter_accounting(text, &[span]), (5, 0));
