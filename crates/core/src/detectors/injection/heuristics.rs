@@ -18,11 +18,40 @@ static LONG_B64: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[A-Za-z0-9+/]{40,}={0,2}").expect("b64 regex"));
 
 /// Count of suspicious delimiter characters commonly used to smuggle instructions.
+const DELIMITERS: [&str; 4] = ["```", "###", "---", "<|"];
 fn delimiter_hits(text: &str) -> usize {
-    text.matches("```").count()
-        + text.matches("###").count()
-        + text.matches("---").count()
-        + text.matches("<|").count()
+    DELIMITERS
+        .iter()
+        .map(|token| text.matches(token).count())
+        .sum()
+}
+
+/// Diagnostic counts over unchanged original bytes. This does not modify score.
+/// A span covers a hit only when it exactly names the producer's newline separator.
+pub(super) fn delimiter_accounting(
+    text: &str,
+    separators: &[std::ops::Range<usize>],
+) -> (usize, usize) {
+    let mut total = 0;
+    let mut owned = 0;
+    let starts: std::collections::BTreeSet<_> = separators
+        .iter()
+        .filter_map(|span| {
+            (span.end.checked_sub(span.start) == Some(5)
+                && text.get(span.clone()) == Some("\n---\n"))
+            .then(|| span.start.checked_add(1))
+            .flatten()
+        })
+        .collect();
+    for token in DELIMITERS {
+        for (start, _) in text.match_indices(token) {
+            total += 1;
+            if token == "---" && starts.contains(&start) {
+                owned += 1;
+            }
+        }
+    }
+    (total, owned)
 }
 
 /// Compute a heuristic score in `[0.0, 1.0]`. Pure function so it is trivially testable.
@@ -106,6 +135,19 @@ pub(crate) fn scan_with_formatter_hash(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnostic_separator_counts_preserve_score_and_reject_bad_coordinates() {
+        let text = "é\n---\nbody --- ### ``` <|";
+        let before = score_text(text);
+        assert_eq!(delimiter_accounting(text, &[2..7]), (5, 1));
+        assert_eq!(delimiter_accounting(text, &[2..7, 2..7]), (5, 1));
+        for span in [0..text.len(), 3..6, 1..6, 2..usize::MAX] {
+            assert_eq!(delimiter_accounting(text, &[span]), (5, 0));
+        }
+        assert_eq!(delimiter_accounting(text, &[]), (5, 0));
+        assert_eq!(score_text(text), before);
+    }
 
     #[test]
     fn proved_formatter_oid_removes_only_its_own_encoding_contribution() {

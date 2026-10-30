@@ -38,6 +38,15 @@ impl Default for InjectionDetector {
 }
 
 impl InjectionDetector {
+    /// Diagnostic accounting only; supplied spans confer no policy authority.
+    /// Returns (all delimiter hits, hits inside exact newline separator spans).
+    pub fn formatter_delimiter_counts(
+        text: &str,
+        spans: &[std::ops::Range<usize>],
+    ) -> (usize, usize) {
+        heuristics::delimiter_accounting(text, spans)
+    }
+
     /// Failure is incomplete inspection, never a clean miss. Refuse rather than
     /// using a partial collection. Input order and empty blocks are preserved.
     pub fn mcp_result_evidence(texts: &[&str]) -> Result<McpResultEvidence, EvidenceLimit> {

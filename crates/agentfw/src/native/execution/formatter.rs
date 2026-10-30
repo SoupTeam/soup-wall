@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Diagnostic coordinates only. This parser has no policy/inspection API.
-//! Its caller must first consume the existing private OriginalResult custody.
+//! Derived on the private original response; release still requires custody consumption.
 use serde::Serialize;
 use serde_json::Value;
 
@@ -19,6 +19,10 @@ pub struct Attribution {
     /// result.structuredContent.content, which were checked byte-identical.
     pub channels: [&'static str; 2],
     pub separator_spans: Vec<std::ops::Range<usize>>,
+    /// Diagnostic counts, never a claim that an aggregate finding is harmless.
+    pub delimiter_hits: usize,
+    pub formatter_delimiter_hits: usize,
+    pub remaining_delimiter_hits: usize,
 }
 
 pub(super) fn derive(args: &Value, raw: &str) -> Option<Attribution> {
@@ -74,6 +78,10 @@ pub(super) fn derive(args: &Value, raw: &str) -> Option<Attribution> {
         }
         start = spans.get(i).map_or(text.len(), |span| span.end);
     }
+    let (delimiter_hits, formatter_delimiter_hits) =
+        soup_wall_core::detectors::injection::InjectionDetector::formatter_delimiter_counts(
+            text, &spans,
+        );
     Some(Attribution {
         contract: "sw-mcp/filesystem-formatter-shadow/1",
         production_authority: false,
@@ -83,6 +91,9 @@ pub(super) fn derive(args: &Value, raw: &str) -> Option<Attribution> {
         complete_text_bytes: text.len(),
         channels: ["result.content[0].text", "result.structuredContent.content"],
         separator_spans: spans,
+        delimiter_hits,
+        formatter_delimiter_hits,
+        remaining_delimiter_hits: delimiter_hits - formatter_delimiter_hits,
     })
 }
 
@@ -128,11 +139,23 @@ mod tests {
                 assert_eq!(a.complete_text_bytes, text.len());
                 assert_eq!(a.text_sha256, super::super::super::hash(text.as_bytes()));
                 assert!(!a.production_authority);
+                assert_eq!(a.delimiter_hits, count - 1);
+                assert_eq!(a.formatter_delimiter_hits, count - 1);
+                assert_eq!(a.remaining_delimiter_hits, 0);
                 for span in a.separator_spans {
                     assert_eq!(&text[span], SEPARATOR);
                 }
             }
         }
+    }
+
+    #[test]
+    fn body_delimiters_remain_visible_and_no_finding_is_discounted() {
+        let (args, raw, _) = fixture(50, "body ### ``` <| --- end");
+        let a = derive(&args, &raw.to_string()).unwrap();
+        assert_eq!(a.formatter_delimiter_hits, 49);
+        assert_eq!(a.remaining_delimiter_hits, 4);
+        assert_eq!(a.delimiter_hits, 53);
     }
 
     #[test]

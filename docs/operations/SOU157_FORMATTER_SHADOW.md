@@ -1,5 +1,34 @@
 # Verified diagnostic checkpoint - 2026-10-29
 
+## Delimiter accounting increment - 2026-10-30
+
+The private formatter receipt now also reports total delimiter hits, exact
+formatter-owned hits, and remaining hits. Accounting uses the same delimiter
+vocabulary as the production heuristic and original UTF-8 byte coordinates.
+Only the `---` occurrence inside an exact authenticated newline separator counts
+as formatter-owned. Duplicate spans cannot double-count; malformed, oversized or
+non-character-boundary spans cannot acquire attribution. Other body delimiters
+remain visible. Bounded producer spans are indexed before scanning, avoiding a
+full span scan per occurrence. No input is removed, replaced or reclassified.
+
+The existing heuristic emits one aggregate finding, not a finding per delimiter.
+These counts therefore do NOT attribute the whole finding, imply harmlessness,
+produce a contextual score or change a decision. In particular, a destructive
+body can have zero remaining delimiters: its positive directive evidence and
+independent policy floors must still block it. Existing full-body/cross-field
+inspection and custody checks remain in force. Public helper outputs are only
+diagnostics and confer no release authority; only the private original-response
+path attaches the counts to the execution receipt.
+
+Component controls cover 50/200/201/256 formatter sizes, body tokens, Unicode byte
+offsets, malformed/duplicate ranges, and unchanged receipt and baseline decisions.
+The accepted Linux witness below belongs to the earlier exact source and does
+not qualify these newly added counters. No new native replay or inference was run.
+
+Validation for this increment: core 98/98, native 146/146 (including execution
+20/20), Clippy for core and agentfw libraries with warnings denied, fmt and diff
+checks passed on Windows. Independent review remains pending.
+
 The previously pending native diagnostic passed on exact source
 `f00889e56383e6776ca66e3e3382d2040437d861` in run
 [40860551932](https://github.com/SoupTeam/soup-wall/actions/runs/40860551932),
