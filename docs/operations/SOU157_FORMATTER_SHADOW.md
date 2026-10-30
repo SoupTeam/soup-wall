@@ -1,3 +1,41 @@
+# Current verified shadow checkpoint - 2026-10-30
+
+Independent review 5711682866 accepted the bounded scoring increment at
+`b94acf7884015a5902f3a2aa58dbf452d7bcf047`. Linux run
+[41049689556](https://github.com/SoupTeam/soup-wall/actions/runs/41049689556)
+completed successfully on that exact source. Runtime artifact 12973594859 has
+ZIP SHA-256 `6b0dfc8cc38c64b28df21867308b19a0b2269e4aabb299e807d5fdabd7adf71a`.
+Hash, four unique archive members and CRC were verified locally. The existing
+pure diagnostic projection reproduces the retained acceptance report. Its POSIX
+file-opening CLI was not run on Windows. Telegram TL acceptance was read at
+17:05; this accepts the shadow run, not production enablement or task closure.
+
+Retained evidence: `evidence/sou157-passed-native-41049689556`. All four executed
+50/200 cases (two benign, two attacks) have baseline heuristic about 0.3 and shadow
+heuristic 0.0, with unchanged refusal. Thus the candidate number alone does NOT
+separate attacks from benign results. The four 201/256 cases remain refused before
+execution; ambiguity and copied-wire controls pass. Runtime cleanup passed and
+model calls were zero. No native/model run was repeated locally.
+
+The full public adapter was rebuilt at this source with an empty tracked diff.
+All 51 cases were retained under `evidence/sou157-b94acf78-corpus`: 24/24 attacks
+refused, zero misses, 10/24 benign false refusals, zero semantic unknowns, and
+three separately reported technical cases. The gate correctly exits 1 (FAIL).
+All 51 label/outcome/verdict/rule tuples match the previous destructive-evidence
+checkpoint, as do every payload hash, manifest and policy. This is an unattested
+Windows policy-preview regression, not native corpus execution or production relief.
+
+Next production proposal must route opaque consumed original-result evidence into
+the existing complete inspection, replace only its heuristic component, and then
+recompose the full policy with signatures, directives, independent hard floors,
+cross-field evidence and existing ML/budget behavior. A public score or caller
+range must never enter this route. The current four native examples do not yet
+prove that recomposition; quoted-signature/reviewer-bot cases remain unresolved.
+This proposal needs separate review before production enablement. Do not infer
+that the ten corpus refusals were repaired by the successful diagnostic run.
+
+The following sections retain historical checkpoints and their then-current status.
+
 # Verified diagnostic checkpoint - 2026-10-29
 
 ## Delimiter accounting increment - 2026-10-30
