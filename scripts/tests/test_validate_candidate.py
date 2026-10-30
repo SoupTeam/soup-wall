@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -365,6 +366,25 @@ function gh() {
             refused, attempts = self.execute_step(script, dry_run=True)
             self.assertNotEqual(refused.returncode, 0)
             self.assertEqual(attempts, '')
+
+
+class QualificationReportTests(unittest.TestCase):
+    def test_missing_historical_source_still_retains_failed_report(self):
+        spec = importlib.util.spec_from_file_location('publication_qualification',
+            ROOT / 'scripts/qualify-publication-admission.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'report'
+            with patch.object(module, 'real_refusal', side_effect=Invalid('published_object_unavailable')), \
+                 patch.object(module.unittest.defaultTestLoader, 'loadTestsFromNames', return_value=unittest.TestSuite()), \
+                 patch.object(sys, 'argv', ['qualify', '--consumer-only', '--output', str(output)]), \
+                 patch('sys.stdout', new_callable=io.StringIO):
+                self.assertEqual(module.main(), 1)
+            report = json.loads((output / 'report.json').read_bytes())
+            self.assertEqual(report['status'], 'failed')
+            self.assertEqual(report['real_not_ready']['consumer']['blockers'], ['real_dossier_unavailable'])
+            self.assertTrue((output / 'tests.txt').is_file())
 
 
 if __name__ == '__main__':

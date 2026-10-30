@@ -93,7 +93,14 @@ def main():
     tests = unittest.defaultTestLoader.loadTestsFromNames(modules)
     stream = io.StringIO()
     result = unittest.TextTestRunner(stream=stream, verbosity=1).run(tests)
-    actual = real_refusal()
+    try:
+        actual = real_refusal()
+    except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError):
+        # Always retain a failed report even when source/evidence prerequisites
+        # are absent. Missing historical Git objects never mean success.
+        actual = {'input_kind': 'real-retained-public-dossier', 'recomputed_status': 'unverified',
+                  'consumer': {'status': 'blocked', 'dossier_status': 'unverified',
+                               'blockers': ['real_dossier_unavailable']}}
     passed = result.wasSuccessful() and actual['consumer']['status'] == 'blocked' and \
         actual['recomputed_status'] == actual['consumer']['dossier_status'] == 'NOT_READY'
     receipt = dossier.git_json(ROOT, commit, 'docs/operations/evidence/sou176/verification-receipt.json')
