@@ -68,6 +68,8 @@ def run_matched(api, args):
         report['source_and_selection_verification_ms'] = round((time.monotonic() - started) * 1000, 3)
         asset_started = time.monotonic()
         prepared = pilot.prepare()
+        if 'runtime_identity' in old_report:
+            report['runtime_identity'] = old_report['runtime_identity']
         report['asset_install_and_daemon_prepare_ms'] = round((time.monotonic() - asset_started) * 1000, 3)
         report['external_build_time'] = 'not_measured_prebuilt_selected_binaries'
         report['preparation_ms'] = round((time.monotonic() - started) * 1000, 3)
