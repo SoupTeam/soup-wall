@@ -75,6 +75,23 @@ def main():
     report = corpus.build_report(manifest, results, identity)
     (args.output_dir / 'report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     by_id = {r['case_id']: r for r in results}
+    paired = {'contract': 'sou157-full-policy-pairs/1', 'identity': identity,
+              'production_authority': False, 'task_complete': False,
+              'eligible_cases': 0, 'relieved_false_refusals': 0, 'cases': []}
+    for case in manifest['cases']:
+        row = by_id[case['case_id']]
+        shadow = row.get('policy_shadow', {})
+        comparison = shadow.get('comparison')
+        if comparison is not None:
+            if comparison['original'] != comparison['candidate'] or comparison['original_findings'] != comparison['candidate_findings']:
+                raise ValueError('offline bytes acquired formatter authority')
+        paired['cases'].append({'case': case, 'payload_sha256': identity['payloads'][case['case_id']],
+            'status': row['status'], 'production_verdict': row.get('verdict'),
+            'production_rule': row.get('rule'),
+            'eligibility': 'baseline_no_live_custody' if comparison is not None else 'technical_not_compared',
+            'comparison': comparison, 'changed_contribution': [],
+            'remaining_findings': row.get('findings', [])})
+    (args.output_dir / 'policy-pairs.json').write_text(json.dumps(paired, indent=2) + '\n', encoding='utf-8')
     lines = ['# Current-source false refusals', '',
              'Public development evidence only; all technical cases remain in report.json.', '',
              '| Case | Policy rule | Complete findings (including independent controls) |',

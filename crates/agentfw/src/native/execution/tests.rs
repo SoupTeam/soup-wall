@@ -56,6 +56,8 @@ impl Env {
     fn with(tool_name: &str, args: Value, text: &str) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let mut st = super::super::tests::fixture(dir.path());
+        Arc::get_mut(&mut st).unwrap().config.max_record_bytes =
+            super::super::MAX_MCP_RESULT_CONTENT;
         let schema = crate::mcp::server_profile::original_manifest()["tools"]
             .as_array()
             .unwrap()
@@ -219,7 +221,8 @@ fn formatter_shadow_requires_custody_and_cannot_change_release() {
             .collect();
         let text = paths
             .iter()
-            .map(|p| format!("{p}:\n{body}\n"))
+            .enumerate()
+            .map(|(i, p)| format!("{p}:\n{}\n", if i == 49 { body } else { "ordinary" }))
             .collect::<Vec<_>>()
             .join("\n---\n");
         let args = json!({"paths":paths});
@@ -234,6 +237,26 @@ fn formatter_shadow_requires_custody_and_cannot_change_release() {
         assert_eq!(reply.verdict, baseline.verdict);
         assert_eq!(reply.reason_codes, baseline.reason_codes);
         assert!(baseline.execution.is_none());
+        assert_eq!(reply.policy_shadow.len(), 2, "{:?}", reply.reason_codes);
+        for (index, pair) in reply.policy_shadow.iter().enumerate() {
+            assert_eq!(pair["eligibility"], "consumed_original_formatter");
+            assert_eq!(pair["block"], index);
+            assert_eq!(pair["production_authority"], false);
+            assert_eq!(pair["comparison"]["contract"], "sw-mcp/policy-shadow/1");
+            assert_eq!(pair["comparison"]["production_authority"], false);
+            assert_eq!(pair["text_sha256"], super::super::hash(text.as_bytes()));
+        }
+        for pair in &baseline.policy_shadow {
+            assert_eq!(pair["eligibility"], "baseline_no_bound_formatter");
+            assert_eq!(
+                pair["comparison"]["original"],
+                pair["comparison"]["candidate"]
+            );
+            assert_eq!(
+                pair["comparison"]["original_findings"],
+                pair["comparison"]["candidate_findings"]
+            );
+        }
         let metadata = reply.execution.unwrap();
         assert_eq!(
             serde_json::to_value(&metadata).unwrap(),

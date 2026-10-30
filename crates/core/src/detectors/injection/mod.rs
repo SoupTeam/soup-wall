@@ -172,6 +172,14 @@ impl Detector for InjectionDetector {
         self.inspect_stages(ctx, None, None).0
     }
 
+    fn inspect_formatter_shadow(
+        &self,
+        ctx: &Context,
+        spans: &[std::ops::Range<usize>],
+    ) -> (Vec<Finding>, Vec<Finding>) {
+        InjectionDetector::inspect_formatter_shadow(self, ctx, spans)
+    }
+
     fn inspect_with_formatter_hash(
         &self,
         ctx: &Context,

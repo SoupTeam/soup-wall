@@ -106,7 +106,8 @@ class Controller(unittest.TestCase):
                         offset=0;spans=[]
                         for part in parts[:-1]:offset+=len(part.encode());spans.append({'start':offset,'end':offset+5});offset+=5
                         evidence['formatter_shadow']={'production_authority':False,'separator_spans':spans,'complete_text_bytes':len(text.encode()),'text_sha256':hashlib.sha256(text.encode()).hexdigest()}
-                    audit.append({'event':'native_result','execution':evidence,'released':False,'verdict':'deny'})
+                    pairs=[{'eligibility':'consumed_original_formatter','block':i,'text_sha256':hashlib.sha256(text.encode()).hexdigest(), 'comparison':{'contract':'sw-mcp/policy-shadow/1','production_authority':False,'task_complete':False}} for i in range(2)]
+                    audit.append({'event':'native_result','execution':evidence,'released':False,'verdict':'deny','policy_shadow':pairs})
                     return {'result':{'isError':True}},b''
             ordinary,_,_=self.ordinary()
             S.exercise(Selected(),lambda:audit,{'runtime':{'closure_sha256':'a'*64}},ordinary,out,'b'*40,'c'*64,

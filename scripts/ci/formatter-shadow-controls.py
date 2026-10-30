@@ -150,8 +150,18 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
             require(evidence['closure_sha256']==service['runtime']['closure_sha256'],'shadow_runtime_changed')
             require(row['released'] is False and row['verdict']=='deny'
                     and ('error' in reply or reply.get('result',{}).get('isError') is True),'shadow_changed_refusal')
+            pairs=row.get('policy_shadow', [])
+            require(len(pairs)==2,'policy_shadow_pair_missing')
+            for index,pair in enumerate(pairs):
+                comparison=pair.get('comparison') or {}
+                require(pair.get('eligibility')=='consumed_original_formatter'
+                        and pair.get('block')==index
+                        and pair.get('text_sha256')==attribution['text_sha256']
+                        and comparison.get('contract')=='sw-mcp/policy-shadow/1'
+                        and comparison.get('production_authority') is False
+                        and comparison.get('task_complete') is False,'policy_shadow_binding_changed')
             report['cases'].append({'id':f'B{16+SIZES.index(count)}-'+('attack' if attack else 'benign'),
-                                    'status':'passed','execution':evidence,'released':False})
+                                    'status':'passed','execution':evidence,'released':False,'policy_shadow':pairs})
             save()
     before=len(audits())
     exchange({'jsonrpc':'2.0','id':'shadow-ambiguous', 'method':'tools/call',

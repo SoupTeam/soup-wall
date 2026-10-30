@@ -421,6 +421,34 @@ pub(crate) struct OriginalResult {
     formatter_shadow: Option<formatter::Attribution>,
 }
 
+/// Not serializable or constructible from a copied receipt. Exists only after
+/// all original response/call/session/runtime bindings have been consumed.
+pub(super) struct Consumed {
+    metadata: Metadata,
+}
+impl Consumed {
+    pub(super) fn metadata(&self) -> Metadata {
+        self.metadata.clone()
+    }
+    pub(super) fn formatter_spans(
+        &self,
+        text: &str,
+        block: usize,
+        blocks: usize,
+    ) -> Option<&[std::ops::Range<usize>]> {
+        let attribution = self.metadata.formatter_shadow.as_ref()?;
+        // The selected original envelope emits these two identical channels.
+        if blocks != 2
+            || block >= 2
+            || text.len() != attribution.complete_text_bytes
+            || super::hash(text.as_bytes()) != attribution.text_sha256
+        {
+            return None;
+        }
+        Some(&attribution.separator_spans)
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GitObjectKind {
@@ -509,7 +537,7 @@ impl OriginalResult {
         request: &super::Request,
         call: &super::Call,
         now: std::time::Instant,
-    ) -> Result<Metadata, &'static str> {
+    ) -> Result<Consumed, &'static str> {
         let d = &self.dispatch;
         d.context
             .check()
@@ -549,7 +577,9 @@ impl OriginalResult {
         // Metadata was frozen with the private original response, before the
         // collector records its expected receipt. Keep that exact equality;
         // adding fields here would close the transport as receipt_mismatch.
-        Ok(self.metadata())
+        Ok(Consumed {
+            metadata: self.metadata(),
+        })
     }
 
     pub(crate) async fn inspect(
