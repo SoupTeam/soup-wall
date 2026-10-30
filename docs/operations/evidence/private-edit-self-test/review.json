@@ -1,0 +1,83 @@
+{
+  "format": "sw-private-edit-self-test-review/1",
+  "reviewed_source_commit": "b71084b7577d4d7d3a8de5f2cace4ac00bbc4598",
+  "independent_read_only_review": true,
+  "remaining_concrete_blockers": 0,
+  "resolved_findings": [
+    "Default workspace cleanup failure must report incomplete unless retention was explicitly requested.",
+    "Directory enumeration must enforce the entry cap before retaining entries, including vanished hints.",
+    "Cleanup must validate ancestry and signal pinned kernel pidfds rather than recycled numeric descendant PIDs.",
+    "A previously pinned child remains owned after reparenting; live unproven hints remain outside the signal path and prevent complete cleanup.",
+    "Only the live retained-byte budget scan may tolerate vanished temporary entries; content-preservation witnesses remain strict.",
+    "Quota controls must distinguish native policy/Ask authorization from actual reservation and commit counters."
+  ],
+  "focused_helper_tests_passed": 32,
+  "qualification_validator_tests_passed": 4,
+  "native_runtime_evidence": "native-attempt-07.json",
+  "latest_independent_review": {
+    "reviewer": "review_selftest",
+    "independent_read_only_review": true,
+    "remaining_concrete_blockers": 0,
+    "scope": "Current private-edit self-test changes; actual platform execution remains a separate evidence requirement.",
+    "actual_wsl_runtime_evidence": "wsl-attempt-03.json",
+    "native_regression_evidence": "native-attempt-07.json",
+    "reviewed_source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f"
+  },
+  "corrective_source_regression_checks": {
+    "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+    "platform": "actual-wsl2-ubuntu-24.04-x86_64",
+    "preparation_tests_passed": 27,
+    "focused_helper_tests_passed": 34,
+    "qualification_validator_tests_passed": 9,
+    "component_tests_passed": 6,
+    "wsl_preflight_tests_run": 9,
+    "wsl_preflight_expected_non_wsl_refusal_skips": 1,
+    "runtime_acceptance": "not established by source regression tests"
+  },
+  "scope": "Correctness, privacy, resource bounds and regressions; not a repository security certification or final shared admission.",
+  "latest_native_validation": {
+    "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+    "source_tree": "16131804dc19067bf1b68f4368a4383e42c48a76",
+    "evidence": "native-attempt-07.json",
+    "strict_report_validator_passed": true,
+    "product_cases_passed": 8,
+    "qualification_controls_passed": 5,
+    "artifact_sha256": "5bc9dc9c70a329081abb778d790dbd9b6068791fefdc0d5c12a75a3ae999e1b2",
+    "report_sha256": "be2cf8a458c4f8f0c0a12078838ae4dd2317676da93fffdde11ff1cc759f5a14",
+    "qualification_sha256": "67f6830a8c2e8b372951302dd55e1893bb3ac171acd8675e83b8c82a94c2e140"
+  },
+  "final_evidence_review": {
+    "independent_read_only_review": true,
+    "remaining_concrete_blockers": 0,
+    "native_and_wsl_same_source_verified": true,
+    "native_and_wsl_eight_product_and_five_qualification_checks_passed": true,
+    "report_qualification_and_source_check_hashes_matched": true,
+    "no_raw_private_paths_payloads_provider_configuration_or_authority_tokens_found": true,
+    "temporary_resource_conditions_and_restoration_documented": true,
+    "preceding_failures_preserved": true
+  },
+  "latest_actual_wsl_attempt": {
+    "status": "passed",
+    "preceding_run": "failed_safely_before_edit_mutation",
+    "preceding_reason": "edit_input_metadata",
+    "setup_diagnosis": "The selected Cargo target binary had st_nlink=2. Preparation and namespace prerequisites were ready; the installed edit API correctly refused the multiply linked executable.",
+    "setup_correction": "Copy the selected executable bytes into a fresh isolated installed location with shutil.copyfile; preserve the exact SHA-256 and require st_nlink=1. No product code, policy or threshold changed.",
+    "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+    "fresh_preparation_and_runtime": "passed",
+    "runtime_success_claimed": true,
+    "evidence": "wsl-attempt-03.json",
+    "preceding_evidence": "wsl-attempt-02.json",
+    "product_cases_passed": 8,
+    "qualification_controls_passed": 5
+  },
+  "platform_validation": {
+    "source_commit": "23db5b6d55d62d6545dd7bee222e4a453f98ac6f",
+    "native_workflow_run": "https://github.com/SoupTeam/soup-wall/actions/runs/40886850670",
+    "native_status": "passed",
+    "actual_wsl_status": "passed",
+    "native_evidence": "native-attempt-07.json",
+    "wsl_evidence": "wsl-attempt-03.json",
+    "strict_identity_and_report_validation": "passed",
+    "host_resource_configuration_restored": true
+  }
+}

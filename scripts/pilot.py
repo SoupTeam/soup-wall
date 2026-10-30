@@ -6,7 +6,7 @@
     pilot.py prepare --apply --prefix DIR [inputs]
     pilot.py run --prefix DIR [--prompt TEXT]
     pilot.py status --prefix DIR
-    pilot.py provider preview|create|select|remove [options]
+    pilot.py provider preview|create|update|restore|prune|select|remove [options]
     pilot.py help
 
 This is a front door over the accepted scripts, not a second installer:
@@ -51,7 +51,9 @@ PROFILE_FAILURE_CODES = frozenset({"provider_home_invalid", "provider_home_chang
     "provider_file_changed", "provider_profile_invalid", "provider_profile_missing", "provider_profile_exists",
     "provider_profile_limit", "provider_store_invalid", "provider_store_busy", "provider_selection_invalid",
     "provider_selection_stale", "provider_source_conflict", "provider_name_invalid", "provider_transport_invalid",
-    "provider_secret_input_invalid", "provider_terminal_required", "provider_consent_required", "provider_unavailable"})
+    "provider_secret_input_invalid", "provider_terminal_required", "provider_consent_required", "provider_unavailable",
+    "provider_version_required", "provider_version_stale", "provider_version_missing", "provider_version_in_use",
+    "provider_version_limit", "provider_index_invalid", "provider_update_no_changes"})
 HINTS = {
     "not_prepared": "No prepared selection under this prefix. Run `pilot.py preview`, then `pilot.py prepare --apply`.",
     "front_door_state_invalid": "The front-door record is unreadable or changed. Prepare again with --apply.",
@@ -778,7 +780,7 @@ def status(args):
 def provider_command(args):
     """Profile management is local and never starts a provider or pilot asset."""
     profiles = provider_profiles()
-    if args.provider_action != "preview" and not args.apply:
+    if args.provider_action not in ("preview", "update") and not args.apply:
         raise profiles.Refusal("provider_consent_required")
     with profiles.Store(args.agent_home or Path.home() / ".agentfw",
                         create=args.provider_action == "create") as store:
@@ -801,6 +803,33 @@ def provider_command(args):
             secrets = profiles.secret_input(args)
             return {"format": profiles.SELECTED_FORMAT, "command": "provider create", "status": "saved",
                     "executed": False, **store.create(args.name, public, secrets, replace=args.replace)}
+        if args.provider_action == "update":
+            changes = {}
+            for flag, key in (("model", "model"), ("base_url", "ANTHROPIC_BASE_URL"),
+                              ("http_proxy", "HTTP_PROXY"), ("https_proxy", "HTTPS_PROXY"),
+                              ("no_proxy", "NO_PROXY"), ("ssl_cert_file", "SSL_CERT_FILE")):
+                value = getattr(args, flag)
+                if value is not None:
+                    changes[key] = value
+            rotation = args.secret_fd is not None or args.prompt_api_key or args.prompt_auth_token
+            if not args.apply:
+                return {"format": profiles.SELECTED_FORMAT, "command": "provider update",
+                        "status": "plan", "executed": False, "redacted": True,
+                        **store.preview_update(args.name, changes, rotation)}
+            if args.expected_version is None:
+                raise profiles.Refusal("provider_version_required")
+            secrets = profiles.secret_input(args) if rotation else None
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider update",
+                    "status": "updated", "executed": False,
+                    **store.update(args.name, changes, secrets, args.expected_version)}
+        if args.provider_action == "restore":
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider restore",
+                    "status": "restored", "executed": False,
+                    **store.restore(args.name, args.version, args.expected_version)}
+        if args.provider_action == "prune":
+            return {"format": profiles.SELECTED_FORMAT, "command": "provider prune",
+                    "status": "pruned", "executed": False,
+                    **store.prune(args.name, args.version)}
         if args.provider_action == "select":
             result = store.environment() if args.environment else store.select(args.name)
             return {"format": profiles.SELECTED_FORMAT, "command": "provider select", "status": "selected",
@@ -887,6 +916,26 @@ def parser():
     source.add_argument("--prompt-auth-token", action="store_true")
     create.add_argument("--replace", action="store_true")
     create.add_argument("--apply", action="store_true")
+    update = actions.add_parser("update", help="preview or atomically update one existing profile")
+    update.add_argument("--name", required=True)
+    update.add_argument("--expected-version", help="non-secret version from preview; required with --apply")
+    update.add_argument("--model")
+    for flag in ("base-url", "http-proxy", "https-proxy", "no-proxy", "ssl-cert-file"):
+        update.add_argument("--" + flag)
+    update_secret = update.add_mutually_exclusive_group()
+    update_secret.add_argument("--secret-fd", type=int)
+    update_secret.add_argument("--prompt-api-key", action="store_true")
+    update_secret.add_argument("--prompt-auth-token", action="store_true")
+    update.add_argument("--apply", action="store_true")
+    restore = actions.add_parser("restore", help="select a retained verified version")
+    restore.add_argument("--name", required=True)
+    restore.add_argument("--version", required=True)
+    restore.add_argument("--expected-version", required=True)
+    restore.add_argument("--apply", action="store_true")
+    prune = actions.add_parser("prune", help="remove one unselected retained version")
+    prune.add_argument("--name", required=True)
+    prune.add_argument("--version", required=True)
+    prune.add_argument("--apply", action="store_true")
     select = actions.add_parser("select", help="select one profile or explicitly return to environment mode")
     choice = select.add_mutually_exclusive_group(required=True)
     choice.add_argument("--name")
