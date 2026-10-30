@@ -96,9 +96,11 @@ class DossierTests(unittest.TestCase):
         a['cases'].insert(7, terminated)
         self.add('ask', a)
 
-    def test_complete_synthetic_fixture_can_be_ready(self):
+    def test_complete_legacy_fixture_is_readable_but_unqualified(self):
         self.full_fixture()
-        self.assertEqual(self.result()['status'], 'READY')
+        result = self.result()
+        self.assertEqual(result['status'], 'NOT_READY')
+        self.assertTrue(all('legacy_identity_contract_unqualified' in row['blockers'] for row in result['evidence']))
 
     def test_empty_evidence_not_ready(self):
         self.assertEqual(self.result()['status'], 'NOT_READY')
@@ -138,7 +140,7 @@ class DossierTests(unittest.TestCase):
         self.m['evidence'][0]['file']=self.put('matched.json',r)
         out=self.result();self.assertEqual(out['status'],'NOT_READY')
         row=next(x for x in out['ledger'] if x['item']=='useful-workflows')
-        self.assertEqual(row['status'],'fail');self.assertEqual(row['counts'],{'passed':11,'required':12})
+        self.assertEqual(row['status'],'fail');self.assertEqual(row['observations'][0]['counts'],{'passed':11,'required':12})
 
     def test_stored_green_gate_cannot_override_rows(self):
         r=self.matched();r['rows'][1].update(status='failed',false_interruption=True);self.add('lie',r)
@@ -290,11 +292,12 @@ class DossierTests(unittest.TestCase):
     def test_current_scenario_denominators(self):
         self.full_fixture()
         out=self.result()
-        self.assertEqual(out['status'],'READY')
+        self.assertEqual(out['status'],'NOT_READY')
         ask=next(r for r in out['ledger'] if r['item']=='ask')
         cleanup=next(r for r in out['ledger'] if r['item']=='cancellation-cleanup')
-        self.assertEqual(ask['counts'],{'passed':15,'required':15})
-        self.assertEqual(cleanup['counts'],{'passed':3,'required':3})
+        self.assertEqual(ask['observations'][0]['counts'],{'passed':15,'required':15})
+        self.assertEqual(cleanup['observations'][0]['counts'],{'passed':3,'required':3})
+        self.assertFalse(ask['observations'][0]['eligible'])
         self.assertEqual(len(json.loads((self.root/'prepared.json').read_text(encoding='utf-8'))['cases']),11)
 
     def test_new_required_cases_cannot_be_omitted_or_duplicated(self):
@@ -328,6 +331,60 @@ class GitIdentityTests(unittest.TestCase):
         commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
         tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],cwd=ROOT,text=True).strip()
         self.assertEqual(d.git_tree(ROOT,commit),tree)
+
+
+class LinkedExecutionContext(unittest.TestCase):
+    setUp = DossierTests.setUp
+    put = DossierTests.put
+    add = DossierTests.add
+    matched = DossierTests.matched
+    full_fixture = DossierTests.full_fixture
+    result = DossierTests.result
+
+    def context(self, change=None):
+        self.full_fixture()
+        entry = self.m['evidence'][0]
+        path = self.root / entry['file']['path']
+        report = json.loads(path.read_bytes()); report.pop('environment')
+        entry['file'] = self.put('matched.json', report)
+        context = {'format':'sw-pilot-readiness-execution/1', 'decision':'NOT_READY',
+                   'source_before':report['identity']['source'], 'source_after':report['source_after'],
+                   'environment':self.m['environment'].copy(), 'stages':[{
+                       'id':'matched', 'status':'executed', 'report_sha256':entry['file']['sha256'],
+                       'independent_namespace_cleanup':{'all_stopped':True,'remaining':[]}}]}
+        if change:
+            change(context)
+        entry['context'] = self.put('execution-context.json', context)
+        return entry
+
+    def test_explicit_context_binds_missing_environment_without_rescoring(self):
+        self.context()
+        result = self.result()
+        self.assertEqual(result['status'], 'NOT_READY')
+        self.assertIn('legacy_identity_contract_unqualified', result['evidence'][0]['blockers'])
+        self.assertIn('execution_context_sha256', result['evidence'][0])
+
+    def test_foreign_source_unconfirmed_cleanup_or_unlinked_report_cannot_pass(self):
+        for change in (lambda c:c['source_after'].update(commit='f'*40),
+                       lambda c:c['stages'][0].update(report_sha256='b'*64),
+                       lambda c:c['stages'][0]['independent_namespace_cleanup'].update(all_stopped=False),
+                       lambda c:c['environment'].update(kernel_release='different-kernel')):
+            # Each subcase is an independent explicit evidence selection.
+            self.m['evidence'] = []
+            self.context(change)
+            self.assertEqual(self.result()['status'], 'NOT_READY')
+
+    def test_context_cannot_replace_conflicting_original_environment(self):
+        entry = self.context()
+        report = json.loads((self.root / entry['file']['path']).read_bytes())
+        report['environment'] = dict(self.m['environment'], kernel_release='another-kernel')
+        entry['file'] = self.put('matched.json', report)
+        context = json.loads((self.root / entry['context']['path']).read_bytes())
+        context['stages'][0]['report_sha256'] = entry['file']['sha256']
+        entry['context'] = self.put('execution-context.json', context)
+        result = self.result()
+        self.assertEqual(result['status'], 'NOT_READY')
+        self.assertIn('invalid_evidence:context_environment_conflict', result['evidence'][0]['blockers'])
 
 
 if __name__ == '__main__': unittest.main()

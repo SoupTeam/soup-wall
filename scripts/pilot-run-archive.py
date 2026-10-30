@@ -241,7 +241,7 @@ def validate_remaining(run, audit, files, audit_present=True):
                   and S.sha(body) == expected["sha256"], "removal_state_changed")
 
 
-def remove_member(directory, name, quarantine, expected, archive_guard):
+def remove_member(directory, name, quarantine, expected, archive_guard, maximum=S.MAX_RECORD):
     """Detach a single member exclusively and verify it before unlinking.
 
 Replacement in the source namespace is preserved as a staged member; it must
@@ -257,11 +257,11 @@ never be mistaken for the selected inode after the last inventory check.
         rename_exclusive(directory.fd, name, quarantine.fd, staging_name)
         os.fsync(directory.fd)
         os.fsync(quarantine.fd)
-        body, held = quarantine.read(staging_name)
+        body, held = quarantine.read(staging_name, maximum)
         # A rename changes ctime; all other selected attributes and bytes match.
         S.require(held == S.identity(os.fstat(source_fd)) and held[:7] == expected["identity"][:7]
                   and len(body) == expected["bytes"] and S.sha(body) == expected["sha256"], "staged_member_changed")
-        S.require(quarantine.read(staging_name)[1] == held, "staged_member_changed")
+        S.require(quarantine.read(staging_name, maximum)[1] == held, "staged_member_changed")
         archive_guard()
         os.unlink(staging_name, dir_fd=quarantine.fd)
         os.fsync(quarantine.fd)
@@ -273,15 +273,22 @@ never be mistaken for the selected inode after the last inventory check.
 def durable_archive(output, plan, row):
     """Pin and sync the current verified archive, not a prior publication inode."""
     filename = archive_name(plan, row)
-    body, selected = output.read(filename, MAX_ARCHIVE)
+    with durable_file(output, filename, MAX_ARCHIVE, lambda body: verify_archive(body, plan, row)) as selected:
+        yield selected
+
+
+@contextmanager
+def durable_file(output, filename, maximum, verify):
+    """Shared pinned publication guard; the caller owns its archive schema."""
+    body, selected = output.read(filename, maximum)
     fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
                  dir_fd=output.fd)
     try:
         S.require(S.identity(os.fstat(fd)) == selected, "archive_changed_during_apply")
-        verify_archive(body, plan, row)
+        verify(body)
 
         def check():
-            current, identity = output.read(filename, MAX_ARCHIVE)
+            current, identity = output.read(filename, maximum)
             S.require(identity == selected == S.identity(os.fstat(fd)) and current == body,
                       "archive_changed_during_apply")
 

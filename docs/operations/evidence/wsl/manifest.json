@@ -1,0 +1,51 @@
+{
+  "format": "sw-wsl-evidence/1",
+  "scope": "actual-wsl2-x86_64-scripted-provider",
+  "archives": {
+    "installed-wsl2-6e19343.zip": {
+      "bytes": 128105,
+      "sha256": "a9c2ed0b3286556d44a4866325da3b70ccdf67298dc3605324f6c37758cca80d",
+      "files": 68
+    },
+    "python-download-failure-0b34160.zip": {
+      "bytes": 3771,
+      "sha256": "f7d75eed7e687b241ee011cd2e118e912ed9801e2fab8b66b3eca60be5ba3e09",
+      "files": 2
+    },
+    "missing-elf-prerequisites.zip": {
+      "bytes": 3836,
+      "sha256": "5d38cf476124138bd9103ed2219aabcdd10e3ca965bd57d17ae6030205db7d9f",
+      "files": 3
+    },
+    "installed-wsl2-controls.zip": {
+      "bytes": 129262,
+      "sha256": "afdde4b42dace2458eb0a839864a8f854a86c3b58a6dba0eddcba5542bae88ff",
+      "files": 70
+    },
+    "installed-wsl2-d4aa63f.zip": {
+      "bytes": 128174,
+      "sha256": "7e58626063b7cdfc4b1153e22a02d07ec776f96d24028021c98fb2cf5c46b182",
+      "files": 68
+    },
+    "installed-wsl2-97729f0.zip": {
+      "bytes": 128133,
+      "sha256": "278a39a4833b1f7b35e8d0886dc663ba00885ad33a50424419c5b03a5c24bcd4",
+      "files": 68
+    },
+    "installed-wsl2-cb74d94.zip": {
+      "bytes": 128294,
+      "sha256": "c4b649fec07d828ae42e1306a5c45eabd3d81e9eb526f1c9980abbf493ef67b0",
+      "files": 68
+    },
+    "installed-wsl2-7bde826.zip": {
+      "bytes": 161049,
+      "sha256": "f9f8a0b0c2dc9935e5d6f0f0e1fe3c964f6e17edd4d6ed85805cfbd603bec584",
+      "files": 74
+    },
+    "failed-wsl2-7bde826.zip": {
+      "bytes": 145744,
+      "sha256": "9d787380b3338b696b441cf495c2da6555e1b62a1a230e6da662774660ea87d3",
+      "files": 77
+    }
+  }
+}

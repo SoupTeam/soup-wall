@@ -48,6 +48,10 @@ JSON needs to be written by hand. At most eight direct-child targets may be
 selected; wildcards, hidden names, aliases and create-plus-replace combinations
 are rejected.
 
+For explicitly selected per-run mutation and cumulative byte ceilings, see
+[installed edit quotas](INSTALLED_EDIT_QUOTAS.md). Omitting those options keeps
+the existing v1 profile semantics.
+
 For replacement select `--read report.txt --replace report.txt`. Preparation
 captures that exact old object and content digest. The generated tool schema
 requires those fixed old facts; it never silently refreshes an outdated version.
@@ -96,17 +100,319 @@ cannot activate this endpoint through caller-supplied configuration.
 
 ## Outcomes and recovery
 
-A host completion is not a claim that every proposed edit succeeded. Read the
-native audit and verify the resulting bytes through the selected read tool.
+A host completion is not a claim that every proposed edit succeeded. Inspect
+the selected run with the installed read-only diagnosis:
+
+```sh
+agentfw edit-session status --run /absolute/runs/edit-RUN_ID
+agentfw edit-session status --run /absolute/runs/edit-RUN_ID --json
+```
+
+Status uses bounded private records and authenticated loopback observations;
+it never launches a host, dispatches a tool, decides Ask, refreshes a plan or
+retries a mutation. It creates no files by default. The versioned report keeps
+live daemon observations, retained local evidence and optional current-output
+observations separate. Local records are operator-controlled evidence, not
+authenticated runtime attestation. A PID or successful host exit does not prove
+that a selected mutation committed or that its result reached the model.
+
+If the daemon is unavailable, its instance has changed, audit is missing or
+truncated, or records cannot be attributed to this exact run, keep the reported
+uncertainty. A publication gate precedes the actual filesystem change; it is
+not a commit receipt. A recorded allowed result is not proof of delivery or
+model consumption. Create and replacement are diagnosed separately. Older runs
+without retained diagnostic bindings remain incomplete evidence.
+
+For an explicit, bounded digest observation of only the declared direct-child
+targets, add `--check-output`. Matching current bytes are an observed postcondition,
+not proof of who wrote them. Status refuses linked, non-regular, unowned,
+oversized or redirected state rather than following it or scanning directories.
+It never renders file content or raw arguments.
+
+The short recovery flow is: inspect status, inspect the intended target
+independently if the result is uncertain, prepare a fresh exact plan when an
+edit is still needed, then obtain new exact approval. Never reuse old Ask
+decisions or spent receipts. To share the fixed allowlist through the existing
+private support exporter, select a new directory outside the run:
+
+```sh
+agentfw edit-session status --run /absolute/runs/edit-RUN_ID \
+  --support-bundle /absolute/private/new-support
+```
+
+The export contains typed outcomes, validated identity digests and evidence
+provenance/completeness, plus the existing hash manifest. It excludes prompts,
+contents, raw arguments/results, provider inputs, tokens, grants, private paths
+and arbitrary exception text. Publication remains private and create-new;
+there is no upload.
+
 An interrupted run is failed/indeterminate. If publication committed before a
 result was lost or withheld, the bytes remain committed: cancellation does not
 roll them back and this entry never automatically retries the mutation.
+
+Read-only status treats the Stop producer's run-revocation record as strictly
+bound descriptive metadata, including at ordinary completed-run cleanup. It does
+not infer commit, delivery, rollback or authenticated Stop confirmation from it.
+A retained `operator_stop` outcome is reported separately from cancellation;
+missing or malformed bindings keep the diagnosis incomplete.
 
 Private run state retains the audit and exact native approval records. Host
 stdout/stderr are drained within fixed caps; only byte counts and digests are
 retained, never raw model output or provider credentials. A killed daemon cannot
 approve stale records: Ask requires the matching live authenticated epoch.
 Prepare a new plan after independently inspecting an uncertain target.
+
+## Archive and clean one completed run
+
+SOU-171 adds an explicit installed entry through the verified helper component.
+It operates independently of stop/revoke and read-only incident diagnostics.
+Install the matching reviewed Agent/component first. Use an existing private
+mode-0700 archive directory outside the selected run and a canonical run path:
+
+```sh
+umask 077
+agentfw edit-session archive --home /absolute/agent-home preview \
+  --run /absolute/runs/edit-RUN_ID --destination /absolute/private-archives \
+  > /absolute/private-archives/plan.json
+
+agentfw edit-session archive --home /absolute/agent-home apply \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256
+```
+
+Preview writes only JSON to stdout. It selects one exact completed run and
+enumerates its bounded file/directory inventory, identities, hashes, reclaimable
+bytes, preserved data and excluded evidence. A plan lasts 15 minutes. Apply
+rechecks the exact inventory and destination inode, then exclusively publishes
+and verifies a private sanitized ZIP; all original run state is still retained.
+The archive contains only an allowlisted audit projection and a manifest with
+hashes, finite terminal facts and explicit evidence limitations. It is **not a
+full forensic backup**. Raw audit, prompts, tool payloads, credentials, child
+authority, host state, provider inputs, environment and absolute paths are
+excluded. Unknown audit event types are counted, not presented as complete
+execution evidence. Malformed or partial raw audit refuses archival.
+
+Cleanup requires separate explicit acknowledgement of irreversible raw-evidence
+loss. Independently retain any raw evidence you still need before using it:
+
+```sh
+agentfw edit-session archive --home /absolute/agent-home cleanup \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256 \
+  --acknowledge-evidence-loss
+```
+
+Only the approved run inventory is removed. Output targets, immutable plans,
+projects, shared assets and other runs are never traversed.
+Output resource roots must remain disjoint from run state. Nested Git or
+immutable-plan markers refuse the whole selection and remain in place. The accepted
+SOU-149 no-follow descriptors, exclusive staging, file identity checks and
+durable archive guard are reused. A durable private journal precedes detachment;
+completion needs a separate durable create-new commit. A missing source or PID
+does not establish completion. New launchers hold the selected daemon-home inode
+lock until terminal publication, so an active run refuses archival even if a
+terminal file is injected. The run-directory lock remains available for short
+Stop metadata transactions. Existing accepted runs require all consistent terminal
+cleanup facts and transport/run/profile/instance bindings; these are local
+owner-editable evidence, not authenticated execution proof. Failed/interrupted
+runs qualify only if their accepted terminal explicitly confirms process and
+daemon cleanup. Unknown crash state, inconsistent bindings and new or unexpected
+state members refuse and remain intact. No background pruning occurs.
+Current-main run-local `profile.json`, `profile.sha256`,
+`diagnostic-context.json` and `host-process.json` are descriptive snapshots,
+distinct from the original external immutable plan. Only the complete exact
+root set with private read-only modes is accepted. Canonical v1 and quota-v2 profile
+bytes and digest, typed nested schemas, transport resources, run/home/profile/
+session/instance bindings, process identity fields and retained control owner
+are checked through bounded no-follow reads. The walker rechecks those exact
+bytes and file identities. No profile-selected path, executable, original plan,
+PID or listener is opened or contacted by this validation. Snapshot bytes are
+inventoried for explicit cleanup and excluded from the sanitized ZIP. Arbitrary
+extra members, future schema versions and all nested plan markers still refuse.
+
+Quota-v2 profiles require the exact `sw-installed-edit-mutation-quota/1` limits:
+at most 64 mutation attempts and 262144 cumulative reserved bytes; zero is valid.
+The terminal observation must bind those same limits. All counters must be
+unsigned integers with consistent attempt partitions, byte ceilings and remaining
+credits, using the accepted runtime's bookkeeping relationships. Missing/null,
+unknown, mismatched, unavailable or unsettled quota evidence refuses archival and
+remains retained. Quota counters never establish inactivity, effects or execution;
+the existing terminal cleanup facts, lifecycle locks and explicit evidence-loss
+consent remain mandatory. Legacy v1 runs retain their original quota-free shape.
+
+Known separately versioned optional stop/control records are included in the
+private inventory and excluded from the sanitized ZIP. They never substitute
+for terminal cleanup and never authorize signaling here. Missing, inconsistent
+or unconfirmed control evidence refuses cleanup; the stop command remains
+optional. Synthetic parser fixtures complement the genuine installed
+current-main Stop-to-archive-to-cleanup qualification.
+
+`archived_source_retained`, `archived_and_cleaned`, `already_cleaned`, `refused`
+and `incomplete` distinguish the outcomes. After interruption preserve the
+archive, plan, journal and any quarantine. Inspect without resuming deletion:
+
+```sh
+agentfw edit-session archive --home /absolute/agent-home recover \
+  --plan /absolute/private-archives/plan.json --confirm DISPLAYED_PLAN_SHA256 \
+  --journal edit-cleanup-DISPLAYED_PLAN_SHA256.json
+```
+
+Recovery accepts an expired plan for read-only inspection. It never restores,
+resumes or guesses successful cleanup from absent members. Repeated cleanup
+requires the same verified archive and explicit durable completion commit; an
+interrupted removal remains incomplete. Stop, policy, approval and expiry
+semantics are unchanged. No mutation is automatically retried.
+
+`python3 -B scripts/qualify-installed-edit-archive.py` is inert. Its opt-in
+qualification uses genuine installed completed/interrupted runs, two concurrent
+active roots, independent target/plan/process/sentinel witnesses and fresh
+useful work. A namespace-private 64-KiB tmpfs supplies actual kernel `ENOSPC`;
+trusted setup supplies an empty foreign-owned fixture. Publication/removal
+interruption uses exact installed helper bytes with a qualification-only pause
+and actual SIGKILL. Those controlled fault windows and synthetic parser fixtures
+are distinguished from genuine host/CLI observations. The existing installed
+job retains exact source/binary correlation, the original edit report and the
+new archive report; failed/incomplete attempts are retained. The current
+18-case archival inventory includes ordinary v1 and quota-v2 completed runs,
+typed descriptive-snapshot refusal controls and a genuine Stop after an
+approved replacement committed. That Stop case checks diagnosis, explicit
+evidence-loss refusal, sanitized archive publication and exact acknowledged
+cleanup, with independent output/immutable-plan/sentinel/active-peer witnesses.
+The v2 case retains exact quota observations, observes a real approved replacement
+and readback, preserves source after archive publication, refuses unacknowledged
+cleanup and verifies explicit cleanup plus an already-cleaned repeat. Thirteen
+negative quota controls mutate the retained metadata of another genuine completed
+v2 run; their failures, unchanged sources/output/plans/sentinel and successful
+restored preview are recorded separately from genuine host observations.
+The earlier 14-case results remain evidence for their original source only.
+## Stop one selected live run
+
+From a second terminal, use the **same installed Agent executable** as the run:
+
+```sh
+agentfw edit-session stop --run /absolute/runs/edit-RUN_ID
+agentfw edit-session stop --run /absolute/runs/edit-RUN_ID --output json-v1
+```
+
+The selected private directory must be canonical, owned and link-free. A new
+bounded `control.json` is separate from the existing `run.json` contract. The
+operator verifies it against the live launcher's sealed descriptor, executable,
+process birth identity, exact profile/session and authenticated daemon epoch,
+then pins the launcher with a Linux pidfd. Edited JSON, a PID or a process name
+cannot authorize signaling. Missing kernel identity support refuses before the
+host starts. Older runs without control metadata cannot use this operation.
+
+Only the existing launcher retires its exact native authority and pending Ask,
+closes its one-use transport and joins the adapter before cleaning its owned
+host/relay group. Native revocation takes the same lock as admission and result
+publication. It never changes policy, approval expiry, output targets, immutable
+plans or sticky host risk. No general kill endpoint or second supervisor exists.
+
+Text and versioned JSON distinguish `stopped`, `already_stopped`,
+`requested_unconfirmed` and `cleanup_incomplete`. Only an authenticated owner
+receipt after confirmed revocation and cleanup permits either successful status.
+A queued request, dead PID or independently observed disappearance is insufficient.
+All outcomes report that effects may remain committed, rollback is false and
+automatic retry is false. A replacement committed before revocation remains on
+disk even if its result was withheld. Inspect the target and retained native audit
+before deciding what to do next; prepare fresh bindings through the ordinary flow.
+
+Daemon authentication failure refuses without signaling or publishing intent.
+If the launcher/embedded daemon crashes after intent, the result remains
+unconfirmed until an owner receipt exists; repeated commands never guess success
+or signal an unrelated replacement PID. Preserve `control.json`, stop request,
+receipt, native audit and any incomplete state for recovery. Old requests,
+receipts and approvals cannot select a freshly prepared run or daemon epoch.
+
+`python3 -B scripts/qualify-installed-edit-stop.py` is inert. Its explicit `--run`
+driver reuses the accepted installed component and genuine restricted host with
+an owned loopback provider. It checks two concurrent private roots and an
+unrelated process/sentinel, pending/rejected Ask, repeat/replay, post-confirmation
+dispatch, committed publication and a publication/stop race, unsafe records,
+unavailable daemon, launcher crash and fresh useful read/edit/read. Birth mismatch
+controls simulate stale/PID-reuse identity; they do not force kernel PID reuse.
+The stopped daemon shares the launcher process. Suspended-daemon and actual
+SIGKILL cases retain that distinction. Parser/MAC and stalled-preamble unit
+controls supplement, rather than replace, the installed observations.
+
+The existing `linux-installed-edit` artifact retains `source.txt`, `binary.txt`,
+the original 23-case `runtime/report.json` and `stop-runtime/report.json`. Match
+the source commit and Agent SHA-256 across both reports and the build witnesses.
+The stop report records the installed component and genuine host digests, exact
+profile and daemon identities, observed owned process IDs/birth ticks, target
+snapshots and audit digests. Private raw arguments, bearer tokens and provider
+contents stay outside that artifact. Failed/incomplete cases remain explicit;
+an observed crash cleanup never becomes an authenticated successful stop.
+For another operation on the same declared targets, use the explicit
+[plan refresh preview and confirmation](INSTALLED_EDIT_PLAN_REFRESH.md).
+Refresh never infers previous success, retries a call or approves the next Ask.
+
+## Retained run inventory and exact selection
+
+The installed Linux CLI can list retained runs directly beneath an explicitly
+selected owner-private state directory. It verifies the helper component under
+the explicit Agent home, then reuses native exact-run, profile, terminal and
+descriptor readers. It does not execute the helper, start a daemon, query a
+provider, inspect output files or follow descriptive executable/plan paths.
+
+```sh
+agentfw edit-session inventory --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --json
+agentfw edit-session inventory --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID --json
+```
+
+`RUN_UUID` is the exact lowercase UUID displayed by inventory, without the
+`edit-` directory prefix. Prefixes, paths, wildcards and option-like identifiers
+refuse. JSON and text show safe IDs, profile/source/component hashes, declared
+target counts, recorded host outcomes and owner-identity observations. Arbitrary
+entry names are represented only by their hash. Paths, prompts, target names and
+contents, tokens, receipts and grants are omitted. Recorded completion is not
+execution, delivery or inactivity proof. A missing terminal, absent PID or old
+boot stays explicit; inventory does not infer Ask acceptance/rejection or tool
+success from host completion. Use exact status for those separate observations.
+
+The fixed listing limits are 32 entries, 512 bounded file reads, 2 MiB of record
+bytes and a cooperative 10-second read/iteration deadline. Enumeration has one
+directory level; only the five exact run-local binding/terminal files are read.
+The existing protected absolute-ancestry limit is 128 components / 4096 bytes.
+The selected helper has its independent existing manifest/file verification
+bounds. Blocking filesystem/kernel stalls are not a hard real-time guarantee.
+The 33rd entry establishes capacity exhaustion without being inspected. Exact
+ID selection does not scan peers and can resolve a known ID beyond that cap.
+
+Malformed, inaccessible, linked, foreign, vanished or changed records produce
+unknown rows and an incomplete listing with nonzero exit status. Unsafe or
+redirected roots produce an unknown result. A partial listing is not a complete
+history or an atomic snapshot. No state is cleaned or repaired.
+
+After reviewing one row, pass its current `selection_sha256` to an explicit
+existing operation:
+
+```sh
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- status --json
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- review --sha256 PROFILE_SHA256
+agentfw edit-session with-run --home /home/pilot/agent \
+  --state /home/pilot/private/edit-state --run-id RUN_UUID \
+  --selection-sha256 SELECTION_SHA256 -- stop --output json-v1
+```
+
+The selector binds the explicit root, exact run inode, profile/context/run files
+and terminal observation, rechecks their identities immediately before handoff,
+and keeps the descriptors open. The existing command independently revalidates
+its selected run. Changed metadata requires a fresh inventory and review; the
+digest is descriptive and grants no execution, export or cleanup authority.
+`with-run` accepts only explicit status/review/stop, injects its verified exact
+`--run`, and rejects another `--run` or recursive/arbitrary commands. Existing
+review/export consent and Stop validation still apply. Inventory alone never
+performs one of these actions. The original direct `--run` grammar is preserved.
+
+This slice uses accepted main's status/review/Stop contracts. It does not depend
+on an open archival PR; archive integration can be added after that command is
+delivered. New inventory/selector CLI types share their Linux executor boundary;
+other platforms retain their existing commands and unsupported behavior.
 
 ## Qualification
 
@@ -126,9 +432,27 @@ process cleanup. This is development qualification, not a live-model efficacy or
 production-readiness claim. The registered `linux-installed-edit` job runs with
 read-only source, private writable scratch and no external network.
 
+Add `--diagnose` to freeze and execute the additional status inventory: eight
+native runtime cases and six explicitly simulated retained-state cases. The
+runtime cases cover create/read, replace/read, pending/rejected Ask,
+cancellation, daemon loss, post-publication interruption and secret-canary
+support export. The fixtures cover stale identity, absent/truncated audit,
+missing result after a publication gate, tampered profile and foreign run.
+The missing-result fixture does not establish a real commit-before-result-loss
+event. Independent target/sentinel/process witnesses check that diagnosis
+does not change the selected run; only correlated bounded lease-renewal audit
+appends are allowed while a real run remains live.
+
 The corrected native qualification passed 23/23 cases, 43 focused Rust controls,
 5 finite/classifier controls and strict Linux Clippy/fmt on implementation source
 `07a5f1d1b2b05162e1d1d7849af577e94b802202`. Source/binary/artifact correlation and
 all original attempts are retained under
 [`evidence/sou-161/`](evidence/sou-161/README.md). Final shared Ready qualification,
 admission and merge remain with the reviewer.
+
+The subsequent installed status/diagnosis qualification passed all 23 existing
+controls plus 14 diagnostic cases on `a7ec2de899aa55726e7488f5d31bec5044b52307`.
+Eight cases observed actual installed runtime boundaries; six explicitly changed
+retained state as parser fixtures. Exact source/binary/component/report hashes,
+typed responses, independent witnesses, limits and both failed attempts are
+retained in [the diagnosis evidence](evidence/edit-diagnostics/README.md).

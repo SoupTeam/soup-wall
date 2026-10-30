@@ -5,7 +5,9 @@ installed Agent without a repository checkout. Its helper scripts are installed
 once as a private, verified **front-door component**; `agentfw pilot` then starts
 only those verified bytes with the exact interpreter recorded at install. The
 preview, prepare, run and status semantics are unchanged: the installed command
-runs the same accepted helpers.
+runs the same accepted helpers. The separate
+[private named provider commands](PILOT_PROVIDER_PROFILES.md) let an operator
+select host inputs without rebuilding ambient environment variables.
 
 To select an existing reviewed extended Git contract, see the
 [Git capability table and operator examples](PILOT_GIT_CAPABILITIES.md).

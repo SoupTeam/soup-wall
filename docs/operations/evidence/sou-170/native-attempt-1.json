@@ -1,0 +1,173 @@
+{
+  "agentfw_sha256": "cbfef36de57efcfdba73e0a74c3c5bda1a641b9c829fbd17f49bdd89f42caa36",
+  "cases": [
+    {
+      "attempted": true,
+      "component": "49311a86ea1827262afe89450d360ca70c841ad258c152c2971cca38b1e03aed",
+      "id": "installed-closure",
+      "source": "8e345beb5b050de5a63fa869d5dbaf3eb9033bb1",
+      "status": "passed"
+    },
+    {
+      "attempted": true,
+      "failure": "profile_version",
+      "id": "legacy-profile",
+      "status": "failed"
+    },
+    {
+      "attempted": false,
+      "id": "inert-preview",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "invalid-limits",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "useful-create",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "useful-replace",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "exact-byte-limit",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "one-byte-over",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "one-operation-over",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "zero-mutations",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "empty-write-count",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "ask-reject",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "no-approval",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "unselected-target",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "create-not-replace",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "stale-replay",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "parallel-last-credit",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "postcommit-withheld-create",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "postcommit-withheld-replace",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "postcommit-interrupted-create",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "postcommit-interrupted-replace",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "fresh-run-recovery",
+      "status": "incomplete"
+    },
+    {
+      "attempted": false,
+      "id": "independent-run",
+      "status": "incomplete"
+    }
+  ],
+  "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+  "component": "49311a86ea1827262afe89450d360ca70c841ad258c152c2971cca38b1e03aed",
+  "expected": [
+    "installed-closure",
+    "legacy-profile",
+    "inert-preview",
+    "invalid-limits",
+    "useful-create",
+    "useful-replace",
+    "exact-byte-limit",
+    "one-byte-over",
+    "one-operation-over",
+    "zero-mutations",
+    "empty-write-count",
+    "ask-reject",
+    "no-approval",
+    "unselected-target",
+    "create-not-replace",
+    "stale-replay",
+    "parallel-last-credit",
+    "postcommit-withheld-create",
+    "postcommit-withheld-replace",
+    "postcommit-interrupted-create",
+    "postcommit-interrupted-replace",
+    "fresh-run-recovery",
+    "independent-run"
+  ],
+  "failure": "profile_version",
+  "failure_type": "ValueError",
+  "format": "sw-installed-edit-quota-qualification/1",
+  "inventory": {
+    "attempted": 2,
+    "expected": 23,
+    "failed": 1,
+    "incomplete": 21,
+    "passed": 1
+  },
+  "last_cli": {
+    "exit_code": 0,
+    "raw_retained": false,
+    "reason": "ok",
+    "stderr_bytes": 0,
+    "stdout_bytes": 1677,
+    "stdout_sha256": "da5e21e1b8e5f7271d9375a7daee323f0f4648577fe50847556c5c492ff5fe40"
+  },
+  "paid_inference": false,
+  "scope": "installed_genuine_host_owned_scripted_provider",
+  "source_commit": "8e345beb5b050de5a63fa869d5dbaf3eb9033bb1",
+  "source_tree": "5230852a940e6b14117e5f1e514b3cb157b07ce3",
+  "status": "failed"
+}

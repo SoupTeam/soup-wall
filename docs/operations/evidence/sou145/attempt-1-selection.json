@@ -1,0 +1,58 @@
+{
+  "format": "sw-pilot-dossier-selection/1",
+  "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+  "candidate": {
+    "commit": "eb6aa6a531cef67a0eac307404da981a5a600f07",
+    "tree": "6da4d371bae069dee954f2d5f37415dee447a7b2"
+  },
+  "accepted_main": "eb6aa6a531cef67a0eac307404da981a5a600f07",
+  "environment": {
+    "platform": "linux",
+    "architecture": "x86_64",
+    "host": "Claude Code 2.1.251",
+    "provider": "owned-scripted-loopback",
+    "transport": "stdio",
+    "distribution": "Ubuntu 24.04",
+    "kernel_release": null
+  },
+  "identities": {
+    "policy": "dba24a1b419040d5f5dad62dfd485db6637c9359f37b9642f458101793062dbc",
+    "filesystem_profile": "39d3069c5ae307a0616d19f3020f0bb5de396bb34c440bf11b2369ed888c1b85",
+    "git_profile": "71a30643f22e7a9cf308f915b0097f9de7c670cc34c5bcbf16df027e685b6a4d",
+    "filesystem_registry": "63d12de143f0f13a7ef63ad0271697ad8d29fcac66b8ccfa7a68ba8f94431de7",
+    "git_registry": "5e22a49a07329335f42f95a48a969c869b5ba84fffcc2739f21a3a70c6437385",
+    "filesystem_classifier": "d2d43d6f67719921592bba4d52e73c0f0543c5b1f1b24c75b88e8d964676aebd",
+    "git_classifier": "8a57c58d5bad5b8b2572ac7a5b6a85ba068f97482d12b4a60e94302bad318474",
+    "agentfw": "9fc0e83f9df881b0cd499ad619eca0f0cde86ba8c0da9d0a77e0771feb01ec83",
+    "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+    "git": "b4bccdfbd66ecbffc868fde4b39cee01bff8fc3ff48dfbafed3a13ce89bd513b",
+    "bwrap": "05b37a091676e85ba4f15138919c0f3b8b07b6db987b8bc7c4ca1d34659ad889"
+  },
+  "support_index": {
+    "path": "docs/operations/roadmap-support-index.json",
+    "sha256": "3c6a96d39133b3c3e740ef9b73ff0ce3b7d12c19439af7c544296e11de0b190e",
+    "member": null,
+    "member_sha256": null
+  },
+  "workload": {
+    "path": "scripts/benchmarks/installed-pilot-workload-v2.json",
+    "sha256": "245110bb6c6b312a70d0bdc69771e44e3bec0da7c79c057019740befffdecd95",
+    "member": null,
+    "member_sha256": null
+  },
+  "evidence": [
+    {
+      "id": "sou145-attempt1-matched",
+      "owner": "sou145",
+      "role": "candidate",
+      "scope": "internal-readonly-original-filesystem-git-scripted-provider",
+      "file": {
+        "path": "runtime-evidence.zip",
+        "sha256": "796383e59bd1000203a40a866f82a4a78b86232e6fd9987c3373cbfc0c1a9141",
+        "member": "sou111-qualification/report.json",
+        "member_sha256": "a2f3e4daf54bb92d2029b7034b875f805c15621f322605765a473defdbffb1ac"
+      }
+    }
+  ]
+}

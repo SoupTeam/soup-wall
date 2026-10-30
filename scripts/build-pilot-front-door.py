@@ -42,6 +42,7 @@ MAX_NAME = 100
 # derives the closure from the sources and fails when this list misses one.
 SCRIPTS = (
     "scripts/agent-audit-report.py",
+    "scripts/edit-run-archive.py",
     "scripts/build-native-pilot-inputs.py",
     "scripts/install-sou62-filesystem-profile.py",
     "scripts/install-sou68-git-profile.py",
@@ -50,6 +51,7 @@ SCRIPTS = (
     "scripts/install-sou83-filesystem-create-profile.py",
     "scripts/mcp-admission-demo.py",
     "scripts/pilot-run.py",
+    "scripts/pilot-run-archive.py",
     "scripts/pilot-selection-lock.py",
     "scripts/pilot.py",
     "scripts/pilot_git_profiles.py",
@@ -58,8 +60,15 @@ SCRIPTS = (
     "scripts/pilot_policy.py",
     "scripts/pilot_preparation_lock.py",
     "scripts/pilot_provider.py",
+    "scripts/pilot_provider_profiles.py",
+    "scripts/pilot_run_state.py",
     "scripts/pilot_qualification.py",
+    "scripts/pilot_resumable_download.py",
     "scripts/pilot_source_identity.py",
+    "scripts/pilot_runtime_identity.py",
+    "scripts/roadmap_support.py",
+    "scripts/pilot_update.py",
+    "scripts/switch-prepared-pilot.py",
     "scripts/prepare-installed-pilot.py",
     "scripts/prepare-native-pilot-prerequisites.py",
     "scripts/qualify-installed-pilot.py",
@@ -67,6 +76,8 @@ SCRIPTS = (
     "scripts/verify-sou62-sou63-combined.py",
     "scripts/verify-sou68-real-mcp.py",
     "scripts/verify-sou79-resource-budgets.py",
+    "scripts/wsl_preflight.py",
+    "scripts/wsl_qualification.py",
 )
 DATA_FILES = (
     "rule_baseline/git_readonly_v1/rule_baseline.py",

@@ -31,6 +31,7 @@ pub mod pilot_doctor;
 mod pilot_host;
 pub mod pilot_launcher;
 pub mod pilot_observation;
+pub mod pilot_workspaces;
 pub mod policy_transition;
 pub use native::child_authority;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -39,6 +40,8 @@ pub(crate) mod macos_create;
 pub(crate) mod macos_read;
 pub mod offline_replay;
 pub mod preflight;
+#[cfg(target_os = "linux")]
+mod private_export;
 #[cfg(windows)]
 mod private_file_windows;
 pub mod protection_status;

@@ -207,6 +207,49 @@ impl ApprovalState {
             .collect())
     }
 
+    /// Read-only observations for the installed edit service. Correlation is
+    /// supplied from its already locked native session map. Unlike selected
+    /// original-server approval, edit resource tools have `selected == false`.
+    /// Do not reconcile files, expire records or inspect grants while polling.
+    pub(super) fn edit_bindings(
+        &self,
+        belongs: impl Fn(&str, &str, &str) -> bool,
+    ) -> Result<(Vec<Value>, Vec<Value>), &'static str> {
+        let records = self
+            .records
+            .lock()
+            .map_err(|_| "native_approval_unavailable")?;
+        if records.len() > MAX_PENDING + KEEP_TERMINAL {
+            return Err("edit_diagnostic_approval_cap");
+        }
+        let now = Instant::now();
+        let mut pending = Vec::new();
+        let mut decisions = Vec::new();
+        for (id, r) in records.iter() {
+            if !belongs(&r.session_id, &r.epoch, &r.tool) {
+                continue;
+            }
+            let state = match r.state {
+                State::Pending if r.expires > now => "pending",
+                State::Pending => "expired",
+                State::Redeemed => "redeemed",
+                State::Closed("rejected" | "native_approval_rejected") => "rejected",
+                State::Closed("cancelled") => "cancelled",
+                State::Closed("expired" | "native_approval_expired") => "expired",
+                State::Closed(_) => "closed",
+            };
+            let row = json!({"pending_id":id,"session_epoch":r.epoch,"tool":r.tool,
+                "binding_sha256":r.binding_sha256,"args_sha256":r.args_sha256,
+                "expires_at_ms":r.expires_at_ms,"state":state});
+            if state == "pending" {
+                pending.push(row);
+            } else {
+                decisions.push(row);
+            }
+        }
+        Ok((pending, decisions))
+    }
+
     fn requires_owner(&self, id: Option<&str>, session: &str) -> bool {
         self.records
             .lock()
@@ -1104,6 +1147,102 @@ mod tests {
     use std::sync::Arc;
 
     const HOOK: &str = "hook-unit-key";
+
+    #[test]
+    fn edit_diagnostics_include_resource_ask_without_mutating_or_reading_authority() {
+        let home = tempfile::tempdir().unwrap();
+        let approval = ApprovalState::new(home.path(), b"private-key-canary", 120).unwrap();
+        let make = |session: &str, epoch: &str, state: State| Record {
+            session_id: session.into(),
+            epoch: epoch.into(),
+            tool: "create_output_0".into(),
+            schema_sha256: "a".repeat(64),
+            binding_sha256: "b".repeat(64),
+            args_sha256: "c".repeat(64),
+            expires_at_ms: now_ms() + 120_000,
+            source: Source::Classifier,
+            policy_epoch: 0,
+            selected: false,
+            expires: Instant::now() + Duration::from_secs(120),
+            state,
+        };
+        {
+            let mut rows = approval.records.lock().unwrap();
+            rows.insert("pending".into(), make("edit", "epoch", State::Pending));
+            rows.insert(
+                "rejected".into(),
+                make("edit", "epoch", State::Closed("rejected")),
+            );
+            rows.insert("foreign".into(), make("foreign", "epoch", State::Pending));
+            rows.insert("stale".into(), make("edit", "stale", State::Pending));
+        }
+        // An attacker-controlled authority marker must never be followed by
+        // a diagnostic query. Its observation cannot mutate the in-memory Ask.
+        let marker = pending_dir(home.path()).join("pending.rejected");
+        std::fs::write(&marker, "raw-arguments-secret-canary").unwrap();
+        let inspect = || {
+            approval
+                .edit_bindings(|session, epoch, tool| {
+                    session == "edit" && epoch == "epoch" && tool == "create_output_0"
+                })
+                .unwrap()
+        };
+        let first = inspect();
+        assert_eq!(first, inspect());
+        assert_eq!(first.0.len(), 1);
+        assert_eq!(first.1.len(), 1);
+        assert_eq!(first.0[0]["state"], "pending");
+        assert_eq!(first.1[0]["state"], "rejected");
+        assert!(approval.operator_bindings().unwrap().is_empty());
+        let observed = serde_json::to_string(&first).unwrap();
+        for canary in [
+            "private-key-canary",
+            "raw-arguments-secret-canary",
+            "foreign",
+            "stale",
+        ] {
+            assert!(!observed.contains(canary));
+        }
+        assert_eq!(
+            std::fs::read_to_string(marker).unwrap(),
+            "raw-arguments-secret-canary"
+        );
+        assert_eq!(approval.records.lock().unwrap().len(), 4);
+        assert_eq!(
+            approval.records.lock().unwrap()["pending"].state,
+            State::Pending
+        );
+    }
+
+    #[test]
+    fn edit_diagnostic_expiry_is_observed_without_closing_or_removing_records() {
+        let home = tempfile::tempdir().unwrap();
+        let approval = ApprovalState::new(home.path(), b"unit", 120).unwrap();
+        approval.records.lock().unwrap().insert(
+            "expired".into(),
+            Record {
+                session_id: "edit".into(),
+                epoch: "epoch".into(),
+                tool: "replace_output_0".into(),
+                schema_sha256: "a".repeat(64),
+                binding_sha256: "b".repeat(64),
+                args_sha256: "c".repeat(64),
+                expires_at_ms: 1,
+                source: Source::Daemon,
+                policy_epoch: 0,
+                selected: false,
+                expires: Instant::now() - Duration::from_secs(1),
+                state: State::Pending,
+            },
+        );
+        let (pending, decisions) = approval.edit_bindings(|_, _, _| true).unwrap();
+        assert!(pending.is_empty());
+        assert_eq!(decisions[0]["state"], "expired");
+        assert_eq!(
+            approval.records.lock().unwrap()["expired"].state,
+            State::Pending
+        );
+    }
 
     #[test]
     fn operator_errors_have_producer_codes_without_parsing_messages() {

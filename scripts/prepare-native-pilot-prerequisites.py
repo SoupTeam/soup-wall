@@ -34,6 +34,7 @@ sys.dont_write_bytecode = True
 import pilot_capacity as capacity
 from pilot_provider import utility_environment
 import pilot_preparation_lock as coordination
+import pilot_resumable_download as resumable
 import pilot_source_identity as SOURCE_IDENTITY
 SOURCES = {
     "git": ("2.51.2", "git-2.51.2",
@@ -43,6 +44,7 @@ SOURCES = {
               "https://github.com/containers/bubblewrap/releases/download/v0.13.1/bubblewrap-0.13.1.tar.xz",
               "0e85c8702248b8dd64144f594147553650cdd0e4c951690345faace79c217c4d", 16 * 1024 * 1024),
 }
+BWRAP_ARCHIVE_BYTES = 129472  # Exact pinned v0.13.1 tar.xz length, independently SHA-256 verified.
 GIT_FLAGS = ("-j2", "NO_CURL=YesPlease", "NO_EXPAT=YesPlease", "NO_TCLTK=YesPlease",
              "NO_GETTEXT=YesPlease", "NO_OPENSSL=YesPlease", "git")
 BWRAP_FLAGS = ("-Dtests=false", "-Dman=disabled", "-Dselinux=disabled",
@@ -55,12 +57,16 @@ MAX_EXPANDED = 512 * 1024 * 1024
 MAX_FILE = 64 * 1024 * 1024
 MAX_DEPENDENCY_ENTRIES = 25000
 MAX_DEPENDENCY_BYTES = 512 * 1024 * 1024
+MAX_GIT_STAGE_BINARY = 64 * 1024 * 1024
+GIT_STAGE_FORMAT = "sw-native-pilot-git-stage/1"
+GIT_STAGE_MARKER_FORMAT = "sw-native-pilot-git-stage-current/1"
 
 
 class Failure(Exception):
-    def __init__(self, reason, stage="inventory", exit_code=None):
+    def __init__(self, reason, stage="inventory", exit_code=None, progress=None):
         super().__init__(reason)
-        self.reason, self.stage, self.exit_code = reason, stage, exit_code
+        self.reason, self.stage, self.exit_code, self.progress = reason, stage, exit_code, progress
+        self.stages = None
 
 
 def require(ok, reason, stage="inventory"):
@@ -294,11 +300,21 @@ def bounded_archive(path, kind):
     return Path(path).resolve(strict=True)
 
 
-def download(kind, destination):
+def download(kind, destination, *, output=None, claim=None, offline=False, reset=False):
     capacity.recheck("before_download")
     url = SOURCES[kind][2]
     require(url.startswith("https://"), "unpinned_download_refused", "download")
     limit = SOURCES[kind][4]
+    if kind == "bwrap":
+        require(output is not None and claim is not None, "download_claim_missing", "download")
+        try:
+            progress = resumable.acquire(output, claim, destination, url=url,
+                sha256=SOURCES[kind][3], expected=BWRAP_ARCHIVE_BYTES, limit=limit,
+                allow_download=not offline, reset=reset)
+        except resumable.Refusal as error:
+            raise Failure("bwrap_" + error.reason, "download", progress=error.progress) from None
+        bounded_archive(destination, kind)
+        return destination, progress
     request = urllib.request.Request(url, headers={"User-Agent": "soup-wall-sou115/1"})
     deadline = time.monotonic() + 120
     try:
@@ -314,7 +330,7 @@ def download(kind, destination):
     except (OSError, TimeoutError, urllib.error.URLError) as error:
         raise Failure(f"{kind}_download_failed; use the pinned local archive", "download") from error
     bounded_archive(destination, kind)
-    return destination
+    return destination, None
 
 
 def extract(archive, destination, kind):
@@ -594,9 +610,212 @@ def freeze(generation):
     generation.chmod(0o500)
 
 
+def stage_json(data):
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            require(key not in result, "completed_git_stage_invalid", "reuse")
+            result[key] = value
+        return result
+    try:
+        value = json.loads(data, object_pairs_hook=pairs)
+    except (UnicodeError, ValueError) as error:
+        raise Failure("completed_git_stage_invalid", "reuse") from error
+    require(isinstance(value, dict), "completed_git_stage_invalid", "reuse")
+    return value
+
+
+def stage_blob(directory_fd, name, limit, mode):
+    """Read one bounded, owned regular file through a no-follow directory fd."""
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
+    try:
+        before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        fd = os.open(name, flags, dir_fd=directory_fd)
+        with os.fdopen(fd, "rb", closefd=True) as stream:
+            opened = os.fstat(stream.fileno())
+            require(stat.S_ISREG(opened.st_mode) and opened.st_uid == os.getuid()
+                    and opened.st_nlink == 1 and stat.S_IMODE(opened.st_mode) == mode
+                    and opened.st_size <= limit and
+                    (before.st_dev, before.st_ino, before.st_mode, before.st_size) ==
+                    (opened.st_dev, opened.st_ino, opened.st_mode, opened.st_size),
+                    "completed_git_stage_invalid", "reuse")
+            data = stream.read(limit + 1)
+            after = os.fstat(stream.fileno())
+            require(len(data) == opened.st_size and len(data) <= limit and
+                    (opened.st_dev, opened.st_ino, opened.st_mode, opened.st_size,
+                     opened.st_mtime_ns, opened.st_ctime_ns) ==
+                    (after.st_dev, after.st_ino, after.st_mode, after.st_size,
+                     after.st_mtime_ns, after.st_ctime_ns),
+                    "completed_git_stage_invalid", "reuse")
+            return data
+    except (OSError, ValueError) as error:
+        if isinstance(error, Failure):
+            raise
+        raise Failure("completed_git_stage_invalid", "reuse") from error
+
+
+def stage_tree(directory_fd, *, receipt=False):
+    expected = {"git", "build.log", "receipt.json"} if receipt else {"git", "build.log"}
+    with os.scandir(directory_fd) as entries:
+        names = [entry.name for entry in itertools.islice(entries, len(expected) + 1)]
+    require(len(names) == len(expected) and set(names) == expected,
+            "completed_git_stage_invalid", "reuse")
+    binary = stage_blob(directory_fd, "git", MAX_GIT_STAGE_BINARY, 0o500)
+    log = stage_blob(directory_fd, "build.log", MAX_LOG, 0o400)
+    entries = (("build.log", 0o400, log), ("git", 0o500, binary))
+    tree = hashlib.sha256()
+    for name, mode, data in entries:
+        tree.update(name.encode() + b"\0" + str(mode).encode() + b"\0" +
+                    str(len(data)).encode() + b"\0" + hashlib.sha256(data).digest())
+    return binary, tree.hexdigest()
+
+
+def stage_inputs(source, snapshot, execution):
+    return {"source_commit": source, "recipe_sha256": digest(Path(__file__)),
+            "archives": {kind: {"url": SOURCES[kind][2], "sha256": SOURCES[kind][3]}
+                         for kind in SOURCES},
+            "flags": {"git": list(GIT_FLAGS), "bwrap": list(BWRAP_FLAGS)},
+            "tools": snapshot, "execution_inputs": execution}
+
+
+def copy_stage_source(source, destination, limit, mode):
+    info = regular(source)
+    require(info.st_size <= limit, "completed_git_stage_invalid", "checkpoint")
+    fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    with os.fdopen(fd, "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        require((opened.st_dev, opened.st_ino, opened.st_size) ==
+                (info.st_dev, info.st_ino, info.st_size),
+                "completed_git_stage_invalid", "checkpoint")
+        data = stream.read(limit + 1)
+        after = os.fstat(stream.fileno())
+        require(len(data) == opened.st_size and len(data) <= limit and
+                (opened.st_mtime_ns, opened.st_ctime_ns, opened.st_size) ==
+                (after.st_mtime_ns, after.st_ctime_ns, after.st_size),
+                "completed_git_stage_invalid", "checkpoint")
+    with destination.open("xb") as target:
+        os.fchmod(target.fileno(), mode)
+        target.write(data)
+        target.flush()
+        os.fsync(target.fileno())
+
+
+def publish_git_stage(output, generation, claim, source, snapshot, execution, tools):
+    """Publish a verified frozen output, never compiler scratch or a generation."""
+    stages = output / "git-stages"
+    stages.mkdir(mode=0o700, exist_ok=True)
+    private(stages)
+    require(sum(1 for _ in itertools.islice(stages.iterdir(), 17)) <= 16,
+            "retained_git_stage_limit", "checkpoint")
+    stage = private(stages / uuid.uuid4().hex, create=True)
+    original_binary = verify_binary("git", generation / "git-src/git", tools)
+    copy_stage_source(generation / "git-src/git", stage / "git", MAX_GIT_STAGE_BINARY, 0o500)
+    copy_stage_source(generation / "git-build.log", stage / "build.log", MAX_LOG, 0o400)
+    directory_fd = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        binary_bytes, tree = stage_tree(directory_fd)
+        require(hashlib.sha256(binary_bytes).hexdigest() == original_binary["sha256"],
+                "completed_git_stage_invalid", "checkpoint")
+        binary = {**original_binary, "path": str(stage / "git")}
+        receipt = {"format": GIT_STAGE_FORMAT, **stage_inputs(source, snapshot, execution),
+                   "tree_sha256": tree, "binary": binary, "status": "completed"}
+        write_json(stage / "receipt.json", receipt)
+        (stage / "receipt.json").chmod(0o400)
+        os.fsync(directory_fd)
+        os.fchmod(directory_fd, 0o500)
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    verify_git_stage(output, source, snapshot, execution, tools,
+                     stage_name=stage.name, directory_fd=claim.directory_fd)
+    marker = {"format": GIT_STAGE_MARKER_FORMAT, "stage": stage.name,
+              "receipt_sha256": digest(stage / "receipt.json")}
+    temporary = output / (".git-stage-" + uuid.uuid4().hex)
+    write_json(temporary, marker)
+    claim.verify()
+    os.replace(temporary.name, "git-stage-current.json", src_dir_fd=claim.directory_fd,
+               dst_dir_fd=claim.directory_fd)
+    claim.verify()
+    os.fsync(claim.directory_fd)
+    return marker
+
+
+def verify_git_stage(output, source, snapshot, execution, tools, *, stage_name=None,
+                     directory_fd=None):
+    root_fd = (os.dup(directory_fd) if directory_fd is not None else
+               os.open(output, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC))
+    try:
+        if stage_name is None:
+            try:
+                marker = stage_json(stage_blob(root_fd, "git-stage-current.json", MAX_RECEIPT, 0o600))
+            except Failure as error:
+                if not (output / "git-stage-current.json").exists():
+                    raise Failure("completed_git_stage_missing; rerun without --resume", "reuse") from error
+                raise
+            require(marker.get("format") == GIT_STAGE_MARKER_FORMAT and
+                    re.fullmatch(r"[0-9a-f]{32}", marker.get("stage", "")) and
+                    re.fullmatch(r"[0-9a-f]{64}", marker.get("receipt_sha256", "")),
+                    "completed_git_stage_invalid", "reuse")
+            stage_name = marker["stage"]
+        else:
+            require(re.fullmatch(r"[0-9a-f]{32}", stage_name), "completed_git_stage_invalid", "reuse")
+            marker = None
+        stages_fd = os.open("git-stages", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW |
+                            os.O_CLOEXEC, dir_fd=root_fd)
+        try:
+            parent = os.fstat(stages_fd)
+            require(parent.st_uid == os.getuid() and stat.S_IMODE(parent.st_mode) == 0o700,
+                    "completed_git_stage_invalid", "reuse")
+            stage_fd = os.open(stage_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW |
+                               os.O_CLOEXEC, dir_fd=stages_fd)
+            try:
+                info = os.fstat(stage_fd)
+                require(info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o500,
+                        "completed_git_stage_invalid", "reuse")
+                binary_bytes, tree = stage_tree(stage_fd, receipt=True)
+                receipt_bytes = stage_blob(stage_fd, "receipt.json", MAX_RECEIPT, 0o400)
+                if marker is not None:
+                    require(hashlib.sha256(receipt_bytes).hexdigest() == marker["receipt_sha256"],
+                            "completed_git_stage_invalid", "reuse")
+                receipt = stage_json(receipt_bytes)
+                require(receipt.get("format") == GIT_STAGE_FORMAT and
+                        receipt.get("status") == "completed" and
+                        receipt.get("tree_sha256") == tree and
+                        all(receipt.get(key) == value for key, value in
+                            stage_inputs(source, snapshot, execution).items()),
+                        "completed_git_stage_invalid", "reuse")
+                stage_path = output / "git-stages" / stage_name
+                binary = receipt.get("binary")
+                require(isinstance(binary, dict) and binary.get("path") == str(stage_path / "git")
+                        and binary.get("sha256") == hashlib.sha256(binary_bytes).hexdigest()
+                        and isinstance(binary.get("version"), str)
+                        and SOURCES["git"][0] in binary["version"]
+                        and isinstance(binary.get("libraries"), dict),
+                        "completed_git_stage_invalid", "reuse")
+                require(stage_tree(stage_fd, receipt=True)[1] == tree and
+                        (os.fstat(stage_fd).st_dev, os.fstat(stage_fd).st_ino) ==
+                        (info.st_dev, info.st_ino), "completed_git_stage_invalid", "reuse")
+                return binary_bytes, marker or {"stage": stage_name,
+                                                "receipt_sha256": hashlib.sha256(receipt_bytes).hexdigest()}, binary
+            finally:
+                os.close(stage_fd)
+        finally:
+            os.close(stages_fd)
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        if isinstance(error, Failure):
+            raise
+        raise Failure("completed_git_stage_invalid", "reuse") from error
+    finally:
+        os.close(root_fd)
+
+
 def failure_record(output, error):
     record = {"status": "failed", "stage": error.stage, "reason": error.reason[:160],
               "exit_code": error.exit_code, "active_protection": False}
+    if progress := getattr(error, "progress", None):
+        record["download_progress"] = progress
+    if getattr(error, "stages", None) is not None:
+        record["stages"] = error.stages
     if output is not None and output.exists() and not output.is_symlink():
         info = output.lstat()
         if stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() \
@@ -616,7 +835,8 @@ def prepare(args):
     missing.extend(f'{item["dependency"]}: install {item["install"]}' for item in dependencies)
     for kind in SOURCES:
         archive = getattr(args, kind + "_archive")
-        if archive is None and not args.allow_download:
+        if archive is None and not args.allow_download and not (
+                kind == "bwrap" and getattr(args, "offline_bwrap_cache", False)):
             missing.append(f"--{kind}-archive ABSOLUTE_PINNED_ARCHIVE or --allow-download")
         elif archive is not None and (not archive.is_absolute() or not archive.is_file()):
             missing.append(f"--{kind}-archive must be an existing absolute file")
@@ -676,23 +896,80 @@ def prepare(args):
         (generation / "tmp").mkdir(mode=0o700)
         env = environment(tools, generation, args)
         archives = {}
+        download_progress = {}
         for kind in SOURCES:
             supplied = getattr(args, kind + "_archive")
-            archives[kind] = bounded_archive(supplied, kind) if supplied else download(
-                kind, generation / (kind + ".tar.xz"))
+            if supplied:
+                archives[kind] = bounded_archive(supplied, kind)
+            else:
+                archives[kind], progress = download(kind, generation / (kind + ".tar.xz"),
+                    output=output, claim=claim,
+                    offline=kind == "bwrap" and getattr(args, "offline_bwrap_cache", False),
+                    reset=kind == "bwrap" and getattr(args, "clear_bwrap_cache", False))
+                if progress is not None:
+                    download_progress[kind] = progress
         for kind in SOURCES:
             destination = generation / (kind + "-src")
             destination.mkdir(mode=0o700)
             extract(archives[kind], destination, kind)
         git = generation / "git-src/git"
         bwrap = generation / "bwrap-build/bwrap"
-        build([tools["make"], *GIT_FLAGS], cwd=generation / "git-src", env=env,
-              log=generation / "git-build.log", seconds=600, stage="git_build")
-        build([tools["meson"], "setup", str(generation / "bwrap-build"),
-               str(generation / "bwrap-src"), *BWRAP_FLAGS], cwd=generation, env=env,
-              log=generation / "bwrap-setup.log", seconds=120, stage="bwrap_setup")
-        build([tools["meson"], "compile", "-C", str(generation / "bwrap-build")],
-              cwd=generation, env=env, log=generation / "bwrap-build.log", seconds=300, stage="bwrap_build")
+        stage_started = time.monotonic()
+        if getattr(args, "resume", False):
+            try:
+                binary_bytes, checkpoint, stage_binary = verify_git_stage(
+                    output, source, snapshot, execution, tools,
+                    directory_fd=claim.directory_fd)
+            except Failure as error:
+                error.stages = {"git": {"status": "incomplete"},
+                                "bwrap": {"status": "not_started"}}
+                raise
+            require(not git.exists() and len(binary_bytes) <= MAX_GIT_STAGE_BINARY,
+                    "completed_git_stage_invalid", "reuse")
+            with git.open("xb") as target:
+                os.fchmod(target.fileno(), 0o700)
+                target.write(binary_bytes)
+                target.flush()
+                os.fsync(target.fileno())
+            reused_binary = verify_binary("git", git, tools)
+            require({key: value for key, value in reused_binary.items() if key != "path"} ==
+                    {key: value for key, value in stage_binary.items() if key != "path"},
+                    "completed_git_stage_invalid", "reuse")
+            git_stage = {"status": "reused", "seconds": round(time.monotonic() - stage_started, 3),
+                         "checkpoint_sha256": checkpoint["receipt_sha256"]}
+        else:
+            try:
+                build([tools["make"], *GIT_FLAGS], cwd=generation / "git-src", env=env,
+                      log=generation / "git-build.log", seconds=600, stage="git_build")
+                verify_binary("git", git, tools)
+                require(source_identity(args.expected_commit) == source and
+                        execution_inputs(args) == execution and
+                        {name: {"path": path, "sha256": digest(path)}
+                         for name, path in tools.items()} == snapshot,
+                        "build_input_changed", "checkpoint")
+                checkpoint = publish_git_stage(output, generation, claim, source,
+                                               snapshot, execution, tools)
+            except Failure as error:
+                error.stages = {"git": {"status": "failed",
+                                         "seconds": round(time.monotonic() - stage_started, 3)},
+                                "bwrap": {"status": "not_started"}}
+                raise
+            git_stage = {"status": "built", "seconds": round(time.monotonic() - stage_started, 3),
+                         "checkpoint_sha256": checkpoint["receipt_sha256"]}
+        bwrap_started = time.monotonic()
+        try:
+            build([tools["meson"], "setup", str(generation / "bwrap-build"),
+                   str(generation / "bwrap-src"), *BWRAP_FLAGS], cwd=generation, env=env,
+                  log=generation / "bwrap-setup.log", seconds=120, stage="bwrap_setup")
+            build([tools["meson"], "compile", "-C", str(generation / "bwrap-build")],
+                  cwd=generation, env=env, log=generation / "bwrap-build.log",
+                  seconds=300, stage="bwrap_build")
+        except Failure as error:
+            error.stages = {"git": git_stage,
+                            "bwrap": {"status": "failed",
+                                      "seconds": round(time.monotonic() - bwrap_started, 3)}}
+            raise
+        bwrap_stage = {"status": "built", "seconds": round(time.monotonic() - bwrap_started, 3)}
         require(source_identity(args.expected_commit) == source and
                 execution_inputs(args) == execution and
                 {name: {"path": path, "sha256": digest(path)}
@@ -706,6 +983,7 @@ def prepare(args):
                    "tools": snapshot, "execution_inputs": execution,
                    "flags": {"git": list(GIT_FLAGS), "bwrap": list(BWRAP_FLAGS)},
                    "binaries": binaries, "generation_tree_sha256": tree_digest(generation),
+                   "stages": {"git": git_stage, "bwrap": bwrap_stage},
                    "status": "built-not-qualified"}
         write_json(generation / "receipt.json", receipt)
         verify_generation(generation, source, tools, execution=execution)
@@ -723,10 +1001,13 @@ def prepare(args):
         os.fsync(claim.directory_fd)
         answer = {"status": "prepared-not-qualified", "git": str(git), "bwrap": str(bwrap),
                   "receipt": str(generation / "receipt.json"),
+                  "stages": {"git": git_stage, "bwrap": bwrap_stage},
                   "waited_seconds": claim.waited_seconds, "contended": claim.contended,
                   "active_protection": False}
         if incomplete:
             answer["retained_interrupted_generations"] = incomplete
+        if download_progress:
+            answer["download_progress"] = download_progress
         return answer
 
 
@@ -735,9 +1016,15 @@ def main():
     capacity.add_arguments(parser)
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--rebuild", action="store_true")
+    parser.add_argument("--resume", action="store_true",
+                        help="explicitly reuse one fully verified frozen Git stage")
     parser.add_argument("--wait-seconds", type=float, default=0,
                         help="explicit bounded wait for an owned same-root build (max 2700)")
     parser.add_argument("--allow-download", action="store_true")
+    parser.add_argument("--offline-bwrap-cache", action="store_true",
+                        help="reuse only the whole-digest-verified private bubblewrap archive")
+    parser.add_argument("--clear-bwrap-cache", action="store_true",
+                        help="with --prepare --rebuild, explicitly clear only owned bubblewrap download staging")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--expected-commit")
     parser.add_argument("--git-archive", type=Path)
@@ -746,6 +1033,11 @@ def main():
     parser.add_argument("--pkg-config-sysroot", type=Path)
     parser.add_argument("--meson-pythonpath", type=Path)
     args = parser.parse_args()
+    if args.clear_bwrap_cache and (not args.prepare or not args.rebuild or
+                                   args.bwrap_archive is not None or not args.allow_download):
+        parser.error("--clear-bwrap-cache requires --prepare --rebuild --allow-download and no --bwrap-archive")
+    if args.offline_bwrap_cache and (args.allow_download or args.bwrap_archive is not None):
+        parser.error("--offline-bwrap-cache requires neither --allow-download nor --bwrap-archive")
     if args.capacity_plan:
         if args.prepare or args.guard_capacity:
             parser.error("--capacity-plan is read-only; use it without --prepare or --guard-capacity")
@@ -756,6 +1048,7 @@ def main():
     try:
         coordination.bounded_wait(args.wait_seconds)
         require(args.prepare or args.wait_seconds == 0, "wait_requires_prepare")
+        require(args.prepare or not args.resume, "resume_requires_prepare")
         with capacity.checked("native", args):
             print(json.dumps(prepare(args)))
         return 0 if not args.prepare or not platform_missing() else 2

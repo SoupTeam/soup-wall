@@ -1,0 +1,95 @@
+{
+  "schema": "sw-installed-edit-status/1",
+  "observed_at_ms": 1793187100332,
+  "status": "recorded_host_completed",
+  "reason_code": "host_completion_does_not_establish_edit_outcome",
+  "provenance": "local_records_are_not_authenticated_runtime_attestation",
+  "identity": {
+    "run_sha256": "8ff7edc9dd99652b4b33a753bf84b5b149a7d12f3e80b32c513c2bc5b6863adb",
+    "context_sha256": "622319d29ad3ed602f71c4ca72a77674d965f290f3bba69692612cf2fc0cf039",
+    "profile_sha256": "88486b0880aab36c0e6aa7fd8b47db7c3b2277d7a4100a6aa3e878b6084ad329",
+    "registry_sha256": "447a9b7e692450ec3f971052eeb4662c7c9733b94ec967bb31f0c6b8e852aec2",
+    "source_commit": "a7ec2de899aa55726e7488f5d31bec5044b52307",
+    "source_tree": "fc1336b4e9ed706d170e52ea181b2fc359f76cc5",
+    "component_sha256": "03686312bb036238da24519f294296f5700ac6348f07fbf07c33c89d6f4a86c4",
+    "agent_sha256": "c62872d5721bda10939de9fcdd94a30fc2a7de746b482424e1a8d777a9112095",
+    "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "policy_sha256": "5a4c161efb933d00a972271dc93ccaef9c1428600e581eb622a29f2af7f43c90",
+    "config_sha256": "2f18203b58054e7741bfc02f3f27d7ceb710d83776dd97c3e336aa4bb1ac27a0",
+    "host_session_sha256": "1a5d1cc260f1e02242e4fe1068768a75ef3e91ebbf4ef363bd98a59956db9504",
+    "instance_sha256": "b9b2452cc3a7fef72fd6a067a52591bd466373ef9423a9bd46c17aaa2758a875"
+  },
+  "recorded_host_outcome": "recorded_host_completed",
+  "owner_process": "unavailable_or_changed",
+  "host_process": "unavailable_or_changed",
+  "authenticated_daemon": "unavailable",
+  "requests": [],
+  "audit": {
+    "provenance": "retained_local_records_not_runtime_attestation",
+    "completeness": "selected_bounded_records_only",
+    "reason_code": "local_audit_observations_not_commit_or_delivery_proof",
+    "file_sha256": "c4338c1a5d5467a6a658f7ec607f32bbf28e124ff2a11bfdad499199e6328c8c",
+    "records": 10,
+    "ask_requests": 1,
+    "calls": [
+      {
+        "target_index": 0,
+        "operation": "read",
+        "session_sha256": "561cbf68ff0a1b0e19e3d9e037181697dc673a51d2a0d2469b1413919805eb43",
+        "call_sha256": "f7c03a373f7f8a4427cf203c5c4cc5c14d24d510c229c34d856a5e9ea0b86b0a",
+        "binding_sha256": "fabafb476e090a28afcc44bd744837a05bf9580f4c2f3606570f1a7a8382aace",
+        "admission": "recorded_allow",
+        "publication_gate": "not_recorded",
+        "commit": "unknown",
+        "result_release": "not_recorded",
+        "host_delivery": "unknown",
+        "model_consumption": "unknown"
+      },
+      {
+        "target_index": 0,
+        "operation": "replace",
+        "session_sha256": "561cbf68ff0a1b0e19e3d9e037181697dc673a51d2a0d2469b1413919805eb43",
+        "call_sha256": "9c3dd2a8cadd626949a03770a9161213e0e94d2075ac4c9d85197d247ca12d3f",
+        "binding_sha256": "76626d11bc5ec77b1e35b7d1b1d4f9e4cce8b506965d9ac0332267b2ecd5ebab",
+        "admission": "recorded_allow",
+        "publication_gate": "recorded_allow",
+        "commit": "unknown",
+        "result_release": "not_recorded",
+        "host_delivery": "unknown",
+        "model_consumption": "unknown"
+      },
+      {
+        "target_index": 0,
+        "operation": "read",
+        "session_sha256": "561cbf68ff0a1b0e19e3d9e037181697dc673a51d2a0d2469b1413919805eb43",
+        "call_sha256": "54e66cc0ab60cbe6a07f684b435098def49a0b4defa97cfd0474f05f609b75fb",
+        "binding_sha256": "027803aa872c285129bd1b0c4ebf6ede8fcef8f9aadc5b3bb103cfe65929a15e",
+        "admission": "recorded_allow",
+        "publication_gate": "not_recorded",
+        "commit": "unknown",
+        "result_release": "not_recorded",
+        "host_delivery": "unknown",
+        "model_consumption": "unknown"
+      }
+    ]
+  },
+  "outputs": [
+    {
+      "target_index": 0,
+      "operation": "replace",
+      "observation": "present",
+      "sha256": "10ba34481513bc2445d370da1e36feef37e5c7b67203944e59e422adb5b4bb3b",
+      "bytes": 36,
+      "matches_prepared_baseline": false,
+      "attribution": "observed_postcondition_not_writer_or_commit_proof"
+    }
+  ],
+  "effects": "indeterminate",
+  "host_delivery": "unknown",
+  "model_consumption": "unknown",
+  "next_steps": [
+    "Inspect the intended target independently before deciding whether another edit is needed.",
+    "Prepare a fresh exact plan and obtain new exact authority for any new mutation; do not replay old approvals or spent receipts.",
+    "Cancellation and withheld or absent results do not roll back previously committed bytes."
+  ]
+}

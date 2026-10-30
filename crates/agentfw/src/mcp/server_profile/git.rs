@@ -256,31 +256,47 @@ pub(crate) fn validate_repository(root: &Path) -> anyhow::Result<()> {
 
 #[cfg(any(target_os = "linux", test))]
 pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> anyhow::Result<()> {
-    use std::io::Read;
+    use super::git_local_clone::{contents, directory_path, open, same};
+    let root_pin = open(root, true)?;
+    let root_before = root_pin.metadata()?;
+    let anchored_root = directory_path(&root_pin, root);
+    let root = anchored_root.as_path();
     ensure!(
         fs::symlink_metadata(root.join(".git"))?.is_dir(),
         "Git requires a standalone non-bare repository"
     );
+    let git_pin = open(&root.join(".git"), true)?;
+    let git_before = git_pin.metadata()?;
+    let git_root = directory_path(&git_pin, &root.join(".git"));
     ensure!(
-        fs::symlink_metadata(root.join(".git/config"))?.is_file(),
+        fs::symlink_metadata(git_root.join("config"))?.is_file(),
         "Git config must be a regular file, not a link or special file"
     );
-    for path in [
-        ".gitmodules",
-        ".gitattributes",
-        ".git/commondir",
-        ".git/gitdir",
-        ".git/config.worktree",
-        ".git/worktrees",
-        ".git/modules",
-        ".git/objects/info/alternates",
-        ".git/objects/info/http-alternates",
-        ".git/info/attributes",
+    for (path, reason) in [
+        (".gitmodules", "git_submodules_unsupported"),
+        (".gitattributes", "git_attributes_unsupported"),
+        (".git/commondir", "git_worktree_indirection_unsupported"),
+        (".git/gitdir", "git_worktree_indirection_unsupported"),
+        (
+            ".git/config.worktree",
+            "git_worktree_indirection_unsupported",
+        ),
+        (".git/worktrees", "git_worktree_indirection_unsupported"),
+        (".git/modules", "git_submodules_unsupported"),
+        (
+            ".git/objects/info/alternates",
+            "git_object_indirection_unsupported",
+        ),
+        (
+            ".git/objects/info/http-alternates",
+            "git_object_indirection_unsupported",
+        ),
+        (".git/info/attributes", "git_attributes_unsupported"),
     ] {
         ensure!(
             fs::symlink_metadata(root.join(path))
                 .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound),
-            "unsupported Git repository indirection or attributes"
+            "{reason}"
         );
     }
     if !shallow {
@@ -295,25 +311,14 @@ pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> an
             "Git shallow boundary must be a regular file"
         );
     }
-    let mut config = Vec::new();
-    let mut options = fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    let file = options.open(root.join(".git/config"))?;
-    ensure!(
-        file.metadata()?.is_file(),
-        "Git config changed to a special file"
-    );
-    file.take(8193).read_to_end(&mut config)?;
-    ensure!(config.len() <= 8192, "Git config exceeds limit");
+    let config = contents(&git_root.join("config"))?;
     validate_configuration(&config)?;
     fn walk(path: &Path, depth: usize, count: &mut usize) -> anyhow::Result<()> {
         ensure!(depth <= 32, "Git repository depth limit");
-        for entry in fs::read_dir(path)? {
+        let pin = open(path, true)?;
+        let before = pin.metadata()?;
+        let anchored = directory_path(&pin, path);
+        for entry in fs::read_dir(&anchored)? {
             let entry = entry?;
             *count += 1;
             ensure!(*count <= 32768, "Git repository entry limit");
@@ -330,11 +335,16 @@ pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> an
                 walk(&entry.path(), depth + 1, count)?;
             }
         }
+        ensure!(
+            same(&before, &pin.metadata()?) && same(&before, &fs::symlink_metadata(path)?),
+            "git_clone_identity_changed"
+        );
         Ok(())
     }
     walk(root, 0, &mut 0)?;
-    if root.join(".git/hooks").exists() {
-        for hook in fs::read_dir(root.join(".git/hooks"))? {
+    if git_root.join("hooks").exists() {
+        let hooks_pin = open(&git_root.join("hooks"), true)?;
+        for hook in fs::read_dir(directory_path(&hooks_pin, &git_root.join("hooks")))? {
             ensure!(
                 hook?
                     .file_name()
@@ -344,6 +354,12 @@ pub(crate) fn validate_repository_with_shallow(root: &Path, shallow: bool) -> an
             );
         }
     }
+    ensure!(
+        same(&root_before, &root_pin.metadata()?)
+            && same(&git_before, &git_pin.metadata()?)
+            && same(&git_before, &fs::symlink_metadata(root.join(".git"))?),
+        "git_clone_identity_changed"
+    );
     Ok(())
 }
 
