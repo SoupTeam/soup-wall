@@ -389,6 +389,7 @@ pub(super) fn read_plan(path: &Path, expected: &str) -> Result<Profile> {
 pub(super) fn command(action: Action) -> Result<()> {
     match action {
         Action::ExportSet(args) => super::review::export_set::command(args)?,
+        Action::Apply { action } => super::application::command(action)?,
         Action::Archive { home, action } => archive(&home, action)?,
         Action::Inventory(args) => super::inventory::command(args)?,
         Action::WithRun(args) => super::inventory::with_run(args)?,

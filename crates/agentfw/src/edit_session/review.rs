@@ -52,9 +52,9 @@ pub(super) struct Args {
     expect_observation: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct FileIdentity {
+pub(super) struct FileIdentity {
     device: u64,
     inode: u64,
     bytes: u64,
@@ -110,6 +110,106 @@ struct Reviewed {
     terminal: Vec<u8>,
     receipt: Vec<u8>,
     host: Vec<u8>,
+}
+
+/// Reuse the accepted completed-run checks without treating a review as a grant.
+/// The held output-directory lock remains alive until this selection is dropped.
+pub(super) struct SelectedOutput {
+    args: Args,
+    reviewed: Reviewed,
+    index: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(super) struct OutputBinding {
+    pub run: PathBuf,
+    pub run_identity: (u64, u64),
+    pub run_sha256: String,
+    pub profile_sha256: String,
+    pub component: profile::Component,
+    pub observation_sha256: String,
+    pub binding_sha256: String,
+    pub output: String,
+    pub output_identity: FileIdentity,
+    pub output_sha256: String,
+    pub output_bytes: usize,
+}
+
+impl SelectedOutput {
+    pub fn open(run: &Path, expected: &str, name: &str, budget: &mut Budget) -> Result<Self> {
+        let args = Args {
+            run: run.into(),
+            sha256: expected.into(),
+            show: vec![],
+            baseline: vec![],
+            consent_private_content: false,
+            export: None,
+            include: vec![],
+            expect_observation: None,
+        };
+        let reviewed = observe(&args, budget)?;
+        let index = reviewed
+            .observation
+            .outputs
+            .iter()
+            .position(|o| o.name == name)
+            .context("edit_apply_output_not_declared")?;
+        let selected = Self {
+            args,
+            reviewed,
+            index,
+        };
+        selected.content()?;
+        Ok(selected)
+    }
+
+    pub fn profile(&self) -> &Profile {
+        &self.reviewed.selection.profile
+    }
+
+    pub fn content(&self) -> Result<&str> {
+        let output = &self.reviewed.observation.outputs[self.index];
+        ensure!(output.text, "edit_apply_text_output_required");
+        std::str::from_utf8(
+            output
+                .content
+                .as_deref()
+                .context("edit_apply_output_missing")?,
+        )
+        .context("edit_apply_text_output_required")
+    }
+
+    pub fn binding(&self) -> Result<OutputBinding> {
+        let observation = &self.reviewed.observation;
+        let output = &observation.outputs[self.index];
+        let meta = self
+            .reviewed
+            .selection
+            .directory
+            .metadata()
+            .map_err(anyhow::Error::msg)?;
+        Ok(OutputBinding {
+            run: self.args.run.clone(),
+            run_identity: (meta.dev(), meta.ino()),
+            run_sha256: observation.run_sha256.clone(),
+            profile_sha256: observation.profile_sha256.clone(),
+            component: self.profile().component.clone(),
+            observation_sha256: profile::digest(observation)?,
+            binding_sha256: observation.binding_sha256.clone(),
+            output: output.name.clone(),
+            output_identity: output
+                .identity
+                .clone()
+                .context("edit_apply_output_missing")?,
+            output_sha256: output.sha256.clone().context("edit_apply_output_missing")?,
+            output_bytes: output.bytes.context("edit_apply_output_missing")?,
+        })
+    }
+
+    pub fn recheck(&self, budget: &mut Budget) -> Result<()> {
+        recheck(&self.args, &self.reviewed, budget)
+    }
 }
 fn needed(dir: &Directory, name: &str, cap: u64, budget: &mut Budget) -> Result<Vec<u8>> {
     dir.read(name, cap, budget)
