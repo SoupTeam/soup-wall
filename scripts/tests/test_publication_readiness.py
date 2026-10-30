@@ -357,7 +357,7 @@ class RealRetainedDossierTests(unittest.TestCase):
             self.assertEqual(stored["status"], "NOT_READY")
             self.assertEqual(result["dossier_status"], "NOT_READY", result)
             self.assertEqual(result["status"], "blocked")
-            self.assertTrue(set(result["blockers"]) & {"dossier_not_ready", "dossier_recomputed_verdict_mismatch"})
+            self.assertIn("dossier_not_ready", result["blockers"])
 
 
 class ArchiveBoundsTests(unittest.TestCase):

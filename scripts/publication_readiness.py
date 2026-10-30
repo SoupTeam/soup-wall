@@ -411,11 +411,11 @@ def verify(index_path, root, repo, candidate_commit, manifest_sha256, approval_p
                  "candidate_tree_mismatch")
             rebuilt = DOSSIER.build(selection, snapshot.target, Path(repo))
             result["dossier_status"] = rebuilt["status"]
+            if rebuilt["status"] != "READY":
+                result["blockers"].append("dossier_not_ready")
             need(set(stored) - METADATA == set(rebuilt) and
                  {key: value for key, value in stored.items() if key not in METADATA} == rebuilt,
                  "dossier_recomputed_verdict_mismatch")
-            if rebuilt["status"] != "READY":
-                result["blockers"].append("dossier_not_ready")
             if selection["format"] != "sw-pilot-dossier-selection/2":
                 result["blockers"].append("scoped_readiness_required")
             if result["blockers"]:
