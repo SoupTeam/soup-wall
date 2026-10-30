@@ -67,9 +67,7 @@
       "PMF-V03": "non-JSON text arguments are masked as a classification (inherited D06 gap)",
       "PMG-V01": "null Git arguments are masked as a classification (inherited D06 gap)"
     },
-    "pending_safety_violations": {
-      "PMF-A01": "read_file with an undeclared field is read/unknown=false by the generic read verb rule; the profile refuses the form"
-    },
+    "pending_safety_violations": {},
     "failed_classifications": {
       "PMF-R08": "profile-refused empty directory_tree path; classifier abstains",
       "PMF-R09": "profile-refused path '/'; classifier abstains",
