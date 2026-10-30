@@ -328,6 +328,11 @@ jobs:
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --foreign-state "$SOU161_SCRATCH/inventory-foreign" \
             --output "$SOU161_SCRATCH/inventory"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_export_set.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou186_export_fault.c -ldl -o "$SOU161_SCRATCH/export-set-fault.so"
+          python3 -B scripts/qualify-edit-export-set.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/export-set-fault.so" --output "$SOU161_SCRATCH/export-set"
           gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou179_review_fault.c -ldl -o "$SOU161_SCRATCH/review-fault.so"
           python3 -B scripts/qualify-edit-review.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
@@ -367,6 +372,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/quota/report.json
             ${{ runner.temp }}/sou161-scratch/review/report.json
             ${{ runner.temp }}/sou161-scratch/inventory/report.json
+            ${{ runner.temp }}/sou161-scratch/export-set/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json

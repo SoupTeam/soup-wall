@@ -45,6 +45,9 @@ enum Action {
     /// Hand one rechecked inventory selection to an explicitly requested existing action.
     #[cfg(target_os = "linux")]
     WithRun(inventory::WithRun),
+    /// Preview or atomically publish an explicitly selected private result set.
+    #[cfg(target_os = "linux")]
+    ExportSet(review::export_set::Args),
     /// Review exact completed-run outputs; private content needs explicit consent.
     #[cfg(target_os = "linux")]
     Review(review::Args),
@@ -282,5 +285,34 @@ mod grammar_tests {
             "--json"
         ])
         .is_ok());
+    }
+    #[derive(Parser)]
+    struct Grammar {
+        #[command(flatten)]
+        cli: Cli,
+    }
+    #[test]
+    fn result_set_types_follow_the_executor_platform_boundary() {
+        Grammar::command().debug_assert();
+        assert!(
+            Grammar::try_parse_from(["agentfw", "status", "--run", "/private/run", "--json"])
+                .is_ok()
+        );
+        let parsed = Grammar::try_parse_from([
+            "agentfw",
+            "export-set",
+            "--run",
+            "/private/run",
+            "--sha256",
+            &"a".repeat(64),
+            "--include",
+            "a.txt",
+            "--include",
+            "b.txt",
+            "--out",
+            "/private/new",
+            "--consent-private-content",
+        ]);
+        assert_eq!(parsed.is_ok(), cfg!(target_os = "linux"));
     }
 }
