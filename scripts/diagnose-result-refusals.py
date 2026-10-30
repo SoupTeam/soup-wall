@@ -72,6 +72,9 @@ def main():
     run.check_returncode()
     results = json.loads(run.stdout)['results']
     validate_results(manifest, results, payload_dir)
+    for row in results:
+        if row['status'] == 'inspected' and not row.get('policy_shadow', {}).get('comparison'):
+            raise ValueError('adapter lacks current full-policy comparison; reject stale executable')
     report = corpus.build_report(manifest, results, identity)
     (args.output_dir / 'report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     by_id = {r['case_id']: r for r in results}
