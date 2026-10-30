@@ -51,7 +51,7 @@ WORKER_PY = ROOT / "rule_baseline/runtime/worker.py"
 WORKER_RS = ROOT / "crates/agentfw/src/classifier_runtime/worker.rs"
 PROTOCOL = "sw-classifier-worker/1"
 RISKY = {"write", "delete", "send_data", "change_permissions"}
-KINDS = {"equal_outcome": 2, "metadata_invariant": 2, "preserve_risk_mark_unknown": 2,
+KINDS = {"equal_outcome": 2, "metadata_invariant": 2, "preserve_risk_mark_unknown": 2, "preserve_actions_mark_unknown": 2,
          "no_silent_loss_past_bound": 2, "technical_failure_channel": 1, "observe": None}
 
 
@@ -253,6 +253,13 @@ def judge(rel: dict, recs: list[dict]) -> tuple[str, str]:
         if not risky <= set(b[2]):
             return "fail", f"risky actions lost: {sorted(risky - set(b[2]))}"
         return ("pass", "risk kept, unknown set") if b[3] is True else ("fail", "unknown component added but unknown is false")
+    if kind == "preserve_actions_mark_unknown":
+        # D01 for an unmodelled argument: every action the source proves (certain and nonempty), of any risk.
+        if a[3] is not False or not a[2]:
+            return "fail", f"inconclusive: the source proves no action to preserve (actions {list(a[2])}, unknown {a[3]})"
+        if not set(a[2]) <= set(b[2]):
+            return "fail", f"proven actions lost: {sorted(set(a[2]) - set(b[2]))}"
+        return ("pass", "actions kept, unknown set") if b[3] is True else ("fail", "unmodelled argument added but unknown is false")
     if kind == "no_silent_loss_past_bound":
         if a[0] != "classification":
             return "fail", "the within-bound source did not classify"
@@ -309,9 +316,10 @@ def source_drift(rels: dict) -> list[str]:
 
 
 # ---------------------------------------------------------------- run
-CANDIDATE_BLOCKER = ("The SOU-97 candidate (rule_baseline/pilot_readonly_v1/rule_baseline.py, pilot_readonly_v1.1) exists only "
-                     "in unmerged Draft PR #213. It is not imported, and no other classifier is substituted for it. Select an "
-                     "explicit file with --candidate NAME=PATH once a reviewed candidate is available on the base branch.")
+CANDIDATE_BLOCKER = ("The SOU-97 candidate (rule_baseline/pilot_readonly_v1/rule_baseline.py, pilot_readonly_v1.2, sha256 "
+                     "ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30 at #213 head 7d7f9747) exists only in "
+                     "unmerged Draft PR #213. It is not imported, and no other classifier is substituted for it. Select an "
+                     "explicit file with --candidate NAME=PATH to compare it; it is never selected by default.")
 
 
 def identity(classifiers: dict[str, Path]) -> dict:
@@ -433,7 +441,8 @@ def compare(base: dict, cand: dict, base_mode: dict, cand_mode: dict) -> dict:
     moved = [{"relation": x["id"], "baseline": verdicts[x["id"]], "candidate": x["verdict"], "detail": x["detail"]}
              for x in cand_mode["relations"] if x["verdict"] != verdicts[x["id"]]]
     return {"cases_compared": len(base), "cases_changed": changed, "risky_losses": [c for c in changed if c.get("risky_lost")],
-            "relation_changes": moved, "relation_regressions": [m for m in moved if m["candidate"] == "fail"]}
+            "relation_changes": moved, "relation_regressions": [m for m in moved if m["candidate"] == "fail"],
+            "relation_fixes": [m for m in moved if m["baseline"] == "fail" and m["candidate"] == "pass"]}
 
 
 def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: dict[str, Path],
@@ -467,6 +476,7 @@ def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: 
     if len(base_outcomes) > 1:
         report["mode_parity"] = parity(base_outcomes)
         status = max(status, 1 if report["mode_parity"]["divergent_cases"] else 0)
+    cand_status = None
     if candidate:
         cand = {**classifiers, **candidate}
         cand_modes, cand_outcomes, cand_status = evaluate_set(cases, rels, modes, cand)
@@ -476,7 +486,6 @@ def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: 
         if len(cand_outcomes) > 1:
             report["candidate"]["mode_parity"] = parity(cand_outcomes)
             cand_status = max(cand_status, 1 if report["candidate"]["mode_parity"]["divergent_cases"] else 0)
-        status = max(status, cand_status)
     else:
         report["candidate"] = {"status": "not_run", "blocker": CANDIDATE_BLOCKER}
     # Each classifier's own single-shot and worker boundaries, by the same probes and rules:
@@ -489,8 +498,16 @@ def run(corpus_path: Path, relations_path: Path, modes: list[str], classifiers: 
         section["boundary_probes_git_classifier"] = identity({"git": selected["git"]})["git"]
         section["boundary_probes_git"] = probe_boundaries(rels, selected["git"], deadlines)
         if any(p["verdict"] == "fail" for p in section["boundary_probes"] + section["boundary_probes_git"]):
-            status = max(status, 1)
-    report["verdict"] = {0: "PASS", 1: "FAIL", 2: "TECHNICAL_ERROR"}[status]
+            if section is report:
+                status = max(status, 1)
+            else:
+                cand_status = max(cand_status, 1)
+    names = {0: "PASS", 1: "FAIL", 2: "TECHNICAL_ERROR"}
+    # The overall verdict is the worse side, as before. Each side's own verdict is also kept, so a baseline
+    # failure is never hidden behind a passing candidate, nor a candidate failure behind the baseline.
+    report["verdict_by_side"] = {"baseline": names[status], "candidate": names[cand_status] if candidate else "not_run"}
+    status = max(status, cand_status or 0)
+    report["verdict"] = names[status]
     report["not_claimed"] = ["label correctness (all labels pending)", "native policy or authority decisions",
                              "production MCP admission (Rust) behaviour", "original-server execution",
                              "candidate classifier (SOU-97 #213 is not merged)",
@@ -618,7 +635,9 @@ def measure_latency(cases: list[dict], classifiers: dict[str, Path], repeats: in
 
 def render_markdown(report: dict, latency: dict | None = None) -> str:
     ids = report["identities"]
-    lines = ["# SOU-128 metamorphic gate (development)", "", f"Verdict: **{report['verdict']}**", "",
+    sides = report.get("verdict_by_side", {})
+    lines = ["# SOU-128 metamorphic gate (development)", "",
+             f"Verdict: **{report['verdict']}** (baseline {sides.get('baseline')}, candidate {sides.get('candidate')})", "",
              report["scope"], "", "## Identities", ""]
     lines += [f"- corpus `{ids['corpus']['path']}` `{ids['corpus']['sha256']}`",
               f"- relations `{ids['relations']['path']}` `{ids['relations']['sha256']}`",
@@ -648,8 +667,12 @@ def render_markdown(report: dict, latency: dict | None = None) -> str:
     if cand.get("status") == "run":
         lines += [f"- {k}: `{v['path']}` `{v['sha256']}`" for k, v in cand["classifiers"].items()]
         for mode, cmp_ in cand["comparison"].items():
-            lines.append(f"- {mode}: {len(cmp_['cases_changed'])}/{cmp_['cases_compared']} cases changed, risky losses "
-                         f"{len(cmp_['risky_losses'])}, relation regressions {len(cmp_['relation_regressions'])}")
+            lines.append(f"- {mode}: relations {cand['modes'][mode]['tally']}; {len(cmp_['cases_changed'])}/"
+                         f"{cmp_['cases_compared']} cases changed, risky losses {len(cmp_['risky_losses'])}, relation "
+                         f"regressions {len(cmp_['relation_regressions'])}, fixes (baseline fail -> candidate pass) "
+                         f"{[m['relation'] for m in cmp_['relation_fixes']] or 'none'}")
+            lines += [f"  - candidate failure `{x['id']}` ({x['kind']}): {x['detail']}"
+                      for x in cand["modes"][mode]["relations"] if x["verdict"] == "fail"]
         for name, key in (("generic", "boundary_probes"), ("git", "boundary_probes_git")):
             lines.append(f"- {name} boundary probes: " + ", ".join(f"{p['id']} {p['verdict']}" for p in cand.get(key, [])))
     else:
@@ -726,7 +749,7 @@ def main(argv: list[str] | None = None) -> int:
         if "boundary_probes" in section:
             print(f"{label}boundary probes: generic {tally(section['boundary_probes'])}; "
                   f"git {tally(section.get('boundary_probes_git', []))}")
-    print(f"verdict {report.get('verdict', 'INVALID')}; wrote {a.out_dir / 'report.json'}")
+    print(f"verdict {report.get('verdict', 'INVALID')} {report.get('verdict_by_side', {})}; wrote {a.out_dir / 'report.json'}")
     return status
 
 

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Generate the SOU-128 metamorphic development corpus v0.4 (deterministic; stdlib only).
 
-v0.4 appends Git-classifier coverage (a value bound and invalid names) after every frozen v0.3 item;
+v0.4 appends Git-classifier coverage (a value bound and invalid names) after every frozen v0.3 item,
+then the three D01 extra-argument counterexamples CE-1/2/3 (eval/sou128/PHASE3_REVIEW.md section 11);
 the v0.3 files are never rewritten, and --check requires v0.4 to keep them as an exact prefix.
 
 v0.3 corrects the untrusted v0.2 preparation as recorded in eval/sou128/SOU128_CORPUS_AUDIT.md:
@@ -43,6 +44,9 @@ CONTRACT = "contract/updated_contract2.md"
 ORIGIN_V02 = "sou128_public_synthetic_v0.2"
 ORIGIN_V03 = "sou128_v0.3_audit_correction"
 ORIGIN_V04 = "sou128_v0.4_git_coverage"
+ORIGIN_V04_D01 = "sou128_v0.4_d01_extra_argument"
+# Origins allowed after the frozen v0.3 prefix, in this order.
+ORIGINS_AFTER_V03 = (ORIGIN_V04, ORIGIN_V04_D01)
 
 
 def sha(rel: str) -> str:
@@ -249,6 +253,44 @@ def build() -> tuple[dict, dict]:
                    "An unusable tool name is a technical failure through an established D06 channel, never a classification.",
                    "source_backed")
 
+    # D01 extra-argument counterexamples (PR #246 TL review, 2026-10-29; PHASE3_REVIEW.md sections 10.3 and 11).
+    # Each variant adds one argument that its pinned upstream schema does not declare. The schema sets no
+    # additionalProperties, so the argument is schema-permitted: unmodelled semantics under D01, not a D06 violation.
+    # This is classifier semantics only; the selected profiles still close the schema and refuse such a call
+    # before classification, and nothing here says the original server would accept or authorize it.
+    d01_partial = source(CONTRACT, "D01 / section 3.1: when some actions are proven but unmodeled parameters remain, "
+                                   "proven actions are preserved alongside unknown: true")
+    d06_scope = source(CONTRACT, "D06 / section 3.2: classifier_invalid covers an input that violates the admitted "
+                                 "schema/profile; an argument an open schema permits violates none")
+    tl = {"path": "SoupTeam/soup-wall PR #246 review by @winux125 (2026-10-29)",
+          "rule": "outside the closed selected profile a schema-permitted additional argument is unmodelled semantics "
+                  "under D01: preserve established actions, unknown = true; a violation of an explicitly closed schema "
+                  "stays invalid under D06", "sha256": None}
+    for name, make, tool, args, key, value, rel, cls, note in [
+        ("CE1", git, "git_log", {"repo_path": "/workspace", "max_count": 5}, "author", "x", GIT_TOOLS, "git",
+         "a bounded Git read"),
+        ("CE2", fs, "read_text_file", {"path": "/workspace/notes.txt"}, "mode", "raw", FS_TOOLS, "generic",
+         "a filesystem read"),
+        ("CE3", fs, "edit_file", {"path": "/workspace/notes.txt", "edits": [{"oldText": "a", "newText": "b"}]},
+         "backup", True, FS_TOOLS, "generic",
+         "a filesystem write; edit_file is in the upstream tool list only, never admitted by the read-only profile"),
+    ]:
+        schema = (FS if make is fs else GIT)[tool]
+        assert key not in schema["properties"] and "additionalProperties" not in schema, (tool, key)
+        a = c.case(f"S128-EXTRA-ARG-{name}-SOURCE", "extra_argument", make(tool, dict(args)), cls,
+                   f"{note}; only schema-declared arguments", ORIGIN_V04_D01)
+        variant = make(tool, dict(args))
+        variant["raw_arguments"][key] = value  # deliberately past fs()/git()'s declared-argument check
+        b = c.case(f"S128-EXTRA-ARG-{name}-VARIANT", "extra_argument", variant, cls,
+                   f"{note}; plus {key}={json.dumps(value)}, absent from the pinned schema, which sets no "
+                   "additionalProperties", ORIGIN_V04_D01)
+        c.relation(f"EXTRA-ARG-{name}", "preserve_actions_mark_unknown", [a, b],
+                   [d01_partial, d06_scope, source(rel, f"{tool}.inputSchema: {key!r} is not a declared property and "
+                                                       "additionalProperties is unset"), tl],
+                   "A schema-permitted argument the classifier does not model keeps every action proven for the source "
+                   "invocation and sets unknown = true (classifier semantics only; not admission or server authorization).",
+                   "source_backed")
+
     worker = source("rule_baseline/runtime/worker.py", "run(): frame parsed with duplicate rejection; input_json parsed with json.loads")
     single = source("rule_baseline/rule_baseline.py", "main(): size limit, then json.loads; ValueError/UnicodeError -> invalid_input")
     admission = source("crates/agentfw/src/mcp/admission.rs", "Strict visitor: duplicate JSON member and non-finite numbers rejected")
@@ -277,7 +319,8 @@ def build() -> tuple[dict, dict]:
     ]
     fixture = {"fixture_version": "sou128-metamorphic-dev-v0.4",
                "description": "SOU-128 public DEVELOPMENT corpus (corrected v0.2; see eval/sou128/SOU128_CORPUS_AUDIT.md). "
-                              "v0.4 appends Git-classifier coverage to the frozen v0.3 items. Inert data; every label pending.",
+                              "v0.4 appends Git-classifier coverage and the D01 extra-argument counterexamples CE-1/2/3 "
+                              "to the frozen v0.3 items. Inert data; every label pending.",
                "cases": c.cases}
     relations = {"format": "sou128-relations/1", "corpus": "sou128-metamorphic-dev-v0.4",
                  "scope": "development only; no security authorization is inferred from any relation",
@@ -309,8 +352,9 @@ def frozen_prefix_errors(fixture: dict, relations: dict) -> list[str]:
     n = len(old_fx["cases"])
     if fixture["cases"][:n] != old_fx["cases"]:
         errors.append("v0.4 cases do not start with the frozen v0.3 cases")
-    if any(c["origin"] != ORIGIN_V04 for c in fixture["cases"][n:]):
-        errors.append("an added case is not marked " + ORIGIN_V04)
+    added = [c["origin"] for c in fixture["cases"][n:]]
+    if any(o not in ORIGINS_AFTER_V03 for o in added) or added != sorted(added, key=ORIGINS_AFTER_V03.index):
+        errors.append("an added case is not marked " + " or ".join(ORIGINS_AFTER_V03) + " in that order")
     m = len(old_rel["relations"])
     if without_citation_hashes(relations["relations"][:m]) != without_citation_hashes(old_rel["relations"]):
         errors.append("v0.4 relations do not start with the frozen v0.3 relations")

@@ -1,6 +1,6 @@
 # SOU-128 Phase 3 review
 
-Development evidence only. Every case label is `pending`: 79 in the frozen v0.3 corpus, 83 in the default v0.4 corpus (section 9.3). Nothing here is label correctness, native policy, production MCP admission or original-server execution. Sections 1 to 8 describe the v0.3 corpus; section 9 describes v0.4.
+Development evidence only. Every case label is `pending`: 79 in the frozen v0.3 corpus, 83 in the default v0.4 corpus (section 9.3), 89 after the D01 additions (section 11). Nothing here is label correctness, native policy, production MCP admission or original-server execution. Sections 1 to 8 describe the v0.3 corpus; section 9 describes v0.4.
 
 ## 1. Relation review (52 relations: 35 asserted, 17 observation only)
 
@@ -368,8 +368,156 @@ What SOU-128 would do in each case:
 
 Until then nothing is added. `risk_loss/git` stays without effect because it depends on this case.
 
+**Decided 2026-10-29 (TL review of #246): (a).** Implemented in section 11 with a new rule, `preserve_actions_mark_unknown`, because `preserve_risk_mark_unknown` needs a risky source action (section 11.1).
+
 ### 10.4 State at the end of this section
 
 - Pushed PR head `90b18d10` with CI: 8 success (Draft fast checks, admission, CodeQL and its five analyses) and 14 skipped by the Draft policy. The Rust `test` job is among the deferred ones.
 - Local commit `d52ecf84` (section 10.1) is not pushed.
 - `eval/eval_runner.py` stays cited at main's `86dded74…` until #213 merges (section 9.6). Re-citing earlier would break the gate on the current base.
+
+## 11. D01 extra-argument relations CE-1/2/3 and the SOU-97 v1.2 candidate (2026-10-30)
+
+This section implements the TL decision in @winux125's 2026-10-29 review of #246, which answers section 10.3:
+- Outside the closed selected profile, an argument the schema permits but does not declare is unmodelled semantics under D01. Established actions are preserved and `unknown` is set to `true`.
+- An actual violation of an explicitly admitted or closed schema stays invalid and refused under D06.
+- The selected filesystem/Git profiles still close the schema and refuse such a call before classification. That path is unchanged and not exercised here.
+- The relations concern classifier semantics only. They say nothing about original-server authorization.
+
+Same Windows host as section 3, on the v0.4 corpus.
+
+### 11.1 Rule: `preserve_actions_mark_unknown`
+
+Section 10.3 option (a) proposed `preserve_risk_mark_unknown`. That rule needs a *risky* source action, so CE-1 and CE-2 (source `read`) would always be "inconclusive". `eval/metamorphic_runner.py` therefore adds one rule. `preserve_risk_mark_unknown` and its controls are unchanged.
+
+`preserve_actions_mark_unknown` passes only if all of these hold:
+1. Both members classify. A technical failure fails the relation, even through an established D06 channel; it is never counted as a valid classification.
+2. The source proves a nonempty set of actions with `unknown: false`. An abstaining or already-uncertain source fails as "inconclusive" instead of passing vacuously.
+3. Every proven source action survives in the variant. A lost action fails, whatever its risk.
+4. The variant has `unknown: true`. Suppressed uncertainty fails.
+
+### 11.2 Cases and relations (appended to v0.4)
+
+`eval/tools/make_sou128_corpus.py` appends 6 cases with origin `sou128_v0.4_d01_extra_argument` and 3 relations, after the existing v0.4 Git items.
+- The frozen v0.3 prefix is unchanged, as are the 83 earlier v0.4 cases and the 55 earlier relations (citations included).
+- The probes are unchanged.
+- `--check` now also requires the added origins to appear in order: Git coverage first, then D01.
+- All 89 labels stay `pending` with null expectations. None is promoted.
+
+| Relation | Source case (schema-declared arguments only) | Variant adds | Pinned schema |
+|---|---|---|---|
+| `EXTRA-ARG-CE1` | `git_log {"repo_path":"/workspace","max_count":5}` (Git classifier) | `"author":"x"` | `git-readonly-v1/upstream-tools-list.json` |
+| `EXTRA-ARG-CE2` | `read_text_file {"path":"/workspace/notes.txt"}` | `"mode":"raw"` | `filesystem-readonly-v1/upstream-tools-list.json` |
+| `EXTRA-ARG-CE3` | `edit_file {"path":"/workspace/notes.txt","edits":[{"oldText":"a","newText":"b"}]}` | `"backup":true` | same |
+
+Each relation cites:
+- `contract/updated_contract2.md` D01 (section 3.1, the "unmodeled parameters" sentence) and D06 (section 3.2, `classifier_invalid` scope);
+- the pinned tool list, for the fact that the key is undeclared and `additionalProperties` is unset;
+- the PR #246 TL review, cited by name only (no file hash).
+
+The builder asserts both schema facts. It refuses to build if the schema declared the key or closed itself; `D01ExtraArgument.test_a_closed_schema_is_not_built_as_a_d01_case` covers this. `edit_file` appears only in the upstream tool list. Nothing here treats it as admitted by the read-only profile.
+
+**Source hashes:** none changed. The new citations reuse the hashes already cited: contract `a3c85a29…`, filesystem tools `d9df6889…`, Git tools `8819c85d…`. Integrated main does not touch any cited source (11.6).
+
+New files: fixture `fc5c920b4103db4792c8aa0a4b06c6ac793392118bd51baded03ed2bed3875f1`, relations `a810b3ecb83b89118f4ed426b34ee455c9548026066104685eaff70e7836fe1c`.
+
+### 11.3 Baseline failures (reproduced before the assertions existed; kept as failures)
+
+The accepted baselines were run on the CE inputs before any relation was written. The gate then reproduces the same outputs in both modes:
+
+| Relation | Source → variant (direct = worker) | Verdict |
+|---|---|---|
+| `EXTRA-ARG-CE1` (Git baseline) | `ok [read] false` → `unknown [] true` | **fail**: proven actions lost: `['read']` |
+| `EXTRA-ARG-CE2` (generic baseline) | `ok [read] false` → `ok [read] false` | **fail**: unknown not set |
+| `EXTRA-ARG-CE3` (generic baseline) | `ok [write] false` → `ok [write] false` | **fail**: unknown not set |
+
+These are classifier-owner defects. No oracle, label or relation kind was changed to hide them. The baseline gate therefore reports `FAIL` (exit 1): 38 pass, 3 fail, 17 observed, 3 vacuous, in both modes, with no direct/worker divergence and probes 6 pass / 4 blocked for each classifier.
+
+`report.json` now records `verdict_by_side` (`baseline`, `candidate`). The overall `verdict` is still the worse side. `summary.md` lists each side's failures and the relations a candidate fixes.
+
+### 11.4 SOU-97 candidate `pilot_readonly_v1.2`
+
+- Source: `rule_baseline/pilot_readonly_v1/rule_baseline.py` at #213 head `7d7f974776c1312ce425f98734281891815b6943` (`refs/pull/213/head`, checked 2026-10-30).
+- sha256: `ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30`.
+- #213 is still an unmerged Draft. The candidate is not imported or merged into this branch, and it is never selected by default (`CANDIDATE_BLOCKER` names v1.2).
+- It was extracted from the commit object and selected with `--candidate generic=PATH --candidate git=PATH`.
+
+| | baseline (direct = worker) | candidate (direct = worker) |
+|---|---|---|
+| relations pass / fail / observed | 38 / 3 / 17 | 41 / 0 / 17 |
+| vacuous passes | 3 | 2 (`META-UNKNOWN`, `ORDER-UNKNOWN`) |
+| certain / partial unknown / abstention / proven no-op / technical (`classifier_invalid`) | 63 / 6 / 11 / 2 / 7 | 65 / 7 / 8 / 2 / 7 |
+| labels scored / pending | 0 / 89 | 0 / 89 |
+| boundary probes (generic, Git) | 6 pass, 4 blocked each | 6 pass, 4 blocked each |
+| side verdict | `FAIL` | `PASS` |
+
+Candidate CE outcomes, in both modes:
+- CE-1: `[read] false` → `[read] true`.
+- CE-2: `[read] false` → `[read] true`.
+- CE-3: `[write] false` → `[write] true`.
+
+The candidate gives reason code `unmodelled_argument` for each.
+
+Comparison, in both modes:
+- 7/89 cases changed: the 4 from section 9.5 plus the three CE variants.
+- 0 risky losses and 0 relation regressions.
+- Relation fixes are exactly `EXTRA-ARG-CE1/2/3`.
+
+The overall run is `FAIL` (exit 1) because the baseline side fails.
+
+### 11.5 Negative controls
+
+`eval/sou128_controls.py` adds `D01_CONTROLS`. They wrap any classifier via `write_control(..., base=PATH)`. They are kept out of `CONTROLS`, so the baseline relation review keeps its control set. Each was wrapped around the v1.2 candidate (generic and Git) and run in both modes:
+
+| control | exit / candidate side | CE-1/2/3 verdict (direct = worker) | other failures |
+|---|---|---|---|
+| `extra_arg_action_loss` | 1 / `FAIL` | fail: proven actions lost | none |
+| `extra_arg_unknown_suppressed` | 1 / `FAIL` | fail: unknown not set | none |
+| `extra_arg_technical_failure` (`classifier_invalid`) | 2 / `TECHNICAL_ERROR` | fail: technical failure on a case that must classify | none |
+| `vacuous_source` (abstains wherever certain) | 1 / `FAIL` | fail: inconclusive, source proves no action | `MIXED-*` (4), also correctly inconclusive |
+
+The judge-level tests also cover the following without the candidate:
+- action loss, with and without uncertainty;
+- suppressed `unknown`;
+- a technical failure on either member;
+- abstaining, certain-empty and uncertain sources;
+- the unchanged `preserve_risk_mark_unknown` rule for a read source.
+
+The relation review now handles the baseline's own failures:
+- It lists them under `failing_on_baseline` (`EXTRA-ARG-CE1/2/3`) and credits them to no control.
+- A control's broken relations are those that pass on the baseline.
+- "No effect" means nothing breaks beyond the baseline's own failures.
+- The review exits 1 while baseline failures remain.
+
+Result: every other asserted relation is broken by a targeted control, and none only by `fake_success`. Vacuous relations are `DEFAULT-DTREE`, `META-UNKNOWN` and `ORDER-UNKNOWN`. No effect: `risk_loss/git` (CE-1's lost action is `read`, which is not risky) and `slow/git`.
+
+### 11.6 Integration and checks
+
+- Fetched accepted `main` `49e89b6b` (#296). Its 67 changed files include nothing under `eval/`, `contract/`, `rule_baseline/` or `profiles/`, and no cited source or worker/admission input. Merged into this branch as `886617f6` (non-fast-forward, conflict-free, no rebase); every cited hash is unchanged after the merge.
+- `make_sou128_corpus.py --check`: OK (89 cases, 58 relations, 8 + 2 probes).
+- `test_sou128_metamorphic.py`: 34 tests. `test_eval_runner.py`, `test_eval_scores.py` and `test_eval_failure_channel.py` are OK. After the merge, the baseline + candidate gate `report.json` is byte-identical across two runs.
+- **Candidate reproducibility.** The two `SOU97CandidateD01` tests read the classifier blob from commit `7d7f9747` and refuse any other SHA-256. The tests never use the network.
+  - Where the object is absent, which is any clone that has not fetched it, the class is **skipped** with `CANDIDATE NOT AVAILABLE, NOT TESTED`. That is not a pass.
+  - With `SOU128_REQUIRE_SOU97_CANDIDATE=1` the absence is an error instead.
+  - `test_candidate_pin_matches_the_runner` always runs offline. It checks that this pin equals the one `CANDIDATE_BLOCKER` publishes.
+  - The README section "SOU-97 candidate" gives the reviewer procedure.
+- **Clean-checkout trial (2026-10-30).** A standalone `--single-branch` clone (no shared object store, no `7d7f9747`) plus this diff gave:
+
+  | Mode | Result |
+  |---|---|
+  | Default | 32 run, OK; `SOU97CandidateD01` skipped (2 tests, explicit reason) |
+  | Strict, before fetch | `FAILED (errors=1)`, a setUpClass error. Under `-k SOU97` the exit is 5 (Python 3.12: no test ran) |
+  | After the documented fetch | see below |
+
+  The documented fetch was `git fetch origin 7d7f9747…` from `github.com/SoupTeam/soup-wall`; `refs/pull/213/head` also resolved to `7d7f9747`. The fetched blob's sha256 was `ffeb367f…ada30`. After it, strict mode gave 34 run, OK, 0 skipped.
+- **Local shared repository.** The object is present here, so 34 run, OK, 0 skipped.
+- Not rerun: the eight earlier broken-candidate controls (section 9.5) and latency. Neither the controls nor the classifier timing path changed, so only the D01 controls were run against v1.2. The section 9.1 candidate latency was measured on v1.1.
+
+### 11.7 Remaining
+
+- **Baseline failures:** `EXTRA-ARG-CE1` (Git baseline: action loss) and `EXTRA-ARG-CE2/3` (generic baseline: suppressed `unknown`). They remain until a classifier owner fixes the baselines or a reviewed candidate replaces them.
+- **Candidate failures:** none.
+- **Native probes:** still `blocked`: duplicate argument, duplicate tool name, `NaN`, lone surrogate. They have not been independently verified, and no Rust/native result is claimed.
+- **Labels:** all 89 `pending`. None is promoted, including the 6 new ones.
+- **Unchanged contract gap:** CE-3 is a classifier-only statement about `edit_file`. Whether any profile admits it is out of scope.
+- **Re-cite after #213 merges:** `eval/eval_runner.py` still needs re-citing then (section 9.6).

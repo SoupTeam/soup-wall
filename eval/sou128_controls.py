@@ -53,8 +53,36 @@ CONTROLS = {
 }
 
 
-def write_control(name: str, directory: Path, profile: str = "generic") -> Path:
-    """Write control `name` wrapping the accepted baseline of `profile` (generic or git)."""
+# D01 extra-argument controls (EXTRA-ARG-CE1/2/3). The accepted baselines already fail those relations, so
+# these are meant to wrap a classifier that satisfies them (the explicitly selected SOU-97 candidate) via
+# write_control(..., base=PATH). They are kept out of CONTROLS so the baseline relation review is unchanged.
+_EXTRA = ("def _extra(event):\n    props = (event.get('tool_schema') or {}).get('properties') if isinstance(event, dict) else None\n"
+          "    args = event.get('raw_arguments') if isinstance(event, dict) else None\n"
+          "    return isinstance(props, dict) and isinstance(args, dict) and any(k not in props for k in args)\n")
+D01_CONTROLS = {
+    # Drops every action when an undeclared argument is present (uncertainty kept).
+    "extra_arg_action_loss": _EXTRA + "def classify(event):\n    r = _base(event)\n"
+                             "    if r.get('status') != 'error' and _extra(event):\n"
+                             "        r = dict(r, actions=[], unknown=True, status='unknown')\n    return r\n",
+    # Keeps the actions but suppresses the uncertainty an undeclared argument adds.
+    "extra_arg_unknown_suppressed": _EXTRA + "def classify(event):\n    r = _base(event)\n"
+                                    "    if r.get('status') != 'error' and _extra(event):\n"
+                                    "        r = dict(r, unknown=False, status='ok')\n    return r\n",
+    # Treats a schema-permitted undeclared argument as a D06 technical failure (an established channel).
+    "extra_arg_technical_failure": _EXTRA + "def classify(event):\n    r = _base(event)\n"
+                                   "    if r.get('status') != 'error' and _extra(event):\n"
+                                   "        r = _error('undeclared argument', 'classifier_invalid')\n    return r\n",
+    # Abstains wherever it was certain, so no source proves an action: a relation over it must not pass vacuously.
+    "vacuous_source": "def classify(event):\n    r = _base(event)\n"
+                      "    if r.get('status') != 'error' and r.get('unknown') is False:\n"
+                      "        r = dict(r, actions=[], unknown=True, status='unknown')\n    return r\n",
+}
+
+
+def write_control(name: str, directory: Path, profile: str = "generic", base: Path | None = None) -> Path:
+    """Write control `name` wrapping the accepted baseline of `profile` (generic or git), or `base` if given."""
     path = Path(directory) / f"{name}-{profile}.py"
-    path.write_text(PREAMBLE.replace("@BASELINE@", repr(str(BASELINES[profile]))) + CONTROLS[name] + POSTAMBLE, encoding="utf-8")
+    wrapped = BASELINES[profile] if base is None else Path(base)
+    path.write_text(PREAMBLE.replace("@BASELINE@", repr(str(wrapped))) + {**CONTROLS, **D01_CONTROLS}[name] + POSTAMBLE,
+                    encoding="utf-8")
     return path

@@ -1,5 +1,6 @@
 """SOU-128: the metamorphic gate, its broken-classifier negative controls and boundary probes."""
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,17 @@ import sou128_relation_review as REVIEW  # noqa: E402
 
 GENERIC_ORDER = {f"ORDER-{n}" for n in ("READ", "SIZES", "SEARCH", "DEL", "MIX", "SHELL", "UNKNOWN")}
 GENERIC_META = {f"META-{n}" for n in ("READ", "SIZES", "SEARCH", "DEL", "MIX", "SHELL", "UNKNOWN")}
+# D01 extra-argument relations (PR #246 TL review, 2026-10-29). The accepted baselines genuinely fail all three.
+EXTRA_ARG = {"EXTRA-ARG-CE1", "EXTRA-ARG-CE2", "EXTRA-ARG-CE3"}
+BASELINE_D01_FAILURES = {("preserve_actions_mark_unknown", r) for r in EXTRA_ARG}
+# The explicitly selected SOU-97 candidate: Draft PR #213, never merged into or imported by this branch.
+SOU97_COMMIT = "7d7f974776c1312ce425f98734281891815b6943"
+SOU97_PATH = "rule_baseline/pilot_readonly_v1/rule_baseline.py"
+SOU97_SHA256 = "ffeb367ffbd8d73d84369111b96fd61026d34b77511149e3c86b07fc133ada30"  # pilot_readonly_v1.2
+# Network is never used by the tests. A reviewer fetches the object first (eval/sou128/README.md, "SOU-97 candidate"):
+#   git fetch origin 7d7f974776c1312ce425f98734281891815b6943
+# Set SOU128_REQUIRE_SOU97_CANDIDATE=1 to make a missing candidate an error instead of a skip.
+REQUIRE_SOU97 = os.environ.get("SOU128_REQUIRE_SOU97_CANDIDATE") == "1"
 
 
 def gate(*args, timeout=900, keep=None):
@@ -38,21 +50,63 @@ def failing(report, mode, section=None):
     return {(x["kind"], x["id"]) for x in modes[mode]["relations"] if x["verdict"] == "fail"}
 
 
+def beyond_baseline(test, report, mode):
+    """Failures of a baseline-wrapped control besides the inherited baseline D01 failures, which must still be there."""
+    found = failing(report, mode)
+    test.assertTrue(BASELINE_D01_FAILURES <= found, (mode, sorted(found)))
+    return found - BASELINE_D01_FAILURES
+
+
+def sou97_candidate(directory: Path) -> Path | None:
+    """The pinned SOU-97 v1.2 classifier from its exact #213 commit, or None where that object is not fetched."""
+    done = subprocess.run(["git", "-C", str(ROOT), "cat-file", "blob", f"{SOU97_COMMIT}:{SOU97_PATH}"], capture_output=True)
+    if done.returncode != 0:
+        return None
+    if MR.sha256(done.stdout) != SOU97_SHA256:
+        raise AssertionError("SOU-97 candidate blob does not match its pinned sha256")
+    path = Path(directory) / "rule_baseline.py"
+    path.write_bytes(done.stdout)
+    return path
+
+
 class AcceptedBaseline(unittest.TestCase):
-    """Positive control: the accepted baselines satisfy every source-backed relation in both modes."""
+    """The accepted baselines satisfy every source-backed relation except the three D01 extra-argument relations,
+    which they genuinely fail in both modes. The gate reports FAIL for that; nothing is relabelled or observed away."""
 
     @classmethod
     def setUpClass(cls):
         cls.done, cls.report = gate()
 
-    def test_passes_in_direct_and_worker_mode_with_parity(self):
-        self.assertEqual(self.done.returncode, 0, self.done.stdout + self.done.stderr)
-        self.assertEqual(self.report["verdict"], "PASS")
+    def test_fails_exactly_the_d01_relations_in_direct_and_worker_mode_with_parity(self):
+        self.assertEqual(self.done.returncode, 1, self.done.stdout + self.done.stderr)
+        self.assertEqual(self.report["verdict"], "FAIL")
+        self.assertEqual(self.report["verdict_by_side"], {"baseline": "FAIL", "candidate": "not_run"})
         total = len(json.loads(RELATIONS.read_bytes())["relations"])
         for mode in ("direct", "worker"):
             tally = self.report["modes"][mode]["tally"]
-            self.assertEqual((tally["fail"], tally["pass"], tally["observed"], tally["pass"] + tally["observed"]), (0, 38, 17, total))
+            self.assertEqual((tally["fail"], tally["pass"], tally["observed"], tally["fail"] + tally["pass"] + tally["observed"]),
+                             (3, 38, 17, total))
+            self.assertEqual(failing(self.report, mode), BASELINE_D01_FAILURES)
+            self.assertEqual(self.report["modes"][mode]["unexpected_technical_errors"], [])
         self.assertEqual(self.report["mode_parity"]["divergent_cases"], [])
+
+    def test_baseline_d01_failures_are_the_reproduced_ones(self):
+        # Observed before the relations existed (PHASE3_REVIEW.md sections 10.3 and 11): CE-1 loses the Git read,
+        # CE-2 and CE-3 keep their action but suppress the uncertainty. Real classifications, not technical failures.
+        expected = {
+            "EXTRA-ARG-CE1": ("proven actions lost: ['read']", ["classification", "ok", ["read"], False],
+                              ["classification", "unknown", [], True]),
+            "EXTRA-ARG-CE2": ("unmodelled argument added but unknown is false", ["classification", "ok", ["read"], False],
+                              ["classification", "ok", ["read"], False]),
+            "EXTRA-ARG-CE3": ("unmodelled argument added but unknown is false", ["classification", "ok", ["write"], False],
+                              ["classification", "ok", ["write"], False]),
+        }
+        for mode in ("direct", "worker"):
+            rels = {x["id"]: x for x in self.report["modes"][mode]["relations"]}
+            for rid, (detail, source, variant) in expected.items():
+                self.assertEqual((rels[rid]["verdict"], rels[rid]["detail"]), ("fail", detail), (mode, rid))
+                self.assertEqual([o for _, o in rels[rid]["members"]], [source, variant], (mode, rid))
+                self.assertTrue(rels[rid]["informative"])
 
     def test_identities_and_scope_are_recorded(self):
         ids = self.report["identities"]
@@ -72,16 +126,19 @@ class AcceptedBaseline(unittest.TestCase):
         for mode in ("direct", "worker"):
             acc = self.report["modes"][mode]["accounting"]
             cases = acc["cases"]
-            self.assertEqual(acc["labels"], {"scored": 0, "pending": 83,
+            self.assertEqual(acc["labels"], {"scored": 0, "pending": 89,
                                              "note": "no label is reviewed ground truth; label-relative misses are not computed"})
-            self.assertEqual(cases["total"], 83)
-            self.assertEqual(cases["classified"] + cases["technical_failure"], 83)
+            self.assertEqual(cases["total"], 89)
+            self.assertEqual(cases["classified"] + cases["technical_failure"], 89)
             self.assertEqual(cases["certain_actions"] + cases["proven_noop"] + cases["partial_unknown"] + cases["abstention"],
                              cases["classified"])
             self.assertEqual(cases["technical_failure_by_channel"], {"expected:classifier_invalid": 7})
             self.assertEqual((acc["protocol_errors"], acc["timeouts"]), (0, 0))
             pairs = acc["relation_pairs"]
             self.assertEqual(pairs["known_action_losses_without_uncertainty"], [])
+            self.assertEqual({(l["relation"], tuple(l["lost"]), l["verdict"]) for l in pairs["known_action_losses"]},
+                             {("BOUND-DEPTH-4-5", ("delete",), "pass"), ("BOUND-DEPTH-4-20", ("delete",), "pass"),
+                              ("BOUND-GITLOG-20-21", ("read",), "pass"), ("EXTRA-ARG-CE1", ("read",), "fail")})
             self.assertEqual({l["relation"] for l in pairs["risky_action_losses"]}, {"BOUND-DEPTH-4-5", "BOUND-DEPTH-4-20"})
             self.assertTrue(all(l["variant_unknown"] for l in pairs["risky_action_losses"]))
 
@@ -111,23 +168,23 @@ class NegativeControls(unittest.TestCase):
     def test_order_sensitive_classifier_fails(self):
         done, report = self.run_broken("order_sensitive")
         self.assertEqual(done.returncode, 1)
-        self.assertEqual(failing(report, "direct"), {("equal_outcome", r) for r in GENERIC_ORDER})
+        self.assertEqual(beyond_baseline(self, report, "direct"), {("equal_outcome", r) for r in GENERIC_ORDER})
         done, report = self.run_broken("order_sensitive", profile="git")
-        self.assertEqual(failing(report, "direct"), {("equal_outcome", "ORDER-GITLOG")})
+        self.assertEqual(beyond_baseline(self, report, "direct"), {("equal_outcome", "ORDER-GITLOG")})
 
     def test_metadata_obedient_classifier_fails_in_both_modes(self):
         done, report = self.run_broken("metadata_obedient", "direct,worker")
         self.assertEqual(done.returncode, 1)
         for mode in ("direct", "worker"):
-            self.assertEqual(failing(report, mode), {("metadata_invariant", r) for r in GENERIC_META})
+            self.assertEqual(beyond_baseline(self, report, mode), {("metadata_invariant", r) for r in GENERIC_META})
 
     def test_default_sensitive_classifier_fails(self):
         done, report = self.run_broken("default_sensitive")
         self.assertEqual(done.returncode, 1)
-        self.assertEqual(failing(report, "direct"),
+        self.assertEqual(beyond_baseline(self, report, "direct"),
                          {("equal_outcome", f"DEFAULT-{n}") for n in ("DTREE", "SEARCH", "SIZES", "EDIT")})
         done, report = self.run_broken("default_sensitive", profile="git")
-        self.assertEqual(failing(report, "direct"), {("equal_outcome", "DEFAULT-GITDIFF"), ("equal_outcome", "DEFAULT-GITLOG")})
+        self.assertEqual(beyond_baseline(self, report, "direct"), {("equal_outcome", "DEFAULT-GITDIFF"), ("equal_outcome", "DEFAULT-GITLOG")})
 
     def test_known_risk_loss_fails(self):
         done, report = self.run_broken("risk_loss")
@@ -142,7 +199,7 @@ class NegativeControls(unittest.TestCase):
                   if x["kind"] == "technical_failure_channel" and not x["id"].startswith("GIT-")]
         self.assertTrue(masked and all(x["verdict"] == "fail" and "masked" in x["detail"] for x in masked))
         done, report = self.run_broken("masked_error", profile="git")
-        self.assertEqual(failing(report, "direct"), {("technical_failure_channel", "GIT-NAME-01"),
+        self.assertEqual(beyond_baseline(self, report, "direct"), {("technical_failure_channel", "GIT-NAME-01"),
                                                      ("technical_failure_channel", "GIT-NAME-02")})
 
     def test_certainty_past_a_bound_fails(self):
@@ -153,7 +210,7 @@ class NegativeControls(unittest.TestCase):
         losses = report["modes"]["direct"]["accounting"]["relation_pairs"]["known_action_losses_without_uncertainty"]
         self.assertTrue(losses)
         done, report = self.run_broken("certain_noop", profile="git")
-        self.assertEqual(failing(report, "direct"), {("no_silent_loss_past_bound", "BOUND-GITLOG-20-21")})
+        self.assertEqual(beyond_baseline(self, report, "direct"), {("no_silent_loss_past_bound", "BOUND-GITLOG-20-21")})
 
     def test_fake_success_is_a_technical_error(self):
         done, report = self.run_broken("fake_success")
@@ -183,8 +240,11 @@ class RelationReview(unittest.TestCase):
     def test_every_asserted_relation_is_sensitive(self):
         with tempfile.TemporaryDirectory(prefix="sou128-review-") as tmp:
             result = REVIEW.review(Path(tmp))
-        self.assertEqual(result["baseline"]["exit_code"], 0)
-        self.assertEqual(result["relations"], {"total": 55, "asserted": 38, "observe_only": 17})
+        # The baseline's own D01 failures are reported, never credited to a control.
+        self.assertEqual((result["baseline"]["exit_code"], result["baseline"]["verdict"]), (1, "FAIL"))
+        self.assertEqual(result["failing_on_baseline"], sorted(EXTRA_ARG))
+        self.assertTrue(all(not set(c["relations_broken"]) & EXTRA_ARG for c in result["controls"].values()))
+        self.assertEqual(result["relations"], {"total": 58, "asserted": 41, "observe_only": 17})
         self.assertEqual(result["unbroken_asserted"], [])
         self.assertEqual(result["broken_only_by_untargeted"], [])
         self.assertEqual(result["vacuous_on_baseline"], ["DEFAULT-DTREE", "META-UNKNOWN", "ORDER-UNKNOWN"])
@@ -202,8 +262,9 @@ class CandidateComparison(unittest.TestCase):
             expected_sha = MR.sha256(path.read_bytes())
             done, report = gate("--modes", "direct", "--candidate", f"generic={path}")
         self.assertEqual(done.returncode, 1)
-        self.assertEqual(report["modes"]["direct"]["tally"]["fail"], 0)  # the baseline itself still passes
+        self.assertEqual(failing(report, "direct"), BASELINE_D01_FAILURES)  # the baseline's own failures, unchanged
         cand = report["candidate"]
+        self.assertEqual(report["verdict_by_side"], {"baseline": "FAIL", "candidate": "FAIL"})
         self.assertEqual(cand["status"], "run")
         self.assertEqual(cand["classifiers"]["generic"]["sha256"], expected_sha)
         self.assertEqual(cand["classifiers"]["git"]["sha256"], report["identities"]["classifiers"]["git"]["sha256"])
@@ -234,7 +295,8 @@ class CandidateComparison(unittest.TestCase):
             done, report = gate("--modes", "direct", "--candidate", f"generic={path}")
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         cand = report["candidate"]
-        self.assertEqual(cand["modes"]["direct"]["tally"]["fail"], 0)  # relations alone would pass this candidate
+        # Relations show nothing beyond the inherited baseline D01 failures; only probing fails it.
+        self.assertEqual(failing(report, "direct", cand), BASELINE_D01_FAILURES)
         self.assertEqual(cand["comparison"]["direct"]["relation_regressions"], [])
         self.assertEqual(cand["boundary_probes_classifier"], cand["classifiers"]["generic"])
         probes = {p["id"]: p for p in cand["boundary_probes"]}
@@ -266,7 +328,8 @@ class CandidateComparison(unittest.TestCase):
             done, report = gate("--modes", "direct", "--candidate", f"git={path}")
         self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
         cand = report["candidate"]
-        self.assertEqual(cand["modes"]["direct"]["tally"]["fail"], 0)  # relations alone would pass
+        self.assertEqual(failing(report, "direct", cand), BASELINE_D01_FAILURES)  # inherited only; probing fails it
+        self.assertEqual(cand["comparison"]["direct"]["relation_regressions"], [])
         self.assertEqual(cand["boundary_probes_git_classifier"], cand["classifiers"]["git"])
         git_probes = {p["id"]: p for p in cand["boundary_probes_git"]}
         for pid in ("TRUNCATED", "TRAILING-COMMA"):
@@ -304,7 +367,9 @@ class Reproducibility(unittest.TestCase):
             plain = gate("--modes", "direct,worker", "--candidate", f"generic={path}", keep=True)
             timed = gate("--modes", "direct,worker", "--candidate", f"generic={path}", "--latency",
                          "--latency-repeats", "1", "--latency-cold", "1", keep=True)
-        self.assertEqual((plain[0].returncode, timed[0].returncode), (0, 0), timed[0].stdout + timed[0].stderr)
+        # Exit 1 on both runs only through the baseline D01 failures, which a pass-through inherits.
+        self.assertEqual((plain[0].returncode, timed[0].returncode), (1, 1), timed[0].stdout + timed[0].stderr)
+        self.assertEqual(failing(timed[1], "worker", timed[1]["candidate"]), BASELINE_D01_FAILURES)
         self.assertEqual(plain[2]["report.json"], timed[2]["report.json"])
         latency = json.loads(timed[2]["latency.json"])
         baseline_ids = timed[1]["identities"]["classifiers"]
@@ -379,7 +444,13 @@ class InputIntegrity(unittest.TestCase):
         self.assertEqual(BUILD.frozen_prefix_errors(corpus, rels), [])
         added = corpus["cases"][len(frozen["cases"]):]
         self.assertEqual([c["id"] for c in added],
-                         ["S128-GIT-BOUND-LOG-20", "S128-GIT-BOUND-LOG-21", "S128-GIT-NAME-01", "S128-GIT-NAME-02"])
+                         ["S128-GIT-BOUND-LOG-20", "S128-GIT-BOUND-LOG-21", "S128-GIT-NAME-01", "S128-GIT-NAME-02"]
+                         + [f"S128-EXTRA-ARG-CE{i}-{side}" for i in (1, 2, 3) for side in ("SOURCE", "VARIANT")])
+        self.assertEqual([c["origin"] for c in added], [BUILD.ORIGIN_V04] * 4 + [BUILD.ORIGIN_V04_D01] * 6)
+        reordered = json.loads(json.dumps(corpus))
+        reordered["cases"][-1]["origin"] = BUILD.ORIGIN_V04
+        reordered["cases"][len(frozen["cases"])]["origin"] = BUILD.ORIGIN_V04_D01
+        self.assertTrue(any("in that order" in e for e in BUILD.frozen_prefix_errors(reordered, rels)))
         self.assertTrue(all(c["expectation_status"] == "pending" and c["expected"] == {"actions": None, "unknown": None, "status": None}
                             for c in added))
         edited = json.loads(json.dumps(corpus))
@@ -415,11 +486,166 @@ class Judge(unittest.TestCase):
         self.assertEqual(j({"kind": "technical_failure_channel"}, [tech])[0], "fail")
         self.assertEqual(j({"kind": "equal_outcome"}, [tech, tech])[0], "fail")
 
+    def test_preserve_actions_mark_unknown(self):
+        k = {"kind": "preserve_actions_mark_unknown"}
+        j = lambda a, b: MR.judge(k, [a, b])  # noqa: E731
+        read = self.rec(["read"], False)
+        # Any proven action, of any risk, kept with unknown = true: the only passing shape.
+        self.assertEqual(j(read, self.rec(["read"], True)), ("pass", "actions kept, unknown set"))
+        self.assertEqual(j(self.rec(["write"], False), self.rec(["delete", "write"], True))[0], "pass")
+        # Action loss, also with uncertainty set.
+        self.assertEqual(j(read, self.rec([], True, "unknown")), ("fail", "proven actions lost: ['read']"))
+        self.assertEqual(j(self.rec(["read", "write"], False), self.rec(["read"], True))[0], "fail")
+        # Suppressed uncertainty.
+        self.assertEqual(j(read, read), ("fail", "unmodelled argument added but unknown is false"))
+        # A technical failure, even through an established D06 channel, is never a valid classification.
+        invalid = self.rec(error="classifier_reported_error: classifier_invalid", channel="classifier_invalid")
+        self.assertEqual(j(read, invalid)[0], "fail")
+        self.assertIn("technical failure", j(read, invalid)[1])
+        self.assertEqual(j(invalid, self.rec(["read"], True))[0], "fail")
+        # A source that proves nothing (abstention, or uncertain) cannot make the relation pass vacuously.
+        for source in (self.rec([], True, "unknown"), self.rec([], False), self.rec(["read"], True)):
+            verdict, detail = j(source, self.rec(["read"], True))
+            self.assertEqual(verdict, "fail")
+            self.assertIn("inconclusive", detail)
+        # The risk-only relation keeps its semantics: a read source is inconclusive there.
+        self.assertEqual(MR.judge({"kind": "preserve_risk_mark_unknown"}, [read, self.rec(["read"], True)])[0], "fail")
+
     def test_nearest_rank_percentile(self):
         self.assertEqual(MR.percentile([5, 1, 3, 2, 4], 50), 3)
         self.assertEqual(MR.percentile(list(range(1, 101)), 95), 95)
         self.assertEqual(MR.percentile([7], 95), 7)
         self.assertIsNone(MR.percentile([], 50))
+
+
+class D01ExtraArgument(unittest.TestCase):
+    """CE-1/2/3: corpus provenance, source drift and the closed-schema boundary (no candidate needed)."""
+
+    def test_cases_and_relations_are_pending_source_backed_and_schema_permitted(self):
+        corpus, rels = json.loads(CORPUS.read_bytes()), json.loads(RELATIONS.read_bytes())
+        cases = {c["id"]: c for c in corpus["cases"]}
+        extra = {r["id"]: r for r in rels["relations"] if r["id"] in EXTRA_ARG}
+        self.assertEqual(set(extra), EXTRA_ARG)
+        added = {"EXTRA-ARG-CE1": ("git_log", "author", "x", "git"), "EXTRA-ARG-CE2": ("read_text_file", "mode", "raw", "generic"),
+                 "EXTRA-ARG-CE3": ("edit_file", "backup", True, "generic")}
+        for rid, (tool, key, value, cls) in added.items():
+            r = extra[rid]
+            self.assertEqual((r["kind"], r["review_status"]), ("preserve_actions_mark_unknown", "source_backed"))
+            source, variant = (cases[m] for m in r["members"])
+            for c in (source, variant):
+                self.assertEqual((c["expectation_status"], c["evaluator_only"]["classifier"], c["input"]["tool_name"]),
+                                 ("pending", cls, tool))
+                self.assertEqual(c["expected"], {"actions": None, "unknown": None, "status": None})
+            schema = variant["input"]["tool_schema"]
+            self.assertEqual(schema, source["input"]["tool_schema"])
+            self.assertNotIn(key, schema["properties"])
+            self.assertNotIn("additionalProperties", schema)  # open: the argument is permitted, not a D06 violation
+            self.assertTrue(set(source["input"]["raw_arguments"]) <= set(schema["properties"]))
+            self.assertEqual(variant["input"]["raw_arguments"], {**source["input"]["raw_arguments"], key: value})
+            cited = {s["path"] for s in r["sources"]}
+            self.assertIn("contract/updated_contract2.md", cited)
+            self.assertTrue({s["rule"].split(" /")[0] for s in r["sources"] if s["path"] == "contract/updated_contract2.md"}
+                            >= {"D01", "D06"})
+            self.assertTrue(cited & {"profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json",
+                                     "profiles/mcp/git-readonly-v1/upstream-tools-list.json"})
+
+    def test_a_closed_schema_is_not_built_as_a_d01_case(self):
+        # An explicitly closed schema would make the argument a D06 violation; the builder refuses to emit it.
+        import make_sou128_corpus as BUILD
+        original = BUILD.FS["read_text_file"]
+        BUILD.FS["read_text_file"] = {**original, "additionalProperties": False}
+        try:
+            with self.assertRaises(AssertionError):
+                BUILD.build()
+        finally:
+            BUILD.FS["read_text_file"] = original
+
+    def test_candidate_pin_matches_the_runner(self):
+        # Offline: the identity this suite verifies is the one the runner publishes, at the same commit.
+        for pin in (SOU97_SHA256, SOU97_COMMIT[:8], SOU97_PATH, "pilot_readonly_v1.2", "unmerged Draft PR #213"):
+            self.assertIn(pin, MR.CANDIDATE_BLOCKER)
+
+    def test_schema_citation_drift_is_refused(self):
+        rels = json.loads(RELATIONS.read_bytes())
+        for r in rels["relations"]:
+            if r["id"] == "EXTRA-ARG-CE2":
+                next(s for s in r["sources"] if s["path"].startswith("profiles/"))["sha256"] = "0" * 64
+        with tempfile.TemporaryDirectory(prefix="sou128-drift-") as tmp:
+            path = Path(tmp, "r.json")
+            path.write_text(json.dumps(rels), encoding="utf-8")
+            done, report = gate("--modes", "direct", "--relations", path)
+        self.assertEqual((done.returncode, report["verdict"]), (3, "INVALID"))
+        self.assertTrue(any(e.startswith("profiles/mcp/filesystem-readonly-v1/upstream-tools-list.json") for e in report["validation_errors"]))
+
+
+class SOU97CandidateD01(unittest.TestCase):
+    """The explicitly selected SOU-97 v1.2 candidate satisfies CE-1/2/3 while the baselines still fail them, and
+    D01 defects wrapped around that candidate are caught in both modes.
+
+    Where #213's commit object is absent (any clone that has not fetched it) both tests are SKIPPED with a
+    "CANDIDATE NOT AVAILABLE" reason: the candidate is then not tested, which is not a pass. With
+    SOU128_REQUIRE_SOU97_CANDIDATE=1 the absence is an error instead."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="sou128-sou97-"))
+        cls.addClassCleanup(shutil.rmtree, cls.tmp, True)
+        cls.candidate = sou97_candidate(cls.tmp)
+        if cls.candidate is None:
+            why = (f"CANDIDATE NOT AVAILABLE, NOT TESTED: SOU-97 #213 commit {SOU97_COMMIT} is not in this clone; "
+                   f"fetch it with 'git fetch origin {SOU97_COMMIT}' (see eval/sou128/README.md)")
+            if REQUIRE_SOU97:
+                raise AssertionError(why + "; required by SOU128_REQUIRE_SOU97_CANDIDATE=1")
+            raise unittest.SkipTest(why)
+
+    def run_candidate(self, generic, git):
+        return gate("--modes", "direct,worker", "--candidate", f"generic={generic}", "--candidate", f"git={git}")
+
+    def test_candidate_passes_d01_and_baseline_failures_remain(self):
+        done, report = self.run_candidate(self.candidate, self.candidate)
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)  # the baseline side still fails D01
+        self.assertEqual(report["verdict_by_side"], {"baseline": "FAIL", "candidate": "PASS"})
+        cand = report["candidate"]
+        self.assertEqual({v["sha256"] for v in cand["classifiers"].values()}, {SOU97_SHA256})
+        for mode in ("direct", "worker"):
+            self.assertEqual(failing(report, mode), BASELINE_D01_FAILURES)
+            self.assertEqual(failing(report, mode, cand), set())
+            rels = {x["id"]: x for x in cand["modes"][mode]["relations"]}
+            for rid in EXTRA_ARG:
+                self.assertEqual((rels[rid]["verdict"], rels[rid]["informative"]), ("pass", True))
+                (_, source), (_, variant) = rels[rid]["members"]
+                self.assertEqual((source[0], source[3], variant[0], variant[3]), ("classification", False, "classification", True))
+                self.assertTrue(source[2] and set(source[2]) <= set(variant[2]))
+            cmp_ = cand["comparison"][mode]
+            self.assertEqual({m["relation"] for m in cmp_["relation_fixes"]}, EXTRA_ARG)
+            self.assertEqual((cmp_["relation_regressions"], cmp_["risky_losses"]), ([], []))
+        self.assertEqual(cand["mode_parity"]["divergent_cases"], [])
+        self.assertEqual(report["mode_parity"]["divergent_cases"], [])
+
+    def test_d01_defects_around_the_candidate_fail_in_both_modes(self):
+        expected = {
+            "extra_arg_action_loss": (1, "FAIL", "proven actions lost"),
+            "extra_arg_unknown_suppressed": (1, "FAIL", "unmodelled argument added but unknown is false"),
+            "extra_arg_technical_failure": (2, "TECHNICAL_ERROR", "technical failure on a case that must classify"),
+            "vacuous_source": (1, "FAIL", "inconclusive: the source proves no action"),
+        }
+        for name, (code, side, detail) in expected.items():
+            with self.subTest(control=name):
+                generic = CONTROLS.write_control(name, self.tmp, "generic", base=self.candidate)
+                git = CONTROLS.write_control(name, self.tmp, "git", base=self.candidate)
+                done, report = self.run_candidate(generic, git)
+                self.assertEqual(done.returncode, code, done.stdout + done.stderr)
+                self.assertEqual(report["verdict_by_side"], {"baseline": "FAIL", "candidate": side})
+                cand = report["candidate"]
+                for mode in ("direct", "worker"):
+                    rels = {x["id"]: x for x in cand["modes"][mode]["relations"]}
+                    for rid in EXTRA_ARG:
+                        self.assertEqual(rels[rid]["verdict"], "fail", (mode, rid))
+                        self.assertTrue(rels[rid]["detail"].startswith(detail), (mode, rid, rels[rid]["detail"]))
+                    others = {i for _, i in failing(report, mode, cand)} - EXTRA_ARG
+                    self.assertEqual(others, {"MIXED-SHELL-MIX", "MIXED-SHELL-SEND", "MIXED-WF-DELETE", "MIXED-WF-PERM"}
+                                     if name == "vacuous_source" else set())
+                self.assertEqual(cand["mode_parity"]["divergent_cases"], [])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 {
   "fixture_version": "sou128-metamorphic-dev-v0.4",
-  "description": "SOU-128 public DEVELOPMENT corpus (corrected v0.2; see eval/sou128/SOU128_CORPUS_AUDIT.md). v0.4 appends Git-classifier coverage to the frozen v0.3 items. Inert data; every label pending.",
+  "description": "SOU-128 public DEVELOPMENT corpus (corrected v0.2; see eval/sou128/SOU128_CORPUS_AUDIT.md). v0.4 appends Git-classifier coverage and the D01 extra-argument counterexamples CE-1/2/3 to the frozen v0.3 items. Inert data; every label pending.",
   "cases": [
     {
       "id": "S128-ORDER-READ-A",
@@ -4138,6 +4138,377 @@
       },
       "evaluator_only": {
         "classifier": "git",
+        "review_status": "unreviewed_label"
+      }
+    },
+    {
+      "id": "S128-EXTRA-ARG-CE1-SOURCE",
+      "group": "extra_argument",
+      "origin": "sou128_v0.4_d01_extra_argument",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "a bounded Git read; only schema-declared arguments"
+      ],
+      "input": {
+        "tool_name": "git_log",
+        "tool_schema": {
+          "properties": {
+            "repo_path": {
+              "title": "Repo Path",
+              "type": "string"
+            },
+            "max_count": {
+              "default": 10,
+              "title": "Max Count",
+              "type": "integer"
+            },
+            "start_timestamp": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Start timestamp for filtering commits. Accepts: ISO 8601 format (e.g., '2024-01-15T14:30:25'), relative dates (e.g., '2 weeks ago', 'yesterday'), or absolute dates (e.g., '2024-01-15', 'Jan 15 2024')",
+              "title": "Start Timestamp"
+            },
+            "end_timestamp": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "End timestamp for filtering commits. Accepts: ISO 8601 format (e.g., '2024-01-15T14:30:25'), relative dates (e.g., '2 weeks ago', 'yesterday'), or absolute dates (e.g., '2024-01-15', 'Jan 15 2024')",
+              "title": "End Timestamp"
+            }
+          },
+          "required": [
+            "repo_path"
+          ],
+          "title": "GitLog",
+          "type": "object"
+        },
+        "raw_arguments": {
+          "repo_path": "/workspace",
+          "max_count": 5
+        }
+      },
+      "expected": {
+        "actions": null,
+        "unknown": null,
+        "status": null
+      },
+      "evaluator_only": {
+        "classifier": "git",
+        "review_status": "unreviewed_label"
+      }
+    },
+    {
+      "id": "S128-EXTRA-ARG-CE1-VARIANT",
+      "group": "extra_argument",
+      "origin": "sou128_v0.4_d01_extra_argument",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "a bounded Git read; plus author=\"x\", absent from the pinned schema, which sets no additionalProperties"
+      ],
+      "input": {
+        "tool_name": "git_log",
+        "tool_schema": {
+          "properties": {
+            "repo_path": {
+              "title": "Repo Path",
+              "type": "string"
+            },
+            "max_count": {
+              "default": 10,
+              "title": "Max Count",
+              "type": "integer"
+            },
+            "start_timestamp": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Start timestamp for filtering commits. Accepts: ISO 8601 format (e.g., '2024-01-15T14:30:25'), relative dates (e.g., '2 weeks ago', 'yesterday'), or absolute dates (e.g., '2024-01-15', 'Jan 15 2024')",
+              "title": "Start Timestamp"
+            },
+            "end_timestamp": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "End timestamp for filtering commits. Accepts: ISO 8601 format (e.g., '2024-01-15T14:30:25'), relative dates (e.g., '2 weeks ago', 'yesterday'), or absolute dates (e.g., '2024-01-15', 'Jan 15 2024')",
+              "title": "End Timestamp"
+            }
+          },
+          "required": [
+            "repo_path"
+          ],
+          "title": "GitLog",
+          "type": "object"
+        },
+        "raw_arguments": {
+          "repo_path": "/workspace",
+          "max_count": 5,
+          "author": "x"
+        }
+      },
+      "expected": {
+        "actions": null,
+        "unknown": null,
+        "status": null
+      },
+      "evaluator_only": {
+        "classifier": "git",
+        "review_status": "unreviewed_label"
+      }
+    },
+    {
+      "id": "S128-EXTRA-ARG-CE2-SOURCE",
+      "group": "extra_argument",
+      "origin": "sou128_v0.4_d01_extra_argument",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "a filesystem read; only schema-declared arguments"
+      ],
+      "input": {
+        "tool_name": "read_text_file",
+        "tool_schema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "tail": {
+              "description": "If provided, returns only the last N lines of the file",
+              "type": "number"
+            },
+            "head": {
+              "description": "If provided, returns only the first N lines of the file",
+              "type": "number"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "raw_arguments": {
+          "path": "/workspace/notes.txt"
+        }
+      },
+      "expected": {
+        "actions": null,
+        "unknown": null,
+        "status": null
+      },
+      "evaluator_only": {
+        "classifier": "generic",
+        "review_status": "unreviewed_label"
+      }
+    },
+    {
+      "id": "S128-EXTRA-ARG-CE2-VARIANT",
+      "group": "extra_argument",
+      "origin": "sou128_v0.4_d01_extra_argument",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "a filesystem read; plus mode=\"raw\", absent from the pinned schema, which sets no additionalProperties"
+      ],
+      "input": {
+        "tool_name": "read_text_file",
+        "tool_schema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "tail": {
+              "description": "If provided, returns only the last N lines of the file",
+              "type": "number"
+            },
+            "head": {
+              "description": "If provided, returns only the first N lines of the file",
+              "type": "number"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        },
+        "raw_arguments": {
+          "path": "/workspace/notes.txt",
+          "mode": "raw"
+        }
+      },
+      "expected": {
+        "actions": null,
+        "unknown": null,
+        "status": null
+      },
+      "evaluator_only": {
+        "classifier": "generic",
+        "review_status": "unreviewed_label"
+      }
+    },
+    {
+      "id": "S128-EXTRA-ARG-CE3-SOURCE",
+      "group": "extra_argument",
+      "origin": "sou128_v0.4_d01_extra_argument",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "a filesystem write; edit_file is in the upstream tool list only, never admitted by the read-only profile; only schema-declared arguments"
+      ],
+      "input": {
+        "tool_name": "edit_file",
+        "tool_schema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "edits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "oldText": {
+                    "type": "string",
+                    "description": "Text to search for - must match exactly"
+                  },
+                  "newText": {
+                    "type": "string",
+                    "description": "Text to replace with"
+                  }
+                },
+                "required": [
+                  "oldText",
+                  "newText"
+                ]
+              }
+            },
+            "dryRun": {
+              "default": false,
+              "description": "Preview changes using git-style diff format",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path",
+            "edits"
+          ]
+        },
+        "raw_arguments": {
+          "path": "/workspace/notes.txt",
+          "edits": [
+            {
+              "oldText": "a",
+              "newText": "b"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "actions": null,
+        "unknown": null,
+        "status": null
+      },
+      "evaluator_only": {
+        "classifier": "generic",
+        "review_status": "unreviewed_label"
+      }
+    },
+    {
+      "id": "S128-EXTRA-ARG-CE3-VARIANT",
+      "group": "extra_argument",
+      "origin": "sou128_v0.4_d01_extra_argument",
+      "expectation_status": "pending",
+      "requires": [],
+      "contract_assumptions": [
+        "a filesystem write; edit_file is in the upstream tool list only, never admitted by the read-only profile; plus backup=true, absent from the pinned schema, which sets no additionalProperties"
+      ],
+      "input": {
+        "tool_name": "edit_file",
+        "tool_schema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "edits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "oldText": {
+                    "type": "string",
+                    "description": "Text to search for - must match exactly"
+                  },
+                  "newText": {
+                    "type": "string",
+                    "description": "Text to replace with"
+                  }
+                },
+                "required": [
+                  "oldText",
+                  "newText"
+                ]
+              }
+            },
+            "dryRun": {
+              "default": false,
+              "description": "Preview changes using git-style diff format",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path",
+            "edits"
+          ]
+        },
+        "raw_arguments": {
+          "path": "/workspace/notes.txt",
+          "edits": [
+            {
+              "oldText": "a",
+              "newText": "b"
+            }
+          ],
+          "backup": true
+        }
+      },
+      "expected": {
+        "actions": null,
+        "unknown": null,
+        "status": null
+      },
+      "evaluator_only": {
+        "classifier": "generic",
         "review_status": "unreviewed_label"
       }
     }

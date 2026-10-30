@@ -5,6 +5,9 @@ Runs eval/metamorphic_runner.py once with the accepted baselines and once per br
 eval/sou128_controls.py (direct mode; the "slow" control needs the worker deadline, so it runs in worker
 mode). An asserted relation that no control can break is not shown to be sensitive; an equality
 between abstentions (pass_vacuous) is listed separately. Observation-only relations are never scored.
+A relation the accepted baseline itself fails (the D01 extra-argument relations) is listed under
+failing_on_baseline: every control inherits that failure, so it is not credited to any control, and the
+review exits 1 while it remains.
 
 usage: python3 eval/tools/sou128_relation_review.py --out-dir DIR
 """
@@ -36,7 +39,8 @@ def review(work: Path) -> dict:
     code, base = gate(work / "baseline", "--modes", "direct")
     relations = base["modes"]["direct"]["relations"]
     asserted = [x for x in relations if x["kind"] != "observe"]
-    killed_by = {x["id"]: [] for x in asserted}
+    base_failing = sorted(x["id"] for x in asserted if x["verdict"] == "fail")
+    killed_by = {x["id"]: [] for x in asserted if x["verdict"] != "fail"}
     controls = {}
     for name in sorted(sou128_controls.CONTROLS):
         for profile in ("generic", "git"):
@@ -44,7 +48,7 @@ def review(work: Path) -> dict:
             mode = "worker" if name == "slow" else "direct"
             label = f"{name}/{profile}"
             exit_code, rep = gate(work / f"{name}-{profile}", "--modes", mode, "--classifier", f"{profile}={path}")
-            broken = sorted(x["id"] for x in rep["modes"][mode]["relations"] if x["verdict"] == "fail")
+            broken = sorted(x["id"] for x in rep["modes"][mode]["relations"] if x["verdict"] == "fail" and x["id"] in killed_by)
             for rid in broken:
                 killed_by[rid].append(label)
             controls[label] = {"mode": mode, "exit_code": exit_code, "verdict": rep["verdict"], "relations_broken": broken,
@@ -52,6 +56,7 @@ def review(work: Path) -> dict:
     vacuous = sorted(x["id"] for x in asserted if not x["informative"])
     return {
         "baseline": {"exit_code": code, "verdict": base["verdict"], "identities": base["identities"]},
+        "failing_on_baseline": base_failing,
         "relations": {"total": len(relations), "asserted": len(asserted), "observe_only": len(relations) - len(asserted)},
         "controls": controls,
         "killed_by": killed_by,
@@ -60,7 +65,8 @@ def review(work: Path) -> dict:
         # about a specific relation, so a relation must also be broken by a targeted control.
         "broken_only_by_untargeted": sorted(r for r, k in killed_by.items() if k and all(c.startswith(UNTARGETED) for c in k)),
         "vacuous_on_baseline": vacuous,
-        "controls_without_effect": sorted(n for n, c in controls.items() if c["exit_code"] == 0),
+        # No effect: nothing beyond the baseline's own failures breaks, and no technical error appears.
+        "controls_without_effect": sorted(n for n, c in controls.items() if not c["relations_broken"] and c["exit_code"] == code),
     }
 
 
@@ -69,7 +75,9 @@ def markdown(r: dict) -> str:
              f"Baseline verdict {r['baseline']['verdict']}; relations {r['relations']}.", "",
              "| control | mode | exit | verdict | relations broken |", "|---|---|---|---|---|"]
     lines += [f"| {n} | {c['mode']} | {c['exit_code']} | {c['verdict']} | {len(c['relations_broken'])} |" for n, c in r["controls"].items()]
-    lines += ["", f"Asserted relations no control breaks: {r['unbroken_asserted'] or 'none'}",
+    lines += ["", f"Asserted relations the accepted baseline itself fails (not credited to any control): "
+                  f"{r['failing_on_baseline'] or 'none'}",
+              f"Asserted relations no control breaks: {r['unbroken_asserted'] or 'none'}",
               f"Broken only by the untargeted fake_success control: {r['broken_only_by_untargeted'] or 'none'}",
               f"Vacuous on the baseline (equal abstentions): {r['vacuous_on_baseline'] or 'none'}",
               f"Control/profile pairs with no effect (no corpus case exercises that defect there): "
