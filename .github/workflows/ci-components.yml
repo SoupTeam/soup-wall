@@ -1329,6 +1329,11 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_inventory.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_application.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_removal.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou188_removal_fault.c -ldl -o "$SOU161_SCRATCH/removal-fault.so"
+          python3 -B scripts/qualify-pilot-removal.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/removal-fault.so" --output "$SOU161_SCRATCH/removal"
           python3 -B scripts/qualify-edit-inventory.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --foreign-state "$SOU161_SCRATCH/inventory-foreign" \
@@ -1346,11 +1351,6 @@ jobs:
           python3 -B scripts/qualify-edit-application.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/application-fault.so" --output "$SOU161_SCRATCH/application"
-          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_removal.py' -v
-          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou188_removal_fault.c -ldl -o "$SOU161_SCRATCH/removal-fault.so"
-          python3 -B scripts/qualify-pilot-removal.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
-            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/removal-fault.so" --output "$SOU161_SCRATCH/removal"
           python3 -B scripts/qualify-installed-edit.py --run --diagnose --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
             --python /usr/bin/python3.12 --output "$SOU161_SCRATCH/runtime"

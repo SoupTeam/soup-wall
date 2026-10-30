@@ -45,6 +45,8 @@ def passed(report):
     for key, count in [('source_commit', 40), ('source_tree', 40), ('agentfw_sha256', 64), ('helper_sha256', 64), ('component_sha256', 64), ('fault_sha256', 64)]:
         if not re.fullmatch('[0-9a-f]{'+str(count)+'}', str(report.get(key, ''))): return False
     if report.get('claude_sha256') != EDIT.CLAUDE: return False
+    startup=next(r for r in rows if r['id']=='installed-closure')
+    if startup.get('installed_outside_checkout') is not True or type(startup.get('standard_stack_bytes')) is not int or startup['standard_stack_bytes']!=1048576: return False
     for name in FAULTS:
         row = next(r for r in rows if r['id'] == name)
         if row.get('actual_syscall_fault') is not True or row.get('preserved') is not True: return False
@@ -71,8 +73,8 @@ def witness(root):
 
 
 @contextlib.contextmanager
-def replaced(path, *, link=None, fifo=False, raw=None):
-    held = path.with_name(path.name + '.kept'); path.rename(held)
+def replaced(path, *, holding, link=None, fifo=False, raw=None):
+    held = holding/'owned-link-control-original'; require(not held.exists(), 'holding_path_occupied'); path.rename(held)
     try:
         if link is not None: path.symlink_to(link)
         elif fifo: os.mkfifo(path, 0o600)
@@ -103,9 +105,9 @@ def qualify(args, report):
     begin('installed-closure')
     for words in (['pilot', '--home', str(suite.home), 'help'], ['pilot-removal', '--help'],
                   *(['pilot-removal', action, '--help'] for action in ('preview', 'apply', 'status', 'resume'))):
-        v = subprocess.run([str(suite.binary), *words], cwd=suite.work, env=suite.env, capture_output=True, timeout=20)
+        v = subprocess.run(['/usr/bin/prlimit', '--stack=1048576', '--', str(suite.binary), *words], cwd=suite.work, env=suite.env, capture_output=True, timeout=20)
         require(v.returncode == 0, 'installed_startup_failed')
-    done('installed-closure', installed_outside_checkout=True)
+    done('installed-closure', installed_outside_checkout=True, standard_stack_bytes=1048576)
     begin('genuine-completed-edit')
     root, output, plan, code, prepared = suite.prepare('genuine-edit')
     require(code == 0, 'genuine_prepare_failed'); index = next(i for i,t in enumerate(prepared['profile']['targets']) if t['name']=='result.txt')
@@ -168,11 +170,13 @@ def qualify(args, report):
             helper=component/'components'/built['component']/'tree/scripts/pilot.py'
             context=contextlib.nullcontext()
             if name=='changed-selection': (component/'current.json').write_bytes(b'{}')
-            elif name=='tampered-receipt': (component/'components'/built['component']/'manifest.json').write_bytes(b'{}')
+            elif name=='tampered-receipt':
+                receipt=component/'components'/built['component']/'manifest.json'
+                receipt.chmod(0o600);receipt.write_bytes(b'{}');receipt.chmod(0o400)
             elif name=='unexpected-entry': (component/'user-added').write_text('Retain unknown user file.')
-            elif name=='component-symlink': context=replaced(helper,link=project/'user.txt')
+            elif name=='component-symlink': context=replaced(helper,holding=journals,link=project/'user.txt')
             elif name=='component-hardlink': os.link(helper,home/'alias')
-            elif name=='special-file': context=replaced(helper,fifo=True)
+            elif name=='special-file': context=replaced(helper,holding=journals,fifo=True)
             elif name=='redirected-parent':
                 held=home.with_name('held');home.rename(held);home.symlink_to(held)
             elif name=='changed-root':

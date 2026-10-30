@@ -17,6 +17,7 @@ class RemovalEvidence(unittest.TestCase):
         for key in ('source_commit','source_tree'):v[key]='a'*40
         for key in ('agentfw_sha256','helper_sha256','component_sha256','fault_sha256'):v[key]='b'*64
         for r in v['cases']:
+            if r['id']=='installed-closure':r.update(installed_outside_checkout=True,standard_stack_bytes=1048576)
             if r['id'] in M.FAULTS:r.update(actual_syscall_fault=True,preserved=True,
                 fault_exit=-9 if r['id'] in ('before-unlink','between-objects','after-unlink') else 0,
                 explicit_retry_completed=True,uncertain_not_success=True)
@@ -37,6 +38,8 @@ class RemovalEvidence(unittest.TestCase):
     def test_faults_actual_effect_preservation_and_identity_cannot_be_backfilled(self):
         for key in ('source_commit','source_tree','agentfw_sha256','helper_sha256','component_sha256','fault_sha256'):
             v=self.report();v.pop(key);self.assertFalse(M.passed(v))
+        for key,val in [('installed_outside_checkout',False),('standard_stack_bytes',8388608)]:
+            v=self.report();v['cases'][0][key]=val;self.assertFalse(M.passed(v))
         for r in self.report()['cases']:
             keys=[k for k in ('actual_syscall_fault','preserved','explicit_retry_completed','uncertain_not_success','actual_installed_effect') if k in r]
             for key in keys:

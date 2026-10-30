@@ -74,7 +74,7 @@ struct Retained {
     #[arg(long)]
     expect_plan: String,
     /// Private acknowledgement returned only by a fully completed removal.
-    #[arg(long)]
+    #[arg(long, allow_hyphen_values = true)]
     success_ack: Option<String>,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

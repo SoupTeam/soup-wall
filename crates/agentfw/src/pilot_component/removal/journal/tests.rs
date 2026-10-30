@@ -283,3 +283,34 @@ fn changed_directory_after_completed_child_is_not_an_original_object() {
         b"private retained sentinel"
     );
 }
+
+#[test]
+fn original_ack_may_start_with_a_hyphen() {
+    use clap::Parser;
+    #[derive(Parser)]
+    struct ArgsParser {
+        #[command(flatten)]
+        cli: super::super::Cli,
+    }
+    let parsed = ArgsParser::try_parse_from([
+        "agentfw",
+        "status",
+        "--journal",
+        "/private/recovery",
+        "--expect-plan",
+        &"a".repeat(64),
+        "--success-ack",
+        &format!("-{}", "a".repeat(42)),
+    ])
+    .unwrap();
+    assert!(
+        matches!(parsed.cli.action, super::super::Action::Status(r) if r.success_ack.is_some_and(|a|a.starts_with('-')))
+    );
+}
+
+#[test]
+fn future_object_progress_without_completed_prefix_refuses() {
+    let (_t, j) = fixture();
+    j.write_record(1, "intent").unwrap();
+    assert!(j.validate_progress(&mut Budget::new()).is_err());
+}

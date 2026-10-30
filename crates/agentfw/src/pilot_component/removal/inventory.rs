@@ -342,6 +342,7 @@ pub(super) fn preview(s: &Selection, b: &mut Budget) -> Result<Plan> {
         identity: component.id.clone(),
         sha256: None,
     });
+    ensure!(entries.len() <= MAX_ENTRIES, "removal_entry_cap");
     let exe = std::env::current_exe()?.canonicalize()?;
     ensure!(
         !exe.starts_with(&root),
