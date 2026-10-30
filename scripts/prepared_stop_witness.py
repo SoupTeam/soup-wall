@@ -19,6 +19,8 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pilot_runtime_identity as IDENTITY
 
 
 def require(condition, code):
@@ -228,6 +230,10 @@ class Prepared:
         until(lambda: self.provider.ready.is_set(), "stop_actual_host_not_ready", seconds=90)
         self.observe()
         self.capture_identities()
+        self.identity_scope = 'stop:' + ':'.join(self.root.relative_to(
+            self.root.parents[1] if self.root.name in ('selected', 'peer') else self.root.parent).parts)
+        IDENTITY.capture_prepared(getattr(self.c, 'identity_report', {}), self.identity_scope,
+                                  self.c.args.selection, self.home)
         self.initial_owners = enrolled_owners(self.run, self.native(), False)
 
     def native(self):
@@ -347,6 +353,8 @@ class Prepared:
 
     def finish(self, stopped=False, failure=None):
         self.process.wait(timeout=105)
+        if hasattr(self, 'identity_scope'):
+            IDENTITY.finish(self.identity_scope)
         self.out.flush(); self.err.flush()
         outcome = json.loads((self.root / "stdout.private").read_text().splitlines()[-1])
         if failure is not None:
@@ -443,6 +451,8 @@ class Prepared:
             self.process.kill()
             self.process.wait(timeout=10)
         self.out.close(); self.err.close()
+        if hasattr(self, 'identity_scope'):
+            IDENTITY.finish(self.identity_scope)
         self.model.close()
 
 
@@ -635,7 +645,7 @@ def qualify(args, private, report, run, launch, ask, paths, env, notes, useful, 
     require(sys.platform == "linux" and Path("/proc/self/stat").is_file(),
             "stop_native_linux_required")
     context = SimpleNamespace(args=args, source=run.ROOT, run=run, launch=launch,
-        ask=ask, base=launch.BASE, paths=paths, env=env, notes=notes, useful=useful)
+        ask=ask, base=launch.BASE, paths=paths, env=env, notes=notes, useful=useful, identity_report=report)
     root = private / "emergency-stop"
     root.mkdir(mode=0o700)
     section = {"format": "sw-prepared-pilot-stop-witness/1", "status": "failed",

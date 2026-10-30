@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Descriptor-pinned, owner-private exact file selection; never enumerate state.
+//! Descriptor-pinned private reads and bounded explicit-root enumeration.
 use std::{
     ffi::{CStr, CString},
     fs::{File, Metadata},
@@ -16,13 +16,22 @@ pub(in crate::edit_session) type Result<T> = std::result::Result<T, &'static str
 pub(in crate::edit_session) struct Budget {
     started: Instant,
     bytes: usize,
+    reads: usize,
 }
 impl Budget {
     pub fn new() -> Self {
         Self {
             started: Instant::now(),
             bytes: 0,
+            reads: 0,
         }
+    }
+    fn record(&mut self) -> Result<()> {
+        self.reads += 1;
+        if self.reads > 512 {
+            return Err("diagnostic_read_budget");
+        }
+        self.tick(0)
     }
     pub fn tick(&mut self, bytes: usize) -> Result<()> {
         self.bytes = self
@@ -93,6 +102,40 @@ fn protected(meta: &Metadata, private: bool) -> bool {
         }
 }
 impl Directory {
+    /// Compare a freshly resolved protected path with the held directory.
+    pub fn check_path(&self, path: &Path) -> Result<()> {
+        let current = Self::open(path)?;
+        if !same_directory(&self.metadata()?, &current.metadata()?) {
+            return Err("selected_directory_changed");
+        }
+        Ok(())
+    }
+    pub fn check_file(&self, name: &str, before: &Metadata) -> Result<()> {
+        let name = CString::new(name).map_err(|_| "selected_state_changed")?;
+        if name.as_bytes().contains(&b'/') || matches!(name.as_bytes(), b"." | b"..") {
+            return Err("selected_state_changed");
+        }
+        let current = openat(&self.0, &name, libc::O_PATH)?.ok_or("selected_state_changed")?;
+        if !stable(
+            before,
+            &current.metadata().map_err(|_| "selected_state_changed")?,
+        ) {
+            return Err("selected_state_changed");
+        }
+        Ok(())
+    }
+    /// One descriptor-relative stream; no allocation proportional to the directory.
+    pub fn entries(&self) -> Result<Entries> {
+        let file = openat(&self.0, c".", libc::O_RDONLY | libc::O_DIRECTORY)?
+            .ok_or("selected_state_missing")?;
+        let fd = std::os::fd::IntoRawFd::into_raw_fd(file);
+        let dir = unsafe { libc::fdopendir(fd) };
+        if dir.is_null() {
+            unsafe { libc::close(fd) };
+            return Err("inventory_enumeration_failed");
+        }
+        Ok(Entries(dir))
+    }
     pub fn observation_lock(&self) -> Result<()> {
         if unsafe { libc::flock(self.0.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
             return Err("selected_output_writer_busy");
@@ -137,7 +180,7 @@ impl Directory {
     }
     pub fn child_dir(&self, name: &str) -> Result<Self> {
         let name = CString::new(name).map_err(|_| "selected_state_unavailable_or_unsafe")?;
-        if name.as_bytes().contains(&b'/') {
+        if name.as_bytes().contains(&b'/') || matches!(name.as_bytes(), b"." | b".." | b"") {
             return Err("selected_state_unavailable_or_unsafe");
         }
         let file = openat(&self.0, &name, libc::O_RDONLY | libc::O_DIRECTORY)?
@@ -169,14 +212,14 @@ impl Directory {
     ) -> Result<Option<(Vec<u8>, Metadata)>> {
         self.read_observed(name, cap, budget, true)
     }
-    fn read_observed(
+    pub(in crate::edit_session) fn read_observed(
         &self,
         name: &str,
         cap: u64,
         budget: &mut Budget,
         output: bool,
     ) -> Result<Option<(Vec<u8>, Metadata)>> {
-        budget.tick(0)?;
+        budget.record()?;
         let name = CString::new(name).map_err(|_| "selected_state_unavailable_or_unsafe")?;
         if name.as_bytes().contains(&b'/') || matches!(name.as_bytes(), b"." | b"..") {
             return Err("selected_state_unavailable_or_unsafe");
@@ -251,6 +294,35 @@ impl Directory {
             return Err("selected_state_changed");
         }
         Ok(Some((bytes, before)))
+    }
+}
+
+pub(in crate::edit_session) fn same_directory(a: &Metadata, b: &Metadata) -> bool {
+    (a.dev(), a.ino(), a.uid(), a.gid(), a.mode()) == (b.dev(), b.ino(), b.uid(), b.gid(), b.mode())
+}
+
+pub(in crate::edit_session) struct Entries(*mut libc::DIR);
+impl Entries {
+    pub fn next(&mut self) -> Result<Option<Vec<u8>>> {
+        loop {
+            unsafe { *libc::__errno_location() = 0 };
+            let entry = unsafe { libc::readdir(self.0) };
+            if entry.is_null() {
+                if std::io::Error::last_os_error().raw_os_error() != Some(0) {
+                    return Err("inventory_enumeration_failed");
+                }
+                return Ok(None);
+            }
+            let name = unsafe { CStr::from_ptr((*entry).d_name.as_ptr()) }.to_bytes();
+            if !matches!(name, b"." | b"..") {
+                return Ok(Some(name.to_vec()));
+            }
+        }
+    }
+}
+impl Drop for Entries {
+    fn drop(&mut self) {
+        unsafe { libc::closedir(self.0) };
     }
 }
 
