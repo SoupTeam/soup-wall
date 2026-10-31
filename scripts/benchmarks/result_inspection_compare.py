@@ -337,10 +337,23 @@ def check_predeclared_grouping(pre, manifest, pairs):
 RUN_KEYS = {"schema", "role", "attempt", "status", "predeclaration_sha256", "recorder", "revision", "checkout",
             "toolchain", "environment", "build", "execution", "report", "problems"}
 FILE_KEYS = {"file", "raw_sha256", "raw_bytes", "retained_sha256", "retained_bytes", "truncated", "sanitized"}
+# Bounded-capture recorder: raw_* only for a complete stream (else null); observed_* covers every byte read.
+FILE_KEYS_BOUNDED = FILE_KEYS | {"complete", "limit_bytes", "limit_policy", "limit_exceeded", "observed_bytes",
+                                 "observed_sha256"}
+
+
+def _stream_complete(entry):
+    """Whether a file entry describes a whole stream: always for the earlier recorder, which captured each
+    process's output in memory until it exited; for the bounded recorder only when it says so."""
+    if set(entry) == FILE_KEYS:
+        return True
+    return entry["complete"] is True and entry["raw_sha256"] == entry["observed_sha256"] and \
+        entry["raw_bytes"] == entry["observed_bytes"]
 
 
 def _retained(run_dir, entry, what, limit, exact=False):
-    _exact(entry, FILE_KEYS, what)
+    if not (isinstance(entry, dict) and set(entry) in (FILE_KEYS, FILE_KEYS_BOUNDED)):
+        _exact(entry, FILE_KEYS, what)
     path = Path(run_dir) / entry["file"]
     if Path(entry["file"]).name != entry["file"]:
         raise Invalid("invalid_record", f"{what} file must be a plain name inside the run directory")
@@ -350,7 +363,8 @@ def _retained(run_dir, entry, what, limit, exact=False):
         raise Invalid("custody_incomplete", f"{what}: {error.code}") from None
     if _sha(raw) != entry["retained_sha256"] or len(raw) != entry["retained_bytes"]:
         raise Invalid("custody_mismatch", f"{what}: retained bytes differ from the run record")
-    if exact and (entry["truncated"] or entry["sanitized"] or entry["raw_sha256"] != entry["retained_sha256"]):
+    if exact and (entry["truncated"] or entry["sanitized"] or not _stream_complete(entry) or
+                  entry["raw_sha256"] != entry["retained_sha256"]):
         raise Invalid("custody_incomplete", f"{what} must be retained complete and unmodified")
     return raw
 
@@ -523,16 +537,25 @@ def verify_run(role, run_dir, run, pre, git, corpus, accepted):
     if execution.get("artifact_sha256_before") != artifact["sha256"] or \
             execution.get("artifact_sha256_after") != artifact["sha256"]:
         raise Invalid("artifact_integrity", f"{role}: executed artifact hash differs from the built artifact")
-    stdout = _retained(run_dir, execution["stdout"], f"{role} adapter stdout", LIMITS["max_stdout_bytes"], exact=True)
+    # A completed run's output must be retained whole and unmodified; a killed or failed run's retained prefix is
+    # checked against its record but never parsed (observe() reports every case as unobserved).
+    stdout = _retained(run_dir, execution["stdout"], f"{role} adapter stdout", LIMITS["max_stdout_bytes"],
+                       exact=_completed(execution))
     _retained(run_dir, execution["stderr"], f"{role} adapter stderr", LIMITS["max_log_bytes"])
     return stdout, noncomparable
+
+
+def _completed(execution):
+    """The adapter process exited 0 by itself: not timed out, not killed for an output limit or otherwise."""
+    return execution["exit_code"] == 0 and not execution["timed_out"] and \
+        not execution.get("output_limit_exceeded") and not execution.get("killed")
 
 
 def observe(role, run_dir, run, stdout, corpus, git, commit):
     """Per-case observations from the raw adapter output, and the original report rebuilt from it."""
     execution = run["execution"]
     cases = corpus["manifest"]["cases"]
-    if execution["exit_code"] != 0 or execution["timed_out"]:
+    if not _completed(execution):
         return {"observable": False, "timed_out": bool(execution["timed_out"]),
                 "exit_code": execution["exit_code"], "cases": {c["case_id"]: {"status": "unobserved"} for c in cases},
                 "report": None, "report_note": "no original report: the adapter run did not complete"}
@@ -759,6 +782,9 @@ def compare(pre_path, base_dir, cand_dir, repo, corpus_root=None, amendments=())
                 "adapter_source_blob": run["checkout"]["inputs"]["crates/agentfw/examples/result_inspection_corpus.rs"]["blob"],
                 "observable": observations[role]["observable"], "exit_code": observations[role]["exit_code"],
                 "timed_out": observations[role]["timed_out"], "original_report": observations[role]["report"]}
+            if "killed" in run["execution"]:  # bounded-capture recorder only; earlier records have no such field
+                result["sides"][role].update(killed=run["execution"]["killed"],
+                                             output_limit_exceeded=run["execution"].get("output_limit_exceeded"))
         base, cand = observations["baseline"], observations["candidate"]
         if result["sides"]["baseline"]["toolchain"] != result["sides"]["candidate"]["toolchain"]:
             result["non_comparable"].append("baseline and candidate used different rustc builds or hosts")

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -36,6 +37,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -102,20 +104,195 @@ def file_sha(path: Path) -> str:
     return sha(path.read_bytes())
 
 
-def execute_verified(argv, artifact: Path, expected: str, timeout: int):
+# ---------------------------------------------------------------- bounded capture
+#
+# Policy (CAPTURE_POLICY): each stream is read incrementally by its own thread, so a child filling one pipe
+# never blocks on the other. At most ``limit`` bytes are kept in memory; every observed byte is hashed. When a
+# stream passes its limit, "terminate" kills the whole process tree and classifies the attempt
+# (output_limit_exceeded); "discard" keeps reading and hashing to EOF but keeps no more bytes. A stream is
+# "complete" only when it reached EOF without the process being killed; only then is its digest labelled as the
+# complete output (raw_sha256).
+
+CHUNK = 64 * 1024
+GRACE_S = 10
+CAPTURE_POLICY = {
+    "build_stdout": "terminate (Cargo's JSON messages are needed whole to select the artifact)",
+    "build_stderr": "discard beyond the limit; the build continues",
+    "adapter_stdout": "terminate; the attempt is unobserved and its output is never parsed",
+    "adapter_stderr": "discard beyond the limit; the run continues",
+}
+
+
+class Stream:
+    """One pipe read to EOF on a thread: bounded prefix, digest and size of everything observed."""
+
+    def __init__(self, pipe, limit: int, policy: str, on_limit):
+        self.limit, self.policy, self.on_limit = limit, policy, on_limit
+        self.kept, self.hasher, self.observed = bytearray(), hashlib.sha256(), 0
+        self.limit_exceeded, self.eof = False, False
+        self.thread = threading.Thread(target=self._read, args=(pipe,), daemon=True)
+        self.thread.start()
+
+    def _read(self, pipe):
+        try:
+            while True:
+                chunk = pipe.read1(CHUNK) if hasattr(pipe, "read1") else pipe.read(CHUNK)
+                if not chunk:
+                    self.eof = True
+                    return
+                self.hasher.update(chunk)
+                self.observed += len(chunk)
+                room = self.limit - len(self.kept)
+                if room > 0:
+                    self.kept += chunk[:room]
+                if self.observed > self.limit and not self.limit_exceeded:
+                    self.limit_exceeded = True
+                    if self.policy == "terminate":
+                        self.on_limit()
+        except (OSError, ValueError):
+            return  # pipe closed after the process tree was killed; eof stays False
+        finally:
+            try:
+                pipe.close()
+            except OSError:
+                pass
+
+
+class ProcessTree:
+    """The child and all its descendants, so that cleanup also reaches processes whose parent already exited.
+
+    Windows: a Job Object with KILL_ON_JOB_CLOSE. The child is created suspended, assigned to the job and only
+    then resumed, so every descendant is born inside the job. POSIX: a new session, killed as a process group."""
+
+    def __init__(self, argv, cwd, env):
+        self.job = None
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+            self._k32 = k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            k32.CreateJobObjectW.restype = wintypes.HANDLE
+            k32.CreateJobObjectW.argtypes = (ctypes.c_void_p, ctypes.c_void_p)
+            k32.SetInformationJobObject.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+            k32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+            k32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
+            k32.QueryInformationJobObject.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+                                                      wintypes.DWORD, ctypes.c_void_p)
+            k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+
+            class Limits(ctypes.Structure):  # JOBOBJECT_EXTENDED_LIMIT_INFORMATION (x64 layout via ctypes)
+                _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                            ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                            ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                            ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                            ("SchedulingClass", wintypes.DWORD), ("IoCounters", ctypes.c_uint64 * 6),
+                            ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                            ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+            self.job = k32.CreateJobObjectW(None, None)
+            info = Limits(LimitFlags=0x2000)  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            if not self.job or not k32.SetInformationJobObject(self.job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+                raise OSError(ctypes.get_last_error(), "cannot create the Windows job object for the child")
+            flags = subprocess.CREATE_NEW_PROCESS_GROUP | 0x4  # CREATE_SUSPENDED
+            self.proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE, creationflags=flags)
+            ntdll = ctypes.WinDLL("ntdll")
+            ntdll.NtResumeProcess.argtypes = (wintypes.HANDLE,)
+            if not k32.AssignProcessToJobObject(self.job, int(self.proc._handle)):
+                error = ctypes.get_last_error()
+                self.proc.kill()
+                raise OSError(error, "cannot assign the child to its job object")
+            ntdll.NtResumeProcess(int(self.proc._handle))
+        else:
+            self.proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE, start_new_session=True)
+
+    def kill(self):
+        if self.job:
+            self._k32.TerminateJobObject(self.job, 1)
+        else:
+            try:
+                os.killpg(self.proc.pid, 9)
+            except (ProcessLookupError, PermissionError):
+                pass
+        try:
+            self.proc.kill()
+        except OSError:
+            pass
+
+    def active(self):
+        """Processes still alive in the job (Windows); None where it cannot be counted."""
+        if not self.job:
+            return None
+        import ctypes
+        info = (ctypes.c_uint32 * 12)()  # JOBOBJECT_BASIC_ACCOUNTING_INFORMATION; ActiveProcesses is field 10
+        if not self._k32.QueryInformationJobObject(self.job, 1, info, ctypes.sizeof(info), None):
+            return None
+        return int(info[10])
+
+    def close(self):
+        if self.job:
+            self._k32.CloseHandle(self.job)  # KILL_ON_JOB_CLOSE: nothing in the job survives this
+            self.job = None
+
+
+def capture(argv, timeout: float, limits, cwd=None, env=None):
+    """Run ``argv`` with bounded, concurrent stdout/stderr capture, a timeout and process-tree cleanup.
+
+    ``limits`` maps "stdout"/"stderr" to (byte limit, "terminate" | "discard"). Returns the process facts and
+    the two ``Stream`` objects. ``cleanup`` reports what was still alive after cleanup, never assumed."""
+    started = time.monotonic()
+    tree = ProcessTree(argv, cwd, env)
+    proc = tree.proc
+    stop = threading.Event()
+    streams = {name: Stream(getattr(proc, name), limit, policy, stop.set)
+               for name, (limit, policy) in limits.items()}
+    reason = None
+    while proc.poll() is None:
+        if stop.is_set():
+            reason = "output_limit"
+        elif time.monotonic() - started > timeout:
+            reason = "timeout"
+        if reason:
+            tree.kill()
+            break
+        stop.wait(0.05)
+    code = proc.wait()
+    if reason is None:
+        # Descendants may outlive the direct child and keep a pipe open; wait only until the run's deadline.
+        for stream in streams.values():
+            stream.thread.join(max(0.0, timeout - (time.monotonic() - started)))
+        if any(s.thread.is_alive() for s in streams.values()):
+            reason = "descendant_held_output_open"
+    remaining = tree.active()
+    if reason or remaining:
+        tree.kill()  # also any descendant left in the job after a normal exit
+    for stream in streams.values():
+        stream.thread.join(GRACE_S)
+    settle = time.monotonic() + GRACE_S
+    while tree.active() and time.monotonic() < settle:  # job termination is asynchronous
+        time.sleep(0.05)
+    exceeded = sorted(name for name, s in streams.items() if s.limit_exceeded and s.policy == "terminate")
+    if exceeded and reason is None:
+        reason = "output_limit"  # the limit was passed as the process exited: still not a complete output
+    cleanup = {"method": "windows_job_object" if tree.job else "posix_process_group",
+               "job_processes_at_exit": remaining, "job_processes_after_cleanup": tree.active(),
+               "reader_threads_alive": sum(s.thread.is_alive() for s in streams.values())}
+    tree.close()
+    cleanup["complete"] = cleanup["reader_threads_alive"] == 0 and cleanup["job_processes_after_cleanup"] in (0, None)
+    return {"exit_code": None if reason else code, "returncode_after_kill": code if reason else None,
+            "timed_out": reason == "timeout", "output_limit_exceeded": exceeded[0] if exceeded else None,
+            "killed": reason, "cleanup": cleanup, "duration_s": round(time.monotonic() - started, 3)}, streams
+
+
+def execute_verified(argv, artifact: Path, expected: str, timeout: int, limits=None):
     """Run ``argv`` (whose program is ``artifact``) only if the artifact still has the built hash."""
     before = file_sha(artifact)
     if before != expected:
         raise Refused("artifact changed between build and execution")
-    started = time.monotonic()
-    try:
-        done = subprocess.run(argv, capture_output=True, timeout=timeout)
-        code, out, err, timed_out = done.returncode, done.stdout, done.stderr, False
-    except subprocess.TimeoutExpired as error:
-        code, out, err, timed_out = None, error.stdout or b"", error.stderr or b"", True
+    limits = limits or {"stdout": (contract.LIMITS["max_stdout_bytes"], "terminate"),
+                        "stderr": (contract.LIMITS["max_log_bytes"], "discard")}
+    facts, streams = capture(argv, timeout, limits)
     after = file_sha(artifact)
-    return {"exit_code": code, "timed_out": timed_out, "duration_s": round(time.monotonic() - started, 3),
-            "artifact_sha256_before": before, "artifact_sha256_after": after}, out, err
+    return {**facts, "artifact_sha256_before": before, "artifact_sha256_after": after}, streams
 
 
 def sanitizer(*roots):
@@ -139,14 +316,25 @@ def sanitizer(*roots):
     return apply
 
 
-def retain(run_dir: Path, name: str, raw: bytes, limit: int, clean=None) -> dict:
-    kept = clean(raw) if clean else raw
-    truncated = len(kept) > limit
-    if truncated:
-        kept = kept[:limit]
+def retain(run_dir: Path, name: str, stream: Stream, killed, clean=None) -> dict:
+    """Write the bounded prefix (sanitized when ``clean``) and describe exactly what each digest covers.
+
+    observed_*: every byte read from the pipe. raw_*: the complete stream, set only when ``complete`` (EOF
+    reached and the process was not killed), else null. retained_*: the bytes written to ``name``."""
+    prefix = bytes(stream.kept)
+    truncated = stream.observed > len(prefix)
+    if truncated and clean and b"\n" in prefix:
+        prefix = prefix[:prefix.rindex(b"\n") + 1]  # never sanitize half a path at the cut
+    kept = clean(prefix) if clean else prefix
+    kept = kept[:stream.limit]
     (run_dir / name).write_bytes(kept)
-    return {"file": name, "raw_sha256": sha(raw), "raw_bytes": len(raw), "retained_sha256": sha(kept),
-            "retained_bytes": len(kept), "truncated": truncated, "sanitized": clean is not None and kept != raw}
+    complete = stream.eof and killed is None
+    observed = stream.hasher.hexdigest()
+    return {"file": name, "complete": complete, "limit_bytes": stream.limit, "limit_policy": stream.policy,
+            "limit_exceeded": stream.limit_exceeded, "observed_bytes": stream.observed, "observed_sha256": observed,
+            "raw_sha256": observed if complete else None, "raw_bytes": stream.observed if complete else None,
+            "retained_sha256": sha(kept), "retained_bytes": len(kept), "truncated": truncated,
+            "sanitized": clean is not None and kept != prefix}
 
 
 def run_text(argv, cwd=None, env=None, timeout=120) -> str:
@@ -259,26 +447,24 @@ def record(args) -> int:
             raise Refused(f"toolchain {run['toolchain']['rustc_release']}/{run['toolchain']['host']} is not predeclared")
         env["CARGO_TARGET_DIR"] = str(target)
         argv = list(pre["build"]["argv"])
-        started = time.monotonic()
         run["status"] = "build_failed"
-        try:
-            done = subprocess.run(argv, cwd=checkout, env=env, capture_output=True, timeout=BUILD_TIMEOUT)
-            code, messages, stderr, timed_out = done.returncode, done.stdout, done.stderr, False
-        except subprocess.TimeoutExpired as error:
-            code, messages, stderr, timed_out = None, error.stdout or b"", error.stderr or b"", True
+        facts, streams = capture(argv, BUILD_TIMEOUT, {"stdout": (contract.LIMITS["max_log_bytes"], "terminate"),
+                                                       "stderr": (contract.LIMITS["max_log_bytes"], "discard")},
+                                 cwd=checkout, env=env)
+        code = facts["exit_code"]
         run["build"] = {"argv": argv, "cwd": "<work>/src", "target_dir": "<work>/target", "target_dir_fresh": True,
-                        "exit_code": code, "timed_out": timed_out, "duration_s": round(time.monotonic() - started, 1),
-                        "messages": retain(run_dir, "build-messages.jsonl", messages, contract.LIMITS["max_log_bytes"], clean),
-                        "stderr": retain(run_dir, "build-stderr.txt", stderr, contract.LIMITS["max_log_bytes"], clean),
+                        **facts, "capture_policy": {k: CAPTURE_POLICY[k] for k in ("build_stdout", "build_stderr")},
+                        "messages": retain(run_dir, "build-messages.jsonl", streams["stdout"], facts["killed"], clean),
+                        "stderr": retain(run_dir, "build-stderr.txt", streams["stderr"], facts["killed"], clean),
                         "artifact": None}
         after = verify_checkout(git, checkout, commit, ids)
         run["checkout"].update(clean_after=after["clean"], inputs_match_blobs_after=after["inputs_match_blobs"],
                                status_after=after["status"], mismatched_after=after["mismatched"])
-        if code != 0:
-            raise Refused(f"build exit {code}{' (timeout)' if timed_out else ''}")
+        if code != 0 or not run["build"]["messages"]["complete"]:
+            raise Refused(f"build exit {code}" + (f" (killed: {facts['killed']})" if facts["killed"] else ""))
         if not (after["clean"] and after["inputs_match_blobs"]):
             raise Refused("the build changed the checkout")
-        artifact = select_artifact(messages, target)
+        artifact = select_artifact(bytes(streams["stdout"].kept), target)
         built = file_sha(artifact)
         run["build"]["artifact"] = {"relative_path": artifact.relative_to(target.resolve()).as_posix(),
                                     "sha256": built, "bytes": artifact.stat().st_size}
@@ -292,18 +478,21 @@ def record(args) -> int:
         exec_argv = [str(artifact), "--manifest", str(corpus["manifest"]), "--payload-dir", str(corpus["payloads"]),
                      "--policy", str(corpus["policy"])]
         run["status"] = "integrity_failed"
-        execution, stdout, stderr = execute_verified(exec_argv, artifact, built, pre["execution"]["timeout_s"])
+        execution, streams = execute_verified(exec_argv, artifact, built, pre["execution"]["timeout_s"])
         run["execution"] = {"argv": [clean(a.encode()).decode() for a in exec_argv],
                             "timeout_s": pre["execution"]["timeout_s"], **execution,
-                            "stdout": retain(run_dir, "adapter-stdout.json", stdout, contract.LIMITS["max_stdout_bytes"]),
-                            "stderr": retain(run_dir, "adapter-stderr.txt", stderr, contract.LIMITS["max_log_bytes"], clean)}
+                            "capture_policy": {k: CAPTURE_POLICY[k] for k in ("adapter_stdout", "adapter_stderr")},
+                            "stdout": retain(run_dir, "adapter-stdout.json", streams["stdout"], execution["killed"]),
+                            "stderr": retain(run_dir, "adapter-stderr.txt", streams["stderr"], execution["killed"],
+                                             clean)}
         if execution["artifact_sha256_after"] != built:
             raise Refused("artifact changed during execution")
         run["status"] = "executed"
-        if execution["exit_code"] == 0 and not execution["timed_out"]:
+        stdout_entry = run["execution"]["stdout"]
+        if execution["exit_code"] == 0 and stdout_entry["complete"] and not stdout_entry["truncated"]:
             try:
-                results = json.loads(stdout)["results"]
-            except (ValueError, KeyError, TypeError):
+                results = contract.shared.parse(bytes(streams["stdout"].kept))["results"]
+            except (contract.shared.Rejected, KeyError, TypeError):
                 run["problems"].append("adapter exit 0 but its output is not a result document; no report built")
                 return finish(1)
             identities = {"source": commit, "rustc": run["toolchain"]["rustc_release"] + " " + pre["build"]["profile"],
@@ -315,8 +504,9 @@ def record(args) -> int:
             (run_dir / "report.json").write_bytes(raw)
             run["report"] = {"file": "report.json", "sha256": sha(raw)}
         else:
-            run["problems"].append(f"adapter exit {execution['exit_code']}, timed_out={execution['timed_out']}; "
-                                   "partial output retained, no report built")
+            run["problems"].append(f"adapter exit {execution['exit_code']}, killed={execution['killed']}, "
+                                   f"output_limit_exceeded={execution['output_limit_exceeded']}; "
+                                   "partial output retained and never parsed, no report built")
         return finish(0)
     except (Refused, contract.Invalid, OSError, subprocess.SubprocessError) as error:
         run["problems"].append(clean(str(error).encode()).decode()[:500])

@@ -302,6 +302,43 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(result["latency"]["attack"]["candidate"]["censored_by_run_timeout"], 24)
         self.assertTrue(attack["overall_change"].startswith("not_established"))
 
+    @staticmethod
+    def bounded(entry_, complete=True, truncated=False, observed=None):
+        """A bounded-recorder file entry: raw_* only for a complete stream."""
+        observed = observed or (entry_["raw_sha256"], entry_["raw_bytes"])
+        return dict(entry_, complete=complete, limit_bytes=ric.LIMITS["max_stdout_bytes"], limit_policy="terminate",
+                    limit_exceeded=truncated, observed_sha256=observed[0], observed_bytes=observed[1],
+                    raw_sha256=observed[0] if complete else None, raw_bytes=observed[1] if complete else None,
+                    truncated=truncated)
+
+    def test_bounded_capture_entries(self):
+        def complete(run, _):
+            for key in ("stdout", "stderr"):
+                run["execution"][key] = self.bounded(run["execution"][key])
+            run["execution"].update(killed=None, output_limit_exceeded=None)
+        result, code = self.compare(cand=self.side("candidate", run_edit=complete))
+        self.assertEqual(code, ric.EXIT_COMPARABLE, result["errors"])
+        self.assertEqual(result["denominators"]["candidate"]["attack"]["inspected"], 24)
+
+        def limited(run, _):  # the recorder killed the adapter at its stdout limit: a prefix, never parsed
+            run["execution"]["stdout"] = self.bounded(run["execution"]["stdout"], complete=False, truncated=True,
+                                                      observed=("c" * 64, ric.LIMITS["max_stdout_bytes"] + 1))
+            run["execution"].update(exit_code=None, killed="output_limit", output_limit_exceeded="stdout")
+            run["report"] = None
+        prefix = json.dumps({"results": default_results(self.manifest)}).encode()[:300]
+        result, code = self.compare(cand=self.side("candidate", stdout=prefix, run_edit=limited, root=self.tmp / "l"),
+                                    base=self.side("baseline", root=self.tmp / "l"))
+        self.assertEqual(code, ric.EXIT_COMPARABLE, result["errors"])
+        d = result["denominators"]["candidate"]["attack"]
+        self.assertEqual((d["unobserved"], d["attempted"], d["timeout"]), (24, None, 0))
+        self.assertEqual(result["sides"]["candidate"]["output_limit_exceeded"], "stdout")
+
+        def inconsistent(run, _):  # exit 0 yet the stream is not complete: refused, not parsed
+            run["execution"]["stdout"] = self.bounded(run["execution"]["stdout"], complete=False)
+            run["execution"].update(killed=None, output_limit_exceeded=None)
+        self.assertInvalid(self.compare(cand=self.side("candidate", run_edit=inconsistent, root=self.tmp / "i"),
+                                        base=self.side("baseline", root=self.tmp / "i")), "custody_incomplete")
+
     def test_adapter_failure_is_not_replaced_by_a_rerun(self):
         root = self.tmp / "r"
         self.side("candidate", root=root, attempt=1, exit_code=2, stdout=b"")
@@ -525,7 +562,7 @@ class RecorderTests(unittest.TestCase):
             rec.execute_verified([sys.executable, str(script)], script, built, 30)
         script.write_text("import pathlib, sys\npathlib.Path(sys.argv[0]).write_text('# replaced\\n')\n", encoding="utf-8")
         built = rec.file_sha(script)
-        execution, out, _ = rec.execute_verified([sys.executable, str(script)], script, built, 30)
+        execution, _ = rec.execute_verified([sys.executable, str(script)], script, built, 30)
         self.assertEqual(execution["artifact_sha256_before"], built)
         self.assertNotEqual(execution["artifact_sha256_after"], built)
 
@@ -533,9 +570,14 @@ class RecorderTests(unittest.TestCase):
         script = self.tmp / "slow.py"
         script.write_text("import sys, time\nsys.stdout.write('{\"results\": [');sys.stdout.flush()\ntime.sleep(30)\n",
                           encoding="utf-8")
-        execution, out, _ = rec.execute_verified([sys.executable, str(script)], script, rec.file_sha(script), 2)
+        execution, streams = rec.execute_verified([sys.executable, str(script)], script, rec.file_sha(script), 2)
         self.assertTrue(execution["timed_out"])
         self.assertIsNone(execution["exit_code"])
+        self.assertEqual(bytes(streams["stdout"].kept), b'{"results": [')
+        entry = rec.retain(self.tmp, "out.json", streams["stdout"], execution["killed"])
+        self.assertFalse(entry["complete"])
+        self.assertIsNone(entry["raw_sha256"])
+        self.assertTrue(execution["cleanup"]["complete"], execution["cleanup"])
 
     def test_environment_and_cargo_config_refusals(self):
         self.assertEqual(rec.refused_environment({"RUSTFLAGS": "-C opt-level=3", "CARGO_TARGET_DIR": "x",
@@ -584,6 +626,118 @@ class RecorderTests(unittest.TestCase):
         bad = rec.verify_checkout(git, repo, commit, ["x01-a"])
         self.assertFalse(bad["clean"])
         self.assertIn("Cargo.lock", bad["mismatched"])
+
+
+def _alive(pid: int) -> bool:
+    """Whether a process ID is still running (Windows: exit code STILL_ACTIVE)."""
+    if os.name == "nt":
+        import ctypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = ctypes.c_void_p
+        handle = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        k32.GetExitCodeProcess(ctypes.c_void_p(handle), ctypes.byref(code))
+        k32.CloseHandle(ctypes.c_void_p(handle))
+        return code.value == 259
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+# A grandchild that inherits the child's stdout/stderr pipes and keeps them open for 60 s.
+SPAWN_GRANDCHILD = (
+    "import subprocess, sys\n"
+    "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], stdout=sys.stdout, "
+    "stderr=sys.stderr, close_fds=False)\n"
+    "print(g.pid, flush=True)\n")
+
+
+class CaptureTests(unittest.TestCase):
+    """Bounded capture with small Python helper processes (no Rust build)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="sou191-capture-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def run_child(self, code, timeout=30, stdout=(1 << 20, "terminate"), stderr=(1 << 20, "discard")):
+        return rec.capture([sys.executable, "-c", code], timeout, {"stdout": stdout, "stderr": stderr})
+
+    def assertCleanedUp(self, facts):
+        self.assertTrue(facts["cleanup"]["complete"], facts["cleanup"])
+        self.assertEqual(facts["cleanup"]["reader_threads_alive"], 0)
+        if os.name == "nt":
+            self.assertEqual(facts["cleanup"]["method"], "windows_job_object")
+            self.assertEqual(facts["cleanup"]["job_processes_after_cleanup"], 0)
+
+    def test_oversized_stdout_terminates_with_partial_digest_only(self):
+        facts, streams = self.run_child("import sys\nwhile True: sys.stdout.buffer.write(b'x' * 65536)\n",
+                                        stdout=(100_000, "terminate"))
+        self.assertEqual((facts["killed"], facts["output_limit_exceeded"], facts["exit_code"]),
+                         ("output_limit", "stdout", None))
+        self.assertLess(facts["duration_s"], 20)
+        entry = rec.retain(self.tmp, "out.json", streams["stdout"], facts["killed"])
+        self.assertEqual(entry["retained_bytes"], 100_000)
+        self.assertEqual((self.tmp / "out.json").read_bytes(), b"x" * 100_000)
+        self.assertGreater(entry["observed_bytes"], 100_000)
+        self.assertEqual((entry["complete"], entry["raw_sha256"], entry["raw_bytes"], entry["truncated"]),
+                         (False, None, None, True))
+        self.assertNotEqual(entry["observed_sha256"], entry["retained_sha256"])
+        self.assertCleanedUp(facts)
+
+    def test_limit_passed_as_the_process_exits_is_still_an_output_limit(self):
+        facts, streams = self.run_child("import sys; sys.stdout.buffer.write(b'y' * 100_001)",
+                                        stdout=(100_000, "terminate"))
+        self.assertEqual((facts["killed"], facts["exit_code"]), ("output_limit", None))
+        self.assertFalse(rec.retain(self.tmp, "o", streams["stdout"], facts["killed"])["complete"])
+
+    def test_oversized_stderr_is_drained_with_a_complete_digest(self):
+        facts, streams = self.run_child("import sys\nsys.stderr.buffer.write(b'e' * 300_000)\nprint('done')\n",
+                                        stderr=(100_000, "discard"))
+        self.assertEqual((facts["killed"], facts["exit_code"]), (None, 0))
+        err = rec.retain(self.tmp, "err.txt", streams["stderr"], facts["killed"])
+        self.assertEqual((err["complete"], err["limit_exceeded"], err["truncated"]), (True, True, True))
+        self.assertEqual(err["raw_sha256"], ric._sha(b"e" * 300_000))
+        self.assertEqual((err["raw_bytes"], err["retained_bytes"]), (300_000, 100_000))
+        out = rec.retain(self.tmp, "out.txt", streams["stdout"], facts["killed"])
+        self.assertEqual((out["complete"], out["truncated"]), (True, False))
+        self.assertEqual((self.tmp / "out.txt").read_bytes().strip(), b"done")
+        self.assertCleanedUp(facts)
+
+    def test_simultaneous_large_output_does_not_deadlock(self):
+        code = ("import sys\nfor i in range(256):\n"
+                "    sys.stdout.buffer.write(b'o' * 8192); sys.stderr.buffer.write(b'e' * 8192)\n")
+        facts, streams = self.run_child(code, timeout=60, stdout=(4 << 20, "terminate"), stderr=(4 << 20, "discard"))
+        self.assertEqual((facts["killed"], facts["exit_code"]), (None, 0))
+        for name, byte in (("stdout", b"o"), ("stderr", b"e")):
+            entry = rec.retain(self.tmp, name, streams[name], facts["killed"])
+            self.assertTrue(entry["complete"])
+            self.assertEqual(entry["raw_sha256"], ric._sha(byte * (256 * 8192)))
+        self.assertCleanedUp(facts)
+
+    def test_timeout_kills_child_and_grandchild(self):
+        facts, streams = self.run_child(SPAWN_GRANDCHILD + "import time; time.sleep(60)\n", timeout=2)
+        grandchild = int(bytes(streams["stdout"].kept).split()[0])
+        self.assertTrue(facts["timed_out"])
+        self.assertEqual((facts["killed"], facts["exit_code"]), ("timeout", None))
+        self.assertLess(facts["duration_s"], 20)
+        self.assertCleanedUp(facts)
+        self.assertFalse(_alive(grandchild), "grandchild survived the timeout cleanup")
+
+    def test_descendant_holding_pipes_after_parent_exit(self):
+        # The parent exits 0 at once; its grandchild keeps both pipes open. On Windows taskkill /T cannot find
+        # it any more; the job object must.
+        facts, streams = self.run_child(SPAWN_GRANDCHILD, timeout=3)
+        grandchild = int(bytes(streams["stdout"].kept).split()[0])
+        self.assertEqual((facts["killed"], facts["exit_code"], facts["returncode_after_kill"]),
+                         ("descendant_held_output_open", None, 0))
+        self.assertLess(facts["duration_s"], 25)
+        self.assertCleanedUp(facts)
+        self.assertFalse(_alive(grandchild), "grandchild survived after its parent exited")
+        self.assertFalse(rec.retain(self.tmp, "o", streams["stdout"], facts["killed"])["complete"])
 
 
 if __name__ == "__main__":

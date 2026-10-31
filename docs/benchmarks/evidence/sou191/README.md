@@ -167,6 +167,18 @@ python scripts/benchmarks/result_inspection_controls.py --evidence docs/benchmar
   review made latency populations explicit, added the recorder identity check and stricter record-shape checks.
   The retained runs, predeclaration and amendment did not change. The semantic counts, transitions and denominators
   are the same as in the first comparison.
-- **Memory while capturing output.** The recorder captures build and adapter output in memory and retains at most
-  2 MiB (logs) or 4 MiB (adapter output), recording the raw size and digest. Truncated adapter output is refused by
-  the comparator. Capture itself is not memory-bounded.
+- **These runs used the earlier recorder's capture.** All four attempts here were recorded before bounded capture
+  was added. That recorder held each process's whole output in memory until the process exited.
+  - For every retained stream here, the process exited by itself, nothing timed out or was truncated, and the
+    largest stream was 193 KB against a 2 MiB limit. So each `raw_sha256` is the digest of the complete stream.
+  - The comparator accepts this earlier entry format. The recorder identities above point to that earlier recorder.
+  - The measurements were not regenerated for the new capture code.
+- **Bounded capture from now on.** The current recorder reads each stream on its own thread, keeps at most the
+  limit in memory, and hashes every byte it observes.
+  - An adapter stdout or build stdout over its limit kills the process tree, and the attempt is classified
+    `output_limit_exceeded`. The adapter output is then never parsed and its cases are unobserved.
+  - stderr beyond its limit is drained and discarded.
+  - A digest is labelled `raw_sha256` only for a complete stream: EOF reached and the process not killed. Otherwise
+    `raw_sha256` is null and `observed_sha256` covers only the bytes read.
+  - Cleanup uses a Windows Job Object (POSIX: a process group). Each record states how many job processes and
+    reader threads were still alive afterwards.

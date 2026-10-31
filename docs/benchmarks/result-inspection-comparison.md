@@ -47,6 +47,25 @@ For each attempt the recorder does the following:
 - takes the executable only from Cargo's `compiler-artifact` message inside that directory;
 - hashes the executable before and after running it on the checkout's own corpus and policy.
 
+Output capture is bounded. Each stdout and stderr stream is read on its own thread, so neither pipe can block the
+other. At most the limit is kept in memory (4 MiB for adapter stdout, 2 MiB for the others), and every observed byte
+is hashed. The policy when a stream passes its limit:
+
+| Stream | Policy |
+| --- | --- |
+| Adapter stdout | Kill the process tree; the attempt is `output_limit_exceeded`, its output is never parsed and every case is unobserved |
+| Build stdout | Kill the process tree; the build fails (Cargo's messages are needed whole) |
+| Adapter and build stderr | Keep reading to EOF and discard the excess |
+
+Each file entry records `observed_bytes` and `observed_sha256` (what was read), and `retained_*` (what was written).
+It sets `raw_sha256` and `raw_bytes` only for a complete stream, meaning EOF was reached and the process was not
+killed; otherwise they are null.
+
+A timeout or limit kills the whole tree: on Windows through a Job Object that the child joins before it starts, and
+on POSIX through its process group. This also reaches descendants whose parent has already exited. A descendant that
+keeps the pipes open after the child exits is killed at the deadline (`descendant_held_output_open`). The record's
+`cleanup` field states how many job processes and reader threads were still alive afterwards.
+
 The recorder keeps the raw adapter output, the exit status and timeout flag, and the bounded build and run logs.
 Local paths in the logs are replaced with `<work>`, `<repo>` and `<home>`, and a `PATH = Some(...)` listing that
 cc-rs prints on a build-script failure is reduced to an entry count. The adapter output is never sanitized. The
