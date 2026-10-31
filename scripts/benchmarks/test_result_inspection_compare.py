@@ -422,7 +422,9 @@ class ComparisonTests(unittest.TestCase):
         (evidence / "runs").mkdir(parents=True)
         shutil.copyfile(PRE, evidence / "predeclaration.json")
         cases = sorted(c["case_id"] for c in self.manifest["cases"] if c["label"] == "attack")
-        self.side("baseline", root=evidence / "runs")
+        # As in the real evidence: a failed baseline attempt precedes the measured one.
+        self.side("baseline", attempt=1, status="build_failed", root=evidence / "runs")
+        self.side("baseline", attempt=2, root=evidence / "runs")
         self.side("candidate", default_results(self.manifest, {cases[0]: "Allow"}), root=evidence / "runs")
         result = controls.run_controls(evidence, ROOT)
         self.assertTrue(result["all_passed"], [r for r in result["controls"] if not r["passed"]])

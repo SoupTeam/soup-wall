@@ -9,9 +9,12 @@ zero execution, readiness or live-model behaviour.
 
 ## Components
 
+The recorded runs, comparison and controls are in the [SOU-191 evidence directory](evidence/sou191/README.md).
+
 | File | Role |
 | --- | --- |
 | [predeclaration.json](evidence/sou191/predeclaration.json) | Revisions, corpus, policy, build command, outcome contract, grouping and attempt rule, committed before measurement |
+| [predeclaration-amendment-001.json](evidence/sou191/predeclaration-amendment-001.json) | Additive amendment: Cargo `--jobs 2` for both revisions, committed before any attempt executed the adapter |
 | [result_inspection_record.py](../../scripts/benchmarks/result_inspection_record.py) | Controlled build and run of one predeclared revision; writes a new `attempt-NNN` |
 | [result_inspection_compare.py](../../scripts/benchmarks/result_inspection_compare.py) | Offline verification and comparison; reuses SOU-153 strict reading and uncertainty helpers |
 | [result_inspection_controls.py](../../scripts/benchmarks/result_inspection_controls.py) | Negative controls on temporary mutated copies of the retained runs |
@@ -23,13 +26,16 @@ described in the [development guide](../DEVELOPMENT.md#prerequisites). Use a scr
 for `--work-root`.
 
 ```powershell
-python scripts/benchmarks/result_inspection_record.py --role baseline `
-  --predeclaration docs/benchmarks/evidence/sou191/predeclaration.json `
-  --work-root $env:TEMP\sou191-work --out docs/benchmarks/evidence/sou191/runs/baseline
-python scripts/benchmarks/result_inspection_record.py --role candidate `
-  --predeclaration docs/benchmarks/evidence/sou191/predeclaration.json `
-  --work-root $env:TEMP\sou191-work --out docs/benchmarks/evidence/sou191/runs/candidate
+$pre = "docs/benchmarks/evidence/sou191/predeclaration.json"
+$amend = "docs/benchmarks/evidence/sou191/predeclaration-amendment-001.json"
+python scripts/benchmarks/result_inspection_record.py --role baseline --predeclaration $pre --amendment $amend `
+  --work-root D:\sou191-work --out docs/benchmarks/evidence/sou191/runs/baseline
+python scripts/benchmarks/result_inspection_record.py --role candidate --predeclaration $pre --amendment $amend `
+  --work-root D:\sou191-work --out docs/benchmarks/evidence/sou191/runs/candidate
 ```
+
+Run the two recordings one after the other, with nothing else heavy running, because the adapter's latency is
+measured on the same machine. The work root needs several GB per attempt; each attempt gets a new subdirectory.
 
 For each attempt the recorder does the following:
 - requires the full commit on the first-parent history of the predeclared accepted-main ref;
@@ -42,17 +48,32 @@ For each attempt the recorder does the following:
 - hashes the executable before and after running it on the checkout's own corpus and policy.
 
 The recorder keeps the raw adapter output, the exit status and timeout flag, and the bounded build and run logs.
-Local paths in the logs are replaced with `<work>`, `<repo>` and `<home>`. It also keeps the original
-`sw-result-inspection-report/1`, built by that revision's own `run_corpus.build_report`.
+Local paths in the logs are replaced with `<work>`, `<repo>` and `<home>`, and a `PATH = Some(...)` listing that
+cc-rs prints on a build-script failure is reduced to an entry count. The adapter output is never sanitized. The
+recorder also keeps the original `sw-result-inspection-report/1`, built by that revision's own
+`run_corpus.build_report`.
 
 Attempts are never overwritten. The first attempt that executes the adapter is the measurement for its role. A
 failed execution stays the measurement, and later attempts are listed but not used.
+
+## Amendments
+
+An amendment is a separate `soup-wall-result-inspection-predeclaration-amendment/1` file. It names the SHA-256 of
+the declaration it amends, and both tools take it with `--amendment`. The only change it may make is to insert
+Cargo's `--jobs N` after `build` in the build command. Any other edit to the command, profile, toolchain, corpus,
+grouping or rule is refused.
+
+Each run records the declaration that governed it in `predeclaration_sha256`. Attempts must follow the chain in
+order. An attempt that executed the adapter under a superseded declaration makes the comparison invalid, so an
+amendment cannot be introduced after a measurement. The order is enforced by the attempt sequence and Git history.
+The declaration times come from the recording machine's clock and are not third-party timestamps.
 
 ## Comparison and reproduction
 
 ```powershell
 python scripts/benchmarks/result_inspection_compare.py `
   --predeclaration docs/benchmarks/evidence/sou191/predeclaration.json `
+  --amendment docs/benchmarks/evidence/sou191/predeclaration-amendment-001.json `
   --baseline docs/benchmarks/evidence/sou191/runs/baseline `
   --candidate docs/benchmarks/evidence/sou191/runs/candidate `
   --out-dir $env:TEMP\sou191-compare --expect docs/benchmarks/evidence/sou191/comparison
@@ -77,7 +98,24 @@ The following inputs are refused:
 - fields outside the adapter's per-status result contract;
 - a report that cannot be rebuilt byte for byte from the raw output, which catches edited totals or edited
   acceptance;
-- missing retained files or digests.
+- missing retained files or digests;
+- a gap in the attempt sequence, such as removed failed attempts.
+
+## Negative controls
+
+```powershell
+python scripts/benchmarks/result_inspection_controls.py --evidence docs/benchmarks/evidence/sou191 `
+  --out docs/benchmarks/evidence/sou191/controls.json
+```
+
+Each control copies both whole role directories and the corpus to a temporary directory and applies one named
+mutation. The comparison then runs on that copy, with the amendment chain read from the evidence directory, and the
+control checks the exit status and the error code. Controls that target a check deeper than custody re-seal the
+recorded digests first, so the deeper check has to catch them.
+
+`unmutated_copy` is a harness check. It must stay comparable and reproduce the retained `comparison.json` byte for
+byte. The controls are synthetic mutations and are not evidence about either revision. The tool exits 0 only when
+every control passes.
 
 ## Outcome contract
 

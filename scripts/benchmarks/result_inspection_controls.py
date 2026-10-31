@@ -124,6 +124,20 @@ def executed_other_artifact(ctx):
     save(run_dir, run)
 
 
+def unmutated(ctx):
+    pass
+
+
+def drop_earlier_attempts(ctx):
+    """Remove the attempts before the measured one, as if failures were silently discarded."""
+    role_dir = ctx["base"].parent
+    earlier = [p for p in ric.attempts(role_dir) if p.name < ctx["base"].name]
+    if not earlier:
+        raise SystemExit("drop_earlier_attempts needs a retained attempt before the baseline measurement")
+    for path in earlier:
+        shutil.rmtree(path)
+
+
 def undeclared_build_change(ctx):
     run_dir = ctx["cand"]
     run = load(run_dir)
@@ -154,6 +168,10 @@ def unknown_and_technical(results, ctx):
 
 
 CONTROLS = [
+    ("unmutated_copy", "no mutation: the copied bundles must stay comparable (harness check)", unmutated,
+     ric.EXIT_COMPARABLE, None),
+    ("failed_attempts_dropped", "delete the baseline attempts that precede its measurement", drop_earlier_attempts,
+     ric.EXIT_INVALID, "custody_incomplete"),
     ("missing_case", "drop one planned case from the raw output (digests and report resealed)",
      mutate_results(lambda r, _: r.pop()), ric.EXIT_INVALID, "missing_case"),
     ("fabricated_case", "add a case ID absent from the frozen manifest (resealed)",
@@ -192,9 +210,9 @@ def run_controls(evidence: Path, repo: Path):
             tmp = Path(tmp)
             dirs = {}
             for role in ric.ROLES:
-                source = measured(evidence / "runs" / role)
-                dirs[role] = tmp / role / source.name
-                shutil.copytree(source, dirs[role])
+                # The whole role directory: the attempt sequence, failed attempts included, is part of custody.
+                shutil.copytree(evidence / "runs" / role, tmp / role)
+                dirs[role] = tmp / role / measured(evidence / "runs" / role).name
             root = tmp / "corpus"
             for rel in CORPUS_FILES:
                 (root / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -207,6 +225,12 @@ def run_controls(evidence: Path, repo: Path):
             row = {"control": name, "synthetic_mutation": mutation, "expected_exit": expected_code,
                    "observed_exit": code, "expected_error": expected_error, "observed_error": error,
                    "passed": code == expected_code and error == expected_error}
+            retained = evidence / "comparison" / "comparison.json"
+            if name == "unmutated_copy" and retained.is_file():
+                same = (json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8") == \
+                    retained.read_bytes()
+                row["matches_retained_comparison"] = same
+                row["passed"] = row["passed"] and same
             if name == "incomplete_run" and code == ric.EXIT_COMPARABLE:
                 d = result["denominators"]["candidate"]["attack"]
                 row["candidate_attack_denominators"] = d
