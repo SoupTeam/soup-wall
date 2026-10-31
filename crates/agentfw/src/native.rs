@@ -3439,6 +3439,8 @@ mod tests {
     mod concurrent_timing;
     mod literal_arguments;
     mod result_evidence_bounds;
+    mod result_parser;
+    mod result_parser_boundary;
     use crate::{
         audit::AuditSink,
         handlers::{AppState, Sessions as HookSessions},
