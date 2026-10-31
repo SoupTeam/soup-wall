@@ -106,9 +106,16 @@ class Controller(unittest.TestCase):
                         offset=0;spans=[]
                         for part in parts[:-1]:offset+=len(part.encode());spans.append({'start':offset,'end':offset+5});offset+=5
                         evidence['formatter_shadow']={'production_authority':False,'separator_spans':spans,'complete_text_bytes':len(text.encode()),'text_sha256':hashlib.sha256(text.encode()).hexdigest()}
-                    pairs=[{'eligibility':'consumed_original_formatter','block':i,'text_sha256':hashlib.sha256(text.encode()).hexdigest(), 'comparison':{'contract':'sw-mcp/policy-shadow/1','production_authority':False,'task_complete':False}} for i in range(2)]
-                    audit.append({'event':'native_result','execution':evidence,'released':False,'verdict':'deny','policy_shadow':pairs})
-                    return {'result':{'isError':True}},b''
+                    attack=request['id'].endswith('True')
+                    pairs=[{'correction_applied':not attack,'eligibility':'consumed_original_formatter','block':i,'text_sha256':hashlib.sha256(text.encode()).hexdigest(), 'comparison':{'contract':'sw-mcp/policy-shadow/1','production_authority':False,'task_complete':False,'original':{'verdict':'deny'},'candidate':{'verdict':'deny' if attack else 'allow'}}} for i in range(2)]
+                    if request['id']=='shadow-ambiguous':
+                        for pair in pairs:
+                            pair['correction_applied']=False
+                            pair['eligibility']='baseline_no_bound_formatter'
+                            pair['comparison']['original']={'verdict':'allow'}
+                            pair['comparison']['candidate']={'verdict':'allow'}
+                    audit.append({'event':'native_result','execution':evidence,'released':not attack,'verdict':'deny' if attack else 'allow','policy_shadow':pairs})
+                    return ({'result':{'isError':True}} if attack else {'result':{'content':[{'type':'text','text':text}],'structuredContent':{'content':text}}}),b''
             ordinary,_,_=self.ordinary()
             S.exercise(Selected(),lambda:audit,{'runtime':{'closure_sha256':'a'*64}},ordinary,out,'b'*40,'c'*64,
                        {'id':'read','params':{'name':'read_text_file','arguments':{'path':'/workspace/notes.txt'}}},'{}',C.classify,TOOLS)
@@ -118,10 +125,14 @@ class Controller(unittest.TestCase):
             runtime={'source_commit':'b'*40,'status':'passed','cleanup_verified':True,'owned_root_empty_final':True,'model_calls':0,
                      'source_read_only':True,'network':'private-loopback-only','execution_records':[r['execution'] for r in audit]}
             self.assertFalse(G.project(report,runtime,'b'*40,0)['task_complete'])
-            for mutate in ('unknown','row','exit'):
+            for mutate in ('unknown','row','exit','release','candidate','custody','bytes'):
                 changed=copy.deepcopy(report)
                 if mutate=='unknown':changed['cases'][4]['status']='passed'
                 if mutate=='row':changed['cases'].pop()
+                if mutate=='release':changed['cases'][1]['released']=True
+                if mutate=='candidate':changed['cases'][1]['policy_shadow'][0]['comparison']['candidate']['verdict']='allow'
+                if mutate=='custody':changed['cases'][0]['policy_shadow'][0]['eligibility']='copied'
+                if mutate=='bytes':changed['cases'][0]['useful_bytes_equal']=False
                 with self.assertRaises(ValueError):G.project(changed,runtime,'b'*40,1 if mutate=='exit' else 0)
 
     def test_workflow_explicit_opt_in_forwarding_and_failure_artifact(self):

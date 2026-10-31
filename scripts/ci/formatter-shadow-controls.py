@@ -89,7 +89,7 @@ def copied_control(ordinary, schema, invocation, raw, evidence):
 
 
 def exercise(selected, audits, service, ordinary, out, source, schema, invocation, raw, classify, tools):
-    report = {'format':'sou157-formatter-runtime-shadow/1', 'source_commit':source,
+    report = {'format':'sou157-formatter-runtime-correction/1', 'source_commit':source,
               'status':'incomplete', 'production_authority':False, 'cases':[]}
     destination = out/'formatter-shadow.json'
     def save(): destination.write_text(json.dumps(report,indent=2)+'\n', encoding='utf-8')
@@ -148,8 +148,15 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
             require(attribution['separator_spans']==expected and attribution['complete_text_bytes']==len(text.encode())
                     and attribution['text_sha256']==hashlib.sha256(text.encode()).hexdigest(),'shadow_coordinates_changed')
             require(evidence['closure_sha256']==service['runtime']['closure_sha256'],'shadow_runtime_changed')
-            require(row['released'] is False and row['verdict']=='deny'
-                    and ('error' in reply or reply.get('result',{}).get('isError') is True),'shadow_changed_refusal')
+            if attack:
+                require(row['released'] is False and row['verdict']=='deny'
+                        and ('error' in reply or reply.get('result',{}).get('isError') is True),'correction_attack_released')
+            else:
+                result=reply.get('result',{})
+                require(row['released'] is True and row['verdict']=='allow'
+                        and 'error' not in reply and result.get('isError') is not True
+                        and result.get('content')==[{'type':'text','text':text}]
+                        and result.get('structuredContent',{}).get('content')==text,'correction_useful_bytes_not_released')
             pairs=row.get('policy_shadow', [])
             require(len(pairs)==2,'policy_shadow_pair_missing')
             for index,pair in enumerate(pairs):
@@ -159,9 +166,12 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
                         and pair.get('text_sha256')==attribution['text_sha256']
                         and comparison.get('contract')=='sw-mcp/policy-shadow/1'
                         and comparison.get('production_authority') is False
-                        and comparison.get('task_complete') is False,'policy_shadow_binding_changed')
+                        and comparison.get('task_complete') is False
+                        and comparison.get('original',{}).get('verdict')=='deny'
+                        and comparison.get('candidate',{}).get('verdict')==('deny' if attack else 'allow')
+                        and pair.get('correction_applied') is (not attack),'policy_shadow_binding_changed')
             report['cases'].append({'id':f'B{16+SIZES.index(count)}-'+('attack' if attack else 'benign'),
-                                    'status':'passed','execution':evidence,'released':False,'policy_shadow':pairs})
+                                    'status':'passed','execution':evidence,'released':not attack,'useful_bytes_equal':not attack,'policy_shadow':pairs})
             save()
     before=len(audits())
     exchange({'jsonrpc':'2.0','id':'shadow-ambiguous', 'method':'tools/call',
@@ -169,7 +179,11 @@ def exercise(selected, audits, service, ordinary, out, source, schema, invocatio
                            '/workspace/shadow-0.txt','/workspace/shadow-ambiguous.txt']}}},'body-separator-no-attribution')
     rows=[r for r in audits()[before:] if r.get('event')=='native_result' and r.get('execution')]
     require(len(rows)==1 and rows[0]['execution'].get('formatter_shadow') is None,'shadow_ambiguous_attributed')
-    report['cases'].append({'id':'body-separator-no-attribution','status':'passed'})
+    require(len(rows[0].get('policy_shadow',[]))==2 and all(
+        p.get('correction_applied') is False and p.get('eligibility')=='baseline_no_bound_formatter'
+        and p['comparison']['original']==p['comparison']['candidate']
+        for p in rows[0]['policy_shadow']),'ambiguous_policy_changed')
+    report['cases'].append({'id':'body-separator-no-attribution','status':'passed','unchanged_policy':True})
     save()
     statuses=copied_control(ordinary,schema,invocation,raw,evidence)
     report['cases'].append({'id':'copied-attribution-wire-refused','status':'passed','matched_outcomes':statuses})

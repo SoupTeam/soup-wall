@@ -430,6 +430,30 @@ impl Consumed {
     pub(super) fn metadata(&self) -> Metadata {
         self.metadata.clone()
     }
+    /// The only native production caller of the trusted formatter correction.
+    /// This value cannot be deserialized or obtained from public diagnostics.
+    pub(super) fn inspect_formatter(
+        &self,
+        firewall: &mut soup_wall_agent::AgentFirewall,
+        event: &soup_wall_agent::AgentEvent,
+        evidence: &soup_wall_core::detectors::injection::McpResultEvidence,
+        block: usize,
+        blocks: usize,
+    ) -> (
+        soup_wall_agent::Outcome,
+        Option<soup_wall_agent::engine::PolicyShadow>,
+    ) {
+        let soup_wall_agent::EventKind::ToolResult { content, .. } = &event.kind else {
+            return firewall.preview_mcp_result_shadow(event, evidence, block, None);
+        };
+        match self.formatter_spans(content, block, blocks) {
+            Some(spans) => {
+                firewall.preview_verified_filesystem_result(event, evidence, block, spans)
+            }
+            None => firewall.preview_mcp_result_shadow(event, evidence, block, None),
+        }
+    }
+
     pub(super) fn formatter_spans(
         &self,
         text: &str,

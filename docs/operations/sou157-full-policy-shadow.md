@@ -1,4 +1,17 @@
-# SOU-157: full-policy diagnostic checkpoint
+# SOU-157: Draft filesystem separator correction
+
+## Current proposed implementation
+
+Following independent scope decision 5721667592, this Draft now changes the eligible native filesystem path: a separator-only Deny may become Allow. This is proposed code for review/qualification, not a deployed or accepted production result. The ten original corpus false refusals remain open; Git is excluded.
+
+Only private `Consumed::inspect_formatter` calls the trusted-owner agent entry point, after original call/runtime/response custody was consumed and both original channels match the bound formatter text hash/length. No serialized receipt, caller range, environment flag or diagnostic report activates this route. The ordinary public diagnostic API still returns the original outcome. The agent entry point also requires read_multiple_files.
+
+Both views are computed in the existing single original-byte detector pass, sharing signatures and optional ML results, other detectors and state. The typed candidate replaces the decision/findings/risk only for original Deny -> candidate Allow when the existing complete structural policy-floor gate proves eligibility. It does not interpret the serialized report. Independent Ask/Deny/judge floors, secrets/PII, complete-result evidence and taint/provenance remain. Native strongest-block aggregation, one-time receipts and normal post-inspection provenance admission still control delivery. A candidate Allow cannot bypass provenance capacity: an explicit 1024-entry fixture still refuses the 200-file case. The normal-capacity fixture uses the product's unchanged DEFAULT_TAINT_CAP.
+
+Finite qualification now requires actual useful benign release with byte-identical text and structured channels for50/200, paired attacks still refused,201/256 still pre-execution unknown, ambiguity unchanged and copied-wire rejection. The current report contract is sou157-formatter-runtime-correction/1. The projector distinguishes this from historical diagnostic-only runs, checks all8 complete policy channel comparisons and rejects wrong release/candidate/custody or missing byte-equality evidence. No new runtime run has yet been launched by the author. Independent review and TL's one affected native qualification are required before Ready/merge. Existing reports below retain their original source/status.
+
+## Historical diagnostic implementation
+
 
 This increment implements the full-policy comparison agreed in review 5714338153. It is not production relief or task acceptance. Production authority and task completion remain false.
 

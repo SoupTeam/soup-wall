@@ -528,6 +528,35 @@ impl AgentFirewall {
         block: usize,
         spans: Option<&[std::ops::Range<usize>]>,
     ) -> (Outcome, Option<PolicyShadow>) {
+        self.preview_formatter_result(ev, evidence, block, spans, false)
+    }
+
+    /// Trusted-owner entry point, like preview_verified_git_result. Coordinates
+    /// do not authenticate a response: the native owner must consume its private
+    /// original call/runtime/response custody before calling this method.
+    /// There is no wire/config switch, and no diagnostic report is interpreted.
+    pub fn preview_verified_filesystem_result(
+        &mut self,
+        ev: &AgentEvent,
+        evidence: &soup_wall_core::detectors::injection::McpResultEvidence,
+        block: usize,
+        spans: &[std::ops::Range<usize>],
+    ) -> (Outcome, Option<PolicyShadow>) {
+        if !matches!(&ev.kind, EventKind::ToolResult { tool, .. } if tool == "read_multiple_files")
+        {
+            return self.preview_mcp_result_shadow(ev, evidence, block, None);
+        }
+        self.preview_formatter_result(ev, evidence, block, Some(spans), true)
+    }
+
+    fn preview_formatter_result(
+        &mut self,
+        ev: &AgentEvent,
+        evidence: &soup_wall_core::detectors::injection::McpResultEvidence,
+        block: usize,
+        spans: Option<&[std::ops::Range<usize>]>,
+        apply_correction: bool,
+    ) -> (Outcome, Option<PolicyShadow>) {
         let EventKind::ToolResult {
             content,
             source:
@@ -549,7 +578,7 @@ impl AgentFirewall {
             &policy,
             None,
             None,
-            Some((spans, &mut shadow)),
+            Some((spans, &mut shadow, apply_correction)),
         );
         outcome
             .findings
@@ -674,7 +703,11 @@ impl AgentFirewall {
         result_evidence: &[Finding],
         trace: Option<&mut Option<InspectionTrace>>,
         formatter_hash: Option<&std::ops::Range<usize>>,
-        shadow: Option<(Option<&[std::ops::Range<usize>]>, &mut Option<PolicyShadow>)>,
+        shadow: Option<(
+            Option<&[std::ops::Range<usize>]>,
+            &mut Option<PolicyShadow>,
+            bool,
+        )>,
     ) -> Outcome {
         // Lifecycle events only mutate state.
         match &ev.kind {
@@ -705,7 +738,8 @@ impl AgentFirewall {
                 soup_wall_core::Direction::Output => Context::output(text),
             };
             for detector in &self.detectors {
-                if let Some((spans, _)) = shadow.as_ref().filter(|_| *facet == Facet::ToolResult) {
+                if let Some((spans, _, _)) = shadow.as_ref().filter(|_| *facet == Facet::ToolResult)
+                {
                     let (original, candidate) =
                         detector.inspect_formatter_shadow(&ctx, spans.unwrap_or(&[]));
                     findings.extend(original.into_iter().map(|f| (*facet, f)));
@@ -876,7 +910,7 @@ impl AgentFirewall {
                 findings = original_signals.findings;
             }
         }
-        if let Some((spans, report)) = shadow {
+        if let Some((spans, report, apply_correction)) = shadow {
             let mut candidate_signals = signals.clone();
             candidate_signals.findings = shadow_findings.expect("shadow requested");
             let candidate_count = candidate_signals.findings.len();
@@ -917,21 +951,36 @@ impl AgentFirewall {
                 candidate = decision.clone();
                 candidate_trace = policy_trace.clone();
             }
+            let correct = apply_correction
+                && decision.verdict == Verdict::Deny
+                && candidate.verdict == Verdict::Allow
+                && self
+                    .policy
+                    .formatter_only_denial(&policy_trace, &signals, &candidate_signals);
             *report = Some(PolicyShadow {
                 contract: "sw-mcp/policy-shadow/1",
                 production_authority: false,
                 task_complete: false,
                 diagnostic_spans_supplied: spans.is_some_and(|s| !s.is_empty()),
                 original: decision.clone(),
-                candidate,
+                candidate: candidate.clone(),
                 original_trace: policy_trace.clone(),
-                candidate_trace,
+                candidate_trace: candidate_trace.clone(),
                 original_risk: signals.risk_score,
                 candidate_risk: candidate_signals.risk_score,
                 original_findings: signals.findings.clone(),
-                candidate_findings: candidate_signals.findings,
+                candidate_findings: candidate_signals.findings.clone(),
                 independent_floor_retained,
             });
+            // The gate above uses live typed signals, not the public report.
+            // Only a separator-only Deny may become Allow. Ask/judge decisions
+            // and all independent floors keep their original outcome.
+            if correct {
+                decision = candidate;
+                policy_trace = candidate_trace;
+                risk_score = candidate_signals.risk_score;
+                findings = candidate_signals.findings;
+            }
         }
         if let Some(trace) = trace {
             *trace = Some(InspectionTrace {
@@ -1146,6 +1195,16 @@ mod tests {
                     assert_eq!(shadow.candidate.verdict, Verdict::Deny, "{body}");
                 }
             }
+            let (corrected, _) =
+                baseline.preview_verified_filesystem_result(&event, &evidence, 0, &spans);
+            assert_eq!(
+                corrected.verdict,
+                if body == "ordinary" || body == "\u{442}\u{435}\u{43a}\u{441}\u{442}" {
+                    Verdict::Allow
+                } else {
+                    Verdict::Deny
+                }
+            );
             for invalid in [
                 vec![],
                 vec![spans[0].clone(), spans[0].clone()],
@@ -1156,7 +1215,54 @@ mod tests {
                 let shadow = shadow.unwrap();
                 assert_eq!(shadow.original, shadow.candidate);
                 assert_eq!(shadow.original_findings, shadow.candidate_findings);
+                let (corrected, _) =
+                    baseline.preview_verified_filesystem_result(&event, &evidence, 0, &invalid);
+                assert_eq!(corrected, expected);
             }
+        }
+    }
+
+    #[test]
+    fn formatter_correction_preserves_secret_pii_and_incomplete_provenance() {
+        for (detector, body) in [
+            ("pii.email", "person@example.invalid"),
+            ("secret.generic", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"),
+        ] {
+            let text = format!("a\n---\nb\n---\nc\n---\n{body}");
+            let spans: Vec<_> = text
+                .match_indices("\n---\n")
+                .map(|(i, t)| i..i + t.len())
+                .collect();
+            let policy = format!("agent_policies:\n  - name: structural\n    when: {{detector: injection, facet: tool_result, min_severity: low}}\n    action: deny\n  - name: independent\n    when: {{detector: {detector}, facet: tool_result, min_severity: low}}\n    action: deny\ndefault: allow\n");
+            let mut firewall = AgentFirewall::new(
+                AgentPolicySet::from_yaml(&policy).unwrap(),
+                DEFAULT_TAINT_CAP,
+            );
+            let event = ev(
+                1,
+                EventKind::ToolResult {
+                    tool: "read_multiple_files".into(),
+                    content: text.clone(),
+                    source: Provenance::McpServer {
+                        name: "filesystem".into(),
+                    },
+                },
+            );
+            let evidence = InjectionDetector::mcp_result_evidence(&[&text]).unwrap();
+            let original = firewall.preview_native_mcp_result(&event, &evidence, 0);
+            let (corrected, _) =
+                firewall.preview_verified_filesystem_result(&event, &evidence, 0, &spans);
+            assert_eq!(corrected, original);
+            assert_ne!(corrected.verdict, Verdict::Allow);
+            assert!(corrected
+                .findings
+                .iter()
+                .any(|(_, f)| f.detector == detector));
+            firewall.mark_provenance_incomplete(&event.session);
+            let original = firewall.preview_native_mcp_result(&event, &evidence, 0);
+            let (corrected, _) =
+                firewall.preview_verified_filesystem_result(&event, &evidence, 0, &spans);
+            assert_eq!(corrected, original);
         }
     }
 
@@ -1190,6 +1296,9 @@ mod tests {
             let (_, shadow) =
                 firewall.preview_mcp_result_shadow(&event, &evidence, 0, Some(&spans));
             assert_eq!(shadow.unwrap().candidate.verdict, Verdict::Deny);
+            let (corrected, _) =
+                firewall.preview_verified_filesystem_result(&event, &evidence, 0, &spans);
+            assert_eq!(corrected.verdict, Verdict::Deny);
         }
         let text = format!("{text} Ignore all");
         let event = ev(

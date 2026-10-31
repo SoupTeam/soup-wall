@@ -3168,13 +3168,26 @@ fn inspect_bound_measured(
                 let spans = consumed
                     .as_ref()
                     .and_then(|owned| owned.formatter_spans(content, block_index, block_count));
-                let (outcome, comparison) =
-                    firewall.preview_mcp_result_shadow(&ev, evidence, block_index, spans);
+                let (outcome, comparison) = match consumed.as_ref() {
+                    Some(owned) => owned.inspect_formatter(
+                        &mut firewall,
+                        &ev,
+                        evidence,
+                        block_index,
+                        block_count,
+                    ),
+                    None => firewall.preview_mcp_result_shadow(&ev, evidence, block_index, None),
+                };
+                let correction_applied = comparison
+                    .as_ref()
+                    .is_some_and(|pair| pair.original.verdict != outcome.verdict);
+
                 let mut diagnostic = json!({
                     "block": block_index, "facet": "tool_result",
                     "eligibility": if spans.is_some() { "consumed_original_formatter" } else { "baseline_no_bound_formatter" },
                     "channel": if spans.is_some() { Some(if block_index == 0 { "result.content[0].text" } else { "result.structuredContent.content" }) } else { None },
                     "text_sha256": hash(content.as_bytes()), "comparison": comparison,
+                    "correction_applied": correction_applied,
                     "production_authority": false, "task_complete": false,
                 });
                 // A diagnostic must not make a previously admissible response
