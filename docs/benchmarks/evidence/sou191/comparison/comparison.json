@@ -44,6 +44,17 @@
         "status": "refused_before_build",
         "run_sha256": "0ce033b636712289fd8d56de2daeb2ff00011abeb6ed91412932a135d74e0a78",
         "declaration_sha256": "01e5e069795f262d6e92d2e810dfb97ef42cd4f07095932ed5e5bd4d23cad552",
+        "recorder_source": {
+          "first_commit_with_both": "6a041a5220fe72d3df08234c651228110b2b8b27",
+          "result_inspection_record.py": {
+            "blob": "a9845d7a68d03689dfd7cb44b104d5a1e477bdf1",
+            "checkout_form": "none"
+          },
+          "result_inspection_compare.py": {
+            "blob": "6bcd912face5804d75fe43e71e77240efa89e2ec",
+            "checkout_form": "none"
+          }
+        },
         "use": "not measured: build or setup did not execute the adapter",
         "problems": [
           "[WinError 2] Не удается найти указанный файл"
@@ -54,6 +65,17 @@
         "status": "build_failed",
         "run_sha256": "e547ccc2024d68d649a7af4671b5e008c04e959196c2daf638efcfe6de7374a3",
         "declaration_sha256": "01e5e069795f262d6e92d2e810dfb97ef42cd4f07095932ed5e5bd4d23cad552",
+        "recorder_source": {
+          "first_commit_with_both": "9098c79f07af781104f981e85a00509d0985bab2",
+          "result_inspection_record.py": {
+            "blob": "624d5bc8345a5a67cda9190069a7b08e5cf79ff9",
+            "checkout_form": "none"
+          },
+          "result_inspection_compare.py": {
+            "blob": "6bcd912face5804d75fe43e71e77240efa89e2ec",
+            "checkout_form": "none"
+          }
+        },
         "use": "not measured: build or setup did not execute the adapter",
         "problems": [
           "build exit 101"
@@ -64,6 +86,17 @@
         "status": "executed",
         "run_sha256": "cf0d0ec77894d2db0e9fdbc8e21c6e0d2eeeb28dea6f4bf5f05a7be64862996b",
         "declaration_sha256": "1ff07638d501d9fdd021385d40079c59c55ded3aeef4e1be4eb4d9a4ca10f769",
+        "recorder_source": {
+          "first_commit_with_both": "95072f50b3a66f999234c8ad18d54031b88dc46e",
+          "result_inspection_record.py": {
+            "blob": "b20538edc1410fe4cb8658809a4575d4f338bacf",
+            "checkout_form": "lf_to_crlf"
+          },
+          "result_inspection_compare.py": {
+            "blob": "6db9368047fbfc7ee2fefe30dd0a02afb07ff9bf",
+            "checkout_form": "none"
+          }
+        },
         "use": "measurement",
         "problems": []
       }
@@ -74,6 +107,17 @@
         "status": "executed",
         "run_sha256": "d2a01ef74501e714b94ac69d3b8977db933cb8b18633b1da44306a83ec445b2f",
         "declaration_sha256": "1ff07638d501d9fdd021385d40079c59c55ded3aeef4e1be4eb4d9a4ca10f769",
+        "recorder_source": {
+          "first_commit_with_both": "95072f50b3a66f999234c8ad18d54031b88dc46e",
+          "result_inspection_record.py": {
+            "blob": "b20538edc1410fe4cb8658809a4575d4f338bacf",
+            "checkout_form": "lf_to_crlf"
+          },
+          "result_inspection_compare.py": {
+            "blob": "6db9368047fbfc7ee2fefe30dd0a02afb07ff9bf",
+            "checkout_form": "none"
+          }
+        },
         "use": "measurement",
         "problems": []
       }
@@ -1429,6 +1473,13 @@
       "--message-format=json-render-diagnostics"
     ]
   },
+  "recorder_identity": {
+    "checkout_forms": {
+      "none": "SHA-256 of the Git blob bytes",
+      "lf_to_crlf": "SHA-256 of the Git blob with every LF written as CRLF, for a blob with no CR byte (a Windows checkout with core.autocrlf=true); no other transformation is accepted"
+    },
+    "rule": "a measured attempt's recorder and contract SHA-256 must match blobs present together in one commit reachable from HEAD, in one of checkout_forms; otherwise it is invalid"
+  },
   "denominators": {
     "definitions": {
       "planned": "cases of this label in the frozen manifest",
@@ -1542,17 +1593,19 @@
     "method": {
       "unit": "microseconds",
       "source": "latency_micros: std::time::Instant around one AgentFirewall::preview_native_result call inside the adapter (crates/agentfw/examples/result_inspection_corpus.rs); excludes process start, policy parsing and payload reads",
-      "measured": "every attempted case whose result carries latency_micros (inspected, and budget refusals that still ran the inspection call)",
-      "unmeasured": "over-budget, technical-error, unknown and unobserved cases have no duration; they are counted, never imputed",
+      "populations": "attack and benign (semantic), technical, and all_cases are summarized separately",
+      "measured": "cases observed as inspected (after CI-1) whose result carries latency_micros; only these enter the latency distribution and the paired difference",
+      "unmeasured": "every other planned case, counted by observation status (incomplete, error, unknown, unobserved); never imputed. Over-budget cases were not inspected and have no duration; a budget refusal that still reports a duration is listed under not_inspected_with_duration",
       "censored": "for a timed-out run, unobserved cases are censored at the run timeout; no value is imputed",
       "statistics": "agentdojo_protocol.distribution (n, min, median, nearest-rank p95, max)",
       "claim": "descriptive only; a single development run on one machine; no speed-up or slow-down is stated"
     },
     "attack": {
+      "population": "semantic attack cases",
       "baseline": {
         "planned": 24,
         "measured": 24,
-        "unmeasured": 0,
+        "unmeasured_by_status": {},
         "censored_by_run_timeout": 0,
         "micros": {
           "n": 24,
@@ -1560,12 +1613,24 @@
           "median": 594.0,
           "p95": 103252,
           "max": 105647
+        },
+        "not_inspected_with_duration": {
+          "n": 0,
+          "statuses": {},
+          "micros": {
+            "n": 0,
+            "min": null,
+            "median": null,
+            "p95": null,
+            "max": null
+          },
+          "note": "e.g. evidence-budget refusals that ran the call; kept apart from inspected latency"
         }
       },
       "candidate": {
         "planned": 24,
         "measured": 24,
-        "unmeasured": 0,
+        "unmeasured_by_status": {},
         "censored_by_run_timeout": 0,
         "micros": {
           "n": 24,
@@ -1573,6 +1638,18 @@
           "median": 5237.0,
           "p95": 91900,
           "max": 93058
+        },
+        "not_inspected_with_duration": {
+          "n": 0,
+          "statuses": {},
+          "micros": {
+            "n": 0,
+            "min": null,
+            "median": null,
+            "p95": null,
+            "max": null
+          },
+          "note": "e.g. evidence-budget refusals that ran the call; kept apart from inspected latency"
         }
       },
       "paired_measured": 24,
@@ -1586,10 +1663,11 @@
       "change": "not_stated"
     },
     "benign": {
+      "population": "semantic benign cases",
       "baseline": {
         "planned": 24,
         "measured": 24,
-        "unmeasured": 0,
+        "unmeasured_by_status": {},
         "censored_by_run_timeout": 0,
         "micros": {
           "n": 24,
@@ -1597,12 +1675,24 @@
           "median": 701.5,
           "p95": 105518,
           "max": 105682
+        },
+        "not_inspected_with_duration": {
+          "n": 0,
+          "statuses": {},
+          "micros": {
+            "n": 0,
+            "min": null,
+            "median": null,
+            "p95": null,
+            "max": null
+          },
+          "note": "e.g. evidence-budget refusals that ran the call; kept apart from inspected latency"
         }
       },
       "candidate": {
         "planned": 24,
         "measured": 24,
-        "unmeasured": 0,
+        "unmeasured_by_status": {},
         "censored_by_run_timeout": 0,
         "micros": {
           "n": 24,
@@ -1610,6 +1700,18 @@
           "median": 802.5,
           "p95": 86638,
           "max": 90599
+        },
+        "not_inspected_with_duration": {
+          "n": 0,
+          "statuses": {},
+          "micros": {
+            "n": 0,
+            "min": null,
+            "median": null,
+            "p95": null,
+            "max": null
+          },
+          "note": "e.g. evidence-budget refusals that ran the call; kept apart from inspected latency"
         }
       },
       "paired_measured": 24,
@@ -1619,6 +1721,138 @@
         "median": 66.5,
         "p95": 3037,
         "max": 10091
+      },
+      "change": "not_stated"
+    },
+    "technical": {
+      "population": "technical cases (reported by status only; never in a semantic rate)",
+      "baseline": {
+        "planned": 3,
+        "measured": 1,
+        "unmeasured_by_status": {
+          "incomplete": 2
+        },
+        "censored_by_run_timeout": 0,
+        "micros": {
+          "n": 1,
+          "min": 145,
+          "median": 145,
+          "p95": 145,
+          "max": 145
+        },
+        "not_inspected_with_duration": {
+          "n": 0,
+          "statuses": {},
+          "micros": {
+            "n": 0,
+            "min": null,
+            "median": null,
+            "p95": null,
+            "max": null
+          },
+          "note": "e.g. evidence-budget refusals that ran the call; kept apart from inspected latency"
+        }
+      },
+      "candidate": {
+        "planned": 3,
+        "measured": 1,
+        "unmeasured_by_status": {
+          "incomplete": 2
+        },
+        "censored_by_run_timeout": 0,
+        "micros": {
+          "n": 1,
+          "min": 131,
+          "median": 131,
+          "p95": 131,
+          "max": 131
+        },
+        "not_inspected_with_duration": {
+          "n": 0,
+          "statuses": {},
+          "micros": {
+            "n": 0,
+            "min": null,
+            "median": null,
+            "p95": null,
+            "max": null
+          },
+          "note": "e.g. evidence-budget refusals that ran the call; kept apart from inspected latency"
+        }
+      },
+      "paired_measured": 1,
+      "difference_micros": {
+        "n": 1,
+        "min": -14,
+        "median": -14,
+        "p95": -14,
+        "max": -14
+      },
+      "change": "not_stated"
+    },
+    "all_cases": {
+      "population": "every planned case of the frozen manifest",
+      "baseline": {
+        "planned": 51,
+        "measured": 49,
+        "unmeasured_by_status": {
+          "incomplete": 2
+        },
+        "censored_by_run_timeout": 0,
+        "micros": {
+          "n": 49,
+          "min": 145,
+          "median": 669,
+          "p95": 105518,
+          "max": 105682
+        },
+        "not_inspected_with_duration": {
+          "n": 0,
+          "statuses": {},
+          "micros": {
+            "n": 0,
+            "min": null,
+            "median": null,
+            "p95": null,
+            "max": null
+          },
+          "note": "e.g. evidence-budget refusals that ran the call; kept apart from inspected latency"
+        }
+      },
+      "candidate": {
+        "planned": 51,
+        "measured": 49,
+        "unmeasured_by_status": {
+          "incomplete": 2
+        },
+        "censored_by_run_timeout": 0,
+        "micros": {
+          "n": 49,
+          "min": 131,
+          "median": 1362,
+          "p95": 90599,
+          "max": 93058
+        },
+        "not_inspected_with_duration": {
+          "n": 0,
+          "statuses": {},
+          "micros": {
+            "n": 0,
+            "min": null,
+            "median": null,
+            "p95": null,
+            "max": null
+          },
+          "note": "e.g. evidence-budget refusals that ran the call; kept apart from inspected latency"
+        }
+      },
+      "paired_measured": 49,
+      "difference_micros": {
+        "n": 49,
+        "min": -18880,
+        "median": 123,
+        "p95": 10091,
+        "max": 23223
       },
       "change": "not_stated"
     }

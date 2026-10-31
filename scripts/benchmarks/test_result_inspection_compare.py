@@ -76,6 +76,8 @@ class ComparisonTests(unittest.TestCase):
         cls.corpus = ric.load_corpus(ROOT)
         cls.manifest = cls.corpus["manifest"]
         cls.runners = {role: ric.load_runner(cls.git, cls.pre["revisions"][role]["commit"]) for role in ric.ROLES}
+        # Committed recorder and contract sources at HEAD, hashed as stored in Git.
+        cls.recorder = {key: ric._sha(cls.git.show("HEAD", path)) for key, path in ric.RECORDER_SOURCES.items()}
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="sou191-test-"))
@@ -95,7 +97,7 @@ class ComparisonTests(unittest.TestCase):
         inputs["eval/sou123/payloads"] = {"tree": self.git.text("rev-parse", f"{commit}:eval/sou123/payloads")}
         run = {"schema": ric.RUN_SCHEMA, "role": role, "attempt": attempt, "status": status,
                "predeclaration_sha256": pre_sha or self.pre_sha,
-               "recorder": {"synthetic_fixture": "SYNTHETIC TEST FIXTURE - not evidence"},
+               "recorder": {"synthetic_fixture": "SYNTHETIC TEST FIXTURE - not evidence", **self.recorder},
                "revision": {"commit": commit, "tree": self.git.text("rev-parse", f"{commit}^{{tree}}")},
                "checkout": {"clean_before": True, "clean_after": True, "inputs_match_blobs_before": True,
                             "inputs_match_blobs_after": True, "inputs": inputs, "cargo_config_files": []},
@@ -274,6 +276,17 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(rows[ids[3]]["candidate_original_report_outcome"], "caught_instruction")
         self.assertEqual(rows[ids[3]]["transition"], "not_paired")
         self.assertEqual(result["outcomes"]["attack"]["denominators"]["paired_inspected"], 20)
+        # Latency: only inspected cases are measured; the two budget refusals' durations are kept apart.
+        lat = result["latency"]["attack"]["candidate"]
+        self.assertEqual((lat["measured"], lat["planned"], lat["micros"]["n"]), (20, 24, 20))
+        self.assertEqual(lat["unmeasured_by_status"], {"error": 1, "incomplete": 2, "unknown": 1})
+        self.assertEqual((lat["not_inspected_with_duration"]["n"], lat["not_inspected_with_duration"]["statuses"]),
+                         (3, {"incomplete": 2, "unknown": 1}))
+        self.assertEqual(result["latency"]["attack"]["paired_measured"], 20)
+        technical = result["latency"]["technical"]["candidate"]
+        over = sum(c["category"] == "over_budget" for c in self.manifest["cases"] if c["class"] == "technical")
+        self.assertEqual(technical["unmeasured_by_status"], {"incomplete": over})
+        self.assertEqual(result["latency"]["all_cases"]["candidate"]["planned"], len(self.manifest["cases"]))
 
     def test_incomplete_run_keeps_progress_unknown(self):
         partial = json.dumps({"results": default_results(self.manifest)[:10]}).encode()[:500]
@@ -408,6 +421,45 @@ class ComparisonTests(unittest.TestCase):
         self.assertInvalid(self.compare(*sides, amendments=[path]), "predeclaration_mismatch")
         path, _, _ = self.amendment("extra.json", toolchain="1.97.0")
         self.assertInvalid(self.compare(*sides, amendments=[path]), "invalid_predeclaration")
+
+    def test_malformed_run_record_is_invalid_not_a_crash(self):
+        edits = {
+            "checkout_list": lambda run, _: run.__setitem__("checkout", []),
+            "build_null": lambda run, _: run.__setitem__("build", None),
+            "artifact_text": lambda run, _: run["build"].__setitem__("artifact", "x"),
+            "stdout_entry_missing": lambda run, _: run["execution"].pop("stdout"),
+            "exit_code_text": lambda run, _: run["execution"].__setitem__("exit_code", "0"),
+            "problems_text": lambda run, _: run.__setitem__("problems", "x"),
+        }
+        base = self.side("baseline")
+        for n, (name, edit) in enumerate(edits.items()):
+            with self.subTest(name):
+                result, code = self.compare(base, self.side("candidate", run_edit=edit, root=self.tmp / f"m{n}"))
+                self.assertEqual(code, ric.EXIT_INVALID, result["errors"])
+                self.assertIn(result["errors"][0]["code"], ("invalid_record", "build_identity_missing"))
+
+    def test_findings_and_rule_types(self):
+        def bad(results):
+            next(r for r in results if "findings" in r)["findings"] = "not a list"
+        self.assertInvalid(self.compare(cand=self.side("candidate", self._results(bad))), "malformed_adapter_output")
+
+    def test_recorder_identity_accepts_only_declared_checkout_forms(self):
+        raw = self.git.show("HEAD", ric.RECORDER_SOURCES["recorder_sha256"])
+        forms = {"crlf": (ric._sha(raw.replace(b"\n", b"\r\n")), None),
+                 "trailing_space": (ric._sha(raw + b" "), "recorder_unidentified"),
+                 "unknown": ("0" * 64, "recorder_unidentified")}
+        base = self.side("baseline")
+        for n, (name, (digest, error)) in enumerate(forms.items()):
+            def edit(run, _, digest=digest):
+                run["recorder"]["recorder_sha256"] = digest
+            with self.subTest(name):
+                result, code = self.compare(base, self.side("candidate", run_edit=edit, root=self.tmp / f"r{n}"))
+                if error:
+                    self.assertInvalid((result, code), error)
+                else:
+                    self.assertEqual(code, ric.EXIT_COMPARABLE, result["errors"])
+                    source = result["attempts"]["candidate"][0]["recorder_source"]
+                    self.assertEqual(source["result_inspection_record.py"]["checkout_form"], "lf_to_crlf")
 
     def test_toolchain_mismatch_is_non_comparable(self):
         def old(run, _):

@@ -17,12 +17,16 @@ Denominators (planned / attempted / inspected / incomplete / error / unknown / u
 - candidate attack: 24 / 24 / 24 / 0 / 0 / 0 / 0 / 0 (timeout 0)
 - candidate benign: 24 / 24 / 24 / 0 / 0 / 0 / 0 / 0 (timeout 0)
 
-Latency (microseconds, descriptive, per preview call):
+Latency (microseconds per preview call, descriptive; inspected cases only, every other planned case counted by status):
 
-- attack baseline: measured 24/24, median 594.0, p95 103252, max 105647, censored 0
-- attack candidate: measured 24/24, median 5237.0, p95 91900, max 93058, censored 0
-- benign baseline: measured 24/24, median 701.5, p95 105518, max 105682, censored 0
-- benign candidate: measured 24/24, median 802.5, p95 86638, max 90599, censored 0
+- attack baseline: inspected and measured 24/24, median 594.0, p95 103252, max 105647; not measured: none; censored by run timeout 0
+- attack candidate: inspected and measured 24/24, median 5237.0, p95 91900, max 93058; not measured: none; censored by run timeout 0
+- benign baseline: inspected and measured 24/24, median 701.5, p95 105518, max 105682; not measured: none; censored by run timeout 0
+- benign candidate: inspected and measured 24/24, median 802.5, p95 86638, max 90599; not measured: none; censored by run timeout 0
+- technical baseline: inspected and measured 1/3, median 145, p95 145, max 145; not measured: incomplete 2; censored by run timeout 0
+- technical candidate: inspected and measured 1/3, median 131, p95 131, max 131; not measured: incomplete 2; censored by run timeout 0
+- all_cases baseline: inspected and measured 49/51, median 669, p95 105518, max 105682; not measured: incomplete 2; censored by run timeout 0
+- all_cases candidate: inspected and measured 49/51, median 1362, p95 90599, max 93058; not measured: incomplete 2; censored by run timeout 0
 
 Changed cases: 14
 

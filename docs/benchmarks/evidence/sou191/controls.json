@@ -103,6 +103,15 @@
    "passed": true
   },
   {
+   "control": "recorder_unidentified",
+   "synthetic_mutation": "candidate record names a recorder hash matching no committed source form",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "recorder_unidentified",
+   "observed_error": "recorder_unidentified",
+   "passed": true
+  },
+  {
    "control": "undeclared_build_change",
    "synthetic_mutation": "candidate record shows --release added to the declared build command",
    "expected_exit": 1,

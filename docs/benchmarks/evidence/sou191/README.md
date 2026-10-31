@@ -25,14 +25,22 @@ readiness or live-model efficacy.
 - The predeclared dependency-and-family grouping gives 2 resampling units, which is 1.087 effective clusters against
   the SOU-153 minimum of 10. No interval is reported, and the overall change is `not_established`. The paired
   transitions are descriptive.
-- Latency is the microseconds of one adapter call in a debug build. It is descriptive only.
+- "Improved" and "regressed" are per-case transition labels on this public corpus. They are descriptive, not a
+  statistical inference, and say nothing about attack prevention, task utility or readiness.
+- Latency is the microseconds of one adapter call in a debug build, for inspected cases only. It is descriptive and
+  no speed-up or slow-down is stated.
 
-  | Cases | Baseline median | Baseline p95 | Candidate median | Candidate p95 |
-  | --- | --- | --- | --- | --- |
-  | Attack | 594 | 103252 | 5237 | 91900 |
-  | Benign | 701.5 | 105518 | 802.5 | 86638 |
+  | Population | Inspected and measured (each side) | Baseline median / p95 | Candidate median / p95 |
+  | --- | --- | --- | --- |
+  | Attack (semantic) | 24/24 | 594 / 103252 | 5237 / 91900 |
+  | Benign (semantic) | 24/24 | 701.5 / 105518 | 802.5 / 86638 |
+  | Technical | 1/3 | 145 / 145 | 131 / 131 |
+  | All cases | 49/51 | 669 / 105518 | 1362 / 90599 |
 
-  All 96 calls were measured and none was censored. A fresh recording produces different latencies.
+  - The two over-budget technical cases (`t02`, `t03`) were not inspected and have no duration. They are counted
+    as `incomplete` and never pooled with inspected latency.
+  - No run timed out, so no case was censored.
+  - A fresh recording produces different latencies.
 
 Full outputs: [comparison.json](comparison/comparison.json), [units.csv](comparison/units.csv) and
 [report.md](comparison/report.md).
@@ -48,7 +56,7 @@ Full outputs: [comparison.json](comparison/comparison.json), [units.csv](compari
 | `runs/baseline/attempt-003/` | **Measurement.** Build exit 0 in 143 s; adapter exit 0 in 0.70 s |
 | `runs/candidate/attempt-001/` | **Measurement.** Build exit 0 in 177 s; adapter exit 0 in 0.77 s |
 | `comparison/` | Retained comparison outputs |
-| [controls.json](controls.json) | 14 negative controls on temporary mutated copies of these runs; all passed |
+| [controls.json](controls.json) | 15 negative controls on temporary mutated copies of these runs; all passed |
 | [SHA256SUMS](SHA256SUMS) | Digests of every other file in this directory |
 
 The measured run directories contain `run.json`, `adapter-stdout.json` (raw adapter output, unmodified),
@@ -91,8 +99,13 @@ python scripts/benchmarks/result_inspection_controls.py --evidence docs/benchmar
   --out $env:TEMP\sou191-controls.json
 ```
 
-- **Comparison:** exits 0 and prints `reproduced: retained outputs are byte-identical`. This re-verifies the
-  retained runs against Git objects and rebuilds both reports. It does not rerun the detector.
+- **What it needs:** a full clone (not shallow) that contains the accepted-main commit `7eb0c2ab` (`git fetch
+  origin main`) and this branch's history. The tools read only files in the repository and Git objects. They do not
+  use the operator's private copy, the build directories, or any network access.
+- **Comparison:** exits 0 and prints `reproduced: retained outputs are byte-identical`. This is *retained-input
+  reproduction*. It re-verifies the retained runs against Git objects, recomputes the corpus digests and rebuilds
+  both original reports from the raw adapter output. It does not rebuild either revision, run the detector or
+  reproduce the artifact hashes.
 - **Changed retained output:** with `report.md` changed, the same command printed `NOT reproduced` and exited 2.
 - **Controls:** exits 0 when every control passes. `unmutated_copy` also has to reproduce the retained
   `comparison.json`.
@@ -128,11 +141,17 @@ python scripts/benchmarks/result_inspection_controls.py --evidence docs/benchmar
   There is no signature. A malicious recording machine, a modified toolchain or a consistently fabricated run
   directory cannot be detected offline. Debug MSVC builds are not expected to be bit-reproducible, so rebuilding will
   not reproduce the artifact hashes `b8543c20…` and `1772d62a…`.
-- **Recorder hashes and line endings.** `recorder_sha256` is the hash of the recorder file as it was on disk.
-  - For attempt-003 and candidate attempt-001 it is `80a77778…`. That is the recorder blob committed in `95072f50`,
-    checked out with CRLF line endings (`core.autocrlf=true`). Removing the CRs gives the blob's SHA-256 `e9c76776…`.
-  - The contract file was on disk with LF endings, so its recorded hash `a82f6839…` equals its blob's SHA-256.
-  - Attempts 001 and 002 ran earlier recorder versions.
+- **Recorder identity is checked, under one declared transformation.** `recorder_sha256` and `contract_sha256`
+  hash the recorder and contract files as they were on disk. The comparator requires both hashes, for a measured
+  attempt, to match blobs that are present together in one commit reachable from HEAD. It accepts each blob in
+  exactly two forms: its raw bytes, or, for a blob with no CR, every LF written as CRLF (a Windows checkout with
+  `core.autocrlf=true`). Anything else is `recorder_unidentified`, and a control tests this.
+  - The result is in each attempt's `recorder_source` in `comparison.json`.
+  - Both measurements resolve to commit `95072f50`. The recorder blob `b20538ed` matches in the `lf_to_crlf` form
+    (`80a77778…`); the contract blob `6db93680` matches exactly.
+  - Baseline attempt-001 resolves to `6a041a52` and attempt-002 to `9098c79f`, both exactly.
+  - This identifies which committed source the recorded bytes correspond to. It does not prove that the recording
+    machine ran those bytes; that is part of the attestation above.
 - **Clock times.** Declaration and run times come from the recording machine's clock. The order "amendment before
   measurement" is enforced by the attempt sequence. The commit order is local history, not a third-party timestamp.
   `52f4e980` is a re-created copy of the sanitizer fix, made when the unpublished commit holding the original
@@ -144,3 +163,10 @@ python scripts/benchmarks/result_inspection_controls.py --evidence docs/benchmar
   `custody_incomplete`. The harness copied only the measured attempt and dropped the failed baseline attempts, and the
   comparator correctly refused the gap. The harness now copies whole role directories, and that failure mode is
   itself a control (`failed_attempts_dropped`). The failed output was not retained.
+- **Derived outputs regenerated.** `comparison/` and `controls.json` were regenerated after the final review. The
+  review made latency populations explicit, added the recorder identity check and stricter record-shape checks.
+  The retained runs, predeclaration and amendment did not change. The semantic counts, transitions and denominators
+  are the same as in the first comparison.
+- **Memory while capturing output.** The recorder captures build and adapter output in memory and retains at most
+  2 MiB (logs) or 4 MiB (adapter output), recording the raw size and digest. Truncated adapter output is refused by
+  the comparator. Capture itself is not memory-bounded.

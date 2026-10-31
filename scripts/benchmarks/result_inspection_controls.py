@@ -138,6 +138,15 @@ def drop_earlier_attempts(ctx):
         shutil.rmtree(path)
 
 
+def edited_recorder(ctx):
+    """The candidate record names a recorder whose bytes differ by one appended space from every committed form."""
+    run_dir = ctx["cand"]
+    run = load(run_dir)
+    raw = ctx["git"].show("HEAD", "scripts/benchmarks/result_inspection_record.py")
+    run["recorder"]["recorder_sha256"] = ric._sha(raw.replace(b"\n", b"\r\n") + b" ")
+    save(run_dir, run)
+
+
 def undeclared_build_change(ctx):
     run_dir = ctx["cand"]
     run = load(run_dir)
@@ -190,6 +199,8 @@ CONTROLS = [
      claim_other_adapter_source, ric.EXIT_INVALID, "source_mismatch"),
     ("artifact_mismatch", "candidate execution records the baseline artifact hash", executed_other_artifact,
      ric.EXIT_INVALID, "artifact_integrity"),
+    ("recorder_unidentified", "candidate record names a recorder hash matching no committed source form",
+     edited_recorder, ric.EXIT_INVALID, "recorder_unidentified"),
     ("undeclared_build_change", "candidate record shows --release added to the declared build command",
      undeclared_build_change, ric.EXIT_NON_COMPARABLE, None),
     ("incomplete_run", "candidate run recorded as timed out with a third of its output", timed_out,

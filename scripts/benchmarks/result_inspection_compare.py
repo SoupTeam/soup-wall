@@ -110,10 +110,12 @@ LATENCY_METHOD = {
     "source": "latency_micros: std::time::Instant around one AgentFirewall::preview_native_result call inside the "
               "adapter (crates/agentfw/examples/result_inspection_corpus.rs); excludes process start, policy "
               "parsing and payload reads",
-    "measured": "every attempted case whose result carries latency_micros (inspected, and budget refusals that "
-                "still ran the inspection call)",
-    "unmeasured": "over-budget, technical-error, unknown and unobserved cases have no duration; they are counted, "
-                  "never imputed",
+    "populations": "attack and benign (semantic), technical, and all_cases are summarized separately",
+    "measured": "cases observed as inspected (after CI-1) whose result carries latency_micros; only these enter "
+                "the latency distribution and the paired difference",
+    "unmeasured": "every other planned case, counted by observation status (incomplete, error, unknown, "
+                  "unobserved); never imputed. Over-budget cases were not inspected and have no duration; a "
+                  "budget refusal that still reports a duration is listed under not_inspected_with_duration",
     "censored": "for a timed-out run, unobserved cases are censored at the run timeout; no value is imputed",
     "statistics": "agentdojo_protocol.distribution (n, min, median, nearest-rank p95, max)",
     "claim": "descriptive only; a single development run on one machine; no speed-up or slow-down is stated",
@@ -366,7 +368,7 @@ def attempts(role_dir):
     return found
 
 
-def select_measurement(role, role_dir, chain):
+def select_measurement(role, role_dir, chain, git=None, cache=None):
     """Predeclared rule: the first attempt that executed the adapter is the measurement; nothing replaces it.
 
     ``chain`` is the predeclaration and its amendments. Every attempt must name one of them in
@@ -387,8 +389,16 @@ def select_measurement(role, role_dir, chain):
             raise Invalid("predeclaration_mismatch", f"{role}/{path.name} executed under a superseded declaration; "
                                                      "an amendment after measurement is not accepted")
         use = executed and chosen is None
+        identity = recorder_identity(git, run["recorder"], cache) if git is not None else None
+        if use and identity is None:
+            raise Invalid("recorder_unidentified", f"{role}/{path.name}: recorder and contract hashes match no "
+                                                   "committed pair of sources in an accepted checkout form")
         listed.append({"attempt": path.name, "status": run["status"], "run_sha256": _sha(raw),
                        "declaration_sha256": run["predeclaration_sha256"],
+                       "recorder_source": None if identity is None else {
+                           "first_commit_with_both": identity["first_commit_with_both"],
+                           **{s["path"].rsplit("/", 1)[1]: {"blob": s["blob"], "checkout_form": s["checkout_form"]}
+                              for s in identity["sources"]}},
                        "use": "measurement" if use else ("not measured: build or setup did not execute the adapter"
                                                          if not executed else "retained, not used: after the measurement"),
                        "problems": run["problems"][:20]})
@@ -399,8 +409,72 @@ def select_measurement(role, role_dir, chain):
     return chosen, listed
 
 
+RECORDER_SOURCES = {"recorder_sha256": "scripts/benchmarks/result_inspection_record.py",
+                    "contract_sha256": "scripts/benchmarks/result_inspection_compare.py"}
+CHECKOUT_FORMS = {
+    "none": "SHA-256 of the Git blob bytes",
+    "lf_to_crlf": "SHA-256 of the Git blob with every LF written as CRLF, for a blob with no CR byte (a Windows "
+                  "checkout with core.autocrlf=true); no other transformation is accepted",
+}
+
+
+def recorder_identity(git, recorder, cache):
+    """Find the committed sources whose bytes, as checked out, hash to the recorded recorder and contract.
+
+    Both files must match blobs present together in one commit reachable from the repository's HEAD. Returns
+    None when they cannot be identified."""
+    def blob_at(commit, path):
+        line = git.text("ls-tree", commit, "--", path)
+        return line.split()[2] if line else None
+
+    found = {}
+    for key, path in RECORDER_SOURCES.items():
+        if path not in cache:
+            versions = {}
+            for commit in git.text("rev-list", "HEAD", "--", path).split():
+                blob = blob_at(commit, path)
+                if blob and blob not in versions:
+                    raw = git.run("cat-file", "blob", blob)
+                    versions[blob] = {"none": _sha(raw)}
+                    if b"\r" not in raw:
+                        versions[blob]["lf_to_crlf"] = _sha(raw.replace(b"\n", b"\r\n"))
+            cache[path] = versions
+        digest = recorder.get(key) if isinstance(recorder, dict) else None
+        matches = [(blob, form) for blob, forms in cache[path].items() for form, value in forms.items()
+                   if value == digest]
+        if not matches:
+            return None
+        found[key] = {"path": path, "sha256": digest, "blob": matches[0][0], "checkout_form": matches[0][1]}
+    blobs = {item["path"]: item["blob"] for item in found.values()}
+    for commit in git.text("rev-list", "--reverse", "HEAD", "--", *blobs).split():
+        if all(blob_at(commit, p) == b for p, b in blobs.items()):
+            return {"sources": list(found.values()), "first_commit_with_both": commit,
+                    "checkout_forms": CHECKOUT_FORMS}
+    return None
+
+
+def _shape(run, role):
+    """Types of a measured run record, checked before any field is used."""
+    for key in ("recorder", "revision", "checkout", "toolchain", "environment", "build", "execution"):
+        if not isinstance(run[key], dict):
+            raise Invalid("invalid_record", f"{role}: {key} must be an object")
+    build, execution = run["build"], run["execution"]
+    if not isinstance(run["problems"], list) or not isinstance(run["checkout"].get("inputs", {}), dict):
+        raise Invalid("invalid_record", f"{role}: problems must be a list and checkout.inputs an object")
+    if not isinstance(build.get("artifact"), dict) or not isinstance(build.get("argv"), list):
+        raise Invalid("build_identity_missing", f"{role}: build.artifact and build.argv must be recorded")
+    code = execution.get("exit_code")
+    if not (code is None or (type(code) is int)) or type(execution.get("timed_out")) is not bool or \
+            not all(isinstance(execution.get(k), dict) for k in ("stdout", "stderr")):
+        raise Invalid("invalid_record", f"{role}: execution needs integer-or-null exit_code, boolean timed_out and "
+                                        "stdout/stderr file entries")
+    if not isinstance(run["report"], (dict, type(None))):
+        raise Invalid("invalid_record", f"{role}: report must be an object or null")
+
+
 def verify_run(role, run_dir, run, pre, git, corpus, accepted):
     """Checks one measured run against the predeclaration, Git objects and retained bytes."""
+    _shape(run, role)
     noncomparable = []
     commit = pre["revisions"][role]["commit"]
     rev = run["revision"]
@@ -486,6 +560,9 @@ def observe(role, run_dir, run, stdout, corpus, git, commit):
         latency = result.get("latency_micros")
         if "latency_micros" in result and (type(latency) is not int or latency < 0):
             raise Invalid("malformed_adapter_output", f"{role}: {case_id} latency_micros must be a non-negative integer")
+        if "findings" in result and not isinstance(result["findings"], list) or \
+                "rule" in result and not isinstance(result["rule"], (str, type(None))):
+            raise Invalid("malformed_adapter_output", f"{role}: {case_id} findings must be a list and rule a string")
         by_id[case_id] = result
     missing = sorted(set(planned) - set(by_id))
     if missing:
@@ -603,19 +680,38 @@ def transitions(label, pairs):
                          sorted(Counter((b["verdict"], c["verdict"]) for b, c in pairs).items())}}
 
 
-def latency(base, cand, cases, label):
-    ids = [c["case_id"] for c in cases if c["label"] == label]
+LATENCY_POPULATIONS = {
+    "attack": "semantic attack cases",
+    "benign": "semantic benign cases",
+    "technical": "technical cases (reported by status only; never in a semantic rate)",
+    "all_cases": "every planned case of the frozen manifest",
+}
 
+
+def _inspected_latency(entry):
+    return entry.get("latency_micros") if entry["status"] == "inspected" else None
+
+
+def latency(base, cand, ids, population):
+    """Per-call latency of inspected cases only; every other planned case is counted by status, never pooled."""
     def side(obs):
-        values = [obs["cases"][i].get("latency_micros") for i in ids]
-        measured = [v for v in values if v is not None]
-        return {"planned": len(ids), "measured": len(measured), "unmeasured": len(ids) - len(measured),
+        entries = [obs["cases"][i] for i in ids]
+        inspected = [v for v in map(_inspected_latency, entries) if v is not None]
+        other = [e for e in entries if e["status"] != "inspected" and e.get("latency_micros") is not None]
+        return {"planned": len(ids), "measured": len(inspected),
+                "unmeasured_by_status": dict(sorted(Counter(e["status"] for e in entries
+                                                            if _inspected_latency(e) is None).items())),
                 "censored_by_run_timeout": len(ids) if obs["timed_out"] else 0,
-                "micros": protocol.distribution(measured)}
+                "micros": protocol.distribution(inspected),
+                "not_inspected_with_duration": {"n": len(other), "statuses": dict(sorted(Counter(
+                    e["status"] for e in other).items())), "micros": protocol.distribution(
+                    [e["latency_micros"] for e in other]), "note": "e.g. evidence-budget refusals that ran the "
+                    "call; kept apart from inspected latency"}}
 
-    both = [i for i in ids if base["cases"][i].get("latency_micros") is not None
-            and cand["cases"][i].get("latency_micros") is not None]
-    return {"baseline": side(base), "candidate": side(cand), "paired_measured": len(both),
+    both = [i for i in ids if _inspected_latency(base["cases"][i]) is not None
+            and _inspected_latency(cand["cases"][i]) is not None]
+    return {"population": LATENCY_POPULATIONS[population], "baseline": side(base), "candidate": side(cand),
+            "paired_measured": len(both),
             "difference_micros": protocol.distribution(
                 [cand["cases"][i]["latency_micros"] - base["cases"][i]["latency_micros"] for i in both]),
             "change": "not_stated"}
@@ -645,9 +741,12 @@ def compare(pre_path, base_dir, cand_dir, repo, corpus_root=None, amendments=())
         accepted = git.first_parent(pre["accepted_main_ref"]["commit"])
         pairs = corpus_pairs(git, pre["revisions"]["candidate"]["commit"])
         units, unit_count = check_predeclared_grouping(pre, corpus["manifest"], pairs)
-        observations = {}
+        observations, sources = {}, {}
+        result["recorder_identity"] = {"checkout_forms": CHECKOUT_FORMS, "rule": "a measured attempt's recorder "
+                                       "and contract SHA-256 must match blobs present together in one commit "
+                                       "reachable from HEAD, in one of checkout_forms; otherwise it is invalid"}
         for role, role_dir in zip(ROLES, (base_dir, cand_dir)):
-            (run_dir, run, raw), listed = select_measurement(role, role_dir, chain)
+            (run_dir, run, raw), listed = select_measurement(role, role_dir, chain, git, sources)
             result["attempts"][role] = listed
             stdout, noncomparable = verify_run(role, run_dir, run, pre, git, corpus, accepted)
             result["non_comparable"] += noncomparable
@@ -665,6 +764,12 @@ def compare(pre_path, base_dir, cand_dir, repo, corpus_root=None, amendments=())
             result["non_comparable"].append("baseline and candidate used different rustc builds or hosts")
     except Invalid as error:
         result["errors"].append({"code": error.code, "detail": error.detail})
+        return result, EXIT_INVALID
+    except (KeyError, TypeError, AttributeError, IndexError, ValueError) as error:
+        # Backstop: a record shape not anticipated above is invalid input, never a crash (whose exit 1 would
+        # read as non-comparable).
+        result["errors"].append({"code": "invalid_record",
+                                 "detail": f"malformed record: {type(error).__name__}: {str(error)[:200]}"})
         return result, EXIT_INVALID
     cases = corpus["manifest"]["cases"]
     semantic = [c for c in cases if c["class"] == "semantic"]
@@ -686,8 +791,11 @@ def compare(pre_path, base_dir, cand_dir, repo, corpus_root=None, amendments=())
         "overall_direction": None,
         "overall_direction_reason": "not stated: attack misses and benign refusals are never merged",
     }
-    result["latency"] = {"method": LATENCY_METHOD, **{label: latency(base, cand, semantic, label)
-                                                       for label in ("attack", "benign")}}
+    populations = {label: [c["case_id"] for c in semantic if c["label"] == label] for label in ("attack", "benign")}
+    populations["technical"] = [c["case_id"] for c in cases if c["class"] == "technical"]
+    populations["all_cases"] = [c["case_id"] for c in cases]
+    result["latency"] = {"method": LATENCY_METHOD, **{name: latency(base, cand, ids, name)
+                                                       for name, ids in populations.items()}}
     result["units"] = [unit_row(c, base, cand, units) for c in cases]
     return result, EXIT_COMPARABLE
 
@@ -758,13 +866,18 @@ def render_markdown(result) -> str:
             d = result["denominators"][role][label]
             out.append(f"- {role} {label}: {d['planned']} / {d['attempted']} / {d['inspected']} / {d['incomplete']} / "
                        f"{d['error']} / {d['unknown']} / {d['unobserved']} / {d['not_run']} (timeout {d['timeout']})")
-    out += ["", "Latency (microseconds, descriptive, per preview call):", ""]
-    for label in ("attack", "benign"):
-        lat = result["latency"][label]
+    out += ["", "Latency (microseconds per preview call, descriptive; inspected cases only, every other planned case "
+                "counted by status):", ""]
+    for name in LATENCY_POPULATIONS:
+        lat = result["latency"][name]
         for role in ROLES:
             s = lat[role]
-            out.append(f"- {label} {role}: measured {s['measured']}/{s['planned']}, median {s['micros']['median']}, "
-                       f"p95 {s['micros']['p95']}, max {s['micros']['max']}, censored {s['censored_by_run_timeout']}")
+            unmeasured = ", ".join(f"{k} {v}" for k, v in s["unmeasured_by_status"].items()) or "none"
+            extra = s["not_inspected_with_duration"]["n"]
+            out.append(f"- {name} {role}: inspected and measured {s['measured']}/{s['planned']}, median "
+                       f"{s['micros']['median']}, p95 {s['micros']['p95']}, max {s['micros']['max']}; not measured: "
+                       f"{unmeasured}; censored by run timeout {s['censored_by_run_timeout']}"
+                       + (f"; {extra} not-inspected results with a duration kept apart" if extra else ""))
     changed = [r for r in result["units"] if r["transition"] in ("improved", "regressed")]
     out += ["", f"Changed cases: {len(changed)}", ""] + [
         f"- `{r['case_id']}` {r['label']} {r['category']}: {r['baseline_verdict']} -> {r['candidate_verdict']} "

@@ -80,8 +80,12 @@ python scripts/benchmarks/result_inspection_compare.py `
 ```
 
 The command writes `comparison.json` (`soup-wall-result-inspection-comparison/1`), `units.csv` and `report.md`.
-`--expect` checks that the retained outputs are reproduced byte for byte from the retained inputs. Reproduction
-re-verifies the recorded runs and does not rerun the detector. A fresh recording measures new latencies, so its
+`--expect` checks that the retained outputs are reproduced byte for byte from the retained inputs. This
+retained-input reproduction needs a full clone that contains the accepted-main ref and the branch history. It reads
+only repository files and Git objects.
+
+Reproduction re-verifies the recorded runs and does not rebuild, rerun the detector or reproduce artifact hashes.
+Debug MSVC builds are not expected to be bit-reproducible. A fresh recording measures new latencies, so its
 latency values are not expected to match.
 
 Exit status: 0 comparable, 1 non-comparable (toolchain, command, environment or Cargo configuration differs), 2
@@ -99,7 +103,14 @@ The following inputs are refused:
 - a report that cannot be rebuilt byte for byte from the raw output, which catches edited totals or edited
   acceptance;
 - missing retained files or digests;
-- a gap in the attempt sequence, such as removed failed attempts.
+- a gap in the attempt sequence, such as removed failed attempts;
+- a malformed run record (wrong field types or missing sections);
+- a measured attempt whose `recorder_sha256` and `contract_sha256` do not match a pair of committed blobs present
+  together in one commit reachable from HEAD.
+
+For the last check each blob is accepted in exactly two forms: its raw bytes, or, for a blob with no CR, every LF
+written as CRLF, as a Windows `core.autocrlf=true` checkout writes it. The matched commit and form are reported per
+attempt as `recorder_source`.
 
 ## Negative controls
 
@@ -133,7 +144,11 @@ The outcome contract is `soup-wall-result-inspection-outcomes/1`, defined in `OU
   `caught_instruction->missed_instruction` and benign `benign_allowed->false_refusal` transitions are reported
   separately, together with the verdict-level transitions. They are never merged into one direction.
 - Latency is the microseconds of one `preview_native_result` call, as measured inside the adapter. It is
-  descriptive only, with counts of measured, unmeasured and timeout-censored cases.
+  descriptive only.
+  - It is summarized separately for attack, benign, technical and all cases.
+  - Only cases observed as inspected enter a distribution. Every other planned case is counted by status.
+  - A not-inspected result that still reports a duration, such as a budget refusal, is listed apart.
+  - Timeout-censored cases are counted.
 
 ## Uncertainty
 
