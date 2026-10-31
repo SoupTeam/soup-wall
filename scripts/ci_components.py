@@ -66,12 +66,15 @@ def generated() -> str:
             if before not in body:
                 raise ValueError("Missing planner condition: " + workflow)
             body = body.replace(before, "fromJSON(inputs.plan).workflows['" + workflow + "']")
-            # The selected consumers must start even when the producer failed:
-            # their explicit guard reports failure instead of skipped-green.
+            # Selected consumers report a failed producer through their own
+            # explicit guard, but must not start on an obsolete cancelled run.
+            # Step-level always() evidence uploads remain unchanged.
             if job_id in BUILD_CONSUMERS.get(workflow, ()):
                 producer = BUILD_PRODUCER[0].removesuffix(".yml") + "--" + BUILD_PRODUCER[1]
                 body = "    needs: " + producer + "\n" + body
-                body = body.replace("    if: ", "    if: always() && ", 1)
+                # A leading ! is YAML tag syntax unless the expression is
+                # quoted or emitted as a block scalar.
+                body = body.replace("    if: ", "    if: >-\n      !cancelled() && ", 1)
                 body = body.replace(" && github.event.inputs.build_mode != 'shared'", "", 1)
                 body = body.replace("      SOU166_MODE: source\n", "      SOU166_MODE: shared\n", 1)
                 for key, field in {"RESULT": "result", "ATTEMPT": "outputs.producer_attempt",
