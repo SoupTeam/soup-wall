@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 static int published;
+static int changed;
 static int mode(const char *s){const char *v=getenv("SOU196_FAULT");return v&&strcmp(s,v)==0;}
 static int selected(int fd,const char *expected){
     if(!expected)return 0;
@@ -22,6 +23,10 @@ static void hit(void){const char msg[]="sou196_owned_fault_observed\n";(void)wri
 int openat(int fd,const char *name,int flags,...){
     int(*original)(int,const char*,int,...)=dlsym(RTLD_NEXT,"openat");
     mode_t permissions=0;if(flags&O_CREAT){va_list ap;va_start(ap,flags);permissions=(mode_t)va_arg(ap,int);va_end(ap);}
+    if(!changed&&(flags&O_CREAT)&&strncmp(name,".soup-replace-",14)==0&&selected(fd,getenv("SOU196_TARGET_ROOT"))&&mode("last-target-during-stage")){
+        changed=1;int target=original(fd,"target-1.txt",O_WRONLY|O_TRUNC|O_NOFOLLOW|O_CLOEXEC,0600);
+        if(target>=0){const char text[]="Later owned user change.\n";(void)write(target,text,sizeof(text)-1);(void)close(target);hit();}
+    }
     if(published&&(flags&O_CREAT)&&strncmp(name,".soup-replace-",14)==0&&selected(fd,getenv("SOU196_TARGET_ROOT"))){
         if(mode("between-publications-kill")){hit();(void)kill(getpid(),SIGKILL);_exit(87);}
         if(mode("between-publications-io")){hit();errno=EIO;return -1;}

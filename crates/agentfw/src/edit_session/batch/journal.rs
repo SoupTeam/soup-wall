@@ -502,7 +502,13 @@ impl Journal {
             json!({"format":FORMAT,"status":status,"plan_sha256":self.hash,"files":rows,"proofs":self.proofs.iter().map(|p|format!("{}:{}:{}:{}",p.index,p.op.name(),p.receipt,p.ack)).collect::<Vec<_>>(),"global_atomicity":false,"automatic_rollback":false,"authority":false,"operator_provider_requests":0}),
         )
     }
-    fn publish(&mut self, i: usize, op: Op, b: &mut Budget) -> Result<()> {
+    fn publish(
+        &mut self,
+        i: usize,
+        op: Op,
+        b: &mut Budget,
+        gate: impl FnOnce(&Self, &mut Budget) -> Result<()>,
+    ) -> Result<()> {
         let m = &self.plan.members[i];
         let before = if op == Op::Apply {
             m.before.clone()
@@ -546,6 +552,7 @@ impl Journal {
             self.reverted[i].intent = Some(intent.clone())
         }
         self.recheck(b)?;
+        gate(self, b)?;
         let commit = stage.publish_before(Instant::now() + Duration::from_secs(10))?;
         ensure!(
             commit.committed
@@ -626,6 +633,29 @@ impl Journal {
         }
         Ok(())
     }
+    fn completed_row(&self, i: usize, op: Op) -> Result<Row> {
+        let p = if op == Op::Apply {
+            &self.applied[i]
+        } else {
+            &self.reverted[i]
+        };
+        let done = p.done.as_ref().context("edit_batch_commit_unconfirmed")?;
+        Ok(Row {
+            index: i,
+            target: self.plan.members[i].target.clone(),
+            status: if op == Op::Apply {
+                "applied"
+            } else {
+                "reverted"
+            },
+            reason: if op == Op::Apply {
+                "returned_exact_apply_completion"
+            } else {
+                "returned_exact_revert_completion"
+            },
+            current: Some(done.after.clone()),
+        })
+    }
     pub fn apply(&mut self, source: &mut SelectedOutput, b: &mut Budget) -> Result<Value> {
         let mut rows = self.inspect(b)?;
         ensure!(
@@ -635,15 +665,17 @@ impl Journal {
         // Full private pre/postimage set was synchronized by retain before this loop.
         for i in 0..self.plan.members.len() {
             let result = (|| {
-                source_check(&self.plan, source, b)?;
                 self.guard_targets(&rows, b)?;
-                self.publish(i, Op::Apply, b)
+                self.publish(i, Op::Apply, b, |j, b| {
+                    source_check(&j.plan, source, b)?;
+                    j.guard_targets(&rows, b)
+                })
             })();
             if result.is_err() {
                 self.failed(i, Op::Apply, b);
                 return self.response(b);
             }
-            rows = self.inspect(b)?;
+            rows[i] = self.completed_row(i, Op::Apply)?;
         }
         self.response(b)
     }
@@ -656,16 +688,18 @@ impl Journal {
         let mut rows = self.inspect(b)?;
         for &i in eligible {
             let result = (|| {
-                source_check(&self.plan, source, b)?;
                 self.guard_targets(&rows, b)?;
                 ensure!(rows[i].status == "applied", "edit_batch_apply_unproven");
-                self.publish(i, Op::Revert, b)
+                self.publish(i, Op::Revert, b, |j, b| {
+                    source_check(&j.plan, source, b)?;
+                    j.guard_targets(&rows, b)
+                })
             })();
             if result.is_err() {
                 self.failed(i, Op::Revert, b);
                 return self.response(b);
             }
-            rows = self.inspect(b)?;
+            rows[i] = self.completed_row(i, Op::Revert)?;
         }
         self.response(b)
     }

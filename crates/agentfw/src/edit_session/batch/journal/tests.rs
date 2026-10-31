@@ -158,7 +158,8 @@ fn exact_order_and_final_member_are_one_confirmation() {
 #[test]
 fn partial_publication_is_explicit_and_safe_member_reverts() {
     let (_t, mut j) = fixture();
-    j.publish(0, Op::Apply, &mut Budget::new()).unwrap();
+    j.publish(0, Op::Apply, &mut Budget::new(), |_, _| Ok(()))
+        .unwrap();
     let rows = j.inspect(&mut Budget::new()).unwrap();
     assert_eq!(
         rows.iter().map(|r| r.status).collect::<Vec<_>>(),
@@ -168,7 +169,8 @@ fn partial_publication_is_explicit_and_safe_member_reverts() {
     let (_, _, eligible) = fresh_restore(&j, &mut Budget::new(), true).unwrap();
     assert_eq!(eligible, [0]);
     assert!(fresh_restore(&j, &mut Budget::new(), false).is_err());
-    j.publish(0, Op::Revert, &mut Budget::new()).unwrap();
+    j.publish(0, Op::Revert, &mut Budget::new(), |_, _| Ok(()))
+        .unwrap();
     assert_eq!(
         fs::read(j.plan.selected.root.join("destination-0.txt")).unwrap(),
         OLD
@@ -185,7 +187,8 @@ fn partial_publication_is_explicit_and_safe_member_reverts() {
 #[test]
 fn unreturned_ack_cannot_be_reconstructed_from_visible_completion() {
     let (_t, mut j) = fixture();
-    j.publish(0, Op::Apply, &mut Budget::new()).unwrap();
+    j.publish(0, Op::Apply, &mut Budget::new(), |_, _| Ok(()))
+        .unwrap();
     let mut a = args(&j);
     a.proof.clear();
     let j = Journal::open(&a, &mut Budget::new()).unwrap();
@@ -214,7 +217,8 @@ fn user_change_and_missing_name_remain_uncertain_while_safe_other_is_recoverable
     for missing in [false, true] {
         let (_t, mut j) = fixture();
         for i in 0..2 {
-            j.publish(i, Op::Apply, &mut Budget::new()).unwrap();
+            j.publish(i, Op::Apply, &mut Budget::new(), |_, _| Ok(()))
+                .unwrap();
         }
         let target = j.plan.selected.root.join("destination-0.txt");
         if missing {
@@ -227,7 +231,8 @@ fn user_change_and_missing_name_remain_uncertain_while_safe_other_is_recoverable
         assert_eq!(rows[0].status, "uncertain");
         assert!(fresh_restore(&j, &mut Budget::new(), false).is_err());
         j.guard_targets(&rows, &mut Budget::new()).unwrap();
-        j.publish(1, Op::Revert, &mut Budget::new()).unwrap();
+        j.publish(1, Op::Revert, &mut Budget::new(), |_, _| Ok(()))
+            .unwrap();
         if missing {
             assert!(!target.exists())
         } else {
@@ -259,7 +264,8 @@ fn changed_journal_backup_progress_and_redirected_parent_fail_closed() {
 #[test]
 fn same_bytes_new_inode_and_bad_or_duplicate_proofs_never_authorize_restore() {
     let (_t, mut j) = fixture();
-    j.publish(0, Op::Apply, &mut Budget::new()).unwrap();
+    j.publish(0, Op::Apply, &mut Budget::new(), |_, _| Ok(()))
+        .unwrap();
     let target = j.plan.selected.root.join("destination-0.txt");
     let replacement = j.plan.selected.root.join("new");
     file(&replacement, NEW.as_bytes());
@@ -272,4 +278,26 @@ fn same_bytes_new_inode_and_bad_or_duplicate_proofs_never_authorize_restore() {
     a.proof.push(a.proof[0].clone());
     assert!(Journal::open(&a, &mut Budget::new()).is_err());
     assert!(proof("0:apply:bad:bad", 2).is_err());
+}
+
+#[test]
+fn changed_final_target_at_publication_gate_preserves_first_preimage() {
+    let (_t, mut j) = fixture();
+    let rows = j.inspect(&mut Budget::new()).unwrap();
+    let result = j.publish(0, Op::Apply, &mut Budget::new(), |j, b| {
+        file(
+            &j.plan.selected.root.join("destination-1.txt"),
+            b"later user edit",
+        );
+        j.guard_targets(&rows, b)
+    });
+    assert!(result.is_err());
+    assert_eq!(
+        fs::read(j.plan.selected.root.join("destination-0.txt")).unwrap(),
+        OLD
+    );
+    assert_eq!(
+        fs::read(j.plan.selected.root.join("destination-1.txt")).unwrap(),
+        b"later user edit"
+    );
 }

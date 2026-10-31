@@ -26,7 +26,7 @@ REVIEW=importlib.util.module_from_spec(spec);spec.loader.exec_module(REVIEW)
 EDIT=REVIEW.EDIT
 require,sha=EDIT.require,EDIT.sha
 FORMAT='sw-installed-edit-batch-qualification/1'
-FAULTS=('between-publications-kill','between-publications-io','after-publication-kill','receipt-sync','after-receipt-sync')
+FAULTS=('between-publications-kill','between-publications-io','after-publication-kill','receipt-sync','after-receipt-sync','last-target-during-stage')
 CASES=('installed-closure','genuine-two-file-flow','genuine-eight-file-flow','preview-no-writes','no-consent',
        'changed-last-output','changed-last-target','duplicate-output','duplicate-target','missing-last-target','linked-last-target',
        'hardlinked-last-target','special-last-target','redirected-parent','protected-root','stale-confirmation','duplicate-application',
@@ -237,6 +237,7 @@ def qualify(args,report):
             else:
                 before=tree(root);require(invoke(completed[0],'recover-preview',retained(j,h,proofs))[0]==1 and before==tree(root),'uncertain_effect_restored')
             require((root/'sibling.txt').read_text()=='Unrelated owned sibling.\n','fault_sibling_changed')
+            if case=='last-target-during-stage':require((root/'target-0.txt').read_text()=='Owned preimage 0.\n' and (root/'target-1.txt').read_text()=='Later owned user change.\n','stage_gate_clobbered_change')
             done(case,fault_observed=True,truthful_partial=True,safe_recovery=True,preserved=True,fault_exit=code)
         require(EDIT.snapshot(suite.sentinel)==sentinel and not trap.requests,'final_preservation_failed')
         report.update(status='passed',operator_provider_requests=len(trap.requests),source_and_siblings_preserved=True,all_owned_stopped=True)
