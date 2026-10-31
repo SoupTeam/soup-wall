@@ -1,0 +1,169 @@
+{
+ "schema": "soup-wall-result-inspection-controls/1",
+ "note": "Every control is a synthetic mutation of a temporary copy of the retained genuine runs; none is evidence about a revision.",
+ "controls": [
+  {
+   "control": "unmutated_copy",
+   "synthetic_mutation": "no mutation: the copied bundles must stay comparable (harness check)",
+   "expected_exit": 0,
+   "observed_exit": 0,
+   "expected_error": null,
+   "observed_error": null,
+   "passed": true,
+   "matches_retained_comparison": true
+  },
+  {
+   "control": "failed_attempts_dropped",
+   "synthetic_mutation": "delete the baseline attempts that precede its measurement",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "custody_incomplete",
+   "observed_error": "custody_incomplete",
+   "passed": true,
+   "variant": "no earlier attempt exists; attempts renumbered from 002 as if attempt-001 were deleted"
+  },
+  {
+   "control": "missing_case",
+   "synthetic_mutation": "drop one planned case from the raw output (digests and report resealed)",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "missing_case",
+   "observed_error": "missing_case",
+   "passed": true
+  },
+  {
+   "control": "fabricated_case",
+   "synthetic_mutation": "add a case ID absent from the frozen manifest (resealed)",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "fabricated_case",
+   "observed_error": "fabricated_case",
+   "passed": true
+  },
+  {
+   "control": "duplicate_case",
+   "synthetic_mutation": "repeat one case (resealed)",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "duplicate_case",
+   "observed_error": "duplicate_case",
+   "passed": true
+  },
+  {
+   "control": "altered_payload",
+   "synthetic_mutation": "append one byte to payload g01-a in the compared corpus",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "payload_altered",
+   "observed_error": "payload_altered",
+   "passed": true
+  },
+  {
+   "control": "altered_policy",
+   "synthetic_mutation": "append a comment to the compared policy",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "policy_or_corpus_drift",
+   "observed_error": "policy_or_corpus_drift",
+   "passed": true
+  },
+  {
+   "control": "fake_aggregate_success",
+   "synthetic_mutation": "set acceptance=pass and zero totals in the report, digest resealed",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "report_not_derivable",
+   "observed_error": "report_not_derivable",
+   "passed": true
+  },
+  {
+   "control": "raw_output_edited",
+   "synthetic_mutation": "flip one verdict in the raw output without updating the record",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "custody_mismatch",
+   "observed_error": "custody_mismatch",
+   "passed": true
+  },
+  {
+   "control": "source_claim_mismatch",
+   "synthetic_mutation": "candidate record claims the baseline adapter blob; checked against Git objects",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "source_mismatch",
+   "observed_error": "source_mismatch",
+   "passed": true
+  },
+  {
+   "control": "artifact_mismatch",
+   "synthetic_mutation": "candidate execution records the baseline artifact hash",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "artifact_integrity",
+   "observed_error": "artifact_integrity",
+   "passed": true
+  },
+  {
+   "control": "recorder_unidentified",
+   "synthetic_mutation": "candidate record names a recorder hash matching no committed source form",
+   "expected_exit": 2,
+   "observed_exit": 2,
+   "expected_error": "recorder_unidentified",
+   "observed_error": "recorder_unidentified",
+   "passed": true
+  },
+  {
+   "control": "undeclared_build_change",
+   "synthetic_mutation": "candidate record shows --release added to the declared build command",
+   "expected_exit": 1,
+   "observed_exit": 1,
+   "expected_error": null,
+   "observed_error": null,
+   "passed": true,
+   "observed_non_comparable": [
+    "candidate: build command or fresh target directory differs from the predeclaration"
+   ]
+  },
+  {
+   "control": "incomplete_run",
+   "synthetic_mutation": "candidate run recorded as timed out with a third of its output",
+   "expected_exit": 0,
+   "observed_exit": 0,
+   "expected_error": null,
+   "observed_error": null,
+   "passed": true,
+   "candidate_attack_denominators": {
+    "planned": 24,
+    "attempted": null,
+    "inspected": 0,
+    "incomplete": 0,
+    "error": 0,
+    "unknown": 0,
+    "unobserved": 24,
+    "not_run": null,
+    "timeout": 1
+   }
+  },
+  {
+   "control": "unknown_and_technical",
+   "synthetic_mutation": "one invalid verdict, one technical error, one budget refusal (resealed)",
+   "expected_exit": 0,
+   "observed_exit": 0,
+   "expected_error": null,
+   "observed_error": null,
+   "passed": true,
+   "candidate_attack_denominators": {
+    "planned": 24,
+    "attempted": 24,
+    "inspected": 21,
+    "incomplete": 1,
+    "error": 1,
+    "unknown": 1,
+    "unobserved": 0,
+    "not_run": 0,
+    "timeout": 0
+   }
+  }
+ ],
+ "all_passed": true
+}
