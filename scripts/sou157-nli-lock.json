@@ -1,0 +1,38 @@
+{
+  "repo": "MoritzLaurer/ModernBERT-large-zeroshot-v2.0",
+  "revision": "a51e07b524299e309dd2b88d48b0cfa2bd9ec598",
+  "license": "apache-2.0",
+  "files": {
+    "README.md": {
+      "sha256": "f5edbc9131c60af9e108be1e2ea2d4edfe75e606218114994059cee65e5f4d1b",
+      "bytes": 3245
+    },
+    "config.json": {
+      "sha256": "ababd87e19a2c783e08495996e5e32e7d6661ea66686ba41fd02f9e7d46d547f",
+      "bytes": 1471
+    },
+    "tokenizer.json": {
+      "sha256": "6c8aaa9a542084f2457eab775d4eeb51f92a70c0fd9de28d5edb0ddec3c08d30",
+      "bytes": 3583228
+    },
+    "tokenizer_config.json": {
+      "sha256": "c5a7dfd44d93c5d7ed9b2ddcd7a6018e935ec7d53f1de45910ea9868e0ff1c17",
+      "bytes": 20839
+    },
+    "special_tokens_map.json": {
+      "sha256": "ea97ecdbcc73713039d8d64dbb05e3689495c96657fbd9a18f5bed381be81049",
+      "bytes": 694
+    },
+    "model.safetensors": {
+      "sha256": "9e88e3ba0721cee770645d262f10dbe8125ed592ff349b7ba2eedaaded97230a",
+      "bytes": 791684972
+    }
+  },
+  "runtime": {
+    "torch": "2.14.1+cpu",
+    "transformers": "5.17.0",
+    "tokenizers": "0.23.1",
+    "safetensors": "0.8.0",
+    "numpy": "2.3.4"
+  }
+}

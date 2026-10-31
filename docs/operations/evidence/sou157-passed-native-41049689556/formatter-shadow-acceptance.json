@@ -1,0 +1,10 @@
+{
+  "format": "sou157-formatter-diagnostic-check/1",
+  "source_commit": "b94acf7884015a5902f3a2aa58dbf452d7bcf047",
+  "status": "passed-diagnostic-only",
+  "executed_pairs": 4,
+  "pre_execution_unknown": 4,
+  "production_authority": false,
+  "task_complete": false,
+  "sou155_acceptance": false
+}

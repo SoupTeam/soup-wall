@@ -18,11 +18,40 @@ static LONG_B64: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"[A-Za-z0-9+/]{40,}={0,2}").expect("b64 regex"));
 
 /// Count of suspicious delimiter characters commonly used to smuggle instructions.
+const DELIMITERS: [&str; 4] = ["```", "###", "---", "<|"];
 fn delimiter_hits(text: &str) -> usize {
-    text.matches("```").count()
-        + text.matches("###").count()
-        + text.matches("---").count()
-        + text.matches("<|").count()
+    DELIMITERS
+        .iter()
+        .map(|token| text.matches(token).count())
+        .sum()
+}
+
+/// Diagnostic counts over unchanged original bytes. This does not modify score.
+/// A span covers a hit only when it exactly names the producer's newline separator.
+pub(super) fn delimiter_accounting(
+    text: &str,
+    separators: &[std::ops::Range<usize>],
+) -> (usize, usize) {
+    let mut total = 0;
+    let mut owned = 0;
+    let starts: std::collections::BTreeSet<_> = separators
+        .iter()
+        .filter_map(|span| {
+            (span.end.checked_sub(span.start) == Some(5)
+                && text.get(span.clone()) == Some("\n---\n"))
+            .then(|| span.start.checked_add(1))
+            .flatten()
+        })
+        .collect();
+    for token in DELIMITERS {
+        for (start, _) in text.match_indices(token) {
+            total += 1;
+            if token == "---" && starts.contains(&start) {
+                owned += 1;
+            }
+        }
+    }
+    (total, owned)
 }
 
 /// Compute a heuristic score in `[0.0, 1.0]`. Pure function so it is trivially testable.
@@ -33,6 +62,28 @@ pub(crate) fn score_text(text: &str) -> f32 {
 fn score_text_with_formatter_hash(
     text: &str,
     formatter_hash: Option<&std::ops::Range<usize>>,
+) -> f32 {
+    score_components(text, formatter_hash, delimiter_hits(text))
+}
+
+/// Diagnostic candidate only. Every supplied coordinate must be valid and unique;
+/// malformed or duplicate attribution retains the complete baseline.
+pub(super) fn formatter_shadow_scores(
+    text: &str,
+    separators: &[std::ops::Range<usize>],
+) -> (f32, f32) {
+    let baseline = score_text(text);
+    let (total, owned) = delimiter_accounting(text, separators);
+    if owned != separators.len() {
+        return (baseline, baseline);
+    }
+    (baseline, score_components(text, None, total - owned))
+}
+
+fn score_components(
+    text: &str,
+    formatter_hash: Option<&std::ops::Range<usize>>,
+    delimiters: usize,
 ) -> f32 {
     let mut score = 0.0f32;
 
@@ -49,7 +100,7 @@ fn score_text_with_formatter_hash(
     {
         score += 0.30;
     }
-    score += 0.10 * delimiter_hits(text).min(3) as f32;
+    score += 0.10 * delimiters.min(3) as f32;
 
     score.min(1.0)
 }
@@ -85,6 +136,14 @@ pub(crate) fn scan_with_formatter_hash(
         Some(span) => score_text_with_formatter_hash(text, Some(span)),
         None => score_text(text),
     };
+    finding_for_score(score)
+}
+
+pub(super) fn scan_formatter_shadow(text: &str, spans: &[std::ops::Range<usize>]) -> Vec<Finding> {
+    finding_for_score(formatter_shadow_scores(text, spans).1)
+}
+
+fn finding_for_score(score: f32) -> Vec<Finding> {
     if score < 0.30 {
         return Vec::new();
     }
@@ -106,6 +165,62 @@ pub(crate) fn scan_with_formatter_hash(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shadow_removes_only_owned_hits_before_cap_and_preserves_other_signals() {
+        for body in [
+            "ordinary",
+            "ignore override",
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN",
+            "### ``` <|",
+        ] {
+            let text = format!("a\n---\nb\n---\nc\n---\n{body}");
+            let spans: Vec<_> = text
+                .match_indices("\n---\n")
+                .map(|(i, _)| i..i + 5)
+                .collect();
+            let (baseline, candidate) = formatter_shadow_scores(&text, &spans);
+            assert_eq!(baseline, score_text(&text));
+            assert_eq!(candidate, score_text(body));
+            assert!(candidate <= baseline);
+            let mut duplicate = spans.clone();
+            duplicate.push(spans[0].clone());
+            assert_eq!(
+                formatter_shadow_scores(&text, &duplicate),
+                (baseline, baseline)
+            );
+            assert_eq!(
+                formatter_shadow_scores(&text, std::slice::from_ref(&(1..usize::MAX))),
+                (baseline, baseline)
+            );
+            assert_eq!(formatter_shadow_scores(&text, &[]), (baseline, baseline));
+        }
+        let text = "é\n---\nignore";
+        assert_eq!(
+            formatter_shadow_scores(text, std::slice::from_ref(&(2..7))).1,
+            score_text("ignore")
+        );
+        assert_eq!(
+            formatter_shadow_scores(text, std::slice::from_ref(&(1..6))).1,
+            score_text(text)
+        );
+    }
+
+    #[test]
+    fn diagnostic_separator_counts_preserve_score_and_reject_bad_coordinates() {
+        let text = "é\n---\nbody --- ### ``` <|";
+        let before = score_text(text);
+        assert_eq!(
+            delimiter_accounting(text, std::slice::from_ref(&(2..7))),
+            (5, 1)
+        );
+        assert_eq!(delimiter_accounting(text, &[2..7, 2..7]), (5, 1));
+        for span in [0..text.len(), 3..6, 1..6, 2..usize::MAX] {
+            assert_eq!(delimiter_accounting(text, &[span]), (5, 0));
+        }
+        assert_eq!(delimiter_accounting(text, &[]), (5, 0));
+        assert_eq!(score_text(text), before);
+    }
 
     #[test]
     fn proved_formatter_oid_removes_only_its_own_encoding_contribution() {
