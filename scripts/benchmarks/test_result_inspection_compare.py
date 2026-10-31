@@ -126,10 +126,20 @@ class ComparisonTests(unittest.TestCase):
         (run_dir / "run.json").write_bytes(json.dumps(run, indent=1).encode())
         return run_dir.parent
 
-    def compare(self, base=None, cand=None, pre=PRE, corpus_root=None):
+    def compare(self, base=None, cand=None, pre=PRE, corpus_root=None, amendments=()):
         base = base or self.side("baseline")
         cand = cand or self.side("candidate")
-        return ric.compare(pre, base, cand, ROOT, corpus_root)
+        return ric.compare(pre, base, cand, ROOT, corpus_root, amendments)
+
+    def amendment(self, name="amend.json", argv=None, amends=None, **extra):
+        argv = argv or self.pre["build"]["argv"][:3] + ["--jobs", "2"] + self.pre["build"]["argv"][3:]
+        data = {"schema": ric.AMENDMENT_SCHEMA, "issue": "SOU-191", "sequence": 1,
+                "amends_sha256": amends or self.pre_sha, "declared_at_utc": "2026-10-31T00:00:00Z",
+                "reason": "SYNTHETIC TEST FIXTURE", "changes": {"build.argv": argv},
+                "applies_to": list(ric.ROLES), "not_claimed": "synthetic", **extra}
+        path = self.tmp / name
+        path.write_bytes(json.dumps(data).encode())
+        return path, ric._sha(path.read_bytes()), argv
 
     def assertInvalid(self, outcome, code):
         result, exit_code = outcome
@@ -352,6 +362,53 @@ class ComparisonTests(unittest.TestCase):
         self.assertInvalid(self.compare(self.side("baseline", pre_sha=sha), self.side("candidate", pre_sha=sha), pre=path),
                            "grouping_drift")
 
+    def test_amendment_governs_attempts_after_it(self):
+        path, sha, argv = self.amendment()
+
+        def jobs(run, _):
+            run["build"]["argv"] = list(argv)
+        root = self.tmp / "ok"
+        self.side("baseline", attempt=1, status="build_failed", root=root)
+        base = self.side("baseline", attempt=2, pre_sha=sha, run_edit=jobs, root=root)
+        cand = self.side("candidate", pre_sha=sha, run_edit=jobs, root=root)
+        result, code = self.compare(base, cand, amendments=[path])
+        self.assertEqual(code, ric.EXIT_COMPARABLE, result["errors"] or result["non_comparable"])
+        self.assertEqual(result["predeclaration"]["governing_sha256"], sha)
+        self.assertEqual([a["use"].split(":")[0] for a in result["attempts"]["baseline"]], ["not measured", "measurement"])
+        # The same runs without the amendment: the build command no longer matches a declaration.
+        self.assertInvalid(self.compare(base, cand), "predeclaration_mismatch")
+        # An old-argv run recorded under the amendment is non-comparable.
+        other = self.tmp / "old"
+        _, code = self.compare(self.side("baseline", pre_sha=sha, root=other), self.side("candidate", pre_sha=sha,
+                               run_edit=jobs, root=other), amendments=[path])
+        self.assertEqual(code, ric.EXIT_NON_COMPARABLE)
+
+    def test_amendment_after_measurement_is_refused(self):
+        path, sha, argv = self.amendment()
+
+        def jobs(run, _):
+            run["build"]["argv"] = list(argv)
+        root = self.tmp / "late"
+        self.side("baseline", attempt=1, root=root)  # executed under the original declaration
+        base = self.side("baseline", attempt=2, pre_sha=sha, run_edit=jobs, root=root)
+        cand = self.side("candidate", pre_sha=sha, run_edit=jobs, root=root)
+        self.assertInvalid(self.compare(base, cand, amendments=[path]), "predeclaration_mismatch")
+
+    def test_amendment_may_only_add_jobs(self):
+        argv = self.pre["build"]["argv"]
+        sides = (self.side("baseline"), self.side("candidate"))
+        for name, bad in (("release", argv[:3] + ["--jobs", "2"] + argv[3:] + ["--release"]),
+                          ("profile", argv[:3] + ["--profile", "release"] + argv[3:]),
+                          ("zero", argv[:3] + ["--jobs", "0"] + argv[3:]),
+                          ("moved", argv + ["--jobs", "2"])):
+            path, _, _ = self.amendment(f"{name}.json", argv=bad)
+            with self.subTest(name):
+                self.assertInvalid(self.compare(*sides, amendments=[path]), "invalid_predeclaration")
+        path, _, _ = self.amendment("chain.json", amends="f" * 64)
+        self.assertInvalid(self.compare(*sides, amendments=[path]), "predeclaration_mismatch")
+        path, _, _ = self.amendment("extra.json", toolchain="1.97.0")
+        self.assertInvalid(self.compare(*sides, amendments=[path]), "invalid_predeclaration")
+
     def test_toolchain_mismatch_is_non_comparable(self):
         def old(run, _):
             run["toolchain"]["rustc_release"] = "1.97.0"
@@ -445,6 +502,8 @@ class RecorderTests(unittest.TestCase):
         self.assertIn("<home>", out)
         twice = json.dumps({"m": json.dumps({"p": str(self.tmp / "out.o")})}).encode()
         self.assertNotIn(str(self.tmp.resolve().drive), clean(twice).decode())
+        dump = clean(b"  PATH = Some(C:\\Windows;D:\\Tools (x86)\\bin;)\n  CC = None\n").decode()
+        self.assertEqual(dump, "  PATH = Some(<redacted: 3 entries>)\n  CC = None\n")
 
     def test_attempts_are_never_overwritten(self):
         out = self.tmp / "role"

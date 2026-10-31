@@ -25,6 +25,11 @@ import result_inspection_compare as ric  # noqa: E402
 CORPUS_FILES = ("eval/sou123/manifest.json", "eval/sou123/payloads", "profiles/pilot/linux-readonly-v1/policy.yaml")
 
 
+def amendment_chain(evidence: Path):
+    """Every ``predeclaration-amendment-NNN.json`` beside the predeclaration, in sequence."""
+    return sorted(evidence.glob("predeclaration-amendment-[0-9][0-9][0-9].json"))
+
+
 def measured(role_dir: Path) -> Path:
     for path in ric.attempts(role_dir):
         if json.loads((path / "run.json").read_bytes())["status"] in ("executed", "integrity_failed"):
@@ -119,6 +124,13 @@ def executed_other_artifact(ctx):
     save(run_dir, run)
 
 
+def undeclared_build_change(ctx):
+    run_dir = ctx["cand"]
+    run = load(run_dir)
+    run["build"]["argv"] = list(run["build"]["argv"]) + ["--release"]
+    save(run_dir, run)
+
+
 def timed_out(ctx):
     run_dir = ctx["cand"]
     run = load(run_dir)
@@ -160,6 +172,8 @@ CONTROLS = [
      claim_other_adapter_source, ric.EXIT_INVALID, "source_mismatch"),
     ("artifact_mismatch", "candidate execution records the baseline artifact hash", executed_other_artifact,
      ric.EXIT_INVALID, "artifact_integrity"),
+    ("undeclared_build_change", "candidate record shows --release added to the declared build command",
+     undeclared_build_change, ric.EXIT_NON_COMPARABLE, None),
     ("incomplete_run", "candidate run recorded as timed out with a third of its output", timed_out,
      ric.EXIT_COMPARABLE, None),
     ("unknown_and_technical", "one invalid verdict, one technical error, one budget refusal (resealed)",
@@ -170,6 +184,7 @@ CONTROLS = [
 def run_controls(evidence: Path, repo: Path):
     pre_path = evidence / "predeclaration.json"
     pre = json.loads(pre_path.read_bytes())
+    amendments = amendment_chain(evidence)
     corpus = ric.load_corpus(repo)
     rows = []
     for name, mutation, apply, expected_code, expected_error in CONTROLS:
@@ -187,7 +202,7 @@ def run_controls(evidence: Path, repo: Path):
             ctx = {"base": dirs["baseline"], "cand": dirs["candidate"], "corpus": root, "repo": repo, "pre": pre,
                    "git": ric.Git(repo), "manifest": corpus["manifest"]}
             apply(ctx)
-            result, code = ric.compare(pre_path, tmp / "baseline", tmp / "candidate", repo, root)
+            result, code = ric.compare(pre_path, tmp / "baseline", tmp / "candidate", repo, root, amendments)
             error = result["errors"][0]["code"] if result["errors"] else None
             row = {"control": name, "synthetic_mutation": mutation, "expected_exit": expected_code,
                    "observed_exit": code, "expected_error": expected_error, "observed_error": error,

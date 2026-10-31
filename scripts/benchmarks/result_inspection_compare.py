@@ -15,6 +15,7 @@ does and does not establish is listed in ``TRUST_BOUNDARY`` and repeated in ever
 
     python scripts/benchmarks/result_inspection_compare.py \
       --predeclaration docs/benchmarks/evidence/sou191/predeclaration.json \
+      --amendment docs/benchmarks/evidence/sou191/predeclaration-amendment-001.json \
       --baseline docs/benchmarks/evidence/sou191/runs/baseline \
       --candidate docs/benchmarks/evidence/sou191/runs/candidate --out-dir OUT
 
@@ -282,6 +283,45 @@ def load_predeclaration(path):
     return data, _sha(raw)
 
 
+AMENDMENT_SCHEMA = "soup-wall-result-inspection-predeclaration-amendment/1"
+AMENDMENT_KEYS = {"schema", "issue", "sequence", "amends_sha256", "declared_at_utc", "reason", "changes", "applies_to",
+                  "not_claimed"}
+
+
+def _jobs_only(old, new):
+    """The one permitted build change: ``--jobs N`` inserted right after ``build``; nothing else moves."""
+    if not (isinstance(new, list) and "build" in old and len(new) == len(old) + 2):
+        return False
+    at = old.index("build") + 1
+    jobs = new[at + 1] if new[at] == "--jobs" else ""
+    return new[:at] + new[at + 2:] == old and jobs.isdigit() and 1 <= int(jobs) <= 64
+
+
+def load_declarations(pre_path, amendment_paths=()):
+    """The predeclaration and its additive amendments, in order; returns the effective declaration and the chain.
+
+    Each amendment names the SHA-256 of the declaration it amends and may only change ``build.argv`` by
+    adding Cargo's ``--jobs N``. The original file is never edited; the chain head governs new attempts."""
+    pre, pre_sha = load_predeclaration(pre_path)
+    chain = [{"kind": "predeclaration", "sha256": pre_sha, "declared_at_utc": pre["declared_at_utc"]}]
+    effective = json.loads(json.dumps(pre))
+    for sequence, path in enumerate(amendment_paths, start=1):
+        data, raw = _read_json(path)
+        if not isinstance(data, dict) or set(data) != AMENDMENT_KEYS or data["schema"] != AMENDMENT_SCHEMA or \
+                data["sequence"] != sequence or data["issue"] != pre["issue"]:
+            raise Invalid("invalid_predeclaration", f"amendment {sequence} must be {AMENDMENT_SCHEMA} number {sequence}")
+        if data["amends_sha256"] != chain[-1]["sha256"]:
+            raise Invalid("predeclaration_mismatch", f"amendment {sequence} does not amend the preceding declaration")
+        if set(data["changes"]) != {"build.argv"} or not _jobs_only(effective["build"]["argv"], data["changes"]["build.argv"]):
+            raise Invalid("invalid_predeclaration", f"amendment {sequence} may only add --jobs N to build.argv")
+        if data["applies_to"] != list(ROLES):
+            raise Invalid("invalid_predeclaration", f"amendment {sequence} must apply to both revisions")
+        effective["build"]["argv"] = data["changes"]["build.argv"]
+        chain.append({"kind": "amendment", "sequence": sequence, "sha256": _sha(raw),
+                      "declared_at_utc": data["declared_at_utc"], "changes": data["changes"]})
+    return effective, chain
+
+
 def check_predeclared_grouping(pre, manifest, pairs):
     units, count = frozen_grouping(manifest, pairs)
     declared = pre["grouping"]["resampling_units"]
@@ -326,19 +366,29 @@ def attempts(role_dir):
     return found
 
 
-def select_measurement(role, role_dir, pre_sha):
-    """Predeclared rule: the first attempt that executed the adapter is the measurement; nothing replaces it."""
-    listed, chosen = [], None
+def select_measurement(role, role_dir, chain):
+    """Predeclared rule: the first attempt that executed the adapter is the measurement; nothing replaces it.
+
+    ``chain`` is the predeclaration and its amendments. Every attempt must name one of them in
+    ``predeclaration_sha256``; once one is named, earlier ones may not be; an attempt that executed under
+    a superseded declaration cannot be the measurement and makes the role invalid."""
+    order = [link["sha256"] for link in chain]
+    listed, chosen, last = [], None, 0
     for path in attempts(role_dir):
         run, raw = _read_json(path / "run.json")
         _exact(run, RUN_KEYS, f"{role}/{path.name}/run.json")
         if run["schema"] != RUN_SCHEMA or run["role"] != role or run["attempt"] != int(path.name[-3:]):
             raise Invalid("invalid_record", f"{role}/{path.name}: schema, role or attempt number differ")
-        if run["predeclaration_sha256"] != pre_sha:
+        if run["predeclaration_sha256"] not in order or order.index(run["predeclaration_sha256"]) < last:
             raise Invalid("predeclaration_mismatch", f"{role}/{path.name} was recorded under another predeclaration")
+        last = order.index(run["predeclaration_sha256"])
         executed = run["status"] in ("executed", "integrity_failed")
+        if executed and chosen is None and last != len(order) - 1:
+            raise Invalid("predeclaration_mismatch", f"{role}/{path.name} executed under a superseded declaration; "
+                                                     "an amendment after measurement is not accepted")
         use = executed and chosen is None
         listed.append({"attempt": path.name, "status": run["status"], "run_sha256": _sha(raw),
+                       "declaration_sha256": run["predeclaration_sha256"],
                        "use": "measurement" if use else ("not measured: build or setup did not execute the adapter"
                                                          if not executed else "retained, not used: after the measurement"),
                        "problems": run["problems"][:20]})
@@ -578,15 +628,16 @@ def technical(obs, cases):
 
 # ---------------------------------------------------------------- comparison
 
-def compare(pre_path, base_dir, cand_dir, repo, corpus_root=None):
+def compare(pre_path, base_dir, cand_dir, repo, corpus_root=None, amendments=()):
     git = Git(repo)
     result = {"schema": SCHEMA, "contract": OUTCOME_CONTRACT, "trust_boundary": TRUST_BOUNDARY,
               "limitations": LIMITATIONS, "comparable": False, "errors": [], "non_comparable": [],
               "attempts": {}, "sides": {}, "outcomes": None, "units": []}
     try:
-        pre, pre_sha = load_predeclaration(pre_path)
-        result["predeclaration"] = {"sha256": pre_sha, "declared_at_utc": pre["declared_at_utc"],
-                                    "revisions": pre["revisions"]}
+        pre, chain = load_declarations(pre_path, amendments)
+        result["predeclaration"] = {"sha256": chain[0]["sha256"], "declared_at_utc": pre["declared_at_utc"],
+                                    "revisions": pre["revisions"], "amendments": chain[1:],
+                                    "governing_sha256": chain[-1]["sha256"], "build_argv": pre["build"]["argv"]}
         corpus = load_corpus(corpus_root or repo)
         if corpus["manifest_sha256"] != pre["corpus"]["manifest_sha256"] or \
                 corpus["policy_sha256"] != pre["corpus"]["policy_sha256"]:
@@ -596,7 +647,7 @@ def compare(pre_path, base_dir, cand_dir, repo, corpus_root=None):
         units, unit_count = check_predeclared_grouping(pre, corpus["manifest"], pairs)
         observations = {}
         for role, role_dir in zip(ROLES, (base_dir, cand_dir)):
-            (run_dir, run, raw), listed = select_measurement(role, role_dir, pre_sha)
+            (run_dir, run, raw), listed = select_measurement(role, role_dir, chain)
             result["attempts"][role] = listed
             stdout, noncomparable = verify_run(role, run_dir, run, pre, git, corpus, accepted)
             result["non_comparable"] += noncomparable
@@ -743,6 +794,8 @@ def summary_line(result, code):
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--predeclaration", required=True)
+    parser.add_argument("--amendment", action="append", default=[],
+                        help="additive predeclaration amendment, in sequence; repeat for each")
     parser.add_argument("--baseline", required=True, help="baseline run directory with attempt-NNN entries")
     parser.add_argument("--candidate", required=True, help="candidate run directory with attempt-NNN entries")
     parser.add_argument("--repo", default=".", help="Git repository holding both commits (default: .)")
@@ -754,7 +807,8 @@ def main(argv=None) -> int:
     if out_dir.exists() and (not out_dir.is_dir() or any(out_dir.iterdir())):
         print("usage error: --out-dir must be a new or empty directory", file=sys.stderr)
         return EXIT_USAGE
-    result, code = compare(args.predeclaration, args.baseline, args.candidate, args.repo, args.corpus_root)
+    result, code = compare(args.predeclaration, args.baseline, args.candidate, args.repo, args.corpus_root,
+                           args.amendment)
     write_result(out_dir, result)
     print(summary_line(result, code))
     if args.expect:

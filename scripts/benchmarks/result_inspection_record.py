@@ -22,6 +22,7 @@ an attestation by the machine that ran it, not a cryptographic proof (see
 
     python scripts/benchmarks/result_inspection_record.py --role baseline \
       --predeclaration docs/benchmarks/evidence/sou191/predeclaration.json \
+      --amendment docs/benchmarks/evidence/sou191/predeclaration-amendment-001.json \
       --work-root SCRATCH_DIR --out docs/benchmarks/evidence/sou191/runs/baseline
 """
 from __future__ import annotations
@@ -46,6 +47,7 @@ REFUSED_VARIABLES = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTDOCFLAGS", "RU
 REFUSED_PREFIXES = ("CARGO_PROFILE_", "CARGO_TARGET_", "CARGO_BUILD_")
 RECORDED_VARIABLES = ("CARGO_HOME", "RUSTUP_HOME", "PROCESSOR_ARCHITECTURE", "OS")
 BUILD_TIMEOUT = 3 * 3600
+PATH_DUMP = re.compile(r"(\bPATH = Some\()(.*)\)(?=\r?$)", re.MULTILINE)
 
 
 class Refused(Exception):
@@ -129,6 +131,8 @@ def sanitizer(*roots):
 
     def apply(raw: bytes) -> bytes:
         text = raw.decode("utf-8", "replace")
+        # cc-rs prints the build script's PATH on failure: installed-software layout, not run evidence.
+        text = PATH_DUMP.sub(lambda m: f"{m.group(1)}<redacted: {m.group(2).count(';') + 1} entries>)", text)
         for form, label in forms:
             text = re.sub(re.escape(form), label.replace("\\", "\\\\"), text, flags=re.IGNORECASE)
         return text.encode("utf-8")
@@ -195,7 +199,8 @@ def toolchain(channel, env, cwd):
 
 
 def record(args) -> int:
-    pre, pre_sha = contract.load_predeclaration(args.predeclaration)
+    pre, chain = contract.load_declarations(args.predeclaration, args.amendment)
+    pre_sha = chain[-1]["sha256"]  # the governing declaration: the predeclaration or its latest amendment
     commit = pre["revisions"][args.role]["commit"]
     repo = Path(args.repo).resolve()
     git = contract.Git(repo)
@@ -322,6 +327,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--role", required=True, choices=contract.ROLES)
     parser.add_argument("--predeclaration", required=True)
+    parser.add_argument("--amendment", action="append", default=[],
+                        help="additive predeclaration amendment, in sequence; repeat for each")
     parser.add_argument("--repo", default=".", help="Git repository holding the predeclared commits")
     parser.add_argument("--work-root", required=True, help="scratch directory for the clone and target directory")
     parser.add_argument("--out", required=True, help="role directory that receives a new attempt-NNN")
