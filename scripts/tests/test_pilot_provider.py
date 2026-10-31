@@ -68,6 +68,20 @@ class ProviderBoundary(unittest.TestCase):
 
 
 class IndependentExecEvidence(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux CA descriptor required')
+    def test_http_only_provider_witness_uses_valid_ca_input_without_claiming_tls(self):
+        sys.path.insert(0, str(ROOT / 'scripts'))
+        import pilot_provider_witness as witness
+        import pilot_provider_ca as ca
+        with tempfile.TemporaryDirectory() as temporary:
+            values = witness.inputs('http://127.0.0.1:19001', Path(temporary))
+            selected = ca.pin(values['SSL_CERT_FILE'])
+            try:
+                selected.verify_source()
+                self.assertEqual(len(selected.sha256), 64)
+            finally:
+                selected.close()
+
     def test_deadline_refusal_requires_exact_launcher_image_arguments_and_stderr(self):
         import json
         sys.path.insert(0, str(ROOT / 'scripts'))

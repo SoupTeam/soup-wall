@@ -51,6 +51,7 @@ def load(name, filename):
 QUAL = load("installed_front_door_first_use", "qualify-pilot-front-door.py")
 PROVIDER = load("installed_provider_carrier", "pilot_provider.py")
 LAUNCH = load("installed_provider_trace", "qualify-pilot-launcher.py")
+PROVIDER_CA_QUALIFICATION = load("installed_provider_ca_qualification", "pilot_provider_ca_qualification.py")
 BASE = QUAL.BASE
 require = BASE.require
 INPUT_NAMES = tuple(name for name in QUAL.INPUT_NAMES if name != "agent_output")
@@ -242,7 +243,7 @@ def provider_call(args, home, env, canary, words, secret_fd=None, *, trace=None)
     return result.returncode, value
 
 
-def provider_exec_witness(trace, claude, canary, url):
+def provider_exec_witness(trace, claude, canary, url, ca_source=None):
     """Every successful exec is checked; only the one selected host receives the canary."""
     raw = trace.read_bytes()
     require(len(raw) <= 32 * 1024 * 1024, "provider_trace_limit")
@@ -317,13 +318,24 @@ def provider_exec_witness(trace, claude, canary, url):
             host += 1
             require(values.get("ANTHROPIC_API_KEY") == canary
                     and values.get("ANTHROPIC_BASE_URL") == url, "provider_host_values_missing")
+            if ca_source is not None:
+                require(re.fullmatch(r"/proc/self/fd/[0-9]+", values.get("SSL_CERT_FILE", ""))
+                        and values["SSL_CERT_FILE"] != ca_source,
+                        "provider_host_ca_descriptor_missing")
         else:
             others += 1
             require(not any(canary in word or url in word for word in environ),
                     "provider_value_in_unrelated_child")
+            if ca_source is not None:
+                require("SSL_CERT_FILE" not in values and ca_source not in environ,
+                        "provider_ca_in_unrelated_child")
     require(host == 1 and others >= 4, "provider_process_graph_incomplete")
-    return {"selected_host_execs": host, "other_execs_checked": others,
-            "canary_in_other_children": False, "canary_in_argv": False}
+    witness = {"selected_host_execs": host, "other_execs_checked": others,
+               "canary_in_other_children": False, "canary_in_argv": False}
+    if ca_source is not None:
+        witness["ca_source_in_other_children"] = False
+        witness["host_ca_descriptor_bound"] = True
+    return witness
 
 
 def provider_files_witness(args, canary):
@@ -847,6 +859,17 @@ def qualify(args, report):
         require(code == 0 and value.get("protection") == "configured-not-running", "status_before_run")
         report["cases"].append({"case": "status-configured", "passed": True, "protection": value["protection"]})
 
+        if args.provider_ca_only:
+            PROVIDER_CA_QUALIFICATION.qualify(
+                args, door, agent_home, env, report, provider_call=provider_call,
+                exec_witness=provider_exec_witness, guided=QUAL, provider=PROVIDER, base=BASE)
+            require(QUAL.snapshot(args.project) == baseline["project"]
+                    and QUAL.snapshot(args.repository) == baseline["repository"],
+                    "provider_ca_qualification_changed_project")
+            report["source_after"] = BASE.source()
+            require(report["source_after"] == before, "source_changed")
+            return
+
         # 5. Useful read and history; refused write, reset and send.
         proposals = [("mcp__filesystem__read_text_file", {"path": "/workspace/README.md"}),
                      ("mcp__git__git_show", {"repo_path": "/workspace", "revision": "HEAD"}),
@@ -1024,6 +1047,8 @@ def main():
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--provider-profiles", action="store_true",
                         help="opt in to SOU-172 private named provider original-host controls")
+    parser.add_argument("--provider-ca-only", action="store_true",
+                        help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
     for name in INPUT_NAMES:
         parser.add_argument("--" + name.replace("_", "-"), type=Path)
     args = parser.parse_args()
@@ -1054,7 +1079,10 @@ def main():
         qualify(args, report)
         report["status"] = "passed"
     except Exception as error:
-        report["error"] = str(error)[:500]
+        detail = str(error)
+        report["error"] = (detail if not args.provider_ca_only or
+                           re.fullmatch(r"[a-z0-9_:-]{1,160}", detail)
+                           else "provider_ca_qualification_failed")[:500]
     finally:
         if args.output.exists():
             BASE.write(args.output / "report.json", report)

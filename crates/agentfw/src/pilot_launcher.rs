@@ -167,6 +167,12 @@ pub struct PilotLaunchArgs {
     /// Anonymous sealed provider-input descriptor supplied by the prepared entry.
     #[arg(long, hide = true)]
     pub provider_env_fd: Option<i32>,
+    /// Anonymous sealed selected CA bytes, supplied only by the installed entry.
+    #[arg(long, hide = true, requires = "provider_ca_sha256")]
+    pub provider_ca_fd: Option<i32>,
+    /// SHA-256 of the selected CA bytes; checked again before host execution.
+    #[arg(long, hide = true, requires = "provider_ca_fd")]
+    pub provider_ca_sha256: Option<String>,
     /// Explicit operator-owned Linux resource budget; absent means unbudgeted.
     #[arg(long)]
     pub linux_budget: Option<PathBuf>,
@@ -1552,6 +1558,20 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     // Consume supplied authority before validation/configuration can allocate
     // another descriptor with the same number as a malformed input.
     let provider = crate::pilot_host::provider_inputs(args.provider_env_fd)?;
+    #[cfg(target_os = "linux")]
+    let mut provider = provider;
+    #[cfg(target_os = "linux")]
+    let selected_ca = crate::pilot_host::bind_selected_ca(
+        &mut provider,
+        args.provider_env_fd.is_some(),
+        args.provider_ca_fd,
+        args.provider_ca_sha256.as_deref(),
+    )?;
+    #[cfg(not(target_os = "linux"))]
+    ensure!(
+        args.provider_ca_fd.is_none() && args.provider_ca_sha256.is_none(),
+        "provider_ca_input_invalid"
+    );
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -1743,6 +1763,10 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     }
 
     crate::pilot_host::isolate(&mut cmd, &guard.path, provider)?;
+    #[cfg(target_os = "linux")]
+    if let Some(ca) = &selected_ca {
+        ca.install(&mut cmd);
+    }
     // Explicit command fixtures may use ordinary system utilities. The pinned
     // production client has no executable search path; its MCP commands and
     // selected collector/runtime paths are already absolute.
@@ -1805,6 +1829,8 @@ pub fn run(args: PilotLaunchArgs) -> Result<()> {
     let timeout = config.timeout;
     let deadline = tokio::time::Instant::now() + timeout;
     let mut child = cmd.spawn().context("failed to spawn Claude Code host")?;
+    #[cfg(target_os = "linux")]
+    drop(selected_ca);
     let child_pid = child.id();
     drop(cmd);
     #[cfg(target_os = "linux")]
@@ -2186,6 +2212,8 @@ mod tests {
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
             provider_env_fd: None,
+            provider_ca_fd: None,
+            provider_ca_sha256: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2258,6 +2286,8 @@ mod tests {
             mock_daemon_token: Some(test_token.clone()),
             mock_instance_id: Some(test_instance_id.clone()),
             provider_env_fd: None,
+            provider_ca_fd: None,
+            provider_ca_sha256: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2415,6 +2445,8 @@ mod tests {
             mock_daemon_token: Some(crate::token::generate()),
             mock_instance_id: Some(crate::token::generate()),
             provider_env_fd: None,
+            provider_ca_fd: None,
+            provider_ca_sha256: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2458,6 +2490,8 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            provider_ca_fd: None,
+            provider_ca_sha256: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2504,6 +2538,8 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            provider_ca_fd: None,
+            provider_ca_sha256: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: false,
@@ -2550,6 +2586,8 @@ mod tests {
             mock_daemon_token: None,
             mock_instance_id: None,
             provider_env_fd: None,
+            provider_ca_fd: None,
+            provider_ca_sha256: None,
             linux_budget: None,
             linux_budget_sha256: None,
             allow_command_fixtures: true,

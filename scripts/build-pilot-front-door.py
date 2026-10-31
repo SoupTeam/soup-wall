@@ -61,6 +61,7 @@ SCRIPTS = (
     "scripts/pilot_policy.py",
     "scripts/pilot_preparation_lock.py",
     "scripts/pilot_provider.py",
+    "scripts/pilot_provider_ca.py",
     "scripts/pilot_provider_profiles.py",
     "scripts/pilot_run_state.py",
     "scripts/pilot_qualification.py",

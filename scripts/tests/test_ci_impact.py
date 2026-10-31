@@ -125,6 +125,31 @@ class ImpactTests(unittest.TestCase):
         central = (ROOT / ".github/workflows/ci-components.yml").read_text()
         self.assertNotIn("manual-native-result-profile", central)
 
+    def test_provider_ca_qualification_requires_explicit_native_dispatch(self):
+        source = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        shared = (ROOT / ".github/workflows/ci-components.yml").read_text()
+        self.assertIn("      provider_ca_only:\n", source)
+        self.assertIn("inputs.get('native_preparation_only') == 'true'", source)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.event.inputs.provider_ca_only == 'true'", source)
+        self.assertIn("scripts/qualify-installed-front-door.py --run --provider-ca-only", source)
+        self.assertIn("installed-provider-ca/report.json", source)
+        self.assertIn("if: github.event_name == 'workflow_dispatch' && github.event.inputs.provider_ca_only == 'true'", shared)
+        for workflow in (source, shared):
+            for name in (
+                "Qualify exact prepared selection through enforcing daemon and original servers",
+                "Run the first-use demo through the prepared original host",
+                "Qualify the guided first-use entry point through the original host",
+                "Qualify the installed guided pilot front door through the original host",
+                "Qualify terminal Ask inbox through the original Claude host",
+                "Qualify owned prepared-selection launch and failures with the original host",
+                "Qualify prepared-run audit rotation and failed-store continuation",
+                "Qualify reused bounded audit engine restart and fail-safe retention",
+                "Targeted existing-project read-only pilot with actual host and independent effects",
+            ):
+                step = workflow.split("      - name: " + name + "\n", 1)[1]
+                condition = next(line for line in step.splitlines() if line.startswith("        if: "))
+                self.assertIn("github.event.inputs.provider_ca_only != 'true'", condition, name)
+
     def test_build_producer_is_selected_only_with_compatible_consumers(self):
         for path, selected in (("README.md", False), ("eval/probe.py", False), ("crates/proxy/src/main.rs", False),
                                ("crates/agentfw/src/main.rs", True), ("Cargo.lock", True),
