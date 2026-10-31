@@ -51,7 +51,8 @@ def generated() -> str:
         jobs = blocks(source)
         # This explicitly dispatched hour-long development exercise must never
         # enter ordinary component qualification or required admission.
-        manual = {"mcp-real-filesystem.yml": {"manual-long-session", "manual-native-result-profile"},
+        manual = {"mcp-real-filesystem.yml": {"manual-long-session", "manual-native-result-profile",
+                                              "manual-sou194-cache-exchange"},
                   "mcp-real-git.yml": {"manual-installed-git-profiles", "sou182-raw-boundary"},
                   "mcp-create-file.yml": {"reuse-plan", "reuse-qualification"}}.get(workflow, set())
         if set(jobs) != {*expected, "impact", *manual}:
