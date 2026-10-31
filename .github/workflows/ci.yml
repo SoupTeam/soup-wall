@@ -283,6 +283,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # The SOU-97 pilot gate verifies its recorded evidence lineage against commit history.
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'

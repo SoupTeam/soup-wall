@@ -76,6 +76,13 @@ def load(name, filename):
 INSTALL = load("sou62_install", "install-sou62-filesystem-profile.py")
 SOU83_INSTALL = load("sou83_installer", "install-sou83-filesystem-create-profile.py")
 DEMO = load("sou62_demo", "mcp-admission-demo.py")
+REPLAY = load("sou62_sou97_replay", "sou97_runtime_replay.py")
+DEFAULT_CLASSIFIER = ROOT / "rule_baseline/rule_baseline.py"
+
+
+def default_classifier():
+    return {"path": str(DEFAULT_CLASSIFIER), "file": DEFAULT_CLASSIFIER.name, "sha256": sha(DEFAULT_CLASSIFIER),
+            "revision": None, "mode": "default"}
 
 
 def require(condition, message):
@@ -401,7 +408,7 @@ def run_stdio(stack, report):
     (stack.workspace / "control-created.txt").unlink()
     baseline = snapshot(stack.workspace)
     env = dict(stack.env, AGENTFW_MCP_SERVER_PROFILE=str(stack.install / "profile.json"),
-               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=str(ROOT / "rule_baseline/rule_baseline.py"),
+               AGENTFW_CLASSIFIER="rule-baseline", AGENTFW_RULE_BASELINE=stack.classifier["path"],
                AGENTFW_CLASSIFIER_PYTHON=sys.executable)
     command = [str(binary), "mcp", "--native-admission", "--id", "sou62-filesystem", "--", str(node), str(entry), "/workspace"]
     with log_path.open("wb") as log:
@@ -425,10 +432,18 @@ def run_stdio(stack, report):
                     "response": response, "passed": True})
                 report["checks"].append({"case": "actual-tool-" + tool, "passed": True})
             response, _ = client.exchange(call(38, {"path": "/workspace"}, "directory_tree"))
-            require(refused(response) and "classifier_ask" in json.dumps(response), "unknown directory_tree classification was bypassed")
-            report["directory_tree_classifier_refusal"] = {"response": response, "schema_sha256": schemas["directory_tree"],
-                "registry_sha256": sha(stack.install / "registry.json"), "passed": True}
-            report["checks"].append({"case": "directory-tree-classifier-ask-preserved", "passed": True})
+            if stack.classifier["mode"] == "candidate":
+                # SOU-97 candidate only: the supported original read is admitted and returns the original tree.
+                tree = json.loads(result_text(response))
+                require(any(entry.get("name") == "notes.txt" for entry in tree), "candidate directory_tree lost the original tree")
+                report["directory_tree_candidate_read"] = {"response": response, "schema_sha256": schemas["directory_tree"],
+                    "registry_sha256": sha(stack.install / "registry.json"), "passed": True}
+                report["checks"].append({"case": "candidate-directory-tree-admitted-original-read", "passed": True})
+            else:
+                require(refused(response) and "classifier_ask" in json.dumps(response), "unknown directory_tree classification was bypassed")
+                report["directory_tree_classifier_refusal"] = {"response": response, "schema_sha256": schemas["directory_tree"],
+                    "registry_sha256": sha(stack.install / "registry.json"), "passed": True}
+                report["checks"].append({"case": "directory-tree-classifier-ask-preserved", "passed": True})
             response, _ = client.exchange(call(39, {"path": "/workspace/notes.txt"}))
             require(result_text(response) == TEXT, "classifier Ask broke useful follow-up")
             report["checks"].append({"case": "directory-tree-ask-useful-follow-up", "passed": True})
@@ -1105,6 +1120,68 @@ def policy_controls(stack, report):
     report["shipped_policy_controls"] = rows
 
 
+def candidate_replay(stack, command, env, report):
+    """SOU-97 candidate mode only: replay the frozen matrix through fresh protected sessions."""
+    def open_session(index):
+        log_path = stack.root / f"sou97-replay-collector-{index}.log"
+        log = log_path.open("wb")
+        client = Client(command, env, stack.workspace, log, f"sou97 replay session {index}")
+        stack.replay_logs.append((client, log))
+        client.initialize()
+        return client, log_path
+
+    def continuation(client, identifier):
+        try:
+            response, _ = client.exchange(call(identifier, {"path": "/workspace/notes.txt"}))
+            return not refused(response) and result_text(response) == TEXT
+        except ValueError:
+            return False  # recorded as a failed continuation, never as success
+
+    calibration_client, _ = open_session("calibration")
+    try:
+        calibration = REPLAY.calibrate(stack.workspace, snapshot, stack.witness_cls,
+                                       lambda: continuation(calibration_client, 2999))
+    finally:
+        calibration_client.close()
+    result, failures = REPLAY.replay("filesystem", open_session=open_session, events=events, snapshot=snapshot,
+                                     workspace=stack.workspace, witness_cls=stack.witness_cls, receiver=stack.receiver,
+                                     continuation=continuation, responses_path=stack.root / "sou97-replay-responses.jsonl",
+                                     prepare=lambda case: REPLAY.seed_case(stack.workspace, case), restore=REPLAY.unseed_case)
+    for client, log in stack.replay_logs:
+        log.close()
+        require(client.process_witness.final is None or client.process_witness.final["all_stopped"],
+                "replay session cleanup incomplete")
+    stack.sou97 = {"result": result, "failures": failures, "calibration": calibration}
+    report["sou97_replay"] = {"cases": len(result["cases"]), "sessions": result["sessions"], "failures": failures,
+                              "calibration": calibration}
+    report["checks"].append({"case": "sou97-candidate-matrix-replay", "passed": not failures})
+
+
+def write_sou97_evidence(stack, report, args):
+    if stack.classifier["mode"] != "candidate":
+        return
+    replayed = getattr(stack, "sou97", None) or {"result": None, "failures": [{"case": None, "expected": "replay completed"}],
+                                                 "calibration": {}}
+    evidence = REPLAY.evidence(
+        "filesystem", status=report["status"], source=report.get("source_before", {}), classifier=stack.classifier,
+        replay_result=replayed["result"], failures=replayed["failures"], calibration=replayed["calibration"],
+        identities={"agent_binary_sha256": report.get("binary_sha256"), "driver_sha256": report.get("driver_sha256"),
+                    "replay_module_sha256": sha(ROOT / "scripts/sou97_runtime_replay.py"),
+                    "installed_policy_sha256": report.get("installed_profile", {}).get("policy_sha256"),
+                    "upstream_package": "@modelcontextprotocol/server-filesystem@2026.8.31"},
+        runtime={name: digest for name, digest in (
+            ("node", report.get("installed_profile", {}).get("profile", {}).get("runtimeSha256")),
+            ("bwrap", report.get("installed_profile", {}).get("profile", {}).get("bwrapSha256")),
+            ("package_tree", report.get("installed_profile", {}).get("profile", {}).get("packageTreeSha256")),
+            ("sandbox_test_binary", report.get("sandbox_test_binary_sha256")),
+            ("claude", report.get("claude_sha256"))) if digest},
+        witnesses={"daemon_stopped": report.get("daemon_stopped") is True,
+                   "workspace_unchanged": report.get("workspace_unchanged") is True,
+                   "egress_bodies": len(stack.receiver.bodies)},
+        error=report.get("error"))
+    write(stack.root / "sou97-runtime-evidence.json", evidence)
+
+
 def grade(report):
     """Reject incomplete evidence; a process exit or claimed pass is insufficient."""
     require(report["source_before"] == report["source_after"] and report["source_before"]["dirty"] is False,
@@ -1161,9 +1238,17 @@ def grade(report):
                 and fragment in result_text(row["response"])
                 and row["registry_sha256"] == report["installed_profile"]["registry_sha256"]
                 and row["arguments_sha256"] == hashlib.sha256(INSTALL.canonical(arguments)).hexdigest(), "actual tool matrix binding changed")
-    tree_refusal = report["directory_tree_classifier_refusal"]
-    require(tree_refusal["passed"] is True and refused(tree_refusal["response"])
-            and "classifier_ask" in json.dumps(tree_refusal["response"]), "directory tree unknown Ask was bypassed")
+    if report.get("classifier", {}).get("mode") == "candidate":
+        tree_read = report["directory_tree_candidate_read"]
+        require(tree_read["passed"] is True and not refused(tree_read["response"])
+                and any(entry.get("name") == "notes.txt" for entry in json.loads(result_text(tree_read["response"]))),
+                "candidate directory_tree admitted read missing")
+        replayed = report["sou97_replay"]
+        require(replayed["failures"] == [] and replayed["cases"] > 0, "candidate matrix replay failed")
+    else:
+        tree_refusal = report["directory_tree_classifier_refusal"]
+        require(tree_refusal["passed"] is True and refused(tree_refusal["response"])
+                and "classifier_ask" in json.dumps(tree_refusal["response"]), "directory tree unknown Ask was bypassed")
     require(report["peak_active"] == 8 and report["peak_queued"] >= 8, "multiple pending execution not witnessed")
     witnesses = report["fifo_execution_witness"]
     require(len(witnesses) == 8 and all(item["reader_opened"] is True and item["bytes_written"] == len(FIFO_TEXT.encode())
@@ -1225,7 +1310,12 @@ def run(args):
               "live_model_efficacy_measured": False, "environment": {"system": platform.system(), "kernel": platform.release(),
               "architecture": platform.machine(), "python": platform.python_version()}}
     from types import SimpleNamespace
-    stack = SimpleNamespace(root=output, binary=binary, node=node, claude=claude)
+    stack = SimpleNamespace(root=output, binary=binary, node=node, claude=claude, replay_logs=[])
+    stack.classifier = (REPLAY.classifier_identity(args.classifier_script, args.classifier_sha256)
+                        if args.classifier_script else default_classifier())
+    report["classifier"] = {k: v for k, v in stack.classifier.items() if k != "path"}
+    if stack.classifier["mode"] == "candidate":
+        stack.witness_cls = load("sou62_sou97_witness", "verify-sou68-real-mcp.py").RepositoryWitness
     daemon = None
     receiver = stack.receiver = DEMO.Receiver()
     try:
@@ -1337,6 +1427,8 @@ def run(args):
                 policy_controls(stack, report)
                 command, env = run_stdio(stack, report)
                 host(stack, command, env, report)
+                if stack.classifier["mode"] == "candidate":
+                    candidate_replay(stack, command, env, report)
                 daemon_loss(stack, command, env, report)
             report["daemon_stopped"] = daemon.poll() is not None
             require(report["daemon_stopped"], "read-only native daemon not terminated")
@@ -1368,6 +1460,7 @@ def run(args):
             DEMO.stop(daemon)
         receiver.close()
         write(output / "report.json", report)
+        write_sou97_evidence(stack, report, args)
     print(json.dumps({"status": report["status"], "passed": report["passed"], "failed": report["failed"],
                       "skipped": report["skipped"], "error": report.get("error"), "report": str(output / "report.json"),
                       "sou83_create_latency":report.get("sou83_create_latency"),
@@ -1390,7 +1483,11 @@ def main():
     parser.add_argument("--npm", type=Path, default=Path(shutil.which("npm") or "npm"))
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--classifier-script", type=Path, help="SOU-97 opt-in candidate classifier (default: frozen baseline)")
+    parser.add_argument("--classifier-sha256", help="required exact sha256 of --classifier-script")
     args = parser.parse_args()
+    if bool(args.classifier_script) != bool(args.classifier_sha256):
+        parser.error("--classifier-script and --classifier-sha256 must be given together")
     if not args.run:
         print(json.dumps({"status": "plan", "executed": False, "required_positive_sandbox": True,
                           "profile": PROFILE, "real_server": "@modelcontextprotocol/server-filesystem@2026.8.31",
