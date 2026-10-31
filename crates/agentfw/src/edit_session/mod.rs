@@ -27,6 +27,10 @@ mod refresh;
 mod review;
 #[cfg(target_os = "linux")]
 mod runtime;
+#[cfg(target_os = "linux")]
+pub(crate) fn removal_inactive(run: &std::path::Path) -> Result<()> {
+    review::removal_inactive(run)
+}
 pub(crate) mod transport;
 
 pub const FORMAT: &str = "sw-installed-edit-session/1";
