@@ -17,7 +17,20 @@
     #fleet-filter{margin:14px 0}
     #fleet-status{margin:12px 0}
     #fleet-panel .inline{margin-top:10px}
-    #rollout-panel{margin-top:22px}
+    #rollout-panel,#enroll-panel{margin-top:22px}
+    .layout>*,.stack>*{min-width:0}
+    #enroll-status{margin:12px 0}
+    #enroll-status.error{color:var(--red)}
+    #enroll-status.ok{color:var(--green)}
+    #enroll-panel form,#enroll-confirm,#enroll-pending{margin:12px 0}
+    #enroll-panel td{overflow-wrap:anywhere;vertical-align:top}
+    #enroll-panel td button{margin:0 6px 6px 0}
+    .secret-view{border:1px solid var(--amber);border-radius:12px;padding:14px;margin:12px 0}
+    .secret-view pre{overflow-wrap:anywhere;white-space:pre-wrap;user-select:all}
+    .secret-view ol{margin:10px 0 0;padding-left:20px;color:var(--muted)}
+    .secret-view li{margin-bottom:6px;overflow-wrap:anywhere}
+    .secret-view li code{display:block;margin-top:4px;padding:6px 8px;border-radius:8px;background:#101c16;color:var(--text);overflow-wrap:anywhere;white-space:pre-wrap}
+    #enroll-confirm .outcome-block{color:var(--text);border:1px solid var(--red);border-radius:12px;padding:12px}
     #rollout-panel code{overflow-wrap:anywhere}
     #rollout-panel td{overflow-wrap:anywhere;vertical-align:top}
     #rollout-panel form,#rollout-panel #rollout-actions,#rollout-panel #rollout-confirm{margin:12px 0}
@@ -44,7 +57,7 @@
   </style>
 </head>
 <body>
-  <header><div class="brand"><div class="brand-lockup"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true"><rect x="20" y="20" width="160" height="160" rx="28" ry="28" fill="#C0512D"/><line x1="55" y1="155" x2="145" y2="45" stroke="white" stroke-width="22" stroke-linecap="round"/></svg><div><h1>Soup Wall</h1><p>Self-hosted control plane</p></div></div></div><div class="header-meta"><span id="current-admin" class="badge">No admin session</span><span id="connection" class="badge">Locked</span></div></header>
+  <header><div class="brand"><div class="brand-lockup"><svg class="brand-mark" viewBox="0 0 200 200" aria-hidden="true"><rect x="20" y="20" width="160" height="160" rx="28" ry="28" fill="#C0512D"/><line x1="55" y1="155" x2="145" y2="45" stroke="white" stroke-width="22" stroke-linecap="round"/></svg><div><h1>Soup Wall</h1><p>Self-hosted control plane</p></div></div></div><div class="header-meta"><span id="current-admin" class="badge">No admin session</span><button id="lock-console" type="button" class="secondary tiny">Lock console</button><span id="connection" class="badge">Locked</span></div></header>
   <main>
     <section id="unlock" class="card unlock"><h2>Connect to the control plane</h2><p class="note">The admin token remains in this tab’s memory only. It is never stored in a URL, browser storage, or this server’s audit records.</p><form id="unlock-form" class="inline"><label class="field">Admin token<input id="admin-token" type="password" autocomplete="off" required></label><button>Connect</button></form><p id="unlock-message" class="note" role="alert"></p></section>
     <section id="console" class="hidden">
@@ -68,6 +81,15 @@
   <div id="fleet-agent-detail" class="section" aria-live="polite"></div><button id="fleet-history-next" type="button" class="secondary tiny" disabled>Older deployments</button>
 </section>
 
+<section id="enroll-panel" class="section" aria-labelledby="enroll-title">
+  <div class="detail-head"><div><h2 id="enroll-title">Agent enrollment and credentials</h2><p class="note">Enroll an Agent, rotate or revoke its enrollment credential. These are records: enrollment, a credential generation or an applied acknowledgement never proves that an Agent is running or protected now. Changes are Owner-only; the server enforces the role.</p></div><button id="enroll-refresh" type="button" class="secondary">Refresh enrollments</button></div>
+  <form id="enroll-form" class="inline owner-action"><label class="field">New Agent ID<input id="enroll-agent-id" maxlength="128" required autocomplete="off" spellcheck="false" placeholder="build-host-1"></label><button class="enroll-mutation">Enroll Agent</button></form>
+  <p id="enroll-status" role="status" class="note">Select a tenant to manage Agent enrollment.</p>
+  <div id="enroll-pending" class="inline"></div>
+  <section id="enroll-secret" class="hidden secret-view" aria-labelledby="enroll-secret-title"><h3 id="enroll-secret-title">One-time Agent credential</h3><p id="enroll-secret-agent" class="note"></p><p class="note">Shown once. The Console does not keep it and cannot show it again; this page forgets it when you clear it, switch tenant or lock the console.</p><pre id="enroll-secret-value" class="secret" translate="no"></pre><div class="inline"><button id="enroll-secret-copy" type="button">Copy credential</button><button id="enroll-secret-dismiss" type="button" class="secondary">I stored it, clear it</button></div><ol id="enroll-secret-steps"></ol></section>
+  <div id="enroll-confirm"></div>
+  <div id="enroll-list" class="table-wrap"></div>
+</section>
 <section id="rollout-panel" class="section" aria-labelledby="rollout-title">
   <div class="detail-head"><div><h2 id="rollout-title">Managed Agent policy rollout</h2><p class="note">Signed AgentPolicySet revisions for enrolled Agent groups: review, approve, deploy to pilots, promote to workers, pause, resume and roll back. Separate from the Gateway model allowlist and tenant policy versions. Changes are Owner-only; the server enforces the role.</p></div><button id="rollout-refresh" type="button" class="secondary">Refresh rollout</button></div>
   <div class="inline"><label class="field">Agent group<select id="rollout-group"></select></label></div>
@@ -100,7 +122,9 @@
     const $=id=>document.getElementById(id),make=(tag,text,cls="")=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n},message=(text,type="")=>{const n=$("message");n.textContent=text;n.className=type},request=async(path,options={})=>{const h=new Headers(options.headers||{});h.set("X-LLM-Firewall-Admin-Token","Bearer "+adminToken);if(options.body)h.set("Content-Type","application/json");const r=await fetch(path,{...options,headers:h,credentials:"same-origin"}),t=await r.text();let b=null;try{b=t?JSON.parse(t):null}catch(_){}if(!r.ok){const e=new Error(b?.error?.message||(typeof b?.error==="string"?b.error:"")||"Request failed (HTTP "+r.status+")");e.status=r.status;throw e}return b},path=suffix=>{if(!selectedTenant)throw new Error("Select a tenant first.");return "/admin/v1/tenants/"+encodeURIComponent(selectedTenant.id)+suffix},time=value=>{const d=new Date(Number(value)*1000);return Number.isNaN(d.getTime())?"—":d.toLocaleString()},num=id=>{const v=$(id).value.trim();if(!v)return null;if(!/^\d+$/.test(v))throw new Error("Limits must be whole non-negative numbers.");const n=Number(v);if(!Number.isSafeInteger(n))throw new Error("Limit is outside the supported integer range.");return n},copy=async(value,label)=>{if(!value)throw new Error("There is no token to copy.");if(!navigator.clipboard?.writeText)throw new Error("Clipboard access is unavailable in this browser.");await navigator.clipboard.writeText(value);message(label+" copied. Store it in a secret manager.","ok")};
     /* FLEET_PANEL */
     /* ROLLOUT_PANEL */
-    const selectPanels=id=>{fleet.select(id);rollout.select(id)};
+    /* ENROLLMENT_PANEL */
+    const selectPanels=id=>{fleet.select(id);enrollment.select(id);rollout.select(id)};
+    $("lock-console").addEventListener("click",()=>{adminToken="";currentAdmin=null;enrollment.clear();location.replace("/admin")});
     const applyRole=()=>{const role=currentAdmin.role;document.body.classList.remove("role-owner","role-operator","role-viewer");document.body.classList.add("role-"+role);$("current-admin").textContent=currentAdmin.admin_name+" · "+role;$("role-display").textContent=role};
     const renderTenants=()=>{const q=$("tenant-search").value.trim().toLowerCase(),shown=tenants.filter(t=>!q||t.name.toLowerCase().includes(q)||t.id.toLowerCase().includes(q));$("tenant-total").textContent=tenants.length;$("tenant-active").textContent=tenants.filter(t=>t.active).length;$("tenant-suspended").textContent=tenants.filter(t=>!t.active).length;const list=$("tenant-list");list.replaceChildren();if(!shown.length){list.append(make("p",q?"No tenants match this search.":"No tenants yet.","empty"));return}shown.forEach(t=>{const b=make("button",undefined,"tenant "+(t.active?"active":"inactive")+(selectedTenant?.id===t.id?" selected":""));b.append(make("span",t.name),make("small",t.id));b.addEventListener("click",()=>selectTenant(t));list.append(b)})};
     const loadTenants=async()=>{tenants=await request("/admin/v1/tenants");if(selectedTenant){selectedTenant=tenants.find(t=>t.id===selectedTenant.id)||null;if(!selectedTenant){detailGeneration++;selectPanels(null);$("detail-content").classList.add("hidden");$("detail-empty").classList.remove("hidden");$("tenant-title").textContent="Select a tenant";$("tenant-id").textContent=""}}renderTenants()},fillLimits=l=>{$("rate-requests").value=l.rate_limit?.requests_per_window??"";$("rate-window").value=l.rate_limit?.window_seconds??"";$("spend-window").value=l.spend_limit?.window_seconds??"";$("spend-budget").value=l.spend_limit?.max_usd_micros??"";$("spend-reserve").value=l.spend_limit?.reserve_usd_micros_per_request??""},setHeader=()=>{$("tenant-title").textContent=selectedTenant.name;$("tenant-id").textContent=selectedTenant.id;const s=$("tenant-state");s.textContent=selectedTenant.active?"Active":"Suspended";s.className="state "+(selectedTenant.active?"active":"suspended");$("set-tenant-state").textContent=selectedTenant.active?"Suspend":"Restore"};

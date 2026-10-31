@@ -1,0 +1,70 @@
+{
+  "backend": "postgres",
+  "binary_sha256": {
+    "agentfw": "ced74fea88714e22b8de72a81ba8e61a1f491b7ddefd58febbcb9dd435fa3ad7",
+    "llm-firewall": "a54e7cca1dd458e156fc16e313514756f8702eabeb158ca8191799446a16272f"
+  },
+  "checks": {
+    "agent-credential-cannot-administer": true,
+    "agent-used-https-edge": true,
+    "ambiguous-rotation-shows-no-credential": true,
+    "ambiguous-rotation-two-identical-posts-one-change": true,
+    "browser-no-storage": true,
+    "credential-not-in-url-or-storage": true,
+    "cross-tenant-lifecycle-refused": true,
+    "displayed-installer-private-and-ignores-planted-staging-link": true,
+    "displayed-installer-refuses-link-and-public-target": true,
+    "enrolled-agent-fetched-and-acknowledged": true,
+    "enrolled-whoami": true,
+    "evidence-sanitized": true,
+    "late-enrollment-committed-only-to-submitted-tenant": true,
+    "late-enrollment-not-shown-in-other-tenant": true,
+    "narrow-layout-no-horizontal-overflow": true,
+    "negatives-changed-nothing": true,
+    "old-credential-refused-after-rotation": true,
+    "postgres-tls-migration": true,
+    "restart-retains-lifecycle-state": true,
+    "revoked-admin-session-locks-panel-on-read": true,
+    "revoked-agent-keeps-last-policy": true,
+    "revoked-credential-refused": true,
+    "same-agent-process-uses-rotated-credential": true,
+    "second-credential-refused": true,
+    "secret-cleared-after-confirmed-rotation": true,
+    "secret-cleared-after-enrollment": true,
+    "secret-cleared-after-rotation": true,
+    "unavailable-api-keeps-changes-disabled": true,
+    "viewer-and-operator-lifecycle-refused-403": true,
+    "viewer-browser-has-no-enrollment-controls": true
+  },
+  "cleanup": "temporary directory, Console, Agent, edge and PostgreSQL cluster stopped and removed",
+  "config_sha256": {
+    "agent": "0d835ee7815176f9dc6dc6d3f800146f986fe831d8505001337ca2d882ed5892",
+    "console": "05283161434b85fa6c6d6093e67daa2fabcec1d2399ffc53b0093f73ff18fe67"
+  },
+  "format": "sw-console-enrollment-acceptance/1",
+  "postgres_version": "postgres (PostgreSQL) 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)",
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; not production, multi-host or runtime attestation",
+  "snapshots": {
+    "refused": {
+      "cross-tenant revoke": 404,
+      "cross-tenant rotate": 409,
+      "operator enroll": 403,
+      "operator revoke": 403,
+      "operator rotate": 403,
+      "viewer enroll": 403,
+      "viewer revoke": 403,
+      "viewer rotate": 403
+    }
+  },
+  "source_commit": "325f3a249fd1a9c66b66d92fd550d87850001292",
+  "source_dirty": false,
+  "source_tree": "8529551517914f3771abf78b5d9982422631bc7e",
+  "status": "passed",
+  "transport": {
+    "agent_to_console": "HTTPS through an owned private-CA edge on 127.0.0.1",
+    "browser_to_console": "loopback HTTP",
+    "ca_sha256_fingerprint": "D8:BF:2F:A7:11:3A:21:C0:52:01:82:3F:25:88:D0:D5:9C:D0:01:DA:DC:55:A4:94:4B:F1:77:6D:79:0C:9C:B3",
+    "console_to_database": "TLS (sslmode=require) verified against an owned CA by the Console rustls connector",
+    "edge_forwarded_requests": 7
+  }
+}
