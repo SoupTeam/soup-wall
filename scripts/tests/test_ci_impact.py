@@ -102,7 +102,8 @@ class ImpactTests(unittest.TestCase):
             for job in jobs:
                 body = re.split(r"\n  [a-z][a-z0-9-]*:\s*\n",
                                 text.split(f"  {job}:\n", 1)[1], maxsplit=1)[0]
-                self.assertIn("needs: impact", body, (filename, job))
+                self.assertRegex(body, r"(?m)^    needs: (?:impact|\[impact, [^\n]+\])$",
+                                 (filename, job))
                 self.assertIn("needs.impact.outputs.jobs", body, (filename, job))
 
     def test_sou182_raw_boundary_is_manual_and_does_not_replace_required_git(self):

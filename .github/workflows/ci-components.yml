@@ -1050,7 +1050,8 @@ jobs:
   mcp-create-file--linux-create-file:
     name: "mcp-create-file / linux-create-file"
     needs: ci-builds--agent-default-ubuntu2404
-    if: always() && contains(fromJSON(inputs.plan).workflows['mcp-create-file.yml'], 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true'
+    if: >-
+      !cancelled() && contains(fromJSON(inputs.plan).workflows['mcp-create-file.yml'], 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -1231,7 +1232,8 @@ jobs:
   mcp-create-file--linux-installed-edit:
     name: "mcp-create-file / linux-installed-edit"
     needs: ci-builds--agent-default-ubuntu2404
-    if: always() && contains(fromJSON(inputs.plan).workflows['mcp-create-file.yml'], 'linux-installed-edit') && github.event.inputs.replacement_only != 'true'
+    if: >-
+      !cancelled() && contains(fromJSON(inputs.plan).workflows['mcp-create-file.yml'], 'linux-installed-edit') && github.event.inputs.replacement_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
