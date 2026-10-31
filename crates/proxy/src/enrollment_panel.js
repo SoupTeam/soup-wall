@@ -41,7 +41,8 @@ const enrollment = (() => {
       await load();
       if (generation === epoch && message !== false) say(message || `Enrollment records read ${new Date().toLocaleString()}. A record is not proof that an Agent is running or protected.`);
     } catch (e) {
-      if (generation === epoch && e.name !== "AbortError") say(e.status === 401 ? "The admin session is no longer authorized. Reconnect." : "Unable to load enrollment records. Refresh to retry.", "error");
+      if (generation !== epoch || e.name === "AbortError" || failure(e, "Reading enrollment records")) return;
+      say("Unable to load enrollment records. Refresh to retry.", "error");
     }
   }
 
@@ -95,6 +96,26 @@ const enrollment = (() => {
     box.append(label, row); root.replaceChildren(box); input.focus();
   }
 
+  // A finite, private installer for the Agent host (POSIX sh with GNU
+  // coreutils/findutils). It refuses a linked, foreign or group/other
+  // writable directory and a target that is a link or not a private regular
+  // file of the user, stages into a fresh exclusive mktemp file (never a fixed
+  // name), validates the 52-byte credential and renames it into place.
+  // The credential is read from the terminal, never from argv or history.
+  const installer = file => [
+    "( f=" + file + "; d=$(dirname -- \"$f\")",
+    "  [ -e \"$d\" ] || [ -L \"$d\" ] || mkdir -m 700 -- \"$d\" || exit 1",
+    "  if [ -L \"$d\" ] || [ ! -d \"$d\" ] || [ ! -O \"$d\" ] || [ -n \"$(find \"$d\" -maxdepth 0 -perm /022)\" ]; then",
+    "    echo \"Refused: $d must be your own directory, not a link and not writable by others.\" >&2; exit 1; fi",
+    "  if [ -L \"$f\" ] || { [ -e \"$f\" ] && { [ ! -f \"$f\" ] || [ ! -O \"$f\" ] || [ -n \"$(find \"$f\" -maxdepth 0 -perm /077)\" ]; }; }; then",
+    "    echo \"Refused: $f is a link or not a private regular file of yours. Inspect it yourself.\" >&2; exit 1; fi",
+    "  t=$(mktemp -- \"$d/.agent-token.XXXXXXXXXX\") || exit 1",
+    "  head -c 52 > \"$t\"",
+    "  if [ \"$(wc -c < \"$t\")\" -ne 52 ] || ! grep -Eq '^sw_agent_[A-Za-z0-9_-]{43}$' \"$t\"; then",
+    "    rm -f -- \"$t\"; echo \"Refused: this is not a 52-character Agent credential.\" >&2; exit 1; fi",
+    "  mv -fT -- \"$t\" \"$f\" && echo \"Installed $f\" )"
+  ].join("\n");
+
   // ------------------------------------------------------------ secret view
   async function showSecret(value) {
     secret = value;
@@ -110,13 +131,13 @@ const enrollment = (() => {
     const key = issuer ? ` SOUP_MANAGED_AGENT_KEY_ID=${issuer.key_id} SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX=${issuer.public_key_hex}` : "";
     // [explanation, command] pairs; commands never contain the credential.
     const lines = value.kind === "rotate" ? [
-      ["On the Agent host, write the new credential to a private file next to the configured SOUP_MANAGED_AGENT_TOKEN_FILE and rename it over that file (paste the credential, then press Enter):",
-       '( umask 077 && head -c 52 > "$TOKEN_FILE.next" ) && mv "$TOKEN_FILE.next" "$TOKEN_FILE"'],
+      ["On the Agent host, as the Agent's user, with SOUP_MANAGED_AGENT_TOKEN_FILE set to the Agent's token file, run this, paste the credential and press Enter. It refuses unsafe existing files or directories and replaces the file only by an atomic rename:",
+       installer('"${SOUP_MANAGED_AGENT_TOKEN_FILE:?set it to the Agent token file}"')],
       ["The running agentfw serve re-reads the file before its next policy fetch; no restart. An Agent configured with the SOUP_MANAGED_AGENT_TOKEN variable cannot reload: restart it with the token file configured.", null],
       ["Check this Agent's next applied acknowledgement in the Agent fleet. The old credential is refused from now on.", null]
     ] : [
-      ["On the Agent host, store the credential in a private file without a newline (paste the credential, then press Enter):",
-       '( umask 077 && mkdir -p "$HOME/.agentfw" && head -c 52 > "$HOME/.agentfw/enrollment-token" )'],
+      ["On the Agent host, as the Agent's user, run this, paste the credential and press Enter. It stores it in a private file without a newline and refuses unsafe existing files or directories:",
+       installer('"$HOME/.agentfw/enrollment-token"')],
       ["Start the existing daemon. Add SOUP_MANAGED_AGENT_TLS_CA_FILE=/absolute/ca.pem for a private CA" + (issuer ? "." : " and the pinned issuer key (SOUP_MANAGED_AGENT_KEY_ID, SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX)."),
        `SOUP_MANAGED_AGENT_CONSOLE=https://CONSOLE_HOST/ SOUP_MANAGED_AGENT_TENANT=${value.tenant} SOUP_MANAGED_AGENT_ID=${value.agent} SOUP_MANAGED_AGENT_TOKEN_FILE="$HOME/.agentfw/enrollment-token"${key} agentfw serve`],
       ["Deploy an approved policy; the Agent fleet then shows its applied acknowledgement. Enrollment alone protects nothing.", null]
@@ -135,9 +156,11 @@ const enrollment = (() => {
   }
 
   // ------------------------------------------------------------- mutations
+  // Authorization loss on any request (mutation, inventory read or
+  // reconciliation) makes the panel read-only until the admin reconnects.
   function failure(e, label) {
-    if (e.status === 401) { blocked = "session"; say("The admin session expired or is no longer authorized. Reconnect; nothing was changed by this browser.", "error"); return true; }
-    if (e.status === 403) { blocked = "role"; say(`${label}: this admin role does not permit enrollment changes. The panel is read-only.`, "error"); return true; }
+    if (e.status === 401) { blocked = "session"; say(`${label}: the admin session expired or is no longer authorized. Reconnect; changes are disabled.`, "error"); lock(); return true; }
+    if (e.status === 403) { blocked = "role"; say(`${label}: this admin role does not permit it. The panel is read-only.`, "error"); lock(); return true; }
     return false;
   }
 
@@ -266,6 +289,7 @@ const enrollment = (() => {
       }
     } catch (e) {
       if (stale(op.tenant, generation) || e.name === "AbortError") return;
+      if (failure(e, "Reconciling the uncertain request")) return;
       say("The outcome is unknown and the server state could not be read. Changes stay disabled until Check again succeeds.", "error");
       button("Check again", "secondary", reconcile);
     } finally {

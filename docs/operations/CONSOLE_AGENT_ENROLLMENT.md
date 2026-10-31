@@ -19,7 +19,8 @@ An enrollment record, a credential generation or an applied acknowledgement is
 | Operator, Viewer | read the enrollment records only |
 
 The server checks the role on every request. A 401 (expired or invalid admin
-session) or 403 (role) makes the panel read-only until you reconnect.
+session) or 403 (role) on any request, including a refresh or a reconciliation
+read, makes the panel read-only until you reconnect.
 
 ## Enroll an Agent
 
@@ -30,13 +31,22 @@ session) or 403 (role) makes the panel read-only until you reconnect.
    install steps. It is never put in a URL, browser storage, logs or exports.
    Other changes stay disabled until you choose **I stored it, clear it**.
    Switching tenant or **Lock console** also forgets it.
-3. On the Agent host, store it in a private file without a newline and start the
-   existing daemon (`agentfw serve`) with `SOUP_MANAGED_AGENT_TOKEN_FILE`, the
-   tenant and Agent ID, the pinned issuer key and, for a private CA,
-   `SOUP_MANAGED_AGENT_TLS_CA_FILE`. The panel shows the exact commands with
+3. On the Agent host, as the Agent's user, run the displayed install command
+   and paste the credential (it is read from the terminal, never from argv or
+   shell history). The command (POSIX `sh` with GNU coreutils and findutils):
+   - refuses a token directory that is a link, not yours, or writable by group
+     or others (it creates a missing one with mode `0700`);
+   - refuses an existing token file that is a link or not a private regular
+     file of yours, leaving it untouched for you to inspect;
+   - writes into a fresh exclusive `mktemp` file in that directory (never a
+     fixed staging name), checks the 52-byte `sw_agent_` format and renames it
+     into place (`mv -T`), so the file is `0600` without a newline.
+4. Start the existing daemon (`agentfw serve`) with `SOUP_MANAGED_AGENT_TOKEN_FILE`,
+   the tenant and Agent ID, the pinned issuer key and, for a private CA,
+   `SOUP_MANAGED_AGENT_TLS_CA_FILE`. The panel shows the exact command with
    these non-secret values filled in. Use the token **file**: only file mode can
    reload a rotated credential without restart.
-4. Deploy an approved policy. The Agent fleet shows its applied acknowledgement.
+5. Deploy an approved policy. The Agent fleet shows its applied acknowledgement.
 
 If the credential is lost before it is stored, the Console cannot show it
 again. Rotate the credential to issue a new one.
@@ -45,9 +55,10 @@ again. Rotate the credential to issue a new one.
 
 **Rotate credential** asks you to type the Agent ID. The browser generates a
 fresh random credential and operation ID in memory and sends one request with
-the current generation. On success the new credential is shown once; replace the
-Agent's token file with it (write a private `.next` file, then rename). The
-running daemon re-reads the file before its next fetch. The old credential is
+the current generation. On success the new credential is shown once; run the
+displayed install command with `SOUP_MANAGED_AGENT_TOKEN_FILE` set to the
+Agent's token file. It applies the same refusals and replaces the file only by
+an atomic rename. The running daemon re-reads the file before its next fetch. The old credential is
 refused from the moment the server commits.
 
 A refused rotation (another rotation or a revocation changed the enrollment)

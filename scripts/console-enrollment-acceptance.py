@@ -65,12 +65,11 @@ def postgres(stack, temp, binaries):
     run("x509", "-req", "-in", csr, "-CA", ca, "-CAkey", ca_key, "-CAcreateserial", "-out", cert, "-days", "2", "-extfile", ext)
     os.chmod(key, 0o600)
     password = secrets.token_urlsafe(24)
-    pwfile = temp / "pgpass.private"
-    pwfile.write_text(password)
-    os.chmod(pwfile, 0o600)
+    # The generated password goes to initdb through its standard input only;
+    # it is never written to a file.
     subprocess.run([str(binaries / "initdb"), "-D", str(data), "-U", "enrollment_owner", "--auth=scram-sha-256",
-                    "--pwfile", str(pwfile), "--no-instructions"], check=True, capture_output=True, timeout=120)
-    pwfile.unlink()
+                    "--pwfile=/dev/stdin", "--no-instructions"], input=(password + "\n").encode(),
+                   check=True, capture_output=True, timeout=120)
     port = D.port()
     (data / "postgresql.auto.conf").write_text(
         f"listen_addresses='127.0.0.1'\nport={port}\nunix_socket_directories='{data}'\nssl=on\n"
@@ -167,7 +166,8 @@ def main():
             origin, ca, edge_counts, ca_fingerprint = EDGE.tls_edge(stack, temp, cp)
             issuer = api("GET", "/admin/v1/managed-issuer")[1]
             home = temp / "agent-home"
-            (home / ".agentfw").mkdir(parents=True)
+            (home / ".agentfw").mkdir(parents=True, mode=0o700)
+            (home / ".agentfw").chmod(0o700)
             agent_port = D.port()
             (home / ".agentfw/config.yaml").write_text(f"bind: 127.0.0.1\nport: {agent_port}\nenforce: true\n")
             token_file = home / ".agentfw/enrollment-token"
@@ -178,13 +178,21 @@ def main():
                              SOUP_MANAGED_AGENT_PUBLIC_KEY_HEX=issuer["public_key_hex"])
             agent_url = f"http://127.0.0.1:{agent_port}"
 
+            def installer():
+                """The exact install command the one-time view displays."""
+                code = page.locator("#enroll-secret-steps li").first.locator("code")
+                expect(code).to_contain_text("mktemp")
+                return code.inner_text()
+
+            def run_installer(command, token):
+                return subprocess.run(["bash", "-c", command], input=token.encode(), capture_output=True, timeout=30,
+                                      env={"PATH": "/usr/bin:/bin", "HOME": str(home),
+                                           "SOUP_MANAGED_AGENT_TOKEN_FILE": str(token_file)})
+
             def install(token):
-                """The documented install: private temporary file, then rename."""
-                staged = token_file.with_name(token_file.name + ".next")
-                fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                with os.fdopen(fd, "w") as stream:
-                    stream.write(token)
-                os.replace(staged, token_file)
+                result = run_installer(installer(), token)
+                assert result.returncode == 0, "displayed installer failed: " + result.stderr.decode("utf-8", "replace")[-300:]
+                assert token_file.read_text() == token and (token_file.stat().st_mode & 0o777) == 0o600
 
             def deploy(revision):
                 path = base + "/edge-1/revisions"
@@ -252,7 +260,28 @@ def main():
                 expect(page.locator("#enroll-secret-steps")).to_contain_text(issuer["public_key_hex"])
                 check("credential-not-in-url-or-storage", first not in page.url
                       and page.evaluate("localStorage.length === 0 && sessionStorage.length === 0"))
+                # The displayed installer refuses unsafe existing targets and
+                # ignores a planted fixed-name staging link.
+                command = installer()
+                victim = temp / "owned-other-file"
+                victim.write_text("owned other file\n")
+                victim.chmod(0o644)
+                token_file.symlink_to(victim)
+                linked = run_installer(command, first)
+                token_file.unlink()
+                token_file.write_text("old public\n")
+                token_file.chmod(0o644)
+                public = run_installer(command, first)
+                public_unchanged = token_file.read_text() == "old public\n"
+                token_file.unlink()
+                token_file.with_name(token_file.name + ".next").symlink_to(victim)
+                check("displayed-installer-refuses-link-and-public-target",
+                      linked.returncode != 0 and public.returncode != 0 and public_unchanged
+                      and victim.read_text() == "owned other file\n" and (victim.stat().st_mode & 0o777) == 0o644)
                 install(first)
+                check("displayed-installer-private-and-ignores-planted-staging-link",
+                      victim.read_text() == "owned other file\n" and (token_file.stat().st_mode & 0o777) == 0o600)
+                token_file.with_name(token_file.name + ".next").unlink()
                 dismiss("enrollment")
                 expect(page.locator("#enroll-list")).to_contain_text("edge-1")
                 shot("enrolled")
@@ -345,6 +374,25 @@ def main():
                 check("negatives-changed-nothing", api("GET", base)[1][0]["credential_generation"] == 3
                       and agent_auth(third)["whoami"] == 200)
                 snapshots["refused"] = {**refused, **{"cross-tenant " + k: v for k, v in cross.items()}}
+                # An Owner session that loses authorization while the panel is
+                # open: the next inventory read locks every change.
+                second_owner = api("POST", "/admin/v1/admins", {"name": "Enrollment second owner", "role": "owner"})[1]
+                private.append(second_owner["token"])
+                lost_page = browser.new_context(viewport={"width": 1440, "height": 1000}).new_page()
+                login(lost_page, second_owner["token"])
+                enabled = "[...document.querySelectorAll('#enroll-panel .enroll-mutation')].filter(b => !b.disabled).length"
+                was_enabled = lost_page.evaluate(enabled)
+                api("POST", f"/admin/v1/admins/{second_owner['admin']['id']}/revoke", {})
+                lost_posts = []
+                lost_page.on("request", lambda r: lost_posts.append(r.url) if r.method == "POST" else None)
+                lost_page.locator("#enroll-refresh").click()
+                expect(lost_page.locator("#enroll-status")).to_contain_text("Reading enrollment records: the admin session expired")
+                lost_page.locator("#enroll-agent-id").fill("edge-after-revocation")
+                lost_page.locator("#enroll-agent-id").press("Enter")
+                lost_page.wait_for_timeout(300)
+                check("revoked-admin-session-locks-panel-on-read", was_enabled > 0 and lost_page.evaluate(enabled) == 0
+                      and lost_posts == [])
+                lost_page.context.close()
 
                 # 7. Revocation; the Agent keeps its last verified policy.
                 page.get_by_role("button", name="Revoke edge-1").click()

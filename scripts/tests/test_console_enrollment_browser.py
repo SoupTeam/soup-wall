@@ -12,6 +12,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
+import stat
+import subprocess
+import tempfile
 import unittest
 
 AVAILABLE = importlib.util.find_spec("playwright") is not None
@@ -245,7 +249,7 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
         self.assertRegex(body["replacement_token"], r"^sw_agent_[A-Za-z0-9_-]{43}$")
         self.assertEqual(self.page.locator("#enroll-secret-value").inner_text(), body["replacement_token"])
         self.assertIn("generation 2", self.page.locator("#enroll-secret-agent").inner_text())
-        self.assertIn("rename it over that file", self.page.locator("#enroll-secret-steps").inner_text())
+        self.assertIn("atomic rename", self.page.locator("#enroll-secret-steps").inner_text())
 
     def test_ambiguous_rotation_is_confirmed_only_with_the_identical_request(self):
         path = f"/admin/v1/tenants/{TENANT}/agents/edge-1/credential-rotations"
@@ -331,6 +335,114 @@ class EnrollmentPanelBrowserTests(unittest.TestCase):
         self.wait_status("could not be read")
         self.assertEqual(self.enabled_mutations(), 0)
         self.assertTrue(self.page.get_by_role("button", name="Check again").is_enabled())
+
+    def test_authorization_loss_on_inventory_reads_locks_every_change(self):
+        for status in (401, 403):
+            with self.subTest(status=status):
+                self.overrides.clear()
+                self.open()
+                self.assertGreater(self.enabled_mutations(), 0)
+                self.overrides[("GET", f"/admin/v1/tenants/{TENANT}/agents")] = (status, {"error": "refused"})
+                self.page.locator("#enroll-refresh").click()
+                self.wait_status("Reading enrollment records")
+                self.assertEqual(self.enabled_mutations(), 0)
+                self.page.locator("#enroll-agent-id").fill("edge-5")
+                self.page.locator("#enroll-agent-id").press("Enter")
+                self.page.wait_for_timeout(200)
+                self.assertEqual(self.posts, [])
+
+    def displayed_installers(self):
+        """The exact install commands the one-time views show, for both kinds."""
+        def rotate(route):
+            body = json.loads(route.request.post_data)
+            self.json(route, {"tenant_id": TENANT, "agent_id": "edge-1", "generation": 2,
+                              "operation_id": body["operation_id"], "already_applied": False})
+
+        self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents")] = self.enroll_ok()
+        self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents/edge-1/credential-rotations")] = rotate
+        self.open()
+        self.page.locator("#enroll-agent-id").fill("edge-2")
+        self.page.locator("#enroll-form button").click()
+        self.wait_status("edge-2 enrolled")
+        self.page.wait_for_function("() => document.querySelector('#enroll-secret-steps code')")
+        enroll = self.page.locator("#enroll-secret-steps li").first.locator("code").inner_text()
+        self.page.get_by_role("button", name="I stored it, clear it").click()
+        self.page.get_by_role("button", name="Rotate credential for edge-1").click()
+        self.confirm("edge-1")
+        self.wait_status("rotated to generation 2")
+        self.page.wait_for_function("() => document.querySelector('#enroll-secret-steps code')")
+        rotate_command = self.page.locator("#enroll-secret-steps li").first.locator("code").inner_text()
+        self.assertNotIn(SYNTHETIC, enroll + rotate_command)
+        self.assertNotIn("umask", enroll + rotate_command)
+        return enroll, rotate_command
+
+    @unittest.skipUnless(shutil.which("bash") and shutil.which("mktemp") and shutil.which("find"), "POSIX tools needed")
+    def test_displayed_installer_is_private_exclusive_and_refuses_unsafe_targets(self):
+        enroll, rotate_command = self.displayed_installers()
+        token = SYNTHETIC
+
+        def run(command, home, shell, data=token, extra=None):
+            env = {"PATH": "/usr/bin:/bin", "HOME": str(home), **(extra or {})}
+            return subprocess.run([shell, "-c", command], input=data.encode(), env=env, capture_output=True, timeout=30)
+
+        for shell in [s for s in ("bash", "sh") if shutil.which(s)]:
+            with self.subTest(shell=shell), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                # Fresh install: a private 52-byte file, no staging left behind.
+                home = root / "fresh"
+                home.mkdir()
+                self.assertEqual(run(enroll, home, shell).returncode, 0)
+                target = home / ".agentfw/enrollment-token"
+                self.assertEqual(target.read_bytes(), token.encode())
+                self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+                self.assertEqual(stat.S_IMODE(target.parent.stat().st_mode), 0o700)
+                self.assertEqual(sorted(p.name for p in target.parent.iterdir()), ["enrollment-token"])
+                # Existing link, public file and foreign-writable or linked directory are refused unchanged.
+                cases = {}
+                for name in ("link", "public", "writable", "linked-dir", "next-link", "invalid"):
+                    case = root / name
+                    (case / ".agentfw").mkdir(parents=True, mode=0o700)
+                    cases[name] = case
+                victim = root / "victim"
+                victim.write_text("owned other file\n")
+                victim.chmod(0o644)
+                (cases["link"] / ".agentfw/enrollment-token").symlink_to(victim)
+                public = cases["public"] / ".agentfw/enrollment-token"
+                public.write_text("old public\n")
+                public.chmod(0o644)
+                (cases["writable"] / ".agentfw").chmod(0o770)
+                real = root / "real-dir"
+                real.mkdir(mode=0o700)
+                shutil.rmtree(cases["linked-dir"] / ".agentfw")
+                (cases["linked-dir"] / ".agentfw").symlink_to(real)
+                for name in ("link", "public", "writable", "linked-dir"):
+                    result = run(enroll, cases[name], shell)
+                    self.assertNotEqual(result.returncode, 0, name)
+                    self.assertIn(b"Refused", result.stderr, name)
+                self.assertEqual(victim.read_text(), "owned other file\n")
+                self.assertEqual(stat.S_IMODE(victim.stat().st_mode), 0o644)
+                self.assertEqual(public.read_text(), "old public\n")
+                self.assertEqual(list(real.iterdir()), [])
+                self.assertEqual(sorted(p.name for p in (cases["writable"] / ".agentfw").iterdir()), [])
+                # A planted fixed-name staging link is never used.
+                (cases["next-link"] / ".agentfw/enrollment-token.next").symlink_to(victim)
+                self.assertEqual(run(enroll, cases["next-link"], shell).returncode, 0)
+                self.assertEqual(victim.read_text(), "owned other file\n")
+                # Invalid input leaves nothing behind.
+                result = run(enroll, cases["invalid"], shell, data="x" * 52)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(list((cases["invalid"] / ".agentfw").iterdir()), [])
+                # Rotation replaces the configured private file atomically and
+                # refuses when the token file is not configured.
+                configured = {"SOUP_MANAGED_AGENT_TOKEN_FILE": str(target)}
+                newer = "sw_agent_" + "N" * 43
+                self.assertEqual(run(rotate_command, home, shell, data=newer, extra=configured).returncode, 0)
+                self.assertEqual(target.read_bytes(), newer.encode())
+                self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o600)
+                self.assertNotEqual(run(rotate_command, home, shell, data=newer).returncode, 0)
+                linked = {"SOUP_MANAGED_AGENT_TOKEN_FILE": str(cases["link"] / ".agentfw/enrollment-token")}
+                self.assertNotEqual(run(rotate_command, cases["link"], shell, extra=linked).returncode, 0)
+                self.assertEqual(victim.read_text(), "owned other file\n")
 
     def test_lock_console_forgets_the_secret(self):
         self.overrides[("POST", f"/admin/v1/tenants/{TENANT}/agents")] = self.enroll_ok()
