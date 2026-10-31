@@ -128,3 +128,6 @@ operator operations must be zero, source state and siblings must be preserved,
 and every finite case must be attempted and pass. Raw content, proofs and local
 paths are excluded from public reports. No real credentials or paid inference
 are used. Final shared Ready CI, CodeQL, candidate admission and merge are TL-owned.
+
+The [source-specific acceptance evidence](evidence/sou-196-acceptance/README.md)
+records the native run, exact identities, all finite controls and limitations.
