@@ -520,6 +520,25 @@ class ComparisonTests(unittest.TestCase):
         self.assertTrue(result["all_passed"], [r for r in result["controls"] if not r["passed"]])
         self.assertEqual(len(result["controls"]), len(controls.CONTROLS))
 
+    def test_negative_controls_on_bounded_capture_evidence_without_earlier_attempts(self):
+        import result_inspection_controls as controls
+        evidence = self.tmp / "evidence-bounded"
+        (evidence / "runs").mkdir(parents=True)
+        shutil.copyfile(PRE, evidence / "predeclaration.json")
+
+        def bounded(run, _):
+            for key in ("stdout", "stderr"):
+                run["execution"][key] = self.bounded(run["execution"][key])
+            run["execution"].update(killed=None, output_limit_exceeded=None)
+        cases = sorted(c["case_id"] for c in self.manifest["cases"] if c["label"] == "attack")
+        self.side("baseline", root=evidence / "runs", run_edit=bounded)
+        self.side("candidate", default_results(self.manifest, {cases[0]: "Allow"}), root=evidence / "runs",
+                  run_edit=bounded)
+        result = controls.run_controls(evidence, ROOT)
+        self.assertTrue(result["all_passed"], [r for r in result["controls"] if not r["passed"]])
+        dropped = next(r for r in result["controls"] if r["control"] == "failed_attempts_dropped")
+        self.assertIn("renumbered", dropped["variant"])
+
     def test_oversized_input_refused_before_parsing(self):
         def big(run, run_dir):
             raw = b" " * (ric.LIMITS["max_stdout_bytes"] + 1)

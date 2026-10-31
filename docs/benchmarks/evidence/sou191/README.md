@@ -57,7 +57,8 @@ Full outputs: [comparison.json](comparison/comparison.json), [units.csv](compari
 | `runs/candidate/attempt-001/` | **Measurement.** Build exit 0 in 177 s; adapter exit 0 in 0.77 s |
 | `comparison/` | Retained comparison outputs |
 | [controls.json](controls.json) | 15 negative controls on temporary mutated copies of these runs; all passed |
-| [SHA256SUMS](SHA256SUMS) | Digests of every other file in this directory |
+| `replication/` | Replication series recorded with the bounded-capture recorder; see [below](#replication-series). Not the primary result |
+| [SHA256SUMS](SHA256SUMS) | Digests of every other file in this directory, including `replication/` |
 
 The measured run directories contain `run.json`, `adapter-stdout.json` (raw adapter output, unmodified),
 `adapter-stderr.txt`, `build-messages.jsonl`, `build-stderr.txt` and `report.json`. The `report.json` file is the
@@ -110,6 +111,50 @@ python scripts/benchmarks/result_inspection_controls.py --evidence docs/benchmar
 - **Controls:** exits 0 when every control passes. `unmutated_copy` also has to reproduce the retained
   `comparison.json`.
 - **Recording again:** follow the guide. The new attempts get new numbers, and fresh latencies will differ.
+
+## Replication series
+
+The primary result above is unchanged. A second, separately declared series exercises the bounded-capture recorder
+in genuine builds and runs and checks repeatability. Its
+[predeclaration](replication/predeclaration.json) (SHA-256 `a1b9e43e…`) was committed before its first attempt.
+It repeats the primary predeclaration (same revisions, corpus, policy, grouping, contract and attempt rule) with
+`--jobs 2` applied from the start. It records the primary outcomes as prior knowledge and states that it never
+replaces the primary result.
+
+| | Primary series (`runs/`) | Replication series (`replication/runs/`) |
+| --- | --- | --- |
+| Recorder | Earlier recorder, in-memory capture (resolves to `95072f50`) | Bounded-capture recorder (resolves to `7e7360f3`) |
+| Recorded (UTC) | 13:53–13:59 | 15:20–15:27 |
+| Baseline build / adapter | exit 0, 143 s / exit 0, 0.70 s | exit 0, 168 s / exit 0, 0.92 s |
+| Candidate build / adapter | exit 0, 177 s / exit 0, 0.77 s | exit 0, 187 s / exit 0, 1.16 s |
+| Artifact SHA-256 (baseline, candidate) | `b8543c20…`, `1772d62a…` | `e1a04f29…`, `0dbc5cab…` |
+| Attack misses | 14/24 -> 0/24 | 14/24 -> 0/24 |
+| False refusals | 10/24 -> 10/24 | 10/24 -> 10/24 |
+
+- **Agreement.** All 51 cases match on both sides in every field except latency: status, adapter status, verdict,
+  rule, original report outcome and transition. The uncertainty is again `insufficient_clusters`.
+- **Artifacts and latency.** The artifact hashes differ from the primary series, which is expected because debug
+  MSVC builds are not bit-reproducible. Latency is descriptive and differs between fresh runs. Replication attack
+  medians are 587.5 µs (baseline) and 5669.5 µs (candidate); benign medians are 716 and 938.5 µs.
+- **Bounded capture in a real run.** Every build and adapter stream was `complete`, below its limit and not
+  truncated, with `raw_sha256` equal to `observed_sha256`. Nothing timed out or was killed.
+  - Cleanup went through a Windows Job Object. No job process or reader thread was alive afterwards.
+  - After each cargo build exited, one process was still in its job and was terminated (`job_processes_at_exit:
+    1`). The recorder does not record process names. MSVC's detached PDB server is a plausible candidate, but this
+    was not verified.
+  - The adapter jobs were empty at exit.
+- **Checks.** [comparison](replication/comparison/report.md) is reproduced byte for byte from the retained inputs.
+  [controls.json](replication/controls.json) has 15 of 15 passing. The replication has no failed attempt, so
+  `failed_attempts_dropped` uses its documented variant there: it renumbers the attempts as if `attempt-001` had
+  been deleted.
+
+```powershell
+python scripts/benchmarks/result_inspection_compare.py `
+  --predeclaration docs/benchmarks/evidence/sou191/replication/predeclaration.json `
+  --baseline docs/benchmarks/evidence/sou191/replication/runs/baseline `
+  --candidate docs/benchmarks/evidence/sou191/replication/runs/candidate `
+  --out-dir $env:TEMP\sou191-replication --expect docs/benchmarks/evidence/sou191/replication/comparison
+```
 
 ## Public derivative of baseline attempt-002
 
@@ -172,7 +217,8 @@ python scripts/benchmarks/result_inspection_controls.py --evidence docs/benchmar
   - For every retained stream here, the process exited by itself, nothing timed out or was truncated, and the
     largest stream was 193 KB against a 2 MiB limit. So each `raw_sha256` is the digest of the complete stream.
   - The comparator accepts this earlier entry format. The recorder identities above point to that earlier recorder.
-  - The measurements were not regenerated for the new capture code.
+  - The primary measurements were not regenerated for the new capture code. The separately declared replication
+    series exercises it instead.
 - **Bounded capture from now on.** The current recorder reads each stream on its own thread, keeps at most the
   limit in memory, and hashes every byte it observes.
   - An adapter stdout or build stdout over its limit kills the process tree, and the attempt is classified

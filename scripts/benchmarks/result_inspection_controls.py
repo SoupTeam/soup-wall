@@ -45,11 +45,16 @@ def save(run_dir, run):
     (run_dir / "run.json").write_bytes((json.dumps(run, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
 
 
-def reseal_stdout(run_dir, run, raw):
+def reseal_stdout(run_dir, run, raw, complete=True):
+    """Rewrite the retained stdout and every digest describing it, in either file-entry format."""
     (run_dir / "adapter-stdout.json").write_bytes(raw)
     digest = ric._sha(raw)
-    run["execution"]["stdout"].update(raw_sha256=digest, raw_bytes=len(raw), retained_sha256=digest,
-                                      retained_bytes=len(raw))
+    entry = run["execution"]["stdout"]
+    entry.update(raw_sha256=digest, raw_bytes=len(raw), retained_sha256=digest, retained_bytes=len(raw))
+    if "observed_sha256" in entry:  # bounded-capture recorder
+        entry.update(observed_sha256=digest, observed_bytes=len(raw), complete=complete)
+        if not complete:
+            entry.update(raw_sha256=None, raw_bytes=None)
 
 
 def reseal_report(run_dir, run, report):
@@ -133,7 +138,13 @@ def drop_earlier_attempts(ctx):
     role_dir = ctx["base"].parent
     earlier = [p for p in ric.attempts(role_dir) if p.name < ctx["base"].name]
     if not earlier:
-        raise SystemExit("drop_earlier_attempts needs a retained attempt before the baseline measurement")
+        # No failed attempt precedes the measurement (e.g. the replication series): leave the gap a deleted
+        # attempt-001 would leave, by renumbering the measured attempt.
+        later = sorted(p for p in ric.attempts(role_dir))
+        for path in reversed(later):
+            path.rename(role_dir / f"attempt-{int(path.name[-3:]) + 1:03d}")
+        ctx["variant"] = "no earlier attempt exists; attempts renumbered from 002 as if attempt-001 were deleted"
+        return
     for path in earlier:
         shutil.rmtree(path)
 
@@ -158,8 +169,10 @@ def timed_out(ctx):
     run_dir = ctx["cand"]
     run = load(run_dir)
     raw = (run_dir / "adapter-stdout.json").read_bytes()
-    reseal_stdout(run_dir, run, raw[: len(raw) // 3])
+    reseal_stdout(run_dir, run, raw[: len(raw) // 3], complete=False)
     run["execution"].update(exit_code=None, timed_out=True)
+    if "killed" in run["execution"]:  # bounded-capture recorder
+        run["execution"].update(killed="timeout")
     run["report"] = None
     (run_dir / "report.json").unlink()
     save(run_dir, run)
@@ -255,6 +268,8 @@ def run_controls(evidence: Path, repo: Path):
                 d = result["denominators"]["candidate"]["attack"]
                 row["candidate_attack_denominators"] = d
                 row["passed"] = row["passed"] and (d["unknown"], d["error"]) == (1, 1) and d["incomplete"] >= 1
+            if "variant" in ctx:
+                row["variant"] = ctx["variant"]
             rows.append(row)
     return {"schema": "soup-wall-result-inspection-controls/1",
             "note": "Every control is a synthetic mutation of a temporary copy of the retained genuine runs; none "
