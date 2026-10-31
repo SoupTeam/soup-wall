@@ -443,6 +443,8 @@ class RecorderTests(unittest.TestCase):
         self.assertNotIn(str(self.tmp).replace("\\", "\\\\"), out)
         self.assertIn("<work>", out)
         self.assertIn("<home>", out)
+        twice = json.dumps({"m": json.dumps({"p": str(self.tmp / "out.o")})}).encode()
+        self.assertNotIn(str(self.tmp.resolve().drive), clean(twice).decode())
 
     def test_attempts_are_never_overwritten(self):
         out = self.tmp / "role"

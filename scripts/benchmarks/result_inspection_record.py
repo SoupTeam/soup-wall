@@ -117,11 +117,13 @@ def execute_verified(argv, artifact: Path, expected: str, timeout: int):
 
 
 def sanitizer(*roots):
-    """Replace local absolute paths in retained text; JSON-escaped and URL forms included."""
+    """Replace local absolute paths in retained text; JSON-escaped (also twice, as in cc-rs errors
+    inside Cargo's JSON) and URL forms included."""
     forms = []
     for root, label in roots:
         text = str(Path(root).resolve())
-        for form in {text, text.replace("\\", "/"), text.replace("\\", "\\\\"), "/" + text.replace("\\", "/")}:
+        for form in {text, text.replace("\\", "/"), text.replace("\\", "\\\\"), text.replace("\\", "\\\\\\\\"),
+                     "/" + text.replace("\\", "/")}:
             forms.append((form, label))
     forms.sort(key=lambda item: -len(item[0]))
 
