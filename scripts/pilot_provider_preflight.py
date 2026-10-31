@@ -7,6 +7,7 @@ host/port and optional CA bytes, performs DNS/TCP/TLS, and sends no HTTP data.
 from __future__ import annotations
 
 import ctypes
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,11 @@ import subprocess
 import sys
 import time
 from urllib.parse import urlsplit
+
+_ca_spec = importlib.util.spec_from_file_location(
+    "provider_preflight_ca_boundary", Path(__file__).with_name("pilot_provider_ca.py"))
+PROVIDER_CA = importlib.util.module_from_spec(_ca_spec)
+_ca_spec.loader.exec_module(PROVIDER_CA)
 
 FORMAT = "sw-pilot-provider-preflight/1"
 MAX_CA = 2 * 1024 * 1024
@@ -206,7 +212,9 @@ def check(home, profiles, *, transport=False, seconds=5):
         return report("refused", "local", "ca_unsafe", transport=transport)
     if ca is not None:
         try:
-            ssl.create_default_context(cadata=ca)
+            # Match the installed host's certificate-only and count bounds
+            # before any CA bytes can reach the transport helper.
+            PROVIDER_CA._validate(ca.encode("ascii"))
         except (ssl.SSLError, ValueError):
             return report("refused", "local", "ca_invalid", transport=transport)
     try:

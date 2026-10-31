@@ -454,6 +454,22 @@ class Preflight(unittest.TestCase):
         malformed = self.check()
         self.assertEqual((malformed["status"], malformed["reason"]),
                          ("refused", "ca_invalid"))
+        valid_ca, _certificate, private_key = self.certificates()
+        certificate_bytes = valid_ca.read_bytes()
+        for label, material in (
+            ("private-key", certificate_bytes + b"\n" + private_key.read_bytes()),
+            ("trailing-junk", certificate_bytes + b"not trust material\n"),
+            ("certificate-count", certificate_bytes * 65),
+        ):
+            ca.write_bytes(material)
+            for transport in (False, True):
+                with self.subTest(material=label, transport=transport):
+                    with mock.patch.object(PREFLIGHT, "_probe", side_effect=AssertionError("invalid CA reached transport worker")):
+                        rejected = self.check(transport=transport)
+                    self.assertEqual((rejected["status"], rejected["reason"]),
+                                     ("refused", "ca_invalid"))
+                    self.assertFalse(rejected["network_attempted"])
+                    self.assert_private_report(rejected)
         ca.unlink()
         other = self.root / "outside-ca.pem"
         other.write_text("unrelated canary")
