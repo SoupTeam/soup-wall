@@ -194,3 +194,47 @@ bounded, canary-free results may be retained publicly; raw exec traces stay
 private and are removed after inspection. A successful run does not claim
 paid-provider operation, external credential correctness or live protection
 outside the observed local session.
+
+## Selected provider CA custody (SOU-195)
+
+For an installed Linux pilot profile that needs a private provider CA, set
+`--ssl-cert-file /absolute/owner-private/ca.pem` on an explicit `provider
+create` or `provider update --apply`, then select that profile. The selected
+source must be a canonical, regular, owner/root-owned, non-writable-by-others
+PEM certificate bundle. The source is read and validated again for every
+explicit `pilot run`. A symlink, hardlink, FIFO, mutation during the read,
+malformed certificate or file beyond the finite limit refuses before the
+provider host starts. A valid replacement between runs supplies the new
+run's trust bytes, even when the named profile still points to the same
+pathname. Preview and profile publication do not make a network request.
+
+Each run snapshots the exact selected CA bytes in a sealed anonymous file
+descriptor. Only its selected Claude host receives a descriptor-backed
+`SSL_CERT_FILE`; children and unrelated helpers do not receive the source
+path or CA descriptor. The ordinary run report contains the CA SHA-256 only,
+never the path, PEM or key. An already running host retains its trust choice
+if the operator replaces the source or explicitly updates the profile. A
+newly launched host reads the new selected source. To roll back trust,
+restore the retained provider profile version or explicitly reselect a known
+CA source and launch a new run. Stop old runs and revoke an old credential
+separately if it must no longer be usable. This binding does not install a
+system trust anchor or make an external endpoint trustworthy by itself.
+
+The focused native Ubuntu 24.04 qualification is an opt-in dispatch of
+`Real filesystem MCP profile` with both `native_preparation_only=true` and
+`provider_ca_only=true`. It builds and installs the current exact-source
+component, uses the genuine selected Claude and original servers outside the
+checkout, and runs two private scripted HTTPS providers with different
+synthetic credentials and CAs. The witness requires authenticated old and
+new requests, continued old-run TLS after source replacement, new-run TLS
+with the replacement CA, a changed source before launch, and zero credential
+delivery for an unrelated certificate or wrong hostname. It also checks
+symlink, hardlink, FIFO, over-limit, malformed and wrong-mode source refusals,
+an explicitly restored successful run, child exec environments and process
+cleanup. The bounded artifact
+`sou195-installed-provider-ca` retains only source/component/input hashes,
+finite status, CA hashes and request/handshake counts. Private test keys,
+PEMs and raw exec traces are deleted. This does not call a live provider or
+claim paid-model effectiveness. The focused manual dispatch keeps its native
+toolchain, prerequisite builds and owned sandbox checks, and skips unrelated
+long pilot qualifiers; ordinary PR and Ready scheduling remain unchanged.
