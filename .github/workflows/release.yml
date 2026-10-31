@@ -62,7 +62,7 @@ jobs:
           sha="$(git rev-parse HEAD)"
           test "$sha" = "$(git rev-parse "refs/tags/$TAG^{commit}")"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -104,7 +104,7 @@ jobs:
         env:
           EXPECTED_SHA: ${{ needs.verify.outputs.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
@@ -168,7 +168,7 @@ jobs:
         env:
           EXPECTED_SHA: ${{ needs.verify.outputs.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: dtolnay/rust-toolchain@1.120.0
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-cyclonedx@0.5.9
