@@ -88,6 +88,7 @@ overview. Choose a guide below for development, operation or evaluation.
 | [AgentDojo runtime adapter](benchmarks/agentdojo-live-fallback.md) | Pinned runtime fixtures and explicit live-evaluation prerequisites |
 | [AgentDojo matched protocol](benchmarks/agentdojo-matched-protocol.md) | SOU-36 frozen plan, live gate, pair validation and independent report (Phase 4 stays open) |
 | [Paired development regression](benchmarks/paired-regression.md) | SOU-153 offline comparison of two matched runs: input contract, comparability, completeness, transitions and family-aware uncertainty |
+| [Result-inspection comparison](benchmarks/result-inspection-comparison.md) | SOU-191 controlled recording and offline comparison of two accepted-main runs of the SOU-123 corpus: custody checks, outcome contract, denominators and trust boundary |
 | [Task 3 resilience](benchmarks/task3_resilience.md) | Malformed events, unknown tools, daemon failures and independent execution witnesses |
 | [SOU-17 verification](benchmarks/sou17_verification.md) | Failure, overlap, replay and native witnesses; exact-source reproduction and code-scanning triage |
 | [Native admission](benchmarks/native-admission.md) | Installed tool semantics, invocation binding and result/context contracts |

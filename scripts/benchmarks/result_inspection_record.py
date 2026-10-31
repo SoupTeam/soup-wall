@@ -144,7 +144,11 @@ def retain(run_dir: Path, name: str, raw: bytes, limit: int, clean=None) -> dict
 
 
 def run_text(argv, cwd=None, env=None, timeout=120) -> str:
-    done = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, timeout=timeout)
+    try:
+        done = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, timeout=timeout)
+    except FileNotFoundError:
+        raise Refused(f"{argv[0]} not found on PATH" + (" (the +toolchain form needs rustup's proxies)"
+                                                        if argv[0] in ("rustc", "cargo") else "")) from None
     if done.returncode != 0:
         raise Refused(f"{argv[0]} {' '.join(argv[1:3])} failed: {done.stderr.decode('utf-8', 'replace')[:300]}")
     return done.stdout.decode("utf-8", "replace").strip()

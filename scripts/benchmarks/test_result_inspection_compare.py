@@ -359,6 +359,18 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(code, ric.EXIT_NON_COMPARABLE)
         self.assertIsNone(result["outcomes"])
 
+    def test_negative_controls_script_on_synthetic_evidence(self):
+        import result_inspection_controls as controls
+        evidence = self.tmp / "evidence"
+        (evidence / "runs").mkdir(parents=True)
+        shutil.copyfile(PRE, evidence / "predeclaration.json")
+        cases = sorted(c["case_id"] for c in self.manifest["cases"] if c["label"] == "attack")
+        self.side("baseline", root=evidence / "runs")
+        self.side("candidate", default_results(self.manifest, {cases[0]: "Allow"}), root=evidence / "runs")
+        result = controls.run_controls(evidence, ROOT)
+        self.assertTrue(result["all_passed"], [r for r in result["controls"] if not r["passed"]])
+        self.assertEqual(len(result["controls"]), len(controls.CONTROLS))
+
     def test_oversized_input_refused_before_parsing(self):
         def big(run, run_dir):
             raw = b" " * (ric.LIMITS["max_stdout_bytes"] + 1)
