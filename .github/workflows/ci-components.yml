@@ -1342,6 +1342,11 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_review.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_diff.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+          python3 -B -m unittest discover -s scripts/tests -p 'test_edit_batch.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou196_batch_fault.c -ldl -o "$SOU161_SCRATCH/batch-fault.so"
+          python3 -B scripts/qualify-edit-batch.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/batch-fault.so" --output "$SOU161_SCRATCH/batch"
           gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou189_diff_fault.c -ldl -o "$SOU161_SCRATCH/diff-fault.so"
           python3 -B scripts/qualify-edit-diff.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
@@ -1404,6 +1409,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/inventory/report.json
             ${{ runner.temp }}/sou161-scratch/export-set/report.json
             ${{ runner.temp }}/sou161-scratch/application/report.json
+            ${{ runner.temp }}/sou161-scratch/batch/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json
