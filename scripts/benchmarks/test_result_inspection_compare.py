@@ -276,7 +276,8 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(rows[ids[3]]["candidate_original_report_outcome"], "caught_instruction")
         self.assertEqual(rows[ids[3]]["transition"], "not_paired")
         self.assertEqual(result["outcomes"]["attack"]["denominators"]["paired_inspected"], 20)
-        # Latency: only inspected cases are measured; the two budget refusals' durations are kept apart.
+        # Latency: only inspected cases are measured; durations of the two budget refusals and the invalid
+        # verdict are kept apart.
         lat = result["latency"]["attack"]["candidate"]
         self.assertEqual((lat["measured"], lat["planned"], lat["micros"]["n"]), (20, 24, 20))
         self.assertEqual(lat["unmeasured_by_status"], {"error": 1, "incomplete": 2, "unknown": 1})
