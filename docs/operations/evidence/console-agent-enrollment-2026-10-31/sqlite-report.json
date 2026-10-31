@@ -1,8 +1,8 @@
 {
   "backend": "sqlite",
   "binary_sha256": {
-    "agentfw": "85561f380dc566ffbcfb9148196b127cd507f8f5ed3d44eafb86adfcbdec7fd7",
-    "llm-firewall": "0d2eaa802bd4403e45f474405cada4a63456fb2ca5a622ffe94e13057689854b"
+    "agentfw": "ced74fea88714e22b8de72a81ba8e61a1f491b7ddefd58febbcb9dd435fa3ad7",
+    "llm-firewall": "a54e7cca1dd458e156fc16e313514756f8702eabeb158ca8191799446a16272f"
   },
   "checks": {
     "agent-credential-cannot-administer": true,
@@ -12,6 +12,8 @@
     "browser-no-storage": true,
     "credential-not-in-url-or-storage": true,
     "cross-tenant-lifecycle-refused": true,
+    "displayed-installer-private-and-ignores-planted-staging-link": true,
+    "displayed-installer-refuses-link-and-public-target": true,
     "enrolled-agent-fetched-and-acknowledged": true,
     "enrolled-whoami": true,
     "evidence-sanitized": true,
@@ -21,6 +23,7 @@
     "negatives-changed-nothing": true,
     "old-credential-refused-after-rotation": true,
     "restart-retains-lifecycle-state": true,
+    "revoked-admin-session-locks-panel-on-read": true,
     "revoked-agent-keeps-last-policy": true,
     "revoked-credential-refused": true,
     "same-agent-process-uses-rotated-credential": true,
@@ -34,8 +37,8 @@
   },
   "cleanup": "temporary directory, Console, Agent, edge stopped and removed",
   "config_sha256": {
-    "agent": "fd9b4e850ed9de0568b202a0c690389c29ec47253003828c83b1f5cabf83ffea",
-    "console": "d67e1830d69750a7f7d1ebc743718b437736c7cc8a27b0c9f0b634224cbefbb9"
+    "agent": "cf7a6b74d56e1662edf0a5f02ae4e11da66c2e62313b8bccd075bdedda25f601",
+    "console": "329945fcd47181971dcdd3c8267ee2d4beea8f227310de0f2d74a977650b2195"
   },
   "format": "sw-console-enrollment-acceptance/1",
   "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; not production, multi-host or runtime attestation",
@@ -51,15 +54,15 @@
       "viewer rotate": 403
     }
   },
-  "source_commit": "874cfb27d917d643e9aee7609fbde23073969b7c",
+  "source_commit": "325f3a249fd1a9c66b66d92fd550d87850001292",
   "source_dirty": false,
-  "source_tree": "cdec9b292108399139185a5e0695da17bfd9aafc",
+  "source_tree": "8529551517914f3771abf78b5d9982422631bc7e",
   "status": "passed",
   "transport": {
     "agent_to_console": "HTTPS through an owned private-CA edge on 127.0.0.1",
     "browser_to_console": "loopback HTTP",
-    "ca_sha256_fingerprint": "05:52:DB:D2:42:CC:2C:97:2A:4C:BD:E4:99:FF:83:35:27:99:32:39:7C:2B:98:48:C1:97:70:90:FB:DF:32:CB",
+    "ca_sha256_fingerprint": "1E:22:A5:D7:8E:F6:30:A0:79:1F:9B:56:32:72:9C:E0:97:B8:CF:FB:D9:D7:40:85:C7:17:6E:13:13:BE:99:50",
     "console_to_database": "local SQLite file",
-    "edge_forwarded_requests": 6
+    "edge_forwarded_requests": 7
   }
 }
