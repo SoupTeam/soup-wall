@@ -48,6 +48,10 @@ selected named profile it reports `unavailable`; it does not infer a profile
 from ambient environment variables. Ambient provider values conflicting with
 an explicit selection are refused, as they are for an actual run.
 
+The CA uses the same certificate-only validation and 64-certificate limit as
+the installed run. Private-key blocks and other non-certificate material are
+refused locally before a transport helper starts.
+
 Add `--transport` to opt in to one bounded observation. The helper receives
 only the selected host, port and optional CA certificate bytes through a pipe.
 It resolves the host, connects, and for HTTPS completes certificate and
