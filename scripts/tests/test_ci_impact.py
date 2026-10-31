@@ -92,7 +92,8 @@ class ImpactTests(unittest.TestCase):
                                         text.split("jobs:\n", 1)[1]))
             auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             if filename == "mcp-real-filesystem.yml":
-                auxiliary.update({"manual-long-session", "manual-native-result-profile"})
+                auxiliary.update({"manual-long-session", "manual-native-result-profile",
+                                  "manual-sou194-cache-exchange"})
             if filename == "mcp-real-git.yml":
                 auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
@@ -124,6 +125,14 @@ class ImpactTests(unittest.TestCase):
         self.assertNotIn("manual-native-result-profile", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
         central = (ROOT / ".github/workflows/ci-components.yml").read_text()
         self.assertNotIn("manual-native-result-profile", central)
+
+    def test_sou194_native_exchange_is_manual_and_outside_required_admission(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  manual-sou194-cache-exchange:\n", 1)[1].split("\n  native-ubuntu-2404:", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.cache_exchange_only", body)
+        self.assertNotIn("needs: impact", body)
+        self.assertNotIn("manual-sou194-cache-exchange", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        self.assertIn("github.event.inputs.cache_exchange_only != 'true'", text)
 
     def test_build_producer_is_selected_only_with_compatible_consumers(self):
         for path, selected in (("README.md", False), ("eval/probe.py", False), ("crates/proxy/src/main.rs", False),

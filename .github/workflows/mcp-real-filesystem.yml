@@ -44,6 +44,10 @@ on:
         description: Run only native Ubuntu 24.04 preparation qualification
         type: boolean
         default: false
+      cache_exchange_only:
+        description: Run focused SOU-194 pinned download cache exchange on native Ubuntu
+        type: boolean
+        default: false
       stage_reuse_only:
         description: Opt-in SOU-180 Git checkpoint interruption/retry (requires native_preparation_only)
         type: boolean
@@ -94,7 +98,7 @@ concurrency:
 
 jobs:
   impact:
-    if: github.event.inputs.native_result_profile_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
+    if: github.event.inputs.native_result_profile_only != 'true' && github.event.inputs.cache_exchange_only != 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.stability_mode == '' || github.event.inputs.stability_mode == 'off')
     uses: ./.github/workflows/ci-impact-plan.yml
     with:
       workflow: mcp-real-filesystem.yml
@@ -509,10 +513,94 @@ jobs:
             ${{ runner.temp }}/profile-onboarding-filesystem/*.json
           if-no-files-found: error
           retention-days: 30
+
+  manual-sou194-cache-exchange:
+    if: github.event_name == 'workflow_dispatch' && inputs.cache_exchange_only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Focused source and exchange regressions
+        run: python3 -B -m unittest scripts.tests.test_pilot_prerequisite_cache_exchange -v
+      - name: Prepare private native build inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/sou194" "$RUNNER_TEMP/sou194/assets" "$RUNNER_TEMP/sou194/meson-wheel"
+          (cd "$RUNNER_TEMP/sou194/assets" && apt-get download libcap-dev)
+          dpkg-deb -x "$RUNNER_TEMP"/sou194/assets/libcap-dev_*.deb "$RUNNER_TEMP/sou194/assets/libcap"
+          caplib="$RUNNER_TEMP/sou194/assets/libcap/usr/lib/x86_64-linux-gnu"
+          cp /lib/x86_64-linux-gnu/libcap.so.2 "$caplib/"
+          ln -sf libcap.so.2 "$caplib/libcap.so"
+          ln -s "$caplib" "$RUNNER_TEMP/sou194/assets/libcap/usr/lib64"
+          python3 -m pip download --disable-pip-version-check --only-binary=:all: --no-deps \
+            --dest "$RUNNER_TEMP/sou194/meson-wheel" meson==1.9.1
+          printf '%s  %s\n' f824ab770c041a202f532f69e114c971918ed2daff7ea56583d80642564598d0 \
+            "$RUNNER_TEMP/sou194/meson-wheel/meson-1.9.1-py3-none-any.whl" | sha256sum --check
+          python3 -m pip install --disable-pip-version-check --no-deps --no-index \
+            --target "$RUNNER_TEMP/sou194/assets/build-tools" \
+            "$RUNNER_TEMP/sou194/meson-wheel/meson-1.9.1-py3-none-any.whl"
+      - name: Verified online export, fresh import and network-isolated preparation
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch="$RUNNER_TEMP/sou194"
+          mkdir -m 700 "$scratch/online" "$scratch/offline" "$scratch/transfer"
+          export PATH="$scratch/assets/build-tools/bin:$PATH"
+          caplib="$scratch/assets/libcap/usr/lib/x86_64-linux-gnu"
+          common=(--expected-commit "$(git rev-parse HEAD)"
+            --pkg-config-libdir "$caplib/pkgconfig"
+            --pkg-config-sysroot "$scratch/assets/libcap"
+            --meson-pythonpath "$scratch/assets/build-tools")
+          source_before="$(git status --porcelain)"
+          test -z "$source_before"
+          started="$(date +%s%N)"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --prepare --allow-download \
+            --output "$scratch/online" "${common[@]}" > "$scratch/online.json"
+          online_done="$(date +%s%N)"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-preview \
+            --output "$scratch/online" "${common[@]}" > "$scratch/preview-online.json"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-export "$scratch/transfer/pinned.tar" \
+            --output "$scratch/online" "${common[@]}" > "$scratch/export.json"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-import "$scratch/transfer/pinned.tar" \
+            --output "$scratch/offline" "${common[@]}" > "$scratch/import.json"
+          imported_done="$(date +%s%N)"
+          python3 -B scripts/prepare-native-pilot-prerequisites.py --cache-preview \
+            --output "$scratch/offline" "${common[@]}" > "$scratch/preview-offline.json"
+          host_ns="$(readlink /proc/self/ns/net)"
+          sudo unshare --net --fork setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            env PATH="$PATH" python3 -B -c \
+            'import json,os,socket,sys; h=sys.argv[1]; n=os.readlink("/proc/self/ns/net"); assert n != h, "network namespace unchanged"; s=socket.socket(); s.settimeout(2); rc=s.connect_ex(("1.1.1.1",443)); s.close(); assert rc != 0, "network reachable"; print(json.dumps({"host_namespace":h,"offline_namespace":n,"connect_errno":rc}))' \
+            "$host_ns" > "$scratch/network-isolation.json"
+          sudo unshare --net --fork setpriv --reuid "$(id -u)" --regid "$(id -g)" --clear-groups \
+            env PATH="$PATH" python3 -B scripts/prepare-native-pilot-prerequisites.py \
+            --prepare --offline-import-cache --output "$scratch/offline" "${common[@]}" \
+            > "$scratch/offline.json"
+          offline_done="$(date +%s%N)"
+          printf '{"online_prepare_ns":%s,"exchange_ns":%s,"offline_prepare_ns":%s}\n' \
+            "$((online_done-started))" "$((imported_done-online_done))" \
+            "$((offline_done-imported_done))" > "$scratch/timings.json"
+          test -z "$(git status --porcelain)"
+          python3 -B scripts/sou194-cache-evidence.py --source "$(git rev-parse HEAD)" \
+            --scratch "$scratch" > "$scratch/evidence.json"
+          cat "$scratch/evidence.json"
+      - name: Retain finite evidence, including failed attempts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sou194-cache-exchange-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sou194/*.json
+          if-no-files-found: warn
+          retention-days: 30
   native-ubuntu-2404:
     name: native-ubuntu-2404
     needs: impact
-    if: ((github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.stage_reuse_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))) || (github.event_name == 'workflow_dispatch' && github.event.inputs.private_edit_self_test_only == 'true')
+    if: github.event.inputs.cache_exchange_only != 'true' && (((github.event_name != 'workflow_dispatch' || github.event.inputs.original_create_only != 'true') && (contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'native-ubuntu-2404') || (github.event_name == 'workflow_dispatch' && (github.event.inputs.coordinated_update_only == 'true' || github.event.inputs.capacity_only == 'true' || github.event.inputs.prepared_operations_only == 'true' || github.event.inputs.matched_development_only == 'true' || github.event.inputs.native_preparation_only == 'true' || github.event.inputs.stage_reuse_only == 'true' || github.event.inputs.existing_project_only == 'true' || github.event.inputs.operator_results_only == 'true' || github.event.inputs.audit_retention_only == 'true' || github.event.inputs.storage_recovery_only == 'true')))) || (github.event_name == 'workflow_dispatch' && github.event.inputs.private_edit_self_test_only == 'true'))
     runs-on: ubuntu-24.04
     # Optional paired Ask measurement owns two <=3600s side budgets plus setup;
     # opt-in A-B-A repeats the original-host qualifier twice. Ordinary PR/default
