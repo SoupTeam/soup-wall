@@ -97,7 +97,7 @@ def qualify(args,report):
     sentinel=EDIT.snapshot(suite.sentinel)
     trap=EDIT.HOST.ScriptedModel([])
     env=dict(suite.env,ANTHROPIC_API_KEY='owned-batch-provider-trap',ANTHROPIC_BASE_URL=trap.url,HTTP_PROXY=trap.url,HTTPS_PROXY=trap.url)
-    completed=[];counter=0
+    completed=[];counter=0;sibling_witnesses=[]
     def source_witness(data):
         root,plan,prepared,run,names=data
         return (EDIT.private_state_witness(run,include_audit=(run/'terminal.json').exists()),[(n,EDIT.snapshot(root/n))for n in names],[(n,EDIT.snapshot(plan/n))for n in ('profile.json','profile.sha256')])
@@ -115,6 +115,8 @@ def qualify(args,report):
         for i,t in enumerate(targets):proposals.append((f'read_output_{i}',{'path':t['name']}))
         if on_pending is not None:on_pending.prepared=prepared;on_pending.plan=plan;on_pending.root=root;on_pending.names=names
         native,seen,_=suite.host(label,root,target,plan,prepared,proposals,mode=mode,timeout=90,on_pending=on_pending)
+        require(native['process_cleanup']['all_stopped'],'owned_processes_remain')
+        if mode=='cancel-pending':require(native['terminal']['reason']=='cancelled','actual_cancellation_missing')
         if mode=='approve':
             require(native['exit']==0 and native['write_admissions']==count and native['process_cleanup']['all_stopped'],'batch_host_failed')
             for i,t in enumerate(targets):require(not seen.get(f'toolu_edit_{count+i}',{}).get('is_error',True) and EDIT.NEW.strip() in json.dumps(seen[f'toolu_edit_{count+i}']['content']) and (root/t['name']).read_text()==EDIT.NEW,'genuine_readback_failed')
@@ -138,6 +140,7 @@ def qualify(args,report):
         for i,n in enumerate(data[4]):
             target=f'target-{i}.txt';(root/target).write_text(f'Owned preimage {i}.\n');(root/target).chmod(0o600);maps.append(f'{n}={target}')
         (root/'sibling.txt').write_text('Unrelated owned sibling.\n');(root/'sibling.txt').chmod(0o600)
+        sibling_witnesses.append((root/'sibling.txt',EDIT.snapshot(root/'sibling.txt')))
         journal=journals/f'batch-{counter}'
         words=['--run',data[3],'--plan',data[1],'--sha256',data[2]['profile_sha256'],'--root',root,'--journal',journal]
         for m in maps:words+=['--map',m]
@@ -164,7 +167,7 @@ def qualify(args,report):
             v,_=restore(data,j,h,proofs);require(v['status']=='reverted'and all((root/f'target-{i}.txt').read_text()==f'Owned preimage {i}.\n'for i in range(count)),'batch_revert_failed')
             require(EDIT.snapshot(suite.sentinel)==sentinel and (root/'sibling.txt').read_text()=='Unrelated owned sibling.\n','positive_sibling_changed')
             done(case,genuine_host_readback=True,apply_readback=True,revert_readback=True,reviewed=True,source_preserved=True)
-        data=completed[-1]
+        data=completed[-1];source_states=[source_witness(d)for d in completed]
         begin('preview-no-writes');root,j,words=project(data);before=tree(root),tree(journals);preview(data,words);require(before==(tree(root),tree(journals)),'preview_wrote');done('preview-no-writes',preserved=True)
         begin('no-consent')
         for flags in ([],consent[:1],consent[1:]):
@@ -239,7 +242,7 @@ def qualify(args,report):
             require((root/'sibling.txt').read_text()=='Unrelated owned sibling.\n','fault_sibling_changed')
             if case=='last-target-during-stage':require((root/'target-0.txt').read_text()=='Owned preimage 0.\n' and (root/'target-1.txt').read_text()=='Later owned user change.\n','stage_gate_clobbered_change')
             done(case,fault_observed=True,truthful_partial=True,safe_recovery=True,preserved=True,fault_exit=code)
-        require(EDIT.snapshot(suite.sentinel)==sentinel and not trap.requests,'final_preservation_failed')
+        require(EDIT.snapshot(suite.sentinel)==sentinel and not trap.requests and all(EDIT.snapshot(p)==before for p,before in sibling_witnesses) and source_states==[source_witness(d)for d in completed],'final_preservation_failed')
         report.update(status='passed',operator_provider_requests=len(trap.requests),source_and_siblings_preserved=True,all_owned_stopped=True)
     finally:trap.close()
 
