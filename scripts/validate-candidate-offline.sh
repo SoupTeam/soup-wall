@@ -6,6 +6,11 @@ KIT_ARCHIVE="$(pwd)/target/soup-wall-linux-amd64.tar.gz"
 VALIDATION_DIR=$(mktemp -d -t soup-wall-candidate-XXXXXX)
 AGENT_PID=""
 
+echo "=== EXACT SOURCE & ARCHIVE IDENTITIES ==="
+echo "Source Commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+echo "Archive SHA256: $(sha256sum "$KIT_ARCHIVE" | awk '{print $1}')"
+echo "========================================="
+
 cleanup() {
     if [ -n "$AGENT_PID" ]; then
         kill -9 $AGENT_PID 2>/dev/null || true
@@ -32,7 +37,6 @@ with tarfile.open("empty_manifest.tar.gz", "w:gz") as tar: tar.add("manifest_emp
 with tarfile.open("unsafe_mode.tar.gz", "w:gz") as tar:
     ti = tarfile.TarInfo("kit/setuid.bin"); ti.size = 0; ti.mode = 0o4755; tar.addfile(ti)
 
-# Generate realistic missing-notice/valid mock fixtures with the required top-level directory
 required = [
     "bin/agentfw", "bin/llm-firewall", "bin/bwrap", "assets/baseline.classifier", 
     "scripts/install-sou62-filesystem-profile.py", "profiles/mcp/filesystem-readonly-v1/package.json",
@@ -229,7 +233,6 @@ mkdir -p "$HOME/.agentfw" "$(pwd)/workspace"
 
 cat <<'EOF' > run_installer.py
 import sys, pathlib, importlib.util
-# FIX: Insert scripts/ into PYTHONPATH so pilot_provider resolves locally
 sys.path.insert(0, str(pathlib.Path("scripts").absolute()))
 spec = importlib.util.spec_from_file_location("fs", "scripts/install-sou62-filesystem-profile.py")
 fs = importlib.util.module_from_spec(spec)
@@ -297,7 +300,16 @@ try:
         send({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{"path":path}}})
 
     resp = read_response(3)
-    proc.kill()
+    
+    # Graceful shutdown to capture ALL daemon logs
+    proc.stdin.close()
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        
+    daemon_stderr = proc.stderr.read()
 except Exception as e:
     sys.exit(f"CRITICAL: Failed to communicate with collector: {e}")
 
@@ -330,7 +342,6 @@ elif action == "verify_policy":
     if "error" in resp:
         sys.exit(f"CRITICAL: Expected structured policy denial result, but got raw JSON-RPC error: {resp}")
     
-    # ENVELOPE SHAPE VALIDATION
     if resp.get("jsonrpc") != "2.0":
         sys.exit(f"CRITICAL: Invalid JSON-RPC version (expected 2.0): {resp}")
     if resp.get("id") != 3:
@@ -353,6 +364,11 @@ elif action == "verify_policy":
     
     if text_content != expected_framing:
         sys.exit(f"CRITICAL: Expected EXACT policy denial framing, but got incidental substring match or wrong text: '{text_content}'")
+        
+    # AUTHENTIC DAEMON DECISION EVIDENCE FOR POLICY DENIAL
+    if "mcp_classification" not in daemon_stderr:
+        sys.exit(f"CRITICAL: Authentic daemon decision evidence (mcp_classification) missing from stderr. Stderr: {daemon_stderr}")
+        
     sys.exit(0)
 EOF
 
@@ -387,7 +403,7 @@ for line in sys.stdin:
 EOF
 
 if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_raw.py >/dev/null 2>&1; then
-    echo "CRITICAL: Generic raw setup error containing the word 'withheld' was falsely accepted as a policy denial!"
+    echo "CRITICAL: Generic raw setup error was falsely accepted as a policy denial!"
     exit 1
 fi
 
@@ -409,7 +425,7 @@ for line in sys.stdin:
 EOF
 
 if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_structured.py >/dev/null 2>&1; then
-    echo "CRITICAL: Structured setup error containing the word 'withheld' was falsely accepted as a policy denial!"
+    echo "CRITICAL: Structured setup error was falsely accepted as a policy denial!"
     exit 1
 fi
 
@@ -431,7 +447,7 @@ for line in sys.stdin:
 EOF
 
 if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_substring.py >/dev/null 2>&1; then
-    echo "CRITICAL: Substring setup error containing the exact expected phrase was falsely accepted as a policy denial!"
+    echo "CRITICAL: Substring setup error was falsely accepted as a policy denial!"
     exit 1
 fi
 
@@ -453,7 +469,29 @@ for line in sys.stdin:
 EOF
 
 if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_malformed.py >/dev/null 2>&1; then
-    echo "CRITICAL: Malformed envelope (wrong protocol/type) was falsely accepted as a policy denial!"
+    echo "CRITICAL: Malformed envelope (wrong protocol/type) was falsely accepted!"
+    exit 1
+fi
+
+echo "Testing Fake Policy Setup Error Negative Control (Missing Daemon Evidence)..."
+cat <<'EOF' > mock_agent_missing_stderr.py
+import sys, json
+for line in sys.stdin:
+    if not line.strip(): continue
+    req = json.loads(line)
+    mid = req.get("id")
+    method = req.get("method")
+    if method == "initialize":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{}}))
+    elif method == "tools/list":
+        print(json.dumps({"jsonrpc":"2.0","id":mid,"result":{"tools":[]}}))
+    elif method == "tools/call":
+        print(json.dumps({"jsonrpc":"2.0","id":3,"result":{"isError":True,"content":[{"type":"text","text":"Soup Wall withheld MCP result (filesystem-profile-refuse-result-injection)"}]}}))
+    sys.stdout.flush()
+EOF
+
+if python3 mcp_test_driver.py "verify_policy" "" "" python3 mock_agent_missing_stderr.py >/dev/null 2>&1; then
+    echo "CRITICAL: Envelope was perfect but authentic daemon stderr evidence was missing, yet it passed!"
     exit 1
 fi
 
