@@ -92,7 +92,8 @@ class ImpactTests(unittest.TestCase):
                                         text.split("jobs:\n", 1)[1]))
             auxiliary = {"draft-checks", "main-smoke", "components"} if filename == "ci.yml" else set()
             if filename == "mcp-real-filesystem.yml":
-                auxiliary.update({"manual-long-session", "manual-native-result-profile"})
+                auxiliary.update({"manual-long-session", "manual-native-result-profile",
+                                  "sou193-provider-preflight"})
             if filename == "mcp-real-git.yml":
                 auxiliary.update({"manual-installed-git-profiles", "sou182-raw-boundary"})
             if filename == "mcp-create-file.yml":
@@ -125,6 +126,17 @@ class ImpactTests(unittest.TestCase):
         self.assertNotIn("manual-native-result-profile", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
         central = (ROOT / ".github/workflows/ci-components.yml").read_text()
         self.assertNotIn("manual-native-result-profile", central)
+
+    def test_sou193_preflight_is_manual_and_cannot_replace_required_native_job(self):
+        text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
+        body = text.split("  sou193-provider-preflight:\n", 1)[1].split("  required-linux-sandbox-and-real-host:\n", 1)[0]
+        self.assertIn("github.event_name == 'workflow_dispatch'", body)
+        self.assertIn("provider_preflight_only == 'true'", body)
+        self.assertNotIn("needs: impact", body)
+        impact = text.split("  impact:\n", 1)[1].split("  sou193-provider-preflight:\n", 1)[0]
+        self.assertIn("provider_preflight_only != 'true'", impact)
+        self.assertNotIn("sou193-provider-preflight", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
+        self.assertNotIn("sou193-provider-preflight", (ROOT / ".github/workflows/ci-components.yml").read_text())
 
     def test_build_producer_is_selected_only_with_compatible_consumers(self):
         for path, selected in (("README.md", False), ("eval/probe.py", False), ("crates/proxy/src/main.rs", False),
