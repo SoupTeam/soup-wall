@@ -10,6 +10,12 @@ Both views are computed in the existing single original-byte detector pass, shar
 
 Finite qualification now requires actual useful benign release with byte-identical text and structured channels for50/200, paired attacks still refused,201/256 still pre-execution unknown, ambiguity unchanged and copied-wire rejection. The current report contract is sou157-formatter-runtime-correction/1. The projector distinguishes this from historical diagnostic-only runs, checks all8 complete policy channel comparisons and rejects wrong release/candidate/custody or missing byte-equality evidence. No new runtime run has yet been launched by the author. Independent review and TL's one affected native qualification are required before Ready/merge. Existing reports below retain their original source/status.
 
+### Validation of correction source 504ba882
+
+Windows: agent186/186, native153/153, Python reporter/controller11/11; all-target agent/agentfw Clippy -D warnings and fmt/diff checks pass. Native unit fixtures cover useful release at50/200, paired directives retained, absent/forged/stale/foreign/wrong-call and ambiguous custody, immutable receipt, hidden Ask/judge/Deny overlap, secrets/PII and incomplete provenance. The initial200-file fixture hit its1024-entry provenance cap; this is retained as a dedicated refusal regression. Successful fixtures use the unchanged product default capacity. These are component checks, not fresh Linux original-server qualification.
+
+Built the adapter successfully before running the full frozen51 offline regression on exact clean504ba882. Retained `evidence/sou157-504ba882-corpus/`: all51 case/status/verdict/rule tuples match02d3495a,24attacks withheld,10benign refusals remain, technical rows retained. Exit1 is the expected still-failing corpus acceptance gate. No invented live custody or model inference. A fresh affected Linux correction run and independent acceptance are pending; prior e5327e58 evidence remains diagnostic-only.
+
 ## Historical diagnostic implementation
 
 
