@@ -236,6 +236,11 @@ def run_controls(evidence: Path, repo: Path):
             row = {"control": name, "synthetic_mutation": mutation, "expected_exit": expected_code,
                    "observed_exit": code, "expected_error": expected_error, "observed_error": error,
                    "passed": code == expected_code and error == expected_error}
+            if expected_code == ric.EXIT_NON_COMPARABLE:
+                # Reached the intended check: the only non-comparable reason is the build command.
+                row["observed_non_comparable"] = result["non_comparable"]
+                row["passed"] = row["passed"] and len(result["non_comparable"]) == 1 and \
+                    "build command" in result["non_comparable"][0]
             retained = evidence / "comparison" / "comparison.json"
             if name == "unmutated_copy" and retained.is_file():
                 same = (json.dumps(result, indent=2, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8") == \

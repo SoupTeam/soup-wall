@@ -118,7 +118,10 @@
    "observed_exit": 1,
    "expected_error": null,
    "observed_error": null,
-   "passed": true
+   "passed": true,
+   "observed_non_comparable": [
+    "candidate: build command or fresh target directory differs from the predeclaration"
+   ]
   },
   {
    "control": "incomplete_run",
