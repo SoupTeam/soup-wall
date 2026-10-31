@@ -21,6 +21,63 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def formatter_recipe(case, payload):
+    """Offline byte round-trip only; never a runtime/custody witness.
+
+    Require unambiguous pinned-producer framing. Do not write files, normalize
+    paths or infer that a matching formatter makes the body safe.
+    """
+    if case['tool'] != 'read_multiple_files':
+        return {'status': 'different_tool_no_separator_correction'}
+    paths = case.get('arguments', {}).get('paths', [])
+    if not 2 <= len(paths) <= 200 or len(payload) > 262144:
+        return {'status': 'outside_selected_bounds'}
+    parts = payload.split(b'\n---\n')
+    if len(parts) != len(paths):
+        return {'status': 'ambiguous_formatter_boundaries'}
+    bodies = []
+    for path, part in zip(paths, parts):
+        if not isinstance(path, str) or not path or any(c in path for c in '\r\n\0'):
+            return {'status': 'invalid_path'}
+        prefix = (path + ':\n').encode('utf-8')
+        if not part.startswith(prefix) or not part.endswith(b'\n'):
+            return {'status': 'formatter_bytes_mismatch'}
+        bodies.append(part[len(prefix):-1])
+    rebuilt = b'\n---\n'.join((p + ':\n').encode('utf-8') + b + b'\n'
+                                 for p, b in zip(paths, bodies))
+    assert rebuilt == payload
+    outside = [p for p in paths if p.startswith('/') and not p.startswith('/workspace/')]
+    # This is an incompatibility test, NOT a replacement path validator or
+    # positive eligibility decision. Only the native owner can validate custody.
+    return {'status': 'selected_namespace_mismatch' if outside else 'requires_live_original_verification',
+            'offline_formatter_roundtrip_equal': True,
+            'original_returned_bytes_verified': False, 'live_custody': False,
+            'paths': paths, 'outside_selected_namespace': outside,
+            'body_sha256': [hashlib.sha256(b).hexdigest() for b in bodies],
+            'separator_count': len(parts) - 1}
+
+
+def reproduction_map(manifest, results, payload_dir):
+    validate_results(manifest, results, payload_dir)
+    by_id = {row['case_id']: row for row in results}
+    rows = []
+    for case in manifest['cases']:
+        payload = (payload_dir / (case['case_id'] + '.txt')).read_bytes()
+        if hashlib.sha256(payload).hexdigest() != case['sha256'] or len(payload) != case['size_bytes']:
+            raise ValueError('frozen payload identity changed')
+        result = by_id[case['case_id']]
+        rows.append({'case_id': case['case_id'], 'label': case['label'],
+                     'payload_sha256': case['sha256'], 'arguments': case['arguments'],
+                     'production_status': result['status'], 'production_verdict': result.get('verdict'),
+                     'production_rule': result.get('rule'),
+                     'false_refusal': case['label'] == 'benign' and result.get('verdict') in ('Deny', 'Ask', 'deny', 'ask'),
+                     'recipe': formatter_recipe(case, payload),
+                     'unchanged_findings': result.get('findings', []),
+                     'eligible': False})
+    return {'contract': 'sou157-original-reproduction-map/1', 'production_authority': False,
+            'task_complete': False, 'live_executions': 0, 'cases': rows}
+
+
 def validate_results(manifest, results, payload_dir):
     expected = {c['case_id'] for c in manifest['cases']}
     ids = [r['case_id'] for r in results]
@@ -43,7 +100,9 @@ def validate_results(manifest, results, payload_dir):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--adapter', type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--adapter', type=Path)
+    mode.add_argument('--map-retained', type=Path, help='Map retained adapter JSON without executing an adapter/server')
     parser.add_argument('--output-dir', type=Path, required=True)
     args = parser.parse_args()
     manifest_path = ROOT / 'eval/sou123/manifest.json'
@@ -54,6 +113,15 @@ def main():
     if errors:
         raise ValueError(errors)
     args.output_dir.mkdir(parents=True, exist_ok=False)
+    if args.map_retained:
+        results = json.loads(args.map_retained.read_text(encoding='utf-8'))['results']
+        mapping = reproduction_map(manifest, results, payload_dir)
+        mapping['retained_results_sha256'] = digest(args.map_retained)
+        mapping['manifest_sha256'] = digest(manifest_path)
+        mapping['mapper_sha256'] = digest(__file__)
+        (args.output_dir / 'reproduction-map.json').write_text(json.dumps(mapping, indent=2) + '\n', encoding='utf-8')
+        print(json.dumps({'cases': len(mapping['cases']), 'false_refusals': sum(r['false_refusal'] for r in mapping['cases']), 'live_executions': 0}))
+        return 0
     command = [str(args.adapter.resolve()), '--manifest', str(manifest_path),
                '--payload-dir', str(payload_dir), '--policy', str(policy)]
     identity = {

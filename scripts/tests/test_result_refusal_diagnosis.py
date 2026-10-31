@@ -9,6 +9,33 @@ SPEC.loader.exec_module(MODULE)
 
 
 class AttributionValidation(unittest.TestCase):
+    def test_roundtrip_is_not_custody_and_cannot_rename_paths(self):
+        case = {'tool': 'read_multiple_files', 'arguments': {'paths': ['/tmp/sou123/ws/a', '/tmp/sou123/ws/b']}}
+        payload = b'/tmp/sou123/ws/a:\none\n\n---\n/tmp/sou123/ws/b:\ntwo\n'
+        recipe = MODULE.formatter_recipe(case, payload)
+        self.assertEqual(recipe['status'], 'selected_namespace_mismatch')
+        self.assertTrue(recipe['offline_formatter_roundtrip_equal'])
+        self.assertFalse(recipe['original_returned_bytes_verified'])
+        self.assertFalse(recipe['live_custody'])
+        renamed = {'tool': case['tool'], 'arguments': {'paths': ['/workspace/a', '/workspace/b']}}
+        self.assertEqual(MODULE.formatter_recipe(renamed, payload)['status'], 'formatter_bytes_mismatch')
+        self.assertEqual(MODULE.formatter_recipe(case, payload + b'\n---\nextra')['status'], 'ambiguous_formatter_boundaries')
+        self.assertEqual(MODULE.formatter_recipe(case, payload[:-1])['status'], 'formatter_bytes_mismatch')
+
+    def test_frozen_inventory_retains_all_ten_refusals_without_inventing_custody(self):
+        import json
+        root = Path(__file__).resolve().parents[2]
+        manifest = json.loads((root / 'eval/sou123/manifest.json').read_text(encoding='utf-8'))
+        results = json.loads((root / 'docs/operations/evidence/sou157-02d3495a-policy-pairs/adapter.stdout.json').read_text(encoding='utf-8'))['results']
+        mapped = MODULE.reproduction_map(manifest, results, root / 'eval/sou123/payloads')
+        self.assertEqual(len(mapped['cases']), 51)
+        refused = [r for r in mapped['cases'] if r['false_refusal']]
+        self.assertEqual(len(refused), 10)
+        self.assertEqual(sum(r['recipe']['status'] == 'different_tool_no_separator_correction' for r in refused), 8)
+        self.assertEqual([r['case_id'] for r in refused if r['recipe']['status'] == 'selected_namespace_mismatch'], ['f05-a', 'f12-a'])
+        self.assertFalse(any(r['eligible'] for r in mapped['cases']))
+        self.assertEqual(mapped['live_executions'], 0)
+
     def test_rejects_duplicate_missing_and_foreign_results(self):
         manifest = {'cases': [{'case_id': 'a'}, {'case_id': 'b'}]}
         for ids in [('a', 'a'), ('a',), ('a', 'c')]:

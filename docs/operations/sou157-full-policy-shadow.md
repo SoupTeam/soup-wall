@@ -21,3 +21,32 @@ Retained report: `evidence/sou157-02d3495a-policy-pairs/`. All 51 production cas
 Windows validation: core 100/100, agent 183/183, native execution 21/21, Python controller/reporter 9/9. Full agentfw library pass: 718 passed, two ignored, one port-ownership collision in preview_preserves_source_and_rejects_server_rebinding; that test passed immediately in isolation. All-target Clippy for core/agent/agentfw and offline core ML compilation pass; no inference. An initial report attempt used a stale executable while linking failed; rejected and retained only in local notes. The reporter now rejects inspected rows lacking a full-policy comparison; the retained run followed a successful build with a clean source diff.
 
 Integration: merged main 9720f5f4, preserving the new native timing measurements alongside block counting. Post-merge native suite: 152/152 passed. Frozen corpus evidence above remains bound to 02d3495a, not relabelled as a post-merge runtime run.
+
+## Accepted runtime and next Draft correction boundary (2026-10-31)
+
+Independent review 5717591951 and comment 6532229610 accept the diagnostic increment, not production relief. Retained exact-source run 41115547761 at e5327e58 is in `evidence/sou157-passed-native-41115547761/`. Archive 13007090466 SHA-256: `7482c7ad9463f59dc523bced1b8b4f04a0faa9e833596d12a505e3d5b379f600`. All four ZIP members and CRCs verified; the existing projector reproduces acceptance. Eight channel comparisons independently inspected: both benign 50/200 calls have candidate Allow, both attack calls retain Deny; all four actual releases remain false. Four 201/256 calls remain pre-execution unknown. Ambiguity, copied-wire and cleanup controls pass, model calls zero. Failed preflight run 41114573880 remains a failed trusted-input check, not runtime evidence; TL's e5327e58 updates only the accepted input pin/generator.
+
+### First required step: faithful frozen-case mapping
+
+Run without any adapter, server, inference or matrix replay:
+
+```
+python scripts/diagnose-result-refusals.py --map-retained docs/operations/evidence/sou157-02d3495a-policy-pairs/adapter.stdout.json --output-dir <new-output-directory>
+```
+
+Retained output: `evidence/sou157-original-reproduction-map/reproduction-map.json`. It preserves all 51 IDs, labels, argument objects, payload hashes and existing outcomes/findings. No live custody is inferred. A pure formatter round-trip is explicitly distinct from actual returned-byte equality.
+
+| Existing false refusals | Reconstruction result | Consequence for this separator slice |
+| --- | --- | --- |
+| g01-a, g03-a, g05-a, g06-b, g07-b, g09-b, g11-a, g12-a | Git tools, not the filesystem read_multiple_files separator producer | Ineligible; retain baseline. Existing Git hash work is a separate custody path. |
+| f05-a, f12-a | Unambiguous offline byte round-trip for three files, but original absolute arguments/headers are /tmp/sou123/ws/... | Current selected native path validator rejects them as PathRefusal::Outside. Rewriting to /workspace changes the frozen bytes and is not an exact replay. |
+
+A Rust control passes the actual two frozen argument objects through the existing selected-profile validator; no duplicated Python validator is used to claim positive eligibility. Python controls reject changed headers, ambiguous body delimiters and missing formatter newlines. The quoted signature/exfiltration findings in f05-a and all remaining secret/PII/directive findings are retained; no benignness is inferred from a formatter match.
+
+**Result: zero of the ten existing false refusals currently has a verified identical-byte eligible native reproduction.** The successful native 50/200 controls are separate public fixtures, not replacements for those ten. No original returned-byte equality or new call/runtime/channel custody was obtained by this offline mapping. No labels, payloads, allowed roots, policy thresholds or production decisions changed.
+
+### Concrete production-slice proposal for independent review
+
+The only currently qualified candidate domain is the private consumed-original filesystem read_multiple_files path with two byte-identical verified formatter channels. A future correction must apply before native strongest-verdict aggregation, only when the existing structural policy-floor gate proves the original denial is separator-only. It must retain the same one-pass findings, original signatures/ML, independent evidence/floors, state/grant lifecycle, strict receipt identity and original bytes. Absence, duplication, ambiguity, foreign/stale custody or a report/budget failure keeps the original outcome. The public shadow report, public ranges and a zero score must never become release authority. No public opt-in, environment switch or wire field is proposed.
+
+Before enabling this correction, independently approve its scope and qualify actual benign release plus attack refusal on the affected original-runtime path. There is presently no basis to claim it fixes any of the frozen ten. The review decision needed is whether to proceed with this native-only slice as a separately measured improvement, or first agree a distinct faithful corpus reproduction profile (including its fixed namespace/identity) and Git-specific scope. Do not widen the existing /workspace allowlist or rename frozen corpus paths to manufacture success. Delivered behavior remains unchanged pending that decision and qualification; SOU-157 is not Done or Ready.
