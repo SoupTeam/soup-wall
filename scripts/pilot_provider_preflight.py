@@ -284,6 +284,7 @@ def _worker():
                     emit("tls")
                     current_stage = "tls"
                     context = ssl.create_default_context(cadata=value["ca"])
+                    context.minimum_version = ssl.TLSVersion.TLSv1_2
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         return finish("incomplete", "tls", "deadline")
