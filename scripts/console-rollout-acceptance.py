@@ -96,7 +96,14 @@ def tls_edge(stack, temp, upstream):
             headers = {k: v for k, v in self.headers.items() if k.lower() in ("authorization", "content-type")}
             connection = http.client.HTTPConnection("127.0.0.1", upstream, timeout=10)
             try:
-                connection.request(self.command, self.path, body=body, headers=headers)
+                try:
+                    connection.request(self.command, self.path, body=body, headers=headers)
+                except OSError:
+                    # Console stopped on purpose: answer like an unavailable upstream.
+                    self.send_response(502)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
                 response = connection.getresponse()
                 data = response.read(256_000)
                 self.send_response(response.status)

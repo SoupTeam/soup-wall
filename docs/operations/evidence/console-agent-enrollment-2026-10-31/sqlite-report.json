@@ -1,0 +1,68 @@
+{
+  "backend": "sqlite",
+  "binary_sha256": {
+    "agentfw": "ced74fea88714e22b8de72a81ba8e61a1f491b7ddefd58febbcb9dd435fa3ad7",
+    "llm-firewall": "a54e7cca1dd458e156fc16e313514756f8702eabeb158ca8191799446a16272f"
+  },
+  "checks": {
+    "agent-credential-cannot-administer": true,
+    "agent-used-https-edge": true,
+    "ambiguous-rotation-shows-no-credential": true,
+    "ambiguous-rotation-two-identical-posts-one-change": true,
+    "browser-no-storage": true,
+    "credential-not-in-url-or-storage": true,
+    "cross-tenant-lifecycle-refused": true,
+    "displayed-installer-private-and-ignores-planted-staging-link": true,
+    "displayed-installer-refuses-link-and-public-target": true,
+    "enrolled-agent-fetched-and-acknowledged": true,
+    "enrolled-whoami": true,
+    "evidence-sanitized": true,
+    "late-enrollment-committed-only-to-submitted-tenant": true,
+    "late-enrollment-not-shown-in-other-tenant": true,
+    "narrow-layout-no-horizontal-overflow": true,
+    "negatives-changed-nothing": true,
+    "old-credential-refused-after-rotation": true,
+    "restart-retains-lifecycle-state": true,
+    "revoked-admin-session-locks-panel-on-read": true,
+    "revoked-agent-keeps-last-policy": true,
+    "revoked-credential-refused": true,
+    "same-agent-process-uses-rotated-credential": true,
+    "second-credential-refused": true,
+    "secret-cleared-after-confirmed-rotation": true,
+    "secret-cleared-after-enrollment": true,
+    "secret-cleared-after-rotation": true,
+    "unavailable-api-keeps-changes-disabled": true,
+    "viewer-and-operator-lifecycle-refused-403": true,
+    "viewer-browser-has-no-enrollment-controls": true
+  },
+  "cleanup": "temporary directory, Console, Agent, edge stopped and removed",
+  "config_sha256": {
+    "agent": "cf7a6b74d56e1662edf0a5f02ae4e11da66c2e62313b8bccd075bdedda25f601",
+    "console": "329945fcd47181971dcdd3c8267ee2d4beea8f227310de0f2d74a977650b2195"
+  },
+  "format": "sw-console-enrollment-acceptance/1",
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; not production, multi-host or runtime attestation",
+  "snapshots": {
+    "refused": {
+      "cross-tenant revoke": 404,
+      "cross-tenant rotate": 409,
+      "operator enroll": 403,
+      "operator revoke": 403,
+      "operator rotate": 403,
+      "viewer enroll": 403,
+      "viewer revoke": 403,
+      "viewer rotate": 403
+    }
+  },
+  "source_commit": "325f3a249fd1a9c66b66d92fd550d87850001292",
+  "source_dirty": false,
+  "source_tree": "8529551517914f3771abf78b5d9982422631bc7e",
+  "status": "passed",
+  "transport": {
+    "agent_to_console": "HTTPS through an owned private-CA edge on 127.0.0.1",
+    "browser_to_console": "loopback HTTP",
+    "ca_sha256_fingerprint": "1E:22:A5:D7:8E:F6:30:A0:79:1F:9B:56:32:72:9C:E0:97:B8:CF:FB:D9:D7:40:85:C7:17:6E:13:13:BE:99:50",
+    "console_to_database": "local SQLite file",
+    "edge_forwarded_requests": 7
+  }
+}
