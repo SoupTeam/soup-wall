@@ -6,7 +6,7 @@
     pilot.py prepare --apply --prefix DIR [inputs]
     pilot.py run --prefix DIR [--prompt TEXT]
     pilot.py status --prefix DIR
-    pilot.py provider preview|create|update|restore|prune|select|remove [options]
+    pilot.py provider preview|check|create|update|restore|prune|select|remove [options]
     pilot.py help
 
 This is a front door over the accepted scripts, not a second installer:
@@ -94,6 +94,10 @@ def load(name, filename):
 
 def provider_profiles():
     return load("front_door_provider_profiles", "pilot_provider_profiles.py")
+
+
+def provider_preflight():
+    return load("front_door_provider_preflight", "pilot_provider_preflight.py")
 
 
 PREP = load("front_door_preparation", "prepare-installed-pilot.py")
@@ -780,8 +784,11 @@ def status(args):
 def provider_command(args):
     """Profile management is local and never starts a provider or pilot asset."""
     profiles = provider_profiles()
-    if args.provider_action not in ("preview", "update") and not args.apply:
+    if args.provider_action not in ("preview", "check", "update") and not args.apply:
         raise profiles.Refusal("provider_consent_required")
+    if args.provider_action == "check":
+        return provider_preflight().check(args.agent_home or Path.home() / ".agentfw", profiles,
+                                          transport=args.transport, seconds=args.timeout_seconds)
     with profiles.Store(args.agent_home or Path.home() / ".agentfw",
                         create=args.provider_action == "create") as store:
         if args.provider_action == "preview":
@@ -905,6 +912,10 @@ def parser():
     actions = provider.add_subparsers(dest="provider_action", required=True)
     preview = actions.add_parser("preview", help="read-only redacted inventory")
     preview.add_argument("--name")
+    check = actions.add_parser("check", help="validate selected profile; opt in to bounded DNS/TCP/TLS observation")
+    check.add_argument("--transport", action="store_true", help="observe the selected endpoint without an API request")
+    check.add_argument("--timeout-seconds", type=int, default=5, help="total transport deadline, 1 to 15 seconds")
+    check.add_argument("--json", action="store_true", help="print finite JSON instead of text")
     create = actions.add_parser("create", help="save one private profile with explicit consent")
     create.add_argument("--name", required=True)
     create.add_argument("--model", default="claude-sonnet-4-20250514")
@@ -961,14 +972,22 @@ def main(argv=None):
     if args.command == "provider":
         try:
             report = provider_command(args)
-            code = 0
+            code = (0 if args.provider_action != "check" or report["status"] in
+                    ("configuration-valid", "transport-observed") else
+                    3 if report["status"] == "unavailable" else
+                    4 if report["status"] == "incomplete" else 2)
         except Exception as error:
-            reason = str(error)
-            report = {"format": "sw-pilot-provider-selection/1", "command": "provider " + args.provider_action,
-                      "status": "failed", "executed": False,
-                      "reason": reason if reason in PROFILE_FAILURE_CODES else "provider_input_or_store_failure"}
+            if args.provider_action == "check":
+                report = provider_preflight().report("refused", "local", "check_failed",
+                                                     transport=args.transport)
+            else:
+                reason = str(error)
+                report = {"format": "sw-pilot-provider-selection/1", "command": "provider " + args.provider_action,
+                          "status": "failed", "executed": False,
+                          "reason": reason if reason in PROFILE_FAILURE_CODES else "provider_input_or_store_failure"}
             code = 2
-        print(json.dumps(report, sort_keys=True))
+        print(provider_preflight().human(report) if args.provider_action == "check" and not args.json
+              else json.dumps(report, sort_keys=True))
         return code
     coordinated = args.command != "help" and any((args.prefix / name).exists() or (args.prefix / name).is_symlink()
                                                 for name in ("current.json", "journal.json"))

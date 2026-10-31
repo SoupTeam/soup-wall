@@ -20,6 +20,8 @@ agentfw pilot provider create --name local-test \
   --prompt-api-key --apply
 agentfw pilot provider select --name local-test --apply
 agentfw pilot provider preview --name local-test
+agentfw pilot provider check
+agentfw pilot provider check --transport --timeout-seconds 5 --json
 agentfw pilot status --prefix "$HOME/soup-wall-pilot"
 agentfw pilot run --prefix "$HOME/soup-wall-pilot"
 agentfw pilot provider update --name local-test \
@@ -35,6 +37,48 @@ agentfw pilot provider prune --name local-test \
 agentfw pilot provider remove --name local-test --apply
 agentfw pilot provider select --environment --apply
 ```
+
+### Check the selected profile before launching Claude (SOU-193)
+
+`agentfw pilot provider check` reads the exact selected profile/version and
+validates its owner-private files, accepted endpoint settings and optional CA
+file. It is local and read-only: no DNS, connection, prompt, credential output,
+profile switch, host launch, API request, model call or tool call. With no
+selected named profile it reports `unavailable`; it does not infer a profile
+from ambient environment variables. Ambient provider values conflicting with
+an explicit selection are refused, as they are for an actual run.
+
+Add `--transport` to opt in to one bounded observation. The helper receives
+only the selected host, port and optional CA certificate bytes through a pipe.
+It resolves the host, connects, and for HTTPS completes certificate and
+hostname verification. It sends **no HTTP request**, API key, bearer token,
+prompt, model name or tool call. HTTP is accepted only for literal loopback,
+following the existing profile rule. No redirect is followed. The total
+deadline is 1–15 seconds (default 5); cancellation stops and reaps the owned
+helper. The selection and CA are rechecked before any result is returned.
+An implicit endpoint or configured `HTTP_PROXY`/`HTTPS_PROXY` reports an
+unsupported route instead of probing a different direct route. `NO_PROXY`
+without a proxy does not change the direct route. This command does not prove
+that Claude's own proxy or default trust implementation behaves like the
+observer. Correct an unsupported route explicitly or use an independent
+proxy diagnostic; do not interpret a direct probe as proxy success.
+
+The default text output and optional `--json` use finite outcomes:
+
+| Status | Meaning | Exit |
+| --- | --- | ---: |
+| `configuration-valid` | The selected local configuration passed; no network was attempted. | 0 |
+| `transport-observed` | TCP connection or HTTPS TLS verification completed; no provider API call was made. | 0 |
+| `refused` | Invalid, changed or unsafe selected state, or TLS validation failed. | 2 |
+| `unavailable` | No selected profile, unreachable endpoint or unsupported route. | 3 |
+| `incomplete` | Deadline or cancellation ended the observation. | 4 |
+
+Each result names a finite stage and safe next step. It does not emit a raw
+URL, private path, exception text or secret-derived digest. **Credential
+validity, model availability and protected task execution are not verified**
+by either success status. A successful check grants no permission or runtime
+readiness. The focused native installed qualification uses owned loopback and
+private-CA fixtures; it makes no paid or live-provider calls.
 
 The create prompt is hidden. Use `--prompt-auth-token` instead of
 `--prompt-api-key` for a supported bearer token. For an existing explicit
