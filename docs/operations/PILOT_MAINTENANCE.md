@@ -90,10 +90,11 @@ replayed marker, history or journal cannot clear another owner's maintenance.
 ## Limits
 
 The marker is capped at 32 KiB, history at 128 events, and 64 enrolled runs. Reaching
-a cap refuses with a finite reason rather than dropping records. The feature is
-Linux-only, local to one filesystem, and covers launches that go through the
-installed front door of the enrolled home. Direct preparation scripts remain
-outside it.
+a cap refuses with a finite reason rather than dropping records. Two new launches
+that start at the same instant may briefly refuse each other with
+`maintenance_transition_busy`; retry. The feature is Linux-only, local to one
+filesystem, and covers launches that go through the installed front door of the
+enrolled home. Direct preparation scripts remain outside it.
 
 ## Qualification
 
