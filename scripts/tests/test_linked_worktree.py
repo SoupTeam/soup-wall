@@ -54,6 +54,14 @@ class Selection(unittest.TestCase):
         self.assertEqual(one['commonDir'], two['commonDir'])
         self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()})
 
+    def test_ordinary_empty_private_refs_are_supported_but_namespaces_do_not_expand(self):
+        refs = self.admin / 'refs'
+        refs.mkdir(exist_ok=True)
+        self.binding()
+        (refs/'unselected-ref').write_text('never-authority')
+        with self.assertRaisesRegex(ValueError, 'private_refs_unsupported'):
+            self.binding()
+
     def test_missing_or_sibling_selection_never_follows_repository_path_strings(self):
         with self.assertRaisesRegex(ValueError, 'selection_mismatch'):
             self.binding(self.one, self.common / 'worktrees/two')

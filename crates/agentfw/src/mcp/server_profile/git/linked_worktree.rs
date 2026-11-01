@@ -186,11 +186,25 @@ mod linux {
                         "gitdir",
                         "commondir",
                         "logs",
+                        "refs",
                         "ORIG_HEAD"
                     ]
                     .contains(&v))),
                 "linked_worktree_admin_metadata_unsupported"
             );
+            if admin_names.iter().any(|n| n == "refs") {
+                let refs = open(&admin_path.join("refs"), true)?;
+                let m = refs.metadata()?;
+                ensure!(
+                    m.uid() == unsafe { libc::geteuid() }
+                        && m.mode() & 0o022 == 0
+                        && fs::read_dir(directory_path(&refs, Path::new("/")))?
+                            .next()
+                            .is_none(),
+                    "linked_worktree_private_refs_unsupported"
+                );
+                watches.push(refs);
+            }
             if let Ok(hooks) = open(&base.join("hooks"), true) {
                 let mut count = 0;
                 for entry in fs::read_dir(directory_path(&hooks, Path::new("/")))? {

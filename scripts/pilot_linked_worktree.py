@@ -86,6 +86,17 @@ def inventory(workspace, git_dir, common_dir):
         require(git_dir.parent.parent == common_dir and git_dir.parent.name == 'worktrees'
                 and re.fullmatch(r'[A-Za-z0-9_-]{1,64}', git_dir.name), 'ordinary_layout_required')
         require(not workspace.is_relative_to(common_dir) and not common_dir.is_relative_to(workspace), 'overlapping_roots')
+        try:
+            refs = os.open('refs', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=g)
+        except FileNotFoundError:
+            pass
+        else:
+            try:
+                m = os.fstat(refs)
+                require(m.st_uid == os.getuid() and not m.st_mode & 0o022 and not os.listdir(refs),
+                        'private_refs_unsupported')
+            finally:
+                os.close(refs)
         controls = {'.control/gitfile': read(w, '.git', 8192),
                     '.control/gitdir': read(g, 'gitdir', 8192),
                     '.control/commondir': read(g, 'commondir', 8192)}
