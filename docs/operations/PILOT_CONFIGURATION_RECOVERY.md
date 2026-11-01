@@ -156,3 +156,8 @@ scripted provider outside the checkout. Its report must distinguish successful,
 failed, incomplete and unsupported cases and retain earlier attempts. Native
 Linux evidence does not qualify Windows, macOS or WSL. Final shared CI/security
 and product readiness remain separate decisions.
+
+The [installed native qualification evidence](evidence/configuration-recovery/README.md)
+records the exact qualified source, all 17 installed cases, supporting controls
+and the earlier failed precondition. It covers owned synthetic Linux scenarios;
+it is not a claim of enrollment or protection for another installation.

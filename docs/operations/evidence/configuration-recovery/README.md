@@ -10,6 +10,35 @@ scripted provider; no paid inference or actual publication is attempted.
 | Attempt | Source | Outcome | Evidence |
 | --- | --- | --- | --- |
 | Native 1 | `77062f87ef04e0979c35873c4dd939c3a0a9bb0e` | Failed before operator scenarios: accepted selection still referenced checkout assets; outside-checkout guard refused | [Report](native-attempt-01-report.json), [workflow](https://github.com/SoupTeam/soup-wall/actions/runs/41296614453) |
+| Native 2 | `3f5f378bd54c6a67019d8afb33970b5681b697f1` | Passed all 17 installed cases, no failed or incomplete cases | [Report](native-attempt-02-report.json), [workflow](https://github.com/SoupTeam/soup-wall/actions/runs/41297520712) |
+
+Native attempt 2 used Ubuntu 24.04 x86-64, accepted verified preparation with
+exact-source classifiers staged privately outside the checkout, and an
+installed helper component. Operator commands ran outside the checkout against
+explicit current inputs. All 23 native Python recovery controls, 9 qualification
+grader/external-input controls, 11 Rust projection tests, Agent Clippy with
+warnings denied, and workspace formatting passed.
+
+The installed witnesses establish consented private backup, zero-write
+inventory/preview, strict invalid-archive refusals, confirmed fresh-home restore,
+fresh daemon authority, useful genuine-host original-server read and calibrated
+refusal with zero forbidden bytes/effects. The old bearer returned HTTP 401;
+an old signed grant submitted with the new token returned HTTP 409 with
+`native_child_authority_bad_signature`. The same old daemon and active sibling
+remained useful. Source configuration/authority, workspace contents and retained
+evidence were preserved; expected authenticated sibling lease renewals appended
+without changing the retained audit prefix. Source-change refusal and recovery
+before/after publication passed. All owned processes stopped and private test
+state was removed.
+
+Native 2 artifact `13079698240` ZIP SHA-256:
+`4b2f38579098612d26621026377b8057a36b281a441c15082b8f98faa7f82439`.
+The ZIP's exact single-member inventory/CRC, report byte hash, independent
+current report grader, exact source/tree and driver hash were checked locally.
+Report SHA-256:
+`40ae9d146a3ce52b32f6b2293bf4720a9c96f314038cc32f398236602d273107`.
+The evidence commit only records these results; it is not another product
+qualification source. The qualified product/driver source is the Native 2 SHA.
 
 Native attempt 1 passed all 23 Python recovery controls, 6 qualification grader
 controls, 11 Rust projection tests, Agent Clippy with warnings denied, and
