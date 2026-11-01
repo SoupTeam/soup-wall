@@ -129,8 +129,11 @@ def qualify(args, door, home, env, report, installed):
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(run, i) for i in range(2)]
         runs = [f.result() for f in futures]
+    evidence['last_runs'] = [{key: row.get(key) for key in ('case', 'exit', 'status', 'reason', 'cleanup', 'live_status', 'process_cleanup')}
+                             | {'stage': outcome.get('stage'), 'host_started': outcome.get('host_started'),
+                                'executed': outcome.get('executed')} for row, _, outcome in runs]
     for i, (row, results, outcome) in enumerate(runs):
-        require(row['exit'] == 0 and row['live_status']['protection'] == 'observed-live', 'linked_worktree_live_host_unverified')
+        require(row['exit'] == 0 and row['live_status'].get('protection') == 'observed-live', 'linked_worktree_live_host_unverified')
         require(len(results) == 6, 'linked_worktree_correlated_results_missing')
         for index in (0, 1, 2, 5):
             require(results['toolu_front_linked'+str(i)+'_'+str(index)]['is_error'] is False,
