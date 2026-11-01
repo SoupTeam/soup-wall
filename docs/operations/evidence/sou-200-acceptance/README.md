@@ -74,6 +74,16 @@ selection is reported and adopted only by a freshly confirmed `enter`/`leave`. T
 to those later commits; the 12 recorded cases remain evidence for `a7e1592f` only until
 a new focused native run records the 13-case matrix for the final head.
 
+Diagnostic native run 41343694398 (focused `maintenance_only` + `native_preparation_only`,
+source `f075caf0a26018ae82068b5209f8eb3d79a979c2`, report SHA-256
+`c2586f0482ec6267c8bb712212245d5dafa7adc21d889e7d85d3820bceda29ec`) passed all 13 cases,
+including `named-project-refused` (0 protected process starts, 0 provider connects) and
+0 receiver requests. That source differs from `49043b0f` only by one unrelated
+`workflow_dispatch` input removed from a throwaway branch, because the dispatch
+file exceeds GitHub's 25-input limit until the shared `installed_focus` selector (#328)
+lands. It is a diagnostic of the fixed behavior, not the final-head acceptance report,
+which must be recorded after that selector merges.
+
 ## Not claimed
 
 Only the owned scripted-provider flows above were observed. Live model
