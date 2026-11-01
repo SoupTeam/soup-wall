@@ -16,6 +16,10 @@ on:
         description: Focus on installed edit, stop, refresh and cumulative quota qualification
         type: boolean
         default: false
+      batch_only:
+        description: Author-only exact-source SOU-196 core and installed batch qualification, not merge admission
+        type: boolean
+        default: false
       replacement_only:
         description: Focus only on the additive SOU-159 qualification
         type: boolean
@@ -36,7 +40,7 @@ jobs:
       workflow: mcp-create-file.yml
   linux-create-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true' && github.event.inputs.build_mode != 'shared'
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-create-file') && github.event.inputs.replacement_only != 'true' && github.event.inputs.edit_only != 'true' && github.event.inputs.batch_only != 'true' && github.event.inputs.build_mode != 'shared'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -142,7 +146,7 @@ jobs:
 
   linux-replace-file:
     needs: impact
-    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-replace-file') && github.event.inputs.edit_only != 'true' && github.event.inputs.comparison_only != 'true' && github.event.inputs.build_mode != 'shared'
+    if: contains(fromJSON(needs.impact.outputs.jobs || '[]'), 'linux-replace-file') && github.event.inputs.edit_only != 'true' && github.event.inputs.batch_only != 'true' && github.event.inputs.comparison_only != 'true' && github.event.inputs.build_mode != 'shared'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -297,11 +301,27 @@ jobs:
             HOME="$task_scratch/home" CARGO_HOME="$task_scratch/cargo-home" \
             CARGO_TARGET_DIR="$task_scratch/target" TMPDIR="$task_scratch/tmp" \
             SOU161_SCRATCH="$task_scratch" SOU161_SOURCE="$GITHUB_WORKSPACE" CARGO_BUILD_JOBS=4 \
+            SOU196_ONLY="${{ github.event_name == 'workflow_dispatch' && inputs.batch_only == true && 'true' || 'false' }}" \
             SOU166_MODE="$SOU166_MODE" SOU166_BUNDLE="$SOU166_BUNDLE" SOU166_CONTEXT="$SOU166_CONTEXT" \
             ImageOS="$ImageOS" ImageVersion="$ImageVersion" \
             /bin/bash -euo pipefail <<'BASH'
           cd "$SOU161_SOURCE"
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-build.json" -- build --locked --offline -p agentfw --bin agentfw
+          qualify_batch() {
+            python3 -B -m unittest discover -s scripts/tests -p 'test_edit_batch.py' -v
+            gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou196_batch_fault.c -ldl -o "$SOU161_SCRATCH/batch-fault.so"
+            python3 -B scripts/qualify-edit-batch.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+              --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+              --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/batch-fault.so" --output "$SOU161_SCRATCH/batch"
+          }
+          if [ "${SOU196_ONLY:-false}" = true ]; then
+            python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-batch-unit.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
+            python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-batch-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
+            cargo fmt --all --check
+            sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+            qualify_batch
+            exit 0
+          fi
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-0.json" -- test --locked --offline -p agentfw --lib edit_session -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-review-publish.json" -- test --locked --offline -p agentfw --lib private_export -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-support-export.json" -- test --locked --offline -p agentfw --lib support_bundle -- --nocapture
@@ -324,6 +344,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_review.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_diff.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
+          qualify_batch
           gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou189_diff_fault.c -ldl -o "$SOU161_SCRATCH/diff-fault.so"
           python3 -B scripts/qualify-edit-diff.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
@@ -386,6 +407,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/inventory/report.json
             ${{ runner.temp }}/sou161-scratch/export-set/report.json
             ${{ runner.temp }}/sou161-scratch/application/report.json
+            ${{ runner.temp }}/sou161-scratch/batch/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json

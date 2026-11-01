@@ -133,6 +133,8 @@ PUBLIC_FAILURE_CODES = frozenset({
     'private_assets_inside_workspace',
     'profile_workspace_identity_mismatch',
     'unsupported_existing_git_layout_use_supported_standalone_repository',
+    'project_provider_binding_required', 'project_selection_changed', 'project_provider_changed',
+    'project_state_changed', 'project_budget_changed', 'project_provider_version_changed',
 }) | PREP.GIT_PROFILES.FAILURES
 
 
@@ -167,6 +169,8 @@ def selected(args):
     PREP.private_dir(generation.parent)
     PREP.private_dir(generation.parent.parent)
     selection_path, profiles = PREP.verify_generation(generation, args.expected_commit, probe_native=False)
+    expected_sha = getattr(args, 'expected_selection_sha256', None)
+    require(expected_sha is None or PREP.FS.sha(selection_path) == expected_sha, 'project_selection_changed')
     selection = PREP.PILOT.strict_json(selection_path.read_bytes())
     # A completed generation, not an interrupted or caller-assembled one.
     require(re.fullmatch(r"[0-9a-f]{32}", generation.name), "prepared_generation_required")
@@ -307,10 +311,34 @@ def confirmed_stop(home, launcher_pid, binary, env, cwd):
                          "running_effects_rolled_back": False}, "owned_stop_unconfirmed")
 
 
+def preset_provider(args):
+    """Resolve an explicit current version without changing global selection."""
+    fields = [getattr(args, n, None) for n in ('provider_name', 'provider_version', 'provider_sha256')]
+    require(all(v is None for v in fields) or all(v is not None for v in fields), 'project_provider_binding_required')
+    if fields[0] is None:
+        return None
+    require(args.provider_home is not None and not PROVIDER.selected(os.environ), 'provider_source_conflict')
+    presets = load('pilot_run_project_presets', 'pilot_project_presets.py')
+    profile, binding = presets.provider_reference(args.provider_home, *fields, PROFILES)
+    values = dict(profile['public']); model = values.pop('model'); values.update(profile['secrets'])
+    return values, model, binding['name'], binding['version'] + ':' + binding['sha256']
+
+
+def preset_state(args):
+    expected = getattr(args, 'expected_state_identity', None)
+    if expected is not None:
+        presets = load('pilot_run_project_state', 'pilot_project_presets.py')
+        require(':'.join(map(str, presets.directory_identity(args.state_root, PROFILES))) == expected,
+                'project_state_changed')
+
+
 def run(args, report):
     PREP.supported_platform()
     provider_home = getattr(args, "provider_home", None)
-    if provider_home is not None:
+    explicit_provider = preset_provider(args)
+    if explicit_provider is not None:
+        provider, model, provider_name, provider_identity = explicit_provider
+    elif provider_home is not None:
         provider, model, provider_name, provider_identity = PROFILES.chosen(provider_home, os.environ)
     else:
         provider, model, provider_name, provider_identity = PROVIDER.selected(os.environ), None, None, None
@@ -334,6 +362,7 @@ def run(args, report):
                                              if PREP.GIT_PROFILES.from_selection(selection) == "git-linked-worktree-readonly-v1" else {}))
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
+    preset_state(args)
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()
     if PREP.GIT_PROFILES.from_selection(selection) == 'git-linked-worktree-readonly-v1':
         require(not state_root.is_relative_to(Path(selection['linked_worktree']['commonDir']['path'])),
@@ -380,6 +409,8 @@ def run(args, report):
         budget_snapshot = None
         if getattr(args, "linux_budget", None) is not None:
             raw = budget_input(args.linux_budget)
+            require(getattr(args, 'expected_budget_sha256', None) is None or
+                    hashlib.sha256(raw).hexdigest() == args.expected_budget_sha256, 'project_budget_changed')
             budget_snapshot = private / "selected-linux-budget.json"
             with budget_snapshot.open("xb") as stream:
                 os.fchmod(stream.fileno(), 0o600)
@@ -441,7 +472,14 @@ def run(args, report):
             require(not cancelled and not GROUPS.leader_finished(daemon), "pilot_cancelled_before_host")
             require(selected(args)[0] == selection, "selection_changed_before_host")
             if provider_name is not None:
-                PROFILES.unchanged(provider_home, provider_name, provider_identity)
+                if explicit_provider is None:
+                    PROFILES.unchanged(provider_home, provider_name, provider_identity)
+                else:
+                    require(preset_provider(args) == explicit_provider, 'project_provider_changed')
+            preset_state(args)
+            if getattr(args, 'expected_budget_sha256', None) is not None:
+                require(hashlib.sha256(budget_input(args.linux_budget)).hexdigest() == args.expected_budget_sha256,
+                        'project_budget_changed')
             if ca_snapshot is not None:
                 ca_snapshot.verify_source()
             roots = PREP.workspace_paths(selection, args.selection.parent)
@@ -612,6 +650,9 @@ def main():
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--ask-wait-seconds", type=int, default=0)
     parser.add_argument("--prompt", default="Read useful notes with filesystem and inspect Git status using the selected MCP tools.")
+    for field in ('provider-name', 'provider-version', 'provider-sha256', 'expected-selection-sha256',
+                  'expected-budget-sha256', 'expected-state-identity'):
+        parser.add_argument('--' + field, help=argparse.SUPPRESS)
     args = parser.parse_args()
     report = {"format": "sw-prepared-pilot-run/1", "status": "plan", "executed": False}
     try:

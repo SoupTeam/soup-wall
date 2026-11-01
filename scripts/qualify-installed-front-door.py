@@ -849,6 +849,16 @@ def qualify(args, report):
             require(report['source_after'] == before, 'source_changed')
             return
 
+        if args.project_presets_only:
+            import types
+            suite = types.SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load,
+                                          provider_exec_witness=provider_exec_witness, agent_executions=agent_executions)
+            load('installed_project_qualification', 'qualify-project-presets.py').qualify(
+                args, door, agent_home, env, report, selection, suite, receiver)
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
         # 4. An existing selection prepared by the accepted checkout front door
         #    at the same commit is consumed unchanged by the installed command.
         checkout = QUAL.FrontDoor(args, build_env, home)
@@ -1052,9 +1062,10 @@ def main():
                         help="absolute CPython recorded for the installed helpers")
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
     parser.add_argument("--allow-download", action="store_true")
-    parser.add_argument("--linked-worktrees-only", action="store_true", help="focused SOU-201 installed linked-worktree qualification")
     parser.add_argument("--provider-profiles", action="store_true",
                         help="opt in to SOU-172 private named provider original-host controls")
+    parser.add_argument("--linked-worktrees-only", action="store_true", help="focused SOU-201 installed linked-worktree qualification")
+    parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
     parser.add_argument("--provider-ca-only", action="store_true",
                         help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
     for name in INPUT_NAMES:
@@ -1098,6 +1109,9 @@ def main():
     if args.linked_worktrees_only:
         linked = report.get('linked_worktrees', {})
         summary['linked_worktrees'] = {k: linked.get(k) for k in ('status', 'active_case', 'last_cli', 'last_runs', 'namespace_probe')}
+    if args.project_presets_only:
+        project = report.get("project_presets", {})
+        summary["project_presets"] = {key: project.get(key) for key in ("status", "active_case", "last_cli")}
     print(json.dumps(summary))
     return 0 if report["status"] == "passed" else 1
 
