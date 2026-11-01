@@ -516,10 +516,13 @@ fn selected_changed_arguments_expiry_and_hard_deny_cannot_redeem() {
             if control == "args" {
                 if name == "write_file" {
                     presented["content"] = json!("unapproved");
-                } else if format == crate::mcp::server_profile::filesystem_roots::FORMAT {
-                    json!({"path":"/workspace/alpha/notes.txt"})
                 } else if name == "read_text_file" {
-                    presented["path"] = json!("/workspace/other.txt");
+                    presented["path"] =
+                        if *format == crate::mcp::server_profile::filesystem_roots::FORMAT {
+                            json!("/workspace/beta/notes.txt")
+                        } else {
+                            json!("/workspace/other.txt")
+                        };
                 } else {
                     presented["revision"] = json!("a".repeat(40));
                 }
