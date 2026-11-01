@@ -23,3 +23,25 @@ the earlier macOS runs. The source-bound focused Linux run will retain the exact
 commit, binary identity, build/test/lint receipts and all 22 installed qualifier
 cases. The qualifier's raw policy/examples, stdout, stderr and syscall traces stay
 private. Only the bounded report and hashes are eligible for retained evidence.
+
+## Retained first Linux attempt
+
+Run `41306920087`, exact source `529363b7eae2c225595688c439ea9878ea8ff269`,
+successfully built the executable and ran all eight new protocol tests: seven
+passed and one failed. The failed fixture expected destructive-call taint from
+an unrelated prior result without the evaluator's required derivation evidence.
+It was corrected to the existing accepted explicit secret-egress hard-Deny
+control. The required outcome remains Deny; no product evaluator, floor or rule
+was changed. Its Ask and unsupported controls were retained.
+
+Artifact `13083856750` has ZIP SHA-256
+`97a3ff7502e9f079b648f27e1806756717d56028a13cb9416d4d3643dd20cc31`;
+all four unique safe members and CRCs were independently verified. This failed
+attempt is not acceptance and did not reach the installed qualifier.
+
+The corrected supplied Deny/Ask/unsupported example was independently executed
+through the existing installed offline evaluator on macOS before repeating
+Linux: passed. Source snapshot
+`5bc1c7dd62baf75d454f94c15181046bc635c57c16d5c13f98335b24ae7d9ef5`,
+log SHA-256 `0681b714fe9976943408b6a51fff8f1b788bf1b5aea809fb7e7ea52fa891d678`.
+That is evaluator-fixture validation, not Linux feature qualification.
