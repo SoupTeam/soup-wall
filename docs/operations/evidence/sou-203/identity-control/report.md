@@ -1,6 +1,6 @@
 # Native performance comparison
 
-Classification: **compatible** (identity_control).
+Classification: **incomplete** (identity_control).
 
 | Role | Input | Original SHA-256 | Custody | Source | Binaries | Build |
 |---|---|---|---|---|---|---|
@@ -9,29 +9,31 @@ Classification: **compatible** (identity_control).
 
 ## Reasons
 
-- none
+- `binary_identity_unverified` (binaries): binary digests are not independently bound
+- `build_profile_unverified` (build): build profile is not bound to the measured binaries
 
 ## Strata (continuation, ms)
 
-Status counts cover trials of qualified runs; trials of unqualified runs are excluded and counted.
+Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs only; trials of unqualified runs stay counted under all runs.
 
-| Profile | Condition | Role | Planned | Excluded (unqualified runs) | Measured / failed / timed out / incomplete / not run | Runs | p50 | p95 | max | 3000 ms p95 |
-|---|---|---|---:|---:|---|---:|---:|---:|---:|---|
-| filesystem | post_cache_drop_setup_rewarmed | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
-| filesystem | post_cache_drop_setup_rewarmed | candidate | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
-| filesystem | warm | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1205.9 | 1256.8 | 1270.2 | met |
-| filesystem | warm | candidate | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1205.9 | 1256.8 | 1270.2 | met |
-| git | post_cache_drop_setup_rewarmed | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1579.6 | 1678.9 | 1692.2 | met |
-| git | post_cache_drop_setup_rewarmed | candidate | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1579.6 | 1678.9 | 1692.2 | met |
-| git | warm | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
-| git | warm | candidate | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
+| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | 3000 ms p95 |
+|---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|
+| filesystem | post_cache_drop_setup_rewarmed | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
+| filesystem | post_cache_drop_setup_rewarmed | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
+| filesystem | warm | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1205.9 | 1256.8 | 1270.2 | met |
+| filesystem | warm | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1205.9 | 1256.8 | 1270.2 | met |
+| git | post_cache_drop_setup_rewarmed | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1579.6 | 1678.9 | 1692.2 | met |
+| git | post_cache_drop_setup_rewarmed | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1579.6 | 1678.9 | 1692.2 | met |
+| git | warm | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
+| git | warm | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
+
+## Identity control
+
+Identical evidence on both sides: 160 trial pairs, all paired differences zero: **True**. comparator control only: identical evidence must give zero paired differences. It establishes no provenance, no compatibility and no performance change.
 
 ## Differences (candidate minus baseline, ms)
 
-- filesystem / post_cache_drop_setup_rewarmed: marginal percentile differences p50 0.0, p95 0.0, max 0.0; paired differences (n=40) p50 0.0, p95 0.0, min 0.0, max 0.0, all zero: True
-- filesystem / warm: marginal percentile differences p50 0.0, p95 0.0, max 0.0; paired differences (n=40) p50 0.0, p95 0.0, min 0.0, max 0.0, all zero: True
-- git / post_cache_drop_setup_rewarmed: marginal percentile differences p50 0.0, p95 0.0, max 0.0; paired differences (n=40) p50 0.0, p95 0.0, min 0.0, max 0.0, all zero: True
-- git / warm: marginal percentile differences p50 0.0, p95 0.0, max 0.0; paired differences (n=40) p50 0.0, p95 0.0, min 0.0, max 0.0, all zero: True
+- none: no comparable stratum. No speed-up, merged p95 or verdict is reported.
 
 ## Limits
 

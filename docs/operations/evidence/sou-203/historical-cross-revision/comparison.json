@@ -1,6 +1,6 @@
 {
   "basis": "two_reports",
-  "classification": "non-comparable",
+  "classification": "incomplete",
   "contract": "sw-native-performance-comparison/1",
   "dimensions": [
     {
@@ -69,13 +69,13 @@
       "candidate": [
         16373452
       ],
-      "code": "host_environment_differs",
-      "detail": "differs: the runs did not share one host",
+      "code": "mem_total_differs_materiality_unassessed",
+      "detail": "reported MemTotal_kb differs; same-boot/same-host conditions are not established and no tolerance is approved",
       "dimension": "memory",
       "fields": [
         "environment.mem_total_kb"
       ],
-      "status": "contradiction"
+      "status": "unverified"
     },
     {
       "baseline": null,
@@ -170,6 +170,7 @@
   },
   "global_pooled_comparison": null,
   "global_pooled_comparison_reason": "never computed: profiles and conditions are separate strata",
+  "identity_control": null,
   "inference": {
     "hosts": "unknown (2 dispatches, host instance not retained)",
     "independent_clusters_per_stratum": [
@@ -545,7 +546,8 @@
           "mode": "seccomp-bpf",
           "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
         },
-        "requested_basis": "the producer accepted only qualification reports whose trace_requested equals this value (validate_report); qualified runs [1, 2, 3, 4]"
+        "requested_basis": "self-declared: the summary marks runs [1, 2, 3, 4] validated, and the producer validates only qualification reports whose trace_requested equals this value; the qualification reports themselves are not retained",
+        "requested_status": "producer_declared"
       },
       "trial_count": 160
     },
@@ -911,7 +913,8 @@
           "mode": "seccomp-bpf",
           "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
         },
-        "requested_basis": "the producer accepted only qualification reports whose trace_requested equals this value (validate_report); qualified runs [1, 2, 3, 4]"
+        "requested_basis": "self-declared: the summary marks runs [1, 2, 3, 4] validated, and the producer validates only qualification reports whose trace_requested equals this value; the qualification reports themselves are not retained",
+        "requested_status": "producer_declared"
       },
       "trial_count": 160
     }
@@ -940,19 +943,19 @@
       ]
     },
     {
-      "code": "host_environment_differs",
-      "detail": "differs: the runs did not share one host",
-      "dimension": "memory",
-      "fields": [
-        "environment.mem_total_kb"
-      ]
-    },
-    {
       "code": "host_instance_unverified",
       "detail": "neither report retains its host instance; same-host conditions cannot be established",
       "dimension": "host_instance",
       "fields": [
         "environment.host_instance"
+      ]
+    },
+    {
+      "code": "mem_total_differs_materiality_unassessed",
+      "detail": "reported MemTotal_kb differs; same-boot/same-host conditions are not established and no tolerance is approved",
+      "dimension": "memory",
+      "fields": [
+        "environment.mem_total_kb"
       ]
     }
   ],

@@ -1,6 +1,6 @@
 # Native performance comparison
 
-Classification: **non-comparable** (two_reports).
+Classification: **incomplete** (two_reports).
 
 | Role | Input | Original SHA-256 | Custody | Source | Binaries | Build |
 |---|---|---|---|---|---|---|
@@ -11,23 +11,23 @@ Classification: **non-comparable** (two_reports).
 
 - `binary_identity_unverified` (binaries): binary digests are not independently bound
 - `build_profile_unverified` (build): build profile is not bound to the measured binaries
-- `host_environment_differs` (memory): differs: the runs did not share one host
 - `host_instance_unverified` (host_instance): neither report retains its host instance; same-host conditions cannot be established
+- `mem_total_differs_materiality_unassessed` (memory): reported MemTotal_kb differs; same-boot/same-host conditions are not established and no tolerance is approved
 
 ## Strata (continuation, ms)
 
-Status counts cover trials of qualified runs; trials of unqualified runs are excluded and counted.
+Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs only; trials of unqualified runs stay counted under all runs.
 
-| Profile | Condition | Role | Planned | Excluded (unqualified runs) | Measured / failed / timed out / incomplete / not run | Runs | p50 | p95 | max | 3000 ms p95 |
-|---|---|---|---:|---:|---|---:|---:|---:|---:|---|
-| filesystem | post_cache_drop_setup_rewarmed | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 991.6 | 1058.5 | 1107.6 | met |
-| filesystem | post_cache_drop_setup_rewarmed | candidate | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
-| filesystem | warm | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 993.4 | 1035.5 | 1064.6 | met |
-| filesystem | warm | candidate | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1205.9 | 1256.8 | 1270.2 | met |
-| git | post_cache_drop_setup_rewarmed | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1365.5 | 1413.2 | 1520.8 | met |
-| git | post_cache_drop_setup_rewarmed | candidate | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1579.6 | 1678.9 | 1692.2 | met |
-| git | warm | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1335.4 | 1409.8 | 1425.5 | met |
-| git | warm | candidate | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
+| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | 3000 ms p95 |
+|---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|
+| filesystem | post_cache_drop_setup_rewarmed | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 991.6 | 1058.5 | 1107.6 | met |
+| filesystem | post_cache_drop_setup_rewarmed | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
+| filesystem | warm | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 993.4 | 1035.5 | 1064.6 | met |
+| filesystem | warm | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1205.9 | 1256.8 | 1270.2 | met |
+| git | post_cache_drop_setup_rewarmed | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1365.5 | 1413.2 | 1520.8 | met |
+| git | post_cache_drop_setup_rewarmed | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1579.6 | 1678.9 | 1692.2 | met |
+| git | warm | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1335.4 | 1409.8 | 1425.5 | met |
+| git | warm | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
 
 ## Differences (candidate minus baseline, ms)
 

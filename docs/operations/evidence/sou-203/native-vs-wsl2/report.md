@@ -24,30 +24,30 @@ Classification: **non-comparable** (two_reports).
 
 ## Strata (continuation, ms)
 
-Status counts cover trials of qualified runs; trials of unqualified runs are excluded and counted.
+Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs only; trials of unqualified runs stay counted under all runs.
 
-| Profile | Condition | Role | Planned | Excluded (unqualified runs) | Measured / failed / timed out / incomplete / not run | Runs | p50 | p95 | max | 3000 ms p95 |
-|---|---|---|---:|---:|---|---:|---:|---:|---:|---|
-| filesystem | declared_cold_unverified | baseline | – | – | absent | – | – | – | – | – |
-| filesystem | declared_cold_unverified | candidate | 40 | 40 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
-| filesystem | declared_warm_unverified | baseline | – | – | absent | – | – | – | – | – |
-| filesystem | declared_warm_unverified | candidate | 20 | 20 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
-| filesystem | post_cache_drop_setup_rewarmed | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
-| filesystem | post_cache_drop_setup_rewarmed | candidate | – | – | absent | – | – | – | – | – |
-| filesystem | undeclared | baseline | – | – | absent | – | – | – | – | – |
-| filesystem | undeclared | candidate | 20 | 20 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
-| filesystem | warm | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1205.9 | 1256.8 | 1270.2 | met |
-| filesystem | warm | candidate | – | – | absent | – | – | – | – | – |
-| git | declared_cold_unverified | baseline | – | – | absent | – | – | – | – | – |
-| git | declared_cold_unverified | candidate | 40 | 40 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
-| git | declared_warm_unverified | baseline | – | – | absent | – | – | – | – | – |
-| git | declared_warm_unverified | candidate | 20 | 20 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
-| git | post_cache_drop_setup_rewarmed | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1579.6 | 1678.9 | 1692.2 | met |
-| git | post_cache_drop_setup_rewarmed | candidate | – | – | absent | – | – | – | – | – |
-| git | undeclared | baseline | – | – | absent | – | – | – | – | – |
-| git | undeclared | candidate | 20 | 20 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
-| git | warm | baseline | 40 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
-| git | warm | candidate | – | – | absent | – | – | – | – | – |
+| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | p50 | p95 | max | 3000 ms p95 |
+|---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|
+| filesystem | declared_cold_unverified | baseline | – | absent | – | – | – | – | – | – | – |
+| filesystem | declared_cold_unverified | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 40 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
+| filesystem | declared_warm_unverified | baseline | – | absent | – | – | – | – | – | – | – |
+| filesystem | declared_warm_unverified | candidate | 20 | 20 / 0 / 0 / 0 / 0 | 20 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
+| filesystem | post_cache_drop_setup_rewarmed | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1199.0 | 1265.4 | 1298.2 | met |
+| filesystem | post_cache_drop_setup_rewarmed | candidate | – | absent | – | – | – | – | – | – | – |
+| filesystem | undeclared | baseline | – | absent | – | – | – | – | – | – | – |
+| filesystem | undeclared | candidate | 20 | 20 / 0 / 0 / 0 / 0 | 20 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
+| filesystem | warm | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1205.9 | 1256.8 | 1270.2 | met |
+| filesystem | warm | candidate | – | absent | – | – | – | – | – | – | – |
+| git | declared_cold_unverified | baseline | – | absent | – | – | – | – | – | – | – |
+| git | declared_cold_unverified | candidate | 40 | 40 / 0 / 0 / 0 / 0 | 40 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
+| git | declared_warm_unverified | baseline | – | absent | – | – | – | – | – | – | – |
+| git | declared_warm_unverified | candidate | 20 | 20 / 0 / 0 / 0 / 0 | 20 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
+| git | post_cache_drop_setup_rewarmed | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1579.6 | 1678.9 | 1692.2 | met |
+| git | post_cache_drop_setup_rewarmed | candidate | – | absent | – | – | – | – | – | – | – |
+| git | undeclared | baseline | – | absent | – | – | – | – | – | – | – |
+| git | undeclared | candidate | 20 | 20 / 0 / 0 / 0 / 0 | 20 | 0 / 0 / 0 / 0 / 0 | 0 | n/a | n/a | n/a | not_evaluable_no_qualified_run |
+| git | warm | baseline | 40 | 40 / 0 / 0 / 0 / 0 | 0 | 40 / 0 / 0 / 0 / 0 | 2 | 1594.0 | 1634.9 | 1665.0 | met |
+| git | warm | candidate | – | absent | – | – | – | – | – | – | – |
 
 ## Differences (candidate minus baseline, ms)
 

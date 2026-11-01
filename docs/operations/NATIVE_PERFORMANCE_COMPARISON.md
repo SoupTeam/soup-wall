@@ -1,6 +1,6 @@
 # Source-bound native performance comparison (SOU-203)
 
-`scripts/native_performance.py` compares two retained native Ask latency series offline. It
+`scripts/native_performance.py` compares two retained native Ask latency reports offline. It
 explains whether a difference can be read at all before it shows one. It reads JSON and local
 git objects only. It runs no measurement, changes no producer, timeout, budget or policy, and
 makes no network call.
@@ -19,9 +19,18 @@ python scripts/native_performance.py `
 
 | Input | Contract | Role |
 |---|---|---|
-| `--*` | `sw-ask-series/1` `summary.json`, or `sw-ask-series/1-retroactive` | Retained series with every per-trial value |
-| `--*-manifest` | the series `manifest.json` | Plan declared before the first trial; binary digests, kernel, machine |
-| `--*-receipt` | `sw-native-pilot-agent-source-build/1` | Binds the agentfw/git_launcher digests and the cargo build profile |
+| `--*` | `sw-ask-series/1` `summary.json`, `sw-ask-series/1-retroactive`, or a `sw-pilot-ask-acceptance/1` qualification report (`qualify-pilot-ask.py --approval-samples N`) | Retained series or single Ask run with every per-trial value |
+| `--*-manifest` | the series `manifest.json` (series only) | Plan declared before the first trial; binary digests, kernel, machine |
+| `--*-receipt` | `sw-native-pilot-agent-source-build/1` (series only) | Binds the agentfw/git_launcher digests and the cargo build profile |
+
+### Supported report families
+
+| Family | Status |
+|---|---|
+| Ask series, `sw-ask-series/1` (SOU-141) | supported, genuine evidence reproduced |
+| Ask qualification, `sw-pilot-ask-acceptance/1` (SOU-124) | supported, genuine evidence reproduced (counts, p50, p95) |
+| Installed host, `sw-installed-pilot-matched/1` (SOU-106) | **not supported**. Its control/protected arm design, per-batch tool latencies, host-start time and gate-derived outcomes need their own endpoints and a reproduction through `pilot_qualification.matched_gate`. Rejected as `unsupported_report_format`. |
+| Preparation, `sw-pilot-preparation/1` | **not supported**, and no genuine report is retained in the repository. Report-level preparation timings in installed-host reports are not read either. |
 | `--repository` | local git checkout (default: this one) | Witness for source identity and report custody |
 
 Output files: `comparison.json` (`sw-native-performance-comparison/1`), `report.md`, `strata.csv`
@@ -52,7 +61,7 @@ python -m unittest discover -s scripts/tests -p test_native_performance.py -v
 | Binaries | Manifest digests are self-declared. A receipt binds agentfw and git_launcher to the same source. | declared only |
 | Build profile | `--release` / `--profile` in the receipt's `cargo build` command, otherwise `dev` | not retained |
 | Published aggregates | Every per-run latency, diagnostic sample, diagnostic distribution, pooled value, status, blocker list and attempt ledger is recomputed from the retained trials with the producer's own functions. Any difference is a rejection. | reproduced |
-| Trace | Requested mode via the producer's `validate_report` gate on qualified runs; the observed strace mode is not retained | requested only |
+| Trace | Series: requested mode inferred from runs the summary itself marks validated (producer-declared). Ask report: its own `trace_requested`, absent in the retained SOU-124 report. The observed strace mode is never retained. | declared only |
 | Host instance | Not recorded by the producer | not retained |
 
 ## Observation contract (`sw-native-performance-observation/1`)
@@ -79,14 +88,17 @@ Precedence: rejection, then contradiction, then missing evidence, then strata.
 
 | Classification | Rule |
 |---|---|
-| `non-comparable` | A verified contradiction: platform, kernel, machine, host environment, host instance, producer format, endpoint or unit, trace mode, build profile, sample plan, measurement harness, or a declared pairing with different trial sets |
-| `incomplete` | Missing independent evidence (custody, source, binaries, build profile, host instance), `--paired` without a pairing basis, or no comparable stratum |
+| `non-comparable` | A verified contradiction: platform, kernel, machine, CPU count, verified host instance, producer format, endpoint or unit, trace mode, build profile, sample plan, measurement harness, or a declared pairing with different trial sets |
+| `incomplete` | Missing independent evidence (custody, source or source contents, binaries, build profile, host instance), a reported `MemTotal_kb` difference (`mem_total_differs_materiality_unassessed`: it can differ between boots of one host, it proves no host difference, and no tolerance is approved), `--paired` without a pairing basis, or no comparable stratum |
 | `stratified-only` | Global evidence is consistent, but some strata are unmatched or have an incomplete denominator. Only the listed comparable strata may be read. |
 | `compatible` | Every stratum is matched, complete and comparable |
 
-The same summary, manifest and receipt bytes on both sides form an **identity control**. Its
-trials pair by identity, so all paired differences must be zero. It proves the comparator, not
-a change between revisions. Two different reports have no paired design in this producer, so
+The same summary, manifest and receipt bytes on both sides form an **identity control**. It is
+reported in `identity_control`, apart from the classification. Its trials pair by identity, so
+all paired differences must be zero. It proves the comparator, not a change between revisions,
+and it never stands in for provenance: identical evidence is classified by the same source,
+binary, build and custody rules as any other pair. The genuine SOU-141 identity control is
+therefore `incomplete` (binaries and build profile unverified). Two different reports have no paired design in this producer, so
 only marginal percentile differences are given for them. These are labeled
 `difference_of_marginal_percentiles_not_percentile_of_paired_differences` and are never
 presented as a percentile of paired improvements. Different source revisions are allowed
@@ -119,3 +131,9 @@ output file is limited to 8 MiB. The output directory must be new or empty.
   reproduced.
 - Custody proves that the bytes are committed, not that the producer executed them. The binaries
   themselves are not retained, so their digests cannot be re-hashed.
+- An Ask qualification report publishes only counts, p50 and p95. A changed trial at another rank
+  is not detectable from its own aggregates. Its per-trial integrity rests on custody, so an
+  uncommitted copy is always `incomplete`.
+- The retained SOU-124 report declares no `files_sha256`, no `trace_requested`, no platform and no
+  condition. Its source is verified to commit and tree only (`source_contents_unverified`).
+- Installed-host and preparation reports are not supported (see above).

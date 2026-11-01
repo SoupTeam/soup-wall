@@ -12,6 +12,7 @@ privately and compares it byte for byte. See the
 | `native-final-ask-series-summary.json` + manifest | committed blob, introduced by `020e2c1f` | `4b99b6e`: tree and `files_sha256` recomputed from git objects |
 | `native-ask-series-summary.json` + manifest | committed blob | `12f3f2b`: tree and `files_sha256` recomputed from git objects |
 | `wsl2-ask-series.json` (retroactive, unvalidated) | committed blob | none recorded |
+| `../sou-124/native-attempt2-baseline.json` (Ask qualification, `performance_blocker`) | committed blob | `d37383e`: commit tree verified; no `files_sha256` declared |
 
 For both native series, every published per-run latency, diagnostic sample, diagnostic
 distribution, pooled value, status and blocker list (plus the attempt ledger of the final
@@ -22,9 +23,11 @@ manifest declarations only. No build receipt and no host instance is retained.
 
 | Directory | Result | Meaning |
 |---|---|---|
-| `identity-control/` | `compatible`, exit 0 | Final series against itself with `--paired`: 4 strata, 40 trial pairs each, all 160 paired differences exactly 0. A comparator control, not a speed-up. |
-| `historical-cross-revision/` | `non-comparable`, exit 1 | `12f3f2b` against `4b99b6e`. Verified different host environments (`MemTotal_kb` 16373448 vs 16373452), plus unverified build profile, binaries and host instance. No difference is reported. |
+| `identity-control/` | `incomplete`, exit 1 | Final series against itself with `--paired`. The identity control has 4 strata with 40 trial pairs each, and all 160 paired differences are exactly 0. The classification stays `incomplete` because binaries and build profile are unverified; identical evidence does not replace provenance. A comparator control, not a speed-up. |
+| `historical-cross-revision/` | `incomplete`, exit 1 | `12f3f2b` against `4b99b6e`. Unverified build profile, binaries and host instance, and a reported `MemTotal_kb` difference (16373452 vs 16373448), which leaves same-host conditions unestablished but proves no host difference. No difference is reported. |
 | `native-vs-wsl2/` | `non-comparable`, exit 1 | `native_linux` against `wsl2`, different producer format, and the WSL2 runs are unvalidated |
+| `ask-qualification-identity-control/` | `incomplete`, exit 1 | SOU-124 Ask report against itself: 40 zero paired differences. Its published latency is reproduced. Its git p95 11310 ms stays `not_met` against the 3000 ms criterion, as originally reported. |
+| `ask-qualification-vs-series/` | `non-comparable`, exit 1 | Ask qualification report against the SOU-141 final series: different producer format, condition strata and a verified change of the measurement harness between `d37383e` and `4b99b6e` |
 | `broken-copy-control/` | rejected, exit 2 | A private copy of the final series with one git trial lowered by 100 ms: `published_distribution_not_reproduced` at `runs[2].summary.latency.git.p50_ms` |
 
 The per-side distributions in `identity-control/strata.csv` reproduce the published SOU-141

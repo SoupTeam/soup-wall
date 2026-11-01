@@ -1,0 +1,13 @@
+profile,condition,role,stratum,planned,attempted,excluded_unqualified_run_trials,all_runs_measured,all_runs_failed,all_runs_timed_out,all_runs_incomplete,all_runs_not_run,qualified_run_trials,qualified_measured,qualified_failed,qualified_timed_out,qualified_incomplete,qualified_not_run,runs,continuation_p50_ms,continuation_p95_ms,continuation_max_ms
+filesystem,post_cache_drop_setup_rewarmed,baseline,absent,,,,,,,,,,,,,,,,,,
+filesystem,post_cache_drop_setup_rewarmed,candidate,not_comparable,40,40,0,40,0,0,0,0,40,40,0,0,0,0,2,1198.990163,1265.400298,1298.161406
+filesystem,undeclared,baseline,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,8742.440677,8840.958933,8850.198494
+filesystem,undeclared,candidate,absent,,,,,,,,,,,,,,,,,,
+filesystem,warm,baseline,absent,,,,,,,,,,,,,,,,,,
+filesystem,warm,candidate,not_comparable,40,40,0,40,0,0,0,0,40,40,0,0,0,0,2,1205.856493,1256.82629,1270.179619
+git,post_cache_drop_setup_rewarmed,baseline,absent,,,,,,,,,,,,,,,,,,
+git,post_cache_drop_setup_rewarmed,candidate,not_comparable,40,40,0,40,0,0,0,0,40,40,0,0,0,0,2,1579.629562,1678.917396,1692.213688
+git,undeclared,baseline,not_comparable,20,20,0,20,0,0,0,0,20,20,0,0,0,0,1,11216.222081,11310.103784,11385.928462
+git,undeclared,candidate,absent,,,,,,,,,,,,,,,,,,
+git,warm,baseline,absent,,,,,,,,,,,,,,,,,,
+git,warm,candidate,not_comparable,40,40,0,40,0,0,0,0,40,40,0,0,0,0,2,1593.970563,1634.924643,1665.005933

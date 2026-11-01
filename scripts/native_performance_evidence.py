@@ -17,18 +17,24 @@ SPEC = importlib.util.spec_from_file_location('native_performance', ROOT / 'scri
 NP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(NP)
 SOU141 = 'docs/operations/evidence/sou-141/'
+SOU124 = 'docs/operations/evidence/sou-124/'
 BUNDLE = ROOT / 'docs/operations/evidence/sou-203'
 FINAL = ['--baseline', SOU141 + 'native-final-ask-series-summary.json',
          '--baseline-manifest', SOU141 + 'native-final-ask-series-manifest.json']
 CASES = {
     'identity-control': (FINAL + ['--candidate', SOU141 + 'native-final-ask-series-summary.json',
                                   '--candidate-manifest', SOU141 + 'native-final-ask-series-manifest.json',
-                                  '--paired'], 0),
+                                  '--paired'], 1),
     'historical-cross-revision': (['--baseline', SOU141 + 'native-ask-series-summary.json',
                                    '--baseline-manifest', SOU141 + 'native-ask-series-manifest.json',
                                    '--candidate', SOU141 + 'native-final-ask-series-summary.json',
                                    '--candidate-manifest', SOU141 + 'native-final-ask-series-manifest.json'], 1),
     'native-vs-wsl2': (FINAL + ['--candidate', SOU141 + 'wsl2-ask-series.json'], 1),
+    'ask-qualification-identity-control': (['--baseline', SOU124 + 'native-attempt2-baseline.json',
+                                            '--candidate', SOU124 + 'native-attempt2-baseline.json', '--paired'], 1),
+    'ask-qualification-vs-series': (['--baseline', SOU124 + 'native-attempt2-baseline.json',
+                                     '--candidate', SOU141 + 'native-final-ask-series-summary.json',
+                                     '--candidate-manifest', SOU141 + 'native-final-ask-series-manifest.json'], 1),
 }
 
 
@@ -48,7 +54,7 @@ def generate(out_dir):
         cases = dict(CASES)
         cases['broken-copy-control'] = (['--baseline', broken_copy(private), '--candidate', broken_copy(private)], 2)
         for name, (words, expected) in sorted(cases.items()):
-            code = NP.main([*(str(ROOT / w) if w.startswith(SOU141) else w for w in words),
+            code = NP.main([*(str(ROOT / w) if w.startswith((SOU141, SOU124)) else w for w in words),
                             '--repository', str(ROOT), '--out-dir', str(out_dir / name)])
             codes[name] = code
             if code != expected:

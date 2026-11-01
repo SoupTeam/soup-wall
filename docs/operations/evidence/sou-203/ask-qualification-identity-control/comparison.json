@@ -1,0 +1,982 @@
+{
+  "basis": "identity_control",
+  "classification": "incomplete",
+  "contract": "sw-native-performance-comparison/1",
+  "dimensions": [
+    {
+      "baseline": "21aba83f1faf7b010e0e2651d28279f148704db9bb96bbd94e6ba2cb3ae4c63c",
+      "candidate": "21aba83f1faf7b010e0e2651d28279f148704db9bb96bbd94e6ba2cb3ae4c63c",
+      "code": null,
+      "detail": null,
+      "dimension": "evidence_identity",
+      "fields": [
+        "input.evidence_sha256"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": "platform_unverified",
+      "detail": "not retained on one side",
+      "dimension": "platform",
+      "fields": [
+        "environment.platform_kind"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": "kernel_unverified",
+      "detail": "not retained on one side",
+      "dimension": "kernel",
+      "fields": [
+        "environment.kernel"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": "machine_unverified",
+      "detail": "not retained on one side",
+      "dimension": "machine",
+      "fields": [
+        "environment.machine"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": [],
+      "candidate": [],
+      "code": "cpu_count_unverified",
+      "detail": "not retained on one side",
+      "dimension": "cpu_count",
+      "fields": [
+        "environment.cpu_count"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": [],
+      "candidate": [],
+      "code": "memory_unverified",
+      "detail": "not retained on one side",
+      "dimension": "memory",
+      "fields": [
+        "environment.mem_total_kb"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": "same original evidence",
+      "dimension": "host_instance",
+      "fields": [
+        "environment.host_instance"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": "trace_requested_unverified",
+      "detail": "not retained on one side",
+      "dimension": "trace_requested",
+      "fields": [
+        "trace.requested"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": 20,
+      "candidate": 20,
+      "code": null,
+      "detail": null,
+      "dimension": "design",
+      "fields": [
+        "design.samples_per_profile"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": "commit_tree_verified_files_not_declared",
+      "candidate": "commit_tree_verified_files_not_declared",
+      "code": "source_contents_unverified",
+      "detail": "commit and tree verified; tracked file contents are not bound by a declared files_sha256",
+      "dimension": "source",
+      "fields": [
+        "provenance.source.files_sha256"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": null,
+      "candidate": null,
+      "code": null,
+      "detail": null,
+      "dimension": "workload",
+      "fields": [
+        "provenance.workload.harness_sha256_at_source"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": "not_retained",
+      "candidate": "not_retained",
+      "code": "build_profile_unverified",
+      "detail": "build profile is not bound to the measured binaries",
+      "dimension": "build",
+      "fields": [
+        "provenance.build.status"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": "declared_only",
+      "candidate": "declared_only",
+      "code": "binary_identity_unverified",
+      "detail": "binary digests are not independently bound",
+      "dimension": "binaries",
+      "fields": [
+        "provenance.binaries.status"
+      ],
+      "status": "unverified"
+    }
+  ],
+  "engineering_targets": {
+    "continuation_p95_ms": 3000,
+    "first_pending_ms": 5000,
+    "note": "existing criteria, evaluated per side and stratum only; not a comparison verdict, not protection, effectiveness or readiness"
+  },
+  "global_pooled_comparison": null,
+  "global_pooled_comparison_reason": "never computed: profiles and conditions are separate strata",
+  "identity_control": {
+    "all_zero": true,
+    "evidence_identical": true,
+    "meaning": "comparator control only: identical evidence must give zero paired differences. It establishes no provenance, no compatibility and no performance change.",
+    "paired_trials": 40,
+    "strata": [
+      {
+        "condition": "undeclared",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 20,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "filesystem"
+      },
+      {
+        "condition": "undeclared",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 20,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "git"
+      }
+    ]
+  },
+  "inference": {
+    "hosts": 1,
+    "independent_clusters_per_stratum": [
+      1
+    ],
+    "intervals": null,
+    "reasons": [
+      "independent_clusters_below_minimum: at most 1 runs per stratum, minimum 10 effective clusters (DEC-SOU153-20261027)",
+      "no_accepted_performance_cluster_method: the SOU-153 bootstrap is approved only for AgentDojo semantic families",
+      "repeated_trials_within_a_run_are_dependent: one qualifier process and host per run"
+    ],
+    "status": "descriptive_only"
+  },
+  "observations": {
+    "baseline": {
+      "contract": "sw-native-performance-observation/1",
+      "design": {
+        "cluster_unit": "run (one qualifier process)",
+        "host_unit": "one report",
+        "pairing_design": null,
+        "plan": [
+          "undeclared"
+        ],
+        "profiles": [
+          "filesystem",
+          "git"
+        ],
+        "samples_per_profile": 20
+      },
+      "endpoints": {
+        "continuation_ms": {
+          "clock": "qualifier_harness_monotonic",
+          "end": "correlated original-server result",
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "observer": "scripts/qualify-pilot-ask.py harness",
+          "role": "continuation engineering criterion (p95 <= 3000 ms)",
+          "source_field": "decision_to_result_ms",
+          "start": "operator approval attempt",
+          "unit": "ms"
+        },
+        "first_pending_asset_verification_ms": {
+          "clock": "collector_monotonic",
+          "end": "pass-1 asset verification end, before the pending approval is published",
+          "metric": "collector_pass_1_asset_verification_sum",
+          "observer": "collector mcp_asset_verification_timing",
+          "role": "lower bound of the operator-visible first-pending wait; never the 5 s pending measurement",
+          "source_field": "sum of pass-1 runtime_and_libraries, package_tree, selected_profile (same clock, sequential)",
+          "start": "collector pass-1 asset verification start",
+          "unit": "ms"
+        },
+        "post_observed_total_ms": {
+          "clock": "collector_monotonic",
+          "end": "result inspection complete",
+          "metric": "collector_post_observed_total",
+          "observer": "collector mcp_real_approval_timing",
+          "role": "internal verification after approval; never a substitute for continuation",
+          "source_field": "post_observed_ms",
+          "start": "collector observation of the approval",
+          "unit": "ms"
+        }
+      },
+      "environment": {
+        "cpu_count": [],
+        "host_instance": {
+          "detail": "the report records no host",
+          "status": "not_retained"
+        },
+        "kernel": null,
+        "machine": null,
+        "mem_total_kb": [],
+        "platform_kind": null
+      },
+      "input": {
+        "custody": {
+          "bytes": 221288,
+          "git_blob": "18a7aaf028f99d21492332cc995f7fb28fab0a9f",
+          "introduced_by": "5128ee415ff4a6285889c94fb01530ac5c6f301f",
+          "method": "local git object store: blob id of the bytes read",
+          "normalization": "crlf_to_lf_checkout",
+          "original_sha256": "e7d29d905ba820061a2f12ad327820db16870d3b51ec433000d0ec5598934ecb",
+          "status": "committed_blob"
+        },
+        "evidence_sha256": "21aba83f1faf7b010e0e2651d28279f148704db9bb96bbd94e6ba2cb3ae4c63c",
+        "manifest": null,
+        "name": "docs/operations/evidence/sou-124/native-attempt2-baseline.json",
+        "producer": "scripts/qualify-pilot-ask.py",
+        "producer_format": "sw-pilot-ask-acceptance/1",
+        "workflow_run": 39989703005
+      },
+      "not_retained": {
+        "cleanup": "cleanup is inside run wall_seconds only",
+        "external_build_time": "not part of the series",
+        "first_observable_pending": "host-visible pending time is measured by SOU-105 acceptance, not by this series",
+        "preparation_elapsed": "qualifier setup is inside run wall_seconds only; no per-trial setup clock is retained",
+        "raw_stage_events": "not part of an Ask qualification report",
+        "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
+      },
+      "provenance": {
+        "binaries": {
+          "detail": "qualification report self-declaration; the binaries are not retained",
+          "sha256": {
+            "agentfw": "743cf5a38d9f76bb1c985b8e6239e13657a2d8b2d3950b3c8ce9386913912e23",
+            "bwrap": "a8cd3e179fb2ecded395e4fddb647eb41fff3445e93bf72dcec331a44fde477f",
+            "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+            "git": "019c1f5473c36fdffc17e491a6c5913c86cc2891e30d13a7ae41105f7c985f28",
+            "git_launcher": "4ecdf84ccb37f951b5aa144b2cf59fc6bdc8a37be192233fe3bdbf6f7d16ec77",
+            "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+            "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+            "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+          },
+          "status": "declared_only"
+        },
+        "build": {
+          "detail": "an Ask qualification report carries no build receipt",
+          "profile": null,
+          "receipt_sha256": null,
+          "status": "not_retained"
+        },
+        "profiles_and_policy": {
+          "detail": "per-case policy_sha256 is self-declared; no files_sha256 binds the source tree contents",
+          "status": "declared_only"
+        },
+        "source": {
+          "commit": "d37383e9f455451fb911af9c9fbf662d39d8b11a",
+          "files_sha256": null,
+          "method": "git rev-parse <commit>^{tree}; the report declares no files_sha256",
+          "status": "commit_tree_verified_files_not_declared",
+          "tree": "5493e04b90578b3f78f783aad06b0e2d661ecf80"
+        },
+        "workload": {
+          "definition": "qualify-pilot-ask.py --approval-samples N, approve case, profiles filesystem,git",
+          "harness_sha256_at_source": {
+            "scripts/pilot_ask_latency.py": "73d1a18f9b25b498dde44d34be81f4ec16f1cf3587ac3136a379ff21bd4439a3",
+            "scripts/qualify-pilot-ask.py": "78a807d366b68f3b2bcd5a7d4043f975073bc657fe78fd14dbe36bb9d3bfae81"
+          },
+          "status": "verified_git_objects"
+        }
+      },
+      "reproduction": {
+        "checked": [
+          "latency"
+        ],
+        "not_reproduced": [],
+        "status": "reproduced_from_retained_trials"
+      },
+      "role": "baseline",
+      "runs": [
+        {
+          "cache_drop": null,
+          "condition": "undeclared",
+          "conditions": {},
+          "declared_kind": "undeclared",
+          "disqualification": null,
+          "exit_code": null,
+          "failure": null,
+          "index": 1,
+          "qualified": true,
+          "wall_seconds": null
+        }
+      ],
+      "stage_clock": {
+        "clock": "collector_monotonic",
+        "observer": "collector mcp_asset_verification_timing / mcp_real_approval_timing",
+        "unit": "ms"
+      },
+      "status_counts": {
+        "failed": 0,
+        "incomplete": 0,
+        "measured": 40,
+        "not_run": 0,
+        "timed_out": 0
+      },
+      "status_mapping": {
+        "failed": "trial row present, passed is not true (the producer counts it in `failed`)",
+        "incomplete": "no trial row in a recorded run (the producer counts it in `incomplete`)",
+        "measured": "case present and the pilot_ask_latency.summarize success predicate holds",
+        "not_run": "not applicable: a single report is one run",
+        "timed_out": "no case, and the report error_type names a timeout"
+      },
+      "trace": {
+        "observed": "not_retained",
+        "requested": null,
+        "requested_basis": "this report predates the trace_requested field",
+        "requested_status": "not_retained"
+      },
+      "trial_count": 40
+    },
+    "candidate": {
+      "contract": "sw-native-performance-observation/1",
+      "design": {
+        "cluster_unit": "run (one qualifier process)",
+        "host_unit": "one report",
+        "pairing_design": null,
+        "plan": [
+          "undeclared"
+        ],
+        "profiles": [
+          "filesystem",
+          "git"
+        ],
+        "samples_per_profile": 20
+      },
+      "endpoints": {
+        "continuation_ms": {
+          "clock": "qualifier_harness_monotonic",
+          "end": "correlated original-server result",
+          "metric": "operator_attempt_to_correlated_original_result_monotonic",
+          "observer": "scripts/qualify-pilot-ask.py harness",
+          "role": "continuation engineering criterion (p95 <= 3000 ms)",
+          "source_field": "decision_to_result_ms",
+          "start": "operator approval attempt",
+          "unit": "ms"
+        },
+        "first_pending_asset_verification_ms": {
+          "clock": "collector_monotonic",
+          "end": "pass-1 asset verification end, before the pending approval is published",
+          "metric": "collector_pass_1_asset_verification_sum",
+          "observer": "collector mcp_asset_verification_timing",
+          "role": "lower bound of the operator-visible first-pending wait; never the 5 s pending measurement",
+          "source_field": "sum of pass-1 runtime_and_libraries, package_tree, selected_profile (same clock, sequential)",
+          "start": "collector pass-1 asset verification start",
+          "unit": "ms"
+        },
+        "post_observed_total_ms": {
+          "clock": "collector_monotonic",
+          "end": "result inspection complete",
+          "metric": "collector_post_observed_total",
+          "observer": "collector mcp_real_approval_timing",
+          "role": "internal verification after approval; never a substitute for continuation",
+          "source_field": "post_observed_ms",
+          "start": "collector observation of the approval",
+          "unit": "ms"
+        }
+      },
+      "environment": {
+        "cpu_count": [],
+        "host_instance": {
+          "detail": "the report records no host",
+          "status": "not_retained"
+        },
+        "kernel": null,
+        "machine": null,
+        "mem_total_kb": [],
+        "platform_kind": null
+      },
+      "input": {
+        "custody": {
+          "bytes": 221288,
+          "git_blob": "18a7aaf028f99d21492332cc995f7fb28fab0a9f",
+          "introduced_by": "5128ee415ff4a6285889c94fb01530ac5c6f301f",
+          "method": "local git object store: blob id of the bytes read",
+          "normalization": "crlf_to_lf_checkout",
+          "original_sha256": "e7d29d905ba820061a2f12ad327820db16870d3b51ec433000d0ec5598934ecb",
+          "status": "committed_blob"
+        },
+        "evidence_sha256": "21aba83f1faf7b010e0e2651d28279f148704db9bb96bbd94e6ba2cb3ae4c63c",
+        "manifest": null,
+        "name": "docs/operations/evidence/sou-124/native-attempt2-baseline.json",
+        "producer": "scripts/qualify-pilot-ask.py",
+        "producer_format": "sw-pilot-ask-acceptance/1",
+        "workflow_run": 39989703005
+      },
+      "not_retained": {
+        "cleanup": "cleanup is inside run wall_seconds only",
+        "external_build_time": "not part of the series",
+        "first_observable_pending": "host-visible pending time is measured by SOU-105 acceptance, not by this series",
+        "preparation_elapsed": "qualifier setup is inside run wall_seconds only; no per-trial setup clock is retained",
+        "raw_stage_events": "not part of an Ask qualification report",
+        "trace_observed": "the qualification report (and its actual strace mode) is not retained in the summary"
+      },
+      "provenance": {
+        "binaries": {
+          "detail": "qualification report self-declaration; the binaries are not retained",
+          "sha256": {
+            "agentfw": "743cf5a38d9f76bb1c985b8e6239e13657a2d8b2d3950b3c8ce9386913912e23",
+            "bwrap": "a8cd3e179fb2ecded395e4fddb647eb41fff3445e93bf72dcec331a44fde477f",
+            "claude": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+            "git": "019c1f5473c36fdffc17e491a6c5913c86cc2891e30d13a7ae41105f7c985f28",
+            "git_launcher": "4ecdf84ccb37f951b5aa144b2cf59fc6bdc8a37be192233fe3bdbf6f7d16ec77",
+            "node": "1bec56ef7cfa9a76f3e0b7c0a87f220eb73f23102b9c0b4c7529a3f7c3ce7c31",
+            "npm": "8e5f6f3429f8cdbe693cdc29904e9d5a7b127a494bd15c804bd54c7403bfcbe7",
+            "strace": "28f957c227012de0b18d1bd7fff2d396cb693ea60ed8013be68de071e84b5001"
+          },
+          "status": "declared_only"
+        },
+        "build": {
+          "detail": "an Ask qualification report carries no build receipt",
+          "profile": null,
+          "receipt_sha256": null,
+          "status": "not_retained"
+        },
+        "profiles_and_policy": {
+          "detail": "per-case policy_sha256 is self-declared; no files_sha256 binds the source tree contents",
+          "status": "declared_only"
+        },
+        "source": {
+          "commit": "d37383e9f455451fb911af9c9fbf662d39d8b11a",
+          "files_sha256": null,
+          "method": "git rev-parse <commit>^{tree}; the report declares no files_sha256",
+          "status": "commit_tree_verified_files_not_declared",
+          "tree": "5493e04b90578b3f78f783aad06b0e2d661ecf80"
+        },
+        "workload": {
+          "definition": "qualify-pilot-ask.py --approval-samples N, approve case, profiles filesystem,git",
+          "harness_sha256_at_source": {
+            "scripts/pilot_ask_latency.py": "73d1a18f9b25b498dde44d34be81f4ec16f1cf3587ac3136a379ff21bd4439a3",
+            "scripts/qualify-pilot-ask.py": "78a807d366b68f3b2bcd5a7d4043f975073bc657fe78fd14dbe36bb9d3bfae81"
+          },
+          "status": "verified_git_objects"
+        }
+      },
+      "reproduction": {
+        "checked": [
+          "latency"
+        ],
+        "not_reproduced": [],
+        "status": "reproduced_from_retained_trials"
+      },
+      "role": "candidate",
+      "runs": [
+        {
+          "cache_drop": null,
+          "condition": "undeclared",
+          "conditions": {},
+          "declared_kind": "undeclared",
+          "disqualification": null,
+          "exit_code": null,
+          "failure": null,
+          "index": 1,
+          "qualified": true,
+          "wall_seconds": null
+        }
+      ],
+      "stage_clock": {
+        "clock": "collector_monotonic",
+        "observer": "collector mcp_asset_verification_timing / mcp_real_approval_timing",
+        "unit": "ms"
+      },
+      "status_counts": {
+        "failed": 0,
+        "incomplete": 0,
+        "measured": 40,
+        "not_run": 0,
+        "timed_out": 0
+      },
+      "status_mapping": {
+        "failed": "trial row present, passed is not true (the producer counts it in `failed`)",
+        "incomplete": "no trial row in a recorded run (the producer counts it in `incomplete`)",
+        "measured": "case present and the pilot_ask_latency.summarize success predicate holds",
+        "not_run": "not applicable: a single report is one run",
+        "timed_out": "no case, and the report error_type names a timeout"
+      },
+      "trace": {
+        "observed": "not_retained",
+        "requested": null,
+        "requested_basis": "this report predates the trace_requested field",
+        "requested_status": "not_retained"
+      },
+      "trial_count": 40
+    }
+  },
+  "pairing": {
+    "basis": "identical_original_evidence",
+    "reason": null,
+    "valid": true
+  },
+  "percentile_definition": "nearest rank: the value at rank ceil(q * n) of the ascending sample, unrounded (pilot_ask_latency.summarize). Published sw-ask-series/1 distributions round to 0.001 ms first; reproduction uses that producer convention.",
+  "reasons": [
+    {
+      "code": "binary_identity_unverified",
+      "detail": "binary digests are not independently bound",
+      "dimension": "binaries",
+      "fields": [
+        "provenance.binaries.status"
+      ]
+    },
+    {
+      "code": "build_profile_unverified",
+      "detail": "build profile is not bound to the measured binaries",
+      "dimension": "build",
+      "fields": [
+        "provenance.build.status"
+      ]
+    },
+    {
+      "code": "cpu_count_unverified",
+      "detail": "not retained on one side",
+      "dimension": "cpu_count",
+      "fields": [
+        "environment.cpu_count"
+      ]
+    },
+    {
+      "code": "kernel_unverified",
+      "detail": "not retained on one side",
+      "dimension": "kernel",
+      "fields": [
+        "environment.kernel"
+      ]
+    },
+    {
+      "code": "machine_unverified",
+      "detail": "not retained on one side",
+      "dimension": "machine",
+      "fields": [
+        "environment.machine"
+      ]
+    },
+    {
+      "code": "memory_unverified",
+      "detail": "not retained on one side",
+      "dimension": "memory",
+      "fields": [
+        "environment.mem_total_kb"
+      ]
+    },
+    {
+      "code": "platform_unverified",
+      "detail": "not retained on one side",
+      "dimension": "platform",
+      "fields": [
+        "environment.platform_kind"
+      ]
+    },
+    {
+      "code": "source_contents_unverified",
+      "detail": "commit and tree verified; tracked file contents are not bound by a declared files_sha256",
+      "dimension": "source",
+      "fields": [
+        "provenance.source.files_sha256"
+      ]
+    },
+    {
+      "code": "trace_requested_unverified",
+      "detail": "not retained on one side",
+      "dimension": "trace_requested",
+      "fields": [
+        "trace.requested"
+      ]
+    }
+  ],
+  "scope": [
+    "Engineering latency diagnostics for recorded native Ask series only.",
+    "Not a security or protection qualification, not task effectiveness, not product or pilot readiness.",
+    "Trace-on is the only observer mode of this producer; no trace-off result exists here, and none would qualify protection.",
+    "The 3000 ms continuation p95 criterion and the 5000 ms first-pending bound are existing engineering criteria, reported separately; no new budget is approved.",
+    "A same-report identity control proves the comparator, not a performance change between revisions."
+  ],
+  "status": "evaluated",
+  "strata": [
+    {
+      "baseline": {
+        "attempted": 20,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "1": {
+            "max": 8850.198494,
+            "min": 8665.215226,
+            "n": 20,
+            "p50": 8742.440677,
+            "p95": 8840.958933
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 8850.198494,
+            "trial": "r01/filesystem/009"
+          },
+          {
+            "ms": 8840.958933,
+            "trial": "r01/filesystem/014"
+          },
+          {
+            "ms": 8835.541496,
+            "trial": "r01/filesystem/019"
+          }
+        ],
+        "continuation_ms": {
+          "max": 8850.198494,
+          "min": 8665.215226,
+          "n": 20,
+          "p50": 8742.440677,
+          "p95": 8840.958933
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "not_met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max n/a"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 8699.571728,
+            "trial": "r01/filesystem/000"
+          }
+        ],
+        "independent_clusters": 1,
+        "planned": 20,
+        "post_observed_total_ms": {
+          "max": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "qualified_run_trials": 20,
+        "runs": [
+          1
+        ],
+        "stages_ms": {},
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 20,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 20,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "candidate": {
+        "attempted": 20,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "1": {
+            "max": 8850.198494,
+            "min": 8665.215226,
+            "n": 20,
+            "p50": 8742.440677,
+            "p95": 8840.958933
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 8850.198494,
+            "trial": "r01/filesystem/009"
+          },
+          {
+            "ms": 8840.958933,
+            "trial": "r01/filesystem/014"
+          },
+          {
+            "ms": 8835.541496,
+            "trial": "r01/filesystem/019"
+          }
+        ],
+        "continuation_ms": {
+          "max": 8850.198494,
+          "min": 8665.215226,
+          "n": 20,
+          "p50": 8742.440677,
+          "p95": 8840.958933
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "not_met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max n/a"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 8699.571728,
+            "trial": "r01/filesystem/000"
+          }
+        ],
+        "independent_clusters": 1,
+        "planned": 20,
+        "post_observed_total_ms": {
+          "max": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "qualified_run_trials": 20,
+        "runs": [
+          1
+        ],
+        "stages_ms": {},
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 20,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 20,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "comparable": false,
+      "condition": "undeclared",
+      "profile": "filesystem",
+      "reasons": []
+    },
+    {
+      "baseline": {
+        "attempted": 20,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "1": {
+            "max": 11385.928462,
+            "min": 11122.747242,
+            "n": 20,
+            "p50": 11216.222081,
+            "p95": 11310.103784
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 11385.928462,
+            "trial": "r01/git/011"
+          },
+          {
+            "ms": 11310.103784,
+            "trial": "r01/git/003"
+          },
+          {
+            "ms": 11282.600684,
+            "trial": "r01/git/017"
+          }
+        ],
+        "continuation_ms": {
+          "max": 11385.928462,
+          "min": 11122.747242,
+          "n": 20,
+          "p50": 11216.222081,
+          "p95": 11310.103784
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "not_met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max n/a"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 11271.272164,
+            "trial": "r01/git/000"
+          }
+        ],
+        "independent_clusters": 1,
+        "planned": 20,
+        "post_observed_total_ms": {
+          "max": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "qualified_run_trials": 20,
+        "runs": [
+          1
+        ],
+        "stages_ms": {},
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 20,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 20,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "candidate": {
+        "attempted": 20,
+        "complete_denominator": true,
+        "continuation_by_run": {
+          "1": {
+            "max": 11385.928462,
+            "min": 11122.747242,
+            "n": 20,
+            "p50": 11216.222081,
+            "p95": 11310.103784
+          }
+        },
+        "continuation_highest": [
+          {
+            "ms": 11385.928462,
+            "trial": "r01/git/011"
+          },
+          {
+            "ms": 11310.103784,
+            "trial": "r01/git/003"
+          },
+          {
+            "ms": 11282.600684,
+            "trial": "r01/git/017"
+          }
+        ],
+        "continuation_ms": {
+          "max": 11385.928462,
+          "min": 11122.747242,
+          "n": 20,
+          "p50": 11216.222081,
+          "p95": 11310.103784
+        },
+        "engineering_targets": {
+          "continuation_p95_le_3000_ms": "not_met",
+          "first_pending_le_5000_ms": "not_evaluated_by_this_evidence (SOU-105 acceptance owns it); collector lower-bound max n/a"
+        },
+        "excluded_runs": [],
+        "excluded_unqualified_run_trials": 0,
+        "first_pending_asset_verification_ms": {
+          "max": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "first_trial_per_run_ms": [
+          {
+            "ms": 11271.272164,
+            "trial": "r01/git/000"
+          }
+        ],
+        "independent_clusters": 1,
+        "planned": 20,
+        "post_observed_total_ms": {
+          "max": null,
+          "min": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "qualified_run_trials": 20,
+        "runs": [
+          1
+        ],
+        "stages_ms": {},
+        "status_counts": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 20,
+          "not_run": 0,
+          "timed_out": 0
+        },
+        "status_counts_all_runs": {
+          "failed": 0,
+          "incomplete": 0,
+          "measured": 20,
+          "not_run": 0,
+          "timed_out": 0
+        }
+      },
+      "comparable": false,
+      "condition": "undeclared",
+      "profile": "git",
+      "reasons": []
+    }
+  ]
+}

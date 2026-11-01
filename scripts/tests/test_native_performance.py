@@ -16,6 +16,7 @@ SPEC.loader.exec_module(NP)
 EVIDENCE = ROOT / 'docs/operations/evidence/sou-141'
 FINAL = (EVIDENCE / 'native-final-ask-series-summary.json', EVIDENCE / 'native-final-ask-series-manifest.json')
 EARLIER = (EVIDENCE / 'native-ask-series-summary.json', EVIDENCE / 'native-ask-series-manifest.json')
+ASK_REPORT = ROOT / 'docs/operations/evidence/sou-124/native-attempt2-baseline.json'
 ASSETS = ('runtime_and_libraries', 'package_tree', 'selected_profile')
 APPROVAL = ('profile_and_assets', 'policy_boundary', 'classifier', 'daemon_redemption', 'original_dispatch',
             'original_response', 'result_inspection')
@@ -209,10 +210,27 @@ class Positive(SyntheticCase):
         self.assertIn('global_comparison_mixes_conditions', [r['code'] for r in result['reasons']])
 
     def test_identity_control_on_synthetic_has_zero_paired_differences(self):
-        o = self.s.observe()
+        o = self.s.observe(receipt='dev')
         result = NP.compare(o, copy.deepcopy(o), requested_pairing=True)
-        self.assertEqual(result['classification'], 'compatible')
+        self.assertEqual(result['classification'], 'compatible', result['reasons'])
+        self.assertTrue(result['identity_control']['all_zero'])
+        self.assertEqual(result['identity_control']['paired_trials'], 80)
         self.assertTrue(all(s['paired_differences']['all_zero'] for s in result['strata']))
+
+    def test_identity_control_does_not_bypass_missing_provenance(self):
+        o = self.s.observe()  # no receipt: binaries declared only, build profile not retained
+        result = NP.compare(o, copy.deepcopy(o), requested_pairing=True)
+        self.assertEqual(result['classification'], 'incomplete')
+        codes = {r['code'] for r in result['reasons']}
+        self.assertTrue({'binary_identity_unverified', 'build_profile_unverified'} <= codes)
+        self.assertTrue(result['identity_control']['all_zero'])
+        self.assertTrue(all('marginal_differences' not in s for s in result['strata']))
+        summary, _ = self.s.series()
+        summary['source'] = dict(summary['source'], commit='e' * 40)  # not in the repository: unverified
+        unverified = NP.normalize('baseline', self.s.write(summary), None, None, self.s.git)
+        result = NP.compare(unverified, copy.deepcopy(unverified))
+        self.assertEqual(result['classification'], 'incomplete')
+        self.assertIn('source_unverified', [r['code'] for r in result['reasons']])
 
     def test_deterministic_json_and_csv(self):
         summary, manifest = self.s.series()
@@ -222,7 +240,7 @@ class Positive(SyntheticCase):
             out = Path(self.s.tmp.name) / name
             code = NP.main(['--baseline', paths[0], '--baseline-manifest', paths[1], '--candidate', paths[0],
                             '--candidate-manifest', paths[1], '--repository', str(self.s.repo), '--out-dir', str(out)])
-            self.assertEqual(code, 0)
+            self.assertEqual(code, 1)
             outputs.append({p.name: p.read_bytes() for p in sorted(out.iterdir())})
         self.assertEqual(outputs[0], outputs[1])
         self.assertEqual(sorted(outputs[0]), ['comparison.json', 'report.md', 'strata.csv', 'trials.csv'])
@@ -269,6 +287,22 @@ class Positive(SyntheticCase):
         self.assertEqual(side['status_counts_all_runs'], {'measured': 19, 'failed': 1, 'timed_out': 0,
                                                           'incomplete': 0, 'not_run': 20})
         self.assertEqual(side['engineering_targets']['continuation_p95_le_3000_ms'], 'not_evaluable_no_qualified_run')
+
+    def test_strata_csv_keeps_unqualified_and_failed_trials_visible(self):
+        base = verified_host(self.s.observe('baseline', receipt='dev'))
+        cand = verified_host(self.s.observe('candidate', receipt='dev', offset=25.0))
+        for t in cand['trials']:
+            if t['run'] == 2:
+                t['run_qualified'] = False
+        cand['trials'][0].update(status='failed', reason='producer_trial_failed')
+        result = NP.compare(base, cand)
+        rows = list(NP.csv.DictReader(NP.io.StringIO(NP.strata_csv(result))))
+        row = next(r for r in rows if r['role'] == 'candidate' and r['condition'] == 'warm' and r['profile'] == 'filesystem')
+        self.assertEqual((row['planned'], row['attempted'], row['excluded_unqualified_run_trials'],
+                          row['all_runs_measured'], row['qualified_run_trials']), ('20', '20', '20', '20', '0'))
+        row = next(r for r in rows if r['role'] == 'candidate' and r['condition'] != 'warm' and r['profile'] == 'filesystem')
+        self.assertEqual((row['all_runs_failed'], row['qualified_failed'], row['qualified_measured']), ('1', '1', '19'))
+        self.assertIn('| 19 / 1 / 0 / 0 / 0 |', NP.render_markdown(result))
 
     def test_insufficient_independent_groups_gives_descriptive_only(self):
         o = self.s.observe()
@@ -423,8 +457,14 @@ class Negative(SyntheticCase):
     def test_different_hosts_and_environment(self):
         self.classify(lambda o: verified_host(o, 'synthetic-host-2'), 'host_instance_mismatch')
         base = verified_host(self.s.observe('baseline', receipt='dev'))
-        cand = verified_host(self.s.observe('candidate', receipt='dev', mem=8000000))
-        self.assertIn('host_environment_differs', [r['code'] for r in NP.compare(base, cand)['reasons']])
+        cand = verified_host(self.s.observe('candidate', receipt='dev', mem=16000004))
+        result = NP.compare(base, cand)
+        self.assertEqual(result['classification'], 'incomplete')  # a MemTotal difference proves no host difference
+        self.assertEqual([r['code'] for r in result['reasons']], ['mem_total_differs_materiality_unassessed'])
+        cand['environment']['cpu_count'] = [8]
+        result = NP.compare(base, cand)
+        self.assertEqual(result['classification'], 'non-comparable')
+        self.assertIn('cpu_count_differs', [r['code'] for r in result['reasons']])
 
     def test_harness_change_is_non_comparable(self):
         self.classify(lambda o: o['provenance']['workload'].update(
@@ -505,6 +545,70 @@ class Negative(SyntheticCase):
         self.assertFalse((out / 'trials.csv').exists())
 
 
+class AskQualification(SyntheticCase):
+    """SYNTHETIC qualify-pilot-ask.py reports built from the producer's own latency summary."""
+
+    def report(self, mutate=None):
+        cases = self.s.cases(1, 20, 0.0)
+        if mutate:
+            mutate(cases)
+        return {'contract_version': NP.ASK_FORMAT, 'status': 'pass', 'real_host_executed': True,
+                'scripted_owned_provider': True, 'paid_api_calls': 0, 'workspace_unchanged': True,
+                'trace_requested': NP.LATENCY.trace_request(), 'source': dict(self.s.source),
+                'source_after': dict(self.s.source),
+                'selected_sha256': {t: 'a' * 64 for t in NP.SERIES.TOOLS}, 'cases': cases,
+                'latency': NP.LATENCY.summarize(cases, 20)}
+
+    def test_normalization_with_diagnostics_and_full_source(self):
+        o = NP.normalize('baseline', self.s.write(self.report()), None, None, self.s.git)
+        self.assertEqual(o['provenance']['source']['status'], 'verified_git_objects')
+        self.assertEqual(NP.summary_of(o)['status_counts']['measured'], 40)
+        self.assertIsNotNone(o['trials'][0]['endpoints']['first_pending_asset_verification_ms'])
+        self.assertEqual(o['trace']['requested_status'], 'producer_declared')
+
+    def test_failed_and_missing_cases_stay_counted(self):
+        def change(cases):
+            cases[0]['released'] = False
+            del cases[-1]
+        report = self.report(change)
+        report['status'] = 'failed'
+        o = NP.normalize('baseline', self.s.write(report), None, None, self.s.git)
+        self.assertEqual(NP.summary_of(o)['status_counts'],
+                         {'measured': 38, 'failed': 1, 'timed_out': 0, 'incomplete': 1, 'not_run': 0})
+        self.assertFalse(o['runs'][0]['qualified'])
+        side = NP.stratum_side(o, ('filesystem', 'undeclared'))
+        self.assertEqual((side['planned'], side['excluded_unqualified_run_trials'], side['status_counts_all_runs']['failed']),
+                         (20, 20, 1))
+
+    def test_ask_negative_controls(self):
+        report = self.report()
+        report['cases'][18]['decision_to_result_ms'] += 1  # the filesystem p95 rank
+        path = self.s.write(report)
+        self.rejected('published_distribution_not_reproduced', lambda: NP.normalize('b', path, None, None, self.s.git))
+        # An Ask report publishes only counts, p50 and p95: a change at another rank is not detectable from its own
+        # aggregates. Per-trial integrity then rests on custody, so an uncommitted copy can never be compatible.
+        report = self.report()
+        report['cases'][2]['decision_to_result_ms'] += 1
+        o = NP.normalize('b', self.s.write(report, commit=False), None, None, self.s.git)
+        self.assertEqual(o['input']['custody']['status'], 'unverified_not_in_repository_history')
+        result = NP.compare(o, copy.deepcopy(o))
+        self.assertEqual(result['classification'], 'incomplete')
+        self.assertIn('custody_unverified', [r['code'] for r in result['reasons']])
+        report = self.report(lambda cases: cases.pop(5))
+        path = self.s.write(report)
+        self.rejected('missing_required_trial', lambda: NP.normalize('b', path, None, None, self.s.git))
+        report = self.report()
+        report['cases'][1] = dict(report['cases'][0])  # after the producer summary, which refuses duplicates
+        path = self.s.write(report)
+        self.rejected('duplicate_trial_id', lambda: NP.normalize('b', path, None, None, self.s.git))
+        path = self.s.write(self.report())
+        self.rejected('input_not_applicable', lambda: NP.normalize('b', path, path, None, self.s.git))
+        report = self.report()
+        report['source'] = report['source_after'] = dict(self.s.source, tree='0' * 40)
+        path = self.s.write(report)
+        self.rejected('source_identity_contradiction', lambda: NP.normalize('b', path, None, None, self.s.git))
+
+
 @unittest.skipUnless(NP.Git(ROOT).tree_of('4b99b6efee6bfd3e603b207d841015d179962977'),
                      'SOU-141 source commit not in this clone')
 class Genuine(unittest.TestCase):
@@ -535,18 +639,23 @@ class Genuine(unittest.TestCase):
 
     def test_same_report_identity_control(self):
         result = NP.compare(self.final, NP.normalize('candidate', *FINAL), requested_pairing=True)
-        self.assertEqual(result['classification'], 'compatible')
         self.assertEqual(result['basis'], 'identity_control')
-        self.assertEqual(len(result['strata']), 4)
-        self.assertTrue(all(s['paired_differences']['n'] == 40 and s['paired_differences']['all_zero']
-                            for s in result['strata']))
+        # Source is verified, but binaries and build profile are not: the control does not make them compatible.
+        self.assertEqual(result['classification'], 'incomplete')
+        self.assertEqual({r['code'] for r in result['reasons']}, {'binary_identity_unverified', 'build_profile_unverified'})
+        control = result['identity_control']
+        self.assertEqual(len(control['strata']), 4)
+        self.assertEqual(control['paired_trials'], 160)
+        self.assertTrue(control['all_zero'])
 
     def test_historical_cross_revision_is_not_a_speedup(self):
         result = NP.compare(self.final, self.earlier)
-        self.assertEqual(result['classification'], 'non-comparable')
+        self.assertEqual(result['classification'], 'incomplete')
         codes = {r['code'] for r in result['reasons']}
-        self.assertTrue({'host_environment_differs', 'build_profile_unverified', 'binary_identity_unverified',
-                         'host_instance_unverified'} <= codes)
+        self.assertEqual(codes, {'mem_total_differs_materiality_unassessed', 'build_profile_unverified',
+                                 'binary_identity_unverified', 'host_instance_unverified'})
+        memory = next(d for d in result['dimensions'] if d['dimension'] == 'memory')
+        self.assertEqual((memory['status'], memory['baseline'], memory['candidate']), ('unverified', [16373452], [16373448]))
         self.assertTrue(all('marginal_differences' not in s for s in result['strata']))
 
     def test_native_versus_wsl2_is_non_comparable(self):
@@ -566,6 +675,26 @@ class Genuine(unittest.TestCase):
                 NP.normalize('baseline', path)
         self.assertEqual(caught.exception.code, 'published_distribution_not_reproduced')
         self.assertIn('runs[2].summary.latency.git', caught.exception.detail)
+
+    def test_genuine_ask_qualification_report(self):
+        o = NP.normalize('baseline', ASK_REPORT)
+        self.assertEqual(o['input']['producer_format'], NP.ASK_FORMAT)
+        self.assertEqual(o['input']['custody']['status'], 'committed_blob')
+        self.assertEqual(o['provenance']['source']['status'], 'commit_tree_verified_files_not_declared')
+        self.assertEqual(o['trace']['requested_status'], 'not_retained')
+        self.assertEqual(o['reproduction']['checked'], ['latency'])
+        published = json.loads(ASK_REPORT.read_text())['latency']
+        for profile in NP.PROFILES:
+            side = NP.stratum_side(o, (profile, 'undeclared'))
+            self.assertEqual(side['continuation_ms']['p95'], published[profile]['p95_ms'])
+            self.assertEqual(side['engineering_targets']['continuation_p95_le_3000_ms'], 'not_met')
+        result = NP.compare(o, self.final)
+        self.assertEqual(result['classification'], 'non-comparable')
+        self.assertIn('producer_format_mismatch', [r['code'] for r in result['reasons']])
+        result = NP.compare(o, NP.normalize('candidate', ASK_REPORT))
+        self.assertEqual(result['classification'], 'incomplete')
+        self.assertIn('source_contents_unverified', [r['code'] for r in result['reasons']])
+        self.assertTrue(result['identity_control']['all_zero'])
 
     def test_committed_evidence_bundle_reproduces_byte_for_byte(self):
         spec = importlib.util.spec_from_file_location('native_performance_evidence',

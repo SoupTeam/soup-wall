@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """SOU-203 offline, source-bound comparison of retained native Ask performance reports.
 
-Reads `sw-ask-series/1` series summaries (SOU-141, `scripts/qualify-ask-series.py`) and
-their manifests, verifies what can be verified from local git objects, normalizes every
+Reads `sw-ask-series/1` series summaries (SOU-141, `scripts/qualify-ask-series.py`) with
+their manifests, and single `sw-pilot-ask-acceptance/1` Ask qualification reports
+(`scripts/qualify-pilot-ask.py`, SOU-124). Installed-host (`sw-installed-pilot-matched/1`)
+and preparation reports are not supported (see the guide). It verifies what can be verified from local git objects, normalizes every
 planned trial into `sw-native-performance-observation/1`, reproduces the published
 aggregates from the retained per-trial values, and classifies a comparison as
 `compatible`, `stratified-only`, `incomplete` or `non-comparable`.
@@ -37,6 +39,7 @@ COMPARISON = 'sw-native-performance-comparison/1'
 SERIES_FORMAT = 'sw-ask-series/1'
 RETROACTIVE_FORMAT = 'sw-ask-series/1-retroactive'
 RECEIPT_FORMAT = 'sw-native-pilot-agent-source-build/1'
+ASK_FORMAT = 'sw-pilot-ask-acceptance/1'
 LIMITS = {'report_bytes': 8 * 1024 * 1024, 'manifest_bytes': 64 * 1024, 'receipt_bytes': 1024 * 1024,
           'json_depth': 32, 'runs': 6, 'samples_per_profile': 100, 'trials': 1200,
           'output_bytes': 8 * 1024 * 1024, 'git_seconds': 60}
@@ -279,12 +282,12 @@ def custody(raw, git, role):
                  'method': 'none: the bytes are not a committed blob reachable from HEAD'}
 
 
-def verify_source(source, git, role):
+def verify_source(source, git, role, files_optional=False):
     require(isinstance(source, dict), 'source_identity_missing', role, 'source')
     commit, tree, files = source.get('commit'), source.get('tree'), source.get('files_sha256')
     require(isinstance(commit, str) and re.fullmatch('[0-9a-f]{40}', commit)
             and isinstance(tree, str) and re.fullmatch('[0-9a-f]{40}', tree)
-            and isinstance(files, str) and re.fullmatch('[0-9a-f]{64}', files),
+            and ((files is None and files_optional) or (isinstance(files, str) and re.fullmatch('[0-9a-f]{64}', files))),
             'source_identity_malformed', role, 'full commit, tree and files_sha256 required')
     require(source.get('dirty') is False, 'source_dirty', role, 'source.dirty must be false')
     actual_tree = git.tree_of(commit)
@@ -292,6 +295,9 @@ def verify_source(source, git, role):
         return {'status': 'unverified_commit_not_in_repository', 'commit': commit, 'tree': tree,
                 'files_sha256': files, 'method': None}
     require(actual_tree == tree, 'source_identity_contradiction', role, 'source.tree differs from git commit tree')
+    if files is None:
+        return {'status': 'commit_tree_verified_files_not_declared', 'commit': commit, 'tree': tree,
+                'files_sha256': None, 'method': 'git rev-parse <commit>^{tree}; the report declares no files_sha256'}
     recomputed = git.files_sha256(commit)
     if recomputed is None:
         return {'status': 'commit_tree_verified_files_unverified', 'commit': commit, 'tree': tree,
@@ -417,6 +423,10 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
     raw = read_bounded(summary_path, LIMITS['report_bytes'], role)
     data, held = custody(raw, git, role)
     summary = parse_strict(data, role)
+    if 'format' not in summary and summary.get('contract_version') == ASK_FORMAT:
+        require(manifest_path is None and receipt_path is None, 'input_not_applicable', role,
+                'an Ask qualification report carries its own binary digests; no manifest or receipt applies')
+        return _normalize_ask(role, summary_path, summary, held, git)
     fmt = summary.get('format')
     require(fmt in (SERIES_FORMAT, RETROACTIVE_FORMAT), 'unsupported_report_format', role, repr(fmt)[:64])
     retroactive = fmt == RETROACTIVE_FORMAT
@@ -648,9 +658,11 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
         },
         'environment': environment,
         'trace': {'requested': LATENCY.trace_request() if trace_basis else None,
-                  'requested_basis': ('the producer accepted only qualification reports whose trace_requested equals '
-                                      'this value (validate_report); qualified runs '
-                                      + str(trace_basis)) if trace_basis else 'unverified: no validated run',
+                  'requested_status': 'producer_declared' if trace_basis else 'unverified',
+                  'requested_basis': ('self-declared: the summary marks runs ' + str(trace_basis) + ' validated, and '
+                                      'the producer validates only qualification reports whose trace_requested equals '
+                                      'this value; the qualification reports themselves are not retained')
+                  if trace_basis else 'unverified: no validated run',
                   'observed': 'not_retained'},
         'endpoints': copy.deepcopy(ENDPOINTS), 'stage_clock': dict(STAGE_CLOCK), 'not_retained': dict(NOT_RETAINED),
         'design': {'plan': plan, 'samples_per_profile': samples, 'profiles': list(PROFILES),
@@ -663,6 +675,124 @@ def _normalize(role, summary_path, manifest_path, receipt_path, git):
                          'not_reproduced': ['runs[].summary.stages (raw stage-events.jsonl not retained)']},
     }
     return observation
+
+
+def _ask_success(row):
+    """The `pilot_ask_latency.summarize` success predicate; latency reproduction keeps both in agreement."""
+    elapsed = row.get('decision_to_result_ms')
+    return (row.get('passed') is True and row.get('approved') is True and row.get('released') is True
+            and _plain(row.get('dispatched'), int) and row['dispatched'] == 1
+            and _plain(row.get('kernel_effects'), int) and row['kernel_effects'] == 1
+            and _number(elapsed) and elapsed >= 0)
+
+
+def _normalize_ask(role, path, report, held, git):
+    """One `qualify-pilot-ask.py --approval-samples N` report: a single run, no declared cold/warm condition."""
+    latency, cases = report.get('latency'), report.get('cases')
+    require(isinstance(latency, dict) and all(isinstance(latency.get(p), dict) for p in PROFILES),
+            'sample_plan_invalid', role, 'latency.<profile>.planned is required for a performance report')
+    samples = latency[PROFILES[0]].get('planned')
+    require(_plain(samples, int) and 20 <= samples <= LIMITS['samples_per_profile']
+            and all(latency[p].get('planned') == samples for p in PROFILES), 'sample_plan_invalid', role, 'planned')
+    require(isinstance(cases, list) and len(cases) <= len(PROFILES) * samples
+            and all(isinstance(c, dict) for c in cases), 'trial_table_malformed', role, 'cases')
+    seen = set()
+    for row in cases:
+        sample = row.get('sample_index')
+        require(row.get('profile') in PROFILES and row.get('case') == 'approve' and _plain(sample, int)
+                and 0 <= sample < samples, 'unexpected_trial_id', role, f'{row.get("profile")!r}/{sample!r}')
+        require((row['profile'], sample) not in seen, 'duplicate_trial_id', role, f'{row["profile"]}/{sample}')
+        seen.add((row['profile'], sample))
+        if row.get('passed') is True:
+            value = row.get('decision_to_result_ms')
+            require(_number(value), 'nonfinite_or_missing_duration', role, f'{row["profile"]}/{sample}')
+            require(value >= 0, 'negative_duration', role, f'{row["profile"]}/{sample}')
+    _check(latency, LATENCY.summarize(cases, samples), role, 'latency')
+    status = report.get('status')
+    checks = {'qualification_status': status in ('pass', 'performance_blocker'),
+              'real_host_executed': report.get('real_host_executed') is True,
+              'no_paid_calls': _plain(report.get('paid_api_calls'), int) and report['paid_api_calls'] == 0,
+              'workspace_unchanged': report.get('workspace_unchanged') is True,
+              'source_unchanged': report.get('source') == report.get('source_after')}
+    failed_checks = [name for name, ok in checks.items() if not ok]
+    qualified = not failed_checks
+    if qualified:
+        require(len(cases) == len(PROFILES) * samples, 'missing_required_trial', role,
+                f'{len(cases)} of {len(PROFILES) * samples} cases in a qualified report')
+    source = verify_source(report.get('source'), git, role, files_optional=True)
+    harness = None
+    if source['status'] != 'unverified_commit_not_in_repository':
+        harness = {name: git.file_sha256(source['commit'], name) for name in HARNESS}
+    selected = report.get('selected_sha256')
+    require(isinstance(selected, dict) and selected
+            and all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in selected.values()),
+            'invalid_digest', role, 'selected_sha256')
+    timed_out = 'timeout' in str(report.get('error_type', '')).lower()
+    by_key = {(c['profile'], c['sample_index']): c for c in cases}
+    trials = []
+    for profile in PROFILES:
+        for sample in range(samples):
+            row = by_key.get((profile, sample))
+            if row is None:
+                state, why = ('timed_out', 'report_timeout') if timed_out else ('incomplete', 'trial_not_recorded')
+            elif _ask_success(row):
+                state, why = 'measured', None
+            else:
+                state, why = 'failed', 'producer_trial_failed'
+            trials.append({'id': f'r01/{profile}/{sample:03d}', 'run': 1, 'profile': profile, 'sample_index': sample,
+                           'condition': 'undeclared', 'run_qualified': qualified, 'status': state, 'reason': why,
+                           'endpoints': {'continuation_ms': row['decision_to_result_ms'] if state == 'measured'
+                                         else None, 'first_pending_asset_verification_ms': None,
+                                         'post_observed_total_ms': None}, 'stages': {}})
+    index = {(t['profile'], t['sample_index']): t for t in trials}
+    for sample in SERIES.diagnostic_samples(cases):  # present only with --require-verified-reuse proofs
+        trial = index[(sample['profile'], sample['sample_index'])]
+        pending, post = sample['first_pending_asset_verification_ms'], sample['post_observed_ms']
+        continuation = trial['endpoints']['continuation_ms']
+        require(continuation is None or (continuation != pending and continuation != post),
+                'endpoint_substitution', role, f'{trial["id"]}: continuation equals a collector endpoint')
+        if trial['status'] == 'measured':
+            trial['endpoints'].update(first_pending_asset_verification_ms=pending, post_observed_total_ms=post)
+            trial['stages'] = {**{'asset/' + k: v for k, v in sorted(sample['assets_ms'].items())},
+                               **{'approval/' + k: v for k, v in sorted(sample['approval_stage_ms'].items())}}
+    trace = report.get('trace_requested')
+    return {
+        'contract': OBSERVATION, 'role': role,
+        'input': {'name': portable_name(path), 'producer': 'scripts/qualify-pilot-ask.py', 'producer_format': ASK_FORMAT,
+                  'evidence_sha256': hashlib.sha256(json.dumps([held['original_sha256'], None, None]).encode()).hexdigest(),
+                  'custody': held, 'manifest': None, 'workflow_run': report.get('workflow_run')},
+        'provenance': {
+            'source': source,
+            'binaries': {'status': 'declared_only', 'sha256': selected,
+                         'detail': 'qualification report self-declaration; the binaries are not retained'},
+            'build': {'status': 'not_retained', 'profile': None, 'receipt_sha256': None,
+                      'detail': 'an Ask qualification report carries no build receipt'},
+            'workload': {'definition': 'qualify-pilot-ask.py --approval-samples N, approve case, profiles '
+                                       + ','.join(PROFILES), 'harness_sha256_at_source': harness,
+                         'status': 'verified_git_objects' if harness and all(harness.values()) else 'unverified'},
+            'profiles_and_policy': {'status': 'declared_only', 'detail': 'per-case policy_sha256 is self-declared; '
+                                    'no files_sha256 binds the source tree contents'
+                                    if source['files_sha256'] is None else 'bound via source.files_sha256'},
+        },
+        'environment': {'platform_kind': None, 'kernel': None, 'machine': None, 'cpu_count': [], 'mem_total_kb': [],
+                        'host_instance': {'status': 'not_retained', 'detail': 'the report records no host'}},
+        'trace': {'requested': trace, 'requested_status': 'producer_declared' if trace else 'not_retained',
+                  'requested_basis': 'self-declared trace_requested in the report' if trace
+                  else 'this report predates the trace_requested field', 'observed': 'not_retained'},
+        'endpoints': copy.deepcopy(ENDPOINTS), 'stage_clock': dict(STAGE_CLOCK),
+        'not_retained': dict(NOT_RETAINED, raw_stage_events='not part of an Ask qualification report'),
+        'design': {'plan': ['undeclared'], 'samples_per_profile': samples, 'profiles': list(PROFILES),
+                   'pairing_design': None, 'cluster_unit': 'run (one qualifier process)', 'host_unit': 'one report'},
+        'status_mapping': dict(STATUS_MAPPING, measured='case present and the pilot_ask_latency.summarize success '
+                               'predicate holds', timed_out='no case, and the report error_type names a timeout',
+                               not_run='not applicable: a single report is one run'),
+        'runs': [{'index': 1, 'declared_kind': 'undeclared', 'condition': 'undeclared', 'qualified': qualified,
+                  'disqualification': None if qualified else 'failed_checks:' + ','.join(failed_checks),
+                  'exit_code': None, 'failure': report.get('error_type'), 'wall_seconds': None, 'cache_drop': None,
+                  'conditions': {}}],
+        'trials': trials,
+        'reproduction': {'status': 'reproduced_from_retained_trials', 'checked': ['latency'], 'not_reproduced': []},
+    }
 
 
 # ------------------------------------------------------------------ statistics (pure)
@@ -770,9 +900,17 @@ def dimensions(base, cand):
     for name, path in (('platform', 'environment.platform_kind'), ('kernel', 'environment.kernel'),
                        ('machine', 'environment.machine')):
         equal(name, path, 'environment_mismatch')
-    # Any difference is verified evidence of different host instances; no tolerance is approved.
-    for name, path in (('cpu_count', 'environment.cpu_count'), ('memory', 'environment.mem_total_kb')):
-        equal(name, path, 'host_environment_differs', 'differs: the runs did not share one host')
+    equal('cpu_count', 'environment.cpu_count', 'cpu_count_differs', 'reported CPU count differs')
+    # A reported MemTotal can differ between boots of one host as well as between hosts, and no materiality
+    # tolerance is approved. A difference leaves same-host conditions unestablished; it is neither a
+    # contradiction nor proof of different hosts.
+    a_mem, b_mem = base['environment']['mem_total_kb'], cand['environment']['mem_total_kb']
+    if a_mem and b_mem and a_mem != b_mem:
+        add('memory', 'unverified', ['environment.mem_total_kb'], 'mem_total_differs_materiality_unassessed',
+            'reported MemTotal_kb differs; same-boot/same-host conditions are not established and no tolerance '
+            'is approved', (a_mem, b_mem))
+    else:
+        equal('memory', 'environment.mem_total_kb', 'mem_total_differs_materiality_unassessed')
     hosts = [side['environment']['host_instance'] for side in (base, cand)]
     if identity:
         add('host_instance', 'match', ['environment.host_instance'], detail='same original evidence')
@@ -802,13 +940,16 @@ def dimensions(base, cand):
     if base['design']['profiles'] != cand['design']['profiles']:
         add('profiles', 'contradiction', ['design.profiles'], 'trial_design_mismatch', 'differs',
             (base['design']['profiles'], cand['design']['profiles']))
-    if identity:
-        for name in ('source', 'binaries', 'build', 'workload'):
-            add(name, 'match', ['provenance.' + name], detail='same original evidence')
-        return identity, found
+    # Identical evidence is checked for provenance like any other pair: being the same bytes proves neither
+    # the source nor the binaries nor the build profile.
     a, b = base['provenance'], cand['provenance']
     for name in ('source', 'workload'):
         if a[name]['status'] != 'verified_git_objects' or b[name]['status'] != 'verified_git_objects':
+            if name == 'source' and 'commit_tree_verified' in a[name]['status'] + b[name]['status']:
+                add(name, 'unverified', ['provenance.source.files_sha256'], 'source_contents_unverified',
+                    'commit and tree verified; tracked file contents are not bound by a declared files_sha256',
+                    (a[name]['status'], b[name]['status']))
+                continue
             add(name, 'unverified', ['provenance.' + name + '.status'], name + '_unverified',
                 'independent verification unavailable', (a[name]['status'], b[name]['status']))
     if a['workload']['status'] == b['workload']['status'] == 'verified_git_objects':
@@ -914,6 +1055,17 @@ def compare(base, cand, requested_pairing=False):
             entry['marginal_differences'] = marginal_differences(entry['baseline'], entry['candidate'])
             entry['paired_differences'] = paired_differences(base, cand, key) if pair['valid'] else None
         strata.append(entry)
+    control = None
+    if identity:
+        control = {'evidence_identical': True,
+                   'meaning': 'comparator control only: identical evidence must give zero paired differences. It '
+                              'establishes no provenance, no compatibility and no performance change.',
+                   'strata': [{'profile': key[0], 'condition': key[1],
+                               'paired_differences': paired_differences(base, cand, key)}
+                              for key in strata_keys(base)]}
+        control['paired_trials'] = sum(s['paired_differences']['n'] for s in control['strata'])
+        control['all_zero'] = control['paired_trials'] > 0 and all(
+            s['paired_differences']['all_zero'] for s in control['strata'] if s['paired_differences']['n'])
     usable = [s for s in strata if s['comparable']]
     if contradiction:
         classification = 'non-comparable'
@@ -933,7 +1085,7 @@ def compare(base, cand, requested_pairing=False):
         'contract': COMPARISON, 'status': 'evaluated', 'classification': classification,
         'basis': 'identity_control' if identity else 'two_reports',
         'reasons': sorted(reasons, key=lambda r: (r['code'], r['dimension'])),
-        'dimensions': dims, 'pairing': pair, 'strata': strata,
+        'dimensions': dims, 'pairing': pair, 'strata': strata, 'identity_control': control,
         'global_pooled_comparison': None,
         'global_pooled_comparison_reason': 'never computed: profiles and conditions are separate strata',
         'inference': {
@@ -993,16 +1145,17 @@ def strata_csv(result):
         for role in ('baseline', 'candidate'):
             side = s[role]
             if side is None:
-                rows.append([s['profile'], s['condition'], role, 'absent'] + [''] * 11)
+                rows.append([s['profile'], s['condition'], role, 'absent'] + [''] * 18)
                 continue
-            c, d = side['status_counts'], side['continuation_ms']
+            c, a, d = side['status_counts'], side['status_counts_all_runs'], side['continuation_ms']
             rows.append([s['profile'], s['condition'], role, 'comparable' if s['comparable'] else 'not_comparable',
-                         side['planned'], side['qualified_run_trials'], c['measured'], c['failed'], c['timed_out'],
-                         c['incomplete'], c['not_run'], side['independent_clusters'], _fmt(d['p50']), _fmt(d['p95']),
-                         _fmt(d['max'])])
-    return render_csv(rows, ['profile', 'condition', 'role', 'stratum', 'planned', 'qualified_run_trials', 'measured',
-                             'failed', 'timed_out', 'incomplete', 'not_run', 'runs', 'continuation_p50_ms',
-                             'continuation_p95_ms', 'continuation_max_ms'])
+                         side['planned'], side['attempted'], side['excluded_unqualified_run_trials'],
+                         *(a[k] for k in STATUSES), side['qualified_run_trials'], *(c[k] for k in STATUSES),
+                         side['independent_clusters'], _fmt(d['p50']), _fmt(d['p95']), _fmt(d['max'])])
+    return render_csv(rows, ['profile', 'condition', 'role', 'stratum', 'planned', 'attempted',
+                             'excluded_unqualified_run_trials', *('all_runs_' + k for k in STATUSES),
+                             'qualified_run_trials', *('qualified_' + k for k in STATUSES), 'runs',
+                             'continuation_p50_ms', 'continuation_p95_ms', 'continuation_max_ms'])
 
 
 def _fmt(value):
@@ -1031,21 +1184,27 @@ def render_markdown(result):
     lines += ['', '## Reasons', '']
     lines += [f"- `{r['code']}` ({r['dimension']}): {r['detail']}" for r in result['reasons']] or ['- none']
     lines += ['', '## Strata (continuation, ms)', '',
-              'Status counts cover trials of qualified runs; trials of unqualified runs are excluded and counted.', '',
-              '| Profile | Condition | Role | Planned | Excluded (unqualified runs) | Measured / failed / timed out / '
-              'incomplete / not run | Runs | p50 | p95 | max | 3000 ms p95 |',
-              '|---|---|---|---:|---:|---|---:|---:|---:|---:|---|']
+              'Counts are measured / failed / timed out / incomplete / not run. Distributions use qualified runs '
+              'only; trials of unqualified runs stay counted under all runs.', '',
+              '| Profile | Condition | Role | Planned | All runs | Excluded (unqualified runs) | Qualified runs | Runs | '
+              'p50 | p95 | max | 3000 ms p95 |',
+              '|---|---|---|---:|---|---:|---|---:|---:|---:|---:|---|']
     for s in result['strata']:
         for role in ('baseline', 'candidate'):
             side = s[role]
             if side is None:
-                lines.append(f"| {s['profile']} | {s['condition']} | {role} | – | – | absent | – | – | – | – | – |")
+                lines.append(f"| {s['profile']} | {s['condition']} | {role} | – | absent | – | – | – | – | – | – | – |")
                 continue
-            c, d = side['status_counts'], side['continuation_ms']
+            c, d, a = side['status_counts'], side['continuation_ms'], side['status_counts_all_runs']
             lines.append(f"| {s['profile']} | {s['condition']} | {role} | {side['planned']} | "
+                         f"{' / '.join(str(a[k]) for k in STATUSES)} | "
                          f"{side['excluded_unqualified_run_trials']} | {c['measured']} / {c['failed']} / {c['timed_out']} / {c['incomplete']} / {c['not_run']} | "
                          f"{side['independent_clusters']} | {_ms(d['p50'])} | {_ms(d['p95'])} | {_ms(d['max'])} | "
                          f"{side['engineering_targets']['continuation_p95_le_3000_ms']} |")
+    control = result.get('identity_control')
+    if control:
+        lines += ['', '## Identity control', '', f"Identical evidence on both sides: {control['paired_trials']} trial "
+                  f"pairs, all paired differences zero: **{control['all_zero']}**. {control['meaning']}"]
     lines += ['', '## Differences (candidate minus baseline, ms)', '']
     shown = False
     for s in result['strata']:

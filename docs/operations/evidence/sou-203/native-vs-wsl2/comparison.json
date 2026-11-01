@@ -173,6 +173,7 @@
   },
   "global_pooled_comparison": null,
   "global_pooled_comparison_reason": "never computed: profiles and conditions are separate strata",
+  "identity_control": null,
   "inference": {
     "hosts": "unknown (2 dispatches, host instance not retained)",
     "independent_clusters_per_stratum": [
@@ -550,7 +551,8 @@
           "mode": "seccomp-bpf",
           "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
         },
-        "requested_basis": "the producer accepted only qualification reports whose trace_requested equals this value (validate_report); qualified runs [1, 2, 3, 4]"
+        "requested_basis": "self-declared: the summary marks runs [1, 2, 3, 4] validated, and the producer validates only qualification reports whose trace_requested equals this value; the qualification reports themselves are not retained",
+        "requested_status": "producer_declared"
       },
       "trial_count": 160
     },
@@ -747,7 +749,8 @@
       "trace": {
         "observed": "not_retained",
         "requested": null,
-        "requested_basis": "unverified: no validated run"
+        "requested_basis": "unverified: no validated run",
+        "requested_status": "unverified"
       },
       "trial_count": 160
     }

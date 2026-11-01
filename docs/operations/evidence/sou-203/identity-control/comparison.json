@@ -1,6 +1,6 @@
 {
   "basis": "identity_control",
-  "classification": "compatible",
+  "classification": "incomplete",
   "contract": "sw-native-performance-comparison/1",
   "dimensions": [
     {
@@ -122,45 +122,45 @@
       "baseline": null,
       "candidate": null,
       "code": null,
-      "detail": "same original evidence",
-      "dimension": "source",
-      "fields": [
-        "provenance.source"
-      ],
-      "status": "match"
-    },
-    {
-      "baseline": null,
-      "candidate": null,
-      "code": null,
-      "detail": "same original evidence",
-      "dimension": "binaries",
-      "fields": [
-        "provenance.binaries"
-      ],
-      "status": "match"
-    },
-    {
-      "baseline": null,
-      "candidate": null,
-      "code": null,
-      "detail": "same original evidence",
-      "dimension": "build",
-      "fields": [
-        "provenance.build"
-      ],
-      "status": "match"
-    },
-    {
-      "baseline": null,
-      "candidate": null,
-      "code": null,
-      "detail": "same original evidence",
+      "detail": null,
       "dimension": "workload",
       "fields": [
-        "provenance.workload"
+        "provenance.workload.harness_sha256_at_source"
       ],
       "status": "match"
+    },
+    {
+      "baseline": "4b99b6efee6bfd3e603b207d841015d179962977",
+      "candidate": "4b99b6efee6bfd3e603b207d841015d179962977",
+      "code": null,
+      "detail": null,
+      "dimension": "source",
+      "fields": [
+        "provenance.source.commit"
+      ],
+      "status": "match"
+    },
+    {
+      "baseline": "not_retained",
+      "candidate": "not_retained",
+      "code": "build_profile_unverified",
+      "detail": "build profile is not bound to the measured binaries",
+      "dimension": "build",
+      "fields": [
+        "provenance.build.status"
+      ],
+      "status": "unverified"
+    },
+    {
+      "baseline": "declared_only",
+      "candidate": "declared_only",
+      "code": "binary_identity_unverified",
+      "detail": "binary digests are not independently bound",
+      "dimension": "binaries",
+      "fields": [
+        "provenance.binaries.status"
+      ],
+      "status": "unverified"
     }
   ],
   "engineering_targets": {
@@ -170,6 +170,74 @@
   },
   "global_pooled_comparison": null,
   "global_pooled_comparison_reason": "never computed: profiles and conditions are separate strata",
+  "identity_control": {
+    "all_zero": true,
+    "evidence_identical": true,
+    "meaning": "comparator control only: identical evidence must give zero paired differences. It establishes no provenance, no compatibility and no performance change.",
+    "paired_trials": 160,
+    "strata": [
+      {
+        "condition": "post_cache_drop_setup_rewarmed",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 40,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "filesystem"
+      },
+      {
+        "condition": "warm",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 40,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "filesystem"
+      },
+      {
+        "condition": "post_cache_drop_setup_rewarmed",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 40,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "git"
+      },
+      {
+        "condition": "warm",
+        "paired_differences": {
+          "all_zero": true,
+          "direction": "candidate_minus_baseline",
+          "kind": "distribution_of_paired_differences",
+          "max": 0.0,
+          "min": 0.0,
+          "n": 40,
+          "p50": 0.0,
+          "p95": 0.0,
+          "unit": "ms"
+        },
+        "profile": "git"
+      }
+    ]
+  },
   "inference": {
     "hosts": 1,
     "independent_clusters_per_stratum": [
@@ -546,7 +614,8 @@
           "mode": "seccomp-bpf",
           "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
         },
-        "requested_basis": "the producer accepted only qualification reports whose trace_requested equals this value (validate_report); qualified runs [1, 2, 3, 4]"
+        "requested_basis": "self-declared: the summary marks runs [1, 2, 3, 4] validated, and the producer validates only qualification reports whose trace_requested equals this value; the qualification reports themselves are not retained",
+        "requested_status": "producer_declared"
       },
       "trial_count": 160
     },
@@ -912,7 +981,8 @@
           "mode": "seccomp-bpf",
           "syscalls": "execve,openat,write,writev,clone,clone3,exit,exit_group"
         },
-        "requested_basis": "the producer accepted only qualification reports whose trace_requested equals this value (validate_report); qualified runs [1, 2, 3, 4]"
+        "requested_basis": "self-declared: the summary marks runs [1, 2, 3, 4] validated, and the producer validates only qualification reports whose trace_requested equals this value; the qualification reports themselves are not retained",
+        "requested_status": "producer_declared"
       },
       "trial_count": 160
     }
@@ -923,7 +993,24 @@
     "valid": true
   },
   "percentile_definition": "nearest rank: the value at rank ceil(q * n) of the ascending sample, unrounded (pilot_ask_latency.summarize). Published sw-ask-series/1 distributions round to 0.001 ms first; reproduction uses that producer convention.",
-  "reasons": [],
+  "reasons": [
+    {
+      "code": "binary_identity_unverified",
+      "detail": "binary digests are not independently bound",
+      "dimension": "binaries",
+      "fields": [
+        "provenance.binaries.status"
+      ]
+    },
+    {
+      "code": "build_profile_unverified",
+      "detail": "build profile is not bound to the measured binaries",
+      "dimension": "build",
+      "fields": [
+        "provenance.build.status"
+      ]
+    }
+  ],
   "scope": [
     "Engineering latency diagnostics for recorded native Ask series only.",
     "Not a security or protection qualification, not task effectiveness, not product or pilot readiness.",
@@ -1290,80 +1377,8 @@
           "timed_out": 0
         }
       },
-      "comparable": true,
+      "comparable": false,
       "condition": "post_cache_drop_setup_rewarmed",
-      "marginal_differences": {
-        "continuation_ms": {
-          "max": 0.0,
-          "p50": 0.0,
-          "p95": 0.0
-        },
-        "direction": "candidate_minus_baseline",
-        "kind": "difference_of_marginal_percentiles_not_percentile_of_paired_differences",
-        "stages_ms": {
-          "approval/classifier": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/daemon_redemption": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/original_dispatch": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/original_response": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/policy_boundary": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/profile_and_assets": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/result_inspection": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/package_tree/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/package_tree/pass_2": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/runtime_and_libraries/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/runtime_and_libraries/pass_2": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/selected_profile/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          }
-        },
-        "stages_one_side_only": [],
-        "unit": "ms"
-      },
-      "paired_differences": {
-        "all_zero": true,
-        "direction": "candidate_minus_baseline",
-        "kind": "distribution_of_paired_differences",
-        "max": 0.0,
-        "min": 0.0,
-        "n": 40,
-        "p50": 0.0,
-        "p95": 0.0,
-        "unit": "ms"
-      },
       "profile": "filesystem",
       "reasons": []
     },
@@ -1724,80 +1739,8 @@
           "timed_out": 0
         }
       },
-      "comparable": true,
+      "comparable": false,
       "condition": "warm",
-      "marginal_differences": {
-        "continuation_ms": {
-          "max": 0.0,
-          "p50": 0.0,
-          "p95": 0.0
-        },
-        "direction": "candidate_minus_baseline",
-        "kind": "difference_of_marginal_percentiles_not_percentile_of_paired_differences",
-        "stages_ms": {
-          "approval/classifier": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/daemon_redemption": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/original_dispatch": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/original_response": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/policy_boundary": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/profile_and_assets": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/result_inspection": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/package_tree/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/package_tree/pass_2": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/runtime_and_libraries/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/runtime_and_libraries/pass_2": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/selected_profile/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          }
-        },
-        "stages_one_side_only": [],
-        "unit": "ms"
-      },
-      "paired_differences": {
-        "all_zero": true,
-        "direction": "candidate_minus_baseline",
-        "kind": "distribution_of_paired_differences",
-        "max": 0.0,
-        "min": 0.0,
-        "n": 40,
-        "p50": 0.0,
-        "p95": 0.0,
-        "unit": "ms"
-      },
       "profile": "filesystem",
       "reasons": []
     },
@@ -2158,80 +2101,8 @@
           "timed_out": 0
         }
       },
-      "comparable": true,
+      "comparable": false,
       "condition": "post_cache_drop_setup_rewarmed",
-      "marginal_differences": {
-        "continuation_ms": {
-          "max": 0.0,
-          "p50": 0.0,
-          "p95": 0.0
-        },
-        "direction": "candidate_minus_baseline",
-        "kind": "difference_of_marginal_percentiles_not_percentile_of_paired_differences",
-        "stages_ms": {
-          "approval/classifier": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/daemon_redemption": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/original_dispatch": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/original_response": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/policy_boundary": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/profile_and_assets": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/result_inspection": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/package_tree/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/package_tree/pass_2": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/runtime_and_libraries/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/runtime_and_libraries/pass_2": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/selected_profile/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          }
-        },
-        "stages_one_side_only": [],
-        "unit": "ms"
-      },
-      "paired_differences": {
-        "all_zero": true,
-        "direction": "candidate_minus_baseline",
-        "kind": "distribution_of_paired_differences",
-        "max": 0.0,
-        "min": 0.0,
-        "n": 40,
-        "p50": 0.0,
-        "p95": 0.0,
-        "unit": "ms"
-      },
       "profile": "git",
       "reasons": []
     },
@@ -2592,80 +2463,8 @@
           "timed_out": 0
         }
       },
-      "comparable": true,
+      "comparable": false,
       "condition": "warm",
-      "marginal_differences": {
-        "continuation_ms": {
-          "max": 0.0,
-          "p50": 0.0,
-          "p95": 0.0
-        },
-        "direction": "candidate_minus_baseline",
-        "kind": "difference_of_marginal_percentiles_not_percentile_of_paired_differences",
-        "stages_ms": {
-          "approval/classifier": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/daemon_redemption": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/original_dispatch": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/original_response": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/policy_boundary": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/profile_and_assets": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "approval/result_inspection": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/package_tree/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/package_tree/pass_2": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/runtime_and_libraries/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/runtime_and_libraries/pass_2": {
-            "p50": 0.0,
-            "p95": 0.0
-          },
-          "asset/selected_profile/pass_1": {
-            "p50": 0.0,
-            "p95": 0.0
-          }
-        },
-        "stages_one_side_only": [],
-        "unit": "ms"
-      },
-      "paired_differences": {
-        "all_zero": true,
-        "direction": "candidate_minus_baseline",
-        "kind": "distribution_of_paired_differences",
-        "max": 0.0,
-        "min": 0.0,
-        "n": 40,
-        "p50": 0.0,
-        "p95": 0.0,
-        "unit": "ms"
-      },
       "profile": "git",
       "reasons": []
     }
