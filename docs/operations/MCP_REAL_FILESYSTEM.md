@@ -424,7 +424,7 @@ manifest, changed scope, substituted profile or old single-root receipt cannot
 adopt extra roots. Do not edit a selected profile or reuse a live withdrawn set.
 
 Focused qualification uses `mcp-real-filesystem.yml` with exactly
-`filesystem_roots_only=true`, `native_preparation_only=true`, stability off and
+`installed_focus=filesystem-roots`, `native_preparation_only=true`, stability off and
 all other optional modes off/empty. It runs native binding regressions, builds
 an exact-source installed component outside the checkout, and exercises owned
 read/list/search, both-root arrays, whole-call refusals, an unselected canary,

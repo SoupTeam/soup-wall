@@ -143,10 +143,10 @@ class ImpactTests(unittest.TestCase):
         text = (ROOT / ".github/workflows/mcp-real-filesystem.yml").read_text()
         body = text.split("  sou205-proxy-preflight:\n", 1)[1].split("  required-linux-sandbox-and-real-host:\n", 1)[0]
         self.assertIn("github.event_name == 'workflow_dispatch'", body)
-        self.assertIn("proxy_preflight_only == 'true'", body)
+        self.assertIn("installed_focus == 'proxy-preflight'", body)
         self.assertNotIn("needs: impact", body)
         impact = text.split("  impact:\n", 1)[1].split("  sou193-provider-preflight:\n", 1)[0]
-        self.assertIn("proxy_preflight_only != 'true'", impact)
+        self.assertIn("installed_focus != 'proxy-preflight'", impact)
         self.assertNotIn("sou205-proxy-preflight", WORKFLOW_JOBS["mcp-real-filesystem.yml"])
         self.assertNotIn("sou205-proxy-preflight", (ROOT / ".github/workflows/ci-components.yml").read_text())
 

@@ -150,7 +150,7 @@ still-valid source inputs. A stale earlier generation refuses rather than
 repreparing or adopting changed inputs.
 
 Focused evidence runs through `mcp-real-filesystem.yml` with only
-`linked_worktrees_only=true` and `native_preparation_only=true` (stability off).
+`installed_focus=linked-worktrees` and `native_preparation_only=true` (stability off).
 It preserves failed/incomplete outcomes and uses two owned real worktrees,
 pinned original servers, a genuine host and an owned scripted provider.
 macOS, Windows, WSL2 and unsupported layouts remain unqualified; local selection

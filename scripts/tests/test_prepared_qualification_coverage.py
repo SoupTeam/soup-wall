@@ -1,5 +1,6 @@
 """Focused audit qualification must never replace the full prepared pilot gate."""
 import ast
+import re
 from pathlib import Path
 import unittest
 
@@ -31,10 +32,8 @@ def enabled(body, **overrides):
         "github.event.inputs.private_edit_self_test_only": "",
         "github.event.inputs.provider_ca_only": "",
         "github.event.inputs.native_preparation_only": "",
-        "github.event.inputs.filesystem_roots_only": "",
-        "github.event.inputs.linked_worktrees_only": "",
         "github.event.inputs.project_presets_only": "",
-        "github.event.inputs.configuration_recovery_only": "",
+        "github.event.inputs.installed_focus": "",
     }
     values.update(overrides)
     condition = next(line.strip()[4:] for line in body.splitlines() if line.strip().startswith("if: "))
@@ -65,9 +64,22 @@ def enabled(body, **overrides):
 
 
 class PreparedQualificationCoverage(unittest.TestCase):
+    def test_manual_workflow_stays_within_github_dispatch_input_limit(self):
+        text = (ROOT / '.github/workflows/mcp-real-filesystem.yml').read_text()
+        inputs = text.split('    inputs:\n', 1)[1].split('\npermissions:', 1)[0]
+        names = re.findall(r'^      ([a-z][a-z_]+):$', inputs, re.M)
+        self.assertLessEqual(len(names), 25)
+        self.assertEqual(len(names), len(set(names)))
+        self.assertIn('installed_focus', names)
+        for obsolete in ('linked_worktrees_only', 'filesystem_roots_only',
+                         'proxy_preflight_only', 'configuration_recovery_only'):
+            self.assertNotIn(obsolete, names)
+        for value in ('linked-worktrees', 'filesystem-roots', 'proxy-preflight', 'configuration-recovery'):
+            self.assertIn(value, inputs)
+
     def test_configuration_recovery_is_explicit_and_never_claims_full_runtime(self):
         context = {"github.event_name": "workflow_dispatch",
-                   "github.event.inputs.configuration_recovery_only": "true",
+                   "github.event.inputs.installed_focus": "configuration-recovery",
                    "github.event.inputs.native_preparation_only": "true"}
         for name, text in self.workflows():
             with self.subTest(workflow=name):
@@ -83,14 +95,14 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 focused = step(text, "Qualify installed declarative configuration backup and restore")
                 self.assertTrue(enabled(focused, **context))
                 self.assertFalse(enabled(focused))
-                for missing in ("configuration_recovery_only", "native_preparation_only"):
+                for missing in ("installed_focus", "native_preparation_only"):
                     self.assertFalse(enabled(focused, **{**context, "github.event.inputs." + missing: ""}))
                 self.assertIn("qualify-configuration-backup.py --run", focused)
                 self.assertIn("configuration-backup-qualification/report.json", text)
 
     def test_linked_worktree_dispatch_is_separate_from_full_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
-                   "github.event.inputs.linked_worktrees_only": "true",
+                   "github.event.inputs.installed_focus": "linked-worktrees",
                    "github.event.inputs.native_preparation_only": "true"}
         for name, text in self.workflows():
             with self.subTest(workflow=name):
@@ -106,7 +118,7 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 body = step(text, "Qualify installed linked worktrees through original servers")
                 self.assertTrue(enabled(body, **context))
                 self.assertFalse(enabled(body))
-                for missing in ("linked_worktrees_only", "native_preparation_only"):
+                for missing in ("installed_focus", "native_preparation_only"):
                     self.assertFalse(enabled(body, **{
                         **context, "github.event.inputs." + missing: "",
                     }))
@@ -116,7 +128,7 @@ class PreparedQualificationCoverage(unittest.TestCase):
 
     def test_filesystem_roots_dispatch_is_separate_from_full_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
-                   "github.event.inputs.filesystem_roots_only": "true",
+                   "github.event.inputs.installed_focus": "filesystem-roots",
                    "github.event.inputs.native_preparation_only": "true"}
         for name, text in self.workflows():
             with self.subTest(workflow=name):
@@ -132,7 +144,7 @@ class PreparedQualificationCoverage(unittest.TestCase):
                 body = step(text, "Qualify installed filesystem roots through original servers")
                 self.assertTrue(enabled(body, **context))
                 self.assertFalse(enabled(body))
-                for missing in ("filesystem_roots_only", "native_preparation_only"):
+                for missing in ("installed_focus", "native_preparation_only"):
                     self.assertFalse(enabled(body, **{
                         **context, "github.event.inputs." + missing: "",
                     }))
