@@ -1,0 +1,142 @@
+{
+  "backend": "sqlite",
+  "binaries": {
+    "agentfw": "aa27e2d7a3c5420a3a3545a94952aad7b068cdf01cb2c5071e372e86448f6857",
+    "llm-firewall": "0c5b29e16d0f6b238d51d335d8a73157849f8900e6affc04a70cebd02e8be44e"
+  },
+  "checks": {
+    "agent-credential-refused": true,
+    "agent-fetch-recorded": true,
+    "browser-first-page-denominator": true,
+    "browser-historical-applied-links": true,
+    "browser-mixed-timeline": true,
+    "browser-no-writes-or-storage": true,
+    "browser-revoked-pending-stays-unresolved": true,
+    "browser-same-id-other-tenant": true,
+    "browser-second-page-completes": true,
+    "browser-stale-tenant-reply-discarded": true,
+    "browser-unavailable-console-visible": true,
+    "browser-unresolved-and-unknown-protection": true,
+    "cross-tenant-agent-404": true,
+    "export-changed-nothing": true,
+    "export-complete-records-not-healthy": true,
+    "export-free-of-private-values-edge-history": true,
+    "export-free-of-private-values-edge-history-after-restart": true,
+    "export-free-of-private-values-edge-many-partial": true,
+    "export-names-unrecorded-rotation": true,
+    "export-partial-denominators": true,
+    "export-scope-and-source-ids": true,
+    "narrow-no-horizontal-overflow": true,
+    "no-session-refused": true,
+    "partial-download-marked": true,
+    "restart-same-event-identities": true,
+    "rotation-through-existing-api": true,
+    "same-id-other-tenant-isolated": true,
+    "store-mixed-history": true,
+    "viewer-and-operator-read": true
+  },
+  "config_sha256": {
+    "console": "f80c9abde75aa2cf9cb19df86e07865868d333c3b7fece8095fb4b59462eed00"
+  },
+  "format": "sw-console-agent-history-acceptance/1",
+  "scope": "one disposable private Linux deployment; synthetic tenants and Agent IDs; recorded Console evidence only, not production, multi-host or runtime attestation",
+  "snapshots": {
+    "store_detail_edge_history": {
+      "agent": {
+        "agent_id": "edge-history",
+        "current_liveness": "unknown",
+        "enrolled_at_unix": 1793532776,
+        "last_reported_applied": {
+          "action": "rollback",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793532777,
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "recorded_state": "applied",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": 1793532778,
+          "revision": "r1",
+          "sequence": "4"
+        },
+        "latest_issued": {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793532779,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "delivered",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "5"
+        },
+        "registry_identity": null,
+        "revoked_at_unix": null,
+        "runtime_coverage": "unknown",
+        "tenant_id": "tenant_iK1SS732HT6u6MYOSdm1Bw"
+      },
+      "contract_version": "sw-agent-fleet/1",
+      "deployments": [
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793532779,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "delivered",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "5"
+        },
+        {
+          "action": "rollback",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793532777,
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "recorded_state": "applied",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": 1793532778,
+          "revision": "r1",
+          "sequence": "4"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793532776,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "rejected",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "3"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793532776,
+          "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+          "recorded_state": "issued",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": null,
+          "revision": "r2",
+          "sequence": "2"
+        },
+        {
+          "action": "activate",
+          "delivered_at_unix": null,
+          "issued_at_unix": 1793532776,
+          "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+          "recorded_state": "applied",
+          "rejected_at_unix": null,
+          "reported_applied_at_unix": 1793532776,
+          "revision": "r1",
+          "sequence": "1"
+        }
+      ],
+      "next_before_sequence": null,
+      "observed_at_unix": 1793532779
+    }
+  },
+  "source_commit": "08d7476991755cb4e772c485e9ee997e0c13aa5b",
+  "source_dirty": false,
+  "source_tree": "400f9ba8204be5e9d09e123cf6bc58e8b6d21c1a",
+  "status": "passed"
+}

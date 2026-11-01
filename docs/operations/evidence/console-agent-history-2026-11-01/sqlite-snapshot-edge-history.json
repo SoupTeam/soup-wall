@@ -1,0 +1,235 @@
+{
+  "contract_version": "sw-agent-incident-snapshot/1",
+  "generated_at_unix": 1793532780,
+  "source": {
+    "api": "GET /admin/v1/tenants/{tenant}/agent-fleet/{agent}",
+    "contract_version": "sw-agent-fleet/1"
+  },
+  "scope": {
+    "tenant_id": "tenant_iK1SS732HT6u6MYOSdm1Bw",
+    "agent_id": "edge-history"
+  },
+  "partial": false,
+  "completeness": {
+    "status": "complete_records",
+    "reasons": [
+      {
+        "code": "credential_rotations_not_recorded",
+        "detail": "The Console keeps no dated record of credential rotations; only enrollment and revocation times are known."
+      },
+      {
+        "code": "fetch_and_rejection_times_not_recorded",
+        "detail": "Fetch and rejection are recorded as states without timestamps."
+      }
+    ],
+    "contradictions": []
+  },
+  "coverage": {
+    "expected_deployments": 5,
+    "loaded_deployments": 5,
+    "loaded_sequence_ranges": [
+      [
+        1,
+        5
+      ]
+    ],
+    "missing_sequence_ranges": [],
+    "pages": [
+      {
+        "before_sequence": null,
+        "observed_at_unix": 1793532780,
+        "records": 5,
+        "malformed": 0,
+        "overlapping": 0
+      }
+    ],
+    "malformed_records_dropped": 0,
+    "bounds": {
+      "page_records": 50,
+      "max_pages": 8,
+      "max_page_bytes": 262144,
+      "max_total_bytes": 1048576,
+      "page_timeout_ms": 15000,
+      "max_build_ms": 60000
+    }
+  },
+  "time_bounds": {
+    "earliest_recorded_unix": 1793532776,
+    "latest_recorded_unix": 1793532779,
+    "first_page_observed_at_unix": 1793532780,
+    "last_page_observed_at_unix": 1793532780
+  },
+  "enrollment": {
+    "enrolled_at_unix": 1793532776,
+    "revoked_at_unix": null
+  },
+  "summary": {
+    "latest_issued": {
+      "sequence": "5",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "recorded_state": "delivered",
+      "issued_at_unix": 1793532779,
+      "reported_applied_at_unix": null
+    },
+    "historical_last_reported_applied": {
+      "sequence": "4",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "rollback",
+      "recorded_state": "applied",
+      "issued_at_unix": 1793532777,
+      "reported_applied_at_unix": 1793532778
+    },
+    "current_protection": "unknown",
+    "current_liveness": "unknown",
+    "note": "Recorded Console evidence only. An applied acknowledgement is a past report, not runtime attestation."
+  },
+  "unresolved_event_ids": [
+    "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/2/superseded",
+    "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/5/pending"
+  ],
+  "events": [
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/enrollment/enrolled",
+      "kind": "enrolled",
+      "at_unix": 1793532776,
+      "time_recorded": true,
+      "sequence": null,
+      "revision": null,
+      "policy_sha256": null,
+      "action": null,
+      "note": "Agent enrolled; first credential issued."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/1/issued",
+      "kind": "issued",
+      "at_unix": 1793532776,
+      "time_recorded": true,
+      "sequence": "1",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/1/applied",
+      "kind": "applied",
+      "at_unix": 1793532776,
+      "time_recorded": true,
+      "sequence": "1",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "activate",
+      "note": "Agent reported applied (historical report, not current protection)."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/2/issued",
+      "kind": "issued",
+      "at_unix": 1793532776,
+      "time_recorded": true,
+      "sequence": "2",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/2/superseded",
+      "kind": "superseded",
+      "at_unix": null,
+      "time_recorded": false,
+      "sequence": "2",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Superseded by a newer deployment without any acknowledgement."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/3/issued",
+      "kind": "issued",
+      "at_unix": 1793532776,
+      "time_recorded": true,
+      "sequence": "3",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/3/rejected",
+      "kind": "rejected",
+      "at_unix": null,
+      "time_recorded": false,
+      "sequence": "3",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Agent reported rejected; time not recorded."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/4/issued",
+      "kind": "issued",
+      "at_unix": 1793532777,
+      "time_recorded": true,
+      "sequence": "4",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "rollback",
+      "note": "Rollback issued."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/4/applied",
+      "kind": "applied",
+      "at_unix": 1793532778,
+      "time_recorded": true,
+      "sequence": "4",
+      "revision": "r1",
+      "policy_sha256": "f9b0bb885f6b55d65039dbd21e2051b883c623db853bc5e127bed691dc799e60",
+      "action": "rollback",
+      "note": "Agent reported applied (historical report, not current protection)."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/5/issued",
+      "kind": "issued",
+      "at_unix": 1793532779,
+      "time_recorded": true,
+      "sequence": "5",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Activation issued."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/5/fetched",
+      "kind": "fetched",
+      "at_unix": null,
+      "time_recorded": false,
+      "sequence": "5",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "Fetched by the Agent; time not recorded."
+    },
+    {
+      "event_id": "tenant_iK1SS732HT6u6MYOSdm1Bw/edge-history/deployment/5/pending",
+      "kind": "pending",
+      "at_unix": null,
+      "time_recorded": false,
+      "sequence": "5",
+      "revision": "r2",
+      "policy_sha256": "8aa28ebc47654e2189df1da1a5d951483351c508fff9601206b590ecf17ec56c",
+      "action": "activate",
+      "note": "No acknowledgement recorded yet."
+    }
+  ],
+  "excluded": [
+    "credentials and tokens",
+    "prompts",
+    "tool payloads",
+    "raw policy bodies",
+    "request auth headers",
+    "private host paths"
+  ]
+}
