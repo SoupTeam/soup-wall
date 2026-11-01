@@ -24,7 +24,7 @@ use std::{
 use subtle::ConstantTimeEq;
 
 const FORMAT: &str = "sw-installed-edit-application/1";
-const CAP: u64 = replace_file::MAX_BYTES as u64;
+pub(super) const CAP: u64 = replace_file::MAX_BYTES as u64;
 
 mod journal;
 use journal::{publish, receipt_digest, retain, Journal, JournalIdentity, Operation, Receipt};
@@ -33,24 +33,24 @@ use journal::{publish, receipt_digest, retain, Journal, JournalIdentity, Operati
 #[serde(deny_unknown_fields)]
 pub(super) struct Selection {
     #[arg(long)]
-    run: PathBuf,
+    pub(super) run: PathBuf,
     /// Original immutable prepared plan, not a model-generated review report.
     #[arg(long)]
-    plan: PathBuf,
+    pub(super) plan: PathBuf,
     #[arg(long)]
-    sha256: String,
+    pub(super) sha256: String,
     /// Exactly one declared mutation output from the completed run.
     #[arg(long)]
-    output: String,
+    pub(super) output: String,
     /// Explicit existing, owner-private and quiesced project directory.
     #[arg(long)]
-    root: PathBuf,
+    pub(super) root: PathBuf,
     /// Existing direct-child regular file; no missing-leaf fallback.
     #[arg(long)]
-    target: String,
+    pub(super) target: String,
     /// New private application directory outside source and destination roots.
     #[arg(long)]
-    journal: PathBuf,
+    pub(super) journal: PathBuf,
 }
 
 #[derive(Args, Debug)]
@@ -117,7 +117,7 @@ struct Plan {
     operator_uid: u32,
 }
 
-fn digest(domain: &[u8], value: &impl Serialize) -> Result<String> {
+pub(super) fn digest(domain: &[u8], value: &impl Serialize) -> Result<String> {
     let mut bytes = domain.to_vec();
     bytes.extend(profile::canonical(value)?);
     Ok(replace_file::content_sha256(&bytes))
@@ -125,12 +125,12 @@ fn digest(domain: &[u8], value: &impl Serialize) -> Result<String> {
 fn confirmation(plan: &Plan) -> Result<String> {
     digest(b"agentfw/edit-application/v1\0", plan)
 }
-fn same(actual: &str, expected: &str) -> bool {
+pub(super) fn same(actual: &str, expected: &str) -> bool {
     crate::native::is_digest(actual)
         && crate::native::is_digest(expected)
         && bool::from(actual.as_bytes().ct_eq(expected.as_bytes()))
 }
-fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
+pub(super) fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     serde_json::from_value(audit::strict(bytes).map_err(anyhow::Error::msg)?)
         .map_err(|_| anyhow::anyhow!("edit_apply_record_schema"))
 }
@@ -140,7 +140,7 @@ fn root_id(m: &fs::Metadata) -> RootIdentity {
         inode: m.ino(),
     }
 }
-fn identity(m: &fs::Metadata) -> Identity {
+pub(super) fn identity(m: &fs::Metadata) -> Identity {
     Identity {
         device: m.dev(),
         inode: m.ino(),
@@ -154,7 +154,7 @@ fn identity(m: &fs::Metadata) -> Identity {
         mode: m.mode(),
     }
 }
-fn directory(path: &Path) -> Result<(Directory, RootIdentity)> {
+pub(super) fn directory(path: &Path) -> Result<(Directory, RootIdentity)> {
     let d = Directory::open(path).map_err(anyhow::Error::msg)?;
     let m = d.metadata().map_err(anyhow::Error::msg)?;
     ensure!(
@@ -163,7 +163,7 @@ fn directory(path: &Path) -> Result<(Directory, RootIdentity)> {
     );
     Ok((d, root_id(&m)))
 }
-fn snapshot(
+pub(super) fn snapshot(
     root: &Path,
     name: &str,
     budget: &mut Budget,
@@ -205,7 +205,7 @@ fn overlap(a: &Path, b: &Path) -> Result<()> {
     }
     Ok(())
 }
-fn target_leaf(name: &str) -> bool {
+pub(super) fn target_leaf(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 255
         && !name.starts_with(".soup-replace-")
@@ -216,7 +216,7 @@ fn target_leaf(name: &str) -> bool {
             Some(std::path::Component::Normal(_))
         )
 }
-fn protect(selected: &Selection, source: &SelectedOutput) -> Result<RootIdentity> {
+pub(super) fn protect(selected: &Selection, source: &SelectedOutput) -> Result<RootIdentity> {
     ensure!(
         target_leaf(&selected.target) && profile::leaf(&selected.output),
         "edit_apply_direct_child"
@@ -265,7 +265,7 @@ fn protect(selected: &Selection, source: &SelectedOutput) -> Result<RootIdentity
     overlap(&selected.journal, &selected.root)?;
     Ok(parent_id)
 }
-fn original_plan(
+pub(super) fn original_plan(
     selected: &Selection,
     source: &SelectedOutput,
     budget: &mut Budget,
