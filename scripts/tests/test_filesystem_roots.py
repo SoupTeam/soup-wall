@@ -28,6 +28,20 @@ class Roots(unittest.TestCase):
             (root / 'note.txt').write_text(root.name)
         self.pairs = [('beta', self.b), ('alpha', self.a)]
 
+    def test_qualification_refusal_witness_retains_hyphenated_codes(self):
+        path = Path(__file__).resolve().parents[1] / 'qualify-filesystem-roots.py'
+        spec = importlib.util.spec_from_file_location('filesystem_roots_qualification', path)
+        qualification = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(qualification)
+        message = json.dumps([{'type': 'text', 'text':
+            'Soup Wall withheld MCP invocation (taint-history-incomplete, native_approval_cancelled)'}])
+        self.assertEqual(['native_approval_cancelled', 'taint-history-incomplete'],
+                         qualification.reported_refusal_codes(message))
+        self.assertEqual([], qualification.reported_refusal_codes(
+            'Soup Wall withheld MCP invocation (arbitrary untrusted prose)'))
+        self.assertLessEqual(len(qualification.reported_refusal_codes(' '.join(
+            'native_reason_' + str(i) for i in range(100)))), 16)
+
     def test_two_through_four_explicit_sorted_root_identities(self):
         value = M.inventory(self.pairs)
         self.assertEqual(['alpha', 'beta'], [r['id'] for r in value['roots']])

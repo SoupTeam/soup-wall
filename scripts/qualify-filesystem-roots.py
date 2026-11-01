@@ -14,6 +14,16 @@ CASES = ('two-explicit-roots', 'inert-installed-preview', 'prepared-root-custody
          'single-root-sibling-retained', 'source-preservation', 'owned-process-cleanup')
 
 
+def reported_refusal_codes(text):
+    """Bounded fixed-frame diagnostics, never an admission decision."""
+    codes = set(re.findall(r'\b(?:native|filesystem|classifier|result|profile)_[a-z0-9_-]{1,100}\b', text))
+    for framed in re.findall(r'Soup Wall withheld MCP (?:invocation|result) \(([^()]{1,512})\)', text):
+        for code in framed.split(', '):
+            if re.fullmatch(r'[a-z][a-z0-9_-]{0,99}', code):
+                codes.add(code)
+    return sorted(codes)[:16]
+
+
 def qualify(args, door, home, env, report, installed):
     q, base, require = installed.QUAL, installed.BASE, installed.require
     binding_module = installed.load('filesystem_roots_binding', 'pilot_filesystem_roots.py')
@@ -181,12 +191,12 @@ def qualify(args, door, home, env, report, installed):
     evidence['result_boundaries'] = {}
     for identifier, result in results.items():
         text = json.dumps(result.get('content'), ensure_ascii=True)
-        codes = sorted(set(re.findall(r'\b(?:native|filesystem|classifier|result|profile)_[a-z0-9_-]{1,100}\b', text)))
+        codes = reported_refusal_codes(text)
         evidence['result_boundaries'][identifier] = {
             'is_error':result['is_error'], 'fixed_messages':[label for label in labels if label in text],
             'reason_codes':codes[:16], 'content_sha256':hashlib.sha256(text.encode()).hexdigest()}
     evidence['owned_first_errors'] = {}
-    for identifier in ('toolu_front_multi-roots_0','toolu_front_multi-roots_1'):
+    for identifier in ('toolu_front_multi-roots_0','toolu_front_multi-roots_1','toolu_front_multi-roots_11'):
         if identifier in results and results[identifier]['is_error']:
             text=json.dumps(results[identifier]['content'],ensure_ascii=True)[:1024]
             for path in (str(selected.prefix),str(args.output)):
