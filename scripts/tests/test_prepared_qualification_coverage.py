@@ -31,6 +31,7 @@ def enabled(body, **overrides):
         "github.event.inputs.private_edit_self_test_only": "",
         "github.event.inputs.provider_ca_only": "",
         "github.event.inputs.native_preparation_only": "",
+        "github.event.inputs.linked_worktrees_only": "",
         "github.event.inputs.project_presets_only": "",
         "github.event.inputs.configuration_recovery_only": "",
     }
@@ -85,6 +86,32 @@ class PreparedQualificationCoverage(unittest.TestCase):
                     self.assertFalse(enabled(focused, **{**context, "github.event.inputs." + missing: ""}))
                 self.assertIn("qualify-configuration-backup.py --run", focused)
                 self.assertIn("configuration-backup-qualification/report.json", text)
+
+    def test_linked_worktree_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.linked_worktrees_only": "true",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers",
+                              "Run the first-use demo through the prepared original host",
+                              "Qualify terminal Ask inbox through the original Claude host",
+                              "Qualify reused bounded audit engine restart and fail-safe retention"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify installed linked worktrees through original servers")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("linked_worktrees_only", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--linked-worktrees-only", body)
+
 
     def test_project_presets_dispatch_is_separate_from_full_qualification(self):
         context = {"github.event_name": "workflow_dispatch",

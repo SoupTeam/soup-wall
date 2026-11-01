@@ -1230,6 +1230,7 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
                     | "provider"
                     | "configuration"
                     | "project"
+                    | "worktree-selection"
                     | "help"
             )
         })

@@ -842,6 +842,13 @@ def qualify(args, report):
         selection = Path(first["selection"])
         report["selection_sha256"] = BASE.sha(selection)
 
+        if args.linked_worktrees_only:
+            load("installed_linked_worktrees", "qualify-linked-worktrees.py").qualify(args, door, agent_home, env, report,
+                installed=__import__('types').SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load))
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
         if args.project_presets_only:
             import types
             suite = types.SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load,
@@ -1057,6 +1064,7 @@ def main():
     parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--provider-profiles", action="store_true",
                         help="opt in to SOU-172 private named provider original-host controls")
+    parser.add_argument("--linked-worktrees-only", action="store_true", help="focused SOU-201 installed linked-worktree qualification")
     parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
     parser.add_argument("--provider-ca-only", action="store_true",
                         help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
@@ -1098,6 +1106,9 @@ def main():
         if args.output.exists():
             BASE.write(args.output / "report.json", report)
     summary = {"status": report["status"], "cases": len(report["cases"]), "error": report.get("error")}
+    if args.linked_worktrees_only:
+        linked = report.get('linked_worktrees', {})
+        summary['linked_worktrees'] = {k: linked.get(k) for k in ('status', 'active_case', 'last_cli', 'last_runs', 'namespace_probe')}
     if args.project_presets_only:
         project = report.get("project_presets", {})
         summary["project_presets"] = {key: project.get(key) for key in ("status", "active_case", "last_cli")}

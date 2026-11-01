@@ -121,7 +121,7 @@ PUBLIC_FAILURE_CODES = frozenset({
     'selection_changed_before_host',
     'selection_changed_before_launch',
     'state_inside_checkout',
-    'state_inside_workspace',
+    'state_inside_workspace', 'state_inside_git_metadata',
     'unsafe_state_parent',
     'canonical_existing_workspace_required',
     'existing_workspace_missing_or_moved',
@@ -357,11 +357,16 @@ def run(args, report):
     selection, paths, profiles = selected(args)
     if "prepared_workspaces" in selection:
         PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent),
-                                          PREP.GIT_PROFILES.from_selection(selection))
+                                          PREP.GIT_PROFILES.from_selection(selection),
+                                          **({"linked_binding": selection.get("linked_worktree")}
+                                             if PREP.GIT_PROFILES.from_selection(selection) == "git-linked-worktree-readonly-v1" else {}))
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
     preset_state(args)
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()
+    if PREP.GIT_PROFILES.from_selection(selection) == 'git-linked-worktree-readonly-v1':
+        require(not state_root.is_relative_to(Path(selection['linked_worktree']['commonDir']['path'])),
+                'state_inside_git_metadata')
     info = state_root.stat()
     require(stat.S_ISDIR(info.st_mode) and info.st_uid in (0, os.getuid())
             and (not info.st_mode & 0o022 or info.st_mode & stat.S_ISVTX), "unsafe_state_parent")

@@ -53,6 +53,7 @@ pub fn selected(format: Option<&str>) -> bool {
                 | git::LOCAL_REFS_FORMAT
                 | git::FILE_READS_FORMAT
                 | git::SHALLOW_FORMAT
+                | git::linked_worktree::FORMAT
                 | git_local_clone::FORMAT
                 | git_tracked_symlinks::FORMAT
         )
@@ -153,6 +154,8 @@ pub struct ProfileConfig {
     pub workspace: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_identity: Option<WorkspaceIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked_worktree: Option<git::linked_worktree::Binding>,
     pub runtime_path: PathBuf,
     pub runtime_sha256: String,
     pub package_root: PathBuf,
@@ -364,6 +367,17 @@ impl ProfileConfig {
                 "invalid Git executable pin"
             );
         }
+        ensure!(
+            (config.format == git::linked_worktree::FORMAT) == config.linked_worktree.is_some(),
+            "linked_worktree_profile_binding_required"
+        );
+        if let Some(binding) = &config.linked_worktree {
+            binding.validate_schema(&config.workspace)?;
+            ensure!(
+                config.workspace_identity.as_ref() == Some(&binding.workspace.identity),
+                "linked_worktree_workspace_binding_required"
+            );
+        }
         ensure!(config.libraries.len() <= 32, "MCP runtime library limit");
         for path in [
             &config.workspace,
@@ -472,6 +486,7 @@ pub fn original_manifest_for(format: &str) -> anyhow::Result<Value> {
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
         | git::SHALLOW_FORMAT
+        | git::linked_worktree::FORMAT
         | git_local_clone::FORMAT
         | git_tracked_symlinks::FORMAT => Ok(git::original_manifest()),
         _ => anyhow::bail!("unsupported MCP profile"),
@@ -485,6 +500,7 @@ pub fn validate_initialization_for(format: &str, value: &Value) -> anyhow::Resul
         | git::LOCAL_REFS_FORMAT
         | git::FILE_READS_FORMAT
         | git::SHALLOW_FORMAT
+        | git::linked_worktree::FORMAT
         | git_local_clone::FORMAT
         | git_tracked_symlinks::FORMAT => git::validate_initialization(value),
         _ => anyhow::bail!("unsupported MCP profile"),
@@ -498,9 +514,10 @@ pub fn classify_manifest_for(
     match format {
         FORMAT => classify_manifest(value),
         filesystem_create::FORMAT => filesystem_create::classify_manifest(value),
-        git::FORMAT | git_local_clone::FORMAT | git_tracked_symlinks::FORMAT => {
-            git::classify_manifest(value)
-        }
+        git::FORMAT
+        | git::linked_worktree::FORMAT
+        | git_local_clone::FORMAT
+        | git_tracked_symlinks::FORMAT => git::classify_manifest(value),
         git::LOCAL_REFS_FORMAT => git::classify_manifest_with_local_refs(value, true),
         git::SHALLOW_FORMAT => git::classify_manifest(value),
         git::FILE_READS_FORMAT => {

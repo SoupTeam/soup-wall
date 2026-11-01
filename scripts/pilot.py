@@ -43,7 +43,7 @@ PLAN_SECONDS = 180
 CLAUDE_VERSION = "2.1.251 (Claude Code)"
 CLAUDE_RELATIVE = "node_modules/@anthropic-ai/claude-code-linux-x64/claude"
 EXECUTABLE_INPUTS = ("agentfw", "git_launcher", "sandbox_tests", "git", "bwrap", "node", "npm", "claude", "python")
-FILE_INPUTS = ("node_archive", "python_archive", "git_archive", "bwrap_archive")
+FILE_INPUTS = ("node_archive", "python_archive", "git_archive", "bwrap_archive", "git_worktree_binding")
 DIR_INPUTS = ("npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "native_output", "agent_output",
               "pkg_config_libdir", "pkg_config_sysroot", "meson_pythonpath")
 NEVER = ["start a daemon, Claude host or MCP server", "edit a project, Git repository or Claude configuration",
@@ -274,7 +274,7 @@ def prepare_words(args, inputs, paths, commit, produced):
             selected[name] = inputs[name]
     for name, value in selected.items():
         words += ["--" + name.replace("_", "-"), value]
-    for name in ("node_archive", "python_archive", "npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace"):
+    for name in ("node_archive", "python_archive", "npm_cache", "wheelhouse", "filesystem_workspace", "git_workspace", "git_worktree_binding"):
         if name in inputs:
             words += ["--" + name.replace("_", "-"), inputs[name]]
     words += ["--filesystem-classifier", ROOT / "rule_baseline/rule_baseline.py",
@@ -959,6 +959,7 @@ def parser():
     remove = actions.add_parser("remove", help="delete one private profile")
     remove.add_argument("--name", required=True)
     remove.add_argument("--apply", action="store_true")
+    commands.add_parser("worktree-selection", help="explicitly bind the roots of a linked Git worktree")
     commands.add_parser("project", help="inspect, check and explicitly manage named project presets")
     commands.add_parser("help")
     commands.add_parser("update", help="preview, apply, recover or roll back a complete local pilot generation")
@@ -974,6 +975,19 @@ def main(argv=None):
     if len(supplied) > at and supplied[at] == "configuration":
         return load("front_door_configuration_backup", "pilot_configuration_backup.py").main(
             supplied[:at] + supplied[at + 1:])
+    linked_words = list(supplied)
+    if linked_words[:1] == ['--agent-home'] and len(linked_words) >= 2:
+        linked_words = linked_words[2:]
+    if linked_words and linked_words[0].startswith('--agent-home='):
+        linked_words = linked_words[1:]
+    if linked_words[:1] == ['worktree-selection']:
+        try:
+            return load('front_door_linked_worktree', 'pilot_linked_worktree.py').main(linked_words[1:])
+        except Exception as error:
+            reason = str(error)
+            print(json.dumps({'status': 'refused', 'executed': False, 'protection': 'not-observed',
+                              'reason': reason if re.fullmatch(r'linked_worktree_[a-z_]{1,90}', reason) else 'linked_worktree_input_unavailable'}))
+            return 2
     if supplied and supplied[0] == "update":
         return load("front_door_update", "pilot_update.py").main(supplied[1:])
     project_words = list(supplied)
