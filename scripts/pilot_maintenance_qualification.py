@@ -45,6 +45,13 @@ def qualify(args, door, home, env, report, *, guided, install_sibling, receiver,
             words = [str(args.strace), '-f', '-qq', '-s', '4096', '-e', 'trace=execve,connect', '-o', str(trace_path), *words]
         process = subprocess.run(words, cwd=door.cwd, env=run_env or env, stdin=subprocess.DEVNULL,
                                  capture_output=True, timeout=180)
+        if (process.returncode == 0) is not success:
+            # Bounded finite context; owned synthetic inputs only, no raw traces.
+            result['failure'] = {'command': [str(word) for word in words if str(word).startswith('-')
+                                              or word in ('pilot', 'maintenance', 'run', 'status', 'preview', 'enter', 'leave')][:24],
+                                 'returncode': process.returncode, 'expected_success': success,
+                                 'stdout': process.stdout.decode(errors='replace')[-600:],
+                                 'stderr': process.stderr.decode(errors='replace')[-400:]}
         require((process.returncode == 0) is success, 'maintenance_unexpected_exit')
         value = json.loads(process.stdout.decode().splitlines()[-1])
         if trace:
