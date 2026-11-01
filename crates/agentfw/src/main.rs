@@ -350,6 +350,12 @@ enum McpCommands {
 
 #[derive(Subcommand)]
 enum PilotCommands {
+    /// Prepare an inert, restricting policy candidate; never activates policy (Linux).
+    #[cfg(target_os = "linux")]
+    PolicyCandidate {
+        #[command(subcommand)]
+        action: Box<agentfw::policy_candidate::Command>,
+    },
     /// Guided Linux pilot from the installed front door: preview,
     /// prepare, run, status or help. Starts only the verified installed
     /// component with its recorded interpreter.
@@ -1020,6 +1026,10 @@ fn dispatch(command: Cmd) -> anyhow::Result<()> {
         Cmd::Pilot(PilotCommands::PilotComponent { home, action }) => {
             let _ = (home, action);
             anyhow::bail!("the installed guided pilot supports native Linux x86_64 only")
+        }
+        #[cfg(target_os = "linux")]
+        Cmd::Pilot(PilotCommands::PolicyCandidate { action }) => {
+            agentfw::policy_candidate::run(*action)
         }
         Cmd::Pilot(PilotCommands::PilotLaunch(args)) => agentfw::pilot_launcher::run(*args),
         Cmd::Pilot(PilotCommands::EditSession(args)) => agentfw::edit_session::run(*args),
