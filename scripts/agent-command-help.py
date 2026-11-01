@@ -10,6 +10,7 @@ import sys
 import subprocess
 import tempfile
 import os
+import types
 
 ALLOWED_READER = None
 
@@ -48,9 +49,9 @@ def discover(path, expected):
         raise ValueError('selected component digest mismatch')
     sys.dont_write_bytecode = True
     sys.addaudithook(guard)
-    spec = importlib.util.spec_from_file_location('selected_pilot', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = types.ModuleType('selected_pilot')
+    module.__file__ = str(path.absolute())
+    exec(compile(raw, str(path.absolute()), 'exec'), module.__dict__)
     parser = module.parser()
     rows = []
     def walk(node, parts):
@@ -91,13 +92,41 @@ def completion(data, shell):
 
 
 def rust_catalog(path, expected):
+    if sys.platform != 'linux' or not hasattr(os, 'memfd_create'):
+        raise ValueError('verified binary help requires Linux sealed executable support')
+    import fcntl
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    source_fd = os.open(path, flags)
+    snapshot = os.memfd_create('agentfw-help', os.MFD_ALLOW_SEALING)
+    try:
+        import stat
+        meta = os.fstat(source_fd)
+        if not stat.S_ISREG(meta.st_mode) or meta.st_size > 256 * 1024 * 1024:
+            raise ValueError('unsafe binary')
+        hashed = hashlib.sha256()
+        size = 0
+        while True:
+            block = os.read(source_fd, 65536)
+            if not block:
+                break
+            size += len(block)
+            if size > 256 * 1024 * 1024:
+                raise ValueError('binary exceeds cap')
+            hashed.update(block)
+            offset = 0
+            while offset < len(block):
+                offset += os.write(snapshot, block[offset:])
+        if hashed.hexdigest() != expected:
+            raise ValueError('binary digest mismatch')
+        fcntl.fcntl(snapshot, fcntl.F_ADD_SEALS, fcntl.F_SEAL_WRITE | fcntl.F_SEAL_GROW | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_SEAL)
+        return rust_catalog_snapshot(Path('/proc/self/fd') / str(snapshot), expected, snapshot)
+    finally:
+        os.close(source_fd)
+        os.close(snapshot)
+
+
+def rust_catalog_snapshot(path, expected, snapshot):
     global ALLOWED_READER
-    if path.is_symlink() or any(parent.is_symlink() for parent in path.absolute().parents) or not path.is_file() or path.stat().st_size > 256 * 1024 * 1024:
-        raise ValueError('unsafe binary')
-    with path.open('rb') as stream:
-        actual = hashlib.file_digest(stream, 'sha256').hexdigest()
-    if actual != expected:
-        raise ValueError('binary digest mismatch')
     ALLOWED_READER = str(path.absolute())
     rows, pending = [], [[]]
     while pending:
@@ -105,7 +134,7 @@ def rust_catalog(path, expected):
         if len(rows) >= 256 or len(parts) > 8:
             raise ValueError('command tree exceeds cap')
         with tempfile.TemporaryFile() as output:
-            child = subprocess.Popen([ALLOWED_READER, *parts, '--help'], stdout=output, stderr=subprocess.DEVNULL)
+            child = subprocess.Popen([ALLOWED_READER, *parts, '--help'], stdout=output, stderr=subprocess.DEVNULL, pass_fds=(snapshot,))
             try:
                 status = child.wait(timeout=5)
             except subprocess.TimeoutExpired:

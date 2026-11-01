@@ -6,11 +6,33 @@ import sys
 import tempfile
 import unittest
 import shutil
+import importlib.util
+from unittest.mock import patch
 
 TOOL = Path(__file__).with_name('agent-command-help.py')
 
 
 class Controls(unittest.TestCase):
+    def test_verified_python_bytes_survive_path_replacement(self):
+        spec = importlib.util.spec_from_file_location('help_reader', TOOL)
+        reader = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reader)
+        with tempfile.TemporaryDirectory() as temp:
+            entry = Path(temp) / 'pilot.py'
+            original = b"import argparse\ndef parser():\n p=argparse.ArgumentParser()\n p.add_subparsers().add_parser('original-command')\n return p\n"
+            changed = original.replace(b'original-command', b'changed-command')
+            entry.write_bytes(original)
+            expected = hashlib.sha256(original).hexdigest()
+            class Hash:
+                def hexdigest(self):
+                    entry.write_bytes(changed)
+                    return expected
+            with patch.object(reader.hashlib, 'sha256', return_value=Hash()), patch.object(reader.sys, 'addaudithook'):
+                catalog = reader.discover(entry, expected)
+            names = [row['command'] for row in catalog['commands']]
+            self.assertIn(['original-command'], names)
+            self.assertNotIn(['changed-command'], names)
+
     def test_accepted_pilot_outside_checkout(self):
         with tempfile.TemporaryDirectory() as temp:
             scripts = Path(temp) / 'scripts'
