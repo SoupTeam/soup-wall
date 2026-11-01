@@ -1552,6 +1552,7 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_configuration_backup.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_configuration_backup_qualification.py -v
           cargo test --locked -p agentfw --lib configuration_recovery
+          cargo clippy --locked -p agentfw --all-targets -- -D warnings
           cargo fmt --all --check
           selection="$(python3 -c 'import json,os,pathlib; print(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"sou111-assets/first.json").read_text())["selection"])')"
           python3 -B scripts/qualify-configuration-backup.py --run \
