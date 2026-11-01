@@ -789,7 +789,8 @@ def provider_command(args):
         raise profiles.Refusal("provider_consent_required")
     if args.provider_action == "check":
         return provider_preflight().check(args.agent_home or Path.home() / ".agentfw", profiles,
-                                          transport=args.transport, seconds=args.timeout_seconds)
+                                          transport=args.transport, proxy_connect=args.proxy_connect,
+                                          seconds=args.timeout_seconds)
     with profiles.Store(args.agent_home or Path.home() / ".agentfw",
                         create=args.provider_action == "create") as store:
         if args.provider_action == "preview":
@@ -915,6 +916,8 @@ def parser():
     preview.add_argument("--name")
     check = actions.add_parser("check", help="validate selected profile; opt in to bounded DNS/TCP/TLS observation")
     check.add_argument("--transport", action="store_true", help="observe the selected endpoint without an API request")
+    check.add_argument("--proxy-connect", action="store_true",
+                       help="with --transport, observe an explicit unauthenticated HTTP CONNECT route")
     check.add_argument("--timeout-seconds", type=int, default=5, help="total transport deadline, 1 to 15 seconds")
     check.add_argument("--json", action="store_true", help="print finite JSON instead of text")
     create = actions.add_parser("create", help="save one private profile with explicit consent")
