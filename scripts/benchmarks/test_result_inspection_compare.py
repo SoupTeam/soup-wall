@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -708,6 +709,8 @@ class CaptureTests(unittest.TestCase):
         if os.name == "nt":
             self.assertEqual(facts["cleanup"]["method"], "windows_job_object")
             self.assertEqual(facts["cleanup"]["job_processes_after_cleanup"], 0)
+        else:
+            self.assertIs(facts["cleanup"]["posix_group_gone"], True)
 
     def test_oversized_stdout_terminates_with_partial_digest_only(self):
         facts, streams = self.run_child("import sys\nwhile True: sys.stdout.buffer.write(b'x' * 65536)\n",
@@ -774,6 +777,71 @@ class CaptureTests(unittest.TestCase):
         self.assertCleanedUp(facts)
         self.assertFalse(_alive(grandchild), "grandchild survived after its parent exited")
         self.assertFalse(rec.retain(self.tmp, "o", streams["stdout"], facts["killed"])["complete"])
+
+    @unittest.skipIf(os.name == "nt", "POSIX group observation; Windows uses its existing Job Object")
+    def test_descendant_with_closed_pipes_is_stopped_before_complete(self):
+        # EOF is not a process-termination witness: a descendant can close both
+        # capture pipes and continue running after the direct child exits.
+        trees = []
+        original = rec.ProcessTree
+
+        class TrackedTree(original):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                trees.append(self)
+
+        code = ("import subprocess,sys\n"
+                "g=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'],"
+                "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+                "print(g.pid,flush=True)\n")
+        try:
+            with patch.object(rec, "ProcessTree", TrackedTree):
+                facts, streams = self.run_child(code, timeout=3)
+            grandchild = int(bytes(streams["stdout"].kept).split()[0])
+            self.assertFalse(_alive(grandchild), "pipe EOF was mistaken for descendant termination")
+            self.assertCleanedUp(facts)
+        finally:
+            # Both old-code failure and successful-code paths own this group;
+            # keep the deliberately spawned sleeper out of later tests.
+            for tree in trees:
+                try:
+                    os.killpg(tree.proc.pid, 0)
+                except ProcessLookupError:
+                    continue
+                tree.kill()
+
+    @unittest.skipIf(os.name == "nt", "POSIX observation refusal")
+    def test_unconfirmed_group_disappearance_never_claims_complete(self):
+        with patch.object(rec.ProcessTree, "posix_group_gone", return_value=False), \
+                patch.object(rec, "GRACE_S", 0):
+            facts, _ = self.run_child("print('done')", timeout=3)
+        self.assertFalse(facts["cleanup"]["complete"])
+        self.assertIs(facts["cleanup"]["posix_group_gone"], False)
+        self.assertIsNone(facts["exit_code"])
+        self.assertEqual(facts["killed"], "cleanup_incomplete")
+
+    @unittest.skipIf(os.name == "nt", "POSIX-hosted unavailable Job Object observation model")
+    def test_unknown_job_count_is_not_a_zero_process_witness(self):
+        class UnobservableJob:
+            def __init__(self, argv, cwd, env):
+                self.proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+                self.job = object()  # Observation model; no native Windows handle is created.
+
+            def active(self): return None
+            def posix_group_gone(self): return None
+            def kill(self):
+                try: self.proc.kill()
+                except OSError: pass
+            def close(self): self.job = None
+
+        with patch.object(rec, "ProcessTree", UnobservableJob):
+            facts, _ = self.run_child("print('done')", timeout=3)
+        self.assertEqual(facts["cleanup"]["method"], "windows_job_object")
+        self.assertIsNone(facts["cleanup"]["job_processes_after_cleanup"])
+        self.assertFalse(facts["cleanup"]["complete"])
+        self.assertIsNone(facts["exit_code"])
+        self.assertEqual(facts["killed"], "cleanup_incomplete")
 
 
 if __name__ == "__main__":
