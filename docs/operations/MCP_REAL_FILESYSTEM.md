@@ -432,3 +432,9 @@ single-root sibling behavior, unchanged sources and process cleanup through
 the pinned original servers and genuine host with a local scripted provider.
 The fixed case inventory retains failed attempts. It is not a shared Ready,
 security or final admission cycle; those remain TL-owned.
+
+The selected roots do not grant policy approval. Existing provenance rules still
+apply: the installed pilot proof policy asks before reading a path learned from
+an MCP result. The focused multi-root qualification keeps that explicit Ask
+control, then checks healthy continuation with a separately supplied owned path.
+It does not erase taint or weaken the installed policy to obtain a pass.

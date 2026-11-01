@@ -61,6 +61,10 @@ def qualify(args, door, home, env, report, installed):
         (root/'README.md').write_text('Owned independent read-only root '+str(i)+'.\n')
         (root/'notes').mkdir(mode=0o700)
         (root/'notes'/'fact.txt').write_text('Owned second file in root '+str(i)+'.\n')
+        # This operator-supplied follow-up path is not returned by the *.txt
+        # searches or root-only listings. Reusing README after read_multiple_files
+        # is separately required to retain the installed MCP-taint Ask rule.
+        (root/'notes'/'continuation.md').write_text('Owned clean follow-up in root '+str(i)+'.\n')
     third.mkdir(mode=0o700)
     (third/'canary').write_text('SOU202-UNSELECTED-NEVER-READ')
     pairs = [('alpha', roots[0]), ('beta', roots[1])]
@@ -137,6 +141,7 @@ def qualify(args, door, home, env, report, installed):
         ('mcp__filesystem__list_directory',{'path':'/workspace'}),
         ('mcp__filesystem__read_text_file',{'path':'/workspace/alpha/../beta/README.md'}),
         ('mcp__filesystem__read_text_file',{'path':'/workspace/beta/README.md'}),
+        ('mcp__filesystem__read_text_file',{'path':'/workspace/beta/notes/continuation.md'}),
     ]
     trace=args.output/'filesystem-roots-runtime.trace.private'
     trace.touch(mode=0o600,exist_ok=False)
@@ -196,7 +201,7 @@ def qualify(args, door, home, env, report, installed):
             'is_error':result['is_error'], 'fixed_messages':[label for label in labels if label in text],
             'reason_codes':codes[:16], 'content_sha256':hashlib.sha256(text.encode()).hexdigest()}
     evidence['owned_first_errors'] = {}
-    for identifier in ('toolu_front_multi-roots_0','toolu_front_multi-roots_1','toolu_front_multi-roots_11'):
+    for identifier in ('toolu_front_multi-roots_0','toolu_front_multi-roots_1','toolu_front_multi-roots_11','toolu_front_multi-roots_12'):
         if identifier in results and results[identifier]['is_error']:
             text=json.dumps(results[identifier]['content'],ensure_ascii=True)[:1024]
             for path in (str(selected.prefix),str(args.output)):
@@ -207,7 +212,7 @@ def qualify(args, door, home, env, report, installed):
     require(row['exit']==0 and row['live_status'].get('protection')=='observed-live', 'filesystem_roots_live_host_unverified')
     ids=['toolu_front_multi-roots_'+str(i) for i in range(len(proposals))]
     require(set(results)==set(ids), 'filesystem_roots_correlated_results_missing')
-    for i in (*range(7),11):
+    for i in (*range(7),12):
         require(results[ids[i]]['is_error'] is False, 'filesystem_roots_useful_original_result_refused')
     for i in (0,1):
         require('Owned independent read-only root '+str(i) in json.dumps(results[ids[i]]), 'filesystem_roots_read_content_missing')
@@ -215,12 +220,20 @@ def qualify(args, door, home, env, report, installed):
     for i in (4,5): require('fact.txt' in json.dumps(results[ids[i]]), 'filesystem_roots_search_content_missing')
     require('Owned independent read-only root 0' in json.dumps(results[ids[6]])
             and 'Owned independent read-only root 1' in json.dumps(results[ids[6]]), 'filesystem_roots_multi_read_missing')
+    require('Owned clean follow-up in root 1' in json.dumps(results[ids[12]]),
+            'filesystem_roots_healthy_followup_content_missing')
     passed('useful-original-read-list-search', observed_live=True, original_bytes=True)
     begin('whole-call-cross-root-refusals')
     for i in (7,8,9,10): require(results[ids[i]]['is_error'] is True, 'filesystem_roots_unselected_resource_accepted')
     require('Owned independent read-only root' not in json.dumps(results[ids[7]])
             and 'SOU202-UNSELECTED-NEVER-READ' not in json.dumps(results), 'filesystem_roots_partial_or_unselected_content_released')
-    passed('whole-call-cross-root-refusals', no_partial_first_path=True, healthy_followup=True)
+    taint_control = evidence['result_boundaries'][ids[11]]
+    require(results[ids[11]]['is_error'] is True
+            and 'combined-ask-mcp-derived-read' in taint_control['reason_codes'],
+            'filesystem_roots_existing_policy_taint_floor_changed')
+    evidence['policy_taint_control'] = {'passed': True, 'reason': 'combined-ask-mcp-derived-read'}
+    passed('whole-call-cross-root-refusals', no_partial_first_path=True, healthy_followup=True,
+           explicit_mcp_taint_ask_retained=True)
     require(evidence['sibling_control']['passed'], 'filesystem_roots_sibling_behavior_changed')
     begin('source-preservation')
     require(baseline==[q.snapshot(path) for path in (*roots,third,args.project,args.repository)],'filesystem_roots_source_changed')
