@@ -1,0 +1,567 @@
+{
+  "boundaries": [
+    "No global multi-file atomicity, automatic rollback or forward retry. Explicit maintenance exclusion includes arbitrary same-UID writers.",
+    "Recover/revert can restore only postimages with exact returned proof and unchanged current identity/bytes. A visible receipt or matching bytes alone remains uncertain.",
+    "All original outputs, private recovery records and subsequent unrelated/user changes remain retained.",
+    "The accepted named replacement staging left by a pre-rename kill is not purged by name; existing staging blocks unsafe subsequent publication.",
+    "Live quotas, detectors, Ask scopes, provider configuration, uninstall, export/diff/archive formats and primitive limits are unchanged.",
+    "Full shared Ready CI, CodeQL, current-main integration, exact-candidate admission and merge remain team-lead-owned.",
+    "Documentation/evidence may be added after qualified source; no claim that the later documentation commit executed as native source."
+  ],
+  "fault_source_sha256": "342b8ebcf342b9eea079546ca7f1e99c3002637b7a53f576df36667e71312b2b",
+  "format": "sw-sou196-acceptance/1",
+  "local": {
+    "boundary": "macOS arm64, read-only source, scratch-only writes, loopback-only target networking",
+    "build_custody_regressions": 21,
+    "format": "passed",
+    "generated_ci_consistency": "passed",
+    "platform_startup_test": 1,
+    "workspace": {
+      "command": "cargo test --locked --offline --workspace",
+      "coverage": "Initial integrated source; later Linux-only publication gate is covered by final native run.",
+      "failed": 0,
+      "ignored": 13,
+      "log_sha256": "d5a4944e186bf77dcc1d76dc8220f233f5169a56e17e2abf67d626c401dd3e40",
+      "passed": 1951,
+      "source_snapshot_sha256": "bc2dc1ef006b7120ebade206d02d518c7ba38ad15f81bb730ddad7f37fe3de58"
+    },
+    "workspace_clippy": {
+      "command": "cargo clippy --locked --offline --all-targets -- -D warnings",
+      "exit_code": 0,
+      "log_sha256": "d821f194b33897b14066c5deb9974af76a78b54866b6671e713cec60f960f92d",
+      "source_snapshot_sha256": "fbec3e7d4902ee49c0d09b3b7d17370a24ec8c68b7fc7171b78238305f9138b9"
+    }
+  },
+  "native": {
+    "all_owned_stopped": true,
+    "artifact": {
+      "bytes": 56643,
+      "crc_and_safe_unique_paths": "passed",
+      "digest": "sha256:f212e4ed5b867985b210fb1e3df5d9b5f6fba1977be378c84567fdddf3850967",
+      "id": 13059125477,
+      "name": "sou161-installed-edit-evidence-41243833783-1",
+      "unique_members": 9
+    },
+    "attempt": 1,
+    "batch_protocol_tests": 8,
+    "cases": [
+      {
+        "attempted": true,
+        "id": "installed-closure",
+        "operator_invocations": 0,
+        "standard_stack_bytes": 1048576,
+        "status": "passed"
+      },
+      {
+        "apply_readback": true,
+        "attempted": true,
+        "genuine_host_readback": true,
+        "id": "genuine-two-file-flow",
+        "operator_invocations": 4,
+        "revert_readback": true,
+        "reviewed": true,
+        "source_preserved": true,
+        "status": "passed"
+      },
+      {
+        "apply_readback": true,
+        "attempted": true,
+        "genuine_host_readback": true,
+        "id": "genuine-eight-file-flow",
+        "operator_invocations": 4,
+        "revert_readback": true,
+        "reviewed": true,
+        "source_preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "preview-no-writes",
+        "operator_invocations": 1,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "no-consent",
+        "operator_invocations": 6,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "changed-last-output",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "changed-last-target",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "duplicate-output",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "duplicate-target",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "missing-last-target",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "linked-last-target",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "hardlinked-last-target",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "special-last-target",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "redirected-parent",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "protected-root",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "stale-confirmation",
+        "operator_invocations": 2,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "duplicate-application",
+        "operator_invocations": 3,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "later-user-change",
+        "operator_invocations": 4,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "same-bytes-substitution",
+        "operator_invocations": 4,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "missing-applied-member",
+        "operator_invocations": 4,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "stale-recovery",
+        "operator_invocations": 4,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "without-returned-proof",
+        "operator_invocations": 4,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "corrupt-backup",
+        "operator_invocations": 3,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "unknown-journal",
+        "operator_invocations": 3,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "active-run",
+        "operator_invocations": 1,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "cancelled-run",
+        "operator_invocations": 1,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "exact_single_winner": true,
+        "id": "concurrent-application",
+        "operator_invocations": 1,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "fault_exit": -9,
+        "fault_observed": true,
+        "id": "between-publications-kill",
+        "operator_invocations": 5,
+        "preserved": true,
+        "safe_recovery": true,
+        "status": "passed",
+        "truthful_partial": true
+      },
+      {
+        "attempted": true,
+        "fault_exit": 0,
+        "fault_observed": true,
+        "id": "between-publications-io",
+        "operator_invocations": 5,
+        "preserved": true,
+        "safe_recovery": true,
+        "status": "passed",
+        "truthful_partial": true
+      },
+      {
+        "attempted": true,
+        "fault_exit": -9,
+        "fault_observed": true,
+        "id": "after-publication-kill",
+        "operator_invocations": 4,
+        "preserved": true,
+        "safe_recovery": true,
+        "status": "passed",
+        "truthful_partial": true
+      },
+      {
+        "attempted": true,
+        "fault_exit": 1,
+        "fault_observed": true,
+        "id": "receipt-sync",
+        "operator_invocations": 4,
+        "preserved": true,
+        "safe_recovery": true,
+        "status": "passed",
+        "truthful_partial": true
+      },
+      {
+        "attempted": true,
+        "fault_exit": -9,
+        "fault_observed": true,
+        "id": "after-receipt-sync",
+        "operator_invocations": 4,
+        "preserved": true,
+        "safe_recovery": true,
+        "status": "passed",
+        "truthful_partial": true
+      },
+      {
+        "attempted": true,
+        "fault_exit": 0,
+        "fault_observed": true,
+        "id": "last-target-during-stage",
+        "operator_invocations": 4,
+        "preserved": true,
+        "safe_recovery": true,
+        "status": "passed",
+        "truthful_partial": true
+      }
+    ],
+    "conclusion": "success",
+    "edit_session_tests": 99,
+    "expected": [
+      "installed-closure",
+      "genuine-two-file-flow",
+      "genuine-eight-file-flow",
+      "preview-no-writes",
+      "no-consent",
+      "changed-last-output",
+      "changed-last-target",
+      "duplicate-output",
+      "duplicate-target",
+      "missing-last-target",
+      "linked-last-target",
+      "hardlinked-last-target",
+      "special-last-target",
+      "redirected-parent",
+      "protected-root",
+      "stale-confirmation",
+      "duplicate-application",
+      "later-user-change",
+      "same-bytes-substitution",
+      "missing-applied-member",
+      "stale-recovery",
+      "without-returned-proof",
+      "corrupt-backup",
+      "unknown-journal",
+      "active-run",
+      "cancelled-run",
+      "concurrent-application",
+      "between-publications-kill",
+      "between-publications-io",
+      "after-publication-kill",
+      "receipt-sync",
+      "after-receipt-sync",
+      "last-target-during-stage"
+    ],
+    "grader_controls": 3,
+    "inventory": {
+      "failed": 0,
+      "incomplete": 0,
+      "passed": 33
+    },
+    "mode": "source",
+    "operator_provider_requests": 0,
+    "paid_inference": false,
+    "platform": "native Ubuntu 24.04 x86_64, ordinary owning account, read-only source, private scratch, loopback-only target networking",
+    "report_sha256": "e8c8f451ac5456581813e4912939f34438a728c825cb73fe4b90b2fe3f4a342f",
+    "run_id": 41243833783,
+    "rust": "1.99.1",
+    "selection": "edit_only=true batch_only=true build_mode=source",
+    "source_and_siblings_preserved": true,
+    "source_build_receipts": [
+      {
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "-p",
+          "agentfw",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "compiled_artifacts": 207,
+        "execution_seconds": 65.257,
+        "format": "sw-ci-build-use/1",
+        "mode": "source",
+        "record_sha256": "191d73f4ab9b525d0f470814129438f0dbf91d87272e054d65673a3ea98f8a35",
+        "role": "clippy",
+        "status": "passed"
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "agentfw",
+          "--lib",
+          "edit_session",
+          "--",
+          "--nocapture"
+        ],
+        "compiled_artifacts": 29,
+        "execution_seconds": 61.394,
+        "format": "sw-ci-build-use/1",
+        "mode": "source",
+        "record_sha256": "bf3352fff8bf03df0a37b3f1b248bd2ae07ba894516988e0ddedd121e10d96f2",
+        "role": "library",
+        "status": "passed"
+      },
+      {
+        "arguments": [
+          "build",
+          "--locked",
+          "--offline",
+          "-p",
+          "agentfw",
+          "--bin",
+          "agentfw"
+        ],
+        "compiled_artifacts": 197,
+        "execution_seconds": 101.858,
+        "format": "sw-ci-build-use/1",
+        "mode": "source",
+        "record_sha256": "3848d5c2653debfc804debfc0752e5822d2625fb8cc89a2cf0278b0d2cb5ca75",
+        "role": "agentfw",
+        "status": "passed"
+      }
+    ],
+    "strict_grader_independently_rerun": "passed",
+    "url": "https://github.com/SoupTeam/soup-wall/actions/runs/41243833783"
+  },
+  "prior_attempts": [
+    {
+      "acceptance": false,
+      "artifact_id": 13058278530,
+      "conclusion": "cancelled",
+      "reason": "Superseded by complete-set publication gate hardening and focused author-only qualification; not counted as final-source acceptance.",
+      "retained_reports": [
+        {
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 37
+          },
+          "name": "application",
+          "sha256": "d0838bdc1ec312c0f3e32f5d66756689175cfd93331fb3292584385682899a63",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 18
+          },
+          "name": "archive-runtime",
+          "sha256": "df8a79042e12590ba77ec100ae63bd8ff5352c75874ad3cc72eebd6c3bd0db99",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 32
+          },
+          "name": "batch",
+          "sha256": "01d5388d75cb44229b77924aac68161d7b1f9290e99e6acc5bfe2bc00dabd9e2",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 42
+          },
+          "name": "diff",
+          "sha256": "4ec2a9cdd8658d0475323f2dbbbc0f3f78f67ba7fca2681be9e7c176b9d251a7",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 31
+          },
+          "name": "export-set",
+          "sha256": "27e45ee3d0b1ec0e61c868af3792ac43c96e3cc7e41a4b5537d323bfc5935ae7",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 12
+          },
+          "name": "inventory",
+          "sha256": "fcee45d4275710688d4f6cb483688ecda62cc5f7e740a580cb9fb25c725e12e1",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "attempted": 25,
+            "expected": 25,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 25
+          },
+          "name": "quota",
+          "sha256": "54ef4b68b4ba964bb0e4f2c8f5ad425e55d99c426e6389c1fa67adf5ffd41bb0",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "attempted": 23,
+            "expected": 23,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 23
+          },
+          "name": "refresh",
+          "sha256": "20674b185224148a0a382a55aac21cd0ef1d5ab3851a1469c5bacb6568aa8a42",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 40
+          },
+          "name": "review",
+          "sha256": "1d107625341941210cd24c0883bbc8297f273f3633f08cd721ed7d8de0958155",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "attempted": 23,
+            "expected": 23,
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 23
+          },
+          "name": "runtime",
+          "sha256": "4b71e17c05a4b509310a0c78bfa008ccbd45f5d18cc834fbc1e7137ad30d7899",
+          "status": "passed"
+        },
+        {
+          "inventory": {
+            "failed": 0,
+            "incomplete": 0,
+            "passed": 12
+          },
+          "name": "stop-runtime",
+          "sha256": "9708c3c0a205b4fd7dd829d96d896ca952dbb22499b45765efd503e434bd3ee7",
+          "status": "passed"
+        }
+      ],
+      "run_id": 41242287537,
+      "source": "e5e9577429f4c5895eaa1e850a4e59a36a343b64"
+    }
+  ],
+  "qualified_source": {
+    "agentfw_sha256": "074c7a46018fa4723f671b6056335ed4b28b0019ba85f083236a0fe57d02e075",
+    "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "component_sha256": "df118ee8b0dc4e7f633515ad82d0cc39ed51d60903039948e96b2738afa9ce95",
+    "fault_sha256": "8763751ff8513c2b50029fabb08d966d4cdc5015d4f746169086db1fcd4e3499",
+    "helper_sha256": "084b3c4597dbfae06ec675d3fc5b809593daa292e1ae9b5de268300ba169f719",
+    "source_commit": "3d2a0e1bd194a432e9f9af4df8774c1f7ba2d9f0",
+    "source_tree": "cfa68ea972c57cf019d716e79abf0156bda7ecd8"
+  },
+  "scope": "explicit_owned_linux_direct_child_batch_only",
+  "status": "author_qualification_passed_draft_tl_admission_pending"
+}

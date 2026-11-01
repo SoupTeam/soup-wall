@@ -74,6 +74,11 @@ pub(super) struct FileIdentity {
     mtime: (i64, i64),
     ctime: (i64, i64),
 }
+impl FileIdentity {
+    pub fn object_identity(&self) -> (u64, u64) {
+        (self.device, self.inode)
+    }
+}
 impl From<&Metadata> for FileIdentity {
     fn from(m: &Metadata) -> Self {
         Self {
@@ -175,6 +180,20 @@ impl SelectedOutput {
         };
         selected.content()?;
         Ok(selected)
+    }
+
+    /// Select another already-observed output while retaining the same completed
+    /// run and output-directory lock. This adds no publication authority.
+    pub fn select_name(&mut self, name: &str) -> Result<()> {
+        self.index = self
+            .reviewed
+            .observation
+            .outputs
+            .iter()
+            .position(|o| o.name == name)
+            .context("edit_apply_output_not_declared")?;
+        self.content()?;
+        Ok(())
     }
 
     pub fn profile(&self) -> &Profile {
