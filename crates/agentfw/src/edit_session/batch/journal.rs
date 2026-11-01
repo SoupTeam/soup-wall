@@ -239,7 +239,6 @@ impl Journal {
             before.push(old.to_vec());
             after.push(new.to_vec());
         }
-        drop(load);
         for (i, expected) in binding.blobs.iter().enumerate() {
             ensure!(
                 files
