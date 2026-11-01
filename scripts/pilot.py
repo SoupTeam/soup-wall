@@ -538,6 +538,11 @@ def run(args):
              "--ask-wait-seconds", str(args.ask_wait_seconds), "--port", str(args.port)]
     if getattr(args, "agent_home", None) is not None:
         words += ["--provider-home", str(args.agent_home)]
+    if getattr(args, "agent_home", None) is not None:
+        words += ["--maintenance-home", str(getattr(args, "maintenance_home", None) or args.agent_home),
+                  "--maintenance-component-home", str(args.agent_home)]
+        if getattr(args, "maintenance_coordinator_root", None) is not None:
+            words += ["--maintenance-coordinator-root", str(args.maintenance_coordinator_root)]
     if args.state_root is not None:
         words += ["--state-root", str(args.state_root)]
     if args.prompt is not None:
@@ -884,6 +889,8 @@ def parser():
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     top.add_argument("--agent-home", type=Path,
                      help=argparse.SUPPRESS)
+    top.add_argument("--maintenance-home", type=Path, help=argparse.SUPPRESS)
+    top.add_argument("--maintenance-coordinator-root", type=Path, help=argparse.SUPPRESS)
     commands = top.add_subparsers(dest="command")
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument("--prefix", type=Path, required=True, help="absolute private directory for all pilot state")
@@ -908,6 +915,15 @@ def parser():
     command.add_argument("--port", type=int, default=0)
     command = commands.add_parser("status", parents=[shared])
     command.add_argument("--state-root", type=Path)
+    maintenance = commands.add_parser("maintenance", help="pause new owned installed launches; keep existing hosts")
+    modes = maintenance.add_subparsers(dest="maintenance_action", required=True)
+    for action in ("status", "preview", "enter", "leave"):
+        mode = modes.add_parser(action, parents=[shared])
+        mode.add_argument("--state-root", type=Path)
+        if action == "preview":
+            mode.add_argument("--operation", choices=("enter", "leave"), required=True)
+        if action in ("enter", "leave"):
+            mode.add_argument("--confirm", required=True, help="fresh preview confirmation_sha256")
     provider = commands.add_parser("provider", help="manage private named provider profiles")
     actions = provider.add_subparsers(dest="provider_action", required=True)
     preview = actions.add_parser("preview", help="read-only redacted inventory")
@@ -995,23 +1011,39 @@ def main(argv=None):
         print(json.dumps({"format": FORMAT, "command": args.command, "status": "failed", "executed": False,
                           "reason": "use_coordinated_update", "action": "use `pilot update preview` with a complete local inventory"}))
         return 2
-    if args.command in ("run", "status") and coordinated:
+    if args.command in ("run", "status", "maintenance") and coordinated:
         try:
             update = load("front_door_update", "pilot_update.py")
             words = [args.command]
+            if args.command == "maintenance":
+                words.append(args.maintenance_action)
+                for field in ("operation", "confirm"):
+                    value = getattr(args, field, None)
+                    if value is not None: words += ["--" + field, value]
             for name in ("prompt", "timeout_seconds", "ask_wait_seconds", "state_root", "port"):
                 value = getattr(args, name, None)
                 if value is not None:
                     words += ["--" + name.replace("_", "-"), str(value)]
             if args.json:
                 words.append("--json")
-            return update.selected_command(args.prefix, words)
+            return update.selected_command(args.prefix, words, owner_home=args.maintenance_home or args.agent_home, coordinator=args.maintenance_coordinator_root or args.prefix)
         except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
             dispatched = getattr(error, "dispatch_started", False)
             print(json.dumps({"format": FORMAT, "command": args.command, "status": "failed",
                               "executed": None if dispatched else False, "dispatch_started": dispatched,
                               "reason": "coordinated_outcome_unknown" if dispatched else "coordinated_update_unavailable",
                               "action": "inspect the update journal and recover before retrying"}, sort_keys=True))
+            return 2
+    if args.command == "maintenance":
+        try:
+            report = load("maintenance_launch", "pilot_maintenance_launch.py").command(
+                args, verified_state(args.prefix), PREP, load("maintenance_runner", "pilot-run.py"))
+            print(json.dumps(report, sort_keys=True))
+            return 0
+        except Exception:
+            print(json.dumps({"format": "sw-pilot-maintenance/1", "status": "refused",
+                              "reason": "maintenance_unavailable_or_uncertain", "executed": False,
+                              "action": "Inspect the owned installation, selected state and retained maintenance evidence; preview again."}))
             return 2
     if args.command == "run":
         try:

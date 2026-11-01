@@ -49,6 +49,11 @@ PROVIDER_CA = load("pilot_run_provider_ca", "pilot_provider_ca.py") if sys.platf
 MAX_OUTPUT = 4 * 1024 * 1024
 OWNER_PID = os.getpid()
 PUBLIC_FAILURE_CODES = frozenset({
+    'maintenance_entered', 'maintenance_transition_busy', 'maintenance_runs_uncertain',
+    'maintenance_selection_stale', 'maintenance_source_changed', 'maintenance_root_changed',
+    'maintenance_state_uncertain', 'maintenance_transition_incomplete',
+    'maintenance_record_missing', 'maintenance_record_replaced', 'maintenance_enrollment_incomplete',
+    'maintenance_inventory_replaced', 'maintenance_run_inventory_incomplete',
     'provider_unavailable',
     'provider_input_invalid',
     'provider_input_unsupported',
@@ -308,6 +313,25 @@ def confirmed_stop(home, launcher_pid, binary, env, cwd):
 
 
 def run(args, report):
+    maintenance_home = getattr(args, "maintenance_home", None)
+    if maintenance_home is None:
+        # Direct preparation scripts remain outside the installed front door.
+        return run_owned(args, report)
+    maintenance = load("run_maintenance", "pilot_maintenance_launch.py")
+    selection, paths, profiles = selected(args)
+    bound = maintenance.binding(maintenance_home, args.maintenance_component_home, args.selection,
+        paths, profiles, args.state_root or Path(tempfile.gettempdir()).resolve(), PREP,
+        args.maintenance_coordinator_root)
+    if maintenance.M.Store.absent(maintenance_home):
+        with maintenance.M.Store.create(maintenance_home, bound, maintenance=False): pass
+    with maintenance.M.Store(maintenance_home) as store:
+        with store.locked(exclusive=False):
+            store.admit(bound)
+            require(not maintenance.inventory(store, bound)["uncertain"], "maintenance_runs_uncertain")
+        return run_owned(args, report, (maintenance, store, bound))
+
+
+def run_owned(args, report, maintenance=None):
     PREP.supported_platform()
     provider_home = getattr(args, "provider_home", None)
     if provider_home is not None:
@@ -348,6 +372,7 @@ def run(args, report):
             raise Failure("occupied_port_refused") from None
         port = reservation.getsockname()[1]
     private = None
+    maintenance_context = None
     audit_selected = False
     daemon = launcher = ca_snapshot = None
     streams = []
@@ -367,6 +392,11 @@ def run(args, report):
         report.update(run_directory=str(private), port=port, executed=False)
         home = private / ".agentfw"
         home.mkdir(mode=0o700)
+        if maintenance is not None:
+            module, store, bound = maintenance
+            with store.locked(exclusive=True):
+                maintenance_context = module.claim(store, bound, private)
+
         env = environment(paths, private)
         if "SSL_CERT_FILE" in provider:
             require(PROVIDER_CA is not None, "provider_ca_snapshot_unavailable")
@@ -425,9 +455,23 @@ def run(args, report):
         streams.append(daemon_log)
         report["stage"] = "daemon_start"
         redactors[daemon_log] = PROVIDER.Redactor(provider)
-        daemon = subprocess.Popen([str(paths["agentfw"]), "serve"], cwd=private, env=env,
+        if maintenance is not None:
+            module, store, bound = maintenance
+            startup_gate = store.locked(exclusive=False)
+            startup_gate.__enter__()
+            try:
+                store.admit(bound); module.revalidate(bound)
+            except BaseException:
+                startup_gate.__exit__(None, None, None)
+                raise
+        else:
+            startup_gate = None
+        try:
+            daemon = subprocess.Popen([str(paths["agentfw"]), "serve"], cwd=private, env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            start_new_session=True, preexec_fn=parent_death)
+                start_new_session=True, preexec_fn=parent_death)
+        finally:
+            if startup_gate is not None: startup_gate.__exit__(None, None, None)
         report["executed"] = True
         with selectors.DefaultSelector() as selector:
             selector.register(daemon.stdout, selectors.EVENT_READ, (daemon_log, False))
@@ -447,6 +491,10 @@ def run(args, report):
                 "--git-profile", profiles["git"]["profile"]["path"], "--policy", str(paths["policy"]),
                 "--classifier", str(paths["git_classifier"]), "--timeout-seconds", str(args.timeout_seconds),
                 "--ask-wait-seconds", str(args.ask_wait_seconds), "--prompt", args.prompt, "--json"]
+            if maintenance_context is not None:
+                command.extend(["--maintenance-home", str(args.maintenance_home),
+                    "--maintenance-component-home", str(args.maintenance_component_home),
+                    "--maintenance-run", maintenance_context["run_id"]])
             if model is not None:
                 command.extend(["--model", model])
             if budget_snapshot is not None:
@@ -570,7 +618,7 @@ def run(args, report):
                     # Keep only selected bounded evidence. Tokens, raw host and
                     # daemon logs, provider state and runtime settings are removed.
                     for child in private.iterdir():
-                        if child.name not in ("audit", "audit-run.json"):
+                        if child.name not in ("audit", "audit-run.json", "maintenance-owner.json"):
                             if child.is_dir() and not child.is_symlink():
                                 shutil.rmtree(child)
                             else:
@@ -590,6 +638,12 @@ def run(args, report):
                              if audit_selected else "owned_state_removed")
         if errors:
             report["cleanup_failures"] = errors
+        if not errors and maintenance_context is not None:
+            try:
+                maintenance[0].finish(maintenance[1], maintenance_context)
+            except (OSError, ValueError):
+                errors.append("maintenance_terminal_unconfirmed")
+                report["cleanup"] = "failed"
         require(not errors, "owned_process_cleanup_failed")
 
 
@@ -599,6 +653,9 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--state-root", type=Path)
+    parser.add_argument("--maintenance-home", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--maintenance-component-home", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--maintenance-coordinator-root", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--provider-home", type=Path,
                         help="private installed Agent home; absent preserves explicit environment mode")
     parser.add_argument("--linux-budget", type=Path,
@@ -642,6 +699,9 @@ def main():
             report["resource_budget"]["status"] = "unsupported"
         report.update(status="failed", reason=code if code in PUBLIC_FAILURE_CODES
                       else "pilot_input_or_runtime_failure")
+        if args.maintenance_home is not None and (not report.get("executed") or code.startswith("maintenance_")):
+            report["maintenance"] = {"status": "refused-or-uncertain",
+                "action": "Use installed pilot maintenance status and a fresh preview for this exact home, prefix and state root; preserve uncertain evidence."}
         failure = storage_failure(error) or report.get("storage_failure") or report.get("cleanup_storage_failure")
         if failure:
             report.update(storage_failure=failure,

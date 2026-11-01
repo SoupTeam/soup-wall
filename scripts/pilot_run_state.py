@@ -228,14 +228,17 @@ def audit_writer_lock(run):
 
 
 def completed_inventory(run):
-    """Only the accepted three-member audit-only layout can ever be removed."""
+    """Accepted audit-only layout, with optional non-secret maintenance attribution."""
     run_generation = identity(os.fstat(run.fd))
-    require(set(run.names(32)) == {"audit", "audit-run.json", "audit-finished.json"},
-            "active_or_retained_state")
+    names = set(run.names(32))
+    base = {"audit", "audit-run.json", "audit-finished.json"}
+    require(names in (base, base | {"maintenance-owner.json"}), "active_or_retained_state")
+    if "maintenance-owner.json" in names:
+        AUDIT.maintenance_reference(run.json("maintenance-owner.json"))
     selected = receipt(run)
     finished(run, selected)
     inventory, bodies = {}, {}
-    for name in ("audit-run.json", "audit-finished.json"):
+    for name in ("audit-run.json", "audit-finished.json", *(("maintenance-owner.json",) if "maintenance-owner.json" in names else ())):
         body, info = run.read(name)
         inventory[name] = {"identity": info, "bytes": len(body), "sha256": sha(body)}
         bodies[name] = body

@@ -30,6 +30,7 @@ def enabled(body, **overrides):
         "github.event.inputs.coordinated_update_only": "",
         "github.event.inputs.private_edit_self_test_only": "",
         "github.event.inputs.provider_ca_only": "",
+        "github.event.inputs.maintenance_only": "",
         "github.event.inputs.native_preparation_only": "",
     }
     values.update(overrides)
@@ -85,6 +86,28 @@ class PreparedQualificationCoverage(unittest.TestCase):
                     }))
                 self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
                 self.assertIn("--provider-ca-only", body)
+
+    def test_maintenance_dispatch_is_separate_from_full_qualification(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.maintenance_only": "true",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                body = step(text, "Qualify owned installed maintenance with original host")
+                self.assertTrue(enabled(body, **context))
+                self.assertFalse(enabled(body))
+                for missing in ("maintenance_only", "native_preparation_only"):
+                    self.assertFalse(enabled(body, **{
+                        **context, "github.event.inputs." + missing: "",
+                    }))
+                self.assertFalse(enabled(body, **{**context, "github.event_name": "pull_request"}))
+                self.assertIn("--maintenance-only", body)
 
     def test_update_dispatch_is_targeted_and_does_not_replace_existing_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
