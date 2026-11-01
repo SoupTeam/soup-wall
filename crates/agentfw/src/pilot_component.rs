@@ -1223,7 +1223,14 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
         .filter(|a| {
             matches!(
                 *a,
-                "preview" | "prepare" | "run" | "status" | "provider" | "filesystem-roots" | "help"
+                "preview"
+                    | "prepare"
+                    | "run"
+                    | "status"
+                    | "provider"
+                    | "project"
+                    | "filesystem-roots"
+                    | "help"
             )
         })
         .unwrap_or("help");

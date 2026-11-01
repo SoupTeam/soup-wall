@@ -1,0 +1,23 @@
+{
+ "schema": "soup-wall-result-inspection-public-derivative/1",
+ "attempt": "baseline/attempt-002",
+ "statement": "build-stderr.public.txt is a SANITIZED DERIVATIVE, not the retained original log. The original retained bytes are kept by the recording operator outside Git and are not published. run.json and build-messages.jsonl in this directory are the original retained bytes, unchanged.",
+ "files": [
+  {
+   "derivative": "build-stderr.public.txt",
+   "derivative_sha256": "39f061bb63705abc2d57fa7f175d10cc36d704f7e39935dca00d3f262d0d77ed",
+   "derivative_bytes": 105389,
+   "original": "build-stderr.txt",
+   "original_retained_sha256": "83a962ee5084d57705c15698b35233b0a9e38c894b46d032f8b0a9d1fc80938d",
+   "original_retained_bytes": 134381,
+   "original_raw_sha256": "5ea78cf6ba3092c1eb76d7f51a5e0a4f067d448d83a9d2e7f397573436accce7"
+  }
+ ],
+ "unchanged": {
+  "run.json": "e547ccc2024d68d649a7af4671b5e008c04e959196c2daf638efcfe6de7374a3",
+  "build-messages.jsonl": "457d97f3dc59938af97fedb9b23d10c07692864123417230cab2b4c69a5414b5"
+ },
+ "procedure": "result_inspection_record.sanitizer as of commit 95072f50, applied once to the original retained bytes with roots <work> (this attempt's work directory), <repo> and <home>. It replaces the two twice-escaped absolute paths the recorder's sanitizer missed when the attempt was recorded and redacts the 42 PATH listings printed by cc-rs to an entry count. No other byte is changed.",
+ "verification_limit": "A public reader can check the derivative's digest and that run.json names the original's digest, but cannot check that the derivative was derived from the original without the original bytes. The operator can, by re-running the procedure on the private copy.",
+ "measurement": "none: the build failed before any artifact existed (cargo exit 101, out of memory)."
+}
