@@ -3,8 +3,8 @@
 Base: accepted `b385e7506ab26896637f348e3180e52d1fc6d423`.
 This ledger distinguishes offline simulation, observed native feature behavior
 and final shared merge qualification. No configuration or simulation is claimed
-as active protection. Native Linux feature evidence is pending at the initial
-implementation commit; full Ready/security/current-main admission is TL-owned.
+as active protection. Native Linux feature qualification passed on the implementation commit recorded
+below; full Ready/security/current-main admission is TL-owned.
 
 Local macOS checks used read-only source, scratch-only writes, loopback-only
 networking and isolated environment/cache paths. The new command is Linux-only;
@@ -80,3 +80,30 @@ qualification. Local formatting, two grader and 21 build-custody controls passed
 after the lint correction: snapshot
 `14b91fe690592ad56ebb798a07d3e8ec2bc020c3117e07b329a484c51083d825`, log
 `6662411cb3f8d4f0d3e1a7d63bb51043c5d01e2075a6667b1f8756e1c3fc9df5`.
+
+## Clean focused Linux qualification
+
+Run [41311691014](https://github.com/SoupTeam/soup-wall/actions/runs/41311691014),
+exact implementation source `016af04f5b948e02d46cd28972e802c3f830ff1e`, passed:
+source build, eight protocol tests, two grader controls, all 22 installed cases,
+Linux all-target Clippy with `-D warnings`, and formatting. The other feature
+jobs were explicitly skipped by the manual focus; this is not a full Ready run.
+
+Installed executable SHA-256:
+`35e3147fc5cf33bf02c6f17a3d647683e876be298e3efe601144b8903b3ea9d0`.
+All 28 measured CLI invocations made zero network syscalls and zero child execs.
+Source and installed binary stayed unchanged; every case retained unchanged
+active-policy, project and sibling witnesses. Offline evaluation is simulation,
+not observed runtime admission or active protection.
+
+Artifact `13086306000`, seven unique safe members with independently verified
+CRCs, ZIP SHA-256
+`e741c13ba9fe04677f485e106b4e355687f2d8101d2358db2b2f6dbd756565c1`.
+Finite report SHA-256:
+`4a1e7c0fe10313e5f5da35f41cf155c79ecd7b8ca7e4aeddcc205010604dacec`.
+The retained report was independently regraded with the current strict grader.
+Raw inputs, stdout, stderr and syscall traces were not published.
+
+This final ledger-only follow-up does not change implementation, tests or CI.
+The Draft is ready for maintainer code review, with final shared Ready/security
+and exact-current-main admission still belonging to the maintainer.
