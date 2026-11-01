@@ -1325,6 +1325,69 @@ mod tests {
     }
 
     #[test]
+    fn frozen_git_cases_bound_the_existing_formatter_candidate_without_claiming_custody() {
+        // Component counterfactual only: files on disk do NOT authenticate a
+        // native result. This exercises the existing trusted-owner scorer to
+        // distinguish missing runtime custody from a missing detector change.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../eval/sou123");
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(root.join("manifest.json")).unwrap()).unwrap();
+        let policy = AgentPolicySet::from_yaml(include_str!(
+            "../../../profiles/mcp/git-readonly-v1/policy.yaml"
+        ))
+        .unwrap();
+        let mut changed = Vec::new();
+        let mut attacks = 0;
+        for case in manifest["cases"].as_array().unwrap() {
+            let id = case["case_id"].as_str().unwrap();
+            if !id.starts_with('g') {
+                continue;
+            }
+            let text =
+                std::fs::read_to_string(root.join("payloads").join(format!("{id}.txt"))).unwrap();
+            let event = ev(
+                1,
+                EventKind::ToolResult {
+                    tool: case["tool"].as_str().unwrap().into(),
+                    content: text.clone(),
+                    source: Provenance::McpServer { name: "git".into() },
+                },
+            );
+            let evidence =
+                soup_wall_core::InjectionDetector::mcp_result_evidence(&[&text]).unwrap();
+            let mut raw = AgentFirewall::new(policy.clone(), DEFAULT_TAINT_CAP);
+            let original = raw.preview_native_mcp_result(&event, &evidence, 0);
+            let mut candidate = AgentFirewall::new(policy.clone(), DEFAULT_TAINT_CAP);
+            // Malformed header offsets are rejected by the existing scorer.
+            let hypothetical =
+                candidate.preview_verified_git_result(&event, &evidence, 0, &(7..47));
+            if case["label"] == "attack" {
+                attacks += 1;
+                assert_eq!(original.verdict, Verdict::Deny, "baseline {id}");
+                assert_eq!(hypothetical.verdict, Verdict::Deny, "candidate {id}");
+            }
+            if hypothetical.verdict != original.verdict {
+                assert_eq!(original.verdict, Verdict::Deny, "{id}");
+                assert_eq!(hypothetical.verdict, Verdict::Allow, "{id}");
+                changed.push(id.to_owned());
+            }
+            // All independent findings survive the component correction.
+            for finding in original
+                .findings
+                .iter()
+                .filter(|f| f.1.detector != "injection")
+            {
+                assert!(
+                    hypothetical.findings.contains(finding),
+                    "independent finding {id}"
+                );
+            }
+        }
+        assert_eq!(attacks, 12);
+        assert_eq!(changed, ["g01-a", "g03-a", "g07-b", "g09-b"]);
+    }
+
+    #[test]
     fn verified_git_formatter_correction_precedes_policy_and_preserves_other_floors() {
         let policy = AgentPolicySet::from_yaml(
             "agent_policies:\n  - name: deny-result\n    when: {detector: injection, facet: tool_result, min_severity: medium}\n    action: deny\ndefault: allow\n"
