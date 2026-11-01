@@ -914,6 +914,28 @@ mod tests {
     }
 
     #[test]
+    fn frozen_false_refusal_paths_do_not_gain_selected_runtime_custody() {
+        let manifest: Value =
+            serde_json::from_str(include_str!("../../../../eval/sou123/manifest.json")).unwrap();
+        let tools = classify_manifest(&original_manifest()).unwrap();
+        for id in ["f05-a", "f12-a"] {
+            let case = manifest["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["case_id"] == id)
+                .unwrap();
+            let error = tools["read_multiple_files"]
+                .validate_arguments(&case["arguments"])
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<PathRefusal>(),
+                Some(PathRefusal::Outside)
+            ));
+        }
+    }
+
+    #[test]
     fn original_upstream_discovery_preserves_every_tool_and_classifies_support() {
         let original = original_manifest();
         let tools = classify_manifest(&original).unwrap();
