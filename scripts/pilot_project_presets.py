@@ -295,6 +295,7 @@ def main(argv, front):
               'observed_protection': 'not-observed'}
     try:
         require(sys.platform.startswith('linux'), 'native_linux_required')
+        require(front.platform_reason() is None, 'unsupported_platform')
         profiles = front.provider_profiles()
         require(args.name is None or NAME.fullmatch(args.name), 'name_invalid')
         writing = args.apply and args.action in ('create', 'update', 'remove')
@@ -305,6 +306,9 @@ def main(argv, front):
             records = store.read()['records']
             record = records.get(args.name)
             if args.action == 'inspect':
+                if args.name is not None:
+                    require(record is not None, 'preset_missing')
+                    records = {args.name: record}
                 report.update(status='configured-not-running', presets=[{'name': n, 'version': r['version'],
                     'digest': digest(encoded(r)), 'provider':{k:r['binding']['provider'][k]for k in ('name','version')},
                     'selection_sha256':r['binding']['selection']['sha256'],

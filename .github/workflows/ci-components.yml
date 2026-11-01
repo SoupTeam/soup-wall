@@ -2075,6 +2075,21 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Validate focused project preset dispatch
+        if: github.event.inputs.project_presets_only == 'true'
+        shell: bash
+        env:
+          DISPATCH_INPUTS: ${{ toJSON(github.event.inputs) }}
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PYCODE'
+          import json, os
+          inputs = json.loads(os.environ['DISPATCH_INPUTS'])
+          assert inputs.get('native_preparation_only') == 'true'
+          assert inputs.get('stability_mode', 'off') == 'off'
+          assert all(value in ('', 'false') for key, value in inputs.items()
+                     if key not in {'project_presets_only', 'native_preparation_only', 'stability_mode'})
+          PYCODE
       - name: Validate focused provider CA dispatch
         if: github.event.inputs.provider_ca_only == 'true'
         shell: bash

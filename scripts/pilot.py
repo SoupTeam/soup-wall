@@ -969,6 +969,8 @@ def main(argv=None):
     project_home = Path.home() / '.agentfw'
     if project_words[:1] == ['--agent-home'] and len(project_words) >= 2:
         project_home = Path(project_words[1]); project_words = project_words[2:]
+    if project_words and project_words[0].startswith('--agent-home='):
+        project_home = Path(project_words[0].split('=', 1)[1]); project_words = project_words[1:]
     if project_words[:1] == ['project']:
         module = load('front_door_project_presets', 'pilot_project_presets.py')
         # Explicit object avoids relying on importlib registration of this entry.

@@ -9,7 +9,7 @@ import subprocess
 import threading
 
 CASES = ('two-explicit-presets','inert-check','stale-workspace','changed-selection',
-         'changed-profile','provider-rotation','stale-update','damaged-store',
+         'changed-profile','changed-budget','changed-last-input','budget-no-fallback','provider-rotation','stale-update','damaged-store',
          'concurrent-update','two-protected-reads','frozen-running-settings',
          'stop-one-sibling-continues','private-catalog','owned-cleanup')
 
@@ -52,17 +52,20 @@ def qualify(args, door, home, env, report, first, installed, receiver):
             state=args.output/('project-state-'+str(i));state.mkdir(mode=0o700);states.append(state)
             with profiles.Store(home,create=True)as provider:
                 provider.create(name,{'model':'owned-initial','ANTHROPIC_BASE_URL':models[i].url}, {'ANTHROPIC_API_KEY':canaries[i]})
-                provider.update(name,{'model':'claude-sonnet-4-20250514'},None,'legacy')
+                index=provider.index()
+                current='legacy' if index is None else index['profiles'][name]['current']
+                provider.update(name,{'model':'claude-sonnet-4-20250514'},None,current)
                 versions.append(provider.index()['profiles'][name]['current'])
             words=['--name',name,'--selection',selections[i],'--provider-name',name,'--provider-version',versions[i],'--state-root',state]
             bindings.append(words)
             call(['create',*words,'--apply'])
         finish('two-explicit-presets')
-        begin('inert-check');before=list((home/presets.DIRECTORY).iterdir());trace=args.output/'project-check.trace.private'
+        begin('inert-check');before=q.snapshot(home);trace=args.output/'project-check.trace.private'
         checked=call(['check','--name','one'],trace=trace)
         observed=q.executed(trace,{k:getattr(args,k)for k in q.SELECTED_PROGRAMS if getattr(args,k,None)is not None and k!='agentfw'})
-        require(not observed['selected_started']and observed['inet_connects']==0 and checked['observed_protection']=='not-observed','project_check_executed')
-        require(before==list((home/presets.DIRECTORY).iterdir()),'project_check_mutated')
+        require(not observed['selected_started']and observed['inet_connects']==0 and checked['observed_protection']=='not-observed'
+                and installed.agent_executions(trace,args.agentfw)==1,'project_check_executed')
+        require(before==q.snapshot(home),'project_check_mutated')
         finish('inert-check',selected_started=0,network_connections=0)
         begin('stale-workspace');held=args.project.with_name('project-held');args.project.rename(held);args.project.mkdir(mode=0o700)
         try:call(['check','--name','one'],2)
@@ -73,6 +76,30 @@ def qualify(args, door, home, env, report, first, installed, receiver):
             try:call(['check','--name','one'],2)
             finally:path.write_bytes(raw);path.chmod(mode)
             finish(case)
+        budget=args.output/'selected-project-budget.json'
+        raw_budget=presets.encoded({'format':'sw-mcp/linux-cgroup-budget/1',
+            'delegationRoot':str(args.output/'unavailable-delegation'),'memoryMaxBytes':268435456,
+            'pidsMax':64,'cpuQuotaMicros':100000,'wallMillis':30000})
+        budget.write_bytes(raw_budget);budget.chmod(0o600)
+        budget_words=list(bindings[0]);budget_words[1]='budgeted';budget_words+=['--linux-budget',budget]
+        call(['create',*budget_words,'--apply'])
+        checked_budget=call(['check','--name','budgeted'])
+        require(checked_budget['resource_budget']=='selected-not-validated','project_budget_claimed_enforcement')
+        begin('changed-budget');budget.write_bytes(raw_budget.replace(b'30000',b'31000'))
+        call(['check','--name','budgeted'],2);finish('changed-budget')
+        begin('changed-last-input');trace=args.output/'project-last-input.trace.private'
+        call(['run','--name','budgeted','--expected-version',checked_budget['digest'],'--apply'],2,trace)
+        observed=q.executed(trace,{k:getattr(args,k)for k in q.SELECTED_PROGRAMS if getattr(args,k,None)is not None and k!='agentfw'})
+        require(not observed['selected_started']and observed['inet_connects']==0
+                and installed.agent_executions(trace,args.agentfw)==1,'project_stale_check_granted_execution')
+        finish('changed-last-input',selected_started=0)
+        budget.write_bytes(raw_budget)
+        begin('budget-no-fallback');trace=args.output/'project-budget-refusal.trace.private'
+        call(['run','--name','budgeted','--expected-version',checked_budget['digest'],'--apply'],2,trace)
+        observed=q.executed(trace,{k:getattr(args,k)for k in q.SELECTED_PROGRAMS if getattr(args,k,None)is not None and k!='agentfw'})
+        require(not observed['selected_started']and observed['inet_connects']==0,'project_budget_downgraded')
+        call(['remove','--name','budgeted','--expected-version',checked_budget['digest'],'--apply'])
+        finish('budget-no-fallback',host_started=False)
         begin('provider-rotation')
         with profiles.Store(home)as provider:
             provider.update('one',{'model':'owned-rotated'},None,versions[0]);new=provider.index()['profiles']['one']['current']

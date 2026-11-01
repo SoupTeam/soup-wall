@@ -845,7 +845,7 @@ def qualify(args, report):
         if args.project_presets_only:
             import types
             suite = types.SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load,
-                                          provider_exec_witness=provider_exec_witness)
+                                          provider_exec_witness=provider_exec_witness, agent_executions=agent_executions)
             load('installed_project_qualification', 'qualify-project-presets.py').qualify(
                 args, door, agent_home, env, report, selection, suite, receiver)
             report['source_after'] = BASE.source()

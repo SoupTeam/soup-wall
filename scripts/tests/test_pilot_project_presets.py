@@ -80,6 +80,11 @@ class StoreBoundaries(unittest.TestCase):
 
     def test_public_catalog_never_contains_provider_material(self):
         marker='owned-untrusted-provider-marker'
+        with PROFILES.Store(self.home,create=True) as provider:
+            provider.create('owned',{'model':'owned-initial'},{'ANTHROPIC_API_KEY':marker})
+            provider.update('owned',{'model':'owned-next'},None,'legacy')
+            version=provider.index()['profiles']['owned']['current']
+        _,self.b['provider']=P.provider_reference(self.home,'owned',version,None,PROFILES)
         with P.Store(self.home,PROFILES,create=True) as store:store.write('create','one',self.b)
         self.assertNotIn(marker,(self.home/P.DIRECTORY/'catalog.json').read_text())
         damaged=dict(self.b,credential=marker)
@@ -107,7 +112,7 @@ class StoreBoundaries(unittest.TestCase):
         import io
         binding=dict(self.b)
         with P.Store(self.home,PROFILES,create=True) as store:store.write('create','one',binding)
-        front=types.SimpleNamespace(PROG='owned', PROJECT_HOME=self.home, provider_profiles=lambda:PROFILES)
+        front=types.SimpleNamespace(PROG='owned', PROJECT_HOME=self.home, provider_profiles=lambda:PROFILES, platform_reason=lambda:None)
         out=io.StringIO()
         with patch.object(P.sys,'platform','linux'), patch.object(P,'snapshot',side_effect=[binding,dict(binding,snapshot_sha256='f'*64)]), \
                 patch.object(P.os,'execve',side_effect=AssertionError('execution during check')),contextlib.redirect_stdout(out):
@@ -122,3 +127,41 @@ class StoreBoundaries(unittest.TestCase):
         with P.Store(self.home,PROFILES) as first, P.Store(self.home,PROFILES) as second:
             first.write('update','one',self.b,expected)
             with self.assertRaisesRegex(ValueError,'version_stale'):second.write('update','one',self.b,expected)
+
+    def test_changed_last_input_before_publication_preserves_previous_catalog(self):
+        with P.Store(self.home,PROFILES,create=True) as store:
+            old=store.write('create','one',self.b)
+            path=self.home/P.DIRECTORY/'catalog.json';before=path.read_bytes()
+            def changed():raise ValueError('project_inputs_changed')
+            with self.assertRaisesRegex(ValueError,'inputs_changed'):
+                store.write('update','one',self.b,P.digest(P.encoded(old)),revalidate=changed)
+            self.assertEqual(path.read_bytes(),before)
+            self.assertEqual(list((self.home/P.DIRECTORY).iterdir()),[path])
+
+    def test_exact_inspection_never_substitutes_a_sibling_record(self):
+        import types, io, contextlib
+        with P.Store(self.home,PROFILES,create=True) as store:
+            store.write('create','one',self.b);store.write('create','two',self.b)
+        front=types.SimpleNamespace(PROG='owned',PROJECT_HOME=self.home,
+            provider_profiles=lambda:PROFILES,platform_reason=lambda:None)
+        for name,code in [('one',0),('missing',2)]:
+            out=io.StringIO()
+            with patch.object(P.sys,'platform','linux'),contextlib.redirect_stdout(out):
+                self.assertEqual(P.main(['inspect','--name',name],front),code)
+            value=json.loads(out.getvalue())
+            if code==0:self.assertEqual([r['name']for r in value['presets']],['one'])
+            else:self.assertEqual(value['reason'],'project_preset_missing')
+
+    def test_second_provider_in_versioned_store_uses_its_actual_version(self):
+        with PROFILES.Store(self.home,create=True) as provider:
+            provider.create('one',{'model':'owned-old'},{'ANTHROPIC_API_KEY':'owned-fixture-a'})
+            provider.update('one',{'model':'owned-current'},None,'legacy')
+            provider.create('two',{'model':'owned-old'},{'ANTHROPIC_API_KEY':'owned-fixture-b'})
+            current=provider.index()['profiles']['two']['current']
+            with self.assertRaisesRegex(ValueError,'provider_version_stale'):
+                provider.update('two',{'model':'owned-current'},None,'legacy')
+            provider.update('two',{'model':'owned-current'},None,current)
+            version=provider.index()['profiles']['two']['current']
+        value,ref=P.provider_reference(self.home,'two',version,None,PROFILES)
+        self.assertEqual(value['public']['model'],'owned-current')
+        self.assertEqual(ref['version'],version)
