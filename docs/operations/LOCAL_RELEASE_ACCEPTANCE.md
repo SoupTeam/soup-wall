@@ -99,17 +99,98 @@ acceptance_record contains:
 - checksums: the exact eleven checksum records from the frozen manifest;
 - evidence_ref: the actual reviewed evidence reference;
 - gates.product, gates.operator, gates.license: passed only for
-  gates that have actually been accepted.
+  gates that have actually been accepted;
+- readiness.artifact_id: the exact same-repository Actions artifact containing
+  the private readiness bundle;
+- readiness.archive_sha256 and readiness.index_sha256: the reviewed bundle ZIP
+  and raw `readiness-index.json` SHA-256 values.
 
 This is an operator approval/checksum record, not a cryptographic signature.
 Synthetic fixture approvals do not establish product or license acceptance.
+The dispatch's separate `operator_approval` input is mandatory. It uses
+`sw-publication-approval/1` and binds the candidate commit/tree, `full-product`
+scope, index digest and candidate-manifest digest, together with `decision:
+approved`, an operator identifier and the existing `sw-support-decisions/1`
+roadmap decisions. The file must remain outside the generated bundle. The
+authorized dispatcher is responsible for supplying the independently reviewed
+human decision; the verifier cannot authenticate physical human presence.
+Generated reports cannot issue that decision or waive an open phase.
+
+### Private acceptance bundle
+
+1. Freeze and retain the candidate package and its original manifest without
+   rebuilding or repacking approved artifacts. Hash `candidate-manifest.json`
+   as bytes and retain the exact preparation run, attempt and artifact identity.
+2. Run the existing [scoped pilot readiness procedure](SCOPED_PILOT_RUNTIME_IDENTITIES.md)
+   and [dossier reconciliation](PILOT_EVIDENCE_DOSSIER.md)
+   for that exact source/tree and installed candidate binary. Retain all selected
+   original reports, runtime plan, execution contexts and identity witnesses;
+   preserve failed and incomplete attempts. Use the accepted support index and
+   workload from the candidate Git objects. Do not replace original filesystem
+   or Git execution with private-edit self-test results.
+3. Assemble one `sw-publication-readiness/1` index named `readiness-index.json`.
+   Its exact fields are `format`, `candidate` (`commit`, `tree`), `scope`
+   (`full-product`), `candidate_manifest_sha256`, `selection`, `dossier` and
+   `stages`. Selection and dossier references contain `path`, `sha256`, `member`
+   and `member_sha256`; those two files are direct JSON files with both member
+   fields null. Stage rows contain `id` and `report`, in this exact order:
+   `installed`, `matched`, `ask`, `prepared`, `docs-code`, `unicode-spaces`,
+   `local-history`. Each report reference must equal the corresponding candidate
+   selection reference. ZIP member references retain both archive and member
+   digests. Include only the selected files at canonical relative paths.
+4. Independently review the actual evidence and every Foundation/Phase 1–6
+   acceptance criterion: all **34** are required, including every linked
+   capability's complete candidate evidence and real model evidence where the
+   criterion requires it. Record decisions in the existing source/evidence-bound
+   [support-decisions format](ROADMAP_SUPPORT_REPORT.md#index-and-report-contract).
+   A recorded review for one capability does not close
+   the others. Keep the operator approval outside the bundle and pin both the
+   raw index and candidate-manifest digests there.
+5. Package the private selected evidence as a ZIP, retain its SHA-256 and exact
+   same-repository Actions artifact ID, and add those pins to the external
+   acceptance record. Do not upload private evidence to the public repository.
+   The readiness extractor accepts at most 64 MiB compressed, 128 MiB expanded
+   and 256 entries; the verifier's selected evidence budget is 64 MiB/128 files.
+   The index is at most 128 KiB and separate approval at most 512 KiB. The
+   candidate ZIP accepts at most 4 GiB expanded, 32 entries and 2 GiB per file.
+   Extraction rejects traversal, links, duplicate members and excessive size
+   before creating files. It accepts an unused output directory only.
+   Ordinary single-disk ZIP is supported; ZIP64, split and self-extracting ZIPs
+   are refused. The Linux archive reader accepts ordinary regular-file/directory
+   TAR headers only, with 256 MiB compressed, 512 MiB decoded, 256 entries and
+   128 MiB per member. PAX/GNU extension records and links are refused before
+   reading their bodies. Limits include decoded padding and archive metadata.
+
+For a local offline check from the candidate's `dist` directory:
+
+```sh
+../scripts/validate_candidate.sh ../external-acceptance.json candidate-manifest.json "$TAG" "$SOURCE_SHA" ../api-context.json full ../readiness-bundle/readiness-index.json ../readiness-bundle ../operator-approval.json ..
+```
+
+The verifier recomputes the existing dossier from the selected evidence bytes,
+validates the source-bound runtime identities and compares the readiness binary
+with the Linux candidate archive. It also reconciles support evidence against
+the separate operator decisions. JSON/text blockers are finite failure codes;
+fix the named missing or mismatched evidence and obtain a fresh external review
+when any approved bytes change. `api-only` is a pre-download custody check and
+never authorizes publication.
+
+The retained historical 10/12 matched result, three-project 0/3 outcomes and
+actual `NOT_READY` dossiers remain refusals. A copied `passed` label, old source,
+wrong support scope, missing original-runtime stage or scripted-provider result
+cannot substitute for complete product acceptance. Current repository evidence
+does not establish full-product readiness. Synthetic positive fixtures test the
+verifier only.
 
 For an authorized no-publication rehearsal, use the existing tag,
 promote_run_id equal to the accepted preparation run and dry_run=true.
 Promotion checks the API workflow/repository/event/source/attempt and successful
 preparation job before downloading the exact artifact. It checks the archive
 digest, the manifest attempt and exact eleven-file inventory, then hashes
-the files using the approved manifest. OCI inspection runs; registry push,
+the files using the approved manifest. The offline readiness gate runs on dry
+runs too. Every publication boundary refreshes the preparation's API custody
+and repeats readiness and artifact-byte verification, including the separate
+`latest` registry write. OCI inspection runs; registry push,
 tag/latest changes and GitHub Release writes must be skipped in the dry run.
 Missing, failed, skipped, stale or mismatched required inputs must stop the gate.
 
@@ -126,3 +207,15 @@ validator revision.
 
 Actual publication remains a separate explicit release decision after all
 required roadmap, security, license and runtime gates are accepted.
+
+To retain a local exact-source offline qualification report without publishing:
+
+```sh
+python3 scripts/qualify-publication-admission.py --output /absolute/new/private-directory
+```
+
+This runs the focused consumer, custody, dossier, scoped identity and support
+controls, plus an independent refusal of the real public historical dossier.
+Its synthetic approval/index metadata are refusal controls. The original report
+bytes and failed measurements remain unchanged. The public scoped receipt is
+retained separately; its private raw archive is neither accessed nor requalified.

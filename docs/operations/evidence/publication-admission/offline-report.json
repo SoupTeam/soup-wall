@@ -1,0 +1,157 @@
+{
+  "actual_publication_attempts": 0,
+  "format": "sw-publication-admission-qualification/1",
+  "implementation_sha256": {
+    ".github/workflows/release.yml": "26b1f304a4830ab756d76642dbb93d65bfc509934e0f603efb5b77eb6471294f",
+    "scripts/publication_readiness.py": "4abd0da8911d581bdf238c3f8bf5cf72ed53a4eb5ba96fe6176cf0d3ad5fcf9f",
+    "scripts/qualify-publication-admission.py": "8850c478ddcbe1876f2ebc89e1ed3d0dbf8667f77bfee26a01f50084014f6593",
+    "scripts/tests/test_publication_readiness.py": "abb66598ca6dbc771bfcaec4fe0f4c6d2ec2876c36b8b17cf44c6c251dfa9f40",
+    "scripts/tests/test_validate_candidate.py": "fdf274d5b0a317f0cbafe50aa47564df5413245a725dfb4e8602abdfa5f0bfa1",
+    "scripts/validate_candidate.py": "4e3d917ff9b2c1757016e0fbb2334dbda89421ae04c74df2cb1a4c121cb435a8",
+    "scripts/validate_candidate.sh": "eab3e2568e096a5bad0cff9188d584be97364449512505cb4bcd00672668bcf6"
+  },
+  "limits": [
+    "Synthetic positive fixtures prove verifier logic only.",
+    "Publication spies execute owned functions, not real publishers.",
+    "No native runtime, model effectiveness or complete-product readiness claim."
+  ],
+  "meaning": "offline verifier regression evidence only; product publication remains blocked",
+  "paid_api_calls": 0,
+  "platform": {
+    "os": "win32",
+    "python": "3.12.14"
+  },
+  "real_not_ready": {
+    "candidate": {
+      "commit": "adefce2a658272e5f23c9c72ef791befe0285648",
+      "tree": "f23e59fb3bd80e7b0666ef4a9cbdcefeb3267519"
+    },
+    "consumer": {
+      "blockers": [
+        "dossier_not_ready",
+        "dossier_recomputed_verdict_mismatch"
+      ],
+      "candidate": {
+        "commit": "adefce2a658272e5f23c9c72ef791befe0285648",
+        "tree": "f23e59fb3bd80e7b0666ef4a9cbdcefeb3267519"
+      },
+      "dossier_status": "NOT_READY",
+      "format": "sw-publication-readiness-result/1",
+      "index_sha256": "e02a6317bce7ecf3a84d8f5f6477c2460c364794a46f11e6c32f624b99cc0702",
+      "roadmap": {
+        "accepted": 0,
+        "required": 34
+      },
+      "stages": [
+        {
+          "id": "installed",
+          "status": "unverified"
+        },
+        {
+          "id": "matched",
+          "status": "unverified"
+        },
+        {
+          "id": "ask",
+          "status": "unverified"
+        },
+        {
+          "id": "prepared",
+          "status": "unverified"
+        },
+        {
+          "id": "docs-code",
+          "status": "unverified"
+        },
+        {
+          "id": "unicode-spaces",
+          "status": "unverified"
+        },
+        {
+          "id": "local-history",
+          "status": "unverified"
+        }
+      ],
+      "status": "blocked"
+    },
+    "control_metadata": "synthetic index/approval pins only; original reports unchanged",
+    "input_kind": "real-retained-public-dossier",
+    "observations": [
+      {
+        "area": "install-start",
+        "counts": [],
+        "status": "incomplete"
+      },
+      {
+        "area": "useful-workflows",
+        "counts": [
+          {
+            "passed": 10,
+            "required": 12
+          }
+        ],
+        "status": "fail"
+      },
+      {
+        "area": "refusal-zero-effects",
+        "counts": [
+          {
+            "passed": 8,
+            "required": 8
+          }
+        ],
+        "status": "incomplete"
+      },
+      {
+        "area": "ask",
+        "counts": [],
+        "status": "incomplete"
+      },
+      {
+        "area": "daemon-loss",
+        "counts": [],
+        "status": "incomplete"
+      },
+      {
+        "area": "cancellation-cleanup",
+        "counts": [],
+        "status": "incomplete"
+      },
+      {
+        "area": "linux-platform",
+        "counts": [],
+        "status": "incomplete"
+      },
+      {
+        "area": "wsl-platform",
+        "counts": [],
+        "status": "incomplete"
+      }
+    ],
+    "recomputed_status": "NOT_READY",
+    "selection_sha256": "1e9bc34bde3ed35752d0d84713b09ff3e9175594e4463210659f2f17ed66e743",
+    "stored_dossier_sha256": "c8b5b2da00069ffca3edc92253767004f4b11af99b1f68d939c55688f0b66876",
+    "stored_status": "NOT_READY"
+  },
+  "scoped_retained_receipt": {
+    "path": "docs/operations/evidence/sou176/verification-receipt.json",
+    "scope": "public receipt preserved; private scoped raw archive not accessed or requalified",
+    "sha256": "a177aff07355eab4d7c0b785702f5e3ca366eb0da44643c0e1f64a06717a084d"
+  },
+  "source": {
+    "commit": "26d536fad2ee9e3eee9a95e743261642805f5982",
+    "dirty": false,
+    "tree": "594ebaa45bfb0c51d44b96aaa252110be0562e89"
+  },
+  "status": "passed",
+  "tests": {
+    "errors": 0,
+    "executed": 43,
+    "failures": 0,
+    "modules": [
+      "test_validate_candidate",
+      "test_publication_readiness"
+    ],
+    "skipped": 0
+  }
+}

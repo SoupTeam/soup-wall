@@ -455,156 +455,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      - name: SOU-26 Positive and Failure Matrix
-        shell: bash
+      - name: Candidate custody and readiness publication controls
         run: |
-          mkdir -p tests
-          cd tests
-          
-          H="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-          MANIFEST="candidate-manifest.json"
-          cat <<EOF > "$MANIFEST"
-          {
-            "tag": "v0.3.0",
-            "source_sha": "dummy_sha",
-            "run_attempt": "1",
-            "checksums": [
-              "$H  soup-wall-v0.3.0-x86_64-unknown-linux-gnu.tar.gz",
-              "$H  soup-wall-v0.3.0-aarch64-apple-darwin.tar.gz",
-              "$H  soup-wall-v0.3.0-x86_64-apple-darwin.tar.gz",
-              "$H  soup-wall-v0.3.0-x86_64-pc-windows-msvc.zip",
-              "$H  agentfw.cdx.json",
-              "$H  llm-firewall.cdx.json",
-              "$H  soup-wall-adapter.cdx.json",
-              "$H  soup-wall-agent.cdx.json",
-              "$H  soup-wall-bench.cdx.json",
-              "$H  soup-wall-core.cdx.json",
-              "$H  soup-wall-image.tar"
-            ]
-          }
-          EOF
-          
-          chmod +x ../scripts/validate_candidate.sh
-
-          # Setup base valid record
-          cat <<EOF > rec_good.json
-          {"decision": "approved", "run_id": "123", "run_attempt": "1", "artifact_id": "999", "artifact_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "source_sha": "dummy_sha", "checksums": $(jq '.checksums' "$MANIFEST"), "evidence_ref": "https://ref", "gates": {"product": "passed", "operator": "passed", "license": "passed"}}
-          EOF
-
-          # Setup base valid API context
-          API_GOOD='{"run_id":"123","run_attempt":"1","workflow_path":".github/workflows/release.yml","event":"push","repository":"SoupTeam/soup-wall","prepare_job_status":"success","artifact_id":"999","status":"completed","conclusion":"success","head_sha":"dummy_sha","head_branch":"v0.3.0"}'
-          echo "$API_GOOD" > api_good.json
-
-          echo "--- Test 1: Missing approval file ---"
-          if ../scripts/validate_candidate.sh "missing.json" "$MANIFEST" "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 2: Decision rejected ---"
-          jq '.decision = "rejected"' rec_good.json > rec_rej.json
-          if ../scripts/validate_candidate.sh rec_rej.json "$MANIFEST" "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 3: Missing product gate ---"
-          jq 'del(.gates.product)' rec_good.json > rec_missing_gate.json
-          if ../scripts/validate_candidate.sh rec_missing_gate.json "$MANIFEST" "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 4: Mismatched tag/commit (Handoff Integrity) ---"
-          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.4.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-          if ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "bad_checkout_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 5: Duplicated artifact ---"
-          jq '.checksums[0] = .checksums[1]' "$MANIFEST" > man_dup.json
-          jq --argjson c "$(jq '.checksums' man_dup.json)" '.checksums = $c' rec_good.json > rec_dup.json
-          if ../scripts/validate_candidate.sh rec_dup.json man_dup.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 6: Suffix alias injection (P1) ---"
-          jq '.checksums[10] = "'$H'  unpublished-soup-wall-image.tar"' "$MANIFEST" > man_suffix.json
-          jq --argjson c "$(jq '.checksums' man_suffix.json)" '.checksums = $c' rec_good.json > rec_suffix.json
-          if ../scripts/validate_candidate.sh rec_suffix.json man_suffix.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 7: Path traversal injection (P1) ---"
-          jq '.checksums[10] = "'$H'  ../soup-wall-image.tar"' "$MANIFEST" > man_trav.json
-          jq --argjson c "$(jq '.checksums' man_trav.json)" '.checksums = $c' rec_good.json > rec_trav.json
-          if ../scripts/validate_candidate.sh rec_trav.json man_trav.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 8: Extra unapproved files (P1) ---"
-          jq '.checksums += ["'$H'  extra-file.txt"]' "$MANIFEST" > man_extra.json
-          jq --argjson c "$(jq '.checksums' man_extra.json)" '.checksums = $c' rec_good.json > rec_extra.json
-          if ../scripts/validate_candidate.sh rec_extra.json man_extra.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 9: Actual bytes mismatch (Artifact Binding) ---"
-          jq -r '.checksums[]' "$MANIFEST" > APPROVED_SUMS
-          touch soup-wall-v0.3.0-x86_64-unknown-linux-gnu.tar.gz
-          if sha256sum --strict -c APPROVED_SUMS 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 10: Successful exact-candidate ---"
-          touch soup-wall-v0.3.0-aarch64-apple-darwin.tar.gz \
-                soup-wall-v0.3.0-x86_64-apple-darwin.tar.gz \
-                soup-wall-v0.3.0-x86_64-pc-windows-msvc.zip \
-                agentfw.cdx.json \
-                llm-firewall.cdx.json \
-                soup-wall-adapter.cdx.json \
-                soup-wall-agent.cdx.json \
-                soup-wall-bench.cdx.json \
-                soup-wall-core.cdx.json \
-                soup-wall-image.tar
-          ../scripts/validate_candidate.sh rec_good.json "$MANIFEST" "v0.3.0" "dummy_sha" api_good.json full
-          
-          echo "--- Test 11: Embedded CR/LF injection (P1) ---"
-          EVIL_STR="$H  soup-wall-image.tar\n$H  extra-owned.txt"
-          jq --arg evil "$EVIL_STR" '.checksums[10] = $evil' "$MANIFEST" > man_embed.json
-          jq --argjson c "$(jq -c '.checksums' man_embed.json)" '.checksums = $c' rec_good.json > rec_embed.json
-          touch extra-owned.txt
-          if ../scripts/validate_candidate.sh rec_embed.json man_embed.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-          rm -f extra-owned.txt
-
-          echo "--- Test 12: Missing or stale run_attempt in record (P2) ---"
-          jq 'del(.run_attempt)' rec_good.json > rec_no_attempt.json
-          if ../scripts/validate_candidate.sh rec_no_attempt.json /dev/null "v0.3.0" "dummy_sha" api_good.json api-only 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 13: Stale attempt mismatch between record and API (P2) ---"
-          jq '.run_attempt = "2"' rec_good.json > rec_attempt2.json
-          if ../scripts/validate_candidate.sh rec_attempt2.json /dev/null "v0.3.0" "dummy_sha" api_good.json api-only 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 14: Skipped prepare job negative (P2) ---"
-          echo "$API_GOOD" | jq '.prepare_job_status = "skipped"' > api_skip.json
-          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_skip.json api-only 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 15: Failed prepare job negative (P2) ---"
-          echo "$API_GOOD" | jq '.prepare_job_status = "failure"' > api_fail.json
-          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_fail.json api-only 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 16: Missing prepare job negative (P2) ---"
-          echo "$API_GOOD" | jq '.prepare_job_status = "missing"' > api_missing.json
-          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_missing.json api-only 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 17: Wrong Artifact ID negative (P2) ---"
-          echo "$API_GOOD" | jq '.artifact_id = "777"' > api_wrong_art.json
-          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_wrong_art.json api-only 2>/dev/null; then exit 1; fi
-          
-          echo "--- Test 18: Missing API context fails closed (P2) ---"
-          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" "" api-only 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 19: API run not completed successfully (P2) ---"
-          echo "$API_GOOD" | jq '.status = "in_progress"' > api_prog.json
-          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_prog.json api-only 2>/dev/null; then exit 1; fi
-          
-          echo "--- Test 20: API head_branch mismatch (P2) ---"
-          echo "$API_GOOD" | jq '.head_branch = "v0.9.0"' > api_branch.json
-          if ../scripts/validate_candidate.sh rec_good.json /dev/null "v0.3.0" "dummy_sha" api_branch.json api-only 2>/dev/null; then exit 1; fi
-          
-          echo "--- Test 21: Missing artifact_digest fails closed (P2) ---"
-          jq 'del(.artifact_digest)' rec_good.json > rec_no_digest.json
-          if ../scripts/validate_candidate.sh rec_no_digest.json /dev/null "v0.3.0" "dummy_sha" api_good.json api-only 2>/dev/null; then exit 1; fi
-
-          echo "--- Test 22: Manifest attempt must match the approved API attempt ---"
-          for attempt in 0 2 null; do
-            jq --argjson attempt "$attempt" '.run_attempt = $attempt' "$MANIFEST" > man_stale_attempt.json
-            if ../scripts/validate_candidate.sh rec_good.json man_stale_attempt.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-          done
-          jq 'del(.run_attempt)' "$MANIFEST" > man_missing_attempt.json
-          if ../scripts/validate_candidate.sh rec_good.json man_missing_attempt.json "v0.3.0" "dummy_sha" api_good.json full 2>/dev/null; then exit 1; fi
-
-          echo "All SOU-26 validator matrix tests passed successfully!"
+          python3 -B -m unittest discover -s scripts/tests -p test_validate_candidate.py -v
+          python3 -B -m unittest discover -s scripts/tests -p test_publication_readiness.py -v
 
   gateway-sdk--official-sdk:
     name: "gateway-sdk / official-sdk"
@@ -1387,6 +1244,7 @@ jobs:
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-3.json" -- test --locked --offline -p agentfw --test replace_file -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-test-4.json" -- test --locked --offline -p agentfw --lib create_file -- --nocapture
           python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-edit-clippy.json" -- clippy --locked --offline -p agentfw --all-targets -- -D warnings
+          python3 -B scripts/ci_qualification_build.py cargo --output "$SOU161_SCRATCH/sou166-removal-unit.json" -- test --locked --offline -p agentfw --lib pilot_component -- --nocapture
           cargo fmt --all --check
           python3 -B -m unittest discover -s scripts/tests -p 'test_installed_edit.py' -v
           python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_run_operations.py' -v
@@ -1400,6 +1258,11 @@ jobs:
           python3 -B -m unittest discover -s scripts/tests -p 'test_edit_diff.py' -v
           sha256sum "$(python3 -B scripts/ci_qualification_build.py binary)" > "$SOU161_SCRATCH/binary.txt"
           qualify_batch
+          python3 -B -m unittest discover -s scripts/tests -p 'test_pilot_removal.py' -v
+          gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou188_removal_fault.c -ldl -o "$SOU161_SCRATCH/removal-fault.so"
+          python3 -B scripts/qualify-pilot-removal.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
+            --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python /usr/bin/python3.12 --fault "$SOU161_SCRATCH/removal-fault.so" --output "$SOU161_SCRATCH/removal"
           gcc -shared -fPIC -Wall -Wextra -Werror scripts/fixtures/sou189_diff_fault.c -ldl -o "$SOU161_SCRATCH/diff-fault.so"
           python3 -B scripts/qualify-edit-diff.py --run --agentfw "$(python3 -B scripts/ci_qualification_build.py binary)" \
             --claude "$SOU161_SCRATCH/host/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
@@ -1466,6 +1329,7 @@ jobs:
             ${{ runner.temp }}/sou161-scratch/export-set/report.json
             ${{ runner.temp }}/sou161-scratch/application/report.json
             ${{ runner.temp }}/sou161-scratch/batch/report.json
+            ${{ runner.temp }}/sou161-scratch/removal/report.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.json
             ${{ runner.temp }}/sou161-scratch/sou166-*.log
             ${{ runner.temp }}/sou166-context.json
