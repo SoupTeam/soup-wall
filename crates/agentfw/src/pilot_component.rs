@@ -1231,6 +1231,7 @@ pub fn exec_pilot(home: &Path, args: &[std::ffi::OsString]) -> i32 {
                     | "configuration"
                     | "project"
                     | "worktree-selection"
+                    | "filesystem-roots"
                     | "help"
             )
         })

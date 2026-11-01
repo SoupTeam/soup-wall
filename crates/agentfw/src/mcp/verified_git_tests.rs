@@ -11,6 +11,7 @@ fn profile() -> ProfileConfig {
         workspace: "/workspace".into(),
         workspace_identity: None,
         linked_worktree: None,
+        filesystem_roots: None,
         runtime_path: "/owned/python".into(),
         runtime_sha256: "1".repeat(64),
         package_root: "/owned/package".into(),

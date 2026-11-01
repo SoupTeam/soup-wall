@@ -140,7 +140,7 @@ PROVIDER_TRACE_STRING_BYTES = 131072  # Linux MAX_ARG_STRLEN, including NUL.
 
 
 def run_case(args, door, report, label, proposals, hold=False, cancel=None,
-             provider_setup=None, provider_trace=None, model=None, close_model=True):
+             provider_setup=None, provider_trace=None, model=None, close_model=True, diagnostic_writes=False):
     """One protected run through `pilot.py run` with the owned scripted provider."""
     model = model if model is not None else BASE.DEMO.ScriptedModel([])
     offered, live = set(), {}
@@ -192,8 +192,8 @@ def run_case(args, door, report, label, proposals, hold=False, cancel=None,
     words = door.words("run", "--state-root", args.state_root, "--timeout-seconds", "120",
                        "--prompt", "Read the project README and inspect Git history.", inputs=False)
     if provider_trace is not None:
-        words = [str(args.strace), "-f", "-qq", "-v", "-s", str(PROVIDER_TRACE_STRING_BYTES),
-                 "-e", "trace=execve,execveat",
+        words = [str(args.strace), "-f", "-qq", "-v", "-s", str(2048 if diagnostic_writes else PROVIDER_TRACE_STRING_BYTES),
+                 "-e", "trace=execve,execveat,write,writev" if diagnostic_writes else "trace=execve,execveat",
                  "-o", str(provider_trace), *words]
     started = time.monotonic()
     try:

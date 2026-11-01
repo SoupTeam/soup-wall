@@ -849,6 +849,13 @@ def qualify(args, report):
             require(report['source_after'] == before, 'source_changed')
             return
 
+        if args.filesystem_roots_only:
+            load("installed_filesystem_roots", "qualify-filesystem-roots.py").qualify(args, door, agent_home, env, report,
+                installed=__import__('types').SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load))
+            report['source_after'] = BASE.source()
+            require(report['source_after'] == before, 'source_changed')
+            return
+
         if args.project_presets_only:
             import types
             suite = types.SimpleNamespace(QUAL=QUAL, BASE=BASE, require=require, load=load,
@@ -1065,6 +1072,7 @@ def main():
     parser.add_argument("--provider-profiles", action="store_true",
                         help="opt in to SOU-172 private named provider original-host controls")
     parser.add_argument("--linked-worktrees-only", action="store_true", help="focused SOU-201 installed linked-worktree qualification")
+    parser.add_argument("--filesystem-roots-only", action="store_true", help="focused SOU-202 installed filesystem-root qualification")
     parser.add_argument("--project-presets-only", action="store_true", help="focused installed named-project qualification")
     parser.add_argument("--provider-ca-only", action="store_true",
                         help="focused SOU-195 installed-host HTTPS CA and rotation qualification")
@@ -1109,6 +1117,9 @@ def main():
     if args.linked_worktrees_only:
         linked = report.get('linked_worktrees', {})
         summary['linked_worktrees'] = {k: linked.get(k) for k in ('status', 'active_case', 'last_cli', 'last_runs', 'namespace_probe')}
+    if args.filesystem_roots_only:
+        roots = report.get('filesystem_roots', {})
+        summary['filesystem_roots'] = {k: roots.get(k) for k in ('status', 'active_case', 'last_cli', 'last_run', 'result_boundaries', 'post_run_sources_unchanged', 'processes_stopped', 'collector_failures', 'owned_first_errors', 'sibling_control', 'policy_taint_control')}
     if args.project_presets_only:
         project = report.get("project_presets", {})
         summary["project_presets"] = {key: project.get(key) for key in ("status", "active_case", "last_cli")}

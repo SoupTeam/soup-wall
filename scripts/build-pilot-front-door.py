@@ -58,6 +58,7 @@ SCRIPTS = (
     "scripts/private_edit_self_test.py",
     "scripts/pilot_git_profiles.py",
     "scripts/pilot_linked_worktree.py",
+    "scripts/pilot_filesystem_roots.py",
     "scripts/pilot_audit.py",
     "scripts/pilot_capacity.py",
     "scripts/pilot_policy.py",
@@ -95,6 +96,7 @@ DATA_FILES = (
 )
 DATA_DIRECTORIES = (
     "profiles/mcp/filesystem-readonly-v1",
+    "profiles/mcp/filesystem-multi-root-readonly-v1",
     "profiles/mcp/git-readonly-v1",
     "profiles/mcp/git-local-clone-readonly-v1",
     "profiles/mcp/git-tracked-symlinks-readonly-v1",
