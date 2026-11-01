@@ -1,33 +1,70 @@
-import json, subprocess, sys, tempfile
+import hashlib
+import importlib.util
+import json
 from pathlib import Path
+import tempfile
+import unittest
+import os
+import sys
+from unittest.mock import patch
 
-ROOT = Path(__file__).parent
-TOOL = ROOT / "agent-diagnostic-diff.py"
+spec = importlib.util.spec_from_file_location('diff', Path(__file__).with_name('agent-diagnostic-diff.py'))
+tool = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tool)
 
-def bundle(root, source, extra=None):
-    root.mkdir()
-    data = {"schema": "sw-agent-diagnostic-bundle/1", "source": source, "scope": "pilot", "policy": "deny", "daemon": "ready"}
-    data.update(extra or {})
-    (root / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
 
-def run(a, b, out):
-    return subprocess.run([sys.executable, str(TOOL), str(a), str(b), "--json-out", str(out / "x.json"), "--markdown-out", str(out / "x.md")], capture_output=True, text=True)
+class Controls(unittest.TestCase):
+    def bundle(self, root, setup='unknown'):
+        root.mkdir()
+        report = {'schema': 'sw-agent-doctor/1', 'scope': tool.SCOPE, 'observed_at_ms': 1,
+                  'setup': setup, 'active_host_call_protection': 'unknown', 'checks': [], 'prompt': 'PRIVATE_CANARY'}
+        raw = json.dumps(report).encode()
+        (root / 'report.json').write_bytes(raw)
+        (root / 'manifest.json').write_text(json.dumps({'schema': 'sw-agent-doctor-support/1',
+            'report_schema': 'sw-agent-doctor/1', 'files': [{'name': 'report.json', 'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw)}]}))
 
-def main():
-    with tempfile.TemporaryDirectory() as td:
-        root = Path(td); out = root / "out"; out.mkdir()
-        a, b = root / "a", root / "b"; bundle(a, "old"); bundle(b, "new", {"policy": "ask"})
-        result = run(a, b, out); assert result.returncode == 0, result.stderr
-        assert json.loads((out / "x.json").read_text())["comparison"]["changed"][0]["field"] == "source"
-        bad = root / "bad"; bundle(bad, "bad", {"token": "secret"})
-        assert run(a, bad, out).returncode == 2
-        link = root / "link"; bundle(link, "link")
-        try:
-            (link / "evil.json").symlink_to(a / "manifest.json")
-        except OSError:
-            pass
-        else:
-            assert run(a, link, out).returncode == 2
-    print("diagnostic diff tests passed")
+    def test_actual_schema_and_private_projection(self):
+        with tempfile.TemporaryDirectory() as temp:
+            a, b = Path(temp) / 'a', Path(temp) / 'b'
+            self.bundle(a)
+            self.bundle(b, 'pass')
+            with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
+                result = tool.compare(tool.load(a), tool.load(b))
+            self.assertEqual(result['rows'][0]['state'], 'changed')
+            self.assertNotIn('PRIVATE_CANARY', json.dumps(result))
 
-if __name__ == "__main__": main()
+    def test_corrupt_artifact(self):
+        with tempfile.TemporaryDirectory() as temp:
+            a = Path(temp) / 'a'
+            self.bundle(a)
+            (a / 'report.json').write_text('{}')
+            with patch.object(tool.audit, '_open_input', lambda p: open(p, 'rb')):
+                with self.assertRaises(ValueError):
+                    tool.load(a)
+
+    def test_duplicate_keys_nonfinite_and_depth(self):
+        for raw in (b'{"x":1,"x":2}', b'{"x":NaN}', b'[' * 100 + b']' * 100):
+            with self.assertRaises(ValueError):
+                tool.parse(raw)
+
+    @unittest.skipUnless(sys.platform == 'linux', 'native Linux private reader control')
+    def test_native_private_reader_and_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            a, b = root / 'a', root / 'b'
+            self.bundle(a)
+            self.bundle(b, 'pass')
+            output = root / 'private'
+            output.mkdir(mode=0o700)
+            args = [str(a), str(b), '--json-out', str(output / 'diff.json'), '--markdown-out', str(output / 'diff.md')]
+            self.assertEqual(tool.main(args), 0)
+            self.assertEqual((output / 'diff.json').stat().st_mode & 0o777, 0o600)
+            self.assertEqual(tool.main(args), 2)
+            linked = root / 'linked'
+            linked.symlink_to(a, target_is_directory=True)
+            with self.assertRaises((OSError, tool.audit.ReportError)):
+                tool.load(linked)
+
+
+if __name__ == '__main__':
+    unittest.main()
