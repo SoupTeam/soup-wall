@@ -7,6 +7,7 @@
     pilot.py run --prefix DIR [--prompt TEXT]
     pilot.py status --prefix DIR
     pilot.py provider preview|check|create|update|restore|prune|select|remove [options]
+    pilot.py configuration inventory|backup|inspect|restore-preview|restore|recover [options]
     pilot.py help
 
 This is a front door over the accepted scripts, not a second installer:
@@ -957,11 +958,18 @@ def parser():
     remove.add_argument("--apply", action="store_true")
     commands.add_parser("help")
     commands.add_parser("update", help="preview, apply, recover or roll back a complete local pilot generation")
+    commands.add_parser("configuration", help="privately back up and restore supported declarative configuration")
     return top
 
 
 def main(argv=None):
     supplied = list(sys.argv[1:] if argv is None else argv)
+    # The installed native front door prepends its verified component home.
+    # Dispatch before the ordinary prefix/run parser, preserving that home.
+    at = 2 if len(supplied) >= 2 and supplied[0] == "--agent-home" else 0
+    if len(supplied) > at and supplied[at] == "configuration":
+        return load("front_door_configuration_backup", "pilot_configuration_backup.py").main(
+            supplied[:at] + supplied[at + 1:])
     if supplied and supplied[0] == "update":
         return load("front_door_update", "pilot_update.py").main(supplied[1:])
     top = parser()

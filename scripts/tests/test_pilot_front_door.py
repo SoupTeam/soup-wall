@@ -25,6 +25,28 @@ spec.loader.exec_module(M)
 COMMIT = "a" * 40
 
 
+class ConfigurationDispatch(unittest.TestCase):
+    def test_installed_component_home_reaches_dedicated_configuration_parser(self):
+        helper = mock.Mock()
+        helper.main.return_value = 0
+        with mock.patch.object(M, "load", return_value=helper) as loading, \
+             mock.patch.object(M, "parser") as ordinary:
+            self.assertEqual(M.main(["--agent-home", "/private/component", "configuration",
+                                     "restore-preview", "--destination", "/private/new"]), 0)
+        loading.assert_called_once_with("front_door_configuration_backup", "pilot_configuration_backup.py")
+        helper.main.assert_called_once_with(["--agent-home", "/private/component", "restore-preview",
+                                             "--destination", "/private/new"])
+        ordinary.assert_not_called()
+
+    def test_checkout_configuration_route_does_not_enter_prepare_or_run(self):
+        helper = mock.Mock()
+        helper.main.return_value = 4
+        with mock.patch.object(M, "load", return_value=helper), mock.patch.object(M, "parser") as ordinary:
+            self.assertEqual(M.main(["configuration", "inspect", "--archive", "/private/backup.tar"]), 4)
+        helper.main.assert_called_once_with(["inspect", "--archive", "/private/backup.tar"])
+        ordinary.assert_not_called()
+
+
 @unittest.skipUnless(sys.platform.startswith("linux"), "native toolchain qualification uses Linux")
 class QualificationToolchain(unittest.TestCase):
     def test_private_home_keeps_existing_default_toolchain(self):
