@@ -107,6 +107,27 @@ def evidence_digest(value):
     return sha(encoded(value))
 
 
+def verified_external_paths(current, selection):
+    """Keep accepted preparation's exact identities and require external inputs."""
+    files = current['binding']['files']
+    paths = {name: Path(value['path']) for name, value in files.items()}
+    selected = Path(selection)
+    profile_paths = [Path(value['profile']['path'])
+                     for value in current['binding']['profiles'].values()]
+    inputs = [selected, *paths.values(), *profile_paths]
+    require(all(path.is_absolute() and path.resolve(strict=True) == path
+                and not path.is_relative_to(ROOT) for path in inputs),
+            'installed_runtime_outside_checkout_required')
+    for role, source in (
+            ('filesystem_classifier', ROOT / 'rule_baseline/rule_baseline.py'),
+            ('git_classifier', ROOT / 'rule_baseline/git_readonly_v1/rule_baseline.py')):
+        require(sha(paths[role].read_bytes()) == files[role]['sha256']
+                == sha(source.read_bytes()), 'selected_classifier_not_exact_source')
+    require(paths['policy'].read_bytes() == current['policy_raw'] == QUAL.PILOT_POLICY.encode(),
+            'selected_policy_not_exact_qualification_policy')
+    return paths
+
+
 def passed(report):
     """Strict independent report grading; an aggregate passed label is not proof."""
     try:
@@ -129,6 +150,8 @@ def passed(report):
             and report['operator_commands_outside_checkout'] is True
             and report['all_owned_processes_stopped'] is True
             and by['exact-installed-inputs']['installed_component_verified'] is True
+            and by['exact-installed-inputs']['accepted_external_selection'] is True
+            and by['exact-installed-inputs']['exact_source_classifiers'] is True
             and by['inventory-zero-effects']['writes'] == 0
             and by['private-secret-free-backup']['secret_canaries_present'] == 0
             and by['private-secret-free-backup']['old_tokens_present'] == 0
@@ -244,6 +267,7 @@ def qualify(args, report):
             require(type(evidence) is dict and bool(evidence), 'missing_qualification_witness')
             rows[name].update(status='passed', evidence=evidence,
                               elapsed_ms=round((time.monotonic() - started) * 1000, 3))
+            rows[name].pop('reason', None)
             return evidence
         except Exception as error:
             label = str(error)
@@ -261,9 +285,7 @@ def qualify(args, report):
             require(report['source_before']['commit'] == args.expected_commit
                     and report['source_before']['dirty'] is False, 'exact_clean_source_required')
             current = RECOVERY.runtime(args.selection, args.agentfw, args.expected_commit)
-            paths = {name: Path(value['path']) for name, value in current['binding']['files'].items()}
-            require(all(not path.is_relative_to(ROOT) for path in paths.values()),
-                    'installed_runtime_outside_checkout_required')
+            paths = verified_external_paths(current, args.selection)
             require('prepared_workspaces' not in current['selection'], 'owned_generated_workspaces_required')
             component_home = private / 'component-home'
             component_home.mkdir(mode=0o700)
@@ -333,6 +355,7 @@ def qualify(args, report):
                 'component': built['component'], 'component_archive_sha256': built['archive_sha256'],
                 'driver_sha256': sha(Path(__file__).read_bytes())}
             return {'installed_component_verified': True, 'native_source_started': True,
+                    'accepted_external_selection': True, 'exact_source_classifiers': True,
                     'active_sibling_original_read': True, 'runtime_binding_sha256': RECOVERY.digest(current['binding'])}
         step('exact-installed-inputs', prepare)
         common = ['--selection', args.selection, '--agentfw', args.agentfw,

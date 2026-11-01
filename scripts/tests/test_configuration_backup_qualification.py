@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -27,7 +28,8 @@ def synthetic_report():
         'old_installation_preserved': True, 'operator_commands_outside_checkout': True,
         'all_owned_processes_stopped': True}
     evidence = {row['id']: row['evidence'] for row in report['cases']}
-    evidence['exact-installed-inputs'].update(installed_component_verified=True)
+    evidence['exact-installed-inputs'].update(installed_component_verified=True,
+        accepted_external_selection=True, exact_source_classifiers=True)
     evidence['inventory-zero-effects'].update(writes=0)
     evidence['private-secret-free-backup'].update(secret_canaries_present=0, old_tokens_present=0)
     evidence['restore-preview-no-authority'].update(writes=0, redirected_destination_refused=True)
@@ -130,6 +132,74 @@ class LiveSourcePreservation(unittest.TestCase):
                         stream.write(raw * (2 if fault == 'replay' else 1))
                 with self.assertRaises(Q.QUAL.Failure):
                     Q.unchanged_live_source(home, baseline, prefix)
+
+
+class ExternalSelectionTrust(unittest.TestCase):
+    def fixture(self, directory):
+        checkout, external = directory / 'checkout', directory / 'external'
+        checkout.mkdir()
+        external.mkdir()
+        source_files = {'filesystem_classifier': 'rule_baseline/rule_baseline.py',
+                        'git_classifier': 'rule_baseline/git_readonly_v1/rule_baseline.py'}
+        files = {}
+        for role in Q.QUAL.ROLES:
+            raw = ((ROOT / source_files[role]).read_bytes() if role in source_files else
+                   Q.QUAL.PILOT_POLICY.encode() if role == 'policy' else role.encode())
+            target = external / role
+            target.write_bytes(raw)
+            files[role] = {'path': str(target), 'sha256': Q.sha(raw)}
+            if role in source_files:
+                source = checkout / source_files[role]
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_bytes(raw)
+        selection = external / 'selection.json'
+        selection.write_bytes(b'{}\n')
+        profiles = {}
+        for kind in ('filesystem', 'git'):
+            profile = external / (kind + '-profile.json')
+            profile.write_bytes(b'{}\n')
+            profiles[kind] = {'profile': {'path': str(profile)}}
+        current = {'binding': {'files': files, 'profiles': profiles},
+                   'policy_raw': Q.QUAL.PILOT_POLICY.encode()}
+        return checkout, selection, current
+
+    def test_accepted_external_selection_keeps_exact_classifier_and_policy_hashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkout, selection, current = self.fixture(Path(directory))
+            with patch.object(Q, 'ROOT', checkout):
+                paths = Q.verified_external_paths(current, selection)
+            self.assertEqual(set(paths), set(Q.QUAL.ROLES))
+            self.assertTrue(all(not path.is_relative_to(checkout) for path in paths.values()))
+
+    def test_any_checkout_runtime_selection_or_profile_reference_is_refused(self):
+        for role in (*Q.QUAL.ROLES, 'selection', 'profile'):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
+                checkout, selection, current = self.fixture(Path(directory))
+                target = checkout / 'checkout-reference'
+                target.write_bytes(b'owned\n')
+                if role == 'selection':
+                    selection = target
+                elif role == 'profile':
+                    current['binding']['profiles']['filesystem']['profile']['path'] = str(target)
+                else:
+                    current['binding']['files'][role]['path'] = str(target)
+                with patch.object(Q, 'ROOT', checkout), self.assertRaisesRegex(
+                        Q.QUAL.Failure, 'installed_runtime_outside_checkout_required'):
+                    Q.verified_external_paths(current, selection)
+
+    def test_changed_classifier_or_policy_cannot_be_rebound_as_exact_source(self):
+        for role in ('filesystem_classifier', 'git_classifier', 'policy'):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
+                checkout, selection, current = self.fixture(Path(directory))
+                record = current['binding']['files'][role]
+                path = Path(record['path'])
+                raw = path.read_bytes() + b'\n'
+                path.write_bytes(raw)
+                record['sha256'] = Q.sha(raw)
+                if role == 'policy':
+                    current['policy_raw'] = raw
+                with patch.object(Q, 'ROOT', checkout), self.assertRaises(Q.QUAL.Failure):
+                    Q.verified_external_paths(current, selection)
 
 
 if __name__ == '__main__':
