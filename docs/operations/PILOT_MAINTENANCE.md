@@ -111,7 +111,7 @@ enrolled home. Direct preparation scripts remain outside it.
 ## Qualification
 
 `scripts/qualify-installed-front-door.py --run --maintenance-only` (manual
-`maintenance_only` + `native_preparation_only` dispatch) exercises the installed
+`installed_focus=maintenance` + `native_preparation_only=true` dispatch) exercises the installed
 binary on owned synthetic inputs with syscall tracing and an independent receiver.
 Required cases: read-only preview, useful run before enter, existing run draining,
 new run refused after enter, sibling unaffected, stale leave refused, fresh leave,

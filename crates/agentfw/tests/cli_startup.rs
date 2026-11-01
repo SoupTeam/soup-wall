@@ -27,6 +27,7 @@ fn ordinary_cli_startup_fits_a_standard_stack_before_execution() {
     let probes = {
         let mut probes = probes;
         probes.extend([
+            (&["policy-candidate", "preview", "--help"][..], 0, None),
             (&["edit-session", "inventory", "--help"][..], 0, None),
             (&["edit-session", "with-run", "--help"][..], 0, None),
             (&["edit-session", "export-set", "--help"][..], 0, None),
@@ -34,6 +35,8 @@ fn ordinary_cli_startup_fits_a_standard_stack_before_execution() {
             (&["edit-session", "batch", "--help"][..], 0, None),
             (&["edit-session", "batch", "preview", "--help"][..], 0, None),
             (&["edit-session", "archive", "--help"][..], 0, None),
+            (&["pilot-removal", "--help"][..], 0, None),
+            (&["pilot-removal", "preview", "--help"][..], 0, None),
         ]);
         probes
     };

@@ -1,0 +1,535 @@
+{
+  "attempts": [
+    {
+      "commit": "e39fb48042272a42d277a6d5469a75c93a4f8733",
+      "fixed_in": "314cffa1ff1121f6c9de38ac92ff78bf98361209",
+      "reason": "clippy_sliced_string_as_bytes",
+      "run": 41113073803,
+      "status": "failed"
+    },
+    {
+      "commit": "314cffa1ff1121f6c9de38ac92ff78bf98361209",
+      "prior_native_reports": {
+        "application": 37,
+        "export-set": 31,
+        "inventory": 12,
+        "review": 40
+      },
+      "product_module_tests": "passed",
+      "reason": "owned_tamper_fixture_wrote_mode_0400",
+      "run": 41114469697,
+      "status": "failed"
+    },
+    {
+      "commit": "f39e3c6d1ebcebc255d737a3ccd4b6c8bdceb447",
+      "reason": "accepted_main_changed_review_contract_before_runner_started",
+      "run": 41116245799,
+      "status": "cancelled"
+    },
+    {
+      "commit": "9ba9bb49ddbb0a548f066a9c20ea7d0c40bfb843",
+      "reason": "test_only_pattern_guard_moved_option_string",
+      "run": 41116890730,
+      "status": "failed"
+    },
+    {
+      "commit": "e2127abcbcb1c12cbd635099d0a4315f1ea8b9d7",
+      "run": 41118449085,
+      "status": "passed"
+    }
+  ],
+  "boundaries": [
+    "Explicit maintenance and complete operator-selected custom state roots are required; cooperative locks and process observation do not constrain arbitrary same-UID writers.",
+    "Only receipt-verified pilot-front-door is removed. Agent binary, projects, outputs, keys, prepared generations and recovery evidence remain retained.",
+    "Live process reference control uses an owned sleep process. Active edit refusal and useful create/read controls use genuine installed native host processes.",
+    "Evidence files are documentation-only additions after the qualified source commit. No claim that a later documentation commit was executed as native source.",
+    "Final shared Ready CI, CodeQL, exact-source candidate admission and merge remain team-lead-owned."
+  ],
+  "fault_source_sha256": "616de6b88ca5fd014f84e23e3651e7e127d2afac801bbbd1d7b3c64f8935f93f",
+  "format": "sw-sou188-acceptance/1",
+  "local": {
+    "clippy": {
+      "command": "cargo clippy --locked --offline --all-targets -- -D warnings",
+      "exit_code": 0,
+      "log_sha256": "367c504ca5a6d05ce7b72b75328fe889194d61507428fee61cef54f0596ac66b",
+      "source_snapshot_sha256": "965407b0222521de767bc29383918fef04d421e5c4bd2493e951094fd21f0b3f"
+    },
+    "fmt": "passed",
+    "generated_workflow_consistency": "passed",
+    "grading_controls": 3,
+    "platform": "macOS arm64, source read-only, scratch-only writes, loopback-only",
+    "workspace": {
+      "coverage_note": "Later Linux-only completion and test-guard fixes are covered by the native exact-source run.",
+      "failed": 0,
+      "ignored": 13,
+      "integrated_base_commit": "9ba9bb49ddbb0a548f066a9c20ea7d0c40bfb843",
+      "log_sha256": "409f7afefb16d651db008426c9779c7696da251555cb3c189474ec2c052b0954",
+      "passed": 1932,
+      "source_snapshot_sha256": "227e08e401bc659c29c58534f93b4c0bbdd831b1d65f4eaee45083703d7a1353"
+    }
+  },
+  "native_regressions": [
+    {
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 37
+      },
+      "name": "application",
+      "report_sha256": "9a47b41259c22e291d4e9db5fc37ce0ff6e3917da1f0f4b34e7a19f61a1fe9e3",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 18
+      },
+      "name": "archive-runtime",
+      "report_sha256": "91aaab6f646f673e5b02c53d63a15212a76e848d0ea06103c68f92b82015e49f",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 42
+      },
+      "name": "diff",
+      "report_sha256": "95402b1987f802cd67cae6d7bdd53cc622263537298a4edb0010c38e33d0a645",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 31
+      },
+      "name": "export-set",
+      "report_sha256": "64ca37b16676d776083635eb613512742c5a3048dff740651cf24e3afc625ce3",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 12
+      },
+      "name": "inventory",
+      "report_sha256": "ed304dcf35358f557823a9df8a37d2d7c145f1f6497e79387ecf9285d3f694fb",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "attempted": 25,
+        "expected": 25,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 25
+      },
+      "name": "quota",
+      "report_sha256": "fd969c3642c67b0d26bf4d6a012c7d3526084a8b5928f0cbf89f45f72b232608",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "name": "refresh",
+      "report_sha256": "ed23606927f0ddfe4c14b80f9617bb471f34962d25e4b60058c901c4e262062c",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 26
+      },
+      "name": "removal",
+      "report_sha256": "0a2270753867c0fe66089165112d424c661bf739e9abde22c0d65200e997577d",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 40
+      },
+      "name": "review",
+      "report_sha256": "f89f63de2188dfd3a4fb4d7586a3fb5e74d17470b5415f6917ee5af0f08f5fc0",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "attempted": 23,
+        "expected": 23,
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 23
+      },
+      "name": "runtime",
+      "report_sha256": "d38da3bdc37d075aeb809432182f72fab932af808aac936e1c17fc102855a96e",
+      "status": "passed"
+    },
+    {
+      "inventory": {
+        "failed": 0,
+        "incomplete": 0,
+        "passed": 12
+      },
+      "name": "stop-runtime",
+      "report_sha256": "bc575b6823936f609b4d4b345395d3f93f9b0e1dbf9b17686477ad63381776b3",
+      "status": "passed"
+    }
+  ],
+  "native_run": {
+    "artifacts": [
+      {
+        "digest": "sha256:9f5f0782d6e4a05515ea8726a4d74f5affb3c5eeecad1002beed1d76370b34c6",
+        "id": 13007149241,
+        "name": "sou161-installed-edit-evidence-41118449085-1",
+        "size_in_bytes": 479542
+      }
+    ],
+    "attempt": 1,
+    "completed_workflow": "mcp-create-file.yml",
+    "conclusion": "success",
+    "id": 41118449085,
+    "platform": "native Ubuntu 24.04 x86_64, non-root, read-only source, private scratch, loopback-only",
+    "rust": "1.99.1",
+    "selection": "edit_only=true build_mode=source",
+    "url": "https://github.com/SoupTeam/soup-wall/actions/runs/41118449085"
+  },
+  "qualified_source": {
+    "agentfw_sha256": "7da97da0f0467864f0762c4987ecc548ffddabf26e2eafe9944315f135df0283",
+    "claude_sha256": "fd5f10ff0eb58daec04900466b143ea98aab50abf208a422bc008eaec13f61f7",
+    "component_sha256": "86ebf6db86fd961b0d03b5e916405e4756dc8a65f036622894f2f1f77c96ca80",
+    "fault_sha256": "4ab41e7cc3285d26d8b97e71b4e2e7fdd79a6ff875300fcaec7c6a0e3b44cc07",
+    "helper_sha256": "eeb54a20eb512f74e8609eaeecfbf811e3c9a5101fd6304ac7d2ae9d30d3bdd1",
+    "source_commit": "e2127abcbcb1c12cbd635099d0a4315f1ea8b9d7",
+    "source_tree": "188236b296c9dd034fd7a827dc3fac83b5ea707c"
+  },
+  "removal": {
+    "all_owned_stopped": true,
+    "cases": [
+      {
+        "attempted": true,
+        "id": "installed-closure",
+        "installed_outside_checkout": true,
+        "standard_stack_bytes": 1048576,
+        "status": "passed"
+      },
+      {
+        "actual_installed_effect": true,
+        "actual_native_approvals": 1,
+        "attempted": true,
+        "id": "genuine-completed-edit",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "preview-preserves-all",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "consent-required",
+        "refused_forms": 3,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "changed-selection",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "tampered-receipt",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "unexpected-entry",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "component-symlink",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "component-hardlink",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "special-file",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "redirected-parent",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "changed-root",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "journal-overlap",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "actual_live_process": true,
+        "attempted": true,
+        "id": "active-process-reference",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "actual_live_process": true,
+        "attempted": true,
+        "id": "active-edit-run",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "uncertain-run",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "unknown-journal",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "changed-journal",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "actual_installed_effect": true,
+        "attempted": true,
+        "id": "actual-removal-preserves-user-data",
+        "objects": 90,
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "already-removed",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "attempted": true,
+        "id": "substitution-after-interruption",
+        "preserved": true,
+        "refused": true,
+        "status": "passed"
+      },
+      {
+        "actual_syscall_fault": true,
+        "attempted": true,
+        "explicit_retry_completed": true,
+        "fault_exit": -9,
+        "id": "before-unlink",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "actual_syscall_fault": true,
+        "attempted": true,
+        "explicit_retry_completed": true,
+        "fault_exit": -9,
+        "id": "between-objects",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "actual_syscall_fault": true,
+        "attempted": true,
+        "fault_exit": -9,
+        "id": "after-unlink",
+        "preserved": true,
+        "status": "passed",
+        "uncertain_not_success": true
+      },
+      {
+        "actual_syscall_fault": true,
+        "attempted": true,
+        "explicit_retry_completed": true,
+        "fault_exit": 0,
+        "id": "unlink-io",
+        "preserved": true,
+        "status": "passed"
+      },
+      {
+        "actual_syscall_fault": true,
+        "attempted": true,
+        "fault_exit": 0,
+        "id": "directory-sync",
+        "preserved": true,
+        "status": "passed",
+        "uncertain_not_success": true
+      }
+    ],
+    "expected": [
+      "installed-closure",
+      "genuine-completed-edit",
+      "preview-preserves-all",
+      "consent-required",
+      "changed-selection",
+      "tampered-receipt",
+      "unexpected-entry",
+      "component-symlink",
+      "component-hardlink",
+      "special-file",
+      "redirected-parent",
+      "changed-root",
+      "journal-overlap",
+      "active-process-reference",
+      "active-edit-run",
+      "uncertain-run",
+      "unknown-journal",
+      "changed-journal",
+      "actual-removal-preserves-user-data",
+      "already-removed",
+      "substitution-after-interruption",
+      "before-unlink",
+      "between-objects",
+      "after-unlink",
+      "unlink-io",
+      "directory-sync"
+    ],
+    "inventory": {
+      "failed": 0,
+      "incomplete": 0,
+      "passed": 26
+    },
+    "operator_provider_requests": 0,
+    "paid_inference": false,
+    "protocol_tests": 11,
+    "raw_report_sha256": "0a2270753867c0fe66089165112d424c661bf739e9abde22c0d65200e997577d",
+    "sibling_and_project_preserved": true
+  },
+  "scope": "verified_front_door_component_only",
+  "source_build_receipts": [
+    {
+      "mode": "source",
+      "name": "sou166-edit-build.json",
+      "role": "agentfw",
+      "sha256": "eb49a8c65ec5b82648e0cc1a020f32d69e365886267224942f290def00b4948f",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-clippy.json",
+      "role": "clippy",
+      "sha256": "85dfaa00133e1e7e2edab16b3a385cc3d44077ee7c231aac145b69fcbafd1c7c",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-review-publish.json",
+      "role": "library",
+      "sha256": "c183948678c13fe402df1e66b8acd888915a658ddcbf67ea7eaab17d3860b0cc",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-stop-endpoint.json",
+      "role": "native_endpoint",
+      "sha256": "ad0f49ffcfe04d3dc66000f6d9f54c0578a0d7b42e5fb7b6ad6c0c9b1e012385",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-stop-unit.json",
+      "role": "library",
+      "sha256": "96e377c6a561bdeb42a9c7d9333f8b17659d1371c668c4896b27b25145e19ed7",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-support-export.json",
+      "role": "library",
+      "sha256": "b27ec28da41cd347eaf9ca2788046112b59ba73d5e7fbc01107b8dd0891140f0",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-test-0.json",
+      "role": "library",
+      "sha256": "56d42db1b78cb1732c327591ed109cfb0cd240eea95b203f11bcb833151db948",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-test-1.json",
+      "role": "library",
+      "sha256": "cda89c95e2b8d74255eed28e33ffb4a213aaa0c95752ceecfcef36ca33174fc5",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-test-2.json",
+      "role": "library",
+      "sha256": "412489cd2a716358034152df12603aa1a371a7a1be3348cdc5544af1fea19b64",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-test-3.json",
+      "role": "replace_file",
+      "sha256": "dbb539cbea10bbab624779dabc20caa0d53165c769d08824d92cdbc2d2587428",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-edit-test-4.json",
+      "role": "library",
+      "sha256": "9f8832940671049d3588ceb43106cee966b5a1420e8278e5910ea8776469097c",
+      "status": "passed"
+    },
+    {
+      "mode": "source",
+      "name": "sou166-removal-unit.json",
+      "role": "library",
+      "sha256": "4470afc373f140de27e322b2b6c280255e0a04d3a4b8978ed1057d130c7cc355",
+      "status": "passed"
+    }
+  ],
+  "status": "author_native_qualification_passed_draft_tl_admission_pending"
+}

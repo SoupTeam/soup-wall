@@ -114,6 +114,9 @@ def validate_selection(selection, expected):
         git_profile = GIT_PROFILES.from_selection(selection)
     except ValueError as error:
         raise Failure(str(error)) from None
+    if 'filesystem_roots' in selection:
+        require(selection.get('format') == GIT_PROFILES.SELECTION_V3,
+                'filesystem_roots_versioned_selection_required')
     before = source()
     require(not before["dirty"] and before["commit"] == expected
             and selection["source"] == before, "candidate_source_mismatch")

@@ -354,6 +354,8 @@ async fn selected_approval_never_rescues_empty_partial_unknown_or_failed_classif
         };
         let profile = server_profile::ProfileConfig {
             workspace_identity: None,
+            linked_worktree: None,
+            filesystem_roots: None,
             format: call.profile.clone(),
             workspace: "/workspace".into(),
             runtime_path: "/never-spawned".into(),
@@ -862,6 +864,8 @@ impl Harness {
             // qualify approval resumption / Linux filesystem confinement.
             let profile = server_profile::ProfileConfig {
                 workspace_identity: None,
+                linked_worktree: None,
+                filesystem_roots: None,
                 format: format.into(),
                 workspace,
                 runtime_path: "/never-spawned/runtime".into(),
@@ -881,7 +885,10 @@ impl Harness {
                 &mut BufReader::new(relay_server),
                 &mut relay_child,
                 &profile,
-                None,
+                SelectedViews {
+                    git: None,
+                    filesystem: None,
+                },
             )
             .await
         };

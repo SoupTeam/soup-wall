@@ -166,7 +166,7 @@ class LaunchPreflight(unittest.TestCase):
                 roots = {"filesystem": root / "project", "git": root / "repository"}
                 paths = {"agentfw": root / "agentfw"}
 
-                def validate(actual_paths, actual_roots, selected_profile=G.DEFAULT):
+                def validate(actual_paths, actual_roots, selected_profile=G.DEFAULT, linked_binding=None):
                     self.assertEqual((actual_paths, actual_roots, selected_profile), (paths, roots, name))
                     raise ValueError("selected_preflight_reached")
 
