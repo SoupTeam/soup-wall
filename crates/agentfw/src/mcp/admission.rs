@@ -4435,6 +4435,7 @@ mod input_identity_tests {
             format: super::super::server_profile::FORMAT.into(),
             workspace: "/workspace".into(),
             workspace_identity: None,
+            linked_worktree: None,
             runtime_path: "/never-opened/runtime".into(),
             runtime_sha256: "a".repeat(64),
             package_root: "/never-opened/package".into(),

@@ -145,8 +145,14 @@ def outside_workspaces(paths, roots):
                 "private_assets_inside_workspace")
 
 
-def validate_existing_workspaces(paths, roots, git_profile=GIT_PROFILES.DEFAULT):
+def validate_existing_workspaces(paths, roots, git_profile=GIT_PROFILES.DEFAULT, linked_binding=None):
     """Opt-in only: reuse native validators, never run Git against user data."""
+    if git_profile == "git-linked-worktree-readonly-v1":
+        import pilot_linked_worktree as linked
+        linked.verify(linked_binding, roots["git"])
+        root_identity(roots["filesystem"])
+        return
+    require(linked_binding is None, "linked_worktree_cross_profile_binding")
     result = subprocess.run([str(paths["agentfw"]), "pilot-workspaces", "--validate-selection", "--workspace", str(roots["filesystem"]),
                              "--git-workspace", str(roots["git"]),
                              "--git-profile-format", GIT_PROFILES.selected(git_profile)[0]],
@@ -364,8 +370,15 @@ def verify_generation(generation, expected_commit, *, probe_native=True):
     require(isinstance(selection, dict), "selection_invalid")
     _, paths = PILOT.validate_selection(selection, expected_commit)
     git_profile = GIT_PROFILES.from_selection(selection)
-    versioned = selection["format"] == GIT_PROFILES.SELECTION_V3
     roots = workspace_paths(selection, generation)
+    if git_profile == "git-linked-worktree-readonly-v1":
+        import pilot_linked_worktree as linked
+        binding = linked.verify(selection.get("linked_worktree"), roots["git"])
+        installed = PILOT.strict_json(bounded_file(generation / "git-profile/profile.json", MAX_JSON).read_bytes())
+        require(installed.get("linkedWorktree") == binding, "linked_worktree_profile_binding_changed")
+    else:
+        require("linked_worktree" not in selection, "linked_worktree_cross_profile_binding")
+    versioned = selection["format"] == GIT_PROFILES.SELECTION_V3
     if "prepared_workspaces" in selection:
         outside_workspaces(paths.values(), roots)
     profiles = {
@@ -482,6 +495,14 @@ def prepare(args):
     require(not before["dirty"] and before["commit"] == args.expected_commit,
             "candidate_source_mismatch")
     requested = requested_workspaces(args)
+    linked_binding = None
+    binding_path = getattr(args, "git_worktree_binding", None)
+    if getattr(args, "git_profile", GIT_PROFILES.DEFAULT) == "git-linked-worktree-readonly-v1":
+        require(requested is not None and binding_path is not None, "linked_worktree_explicit_selection_required")
+        import pilot_linked_worktree as linked
+        linked_binding = linked.load(binding_path, args.git_workspace)
+    else:
+        require(binding_path is None, "linked_worktree_cross_profile_binding")
     for name in ("node_archive", "python_archive", "npm_cache", "wheelhouse"):
         path = getattr(args, name)
         require(path is None or path.is_absolute(), f"absolute_{name}_required")
@@ -493,12 +514,16 @@ def prepare(args):
             root = Path(identity["path"])
             require(not args.output.resolve().is_relative_to(root)
                     and not root.is_relative_to(args.output.resolve()), "preparation_overlaps_workspace")
+    if linked_binding is not None:
+        metadata_root = Path(linked_binding['commonDir']['path'])
+        require(not args.output.resolve().is_relative_to(metadata_root)
+                and not metadata_root.is_relative_to(args.output.resolve()), "linked_worktree_preparation_overlaps_metadata")
     output = private_dir(args.output, create=not args.output.exists())
     with SELECTION_LOCK.hold(output, exclusive=True):
-        return prepare_locked(args, output, requested)
+        return prepare_locked(args, output, requested, linked_binding)
 
 
-def prepare_locked(args, output, requested):
+def prepare_locked(args, output, requested, linked_binding=None):
     git_profile = getattr(args, "git_profile", GIT_PROFILES.DEFAULT)
     wsl = getattr(args, "wsl_root", None) is not None
     if wsl:
@@ -555,7 +580,7 @@ def prepare_locked(args, output, requested):
         roots = workspace_paths({"prepared_workspaces": requested}, generation)
         outside_workspaces([*paths.values(), *[getattr(args, name) for name in
             ("node_archive", "python_archive", "npm_cache", "wheelhouse") if getattr(args, name)]], roots)
-        validate_existing_workspaces(paths, roots, git_profile)
+        validate_existing_workspaces(paths, roots, git_profile, linked_binding)
         fs_workspace, git_workspace = roots["filesystem"], roots["git"]
     else:
         fs_workspace.mkdir(mode=0o700)
@@ -585,7 +610,8 @@ def prepare_locked(args, output, requested):
                         lambda *a, **kw: GIT_PROFILES.install(git_profile, *a, **kw))
                     installer(generation / "git-profile", git_workspace, paths["git"], FS.sha(paths["git"]),
                                 paths["bwrap"], paths["git_launcher"], python_archive=args.python_archive,
-                                wheelhouse=args.wheelhouse, allow_download=args.allow_download, log=log)
+                                wheelhouse=args.wheelhouse, allow_download=args.allow_download, log=log,
+                                **({"linked_worktree_binding": linked_binding} if linked_binding is not None else {}))
             except subprocess.CalledProcessError as error:
                 # Never read the log (even a suffix): arbitrary installer output
                 # can contain secrets and the failed log can exceed the size cap.
@@ -605,10 +631,12 @@ def prepare_locked(args, output, requested):
                  "expected_refusal": {"verdict": args.refusal_verdict, "rule": args.refusal_rule},
                  "files": {role: {"path": str(paths[role]), "sha256": FS.sha(paths[role])}
                            for role in PILOT.ROLES}, "prepared_profiles": profiles}
+    if linked_binding is not None:
+        selection["linked_worktree"] = linked_binding
     if requested:
         selection["prepared_workspaces"] = requested
         require(requested_workspaces(args) == requested, "selected_workspace_changed")
-        validate_existing_workspaces(paths, roots, git_profile)
+        validate_existing_workspaces(paths, roots, git_profile, linked_binding)
     selection_path = generation / "selection.json"
     write_json(selection_path, selection)
     verify_generation(generation, args.expected_commit)
@@ -631,6 +659,7 @@ def main():
     parser.add_argument("--wsl-root", type=Path,
                         help="Explicit opt-in WSL2 preparation in a private Linux ext4 /home stage; output must stay inside it")
     parser.add_argument("--filesystem-workspace", type=Path, help="canonical existing owned read-only root")
+    parser.add_argument("--git-worktree-binding", type=Path, help="explicit private linked-worktree selection manifest")
     parser.add_argument("--git-workspace", type=Path, help="canonical existing supported standalone repository")
     parser.add_argument("--git-profile", default=GIT_PROFILES.DEFAULT, action=GIT_PROFILES.SingleProfile,
                         help="select exactly one reviewed Git registry id; combined capabilities refuse")

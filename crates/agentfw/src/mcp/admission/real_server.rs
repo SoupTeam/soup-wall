@@ -829,6 +829,7 @@ fn validate_registry(
         | server_profile::git::LOCAL_REFS_FORMAT
         | server_profile::git::FILE_READS_FORMAT
         | server_profile::git::SHALLOW_FORMAT
+        | server_profile::git::linked_worktree::FORMAT
         | server_profile::git_local_clone::FORMAT
         | server_profile::git_tracked_symlinks::FORMAT => server_profile::FORMAT,
         server_profile::filesystem_create::FORMAT => server_profile::git::FORMAT,

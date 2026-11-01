@@ -329,7 +329,9 @@ def run(args, report):
     selection, paths, profiles = selected(args)
     if "prepared_workspaces" in selection:
         PREP.validate_existing_workspaces(paths, PREP.workspace_paths(selection, args.selection.parent),
-                                          PREP.GIT_PROFILES.from_selection(selection))
+                                          PREP.GIT_PROFILES.from_selection(selection),
+                                          **({"linked_binding": selection.get("linked_worktree")}
+                                             if PREP.GIT_PROFILES.from_selection(selection) == "git-linked-worktree-readonly-v1" else {}))
     require(args.state_root is None or (args.state_root.is_absolute()
             and args.state_root.resolve(strict=True) == args.state_root), "canonical_state_root_required")
     state_root = args.state_root or Path(tempfile.gettempdir()).resolve()

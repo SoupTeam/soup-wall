@@ -56,6 +56,7 @@ SCRIPTS = (
     "scripts/pilot.py",
     "scripts/private_edit_self_test.py",
     "scripts/pilot_git_profiles.py",
+    "scripts/pilot_linked_worktree.py",
     "scripts/pilot_audit.py",
     "scripts/pilot_capacity.py",
     "scripts/pilot_policy.py",
@@ -84,6 +85,7 @@ SCRIPTS = (
     "scripts/wsl_qualification.py",
 )
 DATA_FILES = (
+    "profiles/mcp/git-linked-worktree-readonly-v1/contract.json",
     "rule_baseline/git_readonly_v1/rule_baseline.py",
     "rule_baseline/git_readonly_file_revisions_v1/rule_baseline.py",
     "rule_baseline/git_readonly_local_refs_v1/rule_baseline.py",

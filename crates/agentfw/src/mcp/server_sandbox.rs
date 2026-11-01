@@ -37,7 +37,9 @@ pub(crate) const SANDBOX_WORKSPACE: &str = "/workspace";
 pub(crate) const SANDBOX_PROFILE: &str = "sw-mcp/filesystem-readonly/linux-bwrap/1";
 
 pub(crate) fn profile_name(format: &str) -> &'static str {
-    if format == super::server_profile::git::FILE_READS_FORMAT {
+    if format == super::server_profile::git::linked_worktree::FORMAT {
+        "sw-mcp/git-linked-worktree-readonly/linux-bwrap-landlock/1"
+    } else if format == super::server_profile::git::FILE_READS_FORMAT {
         "sw-mcp/git-readonly-file-revisions/linux-bwrap-landlock/1"
     } else if format == super::server_profile::git_tracked_symlinks::FORMAT {
         "sw-mcp/git-tracked-symlinks-readonly/linux-bwrap-landlock/1"
@@ -856,7 +858,10 @@ fn prepare_linux_command_inner(
     let guarded_profile = clone_profile || link_profile;
     if git_profile {
         let root = descriptor_path(&workspace_pin).join(".");
-        if link_profile {
+        if profile.format == super::server_profile::git::linked_worktree::FORMAT {
+            // The dedicated view validates the three explicit roots and freezes
+            // only their required metadata below. Legacy validators stay narrow.
+        } else if link_profile {
             super::server_profile::git_tracked_symlinks::validate_repository(&root)?;
         } else if clone_profile {
             super::server_profile::git_local_clone::validate_repository(&root)?;
@@ -879,7 +884,11 @@ fn prepare_linux_command_inner(
     let git_view = if verified_git {
         None
     } else {
-        super::server_profile::git::SelectedView::capture(&profile.format, &workspace_pin)?
+        super::server_profile::git::SelectedView::capture(
+            &profile.format,
+            &workspace_pin,
+            profile.linked_worktree.as_ref(),
+        )?
     };
     // The trusted namespace PID 1 is this exact running Agent image, never a
     // separately resolved pathname or an executable from the server package.
