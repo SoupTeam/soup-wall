@@ -22,6 +22,18 @@ Do not commit local credentials, `.env` files, customer payloads, model weights,
 
 ## Before opening a pull request
 
+For a fast, source-aware first pass on committed changes, use the
+[local PR feedback guide](docs/operations/LOCAL_PR_VERIFICATION.md):
+
+```sh
+python3 -B scripts/local_pr_verify.py plan --base origin/main --head HEAD
+python3 -B scripts/local_pr_verify.py run --base origin/main --head HEAD
+```
+
+It reports checks performed locally and required remote/native checks left
+unrun. It does not include dirty edits, post a GitHub status or replace the
+reviewed qualification below.
+
 Run from the repository root:
 
 ```sh
