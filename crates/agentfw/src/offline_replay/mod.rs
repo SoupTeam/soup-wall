@@ -212,7 +212,7 @@ fn validate_yaml_subset(yaml: &str) -> Result<()> {
     Ok(())
 }
 
-fn policy(bytes: &[u8]) -> Result<AgentPolicySet> {
+pub(crate) fn policy(bytes: &[u8]) -> Result<AgentPolicySet> {
     if bytes.len() > MAX_POLICY_BYTES {
         return Err(Failure("offline_policy_bounds"));
     }

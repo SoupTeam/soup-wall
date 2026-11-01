@@ -81,5 +81,13 @@ scripts/pilot_configuration_backup.py text eol=lf
 scripts/tests/test_pilot_configuration_backup.py text eol=lf
 scripts/qualify-configuration-backup.py text eol=lf
 scripts/tests/test_configuration_backup_qualification.py text eol=lf
-scripts/benchmarks/pilot-readiness-policies/*.yaml text eol=lf
 docs/operations/evidence/configuration-recovery/** text eol=lf
+# Publication admission and byte-pinned runtime templates use identical bytes on all hosts.
+scripts/validate_candidate.sh text eol=lf
+scripts/validate_candidate.py text eol=lf
+scripts/publication_readiness.py text eol=lf
+scripts/tests/test_validate_candidate.py text eol=lf
+scripts/tests/test_publication_readiness.py text eol=lf
+scripts/benchmarks/pilot-readiness-policies/*.yaml text eol=lf
+scripts/qualify-publication-admission.py text eol=lf
+docs/operations/evidence/publication-admission/** text eol=lf

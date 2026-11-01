@@ -1,0 +1,13 @@
+{
+  "format": "sw-mcp/git-linked-worktree-readonly/1",
+  "registry_id": "git-linked-worktree-readonly-v1",
+  "binding_format": "sw-pilot-linked-worktree/1",
+  "metadata_bytes": 16777216,
+  "objects": 128,
+  "references": 64,
+  "required_explicit_roots": ["workspace", "gitDir", "commonDir"],
+  "layout": "ordinary-owned-linked-worktree",
+  "revision_grammar": "HEAD-or-full-SHA1",
+  "source_policy": "unchanged",
+  "upstream_identity": "git-readonly-v1"
+}

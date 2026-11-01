@@ -714,9 +714,9 @@ def verified_role(directory, context, role):
             os.close(fd)
 
 
-FILTERS = {"library": {"create_file", "sou54_", "mcp::input::tests::", "edit_session",
+FILTERS = {"library": {"create_file", "sou54_", "mcp::input::tests::", "edit_session", "policy_candidate",
                        "native::execution::transport", "replace_file", "pilot_approval",
-                       "private_export", "support_bundle"},
+                       "private_export", "support_bundle", "pilot_component"},
            "native_endpoint": {"create_file_v2", "sou125_stop"}, "replace_file": {""}}
 
 
