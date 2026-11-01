@@ -1,5 +1,30 @@
 # SOU-157: Draft filesystem separator correction
 
+## Mapped Git native consumer (review pending, 2026-11-01)
+
+Preparation review [5728714826](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5728714826) independently reproduced all eight commit OIDs on Linux and requested the bounded consumer. The existing `verify-sou109-original-git.py` now has an explicit `--sou157-mapped` mode. It selects only this consumer, not the historical synthetic matrix or the filesystem matrix. Existing default behavior is unchanged.
+
+The consumer independently checks the exact clean source, binary digest and matching native build report, read-only source/binary mounts, loopback-only network, pinned default profile and all runtime/package/library/Git digests. It allocates a new 0700 parent itself, builds the original eight repositories and binds their actual device/inode/uid into disposable profiles. No preparation JSON can grant directory or execution authority.
+
+For each case, a separate pinned original MCP stdio server provides the reference frame. Its host-local repository argument is recorded separately and is only a byte oracle; the protected invocation remains the declared `/workspace` mapping. Exact frozen text equality is checked before policy comparison. Nonmatching commits/text remain non-comparable. The original reference frame is never injected in place of protected execution. The existing daemon Git endpoint performs the actual protected original call. Its profile, call/binding/argument audit reservation, completion and full frame digest are checked against the original reference, including withheld attack frames via the receipt digest. Delivered benign text must also match exactly.
+
+Controls include all four matched attacks (reviewer-directed execution, forged approval and Spanish/Kazakh credential instructions), copied public bytes without execution authority, spent calls, a different call's binding, an invalid foreign owner token, expired authorization, explicit stronger operator Ask/Deny and absence of dispatch for refused controls. Source repository snapshots must remain unchanged. Existing all-Tokio-worker process observation requires an original Git worker and verified owned cleanup. Public evidence retains no issuer/owner tokens. These are proposed executable controls, not results of a Linux run.
+
+Eight local preparation/consumer boundary tests pass. Consumer tests reject changed body/newline, profile, completion, channel digest, response correlation/shape and leaked refused frames. Native execution remains unrun here (Windows); TL owns the independent review and one affected exact-source Linux dispatch. A successful mapped report still preserves `frozen_false_refusals: 10`, `task_complete: false` and no production authority. Six other frozen refusals remain outside this candidate slice.
+
+```
+python3 scripts/verify-sou109-original-git.py --sou157-mapped \
+  --binary /readonly/build/target/debug/agentfw \
+  --binary-sha256 <independently-verified-binary-sha256> \
+  --build-report /readonly/build/native-build.json \
+  --template-profile /readonly/default-git-profile.json \
+  --profile-sha256 <independently-verified-template-sha256> \
+  --expected-commit <exact-reviewed-source-sha> \
+  --output /owned/new-mapped-git-report.json
+```
+
+Run only inside the existing ordinary-user isolated Linux qualification environment. Output must not exist. Private logs and owned fixtures remain in the reported temporary parent for inspection; no old directory is deleted. Any incomplete control fails the run. Review the exact failure and retained evidence before considering another dispatch.
+
 ## Mapped Git preparation for review (2026-11-01)
 
 TL review [5727888870](https://github.com/SoupTeam/soup-wall/pull/280#pullrequestreview-5727888870) settles the launch question without a launcher change: explicitly configure the existing daemon endpoint with a pinned default `sw-mcp/git-readonly/1` profile in a disposable qualification. Do not edit DAEMON_EXECUTION or select file-revision capabilities. The following preparation increment is ready for independent review before TL's one affected native dispatch.
