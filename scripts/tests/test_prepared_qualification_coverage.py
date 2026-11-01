@@ -30,6 +30,7 @@ def enabled(body, **overrides):
         "github.event.inputs.coordinated_update_only": "",
         "github.event.inputs.private_edit_self_test_only": "",
         "github.event.inputs.provider_ca_only": "",
+        "github.event.inputs.configuration_recovery_only": "",
         "github.event.inputs.native_preparation_only": "",
     }
     values.update(overrides)
@@ -61,6 +62,29 @@ def enabled(body, **overrides):
 
 
 class PreparedQualificationCoverage(unittest.TestCase):
+    def test_configuration_recovery_is_explicit_and_never_claims_full_runtime(self):
+        context = {"github.event_name": "workflow_dispatch",
+                   "github.event.inputs.configuration_recovery_only": "true",
+                   "github.event.inputs.native_preparation_only": "true"}
+        for name, text in self.workflows():
+            with self.subTest(workflow=name):
+                for title in (FULL, AUDIT,
+                              "Qualify the installed guided pilot front door through the original host",
+                              "Qualify the guided first-use entry point through the original host",
+                              "Qualify exact prepared selection through enforcing daemon and original servers",
+                              "Run the first-use demo through the prepared original host",
+                              "Qualify terminal Ask inbox through the original Claude host",
+                              "Qualify reused bounded audit engine restart and fail-safe retention"):
+                    self.assertFalse(enabled(step(text, title), **context))
+                    self.assertTrue(enabled(step(text, title)))
+                focused = step(text, "Qualify installed declarative configuration backup and restore")
+                self.assertTrue(enabled(focused, **context))
+                self.assertFalse(enabled(focused))
+                for missing in ("configuration_recovery_only", "native_preparation_only"):
+                    self.assertFalse(enabled(focused, **{**context, "github.event.inputs." + missing: ""}))
+                self.assertIn("qualify-configuration-backup.py --run", focused)
+                self.assertIn("configuration-backup-qualification/report.json", text)
+
     def test_provider_ca_dispatch_is_separate_from_full_qualification(self):
         context = {"github.event_name": "workflow_dispatch",
                    "github.event.inputs.provider_ca_only": "true",

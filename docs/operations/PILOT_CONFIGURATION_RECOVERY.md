@@ -131,6 +131,12 @@ publication; it never resumes a tool call, restores an approval or resets an
 existing instance's risk state. Retain an incomplete outcome until recovery is
 actually verified.
 
+An interruption before the journal was published can leave an unidentified
+private stage. The command reports that manual inspection is required and does
+not delete or adopt it automatically. Successful journal retirement can leave
+one empty private retirement directory; it contains no restored authority and
+is not an active installation.
+
 ## Fresh authority and runtime verification
 
 Supply credentials and enrollment anew through the existing supported flows.
