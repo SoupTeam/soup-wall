@@ -25,7 +25,7 @@ const fleet = (() => {
   const url = () => `/admin/v1/tenants/${encodeURIComponent(tenant)}/agent-fleet`;
   const valid = (data, id) => data?.contract_version === "sw-agent-fleet/1" && id === tenant;
   const clearDetail = () => {
-    detailRequest++; detailController?.abort(); selected = null; historyNext = null;
+    detailRequest++; detailController?.abort(); selected = null; historyNext = null; agentHistory.clear();
     $("fleet-agent-detail").replaceChildren(); $("fleet-history-next").disabled = true;
   };
   const renderList = values => {
@@ -62,7 +62,7 @@ const fleet = (() => {
   async function loadAgent(agent, before=null) {
     detailController?.abort(); detailController=new AbortController();
     const id=tenant, generation=epoch, requestId=++detailRequest;
-    selected=agent; historyNext=null; $("fleet-history-next").disabled=true;
+    selected=agent; historyNext=null; $("fleet-history-next").disabled=true; if(before===null)agentHistory.select(id,agent);
     const root=$("fleet-agent-detail"); root.replaceChildren(make("p","Loading Agent history…","empty"));
     try {
       const q=new URLSearchParams({limit:"25"}); if(before!==null)q.set("before_sequence",String(before));
