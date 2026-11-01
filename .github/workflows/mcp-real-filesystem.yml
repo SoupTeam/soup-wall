@@ -1755,34 +1755,28 @@ jobs:
         run: |
           set -euo pipefail
           asset="$RUNNER_TEMP/sou111-assets"
-          scratch="$RUNNER_TEMP/sou200-maintenance"
-          mkdir -m 700 "$scratch"
-          # Target code has read-only source, private scratch and loopback only.
-          # Reuse this lane's exact selected programs; no duplicate full matrix.
-          "$SOU111_BWRAP" --unshare-net --unshare-pid --die-with-parent \
-            --ro-bind / / --bind "$scratch" "$scratch" --proc /proc --dev /dev \
-            -- /bin/bash -euo pipefail <<'BASH'
-          /usr/sbin/ip link set lo up
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_run_operations.py -v
           python3 -B -m unittest discover -s scripts/tests -p test_pilot_maintenance_qualification.py -v
           cargo fmt --all --check
           python3 -B scripts/qualify-installed-front-door.py --run --maintenance-only \
-            --output "$RUNNER_TEMP/sou200-maintenance/run" --expected-commit "$(git rev-parse HEAD)" \
+            --output "$RUNNER_TEMP/sou200-maintenance" --expected-commit "$(git rev-parse HEAD)" \
             --component-python /usr/bin/python3.12 \
             --strace "$(command -v strace)" --git "$SOU115_GIT" --bwrap "$SOU111_BWRAP" \
             --agentfw "$SOU119_AGENTFW" --git-launcher "$SOU119_GIT_LAUNCHER" \
             --sandbox-tests "$SOU119_SANDBOX_TESTS" \
-            --node-archive "$RUNNER_TEMP/sou111-assets/node.tar.xz" \
-            --claude "$RUNNER_TEMP/sou111-assets/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
-            --python /usr/bin/python3.12 --allow-download
-          BASH
+            --node-archive "$asset/node.tar.xz" \
+            --claude "$asset/claude/node_modules/@anthropic-ai/claude-code-linux-x64/claude" \
+            --python "$(command -v python3)" --allow-download \
+            2>&1 | tee "$RUNNER_TEMP/sou200-maintenance.log"
       - name: Retain finite maintenance report including failure
         if: always() && github.event_name == 'workflow_dispatch' && github.event.inputs.maintenance_only == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: sou200-installed-maintenance-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/sou200-maintenance/run/report.json
+          path: |
+            ${{ runner.temp }}/sou200-maintenance/report.json
+            ${{ runner.temp }}/sou200-maintenance.log
           if-no-files-found: warn
           retention-days: 7
       - name: Qualify installed provider CA custody through owned HTTPS
